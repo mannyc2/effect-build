@@ -1,12 +1,12 @@
 import type { Options, Permissions, PermissionValue } from "../../Deno.js";
 import { InvalidDriverOptions, ToolFailed } from "../BuildError.js";
-import type { CompileExecutableInput } from "../Driver.js";
-import type { CompilerAdapter } from "./CompilerAdapter.js";
+import type { CompilerAdapter, OptionsValidation } from "./CompilerAdapter.js";
 import { type DenoTarget, denoTargetTable } from "./DenoTarget.js";
 
-const invalid = (reason: string): never => {
-  throw new InvalidDriverOptions({ tool: "deno", reason });
-};
+const invalid = <A = never>(reason: string): OptionsValidation<A> => ({
+  _tag: "Invalid",
+  error: new InvalidDriverOptions({ tool: "deno", reason }),
+});
 
 const allowedOptions: ReadonlySet<string> = new Set(["bundle", "minify", "permissions"]);
 
@@ -20,70 +20,91 @@ const isPermissionValue = (value: unknown): value is PermissionValue =>
 const renderPermission = (name: string, value: PermissionValue): string =>
   value === true ? `--allow-${name}` : `--allow-${name}=${value.join(",")}`;
 
-/** Validates and renders permission flags in one pass; throws `InvalidDriverOptions` on bad input. */
-const renderPermissions = (permissions: Permissions | undefined): readonly string[] => {
-  if (permissions === undefined) return [];
+/** Validates and renders permission flags once during adapter preflight. */
+const validatePermissions = (permissions: Permissions | undefined): OptionsValidation<readonly string[]> => {
+  if (permissions === undefined) return { _tag: "Valid", value: [] };
   if (typeof permissions !== "object" || permissions === null || Array.isArray(permissions)) {
     return invalid("permissions must be an object");
   }
   if (Object.keys(permissions).some((key) => !allowedPermissions.has(key))) {
     return invalid("unknown permission");
   }
-  if (permissions.all === true) {
+  const all = permissions.all;
+  if (all !== undefined && typeof all !== "boolean") {
+    return invalid("all permission must be boolean");
+  }
+  if (all === true) {
     return Object.keys(permissions).length === 1
-      ? ["--allow-all"]
+      ? { _tag: "Valid", value: ["--allow-all"] }
       : invalid("allow-all cannot be mixed with scoped permissions");
   }
-  return permissionNames.flatMap((name) => {
+  const permissionArgs: string[] = [];
+  for (const name of permissionNames) {
     const value = permissions[name];
-    if (value === undefined) return [];
+    if (value === undefined) continue;
     if (!isPermissionValue(value)) {
       return invalid(`${name} permission must be true or non-empty strings`);
     }
-    return [renderPermission(name, value)];
-  });
+    permissionArgs.push(renderPermission(name, value));
+  }
+  return { _tag: "Valid", value: permissionArgs };
 };
 
 interface ValidatedOptions {
-  readonly options: Options;
+  readonly bundle?: boolean;
+  readonly minify?: boolean;
   readonly permissionArgs: readonly string[];
 }
 
-const optionsOf = (input: CompileExecutableInput<Options>): ValidatedOptions => {
-  const value: unknown = input.options ?? {};
+const validateOptions = (input: unknown): OptionsValidation<ValidatedOptions> => {
+  const value: unknown = input ?? {};
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return invalid("options must be an object");
   }
   if (Object.keys(value).some((key) => !allowedOptions.has(key))) {
     return invalid("unknown Deno option");
   }
-  const options = value as Options;
-  if (options.bundle !== undefined && typeof options.bundle !== "boolean") {
+  const options = value as Readonly<Record<string, unknown>>;
+  const bundle = options.bundle;
+  const minify = options.minify;
+  const permissions = options.permissions;
+  if (bundle !== undefined && typeof bundle !== "boolean") {
     return invalid("bundle must be boolean");
   }
-  if (options.minify !== undefined && typeof options.minify !== "boolean") {
+  if (minify !== undefined && typeof minify !== "boolean") {
     return invalid("minify must be boolean");
   }
-  if (options.minify !== undefined && options.bundle !== true) {
+  if (minify !== undefined && bundle !== true) {
     return invalid("minify requires bundle");
   }
-  return { options, permissionArgs: renderPermissions(options.permissions) };
+  const permissionArgs = validatePermissions(permissions as Permissions | undefined);
+  return permissionArgs._tag === "Invalid"
+    ? permissionArgs
+    : {
+      _tag: "Valid",
+      value: {
+        ...(bundle === undefined ? {} : { bundle }),
+        ...(minify === undefined ? {} : { minify }),
+        permissionArgs: permissionArgs.value,
+      },
+    };
 };
 
-export const denoAdapter: CompilerAdapter<Options, "deno", DenoTarget> = {
+export const denoAdapter: CompilerAdapter<Options, "deno", DenoTarget, ValidatedOptions> = {
   toolName: "deno",
   probeArgv: [
     "eval",
     'console.log(JSON.stringify({path:Deno.execPath(),version:Deno.version.deno,hostOs:Deno.build.os==="darwin"?"macos":Deno.build.os}))',
   ],
   targetTable: denoTargetTable,
+  validateOptions,
   renderArgv: ({ input, stagedOutfile }) => {
-    const { options, permissionArgs } = optionsOf(input);
+    const { bundle, minify, permissionArgs } = input.options;
     return [
       "compile",
       ...(input.target === undefined ? [] : ["--target", denoTargetTable.nativeToken(input.target)]),
-      ...(options.bundle === true ? ["--bundle"] : []),
-      ...(options.minify === true ? ["--minify"] : []),
+      ...(bundle === true ? ["--bundle"] : []),
+      ...(minify === true ? ["--minify"] : []),
       ...permissionArgs,
       "--output",
       stagedOutfile,

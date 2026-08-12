@@ -1,5 +1,5 @@
 import type { Artifact, ToolName } from "../Artifact.js";
-import type { ToolFailed } from "../BuildError.js";
+import type { InvalidDriverOptions, ToolFailed } from "../BuildError.js";
 import type { Target } from "../Target.js";
 import type { ProcessCompletion } from "./Process.js";
 import type { OperatingSystem } from "./TargetCatalog.js";
@@ -21,13 +21,17 @@ export interface DiscoveredCompiler<Name extends ToolName> {
   readonly hostOs: OperatingSystem;
 }
 
-export interface InternalCompileInput<Options, SupportedTarget extends Target> {
+export type OptionsValidation<ValidatedOptions> =
+  | { readonly _tag: "Valid"; readonly value: ValidatedOptions }
+  | { readonly _tag: "Invalid"; readonly error: InvalidDriverOptions };
+
+export interface PreparedCompileInput<ValidatedOptions, SupportedTarget extends Target> {
   readonly entrypoint: string;
   readonly outfile: string;
   readonly cwd?: string;
   readonly target?: SupportedTarget;
   readonly digest?: boolean;
-  readonly options?: Options;
+  readonly options: ValidatedOptions;
 }
 
 /** The part of an adapter `discoverTool` needs: how to name the tool and how to ask it what it is. */
@@ -41,11 +45,13 @@ export interface CompilerAdapter<
   Options,
   Name extends ToolName = ToolName,
   SupportedTarget extends Target = Target,
+  ValidatedOptions = Options,
 > extends ToolProbe<Name> {
   readonly targetTable: TargetTable<SupportedTarget>;
   readonly defaultTarget?: SupportedTarget;
+  readonly validateOptions: (options: unknown) => OptionsValidation<ValidatedOptions>;
   readonly renderArgv: (context: {
-    readonly input: InternalCompileInput<Options, SupportedTarget>;
+    readonly input: PreparedCompileInput<ValidatedOptions, SupportedTarget>;
     readonly stagedOutfile: string;
   }) => readonly string[];
   readonly interpretFailure: (completion: ProcessCompletion) => ToolFailed;

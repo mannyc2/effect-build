@@ -59,6 +59,7 @@ const adapter = (mode = successMode): CompilerAdapter<Record<string, never>, "bu
   toolName: "bun",
   probeArgv: [],
   targetTable,
+  validateOptions: () => ({ _tag: "Valid", value: {} }),
   renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, mode],
   interpretFailure: (completion) =>
     new ToolFailed({
@@ -195,6 +196,7 @@ describe("standalone atomic publication", () => {
       toolName: "bun",
       probeArgv: [],
       targetTable: windowsTargetTable,
+      validateOptions: () => ({ _tag: "Valid", value: {} }),
       renderArgv: ({ stagedOutfile }) => {
         staged = stagedOutfile;
         return [fixture, stagedOutfile, "pe"];
@@ -231,6 +233,7 @@ describe("standalone atomic publication", () => {
       toolName: "bun",
       probeArgv: [],
       targetTable: windowsTargetTable,
+      validateOptions: () => ({ _tag: "Valid", value: {} }),
       renderArgv: ({ stagedOutfile }) => {
         staged = stagedOutfile;
         return [fixture, stagedOutfile, "pe"];
@@ -265,6 +268,7 @@ describe("standalone atomic publication", () => {
       toolName: "bun",
       probeArgv: [],
       targetTable: windowsTargetTable,
+      validateOptions: () => ({ _tag: "Valid", value: {} }),
       renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, "success"],
       interpretFailure: adapter().interpretFailure,
     };
@@ -299,6 +303,7 @@ describe("standalone atomic publication", () => {
       toolName: "bun",
       probeArgv: [],
       targetTable: wideTargetTable,
+      validateOptions: () => ({ _tag: "Valid", value: {} }),
       renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, successMode],
       interpretFailure: adapter().interpretFailure,
     };

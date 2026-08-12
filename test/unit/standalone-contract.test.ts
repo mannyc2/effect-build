@@ -38,16 +38,20 @@ void _rejectBunWindowsArm64Target;
 // @ts-expect-error Deno's package-private target type deliberately excludes musl.
 const _denoMuslTarget: DenoTarget = "linux-x64-musl";
 void _denoMuslTarget;
-const _rejectDenoMuslAtAdapterBoundary = () =>
-  denoAdapter.renderArgv({
+const _rejectDenoMuslAtAdapterBoundary = () => {
+  const options = denoAdapter.validateOptions(undefined);
+  if (options._tag !== "Valid") throw options.error;
+  return denoAdapter.renderArgv({
     input: {
       entrypoint: "main.ts",
       outfile: "app",
       // @ts-expect-error The private Deno adapter boundary must reject root-only musl targets.
       target: "linux-x64-musl",
+      options: options.value,
     },
     stagedOutfile: "/tmp/app",
   });
+};
 void _rejectDenoMuslAtAdapterBoundary;
 
 const decodeTarget = Schema.decodeUnknownSync(Target);

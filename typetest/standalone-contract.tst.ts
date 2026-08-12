@@ -5,7 +5,10 @@ import * as Deno from "../src/Deno.js";
 import type { Artifact } from "../src/standalone/Artifact.js";
 import type { BuildError, TargetUnsupported } from "../src/standalone/BuildError.js";
 import { makeCompileExecutable } from "../src/standalone/CompileExecutable.js";
+import type { CompileExecutableMatrixInput } from "../src/standalone/CompileExecutableMatrix.js";
 import type { CompileExecutableInput, CompilerService } from "../src/standalone/Driver.js";
+import type { BunTarget } from "../src/standalone/internal/BunTarget.js";
+import type { DenoTarget } from "../src/standalone/internal/DenoTarget.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -135,3 +138,80 @@ export const _bunRejectsDenoOptions = Bun.compileExecutable({
   // @ts-expect-error Object literal may only specify known properties, and 'permissions' does not exist in type 'Options'.
   options: { permissions: { all: true } },
 });
+
+type BunMatrixInput = CompileExecutableMatrixInput<BunTarget, Bun.Options>;
+type DenoMatrixInput = CompileExecutableMatrixInput<DenoTarget, Deno.Options>;
+
+export type _MatrixInputFields = Assert<
+  Same<
+    keyof BunMatrixInput,
+    "entrypoint" | "outdir" | "name" | "targets" | "cwd" | "digest" | "options" | "concurrency"
+  >
+>;
+export type _BunMatrixOptions = Assert<Same<BunMatrixInput["options"], Bun.Options | undefined>>;
+export type _DenoMatrixOptions = Assert<Same<DenoMatrixInput["options"], Deno.Options | undefined>>;
+export type _BunMatrixTargets = Assert<
+  Same<BunMatrixInput["targets"], readonly [BunTarget, ...BunTarget[]]>
+>;
+export type _DenoMatrixTargets = Assert<
+  Same<DenoMatrixInput["targets"], readonly [DenoTarget, ...DenoTarget[]]>
+>;
+
+export const _bunMatrixInput: BunMatrixInput = {
+  entrypoint: "src/main.ts",
+  outdir: "dist",
+  name: "app",
+  targets: ["linux-x64-musl", "windows-x64"],
+  options: { minify: true, bytecode: true },
+  concurrency: 2,
+};
+
+export const _denoMatrixInput: DenoMatrixInput = {
+  entrypoint: "src/main.ts",
+  outdir: "dist",
+  name: "app",
+  targets: ["linux-aarch64-gnu", "windows-aarch64"],
+  options: { bundle: true, minify: true, permissions: { read: true } },
+};
+
+export const _bunMatrixRejectsDenoOptions: BunMatrixInput = {
+  ..._bunMatrixInput,
+  // @ts-expect-error Object literal may only specify known properties, and 'permissions' does not exist in type 'Options'.
+  options: { permissions: { all: true } },
+};
+
+export const _denoMatrixRejectsBunOptions: DenoMatrixInput = {
+  ..._denoMatrixInput,
+  // @ts-expect-error Object literal may only specify known properties, and 'bytecode' does not exist in type 'Options'.
+  options: { bytecode: true },
+};
+
+export const _bunMatrixRejectsCrossProviderTarget: BunMatrixInput = {
+  ..._bunMatrixInput,
+  // @ts-expect-error Type '"windows-aarch64"' is not assignable to type
+  targets: ["windows-aarch64"],
+};
+
+export const _denoMatrixRejectsCrossProviderTarget: DenoMatrixInput = {
+  ..._denoMatrixInput,
+  // @ts-expect-error Type '"linux-x64-musl"' is not assignable to type
+  targets: ["linux-x64-musl"],
+};
+
+export const _matrixRejectsScalarOutfile: BunMatrixInput = {
+  ..._bunMatrixInput,
+  // @ts-expect-error Object literal may only specify known properties, and 'outfile' does not exist in type
+  outfile: "dist/custom",
+};
+
+export const _matrixRejectsNamingCallback: BunMatrixInput = {
+  ..._bunMatrixInput,
+  // @ts-expect-error Object literal may only specify known properties, and 'naming' does not exist in type
+  naming: (target: BunTarget) => `app-${target}`,
+};
+
+export const _matrixRejectsPerCellObjects: BunMatrixInput = {
+  ..._bunMatrixInput,
+  // @ts-expect-error Type '{ target: string; outfile: string; options: { minify: false; }; }' is not assignable to type
+  targets: [{ target: "macos-x64", outfile: "dist/custom", options: { minify: false } }],
+};

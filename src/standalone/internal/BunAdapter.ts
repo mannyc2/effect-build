@@ -1,40 +1,61 @@
 import type { Options } from "../../Bun.js";
 import { InvalidDriverOptions, ToolFailed } from "../BuildError.js";
-import type { CompileExecutableInput } from "../Driver.js";
 import { type BunTarget, bunTargetTable } from "./BunTarget.js";
-import type { CompilerAdapter } from "./CompilerAdapter.js";
+import type { CompilerAdapter, OptionsValidation } from "./CompilerAdapter.js";
 
-const optionsOf = (input: CompileExecutableInput<Options>): Options => {
-  const value: unknown = input.options ?? {};
+interface ValidatedOptions {
+  readonly minify?: boolean;
+  readonly sourcemap?: "linked" | "inline";
+  readonly bytecode?: boolean;
+}
+
+const invalid = (reason: string): OptionsValidation<ValidatedOptions> => ({
+  _tag: "Invalid",
+  error: new InvalidDriverOptions({ tool: "bun", reason }),
+});
+
+const validateOptions = (input: unknown): OptionsValidation<ValidatedOptions> => {
+  const value: unknown = input ?? {};
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new InvalidDriverOptions({ tool: "bun", reason: "options must be an object" });
+    return invalid("options must be an object");
   }
   const allowed = new Set(["minify", "sourcemap", "bytecode"]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
-    throw new InvalidDriverOptions({ tool: "bun", reason: "unknown Bun option" });
+    return invalid("unknown Bun option");
   }
-  const options = value as Options;
-  if (options.minify !== undefined && typeof options.minify !== "boolean") {
-    throw new InvalidDriverOptions({ tool: "bun", reason: "minify must be boolean" });
+  const options = value as Readonly<Record<string, unknown>>;
+  const minify = options.minify;
+  const sourcemap = options.sourcemap;
+  const bytecode = options.bytecode;
+  if (minify !== undefined && typeof minify !== "boolean") {
+    return invalid("minify must be boolean");
   }
-  if (options.bytecode !== undefined && typeof options.bytecode !== "boolean") {
-    throw new InvalidDriverOptions({ tool: "bun", reason: "bytecode must be boolean" });
+  if (bytecode !== undefined && typeof bytecode !== "boolean") {
+    return invalid("bytecode must be boolean");
   }
-  if (options.sourcemap !== undefined && options.sourcemap !== "linked" && options.sourcemap !== "inline") {
-    throw new InvalidDriverOptions({ tool: "bun", reason: "sourcemap must be linked or inline" });
+  if (sourcemap !== undefined && sourcemap !== "linked" && sourcemap !== "inline") {
+    return invalid("sourcemap must be linked or inline");
   }
-  return options;
+  return {
+    _tag: "Valid",
+    value: {
+      ...(minify === undefined ? {} : { minify }),
+      ...(sourcemap === undefined ? {} : { sourcemap }),
+      ...(bytecode === undefined ? {} : { bytecode }),
+    },
+  };
 };
 
-export const bunAdapter: CompilerAdapter<Options, "bun", BunTarget> = {
+export const bunAdapter: CompilerAdapter<Options, "bun", BunTarget, ValidatedOptions> = {
   toolName: "bun",
   probeArgv: [
     "-e",
     'process.stdout.write(JSON.stringify({path:process.execPath,version:Bun.version,hostOs:process.platform==="darwin"?"macos":process.platform==="win32"?"windows":process.platform==="linux"?"linux":process.platform}))',
   ],
   targetTable: bunTargetTable,
+  validateOptions,
   renderArgv: ({ input, stagedOutfile }) => {
-    const options = optionsOf(input);
+    const options = input.options;
     return [
       "build",
       "--compile",

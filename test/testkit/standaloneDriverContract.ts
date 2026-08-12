@@ -126,6 +126,7 @@ export const describeStandaloneDriverContract = <Self, Options>(
       const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
       expect(lines).toHaveLength(1);
       expect(lines[0]?.[0]).toBe(config.probeFirstArg);
+      expect(existsSync(join(root, "out"))).toBe(false);
     });
 
     if (config.unsupportedTarget !== undefined) {

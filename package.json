@@ -39,7 +39,7 @@
     "build": "pnpm clean && tsc -b tsconfig.build.json --force",
     "prepack": "pnpm build",
     "test:types": "tstyche",
-    "test:unit": "vitest run test/unit/standalone-contract.test.ts test/unit/standalone-process.test.ts test/unit/standalone-publication.test.ts test/unit/standalone-bun.test.ts test/unit/standalone-deno.test.ts",
+    "test:unit": "vitest run test/unit/standalone-contract.test.ts test/unit/standalone-process.test.ts test/unit/standalone-publication.test.ts test/unit/standalone-bun.test.ts test/unit/standalone-deno.test.ts test/unit/standalone-matrix.test.ts",
     "test:architecture": "vitest run test/architecture/import-boundaries.test.ts test/architecture/public-api.test.ts test/architecture/generated-and-ci.test.ts test/architecture/workflow-receipt.test.ts test/architecture/docs-contract.test.ts",
     "test:consumer": "pnpm build && node scripts/test-built-consumer.mjs",
     "test:publication": "vitest run test/unit/standalone-publication.test.ts",

@@ -9,6 +9,9 @@ const sourceFiles = async (): Promise<string[]> => {
   return entries.filter((entry) => entry.endsWith(".ts")).map((entry) => resolve(root, "src", entry));
 };
 
+const importSpecifiers = (source: string): ReadonlyArray<string> =>
+  [...source.matchAll(/(?:from\s+|import\s*\(|import\s+)(["'])([^"']+)\1/g)].map((match) => match[2]!);
+
 const compilerSpecific = new Set([
   resolve(root, "src/Bun.ts"),
   resolve(root, "src/Deno.ts"),
@@ -43,6 +46,31 @@ describe("source ownership boundaries", () => {
       expect(source, file).not.toMatch(/from "[./]*Bun\.js"|from "[./]*Deno\.js"/);
       expect(source, file).not.toMatch(/BunAdapter|DenoAdapter/);
     }
+  });
+
+  it("keeps provider target tables pure and dependent only on the shared table primitive", async () => {
+    for (const name of ["BunTarget.ts", "DenoTarget.ts"]) {
+      const file = resolve(root, "src/standalone/internal", name);
+      expect(importSpecifiers(await readFile(file, "utf8")), file).toEqual(["./TargetTable.js"]);
+    }
+  });
+
+  it("allowlists every source module that imports a provider target contract", async () => {
+    const importers: string[] = [];
+    for (const file of await sourceFiles()) {
+      if (
+        importSpecifiers(await readFile(file, "utf8")).some((specifier) =>
+          /(?:BunTarget|DenoTarget)\.js$/.test(specifier)
+        )
+      ) {
+        importers.push(file);
+      }
+    }
+    expect(importers.sort()).toEqual([
+      resolve(root, "src/standalone/MatrixError.ts"),
+      resolve(root, "src/standalone/internal/BunAdapter.ts"),
+      resolve(root, "src/standalone/internal/DenoAdapter.ts"),
+    ].sort());
   });
 
   it("keeps the package export map at exactly the three public paths", async () => {

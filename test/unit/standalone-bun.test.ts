@@ -36,12 +36,15 @@ const fakeTool = (): string => {
 
 describe("standalone Bun driver", () => {
   it("renders only requested native flags and exact target mapping", () => {
+    const options = bunAdapter.validateOptions({ minify: true, sourcemap: "inline", bytecode: true });
+    expect(options._tag).toBe("Valid");
+    if (options._tag !== "Valid") throw options.error;
     expect(bunAdapter.renderArgv({
       input: {
         entrypoint: "src/main.ts",
         outfile: "dist/app",
         target: "linux-aarch64-gnu",
-        options: { minify: true, sourcemap: "inline", bytecode: true },
+        options: options.value,
       },
       stagedOutfile: "/tmp/.effect-build/app",
     })).toEqual([
@@ -57,12 +60,41 @@ describe("standalone Bun driver", () => {
   });
 
   it("rejects unknown runtime options", () => {
-    expect(() =>
-      bunAdapter.renderArgv({
-        input: { entrypoint: "a.ts", outfile: "app", options: { rawArgs: ["--x"] } as never },
-        stagedOutfile: "/tmp/app",
-      })
-    ).toThrowError(expect.objectContaining({ _tag: "InvalidDriverOptions" }));
+    expect(bunAdapter.validateOptions({ rawArgs: ["--x"] })).toMatchObject({
+      _tag: "Invalid",
+      error: { _tag: "InvalidDriverOptions" },
+    });
+  });
+
+  it("copies validated options so rendering cannot observe later caller mutation", () => {
+    let minifyReads = 0;
+    let sourcemapReads = 0;
+    const source: { minify?: boolean; sourcemap?: string } = {
+      get minify() {
+        minifyReads += 1;
+        return true;
+      },
+      get sourcemap() {
+        sourcemapReads += 1;
+        return "inline";
+      },
+    };
+    const validated = bunAdapter.validateOptions(source);
+    expect(validated._tag).toBe("Valid");
+    if (validated._tag !== "Valid") throw validated.error;
+    expect(bunAdapter.renderArgv({
+      input: { entrypoint: "a.ts", outfile: "app", target: "macos-x64", options: validated.value },
+      stagedOutfile: "/tmp/app",
+    })).toEqual([
+      "build",
+      "--compile",
+      "--target=bun-darwin-x64",
+      "--minify",
+      "--sourcemap=inline",
+      "--outfile=/tmp/app",
+      "a.ts",
+    ]);
+    expect({ minifyReads, sourcemapReads }).toEqual({ minifyReads: 1, sourcemapReads: 1 });
   });
 
   it("probes an explicit absolute executable while constructing the Layer", async () => {
