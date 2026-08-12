@@ -5,7 +5,8 @@ after a product-direction interview and source/verification audit. Re-audited
 with the same read-only planning workflow on 2026-08-12 at commit `eb2995c`
 after a target-matrix design review. Plans 001-006 record the original
 managed-proof design. Plans 007-010 record the hard cutover to the standalone
-compile operation. Plans 011-014 are the active typed-target and matrix program.
+compile operation. Plans 011-014 are the completed typed-target and matrix
+program.
 The decision gates opened by
 `FIRST-PRINCIPLES-REVIEW.md` (operator-audited, 2026-08-10) were answered by
 the operator on 2026-08-11 and are recorded under **Gate decisions** below.
@@ -17,9 +18,9 @@ and public-operation freezes identified below. Plans 001-006 remain a
 historical decision record of the removed managed design.
 
 Read the assigned plan fully before changing code. Honor its drift checks, dirty
-worktree boundary, verification gates, and STOP conditions. This is a private
-pre-release package: do not add compatibility aliases, legacy fallbacks, a
-parallel “advanced” managed tier, or a raw-argv escape hatch.
+worktree boundary, verification gates, and STOP conditions. Do not add
+compatibility aliases, legacy fallbacks, a parallel “advanced” managed tier, or
+a raw-argv escape hatch.
 
 ## Gate decisions (recorded 2026-08-11)
 
@@ -123,7 +124,7 @@ of the 2026-08-11 gates:
 | 011 | Centralize provider target authority behind the public API | P1 | M | 010 | DONE |
 | 013 | Prove every provider target with required real evidence | P1 | L | 011 | DONE |
 | 012 | Build the typed executable target matrix | P1 | L | 013 | DONE |
-| 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | IN PROGRESS |
+| 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | DONE |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -168,9 +169,9 @@ behavior, or the standalone operation invalidated that earlier work.
   scalar inputs/artifacts, correlates the root Artifact schema, wires the matrix
   into the existing services, and freezes packed-consumer behavior, examples,
   docs, and the repository execution rule together.
-- Plans 011-014 are one no-publish migration program. Intermediate commits may
-  be reviewed and run in CI, but must not be tagged or published; only a green
-  Plan 014 state is a release candidate.
+- Plans 011-014 were one no-publish migration program. Intermediate commits
+  were reviewed and run in CI without tags or publication; the green Plan 014
+  state is the release candidate.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 

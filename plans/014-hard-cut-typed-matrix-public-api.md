@@ -39,11 +39,11 @@
 - **Category**: direction / public API / documentation / release contract
 - **Planned at**: commit `eb2995c`, 2026-08-12
 - **Effect baseline**: `effect@4.0.0-beta.107`
-- **Required final receipt**: pending. Plan 013's receipt permits this work to
-  start; it cannot complete this plan. Completion requires a new green required
-  workflow for the exact Plan 014 source commit and an unbulleted receipt in
-  this file prefixed `Final target evidence:`, followed by the run URL, ` @ `,
-  and the full 40-character SHA.
+- **Required final receipt**: verified below for the exact Plan 014 source
+  commit. The required workflow completed with the exact CI path, SHA, and
+  complete successful job set checked by the receipt verifier.
+
+Final target evidence: https://github.com/mannyc2/effect-build/actions/runs/31621822836 @ 03d6649dc4289c6b65796de3e057974ba6cc1ce3
 
 ## Why this matters
 
@@ -552,38 +552,38 @@ empty.
 
 ## Done criteria
 
-- [ ] The root module exports exactly `Artifact`, `BuildError`, `MatrixError`,
+- [x] The root module exports exactly `Artifact`, `BuildError`, `MatrixError`,
   and `Target` at runtime.
-- [ ] Each provider module exports exactly `Compiler`, `Target`,
+- [x] Each provider module exports exactly `Compiler`, `Target`,
   `compileExecutable`, `compileExecutableMatrix`, and `layer` at runtime.
-- [ ] Package subpaths remain exactly `.`, `./bun`, and `./deno`.
-- [ ] Built declaration ASTs expose exactly the runtime and type-only names in
+- [x] Package subpaths remain exactly `.`, `./bun`, and `./deno`.
+- [x] Built declaration ASTs expose exactly the runtime and type-only names in
   the frozen table; no shared generic/helper declaration leaks.
-- [ ] Public matrix signatures are provider-concrete and never generic over
+- [x] Public matrix signatures are provider-concrete and never generic over
   `string`.
-- [ ] Type-only provider Artifact and MatrixError aliases preserve target/tool
+- [x] Type-only provider Artifact and MatrixError aliases preserve target/tool
   correlation without adding provider runtime keys.
-- [ ] Scalar fields, defaults, lifecycle, and `BuildError` union are unchanged;
+- [x] Scalar fields, defaults, lifecycle, and `BuildError` union are unchanged;
   only provider target input and successful Artifact types intentionally narrow.
-- [ ] Root Artifact decoding accepts every valid Bun/Deno pair and rejects all
+- [x] Root Artifact decoding accepts every valid Bun/Deno pair and rejects all
   impossible provider-target values, including Deno musl and both narrowed Bun
   pairs.
-- [ ] Matrix failure is exactly the separate two-tag `MatrixError` union, with
+- [x] Matrix failure is exactly the separate two-tag `MatrixError` union, with
   the exact field schemas and non-empty/absolute-path decode constraints above.
-- [ ] README/docs/examples state canonical naming, total preflight, bounded
+- [x] README/docs/examples state canonical naming, total preflight, bounded
   collect-all behavior, partial commits, and interruption accurately.
-- [ ] `AGENTS.md` states the exact scalar-plus-matrix product boundary.
-- [ ] Gate supersessions are recorded without erasing their original bases.
-- [ ] Built and freshly packed consumers prove the exact public surface.
-- [ ] `pnpm verify` passes locally; the final required workflow for the Plan 014
+- [x] `AGENTS.md` states the exact scalar-plus-matrix product boundary.
+- [x] Gate supersessions are recorded without erasing their original bases.
+- [x] Built and freshly packed consumers prove the exact public surface.
+- [x] `pnpm verify` passes locally; the final required workflow for the Plan 014
   source commit has green current-host real tools, publication hosts, and both
   6/6 target-support shards.
-- [ ] This file records that final run URL/SHA, and no product or verification
+- [x] This file records that final run URL/SHA, and no product or verification
   file differs from the recorded evidence commit.
-- [ ] The recorded run's API conclusion, `head_sha`, and complete required job
+- [x] The recorded run's API conclusion, `head_sha`, and complete required job
   set and exact CI workflow path—not merely the receipt text—have been verified.
-- [ ] `npm pack --dry-run` contains only intended files.
-- [ ] No out-of-scope source or documentation file is modified.
+- [x] `npm pack --dry-run` contains only intended files.
+- [x] No out-of-scope source or documentation file is modified.
 
 ## STOP conditions
 
