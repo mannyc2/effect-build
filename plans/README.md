@@ -120,7 +120,7 @@ of the 2026-08-11 gates:
 | 009 | Add discoverable Bun/Deno drivers and exercise all three axes | P1 | L | 008 | DONE |
 | 010 | Hard-cut the public API and delete the managed proof system | P1 | L | 009 | DONE |
 | 011 | Centralize provider target authority behind the public API | P1 | M | 010 | DONE |
-| 013 | Prove every provider target with required real evidence | P1 | L | 011 | TODO |
+| 013 | Prove every provider target with required real evidence | P1 | L | 011 | IN PROGRESS |
 | 012 | Build the typed executable target matrix | P1 | L | 013 | TODO |
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | TODO |
 

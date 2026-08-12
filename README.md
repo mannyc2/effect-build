@@ -12,9 +12,9 @@ a half-written executable.
 pnpm add effect-build effect@4.0.0-beta.107 @effect/platform-node@4.0.0-beta.107
 ```
 
-The v0.1.0 support contract uses the official Node platform package to host the
-Effect program. Bun and Deno are the supported compilers; running the
-orchestrator itself under Bun or Deno remains experimental.
+The support contract uses the official Node platform package to host the Effect
+program. Bun and Deno are the supported compilers; running the orchestrator
+itself under Bun or Deno remains experimental.
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
@@ -38,21 +38,33 @@ the Effect program.
 
 ## Three independent axes
 
-| Axis                 | Examples      | Selected by                            |
-| -------------------- | ------------- | -------------------------------------- |
-| Orchestrator runtime | Node          | the official Effect platform layer     |
-| Compiler             | Bun or Deno   | the package subpath and compiler Layer |
-| Artifact target      | Linux x64 GNU | the optional `target` field            |
+| Axis                 | Examples              | Selected by                            |
+| -------------------- | --------------------- | -------------------------------------- |
+| Orchestrator runtime | Node                  | the official Effect platform layer     |
+| Compiler             | Bun or Deno           | the package subpath and compiler Layer |
+| Artifact target      | macOS, Linux, Windows | the optional `target` field            |
 
 Changing one axis does not silently change either of the others.
 
-The supported v0.1.0 cell is Node on Linux x64 GNU with either compiler.
-Other orchestrator hosts and artifact targets remain experimental.
+Under the Node orchestrator, pinned real-compiler CI requires these artifact
+targets:
 
-## Concurrent targets (experimental)
+- Bun 1.3.9: `macos-x64`, `macos-aarch64`, `linux-x64-gnu`,
+  `linux-x64-musl`, `linux-aarch64-gnu`, `linux-aarch64-musl`, `windows-x64`,
+  and `windows-aarch64`.
+- Deno 2.9.3: `macos-x64`, `macos-aarch64`, `linux-x64-gnu`,
+  `linux-aarch64-gnu`, `windows-x64`, and `windows-aarch64`.
 
-Normal Effect composition can compile different targets concurrently. This
-example uses foreign targets, which remain outside the v0.1.0 support contract:
+Every listed pair is compiled and its native format, architecture, and Linux
+ABI are checked by external system tools. Current Linux x64 GNU artifacts are
+also executed. Foreign outputs are not executed on the Linux CI runner.
+
+These fixture versions define the regularly revalidated support boundary; the
+library does not reject another installed compiler version at runtime.
+
+## Concurrent targets
+
+Normal Effect composition can compile different targets concurrently:
 
 ```ts
 const mac = Bun.compileExecutable({
@@ -98,4 +110,7 @@ follow each compiler CLI's normal behavior.
 - [Runnable examples](examples/README.md)
 
 Run `pnpm verify` for the deterministic local gate. Tool-backed Bun and Deno
-integration runs are in `pnpm verify:real`.
+current-host runs are in `pnpm verify:real`. The exhaustive real target gate is
+`pnpm verify:targets`; it requires Linux x64 with Ubuntu's `/usr/bin/file` and
+`/usr/bin/readelf`, and otherwise directs the caller to the required Ubuntu CI
+jobs.

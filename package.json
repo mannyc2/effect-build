@@ -40,18 +40,19 @@
     "prepack": "pnpm build",
     "test:types": "tstyche",
     "test:unit": "vitest run test/unit/standalone-contract.test.ts test/unit/standalone-process.test.ts test/unit/standalone-publication.test.ts test/unit/standalone-bun.test.ts test/unit/standalone-deno.test.ts",
-    "test:architecture": "vitest run test/architecture/import-boundaries.test.ts test/architecture/public-api.test.ts test/architecture/generated-and-ci.test.ts test/architecture/docs-contract.test.ts",
+    "test:architecture": "vitest run test/architecture/import-boundaries.test.ts test/architecture/public-api.test.ts test/architecture/generated-and-ci.test.ts test/architecture/workflow-receipt.test.ts test/architecture/docs-contract.test.ts",
     "test:consumer": "pnpm build && node scripts/test-built-consumer.mjs",
     "test:publication": "vitest run test/unit/standalone-publication.test.ts",
     "test:integration:real": "vitest run test/integration/standalone-bun.test.ts test/integration/standalone-deno.test.ts",
-    "test:integration:cross-target": "vitest run test/integration/standalone-cross-target.test.ts",
+    "test:integration:target": "vitest run test/integration/standalone-target-support.test.ts",
     "test:host:standalone": "vitest run test/host/standalone-node.smoke.ts",
     "test:host:extra": "bun run test/host/standalone-bun.smoke.ts && deno run --sloppy-imports --allow-run --allow-read --allow-write --allow-env test/host/standalone-deno.smoke.ts",
     "lint": "oxlint src test typetest examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
     "verify": "pnpm check && pnpm test:types && pnpm test:unit && pnpm test:consumer && pnpm test:architecture && pnpm lint && pnpm format:check",
-    "verify:real": "pnpm test:integration:real && pnpm test:host:standalone"
+    "verify:real": "pnpm test:integration:real && pnpm test:host:standalone",
+    "verify:targets": "node scripts/verify-target-support.mjs"
   },
   "peerDependencies": {
     "effect": "4.0.0-beta.107"

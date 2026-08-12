@@ -62,3 +62,9 @@ The compiler never writes directly to the requested destination.
 - Library source has no `node:*` imports and no `Effect.runPromise` calls.
 - Package exports and runtime keys match `tooling/public-api.json`.
 - All examples compile against a packed installation.
+- The package-private Bun and Deno target-table literals exactly equal the
+  authored required cells in `tooling/support-matrix.json`.
+- Every provider target is compiled with a pinned real compiler on Linux x64
+  and independently inspected with `/usr/bin/file`; ELF outputs also use
+  `/usr/bin/readelf`. Execution remains a separate current-host check; foreign
+  native outputs are never executed on the Linux runner.

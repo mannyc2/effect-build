@@ -25,9 +25,8 @@ probe raises `ToolProbeFailed`.
 | `sourcemap` | `"linked" \| "inline"` | `--sourcemap=<value>` |
 | `bytecode`  | `boolean`              | `--bytecode`          |
 
-Bun maps the following canonical targets. The v0.1.0 supported cell is the
-Linux x64 GNU target under the Node orchestrator; all other target mappings
-remain experimental:
+Bun 1.3.9 is required in CI to compile and externally validate all of these
+canonical targets under the Node orchestrator:
 `macos-x64`, `macos-aarch64`, `linux-x64-gnu`, `linux-x64-musl`,
 `linux-aarch64-gnu`, `linux-aarch64-musl`, `windows-x64`, and
 `windows-aarch64`.
@@ -42,10 +41,17 @@ remain experimental:
 | scoped permissions | `true \| readonly string[]`         | `--allow-read`, `--allow-net=...`, and related flags |
 
 Scoped permission names are `read`, `write`, `net`, `env`, `run`, `ffi`, `sys`,
-and `import`. Deno maps macOS x64/aarch64, Linux GNU x64/aarch64, and Windows
-x64/aarch64. The v0.1.0 supported cell is the Linux x64 GNU target under the
-Node orchestrator; all other target mappings remain experimental. Musl
-requests fail with `TargetUnsupported` before spawn.
+and `import`. Deno 2.9.3 is required in CI to compile and externally validate
+`macos-x64`, `macos-aarch64`, `linux-x64-gnu`, `linux-aarch64-gnu`,
+`windows-x64`, and `windows-aarch64` under the Node orchestrator. Musl requests
+fail with `TargetUnsupported` before spawn.
+
+For both compilers, the required target lane checks native format and
+architecture and distinguishes GNU from musl through the ELF interpreter.
+Current Linux x64 GNU artifacts are additionally executed; foreign artifacts
+are not executed on the Linux runner. Support tracks these pinned, regularly
+revalidated compiler fixtures, but the library does not reject other compiler
+versions at runtime.
 
 Project configuration and environment are left to the compiler CLI. If a
 future control is needed, it must become a typed option rather than a raw
