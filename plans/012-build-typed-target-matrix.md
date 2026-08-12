@@ -578,31 +578,31 @@ that an internal helper was called.
 
 ## Done criteria
 
-- [ ] Matrix input is homogeneous and provider concrete; no public generic
+- [x] Matrix input is homogeneous and provider concrete; no public generic
   target/string signature appears.
-- [ ] Output naming is exactly `<name>-<target>[.exe]`; no per-cell outfile or
+- [x] Output naming is exactly `<name>-<target>[.exe]`; no per-cell outfile or
   naming callback exists.
-- [ ] Complete preflight happens before output-directory creation, staging,
+- [x] Complete preflight happens before output-directory creation, staging,
   render, or build spawn.
-- [ ] Invalid options are checked once at matrix preflight and before staging
+- [x] Invalid options are checked once at matrix preflight and before staging
   for single compile.
-- [ ] Concurrency defaults to 1 and accepts only positive safe integers.
-- [ ] Typed cell failures collect all and carry exact target/path attribution.
-- [ ] Provider matrix error types narrow failure targets and partial artifacts;
+- [x] Concurrency defaults to 1 and accepts only positive safe integers.
+- [x] Typed cell failures collect all and carry exact target/path attribution.
+- [x] Provider matrix error types narrow failure targets and partial artifacts;
   only one root runtime MatrixError schema exists.
-- [ ] Successful partial artifacts are returned inside `MatrixFailed` and stay
+- [x] Successful partial artifacts are returned inside `MatrixFailed` and stay
   published; no rollback exists.
-- [ ] Defects and interruption are not converted to matrix errors.
-- [ ] Multi-child interruption reaps active children, skips queued work, and
+- [x] Defects and interruption are not converted to matrix errors.
+- [x] Multi-child interruption reaps active children, skips queued work, and
   cleans staging.
-- [ ] Package-private runner construction is one-adapter/one-tool; Plan 014 is
+- [x] Package-private runner construction is one-adapter/one-tool; Plan 014 is
   responsible for proving one discovery/probe per provided Layer, reused across
   both scalar and matrix calls.
-- [ ] Provider entry points and Compiler service declarations do not expose the
+- [x] Provider entry points and Compiler service declarations do not expose the
   matrix before Plan 014.
-- [ ] Existing `compileExecutable` behavior and `BuildError` union remain green.
-- [ ] `pnpm verify` exits 0.
-- [ ] No files outside Scope are modified, other than the authorized status
+- [x] Existing `compileExecutable` behavior and `BuildError` union remain green.
+- [x] `pnpm verify` exits 0.
+- [x] No files outside Scope are modified, other than the authorized status
   row.
 
 ## STOP conditions
