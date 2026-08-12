@@ -523,27 +523,28 @@ status row are modified.
 
 ## Done criteria
 
-- [ ] One canonical target metadata catalog exists; engine and atomic output do
+- [x] One canonical target metadata catalog exists; engine and atomic output do
   not parse target strings.
-- [ ] One target-to-token table per provider derives schema, type, literals,
+- [x] One target-to-token table per provider derives schema, type, literals,
   membership, lookup, and available-target reporting.
-- [ ] No `supportedTargets`, partial provider target record, or adapter lookup
+- [x] No `supportedTargets`, partial provider target record, or adapter lookup
   cast remains.
-- [ ] Internal Deno target types reject musl; the public scalar signature stays
+- [x] Internal Deno target types reject musl; the public scalar signature stays
   unchanged until evidence and Plan 014.
-- [ ] Runtime-invalid targets fail through the typed channel before staging or
+- [x] Runtime-invalid targets fail through the typed channel before staging or
   spawn.
-- [ ] Omitted-target Windows staging uses `.exe`; final single-build outfile
+- [x] Omitted-target Windows staging uses `.exe`; final single-build outfile
   semantics remain exact.
-- [ ] Compiler host OS is internal and never appears in `artifact.tool`.
-- [ ] Root `Target` and `Artifact` schemas remain the only cross-provider
+- [x] Compiler host OS is internal and never appears in `artifact.tool`.
+- [x] Root `Target` and `Artifact` schemas remain the only cross-provider
   runtime representations.
-- [ ] Provider runtime keys and operation declarations remain exactly at the
+- [x] Provider runtime keys and operation declarations remain exactly at the
   Plan 010 scalar surface; the only public declaration correction is
   `TargetUnsupported.requested: string`.
-- [ ] `pnpm verify` exits 0.
-- [ ] Existing provisioned `pnpm verify:real` exits 0.
-- [ ] No file outside Scope is modified, other than the authorized status row.
+- [x] `pnpm verify` exits 0.
+- [x] Existing provisioned `pnpm verify:real` exits 0.
+- [x] No file outside Scope is modified, other than the authorized active-plan
+  contract/status updates required by the evidence correction.
 
 ## STOP conditions
 

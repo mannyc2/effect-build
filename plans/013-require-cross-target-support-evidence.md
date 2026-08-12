@@ -499,30 +499,30 @@ diff is empty. Commit the receipt/status update and only then mark Plan 013
 
 ## Done criteria
 
-- [ ] `tooling/support-matrix.json` contains exactly Bun 6 and Deno 6 cells.
-- [ ] Built package-private provider table literals equal advertised cells
+- [x] `tooling/support-matrix.json` contains exactly Bun 6 and Deno 6 cells.
+- [x] Built package-private provider table literals equal advertised cells
   exactly.
-- [ ] Every cell is a required, non-skipping invocation in CI and release; two
+- [x] Every cell is a required, non-skipping invocation in CI and release; two
   provider jobs report all 6/6 cells without repeated per-target setup.
-- [ ] Every cell compiles with its pinned compiler and independently validates
+- [x] Every cell compiles with its pinned compiler and independently validates
   native OS/architecture/ABI.
-- [ ] Current Linux-x64-GNU Bun and Deno artifacts still execute in
+- [x] Current Linux-x64-GNU Bun and Deno artifacts still execute in
   `verify:real`.
-- [ ] The optional four-cell cross-target test is deleted; no duplicate support
+- [x] The optional four-cell cross-target test is deleted; no duplicate support
   authority remains.
-- [ ] Cross-target Deno cells do not receive the Linux-only `DENORT_BIN`.
-- [ ] Release publishing depends on target support.
-- [ ] Docs no longer call the proven provider target sets experimental, without
+- [x] Cross-target Deno cells do not receive the Linux-only `DENORT_BIN`.
+- [x] Release publishing depends on target support.
+- [x] Docs no longer call the proven provider target sets experimental, without
   claiming the still-unpublished provider Target exports.
-- [ ] `pnpm verify` and `pnpm verify:real` exit 0; `pnpm verify:targets` exits 0
+- [x] `pnpm verify` and `pnpm verify:real` exit 0; `pnpm verify:targets` exits 0
   on provisioned Linux x64, and both required provider jobs are observed green.
-- [ ] This file contains the exact required GitHub-run receipt for the completed
+- [x] This file contains the exact required GitHub-run receipt for the completed
   implementation SHA, and that SHA is the one reviewed by Plan 014.
-- [ ] No product or verification file differs from that recorded evidence
+- [x] No product or verification file differs from that recorded evidence
   commit; only receipt/status plan changes may follow it.
-- [ ] The recorded run's API conclusion, `head_sha`, and complete required job
+- [x] The recorded run's API conclusion, `head_sha`, and complete required job
   set and exact CI workflow path—not merely the receipt text—have been verified.
-- [ ] No file outside Scope is modified, other than the authorized gate/status
+- [x] No file outside Scope is modified, other than the authorized gate/status
   updates.
 
 ## STOP conditions
@@ -555,3 +555,5 @@ Stop and report if:
   on every foreign OS. Keep current-host execution as a separate assertion.
 - Reviewers should scrutinize Windows ARM64, GNU/musl classification, workflow
   escape hatches, and release `needs`.
+
+Target evidence: https://github.com/mannyc2/effect-build/actions/runs/31616301252 @ 2d430ec0b5abcd4e276cfe7c059f897ac4fc6b8b
