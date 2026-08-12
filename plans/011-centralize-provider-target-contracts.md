@@ -44,6 +44,18 @@
 - **Effect baseline**: `effect@4.0.0-beta.107`; use the installed source under
   `node_modules/effect/src/`, not API names from a later Effect release
 
+### Execution evidence correction (2026-08-12)
+
+The first required target run at
+`https://github.com/mannyc2/effect-build/actions/runs/31614922393` for source
+`37723270060a183f2a0cccf57c19a13a3f14bd4f` triggered this plan's capability
+mismatch STOP condition before the provider schemas were public. Pinned Bun
+1.3.9 produced an ARM64-musl-labeled ELF whose version table contained
+`GLIBC_2.0`, and could not acquire a Windows ARM64 runtime. The canonical root
+catalog remains eight-value vocabulary, while the Bun provider table is
+corrected to the six cells that passed the strict external oracle. Plan 011 is
+re-run on that narrower authority before Plan 013 can complete.
+
 ## Why this matters
 
 The root target union, each adapter's target map, `supportedTargets`, and the
@@ -107,9 +119,9 @@ The exact provider projections are:
 | `linux-x64-gnu` | `bun-linux-x64` | `x86_64-unknown-linux-gnu` |
 | `linux-x64-musl` | `bun-linux-x64-musl` | unsupported |
 | `linux-aarch64-gnu` | `bun-linux-arm64` | `aarch64-unknown-linux-gnu` |
-| `linux-aarch64-musl` | `bun-linux-arm64-musl` | unsupported |
+| `linux-aarch64-musl` | unsupported | unsupported |
 | `windows-x64` | `bun-windows-x64` | `x86_64-pc-windows-msvc` |
-| `windows-aarch64` | `bun-windows-arm64` | `aarch64-pc-windows-msvc` |
+| `windows-aarch64` | unsupported | `aarch64-pc-windows-msvc` |
 
 Each provider table must derive all of the following from its keys and values:
 
@@ -132,7 +144,7 @@ exported by this plan:
 import * as Bun from "effect-build/bun"
 import * as Deno from "effect-build/deno"
 
-Bun.Target.literals  // all eight canonical targets
+Bun.Target.literals  // six evidence-backed targets
 Deno.Target.literals // six targets; neither musl target appears
 
 const bun: Bun.CompileExecutableInput = {
@@ -149,7 +161,8 @@ const deno: Deno.CompileExecutableInput = {
 ```
 
 `Deno.CompileExecutableInput` rejects both musl targets at compile time. Bun
-accepts them. The success types are provider-specialized artifacts whose
+accepts only x64 musl; its pinned ARM64-musl runtime is not musl-pure. The
+success types are provider-specialized artifacts whose
 `target` and `tool.name` fields are narrowed to the selected provider. Do not
 expose generic call signatures such as `<T, string>`; shared generics are
 package implementation details hidden by the concrete Bun/Deno aliases.
@@ -337,8 +350,8 @@ Add type and runtime tests before production changes:
 
 - exact package-private Bun/Deno table schema/literal sequences;
 - every provider literal renders its exact token from the table above;
-- internal Bun target types accept musl while internal Deno target types reject
-  it;
+- internal Bun target types accept x64 musl while internal Deno target types
+  reject both musl targets;
 - unknown strings and non-string values forced through the public operation
   fail as typed `BuildError`, with zero render/spawn and no output directory;
 - `TargetUnsupported` round-trips through `BuildError` encoding with an unknown

@@ -50,8 +50,7 @@ Under the Node orchestrator, pinned real-compiler CI requires these artifact
 targets:
 
 - Bun 1.3.9: `macos-x64`, `macos-aarch64`, `linux-x64-gnu`,
-  `linux-x64-musl`, `linux-aarch64-gnu`, `linux-aarch64-musl`, `windows-x64`,
-  and `windows-aarch64`.
+  `linux-x64-musl`, `linux-aarch64-gnu`, and `windows-x64`.
 - Deno 2.9.3: `macos-x64`, `macos-aarch64`, `linux-x64-gnu`,
   `linux-aarch64-gnu`, `windows-x64`, and `windows-aarch64`.
 

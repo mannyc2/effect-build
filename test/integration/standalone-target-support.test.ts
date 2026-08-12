@@ -37,7 +37,11 @@ const oracle = async (path: string, target: string): Promise<void> => {
     }
   }
   const options = { env: { ...process.env, LC_ALL: "C" }, maxBuffer: 8 * 1024 * 1024 } as const;
-  const { stdout: fileOutput } = await execFileAsync("/usr/bin/file", ["--brief", "--", path], options);
+  const { stdout: fileOutput } = await execFileAsync(
+    "/usr/bin/file",
+    ["--brief", "-P", "elf_shsize=268435456", "--", path],
+    options,
+  );
 
   if (target.startsWith("macos-")) {
     expect(fileOutput).toMatch(/Mach-O/);

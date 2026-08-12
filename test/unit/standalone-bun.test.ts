@@ -40,14 +40,14 @@ describe("standalone Bun driver", () => {
       input: {
         entrypoint: "src/main.ts",
         outfile: "dist/app",
-        target: "linux-aarch64-musl",
+        target: "linux-aarch64-gnu",
         options: { minify: true, sourcemap: "inline", bytecode: true },
       },
       stagedOutfile: "/tmp/.effect-build/app",
     })).toEqual([
       "build",
       "--compile",
-      "--target=bun-linux-arm64-musl",
+      "--target=bun-linux-arm64",
       "--minify",
       "--sourcemap=inline",
       "--bytecode",

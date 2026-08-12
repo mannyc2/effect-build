@@ -76,7 +76,7 @@ const expectPinnedActionsWithoutEscapes = (workflow: Workflow): void => {
 };
 
 describe("tooling pins and CI contract", () => {
-  it("validates the authored 14-cell manifest and its provider-table equality", async () => {
+  it("validates the authored 12-cell manifest and its provider-table equality", async () => {
     const manifest = JSON.parse(await readFile(resolve(root, "tooling/support-matrix.json"), "utf8")) as SupportMatrix;
     const tooling = await loadScript<{
       validateSupportMatrix: (support: unknown) => unknown;
@@ -93,7 +93,7 @@ describe("tooling pins and CI contract", () => {
       bun: bun.bunTargetTable.Target.literals,
       deno: deno.denoTargetTable.Target.literals,
     };
-    expect(tables.bun).toHaveLength(8);
+    expect(tables.bun).toHaveLength(6);
     expect(tables.deno).toHaveLength(6);
     expect(() => assertProviderTargets(manifest, tables)).not.toThrow();
 
@@ -262,7 +262,7 @@ describe("tooling pins and CI contract", () => {
         return { stdout: "bun=/tmp/effect-build-test-bun\n", stderr: "" };
       }
       const target = options.env.EFFECT_BUILD_TARGET;
-      if (target === "macos-x64" || target === "windows-aarch64") throw new Error(`cell failed: ${target}`);
+      if (target === "macos-x64" || target === "windows-x64") throw new Error(`cell failed: ${target}`);
       return { stdout: "", stderr: "" };
     };
     await expect(verifier.verifyTargetSupport({
@@ -281,9 +281,9 @@ describe("tooling pins and CI contract", () => {
       makeTemporaryDirectory: async () => "/tmp/effect-build-target-verifier-fixture",
       removeDirectory: async (path: string) => void (cleaned = path),
       log: () => undefined,
-    })).rejects.toThrow(/macos-x64.*windows-aarch64/);
+    })).rejects.toThrow(/macos-x64.*windows-x64/);
     const cells = calls.filter((call) => call.argv.includes("test:integration:target"));
-    expect(cells).toHaveLength(8);
+    expect(cells).toHaveLength(6);
     expect(cells.every((call) => call.executable === process.execPath && call.argv[0] === "/tmp/pnpm.cjs")).toBe(true);
     expect(cells.map((call) => call.env.EFFECT_BUILD_TARGET)).toEqual([
       "macos-x64",
@@ -291,9 +291,7 @@ describe("tooling pins and CI contract", () => {
       "linux-x64-gnu",
       "linux-x64-musl",
       "linux-aarch64-gnu",
-      "linux-aarch64-musl",
       "windows-x64",
-      "windows-aarch64",
     ]);
     expect(cells.every((call) => call.env.DENORT_BIN === undefined)).toBe(true);
     expect(cells.every((call) => call.env.BUN_INSTALL_CACHE_DIR?.startsWith(cleaned))).toBe(true);
@@ -327,17 +325,17 @@ describe("tooling pins and CI contract", () => {
       removeDirectory: async (path: string) => void (allCleaned = path),
       log: () => undefined,
     });
-    expect(allResult).toEqual({ attempted: 14, failures: [] });
+    expect(allResult).toEqual({ attempted: 12, failures: [] });
     const provisionCalls = allCalls.filter((call) => call.argv[0]?.endsWith("provision-tool-assets.mjs"));
     expect(provisionCalls.map((call) => call.argv.slice(-2))).toEqual([
       ["--only", "bun"],
       ["--only", "deno"],
     ]);
     const allCells = allCalls.filter((call) => call.argv.includes("test:integration:target"));
-    expect(allCells).toHaveLength(14);
+    expect(allCells).toHaveLength(12);
     const bunCells = allCells.filter((call) => call.env.EFFECT_BUILD_TARGET_COMPILER === "bun");
     const denoCells = allCells.filter((call) => call.env.EFFECT_BUILD_TARGET_COMPILER === "deno");
-    expect(bunCells).toHaveLength(8);
+    expect(bunCells).toHaveLength(6);
     expect(denoCells).toHaveLength(6);
     expect(allCells.every((call) => call.env.DENORT_BIN === undefined)).toBe(true);
     expect(bunCells.every((call) => call.env.BUN_INSTALL_CACHE_DIR?.startsWith(allCleaned))).toBe(true);
@@ -351,7 +349,7 @@ describe("tooling pins and CI contract", () => {
     const source = await readFile(resolve(root, "test/integration/standalone-target-support.test.ts"), "utf8");
     expect(source.match(/\bit\(/g)).toHaveLength(1);
     expect(source).not.toMatch(/\.skip\b|inspectNativeExecutable|NativeExecutable\.js/);
-    expect(source).toContain('execFileAsync("/usr/bin/file", ["--brief", "--", path]');
+    expect(source).toContain('["--brief", "-P", "elf_shsize=268435456", "--", path]');
     for (const flags of ['["-hW", path]', '["-lW", path]', '["-VW", path]']) expect(source).toContain(flags);
     expect(source).toContain('LC_ALL: "C"');
     expect(source).toContain("digest: true");
@@ -405,7 +403,7 @@ describe("tooling pins and CI contract", () => {
     expect(realTools?.env?.EFFECT_BUILD_EXPECTED_TARGET).toBe("linux-x64-gnu");
 
     const support = JSON.parse(await readFile(resolve(root, "tooling/support-matrix.json"), "utf8")) as SupportMatrix;
-    expect(support.supportedCells).toHaveLength(14);
+    expect(support.supportedCells).toHaveLength(12);
     const matrix = workflow.jobs["publication-hosts"]?.strategy?.matrix?.runner ?? [];
     expect([...matrix].sort()).toEqual([...support.publicationHosts].sort());
     expect(jobRuns(workflow, "publication-hosts")).toContain("pnpm test:publication");

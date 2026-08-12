@@ -37,12 +37,27 @@
   and an unbulleted receipt is appended to this file with the literal prefix
   `Target evidence:`, the GitHub run URL, ` @ `, and the full 40-character SHA.
 
+### First exact-source run (not a completion receipt)
+
+The required run at
+`https://github.com/mannyc2/effect-build/actions/runs/31614922393` for source
+`37723270060a183f2a0cccf57c19a13a3f14bd4f` passed quality, real-tools, and all
+three publication hosts, but intentionally failed both target-support shards.
+Bun passed six of eight provisional cells; the ARM64-musl output contradicted
+its label with `GLIBC_2.0` references, and pinned Bun could not acquire a
+Windows ARM64 runtime. That evidence reopened Plan 011 and narrowed Bun to six
+targets rather than weakening this plan's oracle. Deno compiled all six; its
+two valid Linux ELFs exposed Ubuntu libmagic 5.45's default 128 MiB ELF-section
+inspection ceiling. The independent `file` invocation is therefore kept
+strict but given an explicit bounded 256 MiB `elf_shsize` limit, while all
+`readelf` format, architecture, interpreter, and ABI checks remain unchanged.
+
 ## Why this matters
 
 A future public provider Target type is a support promise, not an autocomplete
-hint. The internal package maps eight Bun targets and six Deno targets, but
-advertises only Node/Linux-x64-GNU and keeps four foreign compile tests optional. A typed
-target matrix would make that mismatch more visible and more costly: callers
+hint. The provisional internal package mapped eight Bun targets and six Deno
+targets, but advertised only Node/Linux-x64-GNU and kept four foreign compile
+tests optional. A typed target matrix would make that mismatch more visible and more costly: callers
 would build release matrices from values the package has never required itself
 to produce.
 
@@ -58,7 +73,7 @@ Supersede gate decision 3's target subset while preserving its reasoning:
 
 - supported orchestrator host remains Node;
 - supported compilers remain pinned Bun 1.3.9 and Deno 2.9.3 fixtures for CI;
-- supported Bun artifact targets become all eight internal Bun table literals;
+- supported Bun artifact targets become all six evidence-backed Bun table literals;
 - supported Deno artifact targets become all six internal Deno table literals;
 - every `(compiler, target)` pair appears in the authored support manifest and
   runs as a non-skipping invocation in one of two required provider jobs;
@@ -75,7 +90,7 @@ The exact required cells are:
 
 | Compiler | Required targets |
 |---|---|
-| Bun 1.3.9 | `macos-x64`, `macos-aarch64`, `linux-x64-gnu`, `linux-x64-musl`, `linux-aarch64-gnu`, `linux-aarch64-musl`, `windows-x64`, `windows-aarch64` |
+| Bun 1.3.9 | `macos-x64`, `macos-aarch64`, `linux-x64-gnu`, `linux-x64-musl`, `linux-aarch64-gnu`, `windows-x64` |
 | Deno 2.9.3 | `macos-x64`, `macos-aarch64`, `linux-x64-gnu`, `linux-aarch64-gnu`, `windows-x64`, `windows-aarch64` |
 
 This does not reopen gate 1: callers still import exactly one provider module,
@@ -137,7 +152,7 @@ generic URL or arbitrary asset option is allowed.
 
 `pnpm verify:targets` is an explicitly Linux-x64 real-tool gate. Its Node
 orchestrator must create one temporary `EFFECT_BUILD_TOOL_DIR`, provision both
-pinned compilers there, parse their emitted paths, run all 14 cells, and clean
+pinned compilers there, parse their emitted paths, run all 12 cells, and clean
 the directory. `--compiler bun|deno` narrows the same script for CI and
 provisions only that compiler. On other hosts the command fails immediately
 with an actionable “run the required Ubuntu CI gate” message; it must not use
@@ -178,7 +193,7 @@ the acceptance oracle because current Deno docs lag that sixth target.
 | Tooling schema | `node scripts/read-tooling.mjs` | exits 0 and prints validated JSON |
 | Deterministic contract | `pnpm test:architecture` | manifests, internal tables, and two provider jobs agree |
 | One target cell | `EFFECT_BUILD_TARGET_COMPILER=bun EFFECT_BUILD_TARGET=windows-x64 EFFECT_BUILD_BUN_BIN=/absolute/bun pnpm test:integration:target` | one real compile/header test passes |
-| All target cells (Linux x64) | `pnpm verify:targets` | self-provisions pinned tools and reports all 14 cells |
+| All target cells (Linux x64) | `pnpm verify:targets` | self-provisions pinned tools and reports all 12 cells |
 | Current host | `pnpm verify:real` | current Linux GNU builds execute in CI-equivalent environment |
 | Full deterministic | `pnpm verify` | exit 0 |
 
@@ -238,7 +253,7 @@ all failures.
 
 ### Step 1: Author the exact support matrix and drift tests
 
-Expand `tooling/support-matrix.json` so the 14 `(compiler, target)` pairs are
+Expand `tooling/support-matrix.json` so the 12 `(compiler, target)` pairs are
 data, not prose. Order Bun first and Deno second, with each provider's cells in
 its table-literal order. Keep the existing Node orchestrator and three
 publication hosts. Update `read-tooling.mjs` to reject:
@@ -267,7 +282,7 @@ pnpm build
 pnpm exec vitest run test/architecture/generated-and-ci.test.ts
 ```
 
-Expected: exact 8/6 equality passes; duplicate/missing/extra test fixtures are
+Expected: exact 6/6 equality passes; duplicate/missing/extra test fixtures are
 rejected.
 
 ### Step 2: Replace the optional sample with one strict target-cell test
@@ -340,8 +355,8 @@ node scripts/verify-target-support.mjs --compiler deno
 pnpm verify:targets
 ```
 
-Expected: provider commands report 8 and 6 cells respectively; the all-cell
-command reports 14 results and exits 0; and each verifier cleans the temporary
+Expected: provider commands report 6 and 6 cells respectively; the all-cell
+command reports 12 results and exits 0; and each verifier cleans the temporary
 tool/cache directory it created. Network acquisition by the compilers is
 allowed in this real gate. Unit/script self-checks separately prove that narrow
 provisioning emits only the requested compiler path and default provisioning
@@ -370,7 +385,7 @@ shard enumerates every internal table target. Make release `publish.needs` inclu
 publication hosts.
 
 This is the accepted bounded CI shape: two additional real-tool jobs per
-workflow, not fourteen repeated checkout/install jobs. Each of the 14 cells is
+workflow, not twelve repeated checkout/install jobs. Each of the 12 cells is
 still mandatory and separately reported inside its provider job.
 
 **Verify**:
@@ -387,7 +402,7 @@ is green.
 
 Update README, compiler docs, architecture, and the gate record:
 
-- list exact Bun 8 and Deno 6 target sets from the proven provider tables (Plan
+- list exact Bun 6 and Deno 6 target sets from the proven provider tables (Plan
   014 later exposes the same literal sets as public schemas);
 - state Node remains the only supported orchestrator host;
 - distinguish compile-plus-header validation for all targets from execution of
@@ -466,7 +481,7 @@ diff is empty. Commit the receipt/status update and only then mark Plan 013
 ## Test plan
 
 - Manifest validation: duplicate pair, unknown compiler, extra target, missing
-  internal table literal, unexpected key/runner/orchestrator, and exact 8/6
+  internal table literal, unexpected key/runner/orchestrator, and exact 6/6
   happy path.
 - One strict real invocation per manifest cell: missing env/tool is failure,
   not skip.
@@ -480,15 +495,15 @@ diff is empty. Commit the receipt/status update and only then mark Plan 013
   command, and release dependency.
 - Provision script: default all assets plus narrow Bun/Deno modes.
 - Orchestrator: Linux-x64 enforcement, temporary-directory cleanup on success
-  and failure, exact 8/6 counts, and all failures accumulated.
+  and failure, exact 6/6 counts, and all failures accumulated.
 
 ## Done criteria
 
-- [ ] `tooling/support-matrix.json` contains exactly Bun 8 and Deno 6 cells.
+- [ ] `tooling/support-matrix.json` contains exactly Bun 6 and Deno 6 cells.
 - [ ] Built package-private provider table literals equal advertised cells
   exactly.
 - [ ] Every cell is a required, non-skipping invocation in CI and release; two
-  provider jobs report all 8/6 cells without repeated per-target setup.
+  provider jobs report all 6/6 cells without repeated per-target setup.
 - [ ] Every cell compiles with its pinned compiler and independently validates
   native OS/architecture/ABI.
 - [ ] Current Linux-x64-GNU Bun and Deno artifacts still execute in

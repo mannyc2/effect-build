@@ -7,9 +7,7 @@ export const bunTargetTable = makeTargetTable(
     "linux-x64-gnu": "bun-linux-x64",
     "linux-x64-musl": "bun-linux-x64-musl",
     "linux-aarch64-gnu": "bun-linux-arm64",
-    "linux-aarch64-musl": "bun-linux-arm64-musl",
     "windows-x64": "bun-windows-x64",
-    "windows-aarch64": "bun-windows-arm64",
   } as const,
 );
 

@@ -29,6 +29,12 @@ import { Target } from "../../src/standalone/Target.js";
 
 const _bunMuslTarget: BunTarget = "linux-x64-musl";
 void _bunMuslTarget;
+// @ts-expect-error Bun 1.3.9's ARM64 musl artifact has contradictory GLIBC dependencies.
+const _rejectBunArm64MuslTarget: BunTarget = "linux-aarch64-musl";
+void _rejectBunArm64MuslTarget;
+// @ts-expect-error Bun 1.3.9 has no downloadable Windows ARM64 runtime.
+const _rejectBunWindowsArm64Target: BunTarget = "windows-aarch64";
+void _rejectBunWindowsArm64Target;
 // @ts-expect-error Deno's package-private target type deliberately excludes musl.
 const _denoMuslTarget: DenoTarget = "linux-x64-musl";
 void _denoMuslTarget;
@@ -77,9 +83,7 @@ describe("standalone contract: target and artifact", () => {
       ["linux-x64-gnu", "bun-linux-x64"],
       ["linux-x64-musl", "bun-linux-x64-musl"],
       ["linux-aarch64-gnu", "bun-linux-arm64"],
-      ["linux-aarch64-musl", "bun-linux-arm64-musl"],
       ["windows-x64", "bun-windows-x64"],
-      ["windows-aarch64", "bun-windows-arm64"],
     ] as const;
     const denoEntries = [
       ["macos-x64", "x86_64-apple-darwin"],
@@ -111,6 +115,8 @@ describe("standalone contract: target and artifact", () => {
       expect(denoTargetTable.nativeToken(target)).toBe(token);
     }
     expect(bunTargetTable.resolve("not-a-target")).toBeUndefined();
+    expect(bunTargetTable.resolve("linux-aarch64-musl")).toBeUndefined();
+    expect(bunTargetTable.resolve("windows-aarch64")).toBeUndefined();
     expect(denoTargetTable.resolve("linux-x64-musl")).toBeUndefined();
     expect(denoTargetTable.resolve(null)).toBeUndefined();
   });

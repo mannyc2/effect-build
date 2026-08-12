@@ -28,8 +28,7 @@ probe raises `ToolProbeFailed`.
 Bun 1.3.9 is required in CI to compile and externally validate all of these
 canonical targets under the Node orchestrator:
 `macos-x64`, `macos-aarch64`, `linux-x64-gnu`, `linux-x64-musl`,
-`linux-aarch64-gnu`, `linux-aarch64-musl`, `windows-x64`, and
-`windows-aarch64`.
+`linux-aarch64-gnu`, and `windows-x64`.
 
 ## Deno
 

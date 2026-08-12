@@ -87,7 +87,7 @@ The exact runtime keys are:
 | `effect-build/bun` | `Compiler`, `Target`, `compileExecutable`, `compileExecutableMatrix`, `layer` |
 | `effect-build/deno` | `Compiler`, `Target`, `compileExecutable`, `compileExecutableMatrix`, `layer` |
 
-`Bun.Target` has the eight literals proven by Plan 013. `Deno.Target` has its
+`Bun.Target` has the six literals proven by Plan 013. `Deno.Target` has its
 six literals and rejects both musl targets statically and at runtime. There is
 no root compile verb, provider value argument, registry, generic provider
 service, or compatibility export.
@@ -110,7 +110,9 @@ Scalar input fields and behavior remain the same, but their types intentionally
 narrow: `Bun.CompileExecutableInput.target` is `Bun.Target`, Deno's is
 `Deno.Target`, and success is the corresponding provider `Artifact`. The one
 root runtime `Artifact.Artifact` schema becomes a provider/target-correlated
-union derived from the proven tables; it rejects Deno-plus-musl wire values.
+union derived from the proven tables; it rejects every provider-invalid wire
+value, including Deno plus musl and Bun plus either `linux-aarch64-musl` or
+`windows-aarch64`.
 The shared private service type is parameterized by tool name, supported target,
 and options—conceptually `CompilerService<Name, SupportedTarget, Options>`—so a
 provider Artifact's `tool.name` cannot drift from its target/options. Public
@@ -178,8 +180,9 @@ constructing it from unknown input must never invoke user conversion code.
 | `MatrixFailed` | `_tag: "MatrixFailed"`, ordered `artifacts: readonly Artifact.Artifact[]`, `failures: NonEmptyArray<CellFailure>` |
 
 The root `MatrixFailed` schema is a provider-correlated Bun/Deno union derived
-from the same tables. It rejects Deno-musl failure cells and impossible partial
-Artifacts. Its refinements also reject targets or paths duplicated across
+from the same tables. It rejects every provider-invalid failure cell and
+impossible partial Artifact, including the invalid Deno-musl and narrowed Bun
+pairs above. Its refinements also reject targets or paths duplicated across
 artifacts/failures and nested BuildError tool fields that disagree with the
 cell's tool. Provider type aliases narrow tool, targets, nested failures, and
 partial artifacts without adding provider runtime schemas.
@@ -242,7 +245,7 @@ freezes with the tables above—no other public growth is authorized.
 | Public surface | `pnpm test:consumer && pnpm test:architecture` | built and packed imports expose only the declared keys |
 | Full deterministic | `pnpm verify` | exit 0 |
 | Current-host real tools | provisioned `pnpm verify:real`; final required CI `real-tools` job | Bun and Deno executables compile and run |
-| Every provider target | `pnpm verify:targets` on Linux x64 as a local diagnostic; final required CI provider shards | all 14 independent external-oracle cells pass on the Plan 014 source commit |
+| Every provider target | `pnpm verify:targets` on Linux x64 as a local diagnostic; final required CI provider shards | all 12 independent external-oracle cells pass on the Plan 014 source commit |
 | Package contents | `npm pack --dry-run` | only intended dist/docs/examples/package files appear |
 
 ## Suggested executor toolkit
@@ -326,9 +329,9 @@ Extend type tests before production exports to assert:
 - non-empty target tuples;
 - narrowed provider artifacts and tool names;
 - exact provider-narrowed MatrixError failure and provider Compiler context;
-- the root Artifact and MatrixFailed schemas reject Deno-plus-musl values while
-  accepting every provider-correlated wire value;
-- Deno musl target rejection; and
+- the root Artifact and MatrixFailed schemas reject every provider-invalid
+  value while accepting every provider-correlated wire value;
+- Deno musl plus Bun ARM64-musl and Windows-ARM64 target rejection; and
 - unchanged scalar `BuildError.BuildError` failure.
 
 **Verify**:
@@ -349,8 +352,8 @@ Export root `MatrixError` from `src/index.ts`. Project `Bun.Target` and
 literals into the public modules. Narrow each provider's scalar input target and
 success Artifact alias, and change the single root `Artifact.Artifact` runtime
 schema to the provider-correlated Bun/Deno union fixed above. Prove both static
-and runtime rejection of Deno-plus-musl artifacts. Preserve every scalar field,
-default, lifecycle step, and `BuildError` member.
+and runtime rejection of Deno-plus-musl artifacts and both narrowed Bun pairs.
+Preserve every scalar field, default, lifecycle step, and `BuildError` member.
 
 Extend the existing internal and provider Compiler service type with the
 completed Plan 012 matrix runner, then export each provider's concrete matrix
@@ -526,19 +529,19 @@ empty.
 - Exact root/provider runtime keys and unchanged three package subpaths.
 - Exact public declaration identifier sets and signatures for scalar and matrix
   operations.
-- Bun eight-target and Deno six-target runtime literals.
-- Root Artifact accepts all valid provider-target pairs and rejects Deno musl in
-  type tests and runtime decode.
+- Bun six-target and Deno six-target runtime literals.
+- Root Artifact accepts all valid provider-target pairs and rejects Deno musl,
+  Bun ARM64 musl, and Bun Windows ARM64 in type tests and runtime decode.
 - Matrix success order and provider-narrowed artifacts.
 - Exact MatrixIssue fields plus tagged-error encode/decode round trips; empty
   issue/failure arrays, relative paths, duplicate targets/paths, nested tool
-  mismatches, and Deno-musl failures reject.
+  mismatches, and every provider-invalid failure cell rejects.
 - Separate exhaustive error handlers; scalar handlers need no matrix cases.
 - Fresh packed-consumer imports and matrix typecheck.
 - Runnable Bun matrix example typechecks against package exports.
 - Docs assertions for canonical filenames, collect-all behavior, partial
   commits, interruption, and supported target evidence.
-- All deterministic, current-host, and 14 target-support gates remain green.
+- All deterministic, current-host, and 12 target-support gates remain green.
 
 ## Done criteria
 
@@ -555,8 +558,9 @@ empty.
   correlation without adding provider runtime keys.
 - [ ] Scalar fields, defaults, lifecycle, and `BuildError` union are unchanged;
   only provider target input and successful Artifact types intentionally narrow.
-- [ ] Root Artifact decoding accepts every valid Bun/Deno pair and rejects
-  impossible Deno-musl values.
+- [ ] Root Artifact decoding accepts every valid Bun/Deno pair and rejects all
+  impossible provider-target values, including Deno musl and both narrowed Bun
+  pairs.
 - [ ] Matrix failure is exactly the separate two-tag `MatrixError` union, with
   the exact field schemas and non-empty/absolute-path decode constraints above.
 - [ ] README/docs/examples state canonical naming, total preflight, bounded
@@ -566,7 +570,7 @@ empty.
 - [ ] Built and freshly packed consumers prove the exact public surface.
 - [ ] `pnpm verify` passes locally; the final required workflow for the Plan 014
   source commit has green current-host real tools, publication hosts, and both
-  8/6 target-support shards.
+  6/6 target-support shards.
 - [ ] This file records that final run URL/SHA, and no product or verification
   file differs from the recorded evidence commit.
 - [ ] The recorded run's API conclusion, `head_sha`, and complete required job

@@ -79,7 +79,8 @@ of the 2026-08-11 gates:
 3. **Gate 3 is reopened and planned for supersession.** Plan 011 defines the
    provider tables privately; Plan 013 must prove every table literal through a
    required, non-skipping real compiler/header CI cell; only Plan 014 may then
-   publish the provider-owned schemas: eight Bun targets and six Deno targets.
+   publish the provider-owned schemas. The first exact-source run narrowed the
+   provisional Bun table to six targets; Deno remains six.
    Node remains the only supported orchestrator host, and only current-host
    artifacts are executed. This replaces the current-host target subset without
    weakening the original advertise-equals-test rule.
@@ -119,7 +120,7 @@ of the 2026-08-11 gates:
 | 008 | Build the Effect-native compile and atomic publication engine | P1 | L | 007 | DONE |
 | 009 | Add discoverable Bun/Deno drivers and exercise all three axes | P1 | L | 008 | DONE |
 | 010 | Hard-cut the public API and delete the managed proof system | P1 | L | 009 | DONE |
-| 011 | Centralize provider target authority behind the public API | P1 | M | 010 | DONE |
+| 011 | Centralize provider target authority behind the public API | P1 | M | 010 | IN PROGRESS |
 | 013 | Prove every provider target with required real evidence | P1 | L | 011 | IN PROGRESS |
 | 012 | Build the typed executable target matrix | P1 | L | 013 | TODO |
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | TODO |
@@ -331,7 +332,7 @@ WIP outside scope, and identify exact real-tool/host acceptance separately from
 deterministic local tests. Final completion requires `pnpm verify`, required
 real Bun/Deno integration, the required Node host run, atomic publication on
 each advertised OS, a packed consumer, and no stale managed names or proof
-claims. Under Plan 013, all eight Bun and six Deno provider targets become
+claims. Under Plan 013, all six Bun and six Deno provider targets become
 required compile-plus-header gates; only current-host artifacts are executed.
 Optional Bun/Deno orchestrator-host lanes remain non-gating
 (gate 3: advertise-equals-test).

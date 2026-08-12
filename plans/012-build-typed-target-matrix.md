@@ -192,8 +192,10 @@ Use beta.107 `Schema.NonEmptyArray` for `issues` and `failures`, the existing
 `Artifact.ToolName`/`Target.Target` schemas for cell identity, and
 `Artifact.AbsolutePath` for `CellFailure.path`. Correlate tool plus target from
 the provider tables in the root runtime union, just as Plan 014 will do for
-Artifact. Empty decoded aggregates, relative paths, and Deno-musl cell failures
-must be rejected, not merely discouraged by TypeScript tuple notation.
+Artifact. Empty decoded aggregates, relative paths, and every provider-invalid
+cell failure must be rejected, not merely discouraged by TypeScript tuple
+notation. This includes Deno musl plus Bun `linux-aarch64-musl` and
+`windows-aarch64` after Plan 013's evidence-backed narrowing.
 
 Refine decoded `MatrixFailed` values so every artifact/failure target is unique
 across both arrays, every path is unique across both arrays, and any nested
@@ -556,6 +558,8 @@ Plan 012 status row are modified.
 - invalid names, targets, options, and concurrency (0, negative, fraction,
   unsafe integer, NaN, positive/negative Infinity, and `"unbounded"`);
 - decoded empty issue/failure arrays and relative CellFailure paths rejected;
+- decoded Deno-musl, Bun-ARM64-musl, and Bun-Windows-ARM64 failure cells
+  rejected;
 - decoded duplicate/overlapping targets or paths and nested tool mismatches
   rejected;
 - all preflight issues reported together and zero build side effects;
