@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "orchestratorHosts": ["node"],
+  "optionalOrchestratorHosts": ["bun", "deno"],
+  "supportedCells": [
+    { "orchestrator": "node", "runner": "ubuntu-24.04", "target": "linux-x64-gnu", "compiler": "bun" },
+    { "orchestrator": "node", "runner": "ubuntu-24.04", "target": "linux-x64-gnu", "compiler": "deno" }
+  ],
+  "compilerFixtures": [
+    { "tool": "bun", "version": "1.3.9" },
+    { "tool": "deno", "version": "2.9.3" }
+  ],
+  "publicationHosts": ["ubuntu-24.04", "macos-15", "windows-2025"]
+}

@@ -1,0 +1,26 @@
+{
+  "plugins": [
+    "https://plugins.dprint.dev/typescript-0.95.0.wasm",
+    "https://plugins.dprint.dev/json-0.20.0.wasm",
+    "https://plugins.dprint.dev/markdown-0.17.0.wasm"
+  ],
+  "lineWidth": 120,
+  "typescript": {
+    "semiColons": "prefer",
+    "quoteStyle": "preferDouble",
+    "preferHanging": false
+  },
+  "includes": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "typetest/**/*.ts",
+    "examples/**/*.ts",
+    "*.ts",
+    "*.json",
+    "README.md",
+    "AGENTS.md",
+    "docs/**/*.md",
+    "examples/**/*.md"
+  ],
+  "excludes": ["node_modules", "dist", ".agent-sources", "plans"]
+}

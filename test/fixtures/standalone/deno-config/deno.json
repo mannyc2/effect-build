@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@fixture/message": "./message.ts"
+  }
+}
