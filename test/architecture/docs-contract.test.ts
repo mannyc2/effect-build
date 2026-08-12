@@ -31,6 +31,15 @@ describe("documentation contract", () => {
     expect(firstTypeScript).not.toMatch(/\b(cwd|target|digest|options):/);
   });
 
+  it("documents the bounded Effect 4.0 peer and exact current reference install", async () => {
+    const readme = await readFile(resolve(root, "README.md"), "utf8");
+    const install = readme.match(/## Install\n\n```sh\n([^`]+)\n```/)?.[1] ?? "";
+
+    expect(install).toBe("pnpm add effect-build effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108");
+    expect(readme).toContain("`>=4.0.0-beta.104 <4.1.0-0`");
+    expect(readme).not.toContain("4.0.0-beta.107");
+  });
+
   it("documents the exact scalar-plus-matrix product boundary", async () => {
     const agents = await readFile(resolve(root, "AGENTS.md"), "utf8");
     const readme = await readFile(resolve(root, "README.md"), "utf8");

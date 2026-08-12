@@ -1,13 +1,35 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const repository = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const exactSemver = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const arguments_ = process.argv.slice(2);
+if (arguments_.length > 1 || (arguments_.length === 1 && arguments_[0] !== "--fresh-install")) {
+  throw new Error("Usage: node scripts/test-built-consumer.mjs [--fresh-install]");
+}
+const freshInstall = arguments_[0] === "--fresh-install";
 const consumer = await mkdtemp(join(tmpdir(), "effect-build-consumer-"));
+
+const readInstalledVersion = async (root, packageName) => {
+  const packagePath = join(root, "node_modules", ...packageName.split("/"), "package.json");
+  const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
+  if (typeof packageJson.version !== "string" || !exactSemver.test(packageJson.version)) {
+    throw new Error(`${packageName} has no exact SemVer version in ${packagePath}`);
+  }
+  return packageJson.version;
+};
+
+const assertInstalledVersion = async (root, packageName, expectedVersion) => {
+  const actualVersion = await readInstalledVersion(root, packageName);
+  if (actualVersion !== expectedVersion) {
+    throw new Error(`Expected fresh ${packageName}@${expectedVersion}, received ${actualVersion}`);
+  }
+};
 
 try {
   const { stdout } = await execFileAsync("npm", ["pack", "--pack-destination", consumer], {
@@ -15,19 +37,93 @@ try {
     env: { ...process.env, npm_config_cache: join(consumer, "npm-cache") },
   });
   const tarball = join(consumer, stdout.trim().split("\n").at(-1));
-  await execFileAsync("tar", ["-xzf", tarball, "-C", consumer]);
-
   const modules = join(consumer, "node_modules");
-  await mkdir(join(modules, "@effect"), { recursive: true });
-  await mkdir(join(modules, "@types"), { recursive: true });
-  await symlink(join(consumer, "package"), join(modules, "effect-build"), "dir");
-  await symlink(join(repository, "node_modules", "effect"), join(modules, "effect"), "dir");
-  await symlink(
-    join(repository, "node_modules", "@effect", "platform-node"),
-    join(modules, "@effect", "platform-node"),
-    "dir",
-  );
-  await symlink(join(repository, "node_modules", "@types", "node"), join(modules, "@types", "node"), "dir");
+  let effectVersion;
+  let typeScriptBin;
+
+  if (freshInstall) {
+    const versions = Object.fromEntries(
+      await Promise.all(
+        ["effect", "@effect/platform-node", "typescript", "@types/node"].map(async (packageName) => [
+          packageName,
+          await readInstalledVersion(repository, packageName),
+        ]),
+      ),
+    );
+    effectVersion = versions.effect;
+    if (effectVersion !== versions["@effect/platform-node"]) {
+      throw new Error(
+        `Installed effect@${effectVersion} does not match @effect/platform-node@${versions["@effect/platform-node"]}`,
+      );
+    }
+
+    await writeFile(
+      join(consumer, "package.json"),
+      JSON.stringify(
+        {
+          name: "effect-build-consumer",
+          private: true,
+          type: "module",
+          dependencies: {
+            "@effect/platform-node": versions["@effect/platform-node"],
+            "@types/node": versions["@types/node"],
+            effect: effectVersion,
+            "effect-build": `file:./${basename(tarball)}`,
+            typescript: versions.typescript,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    const installArguments = [
+      "install",
+      "--strict-peer-dependencies",
+      "--store-dir",
+      join(consumer, "pnpm-store"),
+    ];
+    const packageManagerEntryPoint = process.env.npm_execpath;
+    if (packageManagerEntryPoint !== undefined && !isAbsolute(packageManagerEntryPoint)) {
+      throw new Error("npm_execpath must be absolute when provided");
+    }
+    const [installExecutable, installExecutableArguments] =
+      packageManagerEntryPoint !== undefined
+        ? [process.execPath, [packageManagerEntryPoint, ...installArguments]]
+        : ["pnpm", installArguments];
+    await execFileAsync(installExecutable, installExecutableArguments, {
+      cwd: consumer,
+      env: {
+        ...process.env,
+        npm_config_cache: join(consumer, "npm-cache"),
+        npm_config_cache_dir: join(consumer, "pnpm-cache"),
+        npm_config_state_dir: join(consumer, "pnpm-state"),
+      },
+    });
+
+    for (const [packageName, expectedVersion] of Object.entries(versions)) {
+      await assertInstalledVersion(consumer, packageName, expectedVersion);
+    }
+    typeScriptBin = join(modules, "typescript", "bin", "tsc");
+  } else {
+    await execFileAsync("tar", ["-xzf", tarball, "-C", consumer]);
+
+    await mkdir(join(modules, "@effect"), { recursive: true });
+    await mkdir(join(modules, "@types"), { recursive: true });
+    await symlink(join(consumer, "package"), join(modules, "effect-build"), "dir");
+    await symlink(join(repository, "node_modules", "effect"), join(modules, "effect"), "dir");
+    await symlink(
+      join(repository, "node_modules", "@effect", "platform-node"),
+      join(modules, "@effect", "platform-node"),
+      "dir",
+    );
+    await symlink(join(repository, "node_modules", "@types", "node"), join(modules, "@types", "node"), "dir");
+
+    await writeFile(
+      join(consumer, "package.json"),
+      JSON.stringify({ name: "effect-build-consumer", private: true, type: "module" }, null, 2),
+    );
+    typeScriptBin = join(repository, "node_modules", "typescript", "bin", "tsc");
+  }
 
   await mkdir(join(consumer, "examples"));
   for (const example of ["bun-compile.ts", "bun-matrix.ts", "deno-compile.ts"]) {
@@ -37,10 +133,6 @@ try {
     );
   }
 
-  await writeFile(
-    join(consumer, "package.json"),
-    JSON.stringify({ name: "effect-build-consumer", private: true, type: "module" }, null, 2),
-  );
   await writeFile(
     join(consumer, "tsconfig.json"),
     JSON.stringify(
@@ -161,9 +253,7 @@ try {
     ].join("\n"),
   );
 
-  await execFileAsync(process.execPath, [join(repository, "node_modules", "typescript", "bin", "tsc"), "-p", "."], {
-    cwd: consumer,
-  });
+  await execFileAsync(process.execPath, [typeScriptBin, "-p", "."], { cwd: consumer });
 
   await writeFile(
     join(consumer, "runtime.mjs"),
@@ -187,7 +277,7 @@ try {
     ].join("\n"),
   );
   await execFileAsync(process.execPath, [join(consumer, "runtime.mjs")], { cwd: consumer });
-  console.log("packed consumer verified");
+  console.log(freshInstall ? `packed consumer verified with effect@${effectVersion}` : "packed consumer verified");
 } finally {
   await rm(consumer, { recursive: true, force: true });
 }

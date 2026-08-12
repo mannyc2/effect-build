@@ -9,7 +9,7 @@ const repository = fileURLToPath(new URL("../..", import.meta.url));
 const verifier = join(repository, "scripts/verify-workflow-receipt.mjs");
 const fakeGhFixture = fileURLToPath(new URL("../fixtures/workflow-receipt/fake-gh.mjs", import.meta.url));
 const sha = "a".repeat(40);
-const requiredJobNames = [
+const targetRequiredJobNames = [
   "quality",
   "real-tools",
   "publication-hosts (ubuntu-24.04)",
@@ -17,6 +17,10 @@ const requiredJobNames = [
   "publication-hosts (windows-2025)",
   "target-support (bun)",
   "target-support (deno)",
+];
+const effectRequiredJobNames = [
+  "effect-compatibility (4.0.0-beta.104)",
+  "effect-compatibility (4.0.0-rc.108)",
 ];
 
 const successfulRun = {
@@ -26,7 +30,16 @@ const successfulRun = {
   conclusion: "success",
   event: "push",
 };
-const successfulJobs = requiredJobNames.map((name) => ({ name, status: "completed", conclusion: "success" }));
+const successfulTargetJobs = targetRequiredJobNames.map((name) => ({
+  name,
+  status: "completed",
+  conclusion: "success",
+}));
+const successfulEffectJobs = [...targetRequiredJobNames, ...effectRequiredJobNames].map((name) => ({
+  name,
+  status: "completed",
+  conclusion: "success",
+}));
 
 describe("workflow receipt verifier", () => {
   let root: string;
@@ -50,20 +63,26 @@ describe("workflow receipt verifier", () => {
   });
 
   const runVerifier = ({
-    receipt = `Target evidence: https://github.com/example/effect-build/actions/runs/123 @ ${sha}`,
+    receipt,
+    prefix = "Target evidence:",
     run = successfulRun,
-    jobs = successfulJobs,
+    jobs = successfulTargetJobs,
     totalCount = jobs.length,
+    verifierArguments = [],
   }: {
     receipt?: string;
+    prefix?: string;
     run?: Record<string, unknown>;
     jobs?: Array<Record<string, unknown>>;
     totalCount?: number;
+    verifierArguments?: string[];
   } = {}) => {
-    writeFileSync(receiptFile, `${receipt}\n`);
+    const receiptLine = receipt ?? `${prefix} https://github.com/example/effect-build/actions/runs/123 @ ${sha}`;
+    writeFileSync(receiptFile, `${receiptLine}\n`);
+    writeFileSync(logFile, "");
     const result = spawnSync(
       process.execPath,
-      [verifier, "--receipt-file", receiptFile, "--prefix", "Target evidence:"],
+      [verifier, "--receipt-file", receiptFile, "--prefix", prefix, ...verifierArguments],
       {
         cwd: repository,
         encoding: "utf8",
@@ -92,6 +111,74 @@ describe("workflow receipt verifier", () => {
       ["api", "repos/example/effect-build/actions/runs/123"],
       ["api", "repos/example/effect-build/actions/runs/123/jobs?per_page=100"],
     ]);
+  });
+
+  it("keeps target-v1 as the explicit and prefix-independent default contract", () => {
+    const explicit = runVerifier({ verifierArguments: ["--contract", "target-v1"] });
+    const defaultWithEffectPrefix = runVerifier({ prefix: "Effect compatibility evidence:" });
+
+    expect(explicit.status).toBe(0);
+    expect(explicit.stderr).toBe("");
+    expect(defaultWithEffectPrefix.status).toBe(0);
+    expect(defaultWithEffectPrefix.stderr).toBe("");
+  });
+
+  it("accepts effect-v1 only when both exact compatibility cells succeed", () => {
+    const result = runVerifier({
+      prefix: "Effect compatibility evidence:",
+      jobs: successfulEffectJobs,
+      verifierArguments: ["--contract", "effect-v1"],
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it("rejects a missing effect-v1 compatibility cell", () => {
+    const missing = effectRequiredJobNames[0]!;
+    const result = runVerifier({
+      jobs: successfulEffectJobs.filter((job) => job.name !== missing),
+      verifierArguments: ["--contract", "effect-v1"],
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`required job ${JSON.stringify(missing)} is missing`);
+  });
+
+  it("rejects a duplicate effect-v1 compatibility cell", () => {
+    const duplicate = successfulEffectJobs.find((job) => job.name === effectRequiredJobNames[1])!;
+    const result = runVerifier({
+      jobs: [...successfulEffectJobs, duplicate],
+      verifierArguments: ["--contract", "effect-v1"],
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`required job ${JSON.stringify(duplicate.name)} appears 2 times`);
+  });
+
+  it.each(["failure", "skipped"])("rejects an effect-v1 compatibility cell with conclusion %s", (conclusion) => {
+    const endpoint = effectRequiredJobNames[1]!;
+    const jobs = successfulEffectJobs.map((job) => job.name === endpoint ? { ...job, conclusion } : job);
+    const result = runVerifier({ jobs, verifierArguments: ["--contract", "effect-v1"] });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `required job ${JSON.stringify(endpoint)} conclusion must be success, received ${JSON.stringify(conclusion)}`,
+    );
+  });
+
+  it("rejects unknown and duplicate receipt contracts before invoking gh", () => {
+    const unknown = runVerifier({ verifierArguments: ["--contract", "effect-v2"] });
+    const duplicate = runVerifier({
+      verifierArguments: ["--contract", "target-v1", "--contract", "effect-v1"],
+    });
+
+    expect(unknown.status).toBe(1);
+    expect(unknown.stderr).toMatch(/contract/);
+    expect(unknown.calls).toEqual([]);
+    expect(duplicate.status).toBe(1);
+    expect(duplicate.stderr).toMatch(/contract/);
+    expect(duplicate.calls).toEqual([]);
   });
 
   it("rejects a malformed GitHub Actions URL before invoking gh", () => {
@@ -128,21 +215,21 @@ describe("workflow receipt verifier", () => {
   });
 
   it("rejects a missing required job", () => {
-    const result = runVerifier({ jobs: successfulJobs.slice(1) });
+    const result = runVerifier({ jobs: successfulTargetJobs.slice(1) });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('required job "quality" is missing');
   });
 
   it("rejects a duplicate required job", () => {
-    const result = runVerifier({ jobs: [...successfulJobs, successfulJobs[0]!] });
+    const result = runVerifier({ jobs: [...successfulTargetJobs, successfulTargetJobs[0]!] });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('required job "quality" appears 2 times');
   });
 
   it.each(["failure", "skipped"])("rejects a required job with conclusion %s", (conclusion) => {
-    const jobs = successfulJobs.map((job) => job.name === "real-tools" ? { ...job, conclusion } : job);
+    const jobs = successfulTargetJobs.map((job) => job.name === "real-tools" ? { ...job, conclusion } : job);
     const result = runVerifier({ jobs });
 
     expect(result.status).toBe(1);
@@ -150,7 +237,7 @@ describe("workflow receipt verifier", () => {
   });
 
   it("rejects a successful required job that is not completed", () => {
-    const jobs = successfulJobs.map((job) => job.name === "real-tools" ? { ...job, status: "in_progress" } : job);
+    const jobs = successfulTargetJobs.map((job) => job.name === "real-tools" ? { ...job, status: "in_progress" } : job);
     const result = runVerifier({ jobs });
 
     expect(result.status).toBe(1);

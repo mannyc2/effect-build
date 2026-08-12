@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -24,7 +25,10 @@ interface Workflow {
       if?: string;
       "continue-on-error"?: boolean;
     }>;
-    strategy?: { "fail-fast"?: boolean; matrix?: { runner?: string[]; compiler?: string[] } };
+    strategy?: {
+      "fail-fast"?: boolean;
+      matrix?: { runner?: string[]; compiler?: string[]; effect?: string[] };
+    };
   }>;
 }
 
@@ -59,6 +63,8 @@ const assertProviderTargets = (
 
 const jobRuns = (workflow: Workflow, name: string): string =>
   (workflow.jobs[name]?.steps ?? []).map((step) => step.run ?? "").join("\n");
+
+const effectEndpoints = ["4.0.0-beta.104", "4.0.0-rc.108"];
 
 const expectPinnedActionsWithoutEscapes = (workflow: Workflow): void => {
   for (const job of Object.values(workflow.jobs)) {
@@ -389,6 +395,151 @@ describe("tooling pins and CI contract", () => {
     );
   });
 
+  it("keeps the evidenced Effect 4.0 peer range and exact current development family", async () => {
+    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.peerDependencies).toEqual({ effect: ">=4.0.0-beta.104 <4.1.0-0" });
+    for (
+      const dependency of [
+        "effect",
+        "@effect/platform-bun",
+        "@effect/platform-deno",
+        "@effect/platform-node",
+      ]
+    ) {
+      expect(packageJson.devDependencies?.[dependency]).toBe("4.0.0-rc.108");
+    }
+    for (const platform of ["@effect/platform-bun", "@effect/platform-deno", "@effect/platform-node"]) {
+      expect(packageJson.dependencies?.[platform]).toBeUndefined();
+      expect(packageJson.peerDependencies?.[platform]).toBeUndefined();
+    }
+    expect(packageJson.scripts?.["verify:effect"]).toBe("node scripts/verify-effect-compatibility.mjs --all");
+  });
+
+  it("keeps Effect endpoint selection exact and rewrites only the temporary development family", async () => {
+    const verifier = await loadScript<{
+      effectEndpoints: readonly string[];
+      parseArguments: (argv: readonly string[]) => readonly string[];
+      rewriteManifest: (manifest: Record<string, unknown>, version: string) => Record<string, unknown>;
+      selectCompatibilityTemporaryDirectory: (path: string, platform: string) => string;
+      shouldCopyRepositoryPath: (path: string) => boolean;
+      verifyEffectEndpoint: (version: string, dependencies: Record<string, unknown>) => Promise<void>;
+    }>("verify-effect-compatibility.mjs");
+    expect(verifier.effectEndpoints).toEqual(effectEndpoints);
+    expect(verifier.parseArguments(["--all"])).toEqual(effectEndpoints);
+    for (const endpoint of effectEndpoints) {
+      expect(verifier.parseArguments(["--effect-version", endpoint])).toEqual([endpoint]);
+    }
+    for (
+      const argv of [
+        [],
+        ["--effect-version"],
+        ["--effect-version", "4.0.0-beta.103"],
+        ["--effect-version", ">=4"],
+        ["--all", "extra"],
+        ["--all", "--effect-version", effectEndpoints[0]!],
+        ["--effect-version", effectEndpoints[0]!, "--effect-version", effectEndpoints[1]!],
+      ]
+    ) expect(() => verifier.parseArguments(argv)).toThrow(/exact Effect endpoints/);
+
+    const manifest = {
+      peerDependencies: { effect: ">=4.0.0-beta.104 <4.1.0-0" },
+      devDependencies: {
+        effect: "old",
+        "@effect/platform-bun": "old",
+        "@effect/platform-deno": "old",
+        "@effect/platform-node": "old",
+        typescript: "6.0.3",
+      },
+    };
+    const rewritten = verifier.rewriteManifest(manifest, effectEndpoints[0]!) as typeof manifest;
+    expect(rewritten.peerDependencies).toEqual(manifest.peerDependencies);
+    expect(rewritten.devDependencies.typescript).toBe("6.0.3");
+    for (
+      const dependency of [
+        "effect",
+        "@effect/platform-bun",
+        "@effect/platform-deno",
+        "@effect/platform-node",
+      ]
+    ) expect(rewritten.devDependencies[dependency as keyof typeof rewritten.devDependencies]).toBe(effectEndpoints[0]);
+    expect(manifest.devDependencies.effect).toBe("old");
+    expect(verifier.shouldCopyRepositoryPath(resolve(root, ".agent-sources/effect"))).toBe(false);
+    expect(verifier.shouldCopyRepositoryPath(resolve(root, "node_modules/effect"))).toBe(false);
+    expect(verifier.shouldCopyRepositoryPath(resolve(root, "dist/index.js"))).toBe(false);
+    expect(
+      verifier.shouldCopyRepositoryPath(resolve(root, "effect-build-effect-compatibility-fixture/repository")),
+    ).toBe(false);
+    expect(verifier.shouldCopyRepositoryPath(resolve(root, "src/index.ts"))).toBe(true);
+    expect(verifier.shouldCopyRepositoryPath(resolve(root, "uncommitted-plan.tsbuildinfo"))).toBe(false);
+    expect(verifier.selectCompatibilityTemporaryDirectory(resolve(root, ".cache/tmp"), "linux")).toBe(resolve("/tmp"));
+
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "effect-build-effect-compatibility-"));
+    const calls: Array<{ argv: readonly string[]; options: { cwd: string; env: Record<string, string> } }> = [];
+    await verifier.verifyEffectEndpoint(effectEndpoints[0]!, {
+      makeTemporaryDirectory: async () => temporaryRoot,
+      copyRepository: async (destination: string) => {
+        await mkdir(destination, { recursive: true });
+        await writeFile(
+          resolve(destination, "package.json"),
+          `${JSON.stringify(manifest, null, 2)}\n`,
+        );
+      },
+      packageManager: { executable: "/fixture/pnpm", prefix: [] },
+      environment: { PATH: "/fixture", SENTINEL: "preserved" },
+      execute: async (
+        _executable: string,
+        argv: readonly string[],
+        options: { cwd: string; env: Record<string, string> },
+      ) => {
+        calls.push({ argv, options });
+      },
+      removeDirectory: async (path: string) => rm(path, { recursive: true, force: true }),
+    });
+    expect(calls.map(({ argv }) => argv)).toEqual([
+      ["install", "--no-frozen-lockfile", "--strict-peer-dependencies"],
+      ["check"],
+      ["test:types"],
+      ["test:unit"],
+      ["test:consumer:fresh"],
+    ]);
+    expect(calls.every(({ options }) => options.cwd === resolve(temporaryRoot, "repository"))).toBe(true);
+    expect(calls.every(({ options }) => options.env.SENTINEL === "preserved")).toBe(true);
+    expect(calls.every(({ options }) =>
+      options.env.npm_config_store_dir === resolve(temporaryRoot, "cache/pnpm-store")
+      && options.env.npm_config_cache === resolve(temporaryRoot, "cache/npm")
+    )).toBe(true);
+
+    const failingTemporaryRoot = await mkdtemp(join(tmpdir(), "effect-build-effect-compatibility-"));
+    try {
+      const failed = verifier.verifyEffectEndpoint(effectEndpoints[0]!, {
+        makeTemporaryDirectory: async () => failingTemporaryRoot,
+        copyRepository: async (destination: string) => {
+          await mkdir(destination, { recursive: true });
+          await writeFile(resolve(destination, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+        },
+        packageManager: { executable: "/fixture/pnpm", prefix: [] },
+        environment: { PATH: "/fixture" },
+        execute: async () => {
+          throw new Error("command sentinel");
+        },
+        removeDirectory: async () => {
+          throw new Error("cleanup sentinel");
+        },
+      });
+      await expect(failed).rejects.toThrow(
+        /Effect 4\.0\.0-beta\.104 failed pnpm install.*cleanup failed: cleanup sentinel/,
+      );
+    } finally {
+      await rm(failingTemporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   it("requires deterministic, real-tool, and publication jobs without escape hatches", async () => {
     const workflow = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as Workflow;
     expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
@@ -417,6 +568,16 @@ describe("tooling pins and CI contract", () => {
     expect(jobRuns(workflow, "target-support")).not.toMatch(/macos-|linux-|windows-|DENORT_BIN/);
     expect(JSON.stringify(targetSupport)).not.toContain("DENORT_BIN");
     expect(JSON.stringify(targetSupport)).not.toMatch(/(?:macos|linux|windows)-(?:x64|aarch64)/);
+
+    const effectCompatibility = workflow.jobs["effect-compatibility"];
+    expect(effectCompatibility?.["runs-on"]).toBe("ubuntu-24.04");
+    expect(effectCompatibility?.strategy).toEqual({
+      "fail-fast": false,
+      matrix: { effect: effectEndpoints },
+    });
+    expect(effectCompatibility?.steps?.filter((step) => step.run !== undefined)).toEqual([
+      { run: "node scripts/verify-effect-compatibility.mjs --effect-version ${{ matrix.effect }}" },
+    ]);
   });
 
   it("keeps npm publication explicit, version-tagged, and provenance-bearing", async () => {
@@ -433,8 +594,6 @@ describe("tooling pins and CI contract", () => {
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.repository?.url).toBe("git+https://github.com/mannyc2/effect-build.git");
     expect(packageJson.publishConfig).toEqual({ access: "public", provenance: true });
-    expect(packageJson.peerDependencies?.effect).toBe("4.0.0-beta.107");
-    expect(packageJson.devDependencies?.effect).toBe("4.0.0-beta.107");
     expect(packageJson.scripts?.prepack).toBe("pnpm build");
 
     const workflow = parse(await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")) as Workflow;
@@ -447,6 +606,7 @@ describe("tooling pins and CI contract", () => {
     expect(workflow.jobs["real-tools"]?.needs).toBe("preflight");
     expect(workflow.jobs["publication-hosts"]?.needs).toBe("preflight");
     expect(workflow.jobs["target-support"]?.needs).toBe("preflight");
+    expect(workflow.jobs["effect-compatibility"]?.needs).toBe("preflight");
     expect(workflow.jobs["target-support"]?.["runs-on"]).toBe("ubuntu-24.04");
     expect(workflow.jobs["target-support"]?.strategy).toEqual({
       "fail-fast": false,
@@ -460,6 +620,14 @@ describe("tooling pins and CI contract", () => {
     expect(JSON.stringify(workflow.jobs["target-support"])).not.toMatch(
       /(?:macos|linux|windows)-(?:x64|aarch64)/,
     );
+    expect(workflow.jobs["effect-compatibility"]?.["runs-on"]).toBe("ubuntu-24.04");
+    expect(workflow.jobs["effect-compatibility"]?.strategy).toEqual({
+      "fail-fast": false,
+      matrix: { effect: effectEndpoints },
+    });
+    expect(workflow.jobs["effect-compatibility"]?.steps?.filter((step) => step.run !== undefined)).toEqual([
+      { run: "node scripts/verify-effect-compatibility.mjs --effect-version ${{ matrix.effect }}" },
+    ]);
     const preflightRuns = (workflow.jobs.preflight?.steps ?? []).map((step) => step.run ?? "").join("\n");
     expect(preflightRuns).toContain("GITHUB_REF_NAME");
     expect(preflightRuns).toContain("refs/remotes/origin/main");
@@ -469,6 +637,7 @@ describe("tooling pins and CI contract", () => {
       "real-tools",
       "publication-hosts",
       "target-support",
+      "effect-compatibility",
     ]);
     expect(workflow.jobs["publish-npm"]?.permissions).toEqual({ contents: "read", "id-token": "write" });
     const releaseRealTools = workflow.jobs["real-tools"]?.steps?.find((step) => step.run?.includes("verify:real"));

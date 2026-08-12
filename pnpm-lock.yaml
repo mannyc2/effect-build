@@ -9,14 +9,14 @@ importers:
   .:
     devDependencies:
       '@effect/platform-bun':
-        specifier: 4.0.0-beta.107
-        version: 4.0.0-beta.107(effect@4.0.0-beta.107)
+        specifier: 4.0.0-rc.108
+        version: 4.0.0-rc.108(effect@4.0.0-rc.108)
       '@effect/platform-deno':
-        specifier: 4.0.0-beta.107
-        version: 4.0.0-beta.107(effect@4.0.0-beta.107)
+        specifier: 4.0.0-rc.108
+        version: 4.0.0-rc.108(effect@4.0.0-rc.108)
       '@effect/platform-node':
-        specifier: 4.0.0-beta.107
-        version: 4.0.0-beta.107(effect@4.0.0-beta.107)(ioredis@5.11.1)
+        specifier: 4.0.0-rc.108
+        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(ioredis@5.11.1)
       '@types/node':
         specifier: 24.3.0
         version: 24.3.0
@@ -24,8 +24,8 @@ importers:
         specifier: 0.49.1
         version: 0.49.1
       effect:
-        specifier: 4.0.0-beta.107
-        version: 4.0.0-beta.107
+        specifier: 4.0.0-rc.108
+        version: 4.0.0-rc.108
       oxlint:
         specifier: 0.15.1
         version: 0.15.1
@@ -89,28 +89,28 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@effect/platform-bun@4.0.0-beta.107':
-    resolution: {integrity: sha512-nDKutCpgr+xHQX7tgN8Cq6JXtj96GqiElKaJ7AwAkZYl2q9f6onc/3aJgl6CyH/DlUoidw6YaxeU+UaTRmMN1g==}
+  '@effect/platform-bun@4.0.0-rc.108':
+    resolution: {integrity: sha512-27RoALzmzx6Qp4LrPIE8bYJfHe+8ZaAO3xLhJMEE6mVA8fxcPh4HAGwBv09Nk2qTFVh578SlSCY5ojUlqeSJ4A==}
     peerDependencies:
-      effect: ^4.0.0-beta.107
+      effect: ^4.0.0-rc.108
 
-  '@effect/platform-deno@4.0.0-beta.107':
-    resolution: {integrity: sha512-3IbUxtHT5MoRaVg3Ycc/N46/gX4PNIRv5dShbeVXm1n90LQL1eU0oeWwfWUCCXiCPYrciYyhineClp9TXj7X+Q==}
+  '@effect/platform-deno@4.0.0-rc.108':
+    resolution: {integrity: sha512-iHpUfHd1cJANDs/vYsvxMG+RT2T+31sOhccC+aLDumJiTOi+TGHYHJFaInZi41vn7FaRfmvED2EJ1UviCm49Tg==}
     engines: {deno: '>=2.5.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.107
+      effect: ^4.0.0-rc.108
 
-  '@effect/platform-node-shared@4.0.0-beta.107':
-    resolution: {integrity: sha512-y6BqcRi86BfTJv+tvDrob4ozYVHxxlHYcn/zIQqZjXI9CvKnkgD6ng+38G1o45c4f2ucU+6HRI9POCmFdMoVGA==}
+  '@effect/platform-node-shared@4.0.0-rc.108':
+    resolution: {integrity: sha512-g5dSRR+tHzFcWav5A6zbug78oV8WPJL5BJqgKlKtow0cQ2IpULcLZaP2xCYR3RJDvz5SETREmPCJ+BNONIsalw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.107
+      effect: ^4.0.0-rc.108
 
-  '@effect/platform-node@4.0.0-beta.107':
-    resolution: {integrity: sha512-k+6YNbV4Ck0L6YXtlgkvEnuP5tlxWD8EeWOrpn46PDqbGEwt4ONpRltTwm3tn2cyBXD0i+2P11cUH/6sdFagTA==}
+  '@effect/platform-node@4.0.0-rc.108':
+    resolution: {integrity: sha512-Nof78154BaHGdSYr4TPQFZ5+Dg+HkpmbI3SQUdwsby5QNs6yahGJPu2AgdIVqdx7pKZ2w7j/bvdnqoMmkG0PbA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.107
+      effect: ^4.0.0-rc.108
       ioredis: '>=5.7.0 <6.0.0'
 
   '@esbuild/aix-ppc64@0.28.2':
@@ -614,8 +614,8 @@ packages:
     resolution: {integrity: sha512-pO9XH79SyXybj2Vhc9ITZMEI8cJkdlQQRoD8oEfPH6Jjpp/7WX5kIgECVd3DBOjjAdCSiW6R47v3gJBx/qZVkw==}
     hasBin: true
 
-  effect@4.0.0-beta.107:
-    resolution: {integrity: sha512-OoBAv8eF+yanc+C6xhgEUnWeXUSHA6ynnscYqpkAY9GSnzZWystsIjBowVqCkLpHGlnRtdIqYT3wHwpOY6JDnQ==}
+  effect@4.0.0-rc.108:
+    resolution: {integrity: sha512-KmI3DlKZWPvCL4QQ2FMaPOuxMt/7DrKMENCY/gQ+MkDR5QYw25wgU5Zmh/wVLboNjIci1gNOgNCFe4xqgxli3A==}
 
   es-module-lexer@1.7.0:
     resolution: {integrity: sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==}
@@ -920,40 +920,40 @@ snapshots:
   '@dprint/win32-x64@0.49.1':
     optional: true
 
-  '@effect/platform-bun@4.0.0-beta.107(effect@4.0.0-beta.107)':
+  '@effect/platform-bun@4.0.0-rc.108(effect@4.0.0-rc.108)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0-beta.107(effect@4.0.0-beta.107)
-      effect: 4.0.0-beta.107
+      '@effect/platform-node-shared': 4.0.0-rc.108(effect@4.0.0-rc.108)
+      effect: 4.0.0-rc.108
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-deno@4.0.0-beta.107(effect@4.0.0-beta.107)':
+  '@effect/platform-deno@4.0.0-rc.108(effect@4.0.0-rc.108)':
     dependencies:
       '@db/redis': '@jsr/db__redis@0.41.2'
-      '@effect/platform-node-shared': 4.0.0-beta.107(effect@4.0.0-beta.107)
+      '@effect/platform-node-shared': 4.0.0-rc.108(effect@4.0.0-rc.108)
       '@std/fs': '@jsr/std__fs@1.0.24'
       '@std/media-types': '@jsr/std__media-types@1.1.0'
       '@std/path': '@jsr/std__path@1.1.6'
       '@std/streams': '@jsr/std__streams@1.1.2'
-      effect: 4.0.0-beta.107
+      effect: 4.0.0-rc.108
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node-shared@4.0.0-beta.107(effect@4.0.0-beta.107)':
+  '@effect/platform-node-shared@4.0.0-rc.108(effect@4.0.0-rc.108)':
     dependencies:
       '@types/ws': 8.18.1
-      effect: 4.0.0-beta.107
+      effect: 4.0.0-rc.108
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.0.0-beta.107(effect@4.0.0-beta.107)(ioredis@5.11.1)':
+  '@effect/platform-node@4.0.0-rc.108(effect@4.0.0-rc.108)(ioredis@5.11.1)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0-beta.107(effect@4.0.0-beta.107)
-      effect: 4.0.0-beta.107
+      '@effect/platform-node-shared': 4.0.0-rc.108(effect@4.0.0-rc.108)
+      effect: 4.0.0-rc.108
       ioredis: 5.11.1
       mime: 4.1.0
       undici: 8.10.0
@@ -1317,7 +1317,7 @@ snapshots:
       '@dprint/win32-arm64': 0.49.1
       '@dprint/win32-x64': 0.49.1
 
-  effect@4.0.0-beta.107:
+  effect@4.0.0-rc.108:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.9.0

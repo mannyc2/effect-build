@@ -11,8 +11,14 @@ a destination is never a half-written executable.
 ## Install
 
 ```sh
-pnpm add effect-build effect@4.0.0-beta.107 @effect/platform-node@4.0.0-beta.107
+pnpm add effect-build effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
 ```
+
+The package peer contract is the evidenced Effect 4.0 interval
+`>=4.0.0-beta.104 <4.1.0-0`; the exact reference environment is
+`4.0.0-rc.108`. Required compatibility CI tests both beta.104 and rc.108 with
+fresh Node-host consumers. Those endpoint checks do not promote Bun or Deno as
+supported orchestrator hosts.
 
 The support contract uses the official Node platform package to host the Effect
 program. Bun and Deno are the supported compilers; running the orchestrator

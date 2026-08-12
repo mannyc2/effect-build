@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const requiredJobNames = [
+const targetRequiredJobNames = [
   "quality",
   "real-tools",
   "publication-hosts (ubuntu-24.04)",
@@ -13,10 +13,21 @@ const requiredJobNames = [
   "target-support (bun)",
   "target-support (deno)",
 ];
+const receiptContracts = new Map([
+  ["target-v1", targetRequiredJobNames],
+  [
+    "effect-v1",
+    [
+      ...targetRequiredJobNames,
+      "effect-compatibility (4.0.0-beta.104)",
+      "effect-compatibility (4.0.0-rc.108)",
+    ],
+  ],
+]);
 
 const parseArguments = (argv) => {
   const values = new Map();
-  const supportedFlags = new Set(["--receipt-file", "--prefix"]);
+  const supportedFlags = new Set(["--receipt-file", "--prefix", "--contract"]);
 
   for (let index = 0; index < argv.length; index += 2) {
     const flag = argv[index];
@@ -35,10 +46,16 @@ const parseArguments = (argv) => {
 
   const receiptFile = values.get("--receipt-file");
   const prefix = values.get("--prefix");
+  const contract = values.get("--contract") ?? "target-v1";
   if (receiptFile === undefined) throw new Error("--receipt-file is required");
   if (prefix === undefined) throw new Error("--prefix is required");
   if (prefix.length === 0) throw new Error("--prefix must not be empty");
-  return { receiptFile, prefix };
+  if (!receiptContracts.has(contract)) {
+    throw new Error(
+      `unknown receipt contract ${JSON.stringify(contract)}; expected one of ${[...receiptContracts.keys()].join(", ")}`,
+    );
+  }
+  return { receiptFile, prefix, contract };
 };
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -105,7 +122,7 @@ const requireRun = (run, receipt) => {
   }
 };
 
-const requireJobs = (response) => {
+const requireJobs = (response, requiredJobNames) => {
   if (response === null || typeof response !== "object" || Array.isArray(response) || !Array.isArray(response.jobs)) {
     throw new Error("workflow jobs response must contain a jobs array");
   }
@@ -138,14 +155,14 @@ const requireJobs = (response) => {
 };
 
 const main = async () => {
-  const { receiptFile, prefix } = parseArguments(process.argv.slice(2));
+  const { receiptFile, prefix, contract } = parseArguments(process.argv.slice(2));
   const receipt = parseReceipt(await readFile(resolve(receiptFile), "utf8"), prefix);
   const endpoint = `repos/${receipt.owner}/${receipt.repository}/actions/runs/${receipt.runId}`;
   const run = await ghApi(endpoint);
   const jobs = await ghApi(`${endpoint}/jobs?per_page=100`);
 
   requireRun(run, receipt);
-  requireJobs(jobs);
+  requireJobs(jobs, receiptContracts.get(contract));
   console.log(`verified workflow receipt ${receipt.url} @ ${receipt.sha}`);
 };
 
