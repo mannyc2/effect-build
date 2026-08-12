@@ -1,44 +1,39 @@
 import { Crypto, Effect, FileSystem, Path, Stream } from "effect";
-import type { Artifact } from "../Artifact.js";
+import type { ToolName } from "../Artifact.js";
 import { InvalidDriverOptions, OutputInvalid, OutputMissing, TargetUnsupported, ToolFailed } from "../BuildError.js";
-import type { BuildError } from "../BuildError.js";
 import type { CompilerService } from "../Driver.js";
 import type { Target } from "../Target.js";
 import { acquireAtomicOutput } from "./AtomicOutput.js";
-import type { CompilerAdapter, ObservedTool } from "./CompilerAdapter.js";
+import type { CompilerAdapter, DiscoveredCompiler, InternalCompileInput, ProviderArtifact } from "./CompilerAdapter.js";
 import {
   inspectNativeExecutableChunks,
   type NativeExecutableObservation,
   NativeExecutableRangeRequired,
 } from "./NativeExecutable.js";
 import { ChildProcessSpawner, runProcess } from "./Process.js";
+import { descriptorOf, matchesObservation, targetFromObservation } from "./TargetCatalog.js";
 
-const targetParts = (target: Target) => {
-  const [os, architecture, abi] = target.split("-") as ["macos" | "linux" | "windows", "x64" | "aarch64", string?];
-  return { os, architecture, abi };
-};
-
-const inferTarget = (
+const inferTarget = <SupportedTarget extends Target>(
   observation: NativeExecutableObservation,
-  requested: Target | undefined,
-  fallback: Target | undefined,
-): Target => {
+  requested: SupportedTarget | undefined,
+  fallback: SupportedTarget | undefined,
+  resolve: (value: unknown) => SupportedTarget | undefined,
+): SupportedTarget => {
   if (requested !== undefined) {
-    const expected = targetParts(requested);
-    if (
-      expected.os !== observation.os || expected.architecture !== observation.architecture
-      || (observation.abi !== undefined && expected.abi !== observation.abi)
-    ) throw new Error("native target does not match requested target");
+    if (!matchesObservation(requested, observation)) throw new Error("native target does not match requested target");
     return requested;
   }
-  if (observation.os === "macos") return `macos-${observation.architecture}`;
-  if (observation.os === "windows") return `windows-${observation.architecture}`;
-  if (observation.abi !== undefined) return `linux-${observation.architecture}-${observation.abi}`;
-  if (fallback !== undefined) {
-    const expected = targetParts(fallback);
-    if (expected.os === observation.os && expected.architecture === observation.architecture) return fallback;
-  }
-  throw new Error("abi-unrecognized");
+  const canonical = targetFromObservation(observation, fallback);
+  if (canonical === undefined) throw new Error("native target is ambiguous");
+  const providerTarget = resolve(canonical);
+  if (providerTarget === undefined) throw new Error("native target is unsupported by the selected compiler");
+  return providerTarget;
+};
+
+const describeUnknownTarget = (value: unknown): string => {
+  if (value === null) return "<non-string:null>";
+  if (Array.isArray(value)) return "<non-string:array>";
+  return `<non-string:${typeof value}>`;
 };
 
 const collectRange = (fileSystem: FileSystem.FileSystem, file: string, offset: number, bytesToRead: number) =>
@@ -85,9 +80,13 @@ const inspectNativeExecutableFile = (
 
 const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
-export const makeCompilerService = <Options>(
-  adapter: CompilerAdapter<Options>,
-  tool: ObservedTool,
+export const makeCompilerService = <
+  Options,
+  const Name extends ToolName,
+  SupportedTarget extends Target,
+>(
+  adapter: CompilerAdapter<Options, Name, SupportedTarget>,
+  tool: DiscoveredCompiler<Name>,
 ): Effect.Effect<
   CompilerService<Options>,
   never,
@@ -100,26 +99,47 @@ export const makeCompilerService = <Options>(
     const crypto = yield* Crypto.Crypto;
 
     const compileExecutable: CompilerService<Options>["compileExecutable"] = (input) => {
-      if (input.target !== undefined && !adapter.supportedTargets.includes(input.target)) {
+      const unsafeTarget: unknown = input.target;
+      const requestedTarget = unsafeTarget === undefined ? undefined : adapter.targetTable.resolve(unsafeTarget);
+      if (unsafeTarget !== undefined && requestedTarget === undefined) {
         return Effect.fail(
           new TargetUnsupported({
             tool: adapter.toolName,
-            requested: input.target,
-            available: [...adapter.supportedTargets],
+            requested: typeof unsafeTarget === "string" ? unsafeTarget : describeUnknownTarget(unsafeTarget),
+            available: [...adapter.targetTable.Target.literals],
           }),
         );
       }
+      const internalInput: InternalCompileInput<Options, SupportedTarget> = {
+        entrypoint: input.entrypoint,
+        outfile: input.outfile,
+        ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+        ...(requestedTarget === undefined ? {} : { target: requestedTarget }),
+        ...(input.digest === undefined ? {} : { digest: input.digest }),
+        ...(input.options === undefined ? {} : { options: input.options }),
+      };
+      const executableSuffix = requestedTarget === undefined
+        ? tool.hostOs === "windows" ? ".exe" : ""
+        : descriptorOf(requestedTarget).executableSuffix;
       return Effect.scoped(
         Effect.gen(function*() {
-          const output = yield* acquireAtomicOutput(fileSystem, path, input);
+          const output = yield* acquireAtomicOutput(fileSystem, path, {
+            outfile: internalInput.outfile,
+            ...(internalInput.cwd === undefined ? {} : { cwd: internalInput.cwd }),
+            executableSuffix,
+          });
           const argv = yield* Effect.try({
-            try: () => adapter.renderArgv({ input, stagedOutfile: output.staged }),
+            try: () =>
+              adapter.renderArgv({
+                input: internalInput,
+                stagedOutfile: output.staged,
+              }),
             catch: (error) =>
               error instanceof InvalidDriverOptions
                 ? error
                 : new InvalidDriverOptions({ tool: adapter.toolName, reason: String(error) }),
           });
-          const completion = yield* runProcess(tool.path, argv, input.cwd).pipe(
+          const completion = yield* runProcess(tool.artifactTool.path, argv, internalInput.cwd).pipe(
             Effect.provideService(ChildProcessSpawner, spawner),
             Effect.mapError((error) =>
               new ToolFailed({
@@ -141,7 +161,7 @@ export const makeCompilerService = <Options>(
           if (information.type !== "File") {
             return yield* new OutputInvalid({ path: output.staged, reason: "not-regular" });
           }
-          if (input.target?.startsWith("windows-") !== true && (information.mode & 0o111) === 0) {
+          if (executableSuffix !== ".exe" && (information.mode & 0o111) === 0) {
             return yield* new OutputInvalid({ path: output.staged, reason: "not-executable" });
           }
           const bytes = Number(information.size);
@@ -151,7 +171,8 @@ export const makeCompilerService = <Options>(
           const target = yield* inspectNativeExecutableFile(fileSystem, output.staged, bytes).pipe(
             Effect.flatMap((observation) =>
               Effect.try({
-                try: () => inferTarget(observation, input.target, adapter.defaultTarget),
+                try: () =>
+                  inferTarget(observation, requestedTarget, adapter.defaultTarget, adapter.targetTable.resolve),
                 catch: (error) => new OutputInvalid({ path: output.staged, reason: String(error) }),
               })
             ),
@@ -161,7 +182,7 @@ export const makeCompilerService = <Options>(
                 : new OutputInvalid({ path: output.staged, reason: String(error) })
             ),
           );
-          const digest = input.digest === true
+          const digest = internalInput.digest === true
             ? yield* fileSystem.readFile(output.staged).pipe(
               Effect.flatMap((bytes) => crypto.digest("SHA-256", bytes)),
               Effect.map((bytes) => `sha256:${hex(bytes)}` as const),
@@ -174,10 +195,10 @@ export const makeCompilerService = <Options>(
             bytes,
             ...(digest === undefined ? {} : { digest }),
             target,
-            tool,
-          } satisfies Artifact;
+            tool: tool.artifactTool,
+          } satisfies ProviderArtifact<Name, SupportedTarget>;
         }),
-      ) as Effect.Effect<Artifact, BuildError, never>;
+      );
     };
     return { compileExecutable };
   });

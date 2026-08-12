@@ -26,7 +26,10 @@ const fakeTool = (): string => {
   const root = mkdtempSync(join(tmpdir(), "effect-build-tool-"));
   roots.push(root);
   const executable = join(root, "bun");
-  writeFileSync(executable, `#!/bin/sh\nprintf '{"path":"${executable}","version":"9.9.9"}'\n`);
+  writeFileSync(
+    executable,
+    `#!/bin/sh\nprintf '{"path":"${executable}","version":"9.9.9","hostOs":"macos"}'\n`,
+  );
   chmodSync(executable, 0o755);
   return executable;
 };

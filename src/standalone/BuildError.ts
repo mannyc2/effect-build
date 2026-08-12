@@ -30,7 +30,7 @@ export class ToolFailed extends Schema.TaggedError<ToolFailed>()("ToolFailed", {
 
 export class TargetUnsupported extends Schema.TaggedError<TargetUnsupported>()("TargetUnsupported", {
   tool: ToolName,
-  requested: Target,
+  requested: Schema.String,
   available: Schema.Array(Target),
 }) {}
 

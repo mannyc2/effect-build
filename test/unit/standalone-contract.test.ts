@@ -15,12 +15,34 @@ import {
 } from "../../src/standalone/BuildError.js";
 import { makeCompileExecutable } from "../../src/standalone/CompileExecutable.js";
 import type { CompileExecutableInput, CompilerService } from "../../src/standalone/Driver.js";
+import { type BunTarget, bunTargetTable } from "../../src/standalone/internal/BunTarget.js";
+import { denoAdapter } from "../../src/standalone/internal/DenoAdapter.js";
+import { type DenoTarget, denoTargetTable } from "../../src/standalone/internal/DenoTarget.js";
 import {
   inspectNativeExecutable,
   inspectNativeExecutableChunks,
   NativeExecutableRangeRequired,
 } from "../../src/standalone/internal/NativeExecutable.js";
+import { descriptorOf } from "../../src/standalone/internal/TargetCatalog.js";
+import { makeTargetTable } from "../../src/standalone/internal/TargetTable.js";
 import { Target } from "../../src/standalone/Target.js";
+
+const _bunMuslTarget: BunTarget = "linux-x64-musl";
+void _bunMuslTarget;
+// @ts-expect-error Deno's package-private target type deliberately excludes musl.
+const _denoMuslTarget: DenoTarget = "linux-x64-musl";
+void _denoMuslTarget;
+const _rejectDenoMuslAtAdapterBoundary = () =>
+  denoAdapter.renderArgv({
+    input: {
+      entrypoint: "main.ts",
+      outfile: "app",
+      // @ts-expect-error The private Deno adapter boundary must reject root-only musl targets.
+      target: "linux-x64-musl",
+    },
+    stagedOutfile: "/tmp/app",
+  });
+void _rejectDenoMuslAtAdapterBoundary;
 
 const decodeTarget = Schema.decodeUnknownSync(Target);
 const decodeArtifact = Schema.decodeUnknownSync(Artifact);
@@ -48,6 +70,58 @@ const validArtifact = {
 };
 
 describe("standalone contract: target and artifact", () => {
+  it("derives each provider target schema and native token from one ordered table", () => {
+    const bunEntries = [
+      ["macos-x64", "bun-darwin-x64"],
+      ["macos-aarch64", "bun-darwin-arm64"],
+      ["linux-x64-gnu", "bun-linux-x64"],
+      ["linux-x64-musl", "bun-linux-x64-musl"],
+      ["linux-aarch64-gnu", "bun-linux-arm64"],
+      ["linux-aarch64-musl", "bun-linux-arm64-musl"],
+      ["windows-x64", "bun-windows-x64"],
+      ["windows-aarch64", "bun-windows-arm64"],
+    ] as const;
+    const denoEntries = [
+      ["macos-x64", "x86_64-apple-darwin"],
+      ["macos-aarch64", "aarch64-apple-darwin"],
+      ["linux-x64-gnu", "x86_64-unknown-linux-gnu"],
+      ["linux-aarch64-gnu", "aarch64-unknown-linux-gnu"],
+      ["windows-x64", "x86_64-pc-windows-msvc"],
+      ["windows-aarch64", "aarch64-pc-windows-msvc"],
+    ] as const;
+
+    expect(bunTargetTable.Target.literals).toEqual(bunEntries.map(([target]) => target));
+    expect(denoTargetTable.Target.literals).toEqual(denoEntries.map(([target]) => target));
+    expect(canonicalTargets.map((target) => [target, descriptorOf(target)])).toEqual([
+      ["macos-x64", { os: "macos", architecture: "x64", executableSuffix: "" }],
+      ["macos-aarch64", { os: "macos", architecture: "aarch64", executableSuffix: "" }],
+      ["linux-x64-gnu", { os: "linux", architecture: "x64", abi: "gnu", executableSuffix: "" }],
+      ["linux-x64-musl", { os: "linux", architecture: "x64", abi: "musl", executableSuffix: "" }],
+      ["linux-aarch64-gnu", { os: "linux", architecture: "aarch64", abi: "gnu", executableSuffix: "" }],
+      ["linux-aarch64-musl", { os: "linux", architecture: "aarch64", abi: "musl", executableSuffix: "" }],
+      ["windows-x64", { os: "windows", architecture: "x64", executableSuffix: ".exe" }],
+      ["windows-aarch64", { os: "windows", architecture: "aarch64", executableSuffix: ".exe" }],
+    ]);
+    for (const [target, token] of bunEntries) {
+      expect(bunTargetTable.resolve(target)).toBe(target);
+      expect(bunTargetTable.nativeToken(target)).toBe(token);
+    }
+    for (const [target, token] of denoEntries) {
+      expect(denoTargetTable.resolve(target)).toBe(target);
+      expect(denoTargetTable.nativeToken(target)).toBe(token);
+    }
+    expect(bunTargetTable.resolve("not-a-target")).toBeUndefined();
+    expect(denoTargetTable.resolve("linux-x64-musl")).toBeUndefined();
+    expect(denoTargetTable.resolve(null)).toBeUndefined();
+  });
+
+  it("rejects malformed target tables at their construction boundary", () => {
+    const unsafeMake = makeTargetTable as (entries: Readonly<Record<string, string>>) => unknown;
+    expect(() => unsafeMake({})).toThrow("target table must not be empty");
+    expect(() => unsafeMake({ "not-a-target": "native" })).toThrow("unknown canonical target");
+    expect(() => unsafeMake({ "macos-x64": "" })).toThrow("native target token must be non-empty");
+  });
+
   it("inspects a valid ELF whose program headers are stored in a distant range", () => {
     const header = new Uint8Array(64);
     header.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
@@ -218,6 +292,21 @@ describe("standalone contract: errors", () => {
     for (const error of constructed) {
       expect(error).toBeInstanceOf(Error);
     }
+  });
+
+  it("round trips an unsupported unknown string with provider-derived availability", () => {
+    const error = new TargetUnsupported({
+      tool: "deno",
+      requested: "not-a-canonical-target",
+      available: [...denoTargetTable.Target.literals],
+    });
+    expect(encodeError(error)).toEqual({
+      _tag: "TargetUnsupported",
+      tool: "deno",
+      requested: "not-a-canonical-target",
+      available: [...denoTargetTable.Target.literals],
+    });
+    expect(decodeError(encodeError(error))).toEqual(error);
   });
 
   it("keeps the union closed and free of interruption", () => {

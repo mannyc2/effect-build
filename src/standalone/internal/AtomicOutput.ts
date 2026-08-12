@@ -1,6 +1,5 @@
 import { Effect, type FileSystem, type Path, type PlatformError, type Scope, Semaphore } from "effect";
 import { OutputLocked, PublicationFailed } from "../BuildError.js";
-import type { Target } from "../Target.js";
 
 export interface AtomicOutput {
   readonly destination: string;
@@ -11,7 +10,7 @@ export interface AtomicOutput {
 export interface AcquireAtomicOutputOptions {
   readonly outfile: string;
   readonly cwd?: string;
-  readonly target?: Target;
+  readonly executableSuffix?: "" | ".exe";
 }
 
 /** Rename failures with these reasons indicate the destination is locked, not broken. */
@@ -36,8 +35,8 @@ const publicationFailed =
     new PublicationFailed({ path, operation, reason: error.message });
 
 /** Windows executables must carry an `.exe` suffix for the staged artifact. */
-const withExeSuffix = (basename: string, target: Target | undefined): string =>
-  target?.startsWith("windows-") && !basename.toLowerCase().endsWith(".exe")
+const withExeSuffix = (basename: string, executableSuffix: "" | ".exe" | undefined): string =>
+  executableSuffix === ".exe" && !basename.toLowerCase().endsWith(".exe")
     ? `${basename}.exe`
     : basename;
 
@@ -60,7 +59,7 @@ export const acquireAtomicOutput = (
 
     const staged = path.join(
       stagingDirectory,
-      withExeSuffix(path.basename(destination), options.target),
+      withExeSuffix(path.basename(destination), options.executableSuffix),
     );
 
     const commit = publicationSemaphore.withPermit(fileSystem.rename(staged, destination)).pipe(

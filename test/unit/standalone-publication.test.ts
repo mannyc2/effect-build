@@ -20,6 +20,8 @@ import { ToolFailed } from "../../src/standalone/BuildError.js";
 import { isLockedRenameError } from "../../src/standalone/internal/AtomicOutput.js";
 import type { CompilerAdapter } from "../../src/standalone/internal/CompilerAdapter.js";
 import { makeCompilerService } from "../../src/standalone/internal/CompilerEngine.js";
+import type { OperatingSystem } from "../../src/standalone/internal/TargetCatalog.js";
+import { makeTargetTable } from "../../src/standalone/internal/TargetTable.js";
 
 const roots: string[] = [];
 const fixture = fileURLToPath(new URL("../fixtures/publication/fake-compiler.mjs", import.meta.url));
@@ -29,6 +31,19 @@ const fixture = fileURLToPath(new URL("../fixtures/publication/fake-compiler.mjs
 const windowsHost = process.platform === "win32";
 const hostTarget = windowsHost ? "windows-x64" as const : "macos-aarch64" as const;
 const successMode = windowsHost ? "pe" : "success";
+
+const targetTable = makeTargetTable(
+  {
+    "macos-aarch64": "test-macos-aarch64",
+    "windows-x64": "test-windows-x64",
+  } as const,
+);
+type TestTarget = typeof targetTable.Target.Type;
+
+const discoveredCompiler = (hostOs: OperatingSystem = windowsHost ? "windows" : "macos") => ({
+  artifactTool: { name: "bun" as const, version: "test", path: process.execPath },
+  hostOs,
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -40,10 +55,10 @@ const makeRoot = () => {
   return root;
 };
 
-const adapter = (mode = successMode): CompilerAdapter<Record<string, never>> => ({
+const adapter = (mode = successMode): CompilerAdapter<Record<string, never>, "bun", TestTarget> => ({
   toolName: "bun",
   probeArgv: [],
-  supportedTargets: ["macos-aarch64", "windows-x64"],
+  targetTable,
   renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, mode],
   interpretFailure: (completion) =>
     new ToolFailed({
@@ -58,11 +73,7 @@ const adapter = (mode = successMode): CompilerAdapter<Record<string, never>> => 
 
 const compile = (root: string, mode = successMode, digest = true) =>
   Effect.gen(function*() {
-    const service = yield* makeCompilerService(adapter(mode), {
-      name: "bun",
-      version: "test",
-      path: process.execPath,
-    });
+    const service = yield* makeCompilerService(adapter(mode), discoveredCompiler());
     return yield* service.compileExecutable({
       entrypoint: "unused.ts",
       outfile: join(root, "nested", "app"),
@@ -118,7 +129,7 @@ describe("standalone atomic publication", () => {
   it("uses the destination basename for the staged compiler path", async () => {
     const root = makeRoot();
     let staged = "";
-    const capturing: CompilerAdapter<Record<string, never>> = {
+    const capturing: CompilerAdapter<Record<string, never>, "bun", TestTarget> = {
       ...adapter(),
       renderArgv: ({ stagedOutfile }) => {
         staged = stagedOutfile;
@@ -128,11 +139,7 @@ describe("standalone atomic publication", () => {
     await Effect.runPromise(
       Effect.gen(function*() {
         const fs = yield* FileSystem.FileSystem;
-        const service = yield* makeCompilerService(capturing, {
-          name: "bun",
-          version: "test",
-          path: process.execPath,
-        });
+        const service = yield* makeCompilerService(capturing, discoveredCompiler());
         const artifact = yield* service.compileExecutable({
           entrypoint: "unused.ts",
           outfile: join(root, "named-app"),
@@ -150,13 +157,13 @@ describe("standalone atomic publication", () => {
     mkdirSync(join(root, "nested"));
     writeFileSync(outfile, "old", { flush: true });
     const sentinel = join(root, "started");
-    const hanging: CompilerAdapter<Record<string, never>> = {
+    const hanging: CompilerAdapter<Record<string, never>, "bun", TestTarget> = {
       ...adapter(),
       renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, "hang", sentinel],
     };
     const fiber = Effect.runFork(
       Effect.gen(function*() {
-        const service = yield* makeCompilerService(hanging, { name: "bun", version: "test", path: process.execPath });
+        const service = yield* makeCompilerService(hanging, discoveredCompiler());
         return yield* service.compileExecutable({
           entrypoint: "unused.ts",
           outfile,
@@ -179,17 +186,24 @@ describe("standalone atomic publication", () => {
     const root = makeRoot();
     const outfile = join(root, "win-app");
     let staged = "";
-    const windows: CompilerAdapter<Record<string, never>> = {
-      ...adapter(),
-      supportedTargets: ["windows-x64"],
+    const windowsTargetTable = makeTargetTable({ "windows-x64": "test-windows-x64" } as const);
+    const windows: CompilerAdapter<
+      Record<string, never>,
+      "bun",
+      typeof windowsTargetTable.Target.Type
+    > = {
+      toolName: "bun",
+      probeArgv: [],
+      targetTable: windowsTargetTable,
       renderArgv: ({ stagedOutfile }) => {
         staged = stagedOutfile;
         return [fixture, stagedOutfile, "pe"];
       },
+      interpretFailure: adapter().interpretFailure,
     };
     const artifact = await Effect.runPromise(
       Effect.gen(function*() {
-        const service = yield* makeCompilerService(windows, { name: "bun", version: "test", path: process.execPath });
+        const service = yield* makeCompilerService(windows, discoveredCompiler("windows"));
         return yield* service.compileExecutable({
           entrypoint: "unused.ts",
           outfile,
@@ -204,19 +218,94 @@ describe("standalone atomic publication", () => {
     expect(existsSync(`${outfile}.exe`)).toBe(false);
   });
 
+  it("uses the compiler host OS for omitted-target Windows staging without leaking it", async () => {
+    const root = makeRoot();
+    const outfile = join(root, "host-win-app");
+    let staged = "";
+    const windowsTargetTable = makeTargetTable({ "windows-x64": "test-windows-x64" } as const);
+    const windows: CompilerAdapter<
+      Record<string, never>,
+      "bun",
+      typeof windowsTargetTable.Target.Type
+    > = {
+      toolName: "bun",
+      probeArgv: [],
+      targetTable: windowsTargetTable,
+      renderArgv: ({ stagedOutfile }) => {
+        staged = stagedOutfile;
+        return [fixture, stagedOutfile, "pe"];
+      },
+      interpretFailure: adapter().interpretFailure,
+    };
+    const artifact = await Effect.runPromise(
+      Effect.gen(function*() {
+        const service = yield* makeCompilerService(windows, discoveredCompiler("windows"));
+        return yield* service.compileExecutable({ entrypoint: "unused.ts", outfile });
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(basename(staged)).toBe("host-win-app.exe");
+    expect(artifact.path).toBe(outfile);
+    expect(artifact.target).toBe("windows-x64");
+    expect(Object.keys(artifact.tool).sort()).toEqual(["name", "path", "version"]);
+    expect(Object.hasOwn(artifact.tool, "hostOs")).toBe(false);
+    expect(existsSync(outfile)).toBe(true);
+    expect(existsSync(`${outfile}.exe`)).toBe(false);
+  });
+
+  it("rejects an observed canonical target outside the selected provider table", async () => {
+    const root = makeRoot();
+    const outfile = join(root, "outside-provider");
+    const windowsTargetTable = makeTargetTable({ "windows-x64": "test-windows-x64" } as const);
+    const windowsOnly: CompilerAdapter<
+      Record<string, never>,
+      "bun",
+      typeof windowsTargetTable.Target.Type
+    > = {
+      toolName: "bun",
+      probeArgv: [],
+      targetTable: windowsTargetTable,
+      renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, "success"],
+      interpretFailure: adapter().interpretFailure,
+    };
+
+    await expect(
+      Effect.runPromise(
+        Effect.gen(function*() {
+          const service = yield* makeCompilerService(windowsOnly, discoveredCompiler("windows"));
+          return yield* service.compileExecutable({ entrypoint: "unused.ts", outfile });
+        }).pipe(Effect.provide(NodeServices.layer)),
+      ),
+    ).rejects.toMatchObject({
+      _tag: "OutputInvalid",
+      reason: expect.stringContaining("unsupported by the selected compiler"),
+    });
+    expect(existsSync(outfile)).toBe(false);
+    expect(existsSync(`${outfile}.exe`)).toBe(false);
+  });
+
   it("rejects a requested target that disagrees with the native output", async () => {
     const root = makeRoot();
     const outfile = join(root, "nested", "app");
     mkdirSync(join(root, "nested"));
     writeFileSync(outfile, "old", { flush: true });
-    const wide: CompilerAdapter<Record<string, never>> = {
-      ...adapter(),
-      supportedTargets: ["macos-x64", "macos-aarch64"],
+    const wideTargetTable = makeTargetTable(
+      {
+        "macos-x64": "test-macos-x64",
+        "macos-aarch64": "test-macos-aarch64",
+      } as const,
+    );
+    const wide: CompilerAdapter<Record<string, never>, "bun", typeof wideTargetTable.Target.Type> = {
+      toolName: "bun",
+      probeArgv: [],
+      targetTable: wideTargetTable,
+      renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, successMode],
+      interpretFailure: adapter().interpretFailure,
     };
     await expect(
       Effect.runPromise(
         Effect.gen(function*() {
-          const service = yield* makeCompilerService(wide, { name: "bun", version: "test", path: process.execPath });
+          const service = yield* makeCompilerService(wide, discoveredCompiler());
           return yield* service.compileExecutable({
             entrypoint: "unused.ts",
             outfile,
@@ -232,7 +321,7 @@ describe("standalone atomic publication", () => {
   it("rejects an unsupported target before rendering or spawning", async () => {
     const root = makeRoot();
     let rendered = 0;
-    const counting: CompilerAdapter<Record<string, never>> = {
+    const counting: CompilerAdapter<Record<string, never>, "bun", TestTarget> = {
       ...adapter(),
       renderArgv: ({ stagedOutfile }) => {
         rendered += 1;
@@ -242,11 +331,7 @@ describe("standalone atomic publication", () => {
     await expect(
       Effect.runPromise(
         Effect.gen(function*() {
-          const service = yield* makeCompilerService(counting, {
-            name: "bun",
-            version: "test",
-            path: process.execPath,
-          });
+          const service = yield* makeCompilerService(counting, discoveredCompiler());
           return yield* service.compileExecutable({
             entrypoint: "unused.ts",
             outfile: join(root, "nested", "app"),

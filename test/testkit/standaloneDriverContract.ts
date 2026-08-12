@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import type { Crypto, FileSystem, Layer, Path } from "effect";
 import { Effect } from "effect";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,13 +47,20 @@ export const describeStandaloneDriverContract = <Self, Options>(
     return root;
   };
 
-  const makeFakeTool = (root: string, behavior: "ok" | "garbage" = "ok"): { executable: string; log: string } => {
+  const makeFakeTool = (
+    root: string,
+    behavior: "ok" | "garbage" | "missing-host" | "unknown-host" = "ok",
+  ): { executable: string; log: string } => {
     const log = join(root, "spawns.log");
     writeFileSync(log, "");
     const executable = join(root, config.tool);
-    const script = behavior === "ok"
-      ? `#!/bin/sh\nEFFECT_BUILD_FAKE_TOOL_PATH="$0" exec "${process.execPath}" "${fixture}" ${config.tool} "${log}" "$@"\n`
-      : `#!/bin/sh\nprintf 'not-json'\n`;
+    const script = behavior === "garbage"
+      ? `#!/bin/sh\nprintf 'not-json'\n`
+      : behavior === "missing-host"
+      ? `#!/bin/sh\nprintf '{"path":"%s","version":"9.9.9"}' "$0"\n`
+      : `#!/bin/sh\nEFFECT_BUILD_FAKE_HOST_OS=${
+        behavior === "unknown-host" ? "plan9" : "macos"
+      } EFFECT_BUILD_FAKE_TOOL_PATH="$0" exec "${process.execPath}" "${fixture}" ${config.tool} "${log}" "$@"\n`;
     writeFileSync(executable, script);
     chmodSync(executable, 0o755);
     return { executable, log };
@@ -138,6 +145,38 @@ export const describeStandaloneDriverContract = <Self, Options>(
       });
     }
 
+    it("rejects unknown and non-string runtime targets before staging or compile spawn", async () => {
+      const hostile = {
+        toString(): never {
+          throw new Error("must not stringify user objects");
+        },
+      };
+      const invalidTargets: ReadonlyArray<readonly [unknown, string]> = [
+        ["not-a-canonical-target", "not-a-canonical-target"],
+        [null, "<non-string:null>"],
+        [[], "<non-string:array>"],
+        [Symbol("target"), "<non-string:symbol>"],
+        [hostile, "<non-string:object>"],
+      ];
+
+      for (const [target, requested] of invalidTargets) {
+        const root = makeRoot();
+        const { executable, log } = makeFakeTool(root);
+        const outputDirectory = join(root, "out");
+        await expect(
+          compileOnce(root, {
+            entrypoint: "main.ts",
+            outfile: join(outputDirectory, "app"),
+            target: target as never,
+          }, { executable }),
+        ).rejects.toMatchObject({ _tag: "TargetUnsupported", requested });
+        const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
+        expect(lines).toHaveLength(1);
+        expect(lines[0]?.[0]).toBe(config.probeFirstArg);
+        expect(existsSync(outputDirectory)).toBe(false);
+      }
+    });
+
     it("inherits the caller environment instead of replacing it", async () => {
       const root = makeRoot();
       const { executable, log } = makeFakeTool(root);
@@ -175,11 +214,13 @@ export const describeStandaloneDriverContract = <Self, Options>(
     });
 
     it("fails layer construction with ToolProbeFailed on malformed probe output", async () => {
-      const root = makeRoot();
-      const { executable } = makeFakeTool(root, "garbage");
-      await expect(
-        compileOnce(root, { entrypoint: "main.ts", outfile: join(root, "out", "app") }, { executable }),
-      ).rejects.toMatchObject({ _tag: "ToolProbeFailed" });
+      for (const behavior of ["garbage", "missing-host", "unknown-host"] as const) {
+        const root = makeRoot();
+        const { executable } = makeFakeTool(root, behavior);
+        await expect(
+          compileOnce(root, { entrypoint: "main.ts", outfile: join(root, "out", "app") }, { executable }),
+        ).rejects.toMatchObject({ _tag: "ToolProbeFailed" });
+      }
     });
   });
 };

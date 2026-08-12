@@ -3,7 +3,7 @@ import type { Effect } from "effect";
 import * as Bun from "../src/Bun.js";
 import * as Deno from "../src/Deno.js";
 import type { Artifact } from "../src/standalone/Artifact.js";
-import type { BuildError } from "../src/standalone/BuildError.js";
+import type { BuildError, TargetUnsupported } from "../src/standalone/BuildError.js";
 import { makeCompileExecutable } from "../src/standalone/CompileExecutable.js";
 import type { CompileExecutableInput, CompilerService } from "../src/standalone/Driver.js";
 
@@ -86,6 +86,7 @@ export const _policyField = bunLikeCompile({
 
 // Interruption is not a member of the closed error union.
 export type _NoInterrupted = Assert<Same<Extract<BuildError, { readonly _tag: "Interrupted" }>, never>>;
+export type _TargetUnsupportedRequested = Assert<Same<TargetUnsupported["requested"], string>>;
 
 // The artifact is plain final-destination data with no store identity.
 export type _NoStoreFields = Assert<

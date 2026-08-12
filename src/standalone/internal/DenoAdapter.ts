@@ -1,17 +1,8 @@
 import type { Options, Permissions, PermissionValue } from "../../Deno.js";
 import { InvalidDriverOptions, ToolFailed } from "../BuildError.js";
 import type { CompileExecutableInput } from "../Driver.js";
-import type { Target } from "../Target.js";
 import type { CompilerAdapter } from "./CompilerAdapter.js";
-
-const targets = {
-  "macos-x64": "x86_64-apple-darwin",
-  "macos-aarch64": "aarch64-apple-darwin",
-  "linux-x64-gnu": "x86_64-unknown-linux-gnu",
-  "linux-aarch64-gnu": "aarch64-unknown-linux-gnu",
-  "windows-x64": "x86_64-pc-windows-msvc",
-  "windows-aarch64": "aarch64-pc-windows-msvc",
-} as const satisfies Partial<Record<Target, string>>;
+import { type DenoTarget, denoTargetTable } from "./DenoTarget.js";
 
 const invalid = (reason: string): never => {
   throw new InvalidDriverOptions({ tool: "deno", reason });
@@ -79,16 +70,18 @@ const optionsOf = (input: CompileExecutableInput<Options>): ValidatedOptions => 
   return { options, permissionArgs: renderPermissions(options.permissions) };
 };
 
-export const denoAdapter: CompilerAdapter<Options> = {
+export const denoAdapter: CompilerAdapter<Options, "deno", DenoTarget> = {
   toolName: "deno",
-  probeArgv: ["eval", "console.log(JSON.stringify({path:Deno.execPath(),version:Deno.version.deno}))"],
-  supportedTargets: Object.keys(targets) as Target[],
+  probeArgv: [
+    "eval",
+    'console.log(JSON.stringify({path:Deno.execPath(),version:Deno.version.deno,hostOs:Deno.build.os==="darwin"?"macos":Deno.build.os}))',
+  ],
+  targetTable: denoTargetTable,
   renderArgv: ({ input, stagedOutfile }) => {
     const { options, permissionArgs } = optionsOf(input);
-    const target = input.target === undefined ? undefined : targets[input.target as keyof typeof targets];
     return [
       "compile",
-      ...(target === undefined ? [] : ["--target", target]),
+      ...(input.target === undefined ? [] : ["--target", denoTargetTable.nativeToken(input.target)]),
       ...(options.bundle === true ? ["--bundle"] : []),
       ...(options.minify === true ? ["--minify"] : []),
       ...permissionArgs,

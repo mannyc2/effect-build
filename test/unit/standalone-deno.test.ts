@@ -27,7 +27,10 @@ const fakeTool = (): string => {
   const root = mkdtempSync(join(tmpdir(), "effect-build-tool-"));
   roots.push(root);
   const executable = join(root, "deno");
-  writeFileSync(executable, `#!/bin/sh\nprintf '{"path":"${executable}","version":"8.8.8"}'\n`);
+  writeFileSync(
+    executable,
+    `#!/bin/sh\nprintf '{"path":"${executable}","version":"8.8.8","hostOs":"macos"}'\n`,
+  );
   chmodSync(executable, 0o755);
   return executable;
 };
@@ -68,8 +71,8 @@ describe("standalone Deno driver", () => {
         stagedOutfile: "/tmp/app",
       })
     ).toThrowError(expect.objectContaining({ _tag: "InvalidDriverOptions" }));
-    expect(denoAdapter.supportedTargets).not.toContain("linux-x64-musl");
-    expect(denoAdapter.supportedTargets).not.toContain("linux-aarch64-musl");
+    expect(denoAdapter.targetTable.Target.literals).not.toContain("linux-x64-musl");
+    expect(denoAdapter.targetTable.Target.literals).not.toContain("linux-aarch64-musl");
   });
 
   it("probes an explicit absolute executable while constructing the Layer", async () => {

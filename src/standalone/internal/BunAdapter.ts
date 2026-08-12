@@ -1,19 +1,8 @@
 import type { Options } from "../../Bun.js";
 import { InvalidDriverOptions, ToolFailed } from "../BuildError.js";
 import type { CompileExecutableInput } from "../Driver.js";
-import type { Target } from "../Target.js";
+import { type BunTarget, bunTargetTable } from "./BunTarget.js";
 import type { CompilerAdapter } from "./CompilerAdapter.js";
-
-const targets: Readonly<Record<Target, string>> = {
-  "macos-x64": "bun-darwin-x64",
-  "macos-aarch64": "bun-darwin-arm64",
-  "linux-x64-gnu": "bun-linux-x64",
-  "linux-x64-musl": "bun-linux-x64-musl",
-  "linux-aarch64-gnu": "bun-linux-arm64",
-  "linux-aarch64-musl": "bun-linux-arm64-musl",
-  "windows-x64": "bun-windows-x64",
-  "windows-aarch64": "bun-windows-arm64",
-};
 
 const optionsOf = (input: CompileExecutableInput<Options>): Options => {
   const value: unknown = input.options ?? {};
@@ -37,16 +26,19 @@ const optionsOf = (input: CompileExecutableInput<Options>): Options => {
   return options;
 };
 
-export const bunAdapter: CompilerAdapter<Options> = {
+export const bunAdapter: CompilerAdapter<Options, "bun", BunTarget> = {
   toolName: "bun",
-  probeArgv: ["-e", "process.stdout.write(JSON.stringify({path:process.execPath,version:Bun.version}))"],
-  supportedTargets: Object.keys(targets) as Target[],
+  probeArgv: [
+    "-e",
+    'process.stdout.write(JSON.stringify({path:process.execPath,version:Bun.version,hostOs:process.platform==="darwin"?"macos":process.platform==="win32"?"windows":process.platform==="linux"?"linux":process.platform}))',
+  ],
+  targetTable: bunTargetTable,
   renderArgv: ({ input, stagedOutfile }) => {
     const options = optionsOf(input);
     return [
       "build",
       "--compile",
-      ...(input.target === undefined ? [] : [`--target=${targets[input.target]}`]),
+      ...(input.target === undefined ? [] : [`--target=${bunTargetTable.nativeToken(input.target)}`]),
       ...(options.minify === true ? ["--minify"] : []),
       ...(options.sourcemap === undefined ? [] : [`--sourcemap=${options.sourcemap}`]),
       ...(options.bytecode === true ? ["--bytecode"] : []),
