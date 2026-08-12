@@ -6,7 +6,10 @@ with the same read-only planning workflow on 2026-08-12 at commit `eb2995c`
 after a target-matrix design review. Plans 001-006 record the original
 managed-proof design. Plans 007-010 record the hard cutover to the standalone
 compile operation. Plans 011-014 are the completed typed-target and matrix
-program.
+program. Re-audited again on 2026-08-12 against the completed `v0.2.0` product
+tag at commit `29f8cfb` and planning baseline `e4257cc` for dependency
+compatibility; Plan 015 is the active, bounded Effect 4.0 range and current-RC
+upgrade.
 The decision gates opened by
 `FIRST-PRINCIPLES-REVIEW.md` (operator-audited, 2026-08-10) were answered by
 the operator on 2026-08-11 and are recorded under **Gate decisions** below.
@@ -125,6 +128,7 @@ of the 2026-08-11 gates:
 | 013 | Prove every provider target with required real evidence | P1 | L | 011 | DONE |
 | 012 | Build the typed executable target matrix | P1 | L | 013 | DONE |
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | DONE |
+| 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | IN PROGRESS |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -170,8 +174,14 @@ behavior, or the standalone operation invalidated that earlier work.
   into the existing services, and freezes packed-consumer behavior, examples,
   docs, and the repository execution rule together.
 - Plans 011-014 were one no-publish migration program. Intermediate commits
-  were reviewed and run in CI without tags or publication; the green Plan 014
-  state is the release candidate.
+  were reviewed and run in CI without tags or publication; their final green
+  state at `29f8cfb` is the completed `v0.2.0` release. Plan 015 is post-release
+  work and must not move, reuse, or rewrite that tag or its release commits.
+- Plan 015 runs only after that public surface is frozen. It separates the
+  consumer peer interval from the exact development lock, updates the complete
+  Effect/platform development family to rc.108, and makes beta.104 plus rc.108
+  fresh-consumer lanes required before publication. It does not multiply the
+  compiler-target matrix or change an operation, schema, host, or target claim.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 
@@ -325,6 +335,25 @@ user-owned unless explicitly listed in the assigned plan.
 - **No-replace/fsync content-store commit reused for outfile**: rejected.
   Outfile needs same-filesystem atomic replace; crash durability is a different
   cost/guarantee.
+- **`effect@latest` as the Effect 4 upgrade selector**: rejected. On the
+  2026-08-12 audit date that tag resolves to Effect 3.22.1; the current v4 line
+  is the explicit rc.108 channel and matching platform family.
+- **Effect beta.103 or earlier**: rejected. The current source uses
+  `Schema.TaggedError`, introduced under that name in beta.104, and the matching
+  Deno platform family also begins at beta.104.
+- **A broad `^4.0.0-beta.104` peer through every stable v4 minor**: rejected for
+  Plan 015. The package imports `effect/unstable/process`; the first evidenced
+  range stops before 4.1 and can be widened deliberately later.
+- **Loose Effect/platform development dependencies**: rejected. Exact rc.108
+  pins and a frozen lock are the reproducible reference environment; consumer
+  breadth belongs in the peer range and isolated endpoint lanes.
+- **Cross-product Effect endpoints with all 12 compiler targets**: rejected.
+  These are independent axes; endpoint source/unit/fresh-consumer checks run at
+  both bounds, while real compiler/target evidence runs once on the current
+  locked Effect baseline.
+- **Bulk latest-tooling upgrades inside Plan 015**: deferred. TypeScript,
+  Vitest, oxlint, dprint, pnpm, and Node types are development-only migrations
+  with separate cross-major risks and do not widen the consumer Effect range.
 
 ## Quality bar
 
