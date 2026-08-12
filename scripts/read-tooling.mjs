@@ -58,6 +58,25 @@ export const validateSupportMatrix = (support) => {
   return support;
 };
 
+const expectedPublicApi = {
+  version: 1,
+  subpaths: [".", "./bun", "./deno"],
+  rootRuntimeKeys: ["Artifact", "BuildError", "MatrixError", "Target"],
+  toolRuntimeKeys: ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+};
+
+export const validatePublicApi = (api) => {
+  if (!exactKeys(api, Object.keys(expectedPublicApi))) {
+    throw new Error("public API manifest must have exactly version, subpaths, rootRuntimeKeys, and toolRuntimeKeys");
+  }
+  for (const key of Object.keys(expectedPublicApi)) {
+    if (JSON.stringify(api[key]) !== JSON.stringify(expectedPublicApi[key])) {
+      throw new Error(`unexpected public API ${key}`);
+    }
+  }
+  return api;
+};
+
 export const validateTooling = ({ pins, support, api }) => {
   if (pins.version !== 1 || support.version !== 1 || api.version !== 1) {
     throw new Error("unsupported tooling version");
@@ -69,9 +88,7 @@ export const validateTooling = ({ pins, support, api }) => {
     throw new Error("duplicate publication host");
   }
   validateSupportMatrix(support);
-  if (JSON.stringify(api.subpaths) !== JSON.stringify([".", "./bun", "./deno"])) {
-    throw new Error("unexpected public subpaths");
-  }
+  validatePublicApi(api);
   return { pins, support, api };
 };
 

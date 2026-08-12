@@ -1,6 +1,6 @@
 {
   "name": "effect-build",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Effect-native Bun and Deno executable compilation with typed failures and atomic publication.",
   "type": "module",
   "packageManager": "pnpm@10.17.1",

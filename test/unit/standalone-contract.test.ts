@@ -16,6 +16,7 @@ import {
 import { makeCompileExecutable } from "../../src/standalone/CompileExecutable.js";
 import type { CompileExecutableInput, CompilerService } from "../../src/standalone/Driver.js";
 import { type BunTarget, bunTargetTable } from "../../src/standalone/internal/BunTarget.js";
+import type { ProviderArtifact } from "../../src/standalone/internal/CompilerAdapter.js";
 import { denoAdapter } from "../../src/standalone/internal/DenoAdapter.js";
 import { type DenoTarget, denoTargetTable } from "../../src/standalone/internal/DenoTarget.js";
 import {
@@ -205,6 +206,42 @@ describe("standalone contract: target and artifact", () => {
     expect(JSON.parse(JSON.stringify(encodeArtifact(decoded)))).toEqual(validArtifact);
   });
 
+  it("accepts all 12 provider-correlated target pairs and rejects every narrowed impossible pair", () => {
+    const providerTargets = [
+      ["bun", bunTargetTable.Target.literals],
+      ["deno", denoTargetTable.Target.literals],
+    ] as const;
+
+    for (const [name, targets] of providerTargets) {
+      for (const target of targets) {
+        expect(decodeArtifact({
+          path: `/work/dist/${name}-${target}`,
+          bytes: 64,
+          target,
+          tool: { name, version: "1.0.0", path: `/tools/${name}` },
+        })).toMatchObject({ target, tool: { name } });
+      }
+    }
+
+    for (
+      const [name, target] of [
+        ["deno", "linux-x64-musl"],
+        ["deno", "linux-aarch64-musl"],
+        ["bun", "linux-aarch64-musl"],
+        ["bun", "windows-aarch64"],
+      ] as const
+    ) {
+      expect(() =>
+        decodeArtifact({
+          path: `/work/dist/${name}-${target}`,
+          bytes: 64,
+          target,
+          tool: { name, version: "1.0.0", path: `/tools/${name}` },
+        })
+      ).toThrow();
+    }
+  });
+
   it("accepts an artifact without a digest", () => {
     const { digest: _digest, ...withoutDigest } = validArtifact;
     const decoded = decodeArtifact(withoutDigest);
@@ -333,25 +370,35 @@ interface DenoLikeOptions {
   readonly permissions?: { readonly all: true };
 }
 
-class BunLikeCompiler extends Context.Service<BunLikeCompiler, CompilerService<BunLikeOptions>>()(
+class BunLikeCompiler extends Context.Service<
+  BunLikeCompiler,
+  CompilerService<"bun", BunTarget, BunLikeOptions>
+>()(
   "test/standalone/BunLikeCompiler",
 ) {}
 
-class DenoLikeCompiler extends Context.Service<DenoLikeCompiler, CompilerService<DenoLikeOptions>>()(
+class DenoLikeCompiler extends Context.Service<
+  DenoLikeCompiler,
+  CompilerService<"deno", DenoTarget, DenoLikeOptions>
+>()(
   "test/standalone/DenoLikeCompiler",
 ) {}
 
-const fakeService = <Options>(name: "bun" | "deno"): CompilerService<Options> => ({
-  compileExecutable: (input: CompileExecutableInput<Options>) =>
+const fakeService = <const Name extends "bun" | "deno", SupportedTarget extends Target, Options>(
+  name: Name,
+  defaultTarget: SupportedTarget,
+): CompilerService<Name, SupportedTarget, Options> => ({
+  compileExecutable: (input: CompileExecutableInput<Options, SupportedTarget>) =>
     Effect.sync(() =>
       decodeArtifact({
         path: `/work/${input.outfile}`,
         bytes: 64,
         ...(input.digest === true ? { digest: `sha256:${"b".repeat(64)}` } : {}),
-        target: input.target ?? "macos-aarch64",
+        target: input.target ?? defaultTarget,
         tool: { name, version: "0.0.1", path: `/usr/local/bin/${name}` },
-      })
+      }) as ProviderArtifact<Name, SupportedTarget>
     ),
+  compileExecutableMatrix: () => Effect.die("unused matrix operation"),
 });
 
 const bunLikeCompile = makeCompileExecutable(BunLikeCompiler);
@@ -361,7 +408,7 @@ describe("standalone contract: driver correlation", () => {
   it("delegates each per-tool operation to exactly its own provided service", () => {
     const artifact = Effect.runSync(
       bunLikeCompile({ entrypoint: "src/main.ts", outfile: "dist/app", options: { minify: true } }).pipe(
-        Effect.provideService(BunLikeCompiler, fakeService<BunLikeOptions>("bun")),
+        Effect.provideService(BunLikeCompiler, fakeService<"bun", BunTarget, BunLikeOptions>("bun", "macos-aarch64")),
       ),
     );
     expect(artifact.path).toBe("/work/dist/app");
@@ -374,14 +421,19 @@ describe("standalone contract: driver correlation", () => {
         outfile: "dist/app",
         digest: true,
         options: { permissions: { all: true } },
-      }).pipe(Effect.provideService(DenoLikeCompiler, fakeService<DenoLikeOptions>("deno"))),
+      }).pipe(
+        Effect.provideService(
+          DenoLikeCompiler,
+          fakeService<"deno", DenoTarget, DenoLikeOptions>("deno", "macos-aarch64"),
+        ),
+      ),
     );
     expect(denoArtifact.tool.name).toBe("deno");
     expect(denoArtifact.digest).toBe(`sha256:${"b".repeat(64)}`);
   });
 
   it("propagates typed failures unchanged", () => {
-    const failing: CompilerService<BunLikeOptions> = {
+    const failing: CompilerService<"bun", BunTarget, BunLikeOptions> = {
       compileExecutable: () =>
         Effect.fail(
           new ToolFailed({
@@ -390,6 +442,7 @@ describe("standalone contract: driver correlation", () => {
             diagnostics: [{ channel: "stderr", text: "error: missing import", truncated: false }],
           }),
         ),
+      compileExecutableMatrix: () => Effect.die("unused matrix operation"),
     };
     const exit = Effect.runSyncExit(
       bunLikeCompile({ entrypoint: "src/main.ts", outfile: "dist/app" }).pipe(

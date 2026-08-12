@@ -503,10 +503,7 @@ export const makeCompilerService = <
   adapter: CompilerAdapter<Options, Name, SupportedTarget, ValidatedOptions>,
   tool: DiscoveredCompiler<Name>,
 ): Effect.Effect<
-  CompilerService<Options>,
+  CompilerService<Name, SupportedTarget, Options>,
   never,
   ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
-> =>
-  makeCompilerRunner(adapter, tool).pipe(
-    Effect.map(({ compileExecutable }) => ({ compileExecutable })),
-  );
+> => makeCompilerRunner(adapter, tool);

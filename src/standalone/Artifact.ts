@@ -1,5 +1,6 @@
 import { Schema } from "effect";
-import { Target } from "./Target.js";
+import { bunTargetTable } from "./internal/BunTarget.js";
+import { denoTargetTable } from "./internal/DenoTarget.js";
 
 const isAbsolutePath = (value: string): boolean =>
   (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)) && value.length > 1;
@@ -36,20 +37,36 @@ export type ByteCount = typeof ByteCount.Type;
 export const ToolName = Schema.Literals(["bun", "deno"] as const);
 export type ToolName = typeof ToolName.Type;
 
-export const Tool = Schema.Struct({
-  name: ToolName,
+const ToolFields = {
   version: Schema.String.pipe(
     Schema.check(Schema.makeFilter((value: string) => value.length > 0 ? true : "tool version must be non-empty")),
   ),
   path: AbsolutePath,
+} as const;
+
+export const Tool = Schema.Struct({
+  name: ToolName,
+  ...ToolFields,
 });
 export type Tool = typeof Tool.Type;
 
-export const Artifact = Schema.Struct({
+const ArtifactFields = {
   path: AbsolutePath,
   bytes: ByteCount,
   digest: Schema.optionalKey(Digest),
-  target: Target,
-  tool: Tool,
+} as const;
+
+const BunArtifact = Schema.Struct({
+  ...ArtifactFields,
+  target: bunTargetTable.Target,
+  tool: Schema.Struct({ name: Schema.Literal("bun"), ...ToolFields }),
 });
+
+const DenoArtifact = Schema.Struct({
+  ...ArtifactFields,
+  target: denoTargetTable.Target,
+  tool: Schema.Struct({ name: Schema.Literal("deno"), ...ToolFields }),
+});
+
+export const Artifact = Schema.Union([BunArtifact, DenoArtifact]);
 export type Artifact = typeof Artifact.Type;

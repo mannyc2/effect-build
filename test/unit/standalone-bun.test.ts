@@ -8,10 +8,12 @@ import * as Bun from "../../src/Bun.js";
 import { bunAdapter } from "../../src/standalone/internal/BunAdapter.js";
 import { describeStandaloneDriverContract } from "../testkit/standaloneDriverContract.js";
 
-describeStandaloneDriverContract({
+describeStandaloneDriverContract<Bun.Compiler, Bun.Options, Bun.Target, Bun.Artifact>({
   tool: "bun",
   layer: Bun.layer,
   compileExecutable: Bun.compileExecutable,
+  compileExecutableMatrix: Bun.compileExecutableMatrix,
+  matrixTarget: "macos-aarch64",
   probeFirstArg: "-e",
   compileFirstArg: "build",
   invalidOptions: { rawArgs: ["--x"] } as never,
@@ -35,6 +37,17 @@ const fakeTool = (): string => {
 };
 
 describe("standalone Bun driver", () => {
+  it("publishes the exact evidence-backed target literals", () => {
+    expect(Bun.Target.literals).toEqual([
+      "macos-x64",
+      "macos-aarch64",
+      "linux-x64-gnu",
+      "linux-x64-musl",
+      "linux-aarch64-gnu",
+      "windows-x64",
+    ]);
+  });
+
   it("renders only requested native flags and exact target mapping", () => {
     const options = bunAdapter.validateOptions({ minify: true, sourcemap: "inline", bytecode: true });
     expect(options._tag).toBe("Valid");
@@ -106,6 +119,7 @@ describe("standalone Bun driver", () => {
       ),
     );
     expect(service.compileExecutable).toBeTypeOf("function");
+    expect(service.compileExecutableMatrix).toBeTypeOf("function");
     await expect(Effect.runPromise(
       Bun.Compiler.pipe(
         Effect.provide(Bun.layer({ executable: "relative/bun" })),

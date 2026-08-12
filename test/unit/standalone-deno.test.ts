@@ -8,10 +8,12 @@ import * as Deno from "../../src/Deno.js";
 import { denoAdapter } from "../../src/standalone/internal/DenoAdapter.js";
 import { describeStandaloneDriverContract } from "../testkit/standaloneDriverContract.js";
 
-describeStandaloneDriverContract({
+describeStandaloneDriverContract<Deno.Compiler, Deno.Options, Deno.Target, Deno.Artifact>({
   tool: "deno",
   layer: Deno.layer,
   compileExecutable: Deno.compileExecutable,
+  compileExecutableMatrix: Deno.compileExecutableMatrix,
+  matrixTarget: "macos-aarch64",
   probeFirstArg: "eval",
   compileFirstArg: "compile",
   invalidOptions: { rawArgs: ["--x"] } as never,
@@ -36,6 +38,17 @@ const fakeTool = (): string => {
 };
 
 describe("standalone Deno driver", () => {
+  it("publishes the exact evidence-backed target literals", () => {
+    expect(Deno.Target.literals).toEqual([
+      "macos-x64",
+      "macos-aarch64",
+      "linux-x64-gnu",
+      "linux-aarch64-gnu",
+      "windows-x64",
+      "windows-aarch64",
+    ]);
+  });
+
   it("renders bundle, minify, permissions, target, and output exactly", () => {
     const options = denoAdapter.validateOptions({
       bundle: true,
@@ -124,6 +137,7 @@ describe("standalone Deno driver", () => {
       ),
     );
     expect(service.compileExecutable).toBeTypeOf("function");
+    expect(service.compileExecutableMatrix).toBeTypeOf("function");
     await expect(Effect.runPromise(
       Deno.Compiler.pipe(
         Effect.provide(Deno.layer({ executable: "relative/deno" })),

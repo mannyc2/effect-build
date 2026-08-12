@@ -1,6 +1,6 @@
 {
   "version": 1,
   "subpaths": [".", "./bun", "./deno"],
-  "rootRuntimeKeys": ["Artifact", "BuildError", "Target"],
-  "toolRuntimeKeys": ["Compiler", "compileExecutable", "layer"]
+  "rootRuntimeKeys": ["Artifact", "BuildError", "MatrixError", "Target"],
+  "toolRuntimeKeys": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"]
 }

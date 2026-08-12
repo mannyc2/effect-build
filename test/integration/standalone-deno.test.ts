@@ -66,7 +66,8 @@ describe("real standalone Deno", () => {
     await expect(build({
       entrypoint: join(fixtures, "hello.ts"),
       outfile: join(root(), "app"),
-      target: "linux-aarch64-musl",
+      // Runtime-unsafe input still receives the typed TargetUnsupported failure.
+      target: "linux-aarch64-musl" as never,
     })).rejects.toMatchObject({ _tag: "TargetUnsupported", tool: "deno" });
   });
 });

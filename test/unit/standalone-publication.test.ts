@@ -340,7 +340,7 @@ describe("standalone atomic publication", () => {
           return yield* service.compileExecutable({
             entrypoint: "unused.ts",
             outfile: join(root, "nested", "app"),
-            target: "linux-x64-gnu",
+            target: "linux-x64-gnu" as never,
           });
         }).pipe(Effect.provide(NodeServices.layer)),
       ),

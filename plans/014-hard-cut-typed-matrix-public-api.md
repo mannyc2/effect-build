@@ -278,17 +278,24 @@ freezes with the tables above—no other public growth is authorized.
 - `test/unit/standalone-contract.test.ts`
 - `test/unit/standalone-bun.test.ts`
 - `test/unit/standalone-deno.test.ts`
+- `test/unit/standalone-publication.test.ts` for the intentional public target
+  narrowing in its runtime-unsafe rejection fixture
 - `test/testkit/standaloneDriverContract.ts`
+- `test/integration/standalone-deno.test.ts` and
+  `test/integration/standalone-target-support.test.ts` for the same concrete
+  provider input/artifact correlation exercised by the real-tool gates
 - `typetest/standalone-contract.tst.ts`
 - `examples/README.md`
 - `README.md`
+- `docs/README.md`
 - `docs/api.md`
 - `docs/architecture.md`
 - `docs/drivers.md`
 - `docs/errors.md`
 - `AGENTS.md`
-- `package.json` only if an exact example or contract-test command must include
-  the new file; do not add a new package subpath
+- `package.json` for the authorized `0.2.0` release version and only if an exact
+  example or contract-test command must include the new file; do not add a new
+  package subpath
 - `plans/README.md` for the final gate supersessions and Plan 014 status
 
 **Out of scope:**

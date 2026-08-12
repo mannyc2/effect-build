@@ -76,16 +76,16 @@ of the 2026-08-11 gates:
 2. **Gate 2 remains closed.** Scalar and matrix artifacts retain `path`,
    `bytes`, `target`, `tool`, and opt-in `digest`; no provenance or release
    record is added.
-3. **Gate 3 is reopened and planned for supersession.** Plan 011 defines the
-   provider tables privately; Plan 013 must prove every table literal through a
-   required, non-skipping real compiler/header CI cell; only Plan 014 may then
-   publish the provider-owned schemas. The first exact-source run narrowed the
+3. **Gate 3 is superseded by exact provider-target evidence.** Plan 011 defines
+   the provider tables privately; Plan 013 proved every table literal through a
+   required, non-skipping real compiler/header CI cell; Plan 014 alone publishes
+   the provider-owned schemas. The first exact-source run narrowed the
    provisional Bun table to six targets; Deno remains six.
    Node remains the only supported orchestrator host, and only current-host
    artifacts are executed. This replaces the current-host target subset without
    weakening the original advertise-equals-test rule.
-4. **Gate 4 remains a library decision with a higher existence test.** A matrix
-   earns a public operation only because it centralizes provider typing,
+4. **Gate 4 remains a library decision with a higher existence test.** The
+   matrix earns its public operation because it centralizes provider typing,
    canonical naming, whole-request collision preflight, bounded collect-all
    execution, and target-attributed failures. Concurrency alone would remain an
    `Effect.all` recipe.
@@ -123,7 +123,7 @@ of the 2026-08-11 gates:
 | 011 | Centralize provider target authority behind the public API | P1 | M | 010 | DONE |
 | 013 | Prove every provider target with required real evidence | P1 | L | 011 | DONE |
 | 012 | Build the typed executable target matrix | P1 | L | 013 | DONE |
-| 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | TODO |
+| 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | IN PROGRESS |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -332,7 +332,7 @@ WIP outside scope, and identify exact real-tool/host acceptance separately from
 deterministic local tests. Final completion requires `pnpm verify`, required
 real Bun/Deno integration, the required Node host run, atomic publication on
 each advertised OS, a packed consumer, and no stale managed names or proof
-claims. Under Plan 013, all six Bun and six Deno provider targets become
+claims. Under Plan 013, all six Bun and six Deno provider targets are
 required compile-plus-header gates; only current-host artifacts are executed.
 Optional Bun/Deno orchestrator-host lanes remain non-gating
 (gate 3: advertise-equals-test).

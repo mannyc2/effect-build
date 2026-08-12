@@ -1,6 +1,7 @@
 # effect-build documentation
 
-`effect-build` exposes one operation through two compiler modules.
+`effect-build` exposes exactly two operations through two compiler modules:
+scalar `compileExecutable` and homogeneous-provider `compileExecutableMatrix`.
 
 | Document                        | Covers                                                         |
 | ------------------------------- | -------------------------------------------------------------- |

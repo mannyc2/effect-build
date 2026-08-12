@@ -1,9 +1,15 @@
 import { Context, Effect, Layer } from "effect";
 import type { Crypto, FileSystem, Path } from "effect";
-import type { ToolNotFound, ToolProbeFailed } from "./standalone/BuildError.js";
-import { makeCompileExecutable } from "./standalone/CompileExecutable.js";
+import type { BuildError, ToolNotFound, ToolProbeFailed } from "./standalone/BuildError.js";
+import { makeCompileExecutable, makeCompileExecutableMatrix } from "./standalone/CompileExecutable.js";
+import type {
+  CompileExecutableMatrixInput as CommonMatrixInput,
+  MatrixErrorFor,
+} from "./standalone/CompileExecutableMatrix.js";
 import type { CompileExecutableInput as CommonInput, CompilerService } from "./standalone/Driver.js";
 import { bunAdapter } from "./standalone/internal/BunAdapter.js";
+import { bunTargetTable } from "./standalone/internal/BunTarget.js";
+import type { ProviderArtifact } from "./standalone/internal/CompilerAdapter.js";
 import { makeCompilerService } from "./standalone/internal/CompilerEngine.js";
 import type { ChildProcessSpawner } from "./standalone/internal/Process.js";
 import { discoverTool } from "./standalone/internal/ToolDiscovery.js";
@@ -18,11 +24,25 @@ export interface LayerOptions {
   readonly executable?: string;
 }
 
-export type CompileExecutableInput = CommonInput<Options>;
+export class Compiler extends Context.Service<Compiler, CompilerService<"bun", Target, Options>>()(
+  "effect-build/bun/Compiler",
+) {}
 
-export class Compiler extends Context.Service<Compiler, CompilerService<Options>>()("effect-build/bun/Compiler") {}
+export const Target = bunTargetTable.Target;
+export type Target = typeof Target.Type;
 
-export const compileExecutable = makeCompileExecutable(Compiler);
+export type Artifact = ProviderArtifact<"bun", Target>;
+export type CompileExecutableInput = CommonInput<Options, Target>;
+export type CompileExecutableMatrixInput = CommonMatrixInput<Target, Options>;
+export type MatrixError = MatrixErrorFor<"bun", Target>;
+
+export const compileExecutable: (
+  input: CompileExecutableInput,
+) => Effect.Effect<Artifact, BuildError, Compiler> = makeCompileExecutable(Compiler);
+
+export const compileExecutableMatrix: (
+  input: CompileExecutableMatrixInput,
+) => Effect.Effect<readonly Artifact[], MatrixError, Compiler> = makeCompileExecutableMatrix(Compiler);
 
 export const layer = (
   options: LayerOptions = {},

@@ -67,6 +67,9 @@ describe("source ownership boundaries", () => {
       }
     }
     expect(importers.sort()).toEqual([
+      resolve(root, "src/Bun.ts"),
+      resolve(root, "src/Deno.ts"),
+      resolve(root, "src/standalone/Artifact.ts"),
       resolve(root, "src/standalone/MatrixError.ts"),
       resolve(root, "src/standalone/internal/BunAdapter.ts"),
       resolve(root, "src/standalone/internal/DenoAdapter.ts"),

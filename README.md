@@ -2,9 +2,11 @@
 
 Experimental, community-maintained build support for Effect applications.
 
-`bun build --compile` / `deno compile`, except the result is a typed Artifact,
-failures are typed, interruption owns the child, and the destination is never
-a half-written executable.
+`bun build --compile` / `deno compile`, with exactly two public operations:
+`compileExecutable` for one caller-named output and
+`compileExecutableMatrix` for one provider's non-empty target set. Results are
+typed Artifacts, failures are typed, interruption owns every active child, and
+a destination is never a half-written executable.
 
 ## Install
 
@@ -61,30 +63,46 @@ also executed. Foreign outputs are not executed on the Linux CI runner.
 These fixture versions define the regularly revalidated support boundary; the
 library does not reject another installed compiler version at runtime.
 
-## Concurrent targets
+## Target matrix
 
-Normal Effect composition can compile different targets concurrently:
+Use one provider's matrix operation when the entry point, options, and output
+name stem are shared across targets:
 
 ```ts
-const mac = Bun.compileExecutable({
-  entrypoint: "src/main.ts",
-  outfile: "dist/app-macos",
-  target: "macos-aarch64",
-}).pipe(Effect.provide(Bun.layer()));
-
-const linux = Deno.compileExecutable({
-  entrypoint: "src/main.ts",
-  outfile: "dist/app-linux",
-  target: "linux-x64-gnu",
-}).pipe(Effect.provide(Deno.layer()));
-
 const artifacts = await Effect.runPromise(
-  Effect.all([mac, linux], { concurrency: 2 }).pipe(Effect.provide(NodeServices.layer)),
+  Bun.compileExecutableMatrix({
+    entrypoint: "src/main.ts",
+    outdir: "dist",
+    name: "app",
+    targets: ["macos-aarch64", "linux-x64-gnu", "windows-x64"],
+    concurrency: 2,
+    digest: true,
+    options: { minify: true },
+  }).pipe(
+    Effect.provide(Bun.layer()),
+    Effect.provide(NodeServices.layer),
+  ),
 );
 ```
 
-This composition is fail-fast: the first failure interrupts the remaining
-work. Use an explicit validation strategy when every failure must be collected.
+The canonical output names are `dist/app-macos-aarch64`,
+`dist/app-linux-x64-gnu`, and `dist/app-windows-x64.exe`. Output order is the
+same as target input order. `concurrency` defaults to 1 and accepts only a
+positive safe integer.
+
+Matrix preflight validates the whole request, including every output path and
+the provider options, before creating an output or staging directory, rendering
+compile argv, or spawning a build child. Provider discovery and its one probe
+happen when the compiler Layer is acquired. Once execution starts, it is
+bounded and collect-all: successful cells commit independently, while
+`MatrixFailed` returns the ordered successful Artifacts and every ordered cell
+failure. There is no matrix-wide rollback.
+Interruption remains an Effect Cause: active children are terminated, queued
+cells do not start, staging is cleaned, and already committed Artifacts remain.
+
+The matrix is deliberately provider-homogeneous. Cross-provider work, different
+entry points, heterogeneous options, and custom output names remain ordinary
+composition of scalar calls.
 
 ## Compiler selection
 

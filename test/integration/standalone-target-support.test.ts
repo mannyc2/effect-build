@@ -102,8 +102,6 @@ describe("required provider target support", () => {
       throw new Error("EFFECT_BUILD_TARGET_COMPILER must be bun or deno");
     }
     const requested = requiredEnvironment("EFFECT_BUILD_TARGET");
-    const target = compiler === "bun" ? bunTargetTable.resolve(requested) : denoTargetTable.resolve(requested);
-    if (target === undefined) throw new Error(`${compiler}/${requested} is not in the provider target table`);
     const executable = requiredEnvironment(compiler === "bun" ? "EFFECT_BUILD_BUN_BIN" : "EFFECT_BUILD_DENO_BIN");
     if (!isAbsolute(executable)) throw new Error(`the provisioned ${compiler} executable must be absolute`);
     accessSync(executable, constants.X_OK);
@@ -111,13 +109,33 @@ describe("required provider target support", () => {
       throw new Error("DENORT_BIN must not be inherited by target-support cells");
     }
 
+    let target: Bun.Target | Deno.Target;
+    let artifact: Bun.Artifact | Deno.Artifact;
+    if (compiler === "bun") {
+      const resolved = bunTargetTable.resolve(requested);
+      if (resolved === undefined) throw new Error(`${compiler}/${requested} is not in the provider target table`);
+      target = resolved;
+      const outfile = join(root, `${compiler}-${target}${target.startsWith("windows-") ? ".exe" : ""}`);
+      artifact = await Effect.runPromise(
+        Bun.compileExecutable({ entrypoint, outfile, target, digest: true }).pipe(
+          Effect.provide(Bun.layer({ executable })),
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+    } else {
+      const resolved = denoTargetTable.resolve(requested);
+      if (resolved === undefined) throw new Error(`${compiler}/${requested} is not in the provider target table`);
+      target = resolved;
+      const outfile = join(root, `${compiler}-${target}${target.startsWith("windows-") ? ".exe" : ""}`);
+      artifact = await Effect.runPromise(
+        Deno.compileExecutable({ entrypoint, outfile, target, digest: true }).pipe(
+          Effect.provide(Deno.layer({ executable })),
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+    }
     const windows = target.startsWith("windows-");
     const outfile = join(root, `${compiler}-${target}${windows ? ".exe" : ""}`);
-    const input = { entrypoint, outfile, target, digest: true } as const;
-    const effect = compiler === "bun"
-      ? Bun.compileExecutable(input).pipe(Effect.provide(Bun.layer({ executable })))
-      : Deno.compileExecutable(input).pipe(Effect.provide(Deno.layer({ executable })));
-    const artifact = await Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 
     const bytes = readFileSync(artifact.path);
     const expectedVersion = support.compilerFixtures.find((fixture) => fixture.tool === compiler)?.version;

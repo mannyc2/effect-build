@@ -8,13 +8,19 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Artifact } from "../../src/standalone/Artifact.js";
 import type { BuildError, ToolNotFound, ToolProbeFailed } from "../../src/standalone/BuildError.js";
+import type { CompileExecutableMatrixInput, MatrixErrorFor } from "../../src/standalone/CompileExecutableMatrix.js";
 import type { CompileExecutableInput } from "../../src/standalone/Driver.js";
 import type { ChildProcessSpawner } from "../../src/standalone/internal/Process.js";
 import type { Target } from "../../src/standalone/Target.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/driver/fake-tool.mjs", import.meta.url));
 
-export interface StandaloneDriverContractConfig<Self, Options> {
+export interface StandaloneDriverContractConfig<
+  Self,
+  Options,
+  SupportedTarget extends Target,
+  ProviderArtifact extends Artifact,
+> {
   readonly tool: "bun" | "deno";
   readonly layer: (options?: { readonly executable?: string }) => Layer.Layer<
     Self,
@@ -22,16 +28,29 @@ export interface StandaloneDriverContractConfig<Self, Options> {
     ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
   >;
   readonly compileExecutable: (
-    input: CompileExecutableInput<Options>,
-  ) => Effect.Effect<Artifact, BuildError, Self>;
+    input: CompileExecutableInput<Options, SupportedTarget>,
+  ) => Effect.Effect<ProviderArtifact, BuildError, Self>;
+  readonly compileExecutableMatrix: (
+    input: CompileExecutableMatrixInput<SupportedTarget, Options>,
+  ) => Effect.Effect<
+    readonly ProviderArtifact[],
+    MatrixErrorFor<ProviderArtifact["tool"]["name"], SupportedTarget>,
+    Self
+  >;
+  readonly matrixTarget: SupportedTarget;
   readonly probeFirstArg: string;
   readonly compileFirstArg: string;
   readonly invalidOptions: Options;
   readonly unsupportedTarget?: Target;
 }
 
-export const describeStandaloneDriverContract = <Self, Options>(
-  config: StandaloneDriverContractConfig<Self, Options>,
+export const describeStandaloneDriverContract = <
+  Self,
+  Options,
+  SupportedTarget extends Target,
+  ProviderArtifact extends Artifact,
+>(
+  config: StandaloneDriverContractConfig<Self, Options, SupportedTarget, ProviderArtifact>,
 ): void => {
   const roots: string[] = [];
   const restores: Array<() => void> = [];
@@ -81,7 +100,7 @@ export const describeStandaloneDriverContract = <Self, Options>(
 
   const compileOnce = (
     root: string,
-    input: CompileExecutableInput<Options>,
+    input: CompileExecutableInput<Options, SupportedTarget>,
     layerOptions?: { readonly executable?: string },
   ) =>
     run(
@@ -89,7 +108,17 @@ export const describeStandaloneDriverContract = <Self, Options>(
         Effect.provide(config.layer(layerOptions)),
         Effect.provide(NodeServices.layer),
       ) as Effect.Effect<Artifact, unknown, never>,
-    ).then((artifact) => ({ artifact, root }));
+    ).then((artifact) => ({ artifact: artifact as ProviderArtifact, root }));
+
+  const matrixInput = (
+    root: string,
+    outputDirectory: string,
+  ): CompileExecutableMatrixInput<SupportedTarget, Options> => ({
+    entrypoint: "main.ts",
+    outdir: join(root, outputDirectory),
+    name: "app",
+    targets: [config.matrixTarget],
+  });
 
   describe(`${config.tool} standalone driver contract`, () => {
     it("discovers the tool on PATH with exactly one probe and one compile spawn", async () => {
@@ -111,6 +140,84 @@ export const describeStandaloneDriverContract = <Self, Options>(
       const compileArgv = lines[1] ?? [];
       expect(compileArgv[compileArgv.length - 1]).toBe("main.ts");
       expect(compileArgv.some((value) => value.includes(".effect-build-"))).toBe(true);
+    });
+
+    it("shares one discovery and probe across two matrix calls under one provided Layer", async () => {
+      const root = makeRoot();
+      const { executable, log } = makeFakeTool(root);
+      const compilerLayer = config.layer({ executable });
+      const artifacts = await run(
+        Effect.gen(function*() {
+          const first = yield* config.compileExecutableMatrix(matrixInput(root, "first"));
+          const second = yield* config.compileExecutableMatrix(matrixInput(root, "second"));
+          return [...first, ...second];
+        }).pipe(
+          Effect.provide(compilerLayer),
+          Effect.provide(NodeServices.layer),
+        ) as Effect.Effect<readonly ProviderArtifact[], unknown, never>,
+      );
+
+      expect(artifacts.map((artifact) => artifact.target)).toEqual([
+        config.matrixTarget,
+        config.matrixTarget,
+      ]);
+      const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
+      expect(lines.map((argv) => argv[0])).toEqual([
+        config.probeFirstArg,
+        config.compileFirstArg,
+        config.compileFirstArg,
+      ]);
+    });
+
+    it("acquires independently when callers build separate Layers", async () => {
+      const root = makeRoot();
+      const { executable, log } = makeFakeTool(root);
+      const compileWithFreshLayer = (outputDirectory: string) =>
+        config.compileExecutableMatrix(matrixInput(root, outputDirectory)).pipe(
+          Effect.provide(config.layer({ executable })),
+        );
+
+      await run(
+        Effect.gen(function*() {
+          yield* compileWithFreshLayer("first");
+          yield* compileWithFreshLayer("second");
+        }).pipe(Effect.provide(NodeServices.layer)) as Effect.Effect<void, unknown, never>,
+      );
+
+      const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
+      expect(lines.map((argv) => argv[0])).toEqual([
+        config.probeFirstArg,
+        config.compileFirstArg,
+        config.probeFirstArg,
+        config.compileFirstArg,
+      ]);
+    });
+
+    it("completes whole-request matrix preflight before any build child starts", async () => {
+      const root = makeRoot();
+      const { executable, log } = makeFakeTool(root);
+      const outputDirectory = join(root, "duplicate-targets");
+
+      await expect(
+        run(
+          config.compileExecutableMatrix({
+            entrypoint: "main.ts",
+            outdir: outputDirectory,
+            name: "app",
+            targets: [config.matrixTarget, config.matrixTarget],
+          }).pipe(
+            Effect.provide(config.layer({ executable })),
+            Effect.provide(NodeServices.layer),
+          ) as Effect.Effect<readonly ProviderArtifact[], unknown, never>,
+        ),
+      ).rejects.toMatchObject({
+        _tag: "InvalidMatrixInput",
+        issues: [expect.objectContaining({ field: "targets", index: 1 })],
+      });
+
+      const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
+      expect(lines.map((argv) => argv[0])).toEqual([config.probeFirstArg]);
+      expect(existsSync(outputDirectory)).toBe(false);
     });
 
     it("does not spawn a compile for invalid driver options", async () => {
@@ -139,7 +246,7 @@ export const describeStandaloneDriverContract = <Self, Options>(
             entrypoint: "main.ts",
             outfile: join(root, "out", "app"),
             target: unsupported,
-          }, { executable }),
+          } as CompileExecutableInput<Options, SupportedTarget>, { executable }),
         ).rejects.toMatchObject({ _tag: "TargetUnsupported", requested: unsupported });
         const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
         expect(lines).toHaveLength(1);
@@ -169,7 +276,7 @@ export const describeStandaloneDriverContract = <Self, Options>(
             entrypoint: "main.ts",
             outfile: join(outputDirectory, "app"),
             target: target as never,
-          }, { executable }),
+          } as CompileExecutableInput<Options, SupportedTarget>, { executable }),
         ).rejects.toMatchObject({ _tag: "TargetUnsupported", requested });
         const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
         expect(lines).toHaveLength(1);

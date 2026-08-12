@@ -1,6 +1,6 @@
 # effect-build execution rules
 
-- Keep one public operation: `compileExecutable`.
+- Keep exactly two public operations: scalar `compileExecutable` and homogeneous-provider `compileExecutableMatrix`.
 - Select exactly one compiler module (`effect-build/bun` or `effect-build/deno`). There is no registry, fallback, raw argv, retry, or automatic installation.
 - Keep orchestrator runtime, compiler, and artifact target independent. Applications provide one official Effect platform layer at composition time.
 - Shared lifecycle code owns sibling staging, scoped child processes, executable validation, optional hashing, and atomic replacement. Compiler adapters own discovery, probing, target mapping, argv, and diagnostics.
