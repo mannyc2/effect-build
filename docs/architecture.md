@@ -32,7 +32,8 @@ modules, adapters, discovery, or execution code.
 
 ## Scalar cell lifecycle
 
-1. Validate the scalar input and provider options.
+1. Validate the runtime target and provider options. Entrypoint, outfile, cwd,
+   and digest remain typed-only fields trusted from the scalar TypeScript call.
 2. Resolve the destination and create a sibling staging directory.
 3. Render the selected compiler's argument vector.
 4. Spawn one compiler inside an Effect Scope while stdout, stderr, and exit are
@@ -67,16 +68,22 @@ error.
 
 ## Atomic publication states
 
-| Event                                 | Existing destination      | Staging                        |
-| ------------------------------------- | ------------------------- | ------------------------------ |
-| compile succeeds and output validates | replaced atomically       | removed                        |
-| compiler rejects input                | unchanged                 | removed                        |
-| output is missing or invalid          | unchanged                 | removed                        |
-| destination is locked                 | unchanged; `OutputLocked` | removed                        |
-| interruption                          | unchanged                 | child terminated, then removed |
+| Event                                  | Existing destination      | Staging                                  |
+| -------------------------------------- | ------------------------- | ---------------------------------------- |
+| compile succeeds and output validates  | replaced atomically       | removed                                  |
+| compiler rejects input                 | unchanged                 | removed                                  |
+| output is missing or invalid           | unchanged                 | removed                                  |
+| destination is locked                  | unchanged; `OutputLocked` | removed                                  |
+| interruption before publication begins | unchanged                 | child terminated if active, then removed |
+| interruption after rename starts       | may already be replaced   | removed                                  |
 
 For a matrix, this table applies independently to every cell. The matrix itself
-does not add a transaction or rollback layer.
+does not add a transaction or rollback layer. Atomic rename is the publication
+linearization point and point of no return. Failure or interruption before
+publication begins leaves the existing destination unchanged. Once rename
+starts, publication may linearize even when the waiting caller observes
+interruption; the destination can therefore contain the new executable without
+an Artifact having been returned. There is no rollback after that point.
 
 ## Divergence register
 

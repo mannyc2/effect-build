@@ -1,18 +1,22 @@
-import { Crypto, Effect, FileSystem, Path, Result, Stream } from "effect";
+import { Crypto, Effect, FileSystem, Path, Result } from "effect";
 import type { ToolName } from "../Artifact.js";
-import type { BuildError } from "../BuildError.js";
-import { OutputInvalid, OutputMissing, TargetUnsupported, ToolFailed } from "../BuildError.js";
-import { captureCellResult, type CompilerRunner, makeMatrixFailedFor } from "../CompileExecutableMatrix.js";
+import { TargetUnsupported, ToolFailed } from "../BuildError.js";
+import { captureCellResult, makeMatrixFailedFor } from "../CompileExecutableMatrix.js";
 import type { CompilerService } from "../Driver.js";
 import { InvalidMatrixInput, type MatrixIssue } from "../MatrixError.js";
 import type { Target } from "../Target.js";
-import { acquireAtomicOutput } from "./AtomicOutput.js";
-import type { CompilerAdapter, DiscoveredCompiler, PreparedCompileInput, ProviderArtifact } from "./CompilerAdapter.js";
 import {
-  inspectNativeExecutableChunks,
-  type NativeExecutableObservation,
-  NativeExecutableRangeRequired,
-} from "./NativeExecutable.js";
+  type CellExecutionError,
+  type CompilerAdapter,
+  type DiscoveredCompiler,
+  type ProviderArtifact,
+} from "./CompilerAdapter.js";
+import {
+  acquireExecutableCandidate,
+  resolveExecutableDestination,
+  validateAndPublishExecutable,
+} from "./ExecutableLifecycle.js";
+import type { NativeExecutableObservation } from "./NativeExecutable.js";
 import { ChildProcessSpawner, runProcess } from "./Process.js";
 import { descriptorOf, matchesObservation, type TargetDescriptor, targetFromObservation } from "./TargetCatalog.js";
 
@@ -21,16 +25,18 @@ const inferTarget = <SupportedTarget extends Target>(
   requested: SupportedTarget | undefined,
   fallback: SupportedTarget | undefined,
   resolve: (value: unknown) => SupportedTarget | undefined,
-): SupportedTarget => {
+): Result.Result<SupportedTarget, string> => {
   if (requested !== undefined) {
-    if (!matchesObservation(requested, observation)) throw new Error("native target does not match requested target");
-    return requested;
+    return matchesObservation(requested, observation)
+      ? Result.succeed(requested)
+      : Result.fail("Error: native target does not match requested target");
   }
   const canonical = targetFromObservation(observation, fallback);
-  if (canonical === undefined) throw new Error("native target is ambiguous");
+  if (canonical === undefined) return Result.fail("Error: native target is ambiguous");
   const providerTarget = resolve(canonical);
-  if (providerTarget === undefined) throw new Error("native target is unsupported by the selected compiler");
-  return providerTarget;
+  return providerTarget === undefined
+    ? Result.fail("Error: native target is unsupported by the selected compiler")
+    : Result.succeed(providerTarget);
 };
 
 const describeUnknownTarget = (value: unknown): string => {
@@ -39,52 +45,16 @@ const describeUnknownTarget = (value: unknown): string => {
   return `<non-string:${typeof value}>`;
 };
 
-const collectRange = (fileSystem: FileSystem.FileSystem, file: string, offset: number, bytesToRead: number) =>
-  fileSystem.stream(file, { offset, bytesToRead }).pipe(
-    Stream.runFold(() => new Uint8Array(0), (current, chunk) => {
-      const combined = new Uint8Array(current.byteLength + chunk.byteLength);
-      combined.set(current);
-      combined.set(chunk, current.byteLength);
-      return combined;
-    }),
-  );
-
-const inspectNativeExecutableFile = (
-  fileSystem: FileSystem.FileSystem,
-  file: string,
-  size: number,
-): Effect.Effect<NativeExecutableObservation, unknown> =>
-  Effect.gen(function*() {
-    const initialLength = Math.min(size, 1024 * 1024);
-    const initial = initialLength === 0
-      ? new Uint8Array(0)
-      : yield* collectRange(fileSystem, file, 0, initialLength);
-    if (initial.byteLength !== initialLength) return yield* Effect.fail(new Error("truncated-header"));
-    const chunks = [{ offset: 0, bytes: initial }];
-
-    for (let reads = 0;; reads++) {
-      const step = yield* Effect.sync(() => {
-        try {
-          return { _tag: "Done", value: inspectNativeExecutableChunks(size, chunks) } as const;
-        } catch (error) {
-          return error instanceof NativeExecutableRangeRequired
-            ? { _tag: "Read", request: error } as const
-            : { _tag: "Failed", error } as const;
-        }
-      });
-      if (step._tag === "Done") return step.value;
-      if (step._tag === "Failed") return yield* Effect.fail(step.error);
-      if (reads === 4) return yield* Effect.fail(new Error("too-many-header-ranges"));
-      const bytes = yield* collectRange(fileSystem, file, step.request.offset, step.request.length);
-      if (bytes.byteLength !== step.request.length) return yield* Effect.fail(new Error("truncated-header"));
-      chunks.push({ offset: step.request.offset, bytes });
-    }
-  });
-
-const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+interface PreparedCellInput<ValidatedOptions> {
+  readonly entrypoint: string;
+  readonly outfile: string;
+  readonly cwd?: string;
+  readonly digest?: boolean;
+  readonly options: ValidatedOptions;
+}
 
 interface PreparedCell<ValidatedOptions, SupportedTarget extends Target> {
-  readonly input: Omit<PreparedCompileInput<ValidatedOptions, SupportedTarget>, "target">;
+  readonly input: PreparedCellInput<ValidatedOptions>;
   readonly selection?: {
     readonly target: SupportedTarget;
     readonly descriptor: TargetDescriptor;
@@ -315,7 +285,7 @@ const preflightMatrix = <
   return { _tag: "Valid", cells, concurrency };
 };
 
-export const makeCompilerRunner = <
+export const makeCompilerService = <
   Options,
   const Name extends ToolName,
   SupportedTarget extends Target,
@@ -324,7 +294,7 @@ export const makeCompilerRunner = <
   adapter: CompilerAdapter<Options, Name, SupportedTarget, ValidatedOptions>,
   tool: DiscoveredCompiler<Name>,
 ): Effect.Effect<
-  CompilerRunner<Options, Name, SupportedTarget>,
+  CompilerService<Name, SupportedTarget, Options>,
   never,
   ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
 > =>
@@ -336,24 +306,26 @@ export const makeCompilerRunner = <
 
     const compilePreparedCell = (
       cell: PreparedCell<ValidatedOptions, SupportedTarget>,
-    ): Effect.Effect<ProviderArtifact<Name, SupportedTarget>, BuildError> => {
+    ): Effect.Effect<ProviderArtifact<Name, SupportedTarget>, CellExecutionError> => {
       const executableSuffix = cell.selection === undefined
         ? tool.hostOs === "windows" ? ".exe" : ""
         : cell.selection.descriptor.executableSuffix;
       return Effect.scoped(
         Effect.gen(function*() {
-          const output = yield* acquireAtomicOutput(fileSystem, path, {
+          const destination = resolveExecutableDestination(path, {
             outfile: cell.input.outfile,
             ...(cell.input.cwd === undefined ? {} : { cwd: cell.input.cwd }),
+          });
+          const candidate = yield* acquireExecutableCandidate(fileSystem, path, {
+            destination,
             executableSuffix,
           });
           const argv = yield* Effect.sync(() =>
             adapter.renderArgv({
-              input: {
-                ...cell.input,
-                ...(cell.selection === undefined ? {} : { target: cell.selection.target }),
-              },
-              stagedOutfile: output.staged,
+              entrypoint: cell.input.entrypoint,
+              ...(cell.selection === undefined ? {} : { target: cell.selection.target }),
+              options: cell.input.options,
+              stagedOutfile: candidate.staged,
             })
           );
           const completion = yield* runProcess(tool.artifactTool.path, argv, cell.input.cwd).pipe(
@@ -368,62 +340,25 @@ export const makeCompilerRunner = <
           );
           if (completion.exitCode !== 0) return yield* adapter.interpretFailure(completion);
 
-          const exists = yield* fileSystem.exists(output.staged).pipe(
-            Effect.mapError((error) => new OutputInvalid({ path: output.staged, reason: error.message })),
-          );
-          if (!exists) return yield* new OutputMissing({ path: output.staged });
-          const information = yield* fileSystem.stat(output.staged).pipe(
-            Effect.mapError((error) => new OutputInvalid({ path: output.staged, reason: error.message })),
-          );
-          if (information.type !== "File") {
-            return yield* new OutputInvalid({ path: output.staged, reason: "not-regular" });
-          }
-          if (executableSuffix !== ".exe" && (information.mode & 0o111) === 0) {
-            return yield* new OutputInvalid({ path: output.staged, reason: "not-executable" });
-          }
-          const bytes = Number(information.size);
-          if (!Number.isSafeInteger(bytes) || bytes < 0) {
-            return yield* new OutputInvalid({ path: output.staged, reason: "invalid-byte-count" });
-          }
-          const target = yield* inspectNativeExecutableFile(fileSystem, output.staged, bytes).pipe(
-            Effect.flatMap((observation) =>
-              Effect.try({
-                try: () =>
-                  inferTarget(
-                    observation,
-                    cell.selection?.target,
-                    adapter.defaultTarget,
-                    adapter.targetTable.resolve,
-                  ),
-                catch: (error) => new OutputInvalid({ path: output.staged, reason: String(error) }),
-              })
-            ),
-            Effect.mapError((error) =>
-              error instanceof OutputInvalid
-                ? error
-                : new OutputInvalid({ path: output.staged, reason: String(error) })
-            ),
-          );
-          const digest = cell.input.digest === true
-            ? yield* fileSystem.readFile(output.staged).pipe(
-              Effect.flatMap((bytes) => crypto.digest("SHA-256", bytes)),
-              Effect.map((bytes) => `sha256:${hex(bytes)}` as const),
-              Effect.mapError((error) => new OutputInvalid({ path: output.staged, reason: error.message })),
-            )
-            : undefined;
-          yield* output.commit;
+          const published = yield* validateAndPublishExecutable(fileSystem, crypto, candidate, {
+            digest: cell.input.digest === true,
+            resolveTarget: (observation) =>
+              inferTarget(
+                observation,
+                cell.selection?.target,
+                adapter.defaultTarget,
+                adapter.targetTable.resolve,
+              ),
+          });
           return {
-            path: output.destination,
-            bytes,
-            ...(digest === undefined ? {} : { digest }),
-            target,
+            ...published,
             tool: tool.artifactTool,
           } satisfies ProviderArtifact<Name, SupportedTarget>;
         }),
       );
     };
 
-    const compileExecutable: CompilerRunner<Options, Name, SupportedTarget>["compileExecutable"] = (input) =>
+    const compileExecutable: CompilerService<Name, SupportedTarget, Options>["compileExecutable"] = (input) =>
       Effect.gen(function*() {
         const unsafeTarget: unknown = input.target;
         const requestedTarget = unsafeTarget === undefined ? undefined : adapter.targetTable.resolve(unsafeTarget);
@@ -452,7 +387,7 @@ export const makeCompilerRunner = <
         });
       });
 
-    const compileExecutableMatrix: CompilerRunner<Options, Name, SupportedTarget>["compileExecutableMatrix"] = (
+    const compileExecutableMatrix: CompilerService<Name, SupportedTarget, Options>["compileExecutableMatrix"] = (
       input,
     ) =>
       Effect.gen(function*() {
@@ -468,7 +403,7 @@ export const makeCompilerRunner = <
           readonly tool: Name;
           readonly target: SupportedTarget;
           readonly path: string;
-          readonly error: BuildError;
+          readonly error: CellExecutionError;
         }> = [];
         for (let index = 0; index < results.length; index++) {
           const result = results[index]!;
@@ -493,17 +428,3 @@ export const makeCompilerRunner = <
 
     return { compileExecutable, compileExecutableMatrix };
   });
-
-export const makeCompilerService = <
-  Options,
-  const Name extends ToolName,
-  SupportedTarget extends Target,
-  ValidatedOptions,
->(
-  adapter: CompilerAdapter<Options, Name, SupportedTarget, ValidatedOptions>,
-  tool: DiscoveredCompiler<Name>,
-): Effect.Effect<
-  CompilerService<Name, SupportedTarget, Options>,
-  never,
-  ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
-> => makeCompilerRunner(adapter, tool);

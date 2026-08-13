@@ -54,17 +54,17 @@ export const bunAdapter: CompilerAdapter<Options, "bun", BunTarget, ValidatedOpt
   ],
   targetTable: bunTargetTable,
   validateOptions,
-  renderArgv: ({ input, stagedOutfile }) => {
-    const options = input.options;
+  renderArgv: (request) => {
+    const options = request.options;
     return [
       "build",
       "--compile",
-      ...(input.target === undefined ? [] : [`--target=${bunTargetTable.nativeToken(input.target)}`]),
+      ...(request.target === undefined ? [] : [`--target=${bunTargetTable.nativeToken(request.target)}`]),
       ...(options.minify === true ? ["--minify"] : []),
       ...(options.sourcemap === undefined ? [] : [`--sourcemap=${options.sourcemap}`]),
       ...(options.bytecode === true ? ["--bytecode"] : []),
-      `--outfile=${stagedOutfile}`,
-      input.entrypoint,
+      `--outfile=${request.stagedOutfile}`,
+      request.entrypoint,
     ];
   },
   interpretFailure: (completion) =>

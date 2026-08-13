@@ -1,8 +1,7 @@
 import { Cause, Effect, Result } from "effect";
 import type { ToolName } from "./Artifact.js";
 import type { BuildError } from "./BuildError.js";
-import type { CompileExecutableInput } from "./Driver.js";
-import type { ProviderArtifact } from "./internal/CompilerAdapter.js";
+import type { CellExecutionError, ProviderArtifact } from "./internal/CompilerAdapter.js";
 import { type CellFailure, type InvalidMatrixInput, MatrixFailed } from "./MatrixError.js";
 import type { Target } from "./Target.js";
 
@@ -52,13 +51,13 @@ export const makeMatrixFailedFor = <Name extends ToolName, SupportedTarget exten
       readonly tool: Name;
       readonly target: SupportedTarget;
       readonly path: string;
-      readonly error: BuildError;
+      readonly error: CellExecutionError;
     },
     ...Array<{
       readonly tool: Name;
       readonly target: SupportedTarget;
       readonly path: string;
-      readonly error: BuildError;
+      readonly error: CellExecutionError;
     }>,
   ];
 }): MatrixFailedFor<Name, SupportedTarget> =>
@@ -66,19 +65,6 @@ export const makeMatrixFailedFor = <Name extends ToolName, SupportedTarget exten
   // checks. This is the sole assertion that projects that checked root value
   // back to the private provider-correlated type.
   new MatrixFailed(input as ConstructorParameters<typeof MatrixFailed>[0]) as MatrixFailedFor<Name, SupportedTarget>;
-
-export interface CompilerRunner<
-  Options,
-  Name extends ToolName,
-  SupportedTarget extends Target,
-> {
-  readonly compileExecutable: (
-    input: CompileExecutableInput<Options>,
-  ) => Effect.Effect<ProviderArtifact<Name, SupportedTarget>, BuildError>;
-  readonly compileExecutableMatrix: (
-    input: CompileExecutableMatrixInput<SupportedTarget, Options>,
-  ) => Effect.Effect<readonly ProviderArtifact<Name, SupportedTarget>[], MatrixErrorFor<Name, SupportedTarget>>;
-}
 
 export const captureCellResult = <A, E, R>(
   effect: Effect.Effect<A, E, R>,

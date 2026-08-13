@@ -98,17 +98,17 @@ export const denoAdapter: CompilerAdapter<Options, "deno", DenoTarget, Validated
   ],
   targetTable: denoTargetTable,
   validateOptions,
-  renderArgv: ({ input, stagedOutfile }) => {
-    const { bundle, minify, permissionArgs } = input.options;
+  renderArgv: (request) => {
+    const { bundle, minify, permissionArgs } = request.options;
     return [
       "compile",
-      ...(input.target === undefined ? [] : ["--target", denoTargetTable.nativeToken(input.target)]),
+      ...(request.target === undefined ? [] : ["--target", denoTargetTable.nativeToken(request.target)]),
       ...(bundle === true ? ["--bundle"] : []),
       ...(minify === true ? ["--minify"] : []),
       ...permissionArgs,
       "--output",
-      stagedOutfile,
-      input.entrypoint,
+      request.stagedOutfile,
+      request.entrypoint,
     ];
   },
   interpretFailure: (completion) =>

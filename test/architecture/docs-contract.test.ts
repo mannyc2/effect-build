@@ -153,6 +153,14 @@ describe("documentation contract", () => {
     const architecture = await readFile(resolve(root, "docs/architecture.md"), "utf8");
     expect(architecture).toContain("## Atomic publication states");
     expect(architecture).toContain("## Divergence register");
+    expect(architecture).toMatch(/validate the runtime target and provider options/i);
+    expect(architecture).toMatch(/typed-only fields trusted from the scalar TypeScript call/i);
+    expect(architecture).toMatch(/atomic rename is the publication\s+linearization point and point of no return/i);
+    expect(architecture).toMatch(/interruption before\s+publication begins leaves the existing destination unchanged/i);
+    expect(architecture).toMatch(
+      /once rename\s+starts, publication may linearize even when the waiting caller observes\s+interruption/i,
+    );
+    expect(architecture).toMatch(/no rollback after that point/i);
     expect(architecture).toMatch(/sibling staged path/i);
     expect(architecture).toMatch(/interruption closes Scope and kills the compiler/i);
     expect(architecture).toMatch(/pure provider target-contract projections/i);

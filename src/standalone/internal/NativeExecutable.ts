@@ -105,9 +105,11 @@ const inspectElf = (source: NativeExecutableBytes): NativeExecutableObservation 
 
 const inspectMacho = (source: NativeExecutableBytes): NativeExecutableObservation => {
   need(source, 0, 8);
-  const magic = u32(source, 0, true);
-  if (magic === 0xbebafeca || magic === 0xcafebabe) {
-    const little = magic === 0xbebafeca;
+  const magic = u32(source, 0, false);
+  const fatMagic = 0xcafebabe;
+  const fatCigam = 0xbebafeca;
+  if (magic === fatMagic || magic === fatCigam) {
+    const little = magic === fatCigam;
     const count = u32(source, 4, little);
     if (count === 0 || count > 4096) throw new Error("invalid-fat-header");
     need(source, 8, count * 20);
@@ -159,7 +161,7 @@ export const inspectNativeExecutableChunks = (
   if (magic[0] === 0x4d && magic[1] === 0x5a) return inspectPe(source);
   if (
     magic[0] === 0xcf && magic[1] === 0xfa || magic[0] === 0xce && magic[1] === 0xfa
-    || magic[0] === 0xca && magic[1] === 0xfe || magic[0] === 0xfe && magic[1] === 0xca
+    || magic[0] === 0xca && magic[1] === 0xfe || magic[0] === 0xbe && magic[1] === 0xba
   ) return inspectMacho(source);
   throw new Error("invalid-native-magic");
 };

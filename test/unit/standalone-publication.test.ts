@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit, Fiber, FileSystem, PlatformError } from "effect";
+import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, Latch, Path, PlatformError, Result } from "effect";
 import { createHash } from "node:crypto";
 import {
   closeSync,
@@ -17,9 +17,14 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { ToolFailed } from "../../src/standalone/BuildError.js";
-import { isLockedRenameError } from "../../src/standalone/internal/AtomicOutput.js";
 import type { CompilerAdapter } from "../../src/standalone/internal/CompilerAdapter.js";
 import { makeCompilerService } from "../../src/standalone/internal/CompilerEngine.js";
+import {
+  acquireExecutableCandidate,
+  type ExecutableCandidate,
+  isLockedRenameError,
+  validateAndPublishExecutable,
+} from "../../src/standalone/internal/ExecutableLifecycle.js";
 import type { OperatingSystem } from "../../src/standalone/internal/TargetCatalog.js";
 import { makeTargetTable } from "../../src/standalone/internal/TargetTable.js";
 
@@ -83,7 +88,140 @@ const compile = (root: string, mode = successMode, digest = true) =>
     });
   }).pipe(Effect.provide(NodeServices.layer));
 
+const compileWithFileSystem = (root: string, fileSystem: FileSystem.FileSystem) =>
+  Effect.gen(function*() {
+    const service = yield* makeCompilerService(adapter(), discoveredCompiler());
+    return yield* service.compileExecutable({
+      entrypoint: "unused.ts",
+      outfile: join(root, "nested", "app"),
+      target: hostTarget,
+      digest: true,
+    });
+  }).pipe(
+    Effect.provideService(FileSystem.FileSystem, fileSystem),
+    Effect.provide(NodeServices.layer),
+  );
+
+const assertCandidateCapabilityIsStagedPathOnly = (candidate: ExecutableCandidate): void => {
+  void candidate.staged;
+  // @ts-expect-error Publication authority is not exposed on the candidate.
+  void candidate.commit;
+  // @ts-expect-error The final destination is retained only by lifecycle identity.
+  void candidate.destination;
+};
+void assertCandidateCapabilityIsStagedPathOnly;
+
 describe("standalone atomic publication", () => {
+  it("rejects forged and scope-closed candidates as defects before filesystem effects", async () => {
+    const root = makeRoot();
+    const hostFileSystem = await Effect.runPromise(
+      FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)),
+    );
+    let fileEffects = 0;
+    const countingFileSystem: FileSystem.FileSystem = {
+      ...hostFileSystem,
+      exists: (path) => {
+        fileEffects += 1;
+        return hostFileSystem.exists(path);
+      },
+      stat: (path) => {
+        fileEffects += 1;
+        return hostFileSystem.stat(path);
+      },
+      rename: (from, to) => {
+        fileEffects += 1;
+        return hostFileSystem.rename(from, to);
+      },
+    };
+    const check = (candidate: ExecutableCandidate) =>
+      Effect.gen(function*() {
+        const crypto = yield* Crypto.Crypto;
+        return yield* validateAndPublishExecutable(countingFileSystem, crypto, candidate, {
+          digest: false,
+          resolveTarget: () => Result.succeed(hostTarget),
+        });
+      }).pipe(Effect.provide(NodeServices.layer), Effect.exit);
+
+    const forged = { staged: join(root, "forged") } as unknown as ExecutableCandidate;
+    const forgedExit = await Effect.runPromise(check(forged));
+    expect(Exit.hasDies(forgedExit)).toBe(true);
+    expect(fileEffects).toBe(0);
+
+    const stale = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const path = yield* Path.Path;
+          return yield* acquireExecutableCandidate(hostFileSystem, path, {
+            destination: join(root, "stale"),
+          });
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+    const staleExit = await Effect.runPromise(check(stale));
+    expect(Exit.hasDies(staleExit)).toBe(true);
+    expect(fileEffects).toBe(0);
+  });
+
+  it("consumes executable candidate identity exactly once", async () => {
+    const root = makeRoot();
+    let fileEffects = 0;
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const crypto = yield* Crypto.Crypto;
+          const countingFileSystem: FileSystem.FileSystem = {
+            ...fileSystem,
+            exists: (file) => {
+              fileEffects += 1;
+              return fileSystem.exists(file);
+            },
+            stat: (file) => {
+              fileEffects += 1;
+              return fileSystem.stat(file);
+            },
+            rename: (from, to) => {
+              fileEffects += 1;
+              return fileSystem.rename(from, to);
+            },
+          };
+          const candidate = yield* acquireExecutableCandidate(countingFileSystem, path, {
+            destination: join(root, "published"),
+          });
+          yield* fileSystem.writeFile(
+            candidate.staged,
+            new Uint8Array([
+              0xcf,
+              0xfa,
+              0xed,
+              0xfe,
+              0x0c,
+              0x00,
+              0x00,
+              0x01,
+            ]),
+          );
+          yield* fileSystem.chmod(candidate.staged, 0o755);
+          const first = yield* validateAndPublishExecutable(countingFileSystem, crypto, candidate, {
+            digest: false,
+            resolveTarget: () => Result.succeed("macos-aarch64" as const),
+          });
+          const effectsAfterFirst = fileEffects;
+          const second = yield* validateAndPublishExecutable(countingFileSystem, crypto, candidate, {
+            digest: false,
+            resolveTarget: () => Result.succeed("macos-aarch64" as const),
+          }).pipe(Effect.exit);
+          return { first, second, effectsAfterFirst };
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(result.first.path).toBe(join(root, "published"));
+    expect(Exit.hasDies(result.second)).toBe(true);
+    expect(fileEffects).toBe(result.effectsAfterFirst);
+  });
+
   it("recognizes normalized locks and Windows rename EPERM", () => {
     const platformError = (tag: PlatformError.SystemErrorTag, code?: string) =>
       PlatformError.systemError({
@@ -180,6 +318,64 @@ describe("standalone atomic publication", () => {
     const exit = await Effect.runPromise(Fiber.await(fiber));
     expect(Exit.isFailure(exit) && Cause.interruptors(exit.cause).size > 0).toBe(true);
     expect(readFileSync(outfile, "utf8")).toBe("old");
+    expect(readdirSync(join(root, "nested")).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
+  });
+
+  it("keeps the old destination when interrupted before rename begins", async () => {
+    const root = makeRoot();
+    const outfile = join(root, "nested", "app");
+    mkdirSync(join(root, "nested"));
+    writeFileSync(outfile, "old", { flush: true });
+    const hostFileSystem = await Effect.runPromise(
+      FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)),
+    );
+    const renameEntered = Latch.makeUnsafe();
+    const permitRename = Latch.makeUnsafe();
+    const barrierFileSystem: FileSystem.FileSystem = {
+      ...hostFileSystem,
+      rename: (from, to) =>
+        Effect.gen(function*() {
+          yield* renameEntered.open;
+          yield* permitRename.await;
+          yield* hostFileSystem.rename(from, to);
+        }),
+    };
+    const fiber = Effect.runFork(compileWithFileSystem(root, barrierFileSystem));
+    await Effect.runPromise(renameEntered.await);
+    await Effect.runPromise(Fiber.interrupt(fiber));
+    const exit = await Effect.runPromise(Fiber.await(fiber));
+
+    expect(Exit.hasInterrupts(exit)).toBe(true);
+    expect(readFileSync(outfile, "utf8")).toBe("old");
+    expect(readdirSync(join(root, "nested")).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
+  });
+
+  it("allows publication to remain linearized when interruption is observed after rename", async () => {
+    const root = makeRoot();
+    const outfile = join(root, "nested", "app");
+    mkdirSync(join(root, "nested"));
+    writeFileSync(outfile, "old", { flush: true });
+    const hostFileSystem = await Effect.runPromise(
+      FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)),
+    );
+    const renameLinearized = Latch.makeUnsafe();
+    const permitRenameCallback = Latch.makeUnsafe();
+    const barrierFileSystem: FileSystem.FileSystem = {
+      ...hostFileSystem,
+      rename: (from, to) =>
+        Effect.gen(function*() {
+          yield* hostFileSystem.rename(from, to);
+          yield* renameLinearized.open;
+          yield* permitRenameCallback.await;
+        }),
+    };
+    const fiber = Effect.runFork(compileWithFileSystem(root, barrierFileSystem));
+    await Effect.runPromise(renameLinearized.await);
+    await Effect.runPromise(Fiber.interrupt(fiber));
+    const exit = await Effect.runPromise(Fiber.await(fiber));
+
+    expect(Exit.hasInterrupts(exit)).toBe(true);
+    expect(readFileSync(outfile, "utf8")).not.toBe("old");
     expect(readdirSync(join(root, "nested")).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
   });
 

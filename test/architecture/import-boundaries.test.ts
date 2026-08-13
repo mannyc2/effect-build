@@ -48,6 +48,20 @@ describe("source ownership boundaries", () => {
     }
   });
 
+  it("keeps executable lifecycle ownership package-private and provider-neutral", async () => {
+    const lifecycle = resolve(root, "src/standalone/internal/ExecutableLifecycle.ts");
+    const lifecycleImports = importSpecifiers(await readFile(lifecycle, "utf8"));
+    for (const specifier of lifecycleImports) {
+      expect(specifier).not.toMatch(/(?:Bun|Deno)(?:Adapter|Target)?\.js$/);
+    }
+
+    for (const publicEntrypoint of ["index.ts", "Bun.ts", "Deno.ts"]) {
+      const file = resolve(root, "src", publicEntrypoint);
+      expect(importSpecifiers(await readFile(file, "utf8")), file)
+        .not.toEqual(expect.arrayContaining([expect.stringMatching(/ExecutableLifecycle\.js$/)]));
+    }
+  });
+
   it("keeps provider target tables pure and dependent only on the shared table primitive", async () => {
     for (const name of ["BunTarget.ts", "DenoTarget.ts"]) {
       const file = resolve(root, "src/standalone/internal", name);

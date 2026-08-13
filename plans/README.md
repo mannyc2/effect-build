@@ -185,7 +185,7 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
 | 012 | Build the typed executable target matrix | P1 | L | 013 | DONE |
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | DONE |
 | 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | DONE |
-| 016 | Compress the executable lifecycle behind one validated publication boundary | P1 | M | 015 | TODO |
+| 016 | Compress the executable lifecycle behind one validated publication boundary | P1 | M | 015 | DONE |
 | 017 | Build one continuation-owned esbuild JavaScript bundle artifact | P1 | M | 015, 016 | TODO |
 | 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | TODO |
 | 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | TODO |
@@ -247,7 +247,9 @@ behavior, or the standalone operation invalidated that earlier work.
   narrowing adapter visibility to a staged-output request, collapsing
   `CompilerRunner` into `CompilerService`, establishing one publication owner
   and file inspector, fixing fat Mach-O endianness, and specifying the rename
-  point of no return.
+  point of no return. Completion evidence: `bun run verify` and the locally
+  selected `EFFECT_BUILD_DENO_VERSION=2.9.5 bun run verify:real` passed on
+  2026-08-13; architecture tests retained the exact public surface.
 - Plan 017 depends on that lifecycle boundary and adds an exact direct esbuild
   dependency. It proves one continuation-owned structured-library operation
   and one five-field internal JavaScript artifact, including the external edges

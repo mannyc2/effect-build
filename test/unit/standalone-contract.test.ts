@@ -16,7 +16,7 @@ import {
 import { makeCompileExecutable } from "../../src/standalone/CompileExecutable.js";
 import type { CompileExecutableInput, CompilerService } from "../../src/standalone/Driver.js";
 import { type BunTarget, bunTargetTable } from "../../src/standalone/internal/BunTarget.js";
-import type { ProviderArtifact } from "../../src/standalone/internal/CompilerAdapter.js";
+import type { PreparedExecutableRequest, ProviderArtifact } from "../../src/standalone/internal/CompilerAdapter.js";
 import { denoAdapter } from "../../src/standalone/internal/DenoAdapter.js";
 import { type DenoTarget, denoTargetTable } from "../../src/standalone/internal/DenoTarget.js";
 import {
@@ -43,17 +43,32 @@ const _rejectDenoMuslAtAdapterBoundary = () => {
   const options = denoAdapter.validateOptions(undefined);
   if (options._tag !== "Valid") throw options.error;
   return denoAdapter.renderArgv({
-    input: {
-      entrypoint: "main.ts",
-      outfile: "app",
-      // @ts-expect-error The private Deno adapter boundary must reject root-only musl targets.
-      target: "linux-x64-musl",
-      options: options.value,
-    },
+    entrypoint: "main.ts",
+    // @ts-expect-error The private Deno adapter boundary must reject root-only musl targets.
+    target: "linux-x64-musl",
+    options: options.value,
     stagedOutfile: "/tmp/app",
   });
 };
 void _rejectDenoMuslAtAdapterBoundary;
+
+const assertPreparedExecutableRequestNarrowing = (
+  request: PreparedExecutableRequest<Record<string, never>, BunTarget>,
+): void => {
+  void request.entrypoint;
+  void request.target;
+  void request.options;
+  void request.stagedOutfile;
+  // @ts-expect-error Final outfile is lifecycle-owned, not adapter-visible.
+  void request.outfile;
+  // @ts-expect-error Child cwd is engine-owned, not adapter-visible.
+  void request.cwd;
+  // @ts-expect-error Digest policy is lifecycle-owned, not adapter-visible.
+  void request.digest;
+  // @ts-expect-error Resolved destination is lifecycle-owned, not adapter-visible.
+  void request.destination;
+};
+void assertPreparedExecutableRequestNarrowing;
 
 const decodeTarget = Schema.decodeUnknownSync(Target);
 const decodeArtifact = Schema.decodeUnknownSync(Artifact);
@@ -78,6 +93,21 @@ const validArtifact = {
   digest: `sha256:${"a".repeat(64)}`,
   target: "macos-aarch64",
   tool: { name: "bun", version: "1.3.9", path: "/usr/local/bin/bun" },
+};
+
+const fatMacho = (
+  byteOrder: "big" | "little",
+  cpuTypes: readonly number[],
+): Uint8Array => {
+  const bytes = new Uint8Array(8 + cpuTypes.length * 20);
+  const view = new DataView(bytes.buffer);
+  const little = byteOrder === "little";
+  bytes.set(little ? [0xbe, 0xba, 0xfe, 0xca] : [0xca, 0xfe, 0xba, 0xbe], 0);
+  view.setUint32(4, cpuTypes.length, little);
+  for (let index = 0; index < cpuTypes.length; index++) {
+    view.setUint32(8 + index * 20, cpuTypes[index]!, little);
+  }
+  return bytes;
 };
 
 describe("standalone contract: target and artifact", () => {
@@ -177,6 +207,32 @@ describe("standalone contract: target and artifact", () => {
     expect(() =>
       inspectNativeExecutableChunks(5_000, [{ offset: 0, bytes: elf }, { offset: 64, bytes: programHeader }])
     ).toThrow("invalid-interpreter");
+  });
+
+  it("decodes a standard big-endian FAT_MAGIC Mach-O with one x64 slice", () => {
+    expect(inspectNativeExecutable(fatMacho("big", [0x01000007]))).toEqual({
+      format: "macho",
+      os: "macos",
+      architecture: "x64",
+    });
+  });
+
+  it("decodes a byte-swapped FAT_CIGAM Mach-O with one aarch64 slice", () => {
+    expect(inspectNativeExecutable(fatMacho("little", [0x0100000c]))).toEqual({
+      format: "macho",
+      os: "macos",
+      architecture: "aarch64",
+    });
+  });
+
+  it("retains the explicit ambiguity rejection for a universal x64 and aarch64 Mach-O", () => {
+    expect(() => inspectNativeExecutable(fatMacho("big", [0x01000007, 0x0100000c])))
+      .toThrow("ambiguous-fat-architecture");
+  });
+
+  it("rejects a fat Mach-O whose slices have only unknown CPU types", () => {
+    expect(() => inspectNativeExecutable(fatMacho("big", [0x12345678])))
+      .toThrow("ambiguous-fat-architecture");
   });
 
   it("accepts every canonical target", () => {

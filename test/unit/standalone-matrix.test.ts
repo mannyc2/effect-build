@@ -10,25 +10,31 @@ import {
   type BuildError,
   InvalidDriverOptions,
   OutputInvalid,
+  OutputLocked,
   OutputMissing,
+  PublicationFailed,
   TargetUnsupported,
   ToolFailed,
+  ToolNotFound,
+  ToolProbeFailed,
 } from "../../src/standalone/BuildError.js";
 import {
   captureCellResult,
   type CellFailureFor,
   type CompileExecutableMatrixInput,
-  type CompilerRunner,
+  makeMatrixFailedFor,
   type MatrixErrorFor,
   type MatrixFailedFor,
 } from "../../src/standalone/CompileExecutableMatrix.js";
+import type { CompilerService } from "../../src/standalone/Driver.js";
 import { type BunTarget, bunTargetTable } from "../../src/standalone/internal/BunTarget.js";
 import type {
+  CellExecutionError,
   CompilerAdapter,
   DiscoveredCompiler,
   OptionsValidation,
 } from "../../src/standalone/internal/CompilerAdapter.js";
-import { makeCompilerRunner } from "../../src/standalone/internal/CompilerEngine.js";
+import { makeCompilerService } from "../../src/standalone/internal/CompilerEngine.js";
 import { denoAdapter } from "../../src/standalone/internal/DenoAdapter.js";
 import { type DenoTarget, denoTargetTable } from "../../src/standalone/internal/DenoTarget.js";
 import type { TargetTable } from "../../src/standalone/internal/TargetTable.js";
@@ -113,15 +119,15 @@ const fixtureAdapter = <const Name extends ToolName, SupportedTarget extends Tar
     }
     return { _tag: "Valid", value: options as FixtureOptions };
   },
-  renderArgv: ({ input, stagedOutfile }) => {
-    const target = input.target;
+  renderArgv: (request) => {
+    const target = request.target;
     if (target === undefined) throw new Error("matrix fixture requires a target");
     config.onRender?.(target);
     const behavior = config.behavior?.[target];
     return [
       fixture,
       "--outfile",
-      stagedOutfile,
+      request.stagedOutfile,
       "--target",
       target,
       "--events",
@@ -129,7 +135,7 @@ const fixtureAdapter = <const Name extends ToolName, SupportedTarget extends Tar
       ...(behavior?.mode === undefined ? [] : ["--mode", behavior.mode]),
       ...(behavior?.delay === undefined ? [] : ["--delay", String(behavior.delay)]),
       ...(config.sentinels === undefined ? [] : ["--sentinels", config.sentinels]),
-      ...(input.options.marker === undefined ? [] : ["--marker", input.options.marker]),
+      ...(request.options.marker === undefined ? [] : ["--marker", request.options.marker]),
     ];
   },
   interpretFailure: (completion) => {
@@ -162,8 +168,8 @@ const runnerFor = <const Name extends ToolName, SupportedTarget extends Target>(
   targetTable: TargetTable<SupportedTarget>,
   config: FixtureAdapterConfig<SupportedTarget>,
   pathService?: Path.Path,
-): Promise<CompilerRunner<FixtureOptions, Name, SupportedTarget>> => {
-  const effect = makeCompilerRunner(fixtureAdapter(toolName, targetTable, config), discoveredCompiler(toolName));
+): Promise<CompilerService<Name, SupportedTarget, FixtureOptions>> => {
+  const effect = makeCompilerService(fixtureAdapter(toolName, targetTable, config), discoveredCompiler(toolName));
   return Effect.runPromise(
     (pathService === undefined ? effect : effect.pipe(Effect.provideService(Path.Path, pathService))).pipe(
       Effect.provide(NodeServices.layer),
@@ -250,6 +256,37 @@ const denoFailure = {
   path: "/dist/app-macos-aarch64",
   error: new OutputMissing({ path: "/dist/app-macos-aarch64" }),
 } as const;
+
+type BunMatrixFailureInput = Parameters<
+  typeof makeMatrixFailedFor<"bun", BunTarget>
+>[0]["failures"][number];
+
+const reachableExecutionErrors: readonly CellExecutionError[] = [
+  new ToolFailed({ tool: "bun", exitCode: 1, diagnostics: [] }),
+  new OutputMissing({ path: "/dist/app" }),
+  new OutputInvalid({ path: "/dist/app", reason: "bad-header" }),
+  new OutputLocked({ path: "/dist/app" }),
+  new PublicationFailed({ path: "/dist/app", operation: "rename", reason: "EIO" }),
+];
+const acceptsReachableExecutionError = (error: CellExecutionError): BunMatrixFailureInput => ({
+  tool: "bun",
+  target: "macos-x64",
+  path: "/dist/app",
+  error,
+});
+void reachableExecutionErrors.map(acceptsReachableExecutionError);
+
+const unreachableAcquisitionAndPreflightErrors = [
+  // @ts-expect-error Tool discovery cannot be a completed matrix-cell execution failure.
+  new ToolNotFound({ tool: "bun", command: "bun" }) satisfies CellExecutionError,
+  // @ts-expect-error Tool probing cannot be a completed matrix-cell execution failure.
+  new ToolProbeFailed({ tool: "bun", reason: "bad probe" }) satisfies CellExecutionError,
+  // @ts-expect-error Target preflight cannot be a completed matrix-cell execution failure.
+  new TargetUnsupported({ tool: "bun", requested: "bad", available: [] }) satisfies CellExecutionError,
+  // @ts-expect-error Options preflight cannot be a completed matrix-cell execution failure.
+  new InvalidDriverOptions({ tool: "bun", reason: "bad options" }) satisfies CellExecutionError,
+];
+void unreachableAcquisitionAndPreflightErrors;
 
 const decodeMatrixIssue = Schema.decodeUnknownSync(MatrixIssue);
 const decodeInvalidMatrixInput = Schema.decodeUnknownSync(InvalidMatrixInput);
@@ -605,7 +642,7 @@ describe("standalone matrix execution", () => {
       },
     } satisfies typeof denoAdapter;
     const runner = await Effect.runPromise(
-      makeCompilerRunner(adapter, discoveredCompiler("deno")).pipe(Effect.provide(NodeServices.layer)),
+      makeCompilerService(adapter, discoveredCompiler("deno")).pipe(Effect.provide(NodeServices.layer)),
     );
     const outdir = join(root, "out");
     const failure = await Effect.runPromise(runner.compileExecutableMatrix({
