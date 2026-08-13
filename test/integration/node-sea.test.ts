@@ -1,3 +1,5 @@
+import { NodeServices } from "@effect/platform-node";
+import { Effect } from "effect";
 import { execFile } from "node:child_process";
 import { accessSync, constants, copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -5,7 +7,9 @@ import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
+import { layer as esbuildLayer, withJavaScriptBundle } from "../../src/standalone/internal/Esbuild.js";
 import { inspectNativeExecutable } from "../../src/standalone/internal/NativeExecutable.js";
+import { createExecutable, layer as nodeSeaLayer } from "../../src/standalone/internal/NodeSea.js";
 
 const execFileAsync = promisify(execFile);
 const fixtures = fileURLToPath(new URL("../fixtures/node-sea/", import.meta.url));
@@ -149,4 +153,46 @@ describe("exact Node 26.7 direct SEA characterization", () => {
     expect(failure?.code).not.toBe(0);
     expect(`${String(failure?.stdout ?? "")}${String(failure?.stderr ?? "")}`.trim()).not.toBe("");
   }, 60_000);
+
+  it("runs the complete private esbuild-to-Node-SEA pipeline under the separate producer", async () => {
+    const executable = requiredSelectedNode();
+    const asset = join(fixtures, "message.txt");
+
+    for (
+      const [format, entrypoint] of [
+        ["cjs", "main.cjs"],
+        ["esm", "main.mjs"],
+      ] as const
+    ) {
+      const output = join(root, `pipeline-${format}`);
+      const artifact = await Effect.runPromise(
+        withJavaScriptBundle(
+          { entrypoint, format, cwd: fixtures },
+          (main) =>
+            createExecutable({
+              main,
+              outfile: output,
+              assets: [{ key: "message", path: asset }],
+            }),
+        ).pipe(
+          Effect.provide(nodeSeaLayer({ executable })),
+          Effect.provide(esbuildLayer),
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+
+      expect(artifact.path).toBe(output);
+      expect(artifact.target).toBe("linux-x64-gnu");
+      expect(artifact.stages).toEqual([
+        { operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } },
+        {
+          operation: "assemble-node-sea",
+          tool: { name: "node", version: "26.7.0", path: executable },
+        },
+      ]);
+      accessSync(output, constants.X_OK);
+      expect(inspectNativeExecutable(readFileSync(output))).toEqual(expectedObservation);
+      expect((await run(output, [])).stdout).toBe(`${format}:effect-build-node-sea\n\n`);
+    }
+  }, 180_000);
 });

@@ -44,13 +44,13 @@
   package-private
 - **Required workflow receipt**: pending; exact `node-sea-v1` evidence is part
   of completion, not a public build receipt
-- **Executor state (2026-08-13)**: `BLOCKED` at Step 2. The non-skipping raw
-  characterization, exact dual-Node CI/release jobs, and `node-sea-v1` verifier
-  contract are implemented locally. No approved exact Node 26.7.0 Linux x64
-  binary is available on the local macOS arm64 host or approved Linux host, and
-  no push authority was supplied. Per Step 2, `NodeSea.ts` and Steps 3-8 have
-  not been started. The required next evidence is one green source-CI
-  `node-sea` characterization job using the captured setup-node 26.7.0 binary.
+- **Executor state (2026-08-13)**: `IN PROGRESS`. Push authority was granted,
+  and the mandatory Step 2 source-CI characterization passed in the `node-sea`
+  job at
+  `https://github.com/mannyc2/effect-build/actions/runs/31753557975` for source
+  `99b4a4e83faa170251bb02de9d17e5e071ead711`. That preliminary observation
+  clears the implementation STOP but is not the required final exact-source
+  receipt. Steps 3-8 are now in progress.
 
 ## Why this matters
 

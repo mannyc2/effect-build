@@ -97,9 +97,11 @@ describe("pinned esbuild API contract", () => {
         { path: "test/fixtures/esbuild/dynamic.ts", kind: "dynamic-import", original: "./dynamic.js" },
       ]),
     );
-    expect(Object.keys(esm.metafile?.inputs ?? {})).toContain(
-      "node_modules/.pnpm/effect@4.0.0-rc.108/node_modules/effect/dist/index.js",
-    );
+    expect(
+      Object.keys(esm.metafile?.inputs ?? {}).some((input) =>
+        input.startsWith("node_modules/.pnpm/effect@") && input.endsWith("/node_modules/effect/dist/index.js")
+      ),
+    ).toBe(true);
 
     const cjsOutfile = outfile.replace(/\.mjs$/, ".cjs");
     const cjs = await rebuild(optionsFor("valid.cjs", "cjs"));

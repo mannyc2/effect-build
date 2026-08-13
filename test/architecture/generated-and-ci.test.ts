@@ -421,12 +421,35 @@ describe("tooling pins and CI contract", () => {
     expect(packageJson.scripts?.["verify:effect"]).toBe("node scripts/verify-effect-compatibility.mjs --all");
   });
 
-  it("registers the private esbuild producer suite exactly once in the full unit gate", async () => {
+  it("registers every private pipeline suite exactly once in the full unit gate", async () => {
     const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
       scripts?: Record<string, string>;
     };
     const unitScript = packageJson.scripts?.["test:unit"] ?? "";
-    expect(unitScript.match(/(?:^|\s)test\/unit\/esbuild-bundle\.test\.ts(?:\s|$)/g)).toHaveLength(1);
+    for (
+      const suite of [
+        "esbuild-bundle.test.ts",
+        "node-sea.test.ts",
+        "esbuild-node-sea-pipeline.test.ts",
+      ]
+    ) {
+      const escaped = suite.replaceAll(".", "\\.");
+      expect(unitScript.match(new RegExp(`(?:^|\\s)test/unit/${escaped}(?:\\s|$)`, "g")), suite).toHaveLength(1);
+    }
+  });
+
+  it("keeps the exact private Node SEA literals aligned without a public support claim", async () => {
+    const nodeSea = await readFile(resolve(root, "src/standalone/internal/NodeSea.ts"), "utf8");
+    const esbuild = await readFile(resolve(root, "src/standalone/internal/Esbuild.ts"), "utf8");
+    const support = await readFile(resolve(root, "tooling/support-matrix.json"), "utf8");
+
+    expect(nodeSea).toMatch(/nodeSeaVersion\s*=\s*"26\.7\.0"\s+as const/);
+    expect(nodeSea).toMatch(/nodeSeaSyntaxTarget\s*=\s*"node26\.7"\s+as const/);
+    expect(nodeSea).toMatch(/nodeSeaTarget\s*=\s*"linux-x64-gnu"\s+as const/);
+    expect(esbuild).toMatch(/nodeSyntaxTarget\s*=\s*"node26\.7"\s+as const/);
+    expect(nodeSea).not.toMatch(/25\.7\.0|postject|download|https?:\/\//i);
+    expect(support).not.toMatch(/node-sea|26\.7\.0|node26\.7/i);
+    await expect(readFile(resolve(root, "tooling/node-sea.json"), "utf8")).rejects.toThrow();
   });
 
   it("pins the early Node SEA characterization to separate producer and orchestrator axes", async () => {
@@ -447,6 +470,11 @@ describe("tooling pins and CI contract", () => {
         .filter((step) => step.uses?.startsWith("actions/setup-node@"))
         .map((step) => (step as { with?: { "node-version"?: string } }).with?.["node-version"]);
       expect(setupVersions).toEqual(["26.7.0", "24.14.1"]);
+      const capture = steps.find((step) => (step as { id?: string }).id === "node26");
+      expect(capture).toBeDefined();
+      expect(capture?.run).toContain('test "$(node --version)" = "v26.7.0"');
+      expect(capture?.run).toContain("node_path=\"$(node -p 'process.execPath')\"");
+      expect(capture?.run).toContain('echo "path=$node_path" >> "$GITHUB_OUTPUT"');
       const captureIndex = steps.findIndex((step) => step.run?.includes("path=$node_path"));
       const restoreIndex = steps.findIndex((step) =>
         (step as { with?: { "node-version"?: string } }).with?.["node-version"] === "24.14.1"
@@ -461,12 +489,20 @@ describe("tooling pins and CI contract", () => {
       expect(steps[integrationIndex]?.env).toEqual({
         EFFECT_BUILD_NODE_SEA_BIN: "${{ steps.node26.outputs.path }}",
       });
+      expect(steps[verifyIndex]?.env?.EFFECT_BUILD_NODE_SEA_BIN).toBeUndefined();
+      const verification = steps[verificationIndex]?.run ?? "";
+      expect(verification).toContain('test "$(node -p \'process.execPath\')" != "$producer"');
+      expect(verification).toContain('test "$("$producer" --version)" = "v26.7.0"');
+      expect(verification).toContain('file -Lb -- "$producer"');
+      expect(verification).toContain('readelf -hW "$producer"');
+      expect(verification).toContain('readelf -lW "$producer"');
       expect(
         steps.filter((_, index) => index !== integrationIndex).every((step) =>
           step.env?.EFFECT_BUILD_NODE_SEA_BIN === undefined
         ),
       ).toBe(true);
       expect(JSON.stringify(job)).not.toMatch(/latest|continue-on-error|GITHUB_ENV/);
+      expect(JSON.stringify(job)).not.toMatch(/provision-tool-assets|postject|curl|wget|npm install -g/i);
     }
   });
 

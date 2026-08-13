@@ -188,6 +188,7 @@ describe("standalone atomic publication", () => {
           };
           const candidate = yield* acquireExecutableCandidate(countingFileSystem, path, {
             destination: join(root, "published"),
+            executableSuffix: process.platform === "win32" ? ".exe" : "",
           });
           yield* fileSystem.writeFile(
             candidate.staged,

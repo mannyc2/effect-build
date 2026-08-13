@@ -47,7 +47,10 @@ describe("source ownership boundaries", () => {
     for (const file of unitFiles) {
       if (importSpecifiers(await readFile(file, "utf8")).includes("esbuild")) directTestImporters.push(file);
     }
-    expect(directTestImporters).toEqual([resolve(root, "test/unit/esbuild-bundle.test.ts")]);
+    expect(directTestImporters).toEqual([
+      resolve(root, "test/unit/esbuild-bundle.test.ts"),
+      resolve(root, "test/unit/node-sea.test.ts"),
+    ]);
   });
 
   it("confines effect/unstable/process to the private process module", async () => {
@@ -82,6 +85,25 @@ describe("source ownership boundaries", () => {
       expect(importSpecifiers(await readFile(file, "utf8")), file)
         .not.toEqual(expect.arrayContaining([expect.stringMatching(/ExecutableLifecycle\.js$/)]));
     }
+  });
+
+  it("keeps the exact Node SEA producer private and outside compiler adapters", async () => {
+    const nodeSeaFile = resolve(root, "src/standalone/internal/NodeSea.ts");
+    const nodeSeaSource = await readFile(nodeSeaFile, "utf8");
+    const nodeSeaImports = importSpecifiers(nodeSeaSource);
+    for (const specifier of nodeSeaImports) {
+      expect(specifier).not.toMatch(/(?:Bun|Deno)(?:Adapter|Target)?\.js$/);
+      expect(specifier).not.toMatch(/CompilerAdapter\.js$/);
+    }
+    expect(nodeSeaSource).not.toMatch(/postject|download|npm|pnpm|yarn|bun add|https?:\/\//i);
+
+    const importers: string[] = [];
+    for (const file of await sourceFiles()) {
+      if (importSpecifiers(await readFile(file, "utf8")).some((specifier) => specifier.endsWith("NodeSea.js"))) {
+        importers.push(file);
+      }
+    }
+    expect(importers).toEqual([]);
   });
 
   it("keeps provider target tables pure and dependent only on the shared table primitive", async () => {

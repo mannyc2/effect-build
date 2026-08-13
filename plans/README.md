@@ -187,7 +187,7 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
 | 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | DONE |
 | 016 | Compress the executable lifecycle behind one validated publication boundary | P1 | M | 015 | DONE |
 | 017 | Build one continuation-owned esbuild JavaScript bundle artifact | P1 | M | 015, 016 | DONE |
-| 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | BLOCKED: Step 2 exact Node 26.7 CI characterization requires push authority |
+| 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | IN PROGRESS |
 | 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | BLOCKED: Plan 018 receipt absent |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
@@ -263,10 +263,10 @@ behavior, or the standalone operation invalidated that earlier work.
   orchestrator, selects exact Node 26.7.0 as a separate Linux direct-SEA
   producer, consumes Plan 017's artifact, and reuses Plan 016's native
   validation/publication without a postject or download fallback. Execution
-  reached its mandatory Step 2 STOP on 2026-08-13: the raw exact-Node
-  characterization and dual-Node jobs are locally ready, but no approved exact
-  Linux Node 26.7 binary or push authority exists to obtain the required green
-  source-CI observation.
+  cleared its mandatory Step 2 STOP on 2026-08-13: the raw exact-Node
+  characterization passed in source CI at run `31753557975` for
+  `99b4a4e83faa170251bb02de9d17e5e071ead711`. Implementation is now in
+  progress; that preliminary run is not the final exact-source receipt.
 - Plan 019 runs only after both topologies have required real evidence. It
   creates a consumer/gate/representation decision record and changes no source
   or public API. An unmet gate stays internal/rejected rather than generating

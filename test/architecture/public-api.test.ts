@@ -134,6 +134,25 @@ describe("built public API", () => {
     expect(builtProviderCallTypeParameterCounts()).toEqual({ Bun: [0, 0], Deno: [0, 0] });
   });
 
+  it("keeps the esbuild-to-Node-SEA pipeline entirely package-private", async () => {
+    const forbidden = new Set([
+      "Esbuild",
+      "JavaScriptBundleArtifact",
+      "NodeSea",
+      "PipelineExecutableArtifact",
+      "createExecutable",
+      "stages",
+      "withJavaScriptBundle",
+    ]);
+    for (const [module, names] of Object.entries(builtDeclarationExports())) {
+      expect(names.filter((name) => forbidden.has(name)), module).toEqual([]);
+    }
+    for (const module of declarationEntryPoints) {
+      const runtime = await import(resolve(root, `dist/${module}.js`));
+      expect(Object.keys(runtime).filter((name) => forbidden.has(name)), module).toEqual([]);
+    }
+  });
+
   it("rejects missing, extra, duplicate, and out-of-order manifest keys", async () => {
     const manifest = JSON.parse(await readFile(resolve(root, "tooling/public-api.json"), "utf8")) as {
       version: number;
