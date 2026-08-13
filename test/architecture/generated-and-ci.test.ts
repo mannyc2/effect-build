@@ -421,6 +421,55 @@ describe("tooling pins and CI contract", () => {
     expect(packageJson.scripts?.["verify:effect"]).toBe("node scripts/verify-effect-compatibility.mjs --all");
   });
 
+  it("registers the private esbuild producer suite exactly once in the full unit gate", async () => {
+    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    const unitScript = packageJson.scripts?.["test:unit"] ?? "";
+    expect(unitScript.match(/(?:^|\s)test\/unit\/esbuild-bundle\.test\.ts(?:\s|$)/g)).toHaveLength(1);
+  });
+
+  it("pins the early Node SEA characterization to separate producer and orchestrator axes", async () => {
+    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.["test:integration:node-sea"]).toBe(
+      "vitest run test/integration/node-sea.test.ts",
+    );
+    for (const filename of ["ci.yml", "release.yml"]) {
+      const workflow = parse(await readFile(resolve(root, ".github/workflows", filename), "utf8")) as Workflow;
+      expect(Object.keys(workflow.jobs).filter((name) => name === "node-sea")).toEqual(["node-sea"]);
+      const job = workflow.jobs["node-sea"]!;
+      expect(job["runs-on"]).toBe("ubuntu-24.04");
+      if (filename === "release.yml") expect(job.needs).toBe("preflight");
+      const steps = job.steps ?? [];
+      const setupVersions = steps
+        .filter((step) => step.uses?.startsWith("actions/setup-node@"))
+        .map((step) => (step as { with?: { "node-version"?: string } }).with?.["node-version"]);
+      expect(setupVersions).toEqual(["26.7.0", "24.14.1"]);
+      const captureIndex = steps.findIndex((step) => step.run?.includes("path=$node_path"));
+      const restoreIndex = steps.findIndex((step) =>
+        (step as { with?: { "node-version"?: string } }).with?.["node-version"] === "24.14.1"
+      );
+      const verificationIndex = steps.findIndex((step) => step.run?.includes("v24.14.1"));
+      const installIndex = steps.findIndex((step) => step.run === "pnpm install --frozen-lockfile");
+      const verifyIndex = steps.findIndex((step) => step.run === "pnpm verify");
+      const integrationIndex = steps.findIndex((step) => step.run === "pnpm test:integration:node-sea");
+      const sequence = [captureIndex, restoreIndex, verificationIndex, installIndex, verifyIndex, integrationIndex];
+      expect(sequence.every((index) => index >= 0)).toBe(true);
+      expect(sequence).toEqual([...sequence].sort((left, right) => left - right));
+      expect(steps[integrationIndex]?.env).toEqual({
+        EFFECT_BUILD_NODE_SEA_BIN: "${{ steps.node26.outputs.path }}",
+      });
+      expect(
+        steps.filter((_, index) => index !== integrationIndex).every((step) =>
+          step.env?.EFFECT_BUILD_NODE_SEA_BIN === undefined
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(job)).not.toMatch(/latest|continue-on-error|GITHUB_ENV/);
+    }
+  });
+
   it("keeps Effect endpoint selection exact and rewrites only the temporary development family", async () => {
     const verifier = await loadScript<{
       effectEndpoints: readonly string[];
@@ -634,6 +683,7 @@ describe("tooling pins and CI contract", () => {
 
     expect(workflow.jobs["publish-npm"]?.needs).toEqual([
       "quality",
+      "node-sea",
       "real-tools",
       "publication-hosts",
       "target-support",

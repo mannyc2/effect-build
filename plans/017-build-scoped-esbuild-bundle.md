@@ -597,22 +597,22 @@ green command summary.
 
 ## Done criteria
 
-- [ ] esbuild is exact direct runtime dependency 0.28.2; Effect/platform pins
+- [x] esbuild is exact direct runtime dependency 0.28.2; Effect/platform pins
       remain aligned, and Layer construction rejects a mismatched loaded API.
-- [ ] `withJavaScriptBundle` owns a private Scope spanning the callback and no
+- [x] `withJavaScriptBundle` owns a private Scope spanning the callback and no
       raw artifact-returning operation exists.
-- [ ] Exactly one CJS/ESM JS output reaches the callback with fixed Node 26.7
+- [x] Exactly one CJS/ESM JS output reaches the callback with fixed Node 26.7
       syntax and Node resolution; TS input is proven, while CSS-only and
       JS-plus-CSS outputs are rejected.
-- [ ] Every esbuild-observed external is retained; no claim of arbitrary source
+- [x] Every esbuild-observed external is retained; no claim of arbitrary source
       closure/hermeticity is made.
-- [ ] Artifact has exactly path, format, literal syntax target, observed
+- [x] Artifact has exactly path, format, literal syntax target, observed
       externals, and observed esbuild stage.
-- [ ] Cancel/dispose and cleanup defects obey the exact Cause-level policy.
-- [ ] `test:unit` includes the new suite and `bun run verify` exercises it.
-- [ ] Context cancel/dispose is operation-owned; the unref'd esbuild service is
+- [x] Cancel/dispose and cleanup defects obey the exact Cause-level policy.
+- [x] `test:unit` includes the new suite and `bun run verify` exercises it.
+- [x] Context cancel/dispose is operation-owned; the unref'd esbuild service is
       explicitly package/host-process-owned and never described as in-process.
-- [ ] Public API remains exact and no out-of-scope/user-owned file changed.
+- [x] Public API remains exact and no out-of-scope/user-owned file changed.
 
 ## STOP conditions
 

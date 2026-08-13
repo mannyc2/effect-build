@@ -186,7 +186,7 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | DONE |
 | 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | DONE |
 | 016 | Compress the executable lifecycle behind one validated publication boundary | P1 | M | 015 | DONE |
-| 017 | Build one continuation-owned esbuild JavaScript bundle artifact | P1 | M | 015, 016 | TODO |
+| 017 | Build one continuation-owned esbuild JavaScript bundle artifact | P1 | M | 015, 016 | DONE |
 | 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | TODO |
 | 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | TODO |
 
@@ -255,7 +255,10 @@ behavior, or the standalone operation invalidated that earlier work.
   and one five-field internal JavaScript artifact, including the external edges
   esbuild actually observed. It explicitly does not claim arbitrary JavaScript
   closure or ownership of esbuild's package-global service and adds no public
-  bundle operation.
+  bundle operation. Completion evidence: exact esbuild 0.28.2 characterization
+  and 19 lifecycle/validation tests passed through `bun run verify` on
+  2026-08-13; dependency alignment, architecture, packed-consumer, lint, and
+  format gates remained green with the exact public surface unchanged.
 - Plan 018 is the sole complete second-pipeline proof. It retains Node 24 as
   orchestrator, selects exact Node 26.7.0 as a separate Linux direct-SEA
   producer, consumes Plan 017's artifact, and reuses Plan 016's native

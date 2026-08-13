@@ -581,31 +581,31 @@ one-line note of the green commands.
 
 ## Done criteria
 
-- [ ] Plan 015 is `DONE` and the Effect/platform family is aligned at its exact
+- [x] Plan 015 is `DONE` and the Effect/platform family is aligned at its exact
       baseline.
-- [ ] `CompilerRunner` and `makeCompilerRunner` have no matches in `src/` or
+- [x] `CompilerRunner` and `makeCompilerRunner` have no matches in `src/` or
       `test/`.
-- [ ] `AtomicOutput.commit` is gone; an opaque staged-path-only candidate
+- [x] `AtomicOutput.commit` is gone; an opaque staged-path-only candidate
       replaces it; orchestrators may transiently preflight a resolved
       destination, but only lifecycle identity retains it with rename authority,
       and identity is consumed once/deleted on Scope close.
-- [ ] Adapters receive one prepared executable request with no final outfile,
+- [x] Adapters receive one prepared executable request with no final outfile,
       cwd, digest, or destination and render only the staged output path.
-- [ ] One `validateAndPublishExecutable` owner performs every file/native/
+- [x] One `validateAndPublishExecutable` owner performs every file/native/
       target/digest check and alone reaches rename; no rent-free validated peer
       exists.
-- [ ] One package-private ranged file inspector is reused by lifecycle
+- [x] One package-private ranged file inspector is reused by lifecycle
       publication and exact selected-Node acquisition without exposing commit.
-- [ ] Publication returns the provider-neutral `ExecutableFile<Target>` used
+- [x] Publication returns the provider-neutral `ExecutableFile<Target>` used
       unchanged by current providers and Plan 018's named consumer.
-- [ ] Standard and byte-swapped fat Mach-O fixtures pass; ambiguous universal
+- [x] Standard and byte-swapped fat Mach-O fixtures pass; ambiguous universal
       output remains explicitly rejected.
-- [ ] Scalar runtime preflight is preserved and accurately documented.
-- [ ] Publication's rename linearization contract is deterministic and tested.
-- [ ] Public export allowlists, Artifact, BuildError, MatrixError, Bun, and Deno
+- [x] Scalar runtime preflight is preserved and accurately documented.
+- [x] Publication's rename linearization contract is deterministic and tested.
+- [x] Public export allowlists, Artifact, BuildError, MatrixError, Bun, and Deno
       declarations are unchanged.
-- [ ] `bun run verify` and `bun run verify:real` exit 0.
-- [ ] No out-of-scope or pre-existing dirty work was modified.
+- [x] `bun run verify` and `bun run verify:real` exit 0.
+- [x] No out-of-scope or pre-existing dirty work was modified.
 
 ## STOP conditions
 

@@ -28,6 +28,28 @@ describe("source ownership boundaries", () => {
     }
   });
 
+  it("confines the esbuild library dependency to its package-private producer", async () => {
+    const allowed = [resolve(root, "src/standalone/internal/Esbuild.ts")];
+    const found: string[] = [];
+    for (const file of await sourceFiles()) {
+      if (importSpecifiers(await readFile(file, "utf8")).includes("esbuild")) found.push(file);
+    }
+    expect(found.sort()).toEqual(allowed.sort());
+
+    const producer = await readFile(allowed[0]!, "utf8");
+    expect(producer).not.toContain(".watch(");
+    expect(producer).not.toContain("esbuild.stop");
+
+    const unitFiles = (await readdir(resolve(root, "test/unit")))
+      .filter((entry) => entry.endsWith(".ts"))
+      .map((entry) => resolve(root, "test/unit", entry));
+    const directTestImporters: string[] = [];
+    for (const file of unitFiles) {
+      if (importSpecifiers(await readFile(file, "utf8")).includes("esbuild")) directTestImporters.push(file);
+    }
+    expect(directTestImporters).toEqual([resolve(root, "test/unit/esbuild-bundle.test.ts")]);
+  });
+
   it("confines effect/unstable/process to the private process module", async () => {
     const allowed = [
       resolve(root, "src/standalone/internal/Process.ts"),
@@ -97,5 +119,13 @@ describe("source ownership boundaries", () => {
     };
     expect(Object.keys(packageJson.exports).sort()).toEqual([".", "./bun", "./deno"]);
     expect(packageJson.engines).toBeUndefined();
+
+    for (const publicEntrypoint of ["index.ts", "Bun.ts", "Deno.ts"]) {
+      const source = await readFile(resolve(root, "src", publicEntrypoint), "utf8");
+      expect(source, publicEntrypoint).not.toMatch(
+        /Esbuild|withJavaScriptBundle|JavaScriptBundleArtifact|NodeSea|PipelineExecutableArtifact|stages/,
+      );
+    }
+    await expect(readFile(resolve(root, "tooling/node-sea.json"), "utf8")).rejects.toThrow();
   });
 });
