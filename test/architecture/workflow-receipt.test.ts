@@ -40,6 +40,11 @@ const successfulEffectJobs = [...targetRequiredJobNames, ...effectRequiredJobNam
   status: "completed",
   conclusion: "success",
 }));
+const successfulNodeSeaJobs = [...targetRequiredJobNames, ...effectRequiredJobNames, "node-sea"].map((name) => ({
+  name,
+  status: "completed",
+  conclusion: "success",
+}));
 
 describe("workflow receipt verifier", () => {
   let root: string;
@@ -134,6 +139,28 @@ describe("workflow receipt verifier", () => {
     expect(result.stderr).toBe("");
   });
 
+  it("accepts node-sea-v1 only when the full effect-v1 contract and exact node-sea job succeed", () => {
+    const result = runVerifier({
+      prefix: "Node SEA evidence:",
+      jobs: successfulNodeSeaJobs,
+      verifierArguments: ["--contract", "node-sea-v1"],
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it("keeps node-sea-v1 independent from the receipt prefix", () => {
+    const result = runVerifier({
+      prefix: "Unrelated operator-selected prefix:",
+      jobs: successfulNodeSeaJobs,
+      verifierArguments: ["--contract", "node-sea-v1"],
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
   it("rejects a missing effect-v1 compatibility cell", () => {
     const missing = effectRequiredJobNames[0]!;
     const result = runVerifier({
@@ -167,10 +194,49 @@ describe("workflow receipt verifier", () => {
     );
   });
 
+  it("rejects a missing node-sea-v1 node-sea job", () => {
+    const result = runVerifier({
+      jobs: successfulNodeSeaJobs.filter((job) => job.name !== "node-sea"),
+      verifierArguments: ["--contract", "node-sea-v1"],
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('required job "node-sea" is missing');
+  });
+
+  it("rejects a duplicate node-sea-v1 node-sea job", () => {
+    const nodeSea = successfulNodeSeaJobs.find((job) => job.name === "node-sea")!;
+    const result = runVerifier({
+      jobs: [...successfulNodeSeaJobs, nodeSea],
+      verifierArguments: ["--contract", "node-sea-v1"],
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('required job "node-sea" appears 2 times');
+  });
+
+  it.each(["failure", "skipped"])("rejects a node-sea-v1 node-sea job with conclusion %s", (conclusion) => {
+    const jobs = successfulNodeSeaJobs.map((job) => job.name === "node-sea" ? { ...job, conclusion } : job);
+    const result = runVerifier({ jobs, verifierArguments: ["--contract", "node-sea-v1"] });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `required job "node-sea" conclusion must be success, received ${JSON.stringify(conclusion)}`,
+    );
+  });
+
+  it("rejects an incomplete node-sea-v1 node-sea job", () => {
+    const jobs = successfulNodeSeaJobs.map((job) => job.name === "node-sea" ? { ...job, status: "in_progress" } : job);
+    const result = runVerifier({ jobs, verifierArguments: ["--contract", "node-sea-v1"] });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('required job "node-sea" status must be completed, received "in_progress"');
+  });
+
   it("rejects unknown and duplicate receipt contracts before invoking gh", () => {
-    const unknown = runVerifier({ verifierArguments: ["--contract", "effect-v2"] });
+    const unknown = runVerifier({ verifierArguments: ["--contract", "node-sea-v2"] });
     const duplicate = runVerifier({
-      verifierArguments: ["--contract", "target-v1", "--contract", "effect-v1"],
+      verifierArguments: ["--contract", "target-v1", "--contract", "node-sea-v1"],
     });
 
     expect(unknown.status).toBe(1);

@@ -13,16 +13,15 @@ const targetRequiredJobNames = [
   "target-support (bun)",
   "target-support (deno)",
 ];
+const effectRequiredJobNames = [
+  ...targetRequiredJobNames,
+  "effect-compatibility (4.0.0-beta.104)",
+  "effect-compatibility (4.0.0-rc.108)",
+];
 const receiptContracts = new Map([
   ["target-v1", targetRequiredJobNames],
-  [
-    "effect-v1",
-    [
-      ...targetRequiredJobNames,
-      "effect-compatibility (4.0.0-beta.104)",
-      "effect-compatibility (4.0.0-rc.108)",
-    ],
-  ],
+  ["effect-v1", effectRequiredJobNames],
+  ["node-sea-v1", [...effectRequiredJobNames, "node-sea"]],
 ]);
 
 const parseArguments = (argv) => {

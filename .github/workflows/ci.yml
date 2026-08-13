@@ -26,6 +26,48 @@ jobs:
       - run: node scripts/read-tooling.mjs
       - run: pnpm verify
 
+  node-sea:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 26.7.0
+          package-manager-cache: false
+      - id: node26
+        name: Capture the exact Node SEA producer
+        shell: bash
+        run: |
+          test "$(node --version)" = "v26.7.0"
+          node_path="$(node -p 'process.execPath')"
+          test "${node_path#/}" != "$node_path"
+          echo "path=$node_path" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Verify independent orchestrator and producer axes
+        shell: bash
+        run: |
+          producer="${{ steps.node26.outputs.path }}"
+          test "$(node --version)" = "v24.14.1"
+          test "$(node -p 'process.execPath')" != "$producer"
+          test "$("$producer" --version)" = "v26.7.0"
+          file -Lb -- "$producer" | grep -E 'ELF 64-bit.*x86-64'
+          readelf -hW "$producer" | grep -E 'Machine:.*Advanced Micro Devices X86-64'
+          readelf -lW "$producer" | grep -E 'Requesting program interpreter:.*/ld-linux'
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        with:
+          version: 10.17.1
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - run: pnpm test:integration:node-sea
+        env:
+          EFFECT_BUILD_NODE_SEA_BIN: ${{ steps.node26.outputs.path }}
+
   real-tools:
     runs-on: ubuntu-24.04
     steps:
