@@ -9,7 +9,8 @@ compile operation. Plans 011-014 are the completed typed-target and matrix
 program. Re-audited again on 2026-08-12 against the completed `v0.2.0` product
 tag at commit `29f8cfb` and planning baseline `e4257cc` for dependency
 compatibility; Plan 015 completed the bounded Effect 4.0 range and current-RC
-upgrade.
+upgrade. Plan 016 is the active hard cut to a private Bun workspace with
+portable core plus Bun and Deno provider packages.
 The decision gates opened by
 `FIRST-PRINCIPLES-REVIEW.md` (operator-audited, 2026-08-10) were answered by
 the operator on 2026-08-11 and are recorded under **Gate decisions** below.
@@ -129,6 +130,7 @@ of the 2026-08-11 gates:
 | 012 | Build the typed executable target matrix | P1 | L | 013 | DONE |
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | DONE |
 | 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | DONE |
+| 016 | Hard-cut the Bun workspace and three-package graph | P1 | L | 015 | IN PROGRESS |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
