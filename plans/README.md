@@ -9,8 +9,9 @@ compile operation. Plans 011-014 are the completed typed-target and matrix
 program. Re-audited again on 2026-08-12 against the completed `v0.2.0` product
 tag at commit `29f8cfb` and planning baseline `e4257cc` for dependency
 compatibility; Plan 015 completed the bounded Effect 4.0 range and current-RC
-upgrade. Plan 016 is the active hard cut to a private Bun workspace with
-portable core plus Bun and Deno provider packages.
+upgrade. Plan 016 completed the hard cut to a private Bun workspace with
+portable core plus Bun and Deno provider packages. Plan 017 is the externally
+gated ts-release qualification successor.
 The decision gates opened by
 `FIRST-PRINCIPLES-REVIEW.md` (operator-audited, 2026-08-10) were answered by
 the operator on 2026-08-11 and are recorded under **Gate decisions** below.
@@ -130,7 +131,8 @@ of the 2026-08-11 gates:
 | 012 | Build the typed executable target matrix | P1 | L | 013 | DONE |
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | DONE |
 | 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | DONE |
-| 016 | Hard-cut the Bun workspace and three-package graph | P1 | L | 015 | IN PROGRESS |
+| 016 | Hard-cut the Bun workspace and three-package graph | P1 | L | 015 | DONE |
+| 017 | Adopt certified ts-release 0.2.0 | P1 | L | 016, external release gates | BLOCKED: public ts-release 0.2.0 and coordinated multi-package evidence are unqualified |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -184,6 +186,16 @@ behavior, or the standalone operation invalidated that earlier work.
   Effect/platform development family to rc.108, and makes beta.104 plus rc.108
   fresh-consumer lanes required before publication. It does not multiply the
   compiler-target matrix or change an operation, schema, host, or target claim.
+- Plan 016 is complete at source `387bf243248447f2e34c26d3db3f2cee7067ff9c`.
+  It hard-cuts to `effect-build`, `effect-build-bun`, and `effect-build-deno`
+  at lockstep 0.3.0, with one-way provider-to-core dependencies, a private Bun
+  workspace, and a manual non-mutating candidate workflow. Normal CI run
+  31695363897 and candidate run 31695486632 are green at that exact source.
+- Plan 017 may begin only with read-only qualification of the real public
+  `@mannyc1/ts-release@0.2.0`, tag/release/certificate, clean consumers, and
+  separately certified multi-package coordination. A singular package
+  release, three independent invocations, or a manual publisher does not
+  qualify.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 

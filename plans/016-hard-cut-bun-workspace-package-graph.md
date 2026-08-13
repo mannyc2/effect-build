@@ -43,6 +43,12 @@
   product source `5a4003fd704211baa9919cee52fc5386e3172b3c`
 - **Initial status**: IN PROGRESS — prerequisite, version/name availability, current
   manifests, verification lanes, and exact file inventory are reconciled
+- **Completion status**: DONE — implementation source
+  `387bf243248447f2e34c26d3db3f2cee7067ff9c`; ordinary CI run
+  [31695363897](https://github.com/mannyc2/effect-build/actions/runs/31695363897)
+  and non-mutating candidate run
+  [31695486632](https://github.com/mannyc2/effect-build/actions/runs/31695486632)
+  both succeeded at that exact SHA on 2026-08-13
 - **Public release boundary**: `effect-build@0.2.0` and annotated tag `v0.2.0`
   are public at `29f8cfb`; the next breaking lockstep version is `0.3.0`.
   Never reuse, move, or retag `v0.2.0`.
@@ -99,6 +105,43 @@ product. Plan 016 therefore uses:
 
 GitHub's exact `head_sha`, job conclusions, and artifacts are canonical.
 No repository script mirrors those facts into a second evidence schema.
+
+## Completion audit (2026-08-13)
+
+- Exact source: `387bf243248447f2e34c26d3db3f2cee7067ff9c`.
+- Workspace CI:
+  <https://github.com/mannyc2/effect-build/actions/runs/31695363897> at the
+  exact source SHA. All nine required jobs succeeded: quality, real tools, two
+  target shards, two Effect endpoints, and publication on Ubuntu, macOS, and
+  Windows.
+- Workspace candidate:
+  <https://github.com/mannyc2/effect-build/actions/runs/31695486632> at the
+  same exact source SHA. Its one read-only job succeeded after deterministic,
+  real-tool, 12-target, and both Effect endpoint gates.
+- Candidate artifact `effect-build-0.3.0-candidate` contains exactly three
+  tarballs plus `manifest.json`; GitHub records archive digest
+  `sha256:f4a806f19370d81b9b357aeccfac7b73079d375f7767e7c6b6c323b61a9879c8`.
+  The manifest records core digest `9e4e220c93409ac94a2e40cde1a544dbc4ac334592036b86ab3b91f3663d41de`,
+  Bun provider digest `c9e85b354904dc7e1c5042ce5b1868120a31d80b0254d6925c85e2253e91fcb1`,
+  and Deno provider digest `3fe50539f3c3e6af48801947f413f6e3493930035e7e314e04e0e7f83864b689`.
+- Local exact Bun 1.3.14 gates passed: frozen install, `bun run verify`
+  (89 unit tests plus one intentional platform skip, two TSTyche files, six
+  packed consumers, 39 architecture tests, lint, format), `bun run
+  verify:effect` at beta.104 and rc.108, and current-host real Bun/Deno plus
+  Node smoke. The Linux-only target gate passed in native CI.
+- The final public dependency graph is
+  `effect-build-bun -> effect-build <- effect-build-deno`; core has no runtime
+  package dependency, and both provider tarballs contain concrete
+  `effect-build: ^0.3.0` edges.
+- Production TypeScript moved 1,501 unchanged lines, deleted 340 old or
+  replaced lines, and added 702 lines: 1,841 before to 2,203 after. Test/type
+  TypeScript is 4,325 to 4,601; script JavaScript is 860 to 1,114; examples
+  remain 70 lines. The production increase is the closed Provider SPI,
+  contracts, and package-owned adapters—not duplicated lifecycle code.
+- Final read-only availability checks still return npm E404 for
+  `effect-build@0.3.0`, `effect-build-bun`, and `effect-build-deno`, and GitHub
+  404 for tag/release `v0.3.0`. No package, tag, release, trusted publisher, or
+  publication workflow was created.
 
 ## Current state
 
@@ -1056,39 +1099,39 @@ manifest; no custom proof-of-proof layer exists.
 
 All must hold:
 
-- [ ] Plan 015 was complete and green at its exact source SHA before the
+- [x] Plan 015 was complete and green at its exact source SHA before the
       migration began.
-- [ ] The private root pins Bun 1.3.14 and has exactly the intended workspaces.
-- [ ] `bun.lock` is the sole package-manager lockfile; no operational pnpm path
+- [x] The private root pins Bun 1.3.14 and has exactly the intended workspaces.
+- [x] `bun.lock` is the sole package-manager lockfile; no operational pnpm path
       remains outside historical plans.
-- [ ] Public packages are exactly `effect-build`, `effect-build-bun`, and
+- [x] Public packages are exactly `effect-build`, `effect-build-bun`, and
       `effect-build-deno`, all at the exact restamped topology version.
-- [ ] Providers depend one way on core; core imports no provider and providers
+- [x] Providers depend one way on core; core imports no provider and providers
       do not import each other.
-- [ ] One private core contract is the sole six-Bun/six-Deno target-set
+- [x] One private core contract is the sole six-Bun/six-Deno target-set
       authority; providers alone own native-token maps with exact keys.
-- [ ] `effect-build/Provider.define` is the only supported cross-package SPI and
+- [x] `effect-build/Provider.define` is the only supported cross-package SPI and
       matches the frozen declaration while exposing no process/lifecycle
       capability.
-- [ ] Old `effect-build/bun` and `effect-build/deno` paths do not resolve and no
+- [x] Old `effect-build/bun` and `effect-build/deno` paths do not resolve and no
       compatibility package/facade exists.
-- [ ] Three packed manifests contain concrete semver, built exports, complete
+- [x] Three packed manifests contain concrete semver, built exports, complete
       metadata, and no workspace/source leakage.
-- [ ] Six isolated Node consumers across npm and Bun installers use tarballs
+- [x] Six isolated Node consumers across npm and Bun installers use tarballs
       only, typecheck, run, and never mask a sibling/undeclared dependency.
-- [ ] `bun run verify`, provisioned `bun run verify:real`, Linux-x64
+- [x] `bun run verify`, provisioned `bun run verify:real`, Linux-x64
       `bun run verify:targets`, and three-host publication tests pass.
-- [ ] CI retains every required no-skip lane and is green on the exact commit.
-- [ ] `release.yml` is manual and non-mutating, produces the three candidate
+- [x] CI retains every required no-skip lane and is green on the exact commit.
+- [x] `release.yml` is manual and non-mutating, produces the three candidate
       tarballs/manifest, and contains no tag trigger or publication permission.
-- [ ] Package-manager Bun and compiler Bun pins remain independent.
-- [ ] Docs and AGENTS describe the new packages and preserve the three build
+- [x] Package-manager Bun and compiler Bun pins remain independent.
+- [x] Docs and AGENTS describe the new packages and preserve the three build
       axes without claiming Effect uses Bun workspaces.
-- [ ] The final compression ledger separates moved, added, and deleted code.
-- [ ] `git diff --check` is silent and no unrelated/user-owned files changed.
-- [ ] Native GitHub run metadata shows normal CI and candidate runs green at
+- [x] The final compression ledger separates moved, added, and deleted code.
+- [x] `git diff --check` is silent and no unrelated/user-owned files changed.
+- [x] Native GitHub run metadata shows normal CI and candidate runs green at
       the same exact implementation SHA, with all required candidate artifacts.
-- [ ] Plan 016's row in `plans/README.md` is `DONE` only after all gates pass.
+- [x] Plan 016's row in `plans/README.md` is `DONE` only after all gates pass.
 
 ## STOP conditions
 
