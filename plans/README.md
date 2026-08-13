@@ -132,7 +132,7 @@ of the 2026-08-11 gates:
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | DONE |
 | 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | DONE |
 | 016 | Hard-cut the Bun workspace and three-package graph | P1 | L | 015 | DONE |
-| 017 | Adopt certified ts-release 0.2.0 | P1 | L | 016, external release gates | BLOCKED: public ts-release 0.2.0 and coordinated multi-package evidence are unqualified |
+| 017 | Adopt certified ts-release 0.2.0 | P1 | L | 016, external release gates | BLOCKED: public 0.2.0, v0.2.0 release/certificate, and certified three-package coordination are absent |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
