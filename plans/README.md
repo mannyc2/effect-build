@@ -187,8 +187,8 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
 | 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | DONE |
 | 016 | Compress the executable lifecycle behind one validated publication boundary | P1 | M | 015 | DONE |
 | 017 | Build one continuation-owned esbuild JavaScript bundle artifact | P1 | M | 015, 016 | DONE |
-| 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | IN PROGRESS |
-| 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | BLOCKED: Plan 018 receipt absent |
+| 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | DONE |
+| 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -263,10 +263,10 @@ behavior, or the standalone operation invalidated that earlier work.
   orchestrator, selects exact Node 26.7.0 as a separate Linux direct-SEA
   producer, consumes Plan 017's artifact, and reuses Plan 016's native
   validation/publication without a postject or download fallback. Execution
-  cleared its mandatory Step 2 STOP on 2026-08-13: the raw exact-Node
-  characterization passed in source CI at run `31753557975` for
-  `99b4a4e83faa170251bb02de9d17e5e071ead711`. Implementation is now in
-  progress; that preliminary run is not the final exact-source receipt.
+  cleared its mandatory Step 2 STOP on 2026-08-13 at preliminary run
+  `31753557975`, then completed against exact source
+  `577ffa7016a7236edba26d82c549bdfc70fdce4f`. Required run `31754891708`
+  passed the full `node-sea-v1` contract, including the real private pipeline.
 - Plan 019 runs only after both topologies have required real evidence. It
   creates a consumer/gate/representation decision record and changes no source
   or public API. An unmet gate stays internal/rejected rather than generating

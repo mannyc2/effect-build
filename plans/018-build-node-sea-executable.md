@@ -42,15 +42,13 @@
 - **Planned at**: commit `e4257cc`, 2026-08-13
 - **Goal kind**: bounded feature growth proving a second topology; still
   package-private
-- **Required workflow receipt**: pending; exact `node-sea-v1` evidence is part
-  of completion, not a public build receipt
-- **Executor state (2026-08-13)**: `IN PROGRESS`. Push authority was granted,
-  and the mandatory Step 2 source-CI characterization passed in the `node-sea`
-  job at
-  `https://github.com/mannyc2/effect-build/actions/runs/31753557975` for source
-  `99b4a4e83faa170251bb02de9d17e5e071ead711`. That preliminary observation
-  clears the implementation STOP but is not the required final exact-source
-  receipt. Steps 3-8 are now in progress.
+- **Required workflow receipt**: recorded below under exact `node-sea-v1`;
+  workflow evidence is not a public build receipt
+- **Executor state (2026-08-13)**: `DONE`. The preliminary Step 2
+  characterization passed at run `31753557975`; the complete implementation
+  then passed every required `node-sea-v1` job at run `31754891708` for exact
+  source `577ffa7016a7236edba26d82c549bdfc70fdce4f`. The receipt verifier and
+  zero-implementation-diff gate both pass.
 
 ## Why this matters
 
@@ -758,27 +756,27 @@ progress; local success is not a substitute.
 
 ## Done criteria
 
-- [ ] Node 24.14.1 remains orchestrator; exact Node 26.7.0 is separately
+- [x] Node 24.14.1 remains orchestrator; exact Node 26.7.0 is separately
       selected and the only accepted producer on exact Linux target.
-- [ ] Selected Node's binary target and builtin authority are observed once;
+- [x] Selected Node's binary target and builtin authority are observed once;
       main externals and exact ELF/Linux/x64/GNU output are checked against
       them without wildcard ABI fallback.
-- [ ] Runtime/library performs no Node download, postject, package-manager, or
+- [x] Runtime/library performs no Node download, postject, package-manager, or
       signing action.
-- [ ] Node SEA consumes only a live callback artifact, derives format, and has
+- [x] Node SEA consumes only a live callback artifact, derives format, and has
       no target/snapshot/cache/flags modes.
-- [ ] Destination cannot alias Node, main, or assets under the defined path/
+- [x] Destination cannot alias Node, main, or assets under the defined path/
       realpath policy or reside within the scoped bundle directory through a
       lexical or symlinked-parent path.
-- [ ] One child writes to the opaque candidate; Plan 016 alone validates,
+- [x] One child writes to the opaque candidate; Plan 016 alone validates,
       digests, and publishes.
-- [ ] Temp bundle/config/candidate state disappears on all exits; committed
+- [x] Temp bundle/config/candidate state disappears on all exits; committed
       final executable persists.
-- [ ] Internal result has exact two-stage observation; public Artifact remains
+- [x] Internal result has exact two-stage observation; public Artifact remains
       unchanged.
-- [ ] Explicit tests are in full gates; exact CI/release job is required and
+- [x] Explicit tests are in full gates; exact CI/release job is required and
       `node-sea-v1` receipt verifies the source SHA.
-- [ ] No out-of-scope/user-owned work changed.
+- [x] No out-of-scope/user-owned work changed.
 
 ## STOP conditions
 
@@ -824,3 +822,5 @@ Stop and report; do not improvise if:
 | explicit assets | implicit filesystem dependency | discovery/glob/plugin |
 | shared opaque lifecycle | second validation/digest/rename workflow | universal producer adapter |
 | exact stage tuple | misleading singular internal provenance | immediate public Artifact/build receipt |
+
+Node SEA evidence: https://github.com/mannyc2/effect-build/actions/runs/31754891708 @ 577ffa7016a7236edba26d82c549bdfc70fdce4f
