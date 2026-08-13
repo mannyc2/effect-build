@@ -1,6 +1,6 @@
 import { DenoServices } from "@effect/platform-deno";
 import { Effect } from "effect";
-import * as Bun from "../../src/Bun.js";
+import * as Bun from "effect-build-bun";
 import { standaloneHostContract } from "../testkit/standaloneHostContract.js";
 
 const executable = (globalThis as typeof globalThis & { Deno: { env: { get(name: string): string | undefined } } }).Deno

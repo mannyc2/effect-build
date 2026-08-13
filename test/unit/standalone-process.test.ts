@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { runProcess } from "../../src/standalone/internal/Process.js";
+import { runProcess } from "../../packages/effect-build/src/standalone/internal/Process.js";
 
 const roots: string[] = [];
 const fixture = fileURLToPath(new URL("../fixtures/process/interruptible-compiler.mjs", import.meta.url));

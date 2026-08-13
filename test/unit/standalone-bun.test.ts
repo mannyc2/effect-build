@@ -1,11 +1,11 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import * as Bun from "effect-build-bun";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import * as Bun from "../../src/Bun.js";
-import { bunAdapter } from "../../src/standalone/internal/BunAdapter.js";
+import { definition as bunDefinition, targetTokens } from "../../packages/effect-build-bun/src/Adapter.js";
 import { describeStandaloneDriverContract } from "../testkit/standaloneDriverContract.js";
 
 describeStandaloneDriverContract<Bun.Compiler, Bun.Options, Bun.Target, Bun.Artifact>({
@@ -49,16 +49,17 @@ describe("standalone Bun driver", () => {
   });
 
   it("renders only requested native flags and exact target mapping", () => {
-    const options = bunAdapter.validateOptions({ minify: true, sourcemap: "inline", bytecode: true });
+    const options = bunDefinition.validateOptions({ minify: true, sourcemap: "inline", bytecode: true });
     expect(options._tag).toBe("Valid");
-    if (options._tag !== "Valid") throw options.error;
-    expect(bunAdapter.renderArgv({
+    if (options._tag !== "Valid") throw new Error(options.reason);
+    expect(bunDefinition.renderArgv({
       input: {
         entrypoint: "src/main.ts",
         outfile: "dist/app",
         target: "linux-aarch64-gnu",
         options: options.value,
       },
+      nativeTarget: targetTokens["linux-aarch64-gnu"],
       stagedOutfile: "/tmp/.effect-build/app",
     })).toEqual([
       "build",
@@ -73,9 +74,9 @@ describe("standalone Bun driver", () => {
   });
 
   it("rejects unknown runtime options", () => {
-    expect(bunAdapter.validateOptions({ rawArgs: ["--x"] })).toMatchObject({
+    expect(bunDefinition.validateOptions({ rawArgs: ["--x"] })).toMatchObject({
       _tag: "Invalid",
-      error: { _tag: "InvalidDriverOptions" },
+      reason: "unknown Bun option",
     });
   });
 
@@ -92,11 +93,12 @@ describe("standalone Bun driver", () => {
         return "inline";
       },
     };
-    const validated = bunAdapter.validateOptions(source);
+    const validated = bunDefinition.validateOptions(source);
     expect(validated._tag).toBe("Valid");
-    if (validated._tag !== "Valid") throw validated.error;
-    expect(bunAdapter.renderArgv({
+    if (validated._tag !== "Valid") throw new Error(validated.reason);
+    expect(bunDefinition.renderArgv({
       input: { entrypoint: "a.ts", outfile: "app", target: "macos-x64", options: validated.value },
+      nativeTarget: targetTokens["macos-x64"],
       stagedOutfile: "/tmp/app",
     })).toEqual([
       "build",

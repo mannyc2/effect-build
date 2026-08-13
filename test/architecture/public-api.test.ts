@@ -5,12 +5,18 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 
-const declarationEntryPoints = ["index", "Bun", "Deno"] as const;
+const declarationEntryPoints = {
+  "effect-build": "packages/effect-build/dist/index.d.ts",
+  "effect-build/Provider": "packages/effect-build/dist/Provider.d.ts",
+  "effect-build-bun": "packages/effect-build-bun/dist/index.d.ts",
+  "effect-build-deno": "packages/effect-build-deno/dist/index.d.ts",
+} as const;
 
-const builtDeclarationExports = (): Readonly<Record<typeof declarationEntryPoints[number], readonly string[]>> => {
-  const rootNames = declarationEntryPoints.map((module) => resolve(root, `dist/${module}.d.ts`));
-  const program = ts.createProgram({
-    rootNames,
+type DeclarationName = keyof typeof declarationEntryPoints;
+
+const declarationProgram = () =>
+  ts.createProgram({
+    rootNames: Object.values(declarationEntryPoints).map((path) => resolve(root, path)),
     options: {
       target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.NodeNext,
@@ -18,57 +24,75 @@ const builtDeclarationExports = (): Readonly<Record<typeof declarationEntryPoint
       skipLibCheck: true,
     },
   });
+
+const builtDeclarationExports = (): Readonly<Record<DeclarationName, readonly string[]>> => {
+  const program = declarationProgram();
   const checker = program.getTypeChecker();
-  const namesFor = (module: typeof declarationEntryPoints[number]): readonly string[] => {
-    const file = resolve(root, `dist/${module}.d.ts`);
-    const source = program.getSourceFile(file);
-    if (source === undefined) throw new Error(`declaration program did not load ${file}`);
-    const symbol = checker.getSymbolAtLocation(source);
-    if (symbol === undefined) throw new Error(`declaration entry point has no module symbol: ${file}`);
-    return checker.getExportsOfModule(symbol).map((entry) => entry.getName()).sort();
-  };
-  return { index: namesFor("index"), Bun: namesFor("Bun"), Deno: namesFor("Deno") };
+  return Object.fromEntries(
+    Object.entries(declarationEntryPoints).map(([name, path]) => {
+      const file = resolve(root, path);
+      const source = program.getSourceFile(file);
+      if (source === undefined) throw new Error(`declaration program did not load ${file}`);
+      const symbol = checker.getSymbolAtLocation(source);
+      if (symbol === undefined) throw new Error(`declaration entry point has no module symbol: ${file}`);
+      return [name, checker.getExportsOfModule(symbol).map((entry) => entry.getName()).sort()];
+    }),
+  ) as unknown as Readonly<Record<DeclarationName, readonly string[]>>;
 };
 
-const builtProviderCallTypeParameterCounts = (): Readonly<Record<"Bun" | "Deno", readonly number[]>> => {
-  const rootNames = declarationEntryPoints.map((module) => resolve(root, `dist/${module}.d.ts`));
-  const program = ts.createProgram({
-    rootNames,
-    options: {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.NodeNext,
-      moduleResolution: ts.ModuleResolutionKind.NodeNext,
-      skipLibCheck: true,
-    },
-  });
+const providerCallTypeParameterCounts = (): Readonly<
+  Record<"effect-build-bun" | "effect-build-deno", readonly number[]>
+> => {
+  const program = declarationProgram();
   const checker = program.getTypeChecker();
-  const countsFor = (module: "Bun" | "Deno"): readonly number[] => {
-    const file = resolve(root, `dist/${module}.d.ts`);
+  const countsFor = (name: "effect-build-bun" | "effect-build-deno"): readonly number[] => {
+    const file = resolve(root, declarationEntryPoints[name]);
     const source = program.getSourceFile(file);
     if (source === undefined) throw new Error(`declaration program did not load ${file}`);
     const moduleSymbol = checker.getSymbolAtLocation(source);
     if (moduleSymbol === undefined) throw new Error(`declaration entry point has no module symbol: ${file}`);
     const exported = checker.getExportsOfModule(moduleSymbol);
-    return ["compileExecutable", "compileExecutableMatrix"].map((name) => {
-      const symbol = exported.find((candidate) => candidate.getName() === name);
+    return ["compileExecutable", "compileExecutableMatrix"].map((operation) => {
+      const symbol = exported.find((candidate) => candidate.getName() === operation);
       const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-      if (symbol === undefined || declaration === undefined) {
-        throw new Error(`missing callable declaration ${module}.${name}`);
-      }
+      if (symbol === undefined || declaration === undefined) throw new Error(`missing ${name}.${operation}`);
       const signatures = checker.getSignaturesOfType(
         checker.getTypeOfSymbolAtLocation(symbol, declaration),
         ts.SignatureKind.Call,
       );
-      if (signatures.length !== 1) throw new Error(`${module}.${name} must have exactly one call signature`);
+      if (signatures.length !== 1) throw new Error(`${name}.${operation} must have one call signature`);
       return signatures[0]?.typeParameters?.length ?? 0;
     });
   };
-  return { Bun: countsFor("Bun"), Deno: countsFor("Deno") };
+  return { "effect-build-bun": countsFor("effect-build-bun"), "effect-build-deno": countsFor("effect-build-deno") };
 };
 
-const exactExportedDeclarations = {
-  index: ["Artifact", "BuildError", "MatrixError", "Target"],
-  Bun: [
+const exactDeclarations = {
+  "effect-build": ["Artifact", "BuildError", "MatrixError", "Target"],
+  "effect-build/Provider": [
+    "BuildError",
+    "CommandCompletion",
+    "CommandOutput",
+    "CompileExecutableInput",
+    "CompileExecutableMatrixInput",
+    "CompilerService",
+    "Defined",
+    "Definition",
+    "Diagnostic",
+    "LayerOptions",
+    "MatrixErrorFor",
+    "PreparedCompileInput",
+    "ProviderArtifact",
+    "ProviderLayerRequirements",
+    "ProviderName",
+    "ProviderTargets",
+    "TargetFor",
+    "ToolNotFound",
+    "ToolProbeFailed",
+    "Validation",
+    "define",
+  ],
+  "effect-build-bun": [
     "Artifact",
     "CompileExecutableInput",
     "CompileExecutableMatrixInput",
@@ -81,7 +105,7 @@ const exactExportedDeclarations = {
     "compileExecutableMatrix",
     "layer",
   ],
-  Deno: [
+  "effect-build-deno": [
     "Artifact",
     "CompileExecutableInput",
     "CompileExecutableMatrixInput",
@@ -96,50 +120,51 @@ const exactExportedDeclarations = {
     "compileExecutableMatrix",
     "layer",
   ],
-} as const;
+} as const satisfies Readonly<Record<DeclarationName, readonly string[]>>;
 
 describe("built public API", () => {
-  it("matches the authored runtime-key allowlists", async () => {
+  it("matches the authored package and runtime-key allowlists", async () => {
     const manifest = JSON.parse(await readFile(resolve(root, "tooling/public-api.json"), "utf8")) as {
-      subpaths: string[];
-      rootRuntimeKeys: string[];
-      toolRuntimeKeys: string[];
+      version: number;
+      packages: Record<string, { subpaths: string[]; runtimeKeys: Record<string, string[]> }>;
     };
-    expect(manifest.subpaths).toEqual([".", "./bun", "./deno"]);
+    expect(manifest.version).toBe(2);
+    expect(Object.keys(manifest.packages)).toEqual(["effect-build", "effect-build-bun", "effect-build-deno"]);
 
-    const api = await import(resolve(root, "dist/index.js"));
-    expect(Object.keys(api)).toEqual(manifest.rootRuntimeKeys);
-
-    for (const module of ["Bun", "Deno"]) {
-      const tool = await import(resolve(root, `dist/${module}.js`));
-      expect(Object.keys(tool)).toEqual(manifest.toolRuntimeKeys);
+    const runtimeModules = {
+      "effect-build": await import("effect-build"),
+      "effect-build/Provider": await import("effect-build/Provider"),
+      "effect-build-bun": await import("effect-build-bun"),
+      "effect-build-deno": await import("effect-build-deno"),
+    };
+    for (const [name, contract] of Object.entries(manifest.packages)) {
+      const packageJson = JSON.parse(await readFile(resolve(root, `packages/${name}/package.json`), "utf8")) as {
+        exports: Record<string, unknown>;
+      };
+      expect(Object.keys(packageJson.exports)).toEqual(contract.subpaths);
+      for (const subpath of contract.subpaths) {
+        const moduleName = subpath === "." ? name : `${name}/${subpath.slice(2)}`;
+        expect(Object.keys(runtimeModules[moduleName as keyof typeof runtimeModules]), moduleName)
+          .toEqual(contract.runtimeKeys[subpath]);
+      }
     }
-
-    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
-      exports: Record<string, { types: string; import: string }>;
-    };
-    expect(Object.keys(packageJson.exports).sort()).toEqual([...manifest.subpaths].sort());
-    expect(packageJson.exports["./bun"]).toEqual({ types: "./dist/Bun.d.ts", import: "./dist/Bun.js" });
-    expect(packageJson.exports["./deno"]).toEqual({ types: "./dist/Deno.d.ts", import: "./dist/Deno.js" });
   });
 
-  it("exposes exactly the frozen runtime and type-only declaration names", async () => {
+  it("exposes exactly the frozen runtime and type-only declaration names", () => {
     const exports = builtDeclarationExports();
-    for (const [module, expected] of Object.entries(exactExportedDeclarations)) {
-      expect(exports[module as keyof typeof exports], module).toEqual([...expected].sort());
+    for (const [module, expected] of Object.entries(exactDeclarations)) {
+      expect(exports[module as DeclarationName], module).toEqual([...expected].sort());
     }
   });
 
   it("keeps both provider operations concrete rather than publicly generic", () => {
-    expect(builtProviderCallTypeParameterCounts()).toEqual({ Bun: [0, 0], Deno: [0, 0] });
+    expect(providerCallTypeParameterCounts()).toEqual({ "effect-build-bun": [0, 0], "effect-build-deno": [0, 0] });
   });
 
-  it("rejects missing, extra, duplicate, and out-of-order manifest keys", async () => {
+  it("rejects any public API manifest drift", async () => {
     const manifest = JSON.parse(await readFile(resolve(root, "tooling/public-api.json"), "utf8")) as {
       version: number;
-      subpaths: string[];
-      rootRuntimeKeys: string[];
-      toolRuntimeKeys: string[];
+      packages: Record<string, { subpaths: string[]; runtimeKeys: Record<string, string[]> }>;
     };
     const { validatePublicApi } = await import(resolve(root, "scripts/read-tooling.mjs")) as {
       validatePublicApi: (api: unknown) => unknown;
@@ -149,20 +174,23 @@ describe("built public API", () => {
       mutate(api);
       expect(() => validatePublicApi(api)).toThrow(/unexpected public API/);
     };
-
-    rejected((api) => api.rootRuntimeKeys.pop());
-    rejected((api) => api.toolRuntimeKeys.push("extra"));
-    rejected((api) => api.rootRuntimeKeys.push(api.rootRuntimeKeys[0]!));
-    rejected((api) => api.toolRuntimeKeys.reverse());
+    rejected((api) => api.packages["effect-build"]!.subpaths.pop());
+    rejected((api) => api.packages["effect-build-bun"]!.runtimeKeys["."]!.push("extra"));
+    rejected((api) => api.packages["effect-build-deno"]!.runtimeKeys["."]!.reverse());
+    rejected((api) => delete api.packages["effect-build"]);
   });
 
-  it("keeps the build output at exactly the standalone module tree", async () => {
-    const entries = await readdir(resolve(root, "dist"), { withFileTypes: true });
-    const directories = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
-    expect(directories).toEqual(["standalone"]);
-    const moduleNames = new Set(
-      entries.filter((entry) => entry.isFile() && entry.name.endsWith(".js")).map((entry) => entry.name),
-    );
-    expect([...moduleNames].sort()).toEqual(["Bun.js", "Deno.js", "index.js"]);
+  it("keeps each build output inside its owner package", async () => {
+    for (const name of ["effect-build-bun", "effect-build-deno"] as const) {
+      const entries = await readdir(resolve(root, `packages/${name}/dist`), { withFileTypes: true });
+      expect(entries.filter((entry) => entry.isDirectory())).toHaveLength(0);
+      expect(entries.filter((entry) => entry.name.endsWith(".js")).map((entry) => entry.name).sort())
+        .toEqual(["Adapter.js", "index.js"]);
+    }
+    const coreEntries = await readdir(resolve(root, "packages/effect-build/dist"), { withFileTypes: true });
+    expect(coreEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort())
+      .toEqual(["internal", "standalone"]);
+    expect(coreEntries.filter((entry) => entry.name.endsWith(".js")).map((entry) => entry.name).sort())
+      .toEqual(["Provider.js", "index.js"]);
   });
 });

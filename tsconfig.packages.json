@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/effect-build"
+    },
+    {
+      "path": "./packages/effect-build-bun"
+    },
+    {
+      "path": "./packages/effect-build-deno"
+    }
+  ]
+}

@@ -481,6 +481,10 @@ planning update; it is not permission for the executor to improvise.
 
 **Create**:
 
+- `.npmrc` with the single standard JSR scope registry required by
+  `@effect/platform-deno`'s published `npm:@jsr/*` aliases; this is dependency
+  resolution metadata, not a registry fallback;
+
 - `bun.lock`, `tsconfig.packages.json`;
 - `packages/effect-build/{package.json,tsconfig.json,README.md,LICENSE}`;
 - `packages/effect-build/src/Provider.ts` and
@@ -569,7 +573,15 @@ full action SHA `0c5077e51419868618aeaa5fe8019c62421857d6`.
 Plan-015 drift is incorporated: retain `verify:effect`,
 `scripts/verify-effect-compatibility.mjs`, the bounded peer interval, exact
 rc.108 development family, and both endpoint CI cells. The deleted custom
-second-order workflow verifier stays deleted.
+second-order workflow verifier stays deleted. The first Bun install exposed
+that `@effect/platform-deno@4.0.0-rc.108` publishes `npm:@jsr/*` aliases;
+without the standard `@jsr` scope registry Bun queried npmjs and failed 404.
+The restamp therefore adds the minimal `.npmrc` scope mapping instead of
+dropping Deno host evidence or inventing per-package overrides. Bun issue
+#28959 also causes pnpm-lock migration to discard those explicit tarball URLs,
+so the Bun lock is generated from the same manifests in a disposable copy with
+only the legacy pnpm lock omitted; the source pnpm lock remains untouched until
+the new frozen Bun install and package graph are green.
 
 **Verify**: this plan contains no placeholder, no signed-tag claim, and no
 custom proof-of-proof verifier; `git diff --check` passes; a cold review finds no
@@ -834,6 +846,27 @@ consumer script. It must:
    `effect-build@0.3.0` from the
    public registry.
 
+Because Bun 1.3.14 resolves a packed provider's rewritten `^0.3.0` edge from
+the registry even when the matching unpublished core tarball is also a root
+file dependency, each Bun provider fixture may use a root-only standard
+`overrides.effect-build` pointing at that same core tarball. This override is
+disposable prepublication test scaffolding: it is absent from every source and
+packed public manifest, and the fixture must still assert the installed core is
+exactly 0.3.0. npm fixtures require no override.
+
+Endpoint fixtures also pin the transitive `@effect/platform-node-shared`
+package to the selected exact Effect endpoint through a disposable root
+override. This is required because the published beta.104 platform-node
+dependency is `^4.0.0-beta.104`, which npm otherwise resolves to rc.108 and
+then correctly rejects against beta.104 under strict peers. The override is
+absent from every public manifest and preserves, rather than relaxes, exact
+endpoint-family testing.
+
+The compatibility verifier places that override in the disposable copied root
+before its Bun install, so the installed workspace and all consumers observe
+the same endpoint. It does not add the override to the checked-in root or any
+published package.
+
 The packed provider manifests must rewrite `workspace:^` to
 `^0.3.0`. Capture
 tarball paths structurally; do not parse incidental progress prose.
@@ -870,7 +903,8 @@ the architecture test freezes both SHA and version input.
 Rewrite `verify-effect-compatibility.mjs` so each endpoint copy preserves every
 public package's bounded peer interval, rewrites only exact development Effect/
 platform references across root, package, and example manifests, installs with
-the selected Bun 1.3.14 executable, and runs check, type, unit, and strict
+the selected Bun 1.3.14 executable, builds the clean declaration graph, and
+runs check, type, unit, and strict
 tarball-consumer gates. Invalid endpoints must still fail before temp creation
 or network access.
 

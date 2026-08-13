@@ -1,18 +1,31 @@
 # API
 
-The package has exactly three entry points:
+The workspace publishes three packages with four public entry points:
 
 ```ts
 import { Artifact, BuildError, MatrixError, Target } from "effect-build";
-import * as Bun from "effect-build/bun";
-import * as Deno from "effect-build/deno";
+import { define } from "effect-build/Provider";
 ```
 
-The root runtime keys are `Artifact`, `BuildError`, `MatrixError`, and `Target`.
-Each compiler module has exactly five runtime keys: `Compiler`, `Target`,
+Select the Bun provider:
+
+```ts
+import * as Bun from "effect-build-bun";
+```
+
+Or select the Deno provider:
+
+```ts
+import * as Deno from "effect-build-deno";
+```
+
+The core root runtime keys are `Artifact`, `BuildError`, `MatrixError`, and
+`Target`; its provider-author path has only `define`. Each provider package has
+exactly five runtime keys: `Compiler`, `Target`,
 `compileExecutable`, `compileExecutableMatrix`, and `layer`. Provider Artifact,
 input, options, and MatrixError aliases are type-only. There is no root compile
-operation or provider argument.
+operation or provider argument. `define` is the closed first-party authoring
+SPI, not an application build call.
 
 ## Scalar compile
 

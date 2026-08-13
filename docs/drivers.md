@@ -1,6 +1,6 @@
-# Compiler modules
+# Compiler providers
 
-Importing a compiler subpath selects one CLI's semantics for both
+Importing `effect-build-bun` or `effect-build-deno` selects one CLI's semantics for both
 `compileExecutable` and `compileExecutableMatrix`. It does not select the
 runtime that hosts the Effect program. A matrix never mixes compilers.
 
@@ -12,6 +12,11 @@ explicit Layer option bypasses `PATH`:
 
 ```ts
 Bun.layer({ executable: "/opt/bun/bin/bun" });
+```
+
+The Deno provider has the same explicit selection:
+
+```ts
 Deno.layer({ executable: "/opt/deno/bin/deno" });
 ```
 
@@ -22,10 +27,10 @@ installs a compiler.
 
 ## Target authority
 
-Each provider's package-private target table is the single authority for its
-public `Target` schema, static target type, CLI mapping, native validation, and
-support-manifest equality test. Root Artifact and matrix-failure schemas use
-pure projections of those same tables to reject provider-invalid pairs. Target
+One private value in core is the single authority for both public `Target`
+schemas, static target types, native validation, root Artifact and
+matrix-failure correlation, and support-manifest equality. Each provider owns
+an exact native-token record whose keys must equal that closed set. Target
 literals are not copied into a registry or broad string overload.
 
 Matrix output paths are canonical:

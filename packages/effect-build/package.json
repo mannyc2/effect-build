@@ -1,0 +1,53 @@
+{
+  "name": "effect-build",
+  "version": "0.3.0",
+  "description": "Portable Effect-native executable compilation contracts and lifecycle.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "keywords": [
+    "effect",
+    "bun",
+    "deno",
+    "compiler",
+    "executable"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mannyc2/effect-build.git",
+    "directory": "packages/effect-build"
+  },
+  "bugs": {
+    "url": "https://github.com/mannyc2/effect-build/issues"
+  },
+  "homepage": "https://github.com/mannyc2/effect-build#readme",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./Provider": {
+      "types": "./dist/Provider.d.ts",
+      "import": "./dist/Provider.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json --force",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+  },
+  "devDependencies": {
+    "effect": "4.0.0-rc.108"
+  }
+}

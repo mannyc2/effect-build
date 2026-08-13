@@ -1,14 +1,15 @@
 import { Context } from "effect";
 import type { Effect } from "effect";
-import * as Bun from "../src/Bun.js";
-import * as Deno from "../src/Deno.js";
-import type { Artifact as RootArtifact } from "../src/standalone/Artifact.js";
-import type { BuildError, TargetUnsupported } from "../src/standalone/BuildError.js";
-import { makeCompileExecutable } from "../src/standalone/CompileExecutable.js";
-import type { CompileExecutableMatrixInput } from "../src/standalone/CompileExecutableMatrix.js";
-import type { CompileExecutableInput, CompilerService } from "../src/standalone/Driver.js";
-import type { MatrixError as RootMatrixError } from "../src/standalone/MatrixError.js";
-import type { Target as RootTarget } from "../src/standalone/Target.js";
+import * as Bun from "effect-build-bun";
+import * as Deno from "effect-build-deno";
+import type { BuildError as PublicBuildError } from "effect-build/Provider";
+import type { Artifact as RootArtifact } from "../packages/effect-build/src/standalone/Artifact.js";
+import type { BuildError, TargetUnsupported } from "../packages/effect-build/src/standalone/BuildError.js";
+import { makeCompileExecutable } from "../packages/effect-build/src/standalone/CompileExecutable.js";
+import type { CompileExecutableMatrixInput } from "../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
+import type { CompileExecutableInput, CompilerService } from "../packages/effect-build/src/standalone/Driver.js";
+import type { MatrixError as RootMatrixError } from "../packages/effect-build/src/standalone/MatrixError.js";
+import type { Target as RootTarget } from "../packages/effect-build/src/standalone/Target.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -91,8 +92,8 @@ type DenoMatrixEffect = ReturnType<typeof Deno.compileExecutableMatrix>;
 
 export type _BunScalarSuccess = Assert<Same<SuccessOf<BunScalarEffect>, Bun.Artifact>>;
 export type _DenoScalarSuccess = Assert<Same<SuccessOf<DenoScalarEffect>, Deno.Artifact>>;
-export type _BunScalarError = Assert<Same<ErrorOf<BunScalarEffect>, BuildError>>;
-export type _DenoScalarError = Assert<Same<ErrorOf<DenoScalarEffect>, BuildError>>;
+export type _BunScalarError = Assert<Same<ErrorOf<BunScalarEffect>, PublicBuildError>>;
+export type _DenoScalarError = Assert<Same<ErrorOf<DenoScalarEffect>, PublicBuildError>>;
 export type _BunScalarContext = Assert<Same<ContextOf<BunScalarEffect>, Bun.Compiler>>;
 export type _DenoScalarContext = Assert<Same<ContextOf<DenoScalarEffect>, Deno.Compiler>>;
 export type _BunArtifactTool = Assert<Same<Bun.Artifact["tool"]["name"], "bun">>;

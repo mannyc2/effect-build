@@ -1,34 +1,49 @@
 # Architecture
 
-The package has one executable-publication lifecycle at exactly two
-cardinalities: scalar `compileExecutable` and homogeneous-provider
-`compileExecutableMatrix`. A caller selects one compiler module explicitly.
+The three-package graph has one executable-publication lifecycle in core at
+exactly two cardinalities: scalar `compileExecutable` and homogeneous-provider
+`compileExecutableMatrix`. A caller selects one provider package explicitly.
 
-## Three independent axes
+```text
+effect-build-bun  ─┐
+                   ├─> effect-build
+effect-build-deno ─┘
+```
 
-The orchestrator runtime supplies Effect's filesystem, path, crypto, and child
-process services. The selected compiler module maps its typed options and target
-to its CLI. The Artifact target describes the native executable being produced.
-These are three separate choices.
+## Four independent axes
+
+The package manager installs the graph. The orchestrator runtime supplies
+Effect's filesystem, path, crypto, and child-process services. The selected
+provider maps its typed options and target to its compiler CLI. The Artifact
+target describes the native executable being produced. These are four separate
+choices; workspace Bun 1.3.14 is not compiler Bun 1.3.9.
 
 ## Ownership
 
-| Shared lifecycle owns                     | Compiler adapter owns            |
-| ----------------------------------------- | -------------------------------- |
-| total matrix request preflight            | executable discovery and probe   |
-| canonical matrix names and collision test | provider target-table authority  |
-| bounded, stable collect-all traversal     | typed options and argv rendering |
-| sibling staging and cleanup               | target-to-CLI mapping            |
-| scoped spawn and interruption             | compiler diagnostics             |
-| bounded stdout and stderr                 |                                  |
-| native executable validation              |                                  |
-| optional SHA-256 digest                   |                                  |
-| atomic destination replacement            |                                  |
+| Core shared lifecycle owns                | Provider package owns              |
+| ----------------------------------------- | ---------------------------------- |
+| executable discovery and probe            | executable identity and probe argv |
+| total matrix request preflight            | native target-token mapping        |
+| canonical matrix names and collision test | typed options and argv rendering   |
+| bounded, stable collect-all traversal     | target-to-CLI mapping              |
+| sibling staging and cleanup               | compiler diagnostics               |
+| scoped spawn and interruption             |                                    |
+| bounded stdout and stderr                 |                                    |
+| native executable validation              |                                    |
+| optional SHA-256 digest                   |                                    |
+| atomic destination replacement            |                                    |
 
 The public calls cannot provide raw argv, a process handle, a provider value,
-or a generic registry. Root provider-correlated schemas may import only the
-pure provider target-contract projections. They never import provider public
-modules, adapters, discovery, or execution code.
+or a generic registry. Core owns one closed value containing the six Bun and
+six Deno canonical target sets; its Artifact and MatrixError schemas and the
+provider Target schemas derive from it. Providers own only their exact native
+CLI token maps. Core never imports a provider package, providers never import
+one another, and providers reach core only through public exports.
+
+`effect-build/Provider.define` is the only authoring SPI. It accepts closed
+Bun/Deno definition data and returns the two operations, Target schema, and
+Layer. Process, discovery, staging, validation, hashing, and atomic publication
+remain private to core.
 
 ## Scalar cell lifecycle
 
@@ -100,13 +115,14 @@ composition.
 
 ## Boundaries checked in tests
 
-- `effect/unstable/process` is imported only by
-  `src/standalone/internal/Process.ts`.
-- Library source has no `node:*` imports and no `Effect.runPromise` calls.
+- `effect/unstable/process` is implemented only by
+  `packages/effect-build/src/standalone/internal/Process.ts`; the public SPI
+  mentions its service requirement type-only.
+- Package source has no `node:*` imports and no `Effect.runPromise` calls.
 - Package exports and runtime keys match `tooling/public-api.json`.
-- All examples compile against a packed installation.
-- Provider target-table literals exactly equal the authored required cells in
-  `tooling/support-matrix.json`.
+- Six clean Node consumers install the three tarballs through npm and Bun.
+- The provider Target schemas exactly equal the authored required cells in
+  `tooling/support-matrix.json` and derive from the one core correlation value.
 - Every Bun and Deno target is compiled with its pinned real compiler on Linux
   x64 and independently inspected with `/usr/bin/file`; ELF outputs also use
   `/usr/bin/readelf`. Foreign native outputs are never executed on that runner.

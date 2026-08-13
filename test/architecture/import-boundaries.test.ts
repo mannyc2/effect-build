@@ -1,87 +1,78 @@
 import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
+const packageRoot = resolve(root, "packages");
+const packageNames = ["effect-build", "effect-build-bun", "effect-build-deno"] as const;
 
 const sourceFiles = async (): Promise<string[]> => {
-  const entries = await readdir(resolve(root, "src"), { recursive: true });
-  return entries.filter((entry) => entry.endsWith(".ts")).map((entry) => resolve(root, "src", entry));
+  const files: string[] = [];
+  for (const name of packageNames) {
+    const sourceRoot = resolve(packageRoot, name, "src");
+    const entries = await readdir(sourceRoot, { recursive: true });
+    files.push(...entries.filter((entry) => entry.endsWith(".ts")).map((entry) => resolve(sourceRoot, entry)));
+  }
+  return files;
 };
 
-const importSpecifiers = (source: string): ReadonlyArray<string> =>
+const importSpecifiers = (source: string): readonly string[] =>
   [...source.matchAll(/(?:from\s+|import\s*\(|import\s+)(["'])([^"']+)\1/g)].map((match) => match[2]!);
 
-const compilerSpecific = new Set([
-  resolve(root, "src/Bun.ts"),
-  resolve(root, "src/Deno.ts"),
-  resolve(root, "src/standalone/internal/BunAdapter.ts"),
-  resolve(root, "src/standalone/internal/DenoAdapter.ts"),
-]);
-
-describe("source ownership boundaries", () => {
-  it("keeps library source on Effect platform-neutral services", async () => {
+describe("workspace source ownership boundaries", () => {
+  it("keeps all library source on Effect platform-neutral services", async () => {
     for (const file of await sourceFiles()) {
       const source = await readFile(file, "utf8");
-      expect(source, file).not.toMatch(/from "node:/);
+      expect(source, file).not.toMatch(/from ["']node:/);
       expect(source, file).not.toContain("Effect.runPromise");
     }
   });
 
-  it("confines effect/unstable/process to the private process module", async () => {
-    const allowed = [
-      resolve(root, "src/standalone/internal/Process.ts"),
-    ];
+  it("confines effect/unstable/process to the core private process module and its type-only SPI reference", async () => {
     const found: string[] = [];
     for (const file of await sourceFiles()) {
-      if ((await readFile(file, "utf8")).includes("effect/unstable/process")) found.push(file);
+      if ((await readFile(file, "utf8")).includes("effect/unstable/process")) found.push(relative(root, file));
     }
-    expect(found.sort()).toEqual(allowed.sort());
+    expect(found.sort()).toEqual([
+      "packages/effect-build/src/Provider.ts",
+      "packages/effect-build/src/standalone/internal/Process.ts",
+    ]);
+    const provider = await readFile(resolve(root, "packages/effect-build/src/Provider.ts"), "utf8");
+    expect(provider).toContain("import type { ChildProcessSpawner");
   });
 
-  it("keeps core standalone modules free of compiler-specific imports", async () => {
+  it("keeps the dependency direction core <- providers with no private cross-package imports", async () => {
     for (const file of await sourceFiles()) {
-      if (compilerSpecific.has(file) || file === resolve(root, "src/index.ts")) continue;
-      const source = await readFile(file, "utf8");
-      expect(source, file).not.toMatch(/from "[./]*Bun\.js"|from "[./]*Deno\.js"/);
-      expect(source, file).not.toMatch(/BunAdapter|DenoAdapter/);
-    }
-  });
-
-  it("keeps provider target tables pure and dependent only on the shared table primitive", async () => {
-    for (const name of ["BunTarget.ts", "DenoTarget.ts"]) {
-      const file = resolve(root, "src/standalone/internal", name);
-      expect(importSpecifiers(await readFile(file, "utf8")), file).toEqual(["./TargetTable.js"]);
-    }
-  });
-
-  it("allowlists every source module that imports a provider target contract", async () => {
-    const importers: string[] = [];
-    for (const file of await sourceFiles()) {
-      if (
-        importSpecifiers(await readFile(file, "utf8")).some((specifier) =>
-          /(?:BunTarget|DenoTarget)\.js$/.test(specifier)
-        )
-      ) {
-        importers.push(file);
+      const owner = relative(packageRoot, file).split("/")[0]!;
+      for (const specifier of importSpecifiers(await readFile(file, "utf8"))) {
+        if (owner === "effect-build") {
+          expect(specifier, file).not.toMatch(/^effect-build-(?:bun|deno)(?:\/|$)/);
+        } else if (owner === "effect-build-bun") {
+          expect(specifier, file).not.toMatch(/^effect-build-deno(?:\/|$)/);
+        } else if (owner === "effect-build-deno") {
+          expect(specifier, file).not.toMatch(/^effect-build-bun(?:\/|$)/);
+        }
+        if (owner !== "effect-build") {
+          expect(specifier, file).not.toMatch(/^effect-build\/(?:internal|standalone)(?:\/|$)/);
+        }
+        if (specifier.startsWith(".")) {
+          const ownerRoot = resolve(packageRoot, owner);
+          const resolvedImport = resolve(dirname(file), specifier);
+          const fromOwner = relative(ownerRoot, resolvedImport);
+          expect(
+            isAbsolute(fromOwner) || fromOwner === ".." || fromOwner.startsWith(`..${sep}`),
+            `${file} imports outside ${owner}: ${specifier}`,
+          ).toBe(false);
+        }
       }
     }
-    expect(importers.sort()).toEqual([
-      resolve(root, "src/Bun.ts"),
-      resolve(root, "src/Deno.ts"),
-      resolve(root, "src/standalone/Artifact.ts"),
-      resolve(root, "src/standalone/MatrixError.ts"),
-      resolve(root, "src/standalone/internal/BunAdapter.ts"),
-      resolve(root, "src/standalone/internal/DenoAdapter.ts"),
-    ].sort());
   });
 
-  it("keeps the package export map at exactly the three public paths", async () => {
-    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
-      exports: Record<string, unknown>;
-      engines?: unknown;
-    };
-    expect(Object.keys(packageJson.exports).sort()).toEqual([".", "./bun", "./deno"]);
-    expect(packageJson.engines).toBeUndefined();
+  it("keeps provider-native tokens out of core", async () => {
+    const coreFiles = (await sourceFiles()).filter((file) => file.includes("/packages/effect-build/src/"));
+    for (const file of coreFiles) {
+      const source = await readFile(file, "utf8");
+      expect(source, file).not.toMatch(/bun-(?:darwin|linux|windows)|(?:x86_64|aarch64)-(?:apple|unknown|pc)-/);
+    }
   });
 });

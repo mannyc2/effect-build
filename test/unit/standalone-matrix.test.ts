@@ -1,11 +1,18 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Fiber, Path, Result, Schema } from "effect";
+import type * as Bun from "effect-build-bun";
+import type * as Deno from "effect-build-deno";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
-import type { Artifact, ToolName } from "../../src/standalone/Artifact.js";
+import { targetTokens as bunTargetTokens } from "../../packages/effect-build-bun/src/Adapter.js";
+import {
+  definition as denoDefinition,
+  targetTokens as denoTargetTokens,
+} from "../../packages/effect-build-deno/src/Adapter.js";
+import type { Artifact, ToolName } from "../../packages/effect-build/src/standalone/Artifact.js";
 import {
   type BuildError,
   InvalidDriverOptions,
@@ -13,7 +20,7 @@ import {
   OutputMissing,
   TargetUnsupported,
   ToolFailed,
-} from "../../src/standalone/BuildError.js";
+} from "../../packages/effect-build/src/standalone/BuildError.js";
 import {
   captureCellResult,
   type CellFailureFor,
@@ -21,25 +28,70 @@ import {
   type CompilerRunner,
   type MatrixErrorFor,
   type MatrixFailedFor,
-} from "../../src/standalone/CompileExecutableMatrix.js";
-import { type BunTarget, bunTargetTable } from "../../src/standalone/internal/BunTarget.js";
+} from "../../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
 import type {
   CompilerAdapter,
   DiscoveredCompiler,
   OptionsValidation,
-} from "../../src/standalone/internal/CompilerAdapter.js";
-import { makeCompilerRunner } from "../../src/standalone/internal/CompilerEngine.js";
-import { denoAdapter } from "../../src/standalone/internal/DenoAdapter.js";
-import { type DenoTarget, denoTargetTable } from "../../src/standalone/internal/DenoTarget.js";
-import type { TargetTable } from "../../src/standalone/internal/TargetTable.js";
+} from "../../packages/effect-build/src/standalone/internal/CompilerEngine.js";
+import { makeCompilerRunner } from "../../packages/effect-build/src/standalone/internal/CompilerEngine.js";
+import { makeTargetTable, type TargetTable } from "../../packages/effect-build/src/standalone/internal/TargetTable.js";
 import {
   CellFailure,
   InvalidMatrixInput,
   MatrixError,
   MatrixFailed,
   MatrixIssue,
-} from "../../src/standalone/MatrixError.js";
-import type { Target } from "../../src/standalone/Target.js";
+} from "../../packages/effect-build/src/standalone/MatrixError.js";
+import type { Target } from "../../packages/effect-build/src/standalone/Target.js";
+
+type BunTarget = Bun.Target;
+type DenoTarget = Deno.Target;
+const bunTargetTable = makeTargetTable(bunTargetTokens);
+const denoTargetTable = makeTargetTable(denoTargetTokens);
+
+const denoAdapter: CompilerAdapter<
+  Deno.Options,
+  "deno",
+  DenoTarget,
+  Extract<
+    ReturnType<typeof denoDefinition.validateOptions>,
+    { readonly _tag: "Valid" }
+  >["value"]
+> = {
+  toolName: "deno",
+  probeArgv: denoDefinition.probeArgv,
+  targetTable: denoTargetTable,
+  validateOptions: (input) => {
+    const result = denoDefinition.validateOptions(input);
+    return result._tag === "Valid"
+      ? result
+      : {
+        _tag: "Invalid",
+        error: new InvalidDriverOptions({
+          tool: "deno",
+          reason: result.reason,
+        }),
+      };
+  },
+  renderArgv: ({ input, stagedOutfile }) =>
+    denoDefinition.renderArgv({
+      input,
+      ...(input.target === undefined
+        ? {}
+        : { nativeTarget: denoTargetTokens[input.target] }),
+      stagedOutfile,
+    }),
+  interpretFailure: (completion) =>
+    new ToolFailed({
+      tool: "deno",
+      exitCode: completion.exitCode,
+      diagnostics: [
+        { channel: "stdout", ...completion.stdout },
+        { channel: "stderr", ...completion.stderr },
+      ],
+    }),
+};
 
 const roots: string[] = [];
 const childPids = new Set<number>();

@@ -1,6 +1,14 @@
 import { Context, Effect, Exit, Schema } from "effect";
+import * as Bun from "effect-build-bun";
+import * as Deno from "effect-build-deno";
+import type { ProviderArtifact } from "effect-build/Provider";
 import { describe, expect, it } from "vitest";
-import { Artifact } from "../../src/standalone/Artifact.js";
+import { targetTokens as bunTargetTokens } from "../../packages/effect-build-bun/src/Adapter.js";
+import {
+  definition as denoDefinition,
+  targetTokens as denoTargetTokens,
+} from "../../packages/effect-build-deno/src/Adapter.js";
+import { Artifact } from "../../packages/effect-build/src/standalone/Artifact.js";
 import {
   BuildError,
   InvalidDriverOptions,
@@ -12,21 +20,31 @@ import {
   ToolFailed,
   ToolNotFound,
   ToolProbeFailed,
-} from "../../src/standalone/BuildError.js";
-import { makeCompileExecutable } from "../../src/standalone/CompileExecutable.js";
-import type { CompileExecutableInput, CompilerService } from "../../src/standalone/Driver.js";
-import { type BunTarget, bunTargetTable } from "../../src/standalone/internal/BunTarget.js";
-import type { ProviderArtifact } from "../../src/standalone/internal/CompilerAdapter.js";
-import { denoAdapter } from "../../src/standalone/internal/DenoAdapter.js";
-import { type DenoTarget, denoTargetTable } from "../../src/standalone/internal/DenoTarget.js";
+} from "../../packages/effect-build/src/standalone/BuildError.js";
+import { makeCompileExecutable } from "../../packages/effect-build/src/standalone/CompileExecutable.js";
+import type { CompileExecutableInput, CompilerService } from "../../packages/effect-build/src/standalone/Driver.js";
 import {
   inspectNativeExecutable,
   inspectNativeExecutableChunks,
   NativeExecutableRangeRequired,
-} from "../../src/standalone/internal/NativeExecutable.js";
-import { descriptorOf } from "../../src/standalone/internal/TargetCatalog.js";
-import { makeTargetTable } from "../../src/standalone/internal/TargetTable.js";
-import { Target } from "../../src/standalone/Target.js";
+} from "../../packages/effect-build/src/standalone/internal/NativeExecutable.js";
+import { descriptorOf } from "../../packages/effect-build/src/standalone/internal/TargetCatalog.js";
+import { makeTargetTable } from "../../packages/effect-build/src/standalone/internal/TargetTable.js";
+import { Target } from "../../packages/effect-build/src/standalone/Target.js";
+
+type BunTarget = Bun.Target;
+type DenoTarget = Deno.Target;
+
+const bunTargetTable = {
+  Target: Bun.Target,
+  resolve: (value: unknown): BunTarget | undefined => Schema.is(Bun.Target)(value) ? value : undefined,
+  nativeToken: (target: BunTarget): string => bunTargetTokens[target],
+};
+const denoTargetTable = {
+  Target: Deno.Target,
+  resolve: (value: unknown): DenoTarget | undefined => Schema.is(Deno.Target)(value) ? value : undefined,
+  nativeToken: (target: DenoTarget): string => denoTargetTokens[target],
+};
 
 const _bunMuslTarget: BunTarget = "linux-x64-musl";
 void _bunMuslTarget;
@@ -40,9 +58,9 @@ void _rejectBunWindowsArm64Target;
 const _denoMuslTarget: DenoTarget = "linux-x64-musl";
 void _denoMuslTarget;
 const _rejectDenoMuslAtAdapterBoundary = () => {
-  const options = denoAdapter.validateOptions(undefined);
-  if (options._tag !== "Valid") throw options.error;
-  return denoAdapter.renderArgv({
+  const options = denoDefinition.validateOptions(undefined);
+  if (options._tag !== "Valid") throw new Error(options.reason);
+  return denoDefinition.renderArgv({
     input: {
       entrypoint: "main.ts",
       outfile: "app",
@@ -50,6 +68,7 @@ const _rejectDenoMuslAtAdapterBoundary = () => {
       target: "linux-x64-musl",
       options: options.value,
     },
+    nativeTarget: "invalid-by-design",
     stagedOutfile: "/tmp/app",
   });
 };

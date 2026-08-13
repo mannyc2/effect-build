@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const docs = ["README.md", "architecture.md", "api.md", "drivers.md", "errors.md"];
-const examples = ["README.md", "bun-compile.ts", "bun-matrix.ts", "deno-compile.ts"];
 
 const loadAll = async (paths: string[], directory: string): Promise<string> =>
   (await Promise.all(paths.map((path) => readFile(resolve(root, directory, path), "utf8")))).join("\n");
@@ -18,12 +17,15 @@ const targetList = (text: string, provider: "Bun" | "Deno", next: string): strin
 describe("documentation contract", () => {
   it("keeps the exact final documentation and example manifests", async () => {
     expect((await readdir(resolve(root, "docs"))).sort()).toEqual([...docs].sort());
-    expect((await readdir(resolve(root, "examples"))).sort()).toEqual([...examples].sort());
+    expect((await readdir(resolve(root, "examples"))).sort()).toEqual(["README.md", "bun", "deno"]);
+    expect((await readdir(resolve(root, "examples/bun/src"))).sort()).toEqual(["compile.ts", "matrix.ts"]);
+    expect(await readdir(resolve(root, "examples/deno/src"))).toEqual(["compile.ts"]);
   });
 
   it("starts with the two-input scalar operation and official host composition", async () => {
     const readme = await readFile(resolve(root, "README.md"), "utf8");
     const firstTypeScript = readme.match(/```ts\n([\s\S]*?)```/)?.[1] ?? "";
+    expect(firstTypeScript).toContain('from "effect-build-bun"');
     expect(firstTypeScript).toContain("entrypoint:");
     expect(firstTypeScript).toContain("outfile:");
     expect(firstTypeScript).toContain("Effect.provide(Bun.layer())");
@@ -33,9 +35,11 @@ describe("documentation contract", () => {
 
   it("documents the bounded Effect 4.0 peer and exact current reference install", async () => {
     const readme = await readFile(resolve(root, "README.md"), "utf8");
-    const install = readme.match(/## Install\n\n```sh\n([^`]+)\n```/)?.[1] ?? "";
+    const install = readme.match(/For the Bun compiler provider:\n\n```sh\n([^`]+)\n```/)?.[1] ?? "";
 
-    expect(install).toBe("pnpm add effect-build effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108");
+    expect(install).toBe(
+      "bun add effect-build effect-build-bun effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108",
+    );
     expect(readme).toContain("`>=4.0.0-beta.104 <4.1.0-0`");
     expect(readme).not.toContain("4.0.0-beta.107");
   });
@@ -51,14 +55,18 @@ describe("documentation contract", () => {
       expect(text).toContain("compileExecutableMatrix");
     }
     expect(agents).toContain("exactly two public operations");
-    expect(api).toContain("The root runtime keys are `Artifact`, `BuildError`, `MatrixError`, and `Target`");
+    expect(api).toContain("The core root runtime keys are `Artifact`, `BuildError`, `MatrixError`, and");
     expect(api).toContain("exactly five runtime keys");
     expect(api).toContain("There is no root compile");
+    expect(readme).toMatch(/closed authoring SPI/);
+    for (const packageName of ["effect-build", "effect-build-bun", "effect-build-deno"]) {
+      expect(`${agents}\n${readme}`).toContain(packageName);
+    }
   });
 
   it("documents a homogeneous matrix with canonical names and one composition boundary", async () => {
     const readme = await readFile(resolve(root, "README.md"), "utf8");
-    const example = await readFile(resolve(root, "examples/bun-matrix.ts"), "utf8");
+    const example = await readFile(resolve(root, "examples/bun/src/matrix.ts"), "utf8");
     const text = `${readme}\n${example}`;
 
     expect(text).toContain("Bun.compileExecutableMatrix({");
@@ -149,14 +157,14 @@ describe("documentation contract", () => {
     ]);
   });
 
-  it("documents atomic states, divergences, and the tested pure-contract boundary", async () => {
+  it("documents atomic states, divergences, and the one-way provider boundary", async () => {
     const architecture = await readFile(resolve(root, "docs/architecture.md"), "utf8");
     expect(architecture).toContain("## Atomic publication states");
     expect(architecture).toContain("## Divergence register");
     expect(architecture).toMatch(/sibling staged path/i);
     expect(architecture).toMatch(/interruption closes Scope and kills the compiler/i);
-    expect(architecture).toMatch(/pure provider target-contract projections/i);
-    expect(architecture).toMatch(/never import provider public\s+modules, adapters, discovery, or execution code/i);
+    expect(architecture).toMatch(/one closed value/i);
+    expect(architecture).toMatch(/Core never imports a provider package/i);
   });
 
   it("rejects obsolete product language everywhere user-facing", async () => {
@@ -164,7 +172,10 @@ describe("documentation contract", () => {
       await readFile(resolve(root, "README.md"), "utf8"),
       await readFile(resolve(root, "AGENTS.md"), "utf8"),
       await loadAll(docs, "docs"),
-      await loadAll(examples, "examples"),
+      await readFile(resolve(root, "examples/README.md"), "utf8"),
+      await readFile(resolve(root, "packages/effect-build/README.md"), "utf8"),
+      await readFile(resolve(root, "packages/effect-build-bun/README.md"), "utf8"),
+      await readFile(resolve(root, "packages/effect-build-deno/README.md"), "utf8"),
     ].join("\n");
     const prohibited = new RegExp(
       [
@@ -174,7 +185,6 @@ describe("documentation contract", () => {
         "truthful terminal record",
         "byte[- ]identical",
         "hermetic",
-        "provenance",
         "Configured" + "Observed",
         "Resolved" + "Build",
         "material" + "ize",
@@ -186,5 +196,7 @@ describe("documentation contract", () => {
       "i",
     );
     expect(text).not.toMatch(prohibited);
+    expect(text).not.toMatch(/effect-build\/(bun|deno)/);
+    expect(text).not.toMatch(new RegExp(["pn", "pm (?:add|run|install|verify)"].join("")));
   });
 });

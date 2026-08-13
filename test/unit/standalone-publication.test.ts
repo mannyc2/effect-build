@@ -16,12 +16,12 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { ToolFailed } from "../../src/standalone/BuildError.js";
-import { isLockedRenameError } from "../../src/standalone/internal/AtomicOutput.js";
-import type { CompilerAdapter } from "../../src/standalone/internal/CompilerAdapter.js";
-import { makeCompilerService } from "../../src/standalone/internal/CompilerEngine.js";
-import type { OperatingSystem } from "../../src/standalone/internal/TargetCatalog.js";
-import { makeTargetTable } from "../../src/standalone/internal/TargetTable.js";
+import { ToolFailed } from "../../packages/effect-build/src/standalone/BuildError.js";
+import { isLockedRenameError } from "../../packages/effect-build/src/standalone/internal/AtomicOutput.js";
+import type { CompilerAdapter } from "../../packages/effect-build/src/standalone/internal/CompilerEngine.js";
+import { makeCompilerService } from "../../packages/effect-build/src/standalone/internal/CompilerEngine.js";
+import type { OperatingSystem } from "../../packages/effect-build/src/standalone/internal/TargetCatalog.js";
+import { makeTargetTable } from "../../packages/effect-build/src/standalone/internal/TargetTable.js";
 
 const roots: string[] = [];
 const fixture = fileURLToPath(new URL("../fixtures/publication/fake-compiler.mjs", import.meta.url));

@@ -59,15 +59,33 @@ export const validateSupportMatrix = (support) => {
 };
 
 const expectedPublicApi = {
-  version: 1,
-  subpaths: [".", "./bun", "./deno"],
-  rootRuntimeKeys: ["Artifact", "BuildError", "MatrixError", "Target"],
-  toolRuntimeKeys: ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+  version: 2,
+  packages: {
+    "effect-build": {
+      subpaths: [".", "./Provider"],
+      runtimeKeys: {
+        ".": ["Artifact", "BuildError", "MatrixError", "Target"],
+        "./Provider": ["define"],
+      },
+    },
+    "effect-build-bun": {
+      subpaths: ["."],
+      runtimeKeys: {
+        ".": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+      },
+    },
+    "effect-build-deno": {
+      subpaths: ["."],
+      runtimeKeys: {
+        ".": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+      },
+    },
+  },
 };
 
 export const validatePublicApi = (api) => {
   if (!exactKeys(api, Object.keys(expectedPublicApi))) {
-    throw new Error("public API manifest must have exactly version, subpaths, rootRuntimeKeys, and toolRuntimeKeys");
+    throw new Error("public API manifest must have exactly version and packages");
   }
   for (const key of Object.keys(expectedPublicApi)) {
     if (JSON.stringify(api[key]) !== JSON.stringify(expectedPublicApi[key])) {
@@ -78,7 +96,7 @@ export const validatePublicApi = (api) => {
 };
 
 export const validateTooling = ({ pins, support, api }) => {
-  if (pins.version !== 1 || support.version !== 1 || api.version !== 1) {
+  if (pins.version !== 1 || support.version !== 1 || api.version !== 2) {
     throw new Error("unsupported tooling version");
   }
   if (new Set(pins.tools.map((entry) => entry.tool)).size !== pins.tools.length) {

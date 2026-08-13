@@ -6,12 +6,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Artifact } from "../../src/standalone/Artifact.js";
-import type { BuildError, ToolNotFound, ToolProbeFailed } from "../../src/standalone/BuildError.js";
-import type { CompileExecutableMatrixInput, MatrixErrorFor } from "../../src/standalone/CompileExecutableMatrix.js";
-import type { CompileExecutableInput } from "../../src/standalone/Driver.js";
-import type { ChildProcessSpawner } from "../../src/standalone/internal/Process.js";
-import type { Target } from "../../src/standalone/Target.js";
+import type { Artifact } from "../../packages/effect-build/src/standalone/Artifact.js";
+import type {
+  BuildError,
+  ToolNotFound,
+  ToolProbeFailed,
+} from "../../packages/effect-build/src/standalone/BuildError.js";
+import type {
+  CompileExecutableMatrixInput,
+  MatrixErrorFor,
+} from "../../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
+import type { CompileExecutableInput } from "../../packages/effect-build/src/standalone/Driver.js";
+import type { ChildProcessSpawner } from "../../packages/effect-build/src/standalone/internal/Process.js";
+import type { Target } from "../../packages/effect-build/src/standalone/Target.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/driver/fake-tool.mjs", import.meta.url));
 
