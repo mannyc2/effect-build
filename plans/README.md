@@ -8,7 +8,7 @@ managed-proof design. Plans 007-010 record the hard cutover to the standalone
 compile operation. Plans 011-014 are the completed typed-target and matrix
 program. Re-audited again on 2026-08-12 against the completed `v0.2.0` product
 tag at commit `29f8cfb` and planning baseline `e4257cc` for dependency
-compatibility; Plan 015 is the active, bounded Effect 4.0 range and current-RC
+compatibility; Plan 015 completed the bounded Effect 4.0 range and current-RC
 upgrade.
 The decision gates opened by
 `FIRST-PRINCIPLES-REVIEW.md` (operator-audited, 2026-08-10) were answered by
@@ -128,7 +128,7 @@ of the 2026-08-11 gates:
 | 013 | Prove every provider target with required real evidence | P1 | L | 011 | DONE |
 | 012 | Build the typed executable target matrix | P1 | L | 013 | DONE |
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | DONE |
-| 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | IN PROGRESS |
+| 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | DONE |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says

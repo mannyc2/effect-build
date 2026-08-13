@@ -36,10 +36,12 @@
 - **Category**: dependencies / migrations / test coverage / CI
 - **Product baseline**: completed `v0.2.0` tag at commit `29f8cfb`, 2026-08-12
 - **Planning baseline**: commit `e4257cc`, 2026-08-12
-- **Required CI evidence**: pending for the final source commit. Completion
-  requires the normal required GitHub Actions run at that exact commit, with
-  all existing jobs and both Effect endpoint cells successful. No second-order
-  receipt contract is required.
+- **Required CI evidence**: verified for the final source commit. The normal
+  required GitHub Actions run is green at that exact commit, with all existing
+  jobs and both Effect endpoint cells successful. No second-order receipt
+  contract is required.
+
+Effect compatibility CI: https://github.com/mannyc2/effect-build/actions/runs/31688719291 @ 5a4003fd704211baa9919cee52fc5386e3172b3c
 
 ## Why this matters
 
@@ -564,9 +566,9 @@ older run or call implementation complete.
 - [x] No file under `src/` or public API/runtime behavior changed.
 - [x] `pnpm verify`, `pnpm verify:effect`, `npm pack --dry-run`, and
       `git diff --check` pass.
-- [ ] Required CI for the exact final source SHA is green, including current real
+- [x] Required CI for the exact final source SHA is green, including current real
       compilers, publication hosts, all targets, and both Effect endpoints.
-- [ ] Only then, Plan 015 is marked `DONE` in `plans/README.md`.
+- [x] Only then, Plan 015 is marked `DONE` in `plans/README.md`.
 
 ## STOP conditions
 
