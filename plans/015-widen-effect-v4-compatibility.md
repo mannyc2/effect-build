@@ -19,14 +19,10 @@
 > rg -q '^\| 014 \|.*\| DONE \|$' plans/README.md
 > pnpm install --frozen-lockfile
 > pnpm verify
-> node scripts/verify-workflow-receipt.mjs \
->   --receipt-file plans/014-hard-cut-typed-matrix-public-api.md \
->   --prefix 'Final target evidence:'
 > ```
 >
 > Expected: the completed `v0.2.0` tag still points exactly to `29f8cfb`; Plan 014
-> is `DONE`; the install and deterministic gate pass; and its recorded workflow
-> remains valid under the existing receipt contract. The worktree is clean or
+> is `DONE`; and the install and deterministic gate pass. The worktree is clean or
 > its only changes are `plans/README.md` plus this file. If product, test,
 > workflow, or manifest files have changed since `29f8cfb`, reconcile every
 > excerpt below against the live file and stop on a semantic mismatch.
@@ -40,10 +36,10 @@
 - **Category**: dependencies / migrations / test coverage / CI
 - **Product baseline**: completed `v0.2.0` tag at commit `29f8cfb`, 2026-08-12
 - **Planning baseline**: commit `e4257cc`, 2026-08-12
-- **Required final receipt**: pending. Completion requires one green required
-  workflow for the exact source commit, including both Effect endpoint cells,
-  recorded below as one unbulleted line beginning `Effect compatibility
-  evidence:` followed by the run URL, ` @ `, and the full source SHA.
+- **Required CI evidence**: pending for the final source commit. Completion
+  requires the normal required GitHub Actions run at that exact commit, with
+  all existing jobs and both Effect endpoint cells successful. No second-order
+  receipt contract is required.
 
 ## Why this matters
 
@@ -158,8 +154,7 @@ The existing test conventions to match are:
 - `test/architecture/generated-and-ci.test.ts` for exact manifest and workflow
   shape;
 - `test/architecture/docs-contract.test.ts` for user-facing support claims;
-- `scripts/verify-workflow-receipt.mjs` and
-  `test/architecture/workflow-receipt.test.ts` for exact required-CI evidence.
+- GitHub Actions required checks for exact-commit CI evidence.
 
 ## Commands you will need
 
@@ -194,15 +189,18 @@ gate; a local skip is not a pass.
 - `README.md`
 - `scripts/test-built-consumer.mjs`
 - `scripts/verify-effect-compatibility.mjs` (create)
-- `scripts/verify-workflow-receipt.mjs`
+- `scripts/verify-workflow-receipt.mjs` (delete after preserving historical run
+  URLs in completed plans)
 - `test/architecture/generated-and-ci.test.ts`
 - `test/architecture/docs-contract.test.ts`
-- `test/architecture/workflow-receipt.test.ts`
+- `test/architecture/workflow-receipt.test.ts` and
+  `test/fixtures/workflow-receipt/fake-gh.mjs` (delete with the redundant
+  verifier)
 - `.github/workflows/ci.yml`
 - `.github/workflows/release.yml`
-- `plans/015-widen-effect-v4-compatibility.md` (receipt/status only after source
+- `plans/015-widen-effect-v4-compatibility.md` (CI note/status only after source
   CI is green)
-- `plans/README.md` (Plan 015 status/receipt reconciliation only)
+- `plans/README.md` (Plan 015 status reconciliation only)
 
 **Out of scope** (do not touch):
 
@@ -230,7 +228,7 @@ gate; a local skip is not a pass.
   `feat!: publish typed executable target matrices` and
   `chore(release): prepare v0.1.0`.
 - Keep the compatibility implementation in one reviewable source commit before
-  appending its workflow receipt. The receipt/status-only follow-up must not
+  recording its required CI run. The CI-note/status-only follow-up must not
   change product or verification files.
 - `v0.2.0` is already complete and tagged at `29f8cfb`. Do not move or reuse that
   tag, rewrite its product/release commits, republish `effect-build@0.2.0`, or
@@ -255,7 +253,7 @@ orchestrator hosts.
 
 ## Steps
 
-### Step 1: Specify the new manifest, documentation, workflow, and receipt contracts
+### Step 1: Specify the new manifest, documentation, and workflow contracts
 
 Update `test/architecture/generated-and-ci.test.ts` before the implementation:
 
@@ -280,29 +278,18 @@ range and the current exact RC install example. Do not turn the current npm
 dist-tag layout into a permanent documentation contract; the explicit version
 already prevents `effect@latest` from selecting the wrong major.
 
-Extend `test/architecture/workflow-receipt.test.ts` with a second receipt
-contract named `effect-v1`. Preserve the existing target receipt behavior and
-prove that `effect-v1` additionally requires exactly:
-
-- `effect-compatibility (4.0.0-beta.104)`; and
-- `effect-compatibility (4.0.0-rc.108)`.
-
-Test missing, duplicate, failed, and skipped compatibility cells. Do not make
-historical Plan 013/014 receipts fail because their old runs predate these jobs.
-
 **Verify**:
 
 ```sh
 pnpm build
 pnpm exec vitest run \
   test/architecture/generated-and-ci.test.ts \
-  test/architecture/docs-contract.test.ts \
-  test/architecture/workflow-receipt.test.ts
+  test/architecture/docs-contract.test.ts
 ```
 
 Expected: the new assertions fail for the missing range, RC baseline,
-compatibility verifier/jobs, docs, and `effect-v1` receipt contract; existing
-unrelated assertions remain green.
+compatibility verifier/jobs, and docs; existing unrelated assertions remain
+green.
 
 ### Step 2: Add a true fresh-install mode to the packed-consumer verifier
 
@@ -465,34 +452,16 @@ Add the same job to `.github/workflows/release.yml` with `needs: preflight`, and
 add its job id to `publish-npm.needs`. Do not multiply `real-tools`,
 `target-support`, or `publication-hosts` by Effect versions.
 
-Extend `scripts/verify-workflow-receipt.mjs` with an explicit versioned receipt
-contract option:
-
-- existing/default `target-v1` keeps the exact seven historical required job
-  names so Plan 013/014 evidence remains re-verifiable;
-- new `effect-v1` requires those seven plus the two exact compatibility matrix
-  job names;
-- reject unknown or duplicate contract arguments.
-
-Use an explicit `--contract effect-v1` in this plan's final receipt command.
-Keep old calls without `--contract` equivalent to `target-v1`; do not infer a
-contract from a receipt prefix.
-
 **Verify**:
 
 ```sh
 pnpm build
 pnpm exec vitest run \
-  test/architecture/generated-and-ci.test.ts \
-  test/architecture/workflow-receipt.test.ts
-node scripts/verify-workflow-receipt.mjs \
-  --receipt-file plans/014-hard-cut-typed-matrix-public-api.md \
-  --prefix 'Final target evidence:' \
-  --contract target-v1
+  test/architecture/generated-and-ci.test.ts
 ```
 
-Expected: workflow/receipt architecture tests pass and the historical Plan 014
-receipt remains valid under `target-v1`.
+Expected: the exact CI and release workflow shapes pass, including both
+required compatibility cells and the publication dependency.
 
 ### Step 7: Run local package, compatibility, and current-tool gates
 
@@ -522,39 +491,32 @@ Expected: current rc.108 remains compatible with both pinned real compilers,
 the Node host smoke test, and all 12 compile/header cells. Do not run the full
 compiler-target matrix once per Effect endpoint.
 
-### Step 8: Record exact required CI evidence before marking the plan done
+### Step 8: Observe exact required CI before marking the plan done
 
 Commit the complete Plan 015 source/workflow change. With explicit push
 authority, observe `.github/workflows/ci.yml` for that exact source SHA. Require
 all existing jobs plus both exact Effect endpoint cells to complete successfully.
 
-Append exactly one receipt line to this file:
+Record the successful run as a direct audit note:
 
 ```text
-Effect compatibility evidence: https://github.com/<owner>/<repo>/actions/runs/<id> @ <40-character-source-sha>
+Effect compatibility CI: https://github.com/<owner>/<repo>/actions/runs/<id> @ <40-character-source-sha>
 ```
 
-Then verify it:
+Expected: GitHub Actions directly identifies the exact source commit, the
+required workflow concludes successfully, and all nine matrix/quality jobs are
+green. The run itself is the compatibility evidence; do not add a custom
+receipt schema that re-queries and restates GitHub's own commit/check binding.
+Only then mark Plan 015 `DONE` in `plans/README.md`.
 
-```sh
-node scripts/verify-workflow-receipt.mjs \
-  --receipt-file plans/015-widen-effect-v4-compatibility.md \
-  --prefix 'Effect compatibility evidence:' \
-  --contract effect-v1
-compat_sha="$(sed -n 's/^Effect compatibility evidence: https:\/\/github.com\/.* @ \([0-9a-f]\{40\}\)$/\1/p' plans/015-widen-effect-v4-compatibility.md)"
-test -n "$compat_sha"
-git diff --exit-code "$compat_sha" -- \
-  package.json pnpm-lock.yaml README.md scripts test/architecture \
-  .github/workflows
-```
-
-Expected: the verifier confirms the exact run URL, workflow path, source SHA,
-successful run, and all nine `effect-v1` jobs; the scoped diff from the source
-SHA is empty. Only then mark Plan 015 `DONE` in `plans/README.md`.
+The earlier target plans retain their recorded GitHub run URLs as historical
+audit notes. Their bespoke local receipt verifier is deleted here because it
+duplicated GitHub Actions' canonical commit/check association and added no
+compatibility coverage.
 
 If there is no remote/push authority, leave Plan 015 `IN PROGRESS` after all
-local gates and report the single external acceptance gate. Do not reuse Plan
-014's receipt or call implementation complete.
+local gates and report the single external acceptance gate. Do not reuse an
+older run or call implementation complete.
 
 ## Test plan
 
@@ -575,8 +537,6 @@ local gates and report the single external acceptance gate. Do not reuse Plan
   compatibility arguments fail before filesystem or network work.
 - CI contract: exact two-cell compatibility matrix in both CI and release, no
   escape hatch, and npm publication depends on it.
-- Receipt versioning: target-v1 historical evidence remains valid; effect-v1
-  rejects a missing, duplicate, failed, or skipped endpoint cell.
 - Docs: exact current install and bounded support interval, without changing
   compiler-version or orchestrator-host claims.
 - Current real behavior: existing real compiler, Node host, publication-host,
@@ -584,32 +544,28 @@ local gates and report the single external acceptance gate. Do not reuse Plan
 
 ## Done criteria
 
-- [ ] `peerDependencies.effect` is exactly
+- [x] `peerDependencies.effect` is exactly
       `>=4.0.0-beta.104 <4.1.0-0`.
-- [ ] Development `effect` and all three official platform packages resolve
+- [x] Development `effect` and all three official platform packages resolve
       exactly to `4.0.0-rc.108` under the frozen lock.
-- [ ] `effect@latest` was not used to select v4 and Effect 3 has no compatibility
+- [x] `effect@latest` was not used to select v4 and Effect 3 has no compatibility
       shim or claim.
-- [ ] The normal packed-consumer test remains deterministic and network-free.
-- [ ] Fresh consumer mode performs strict package-manager resolution and proves
+- [x] The normal packed-consumer test remains deterministic and network-free.
+- [x] Fresh consumer mode performs strict package-manager resolution and proves
       the exact installed endpoint.
-- [ ] beta.104 and rc.108 each pass source check, TSTyche, unit tests, build, and
+- [x] beta.104 and rc.108 each pass source check, TSTyche, unit tests, build, and
       fresh packed-consumer verification in isolated temporary copies.
-- [ ] beta.103 is rejected before compatibility work starts.
-- [ ] CI and release contain the exact required two-cell Effect matrix with no
+- [x] beta.103 is rejected before compatibility work starts.
+- [x] CI and release contain the exact required two-cell Effect matrix with no
       skip/continue escape.
-- [ ] npm publication depends on the Effect compatibility job.
-- [ ] Historical target-v1 receipts remain verifiable and the new effect-v1
-      contract requires both endpoint cells.
-- [ ] README distinguishes the bounded peer interval and exact reference RC
+- [x] npm publication depends on the Effect compatibility job.
+- [x] README distinguishes the bounded peer interval and exact reference RC
       without changing compiler support claims or freezing a volatile dist-tag.
-- [ ] No file under `src/` or public API/runtime behavior changed.
-- [ ] `pnpm verify`, `pnpm verify:effect`, `npm pack --dry-run`, and
+- [x] No file under `src/` or public API/runtime behavior changed.
+- [x] `pnpm verify`, `pnpm verify:effect`, `npm pack --dry-run`, and
       `git diff --check` pass.
-- [ ] Required CI for the exact source SHA is green, including current real
+- [ ] Required CI for the exact final source SHA is green, including current real
       compilers, publication hosts, all targets, and both Effect endpoints.
-- [ ] This file contains the verified `effect-v1` workflow receipt and the
-      source/verification diff from its SHA is empty.
 - [ ] Only then, Plan 015 is marked `DONE` in `plans/README.md`.
 
 ## STOP conditions
