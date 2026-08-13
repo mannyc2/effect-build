@@ -528,11 +528,12 @@ Commit the complete Plan 015 source/workflow change. With explicit push
 authority, observe `.github/workflows/ci.yml` for that exact source SHA. Require
 all existing jobs plus both exact Effect endpoint cells to complete successfully.
 
-Append exactly one receipt line to this file:
-
-```text
-Effect compatibility evidence: https://github.com/<owner>/<repo>/actions/runs/<id> @ <40-character-source-sha>
-```
+Append exactly one physical receipt line to this file. It consists of the
+literal prefix `Effect compatibility evidence:`, one space, an Actions run URL
+of the form `https://github.com/<owner>/<repo>/actions/runs/<positive-id>`, one
+space, `@`, one space, and the 40-character lowercase source SHA. Do not put a
+placeholder line beginning with the prefix in this plan: the verifier requires
+exactly one match, which must be the real receipt.
 
 Then verify it:
 
@@ -555,6 +556,8 @@ SHA is empty. Only then mark Plan 015 `DONE` in `plans/README.md`.
 If there is no remote/push authority, leave Plan 015 `IN PROGRESS` after all
 local gates and report the single external acceptance gate. Do not reuse Plan
 014's receipt or call implementation complete.
+
+Effect compatibility evidence: https://github.com/mannyc2/effect-build/actions/runs/31632275191 @ 5379cb36422911628d344c9cb38a31b094983815
 
 ## Test plan
 
@@ -584,33 +587,33 @@ local gates and report the single external acceptance gate. Do not reuse Plan
 
 ## Done criteria
 
-- [ ] `peerDependencies.effect` is exactly
+- [x] `peerDependencies.effect` is exactly
       `>=4.0.0-beta.104 <4.1.0-0`.
-- [ ] Development `effect` and all three official platform packages resolve
+- [x] Development `effect` and all three official platform packages resolve
       exactly to `4.0.0-rc.108` under the frozen lock.
-- [ ] `effect@latest` was not used to select v4 and Effect 3 has no compatibility
+- [x] `effect@latest` was not used to select v4 and Effect 3 has no compatibility
       shim or claim.
-- [ ] The normal packed-consumer test remains deterministic and network-free.
-- [ ] Fresh consumer mode performs strict package-manager resolution and proves
+- [x] The normal packed-consumer test remains deterministic and network-free.
+- [x] Fresh consumer mode performs strict package-manager resolution and proves
       the exact installed endpoint.
-- [ ] beta.104 and rc.108 each pass source check, TSTyche, unit tests, build, and
+- [x] beta.104 and rc.108 each pass source check, TSTyche, unit tests, build, and
       fresh packed-consumer verification in isolated temporary copies.
-- [ ] beta.103 is rejected before compatibility work starts.
-- [ ] CI and release contain the exact required two-cell Effect matrix with no
+- [x] beta.103 is rejected before compatibility work starts.
+- [x] CI and release contain the exact required two-cell Effect matrix with no
       skip/continue escape.
-- [ ] npm publication depends on the Effect compatibility job.
-- [ ] Historical target-v1 receipts remain verifiable and the new effect-v1
+- [x] npm publication depends on the Effect compatibility job.
+- [x] Historical target-v1 receipts remain verifiable and the new effect-v1
       contract requires both endpoint cells.
-- [ ] README distinguishes the bounded peer interval and exact reference RC
+- [x] README distinguishes the bounded peer interval and exact reference RC
       without changing compiler support claims or freezing a volatile dist-tag.
-- [ ] No file under `src/` or public API/runtime behavior changed.
-- [ ] `pnpm verify`, `pnpm verify:effect`, `npm pack --dry-run`, and
+- [x] No file under `src/` or public API/runtime behavior changed.
+- [x] `pnpm verify`, `pnpm verify:effect`, `npm pack --dry-run`, and
       `git diff --check` pass.
-- [ ] Required CI for the exact source SHA is green, including current real
+- [x] Required CI for the exact source SHA is green, including current real
       compilers, publication hosts, all targets, and both Effect endpoints.
-- [ ] This file contains the verified `effect-v1` workflow receipt and the
+- [x] This file contains the verified `effect-v1` workflow receipt and the
       source/verification diff from its SHA is empty.
-- [ ] Only then, Plan 015 is marked `DONE` in `plans/README.md`.
+- [x] Only then, Plan 015 is marked `DONE` in `plans/README.md`.
 
 ## STOP conditions
 

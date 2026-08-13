@@ -10,6 +10,16 @@ program. Re-audited again on 2026-08-12 against the completed `v0.2.0` product
 tag at commit `29f8cfb` and planning baseline `e4257cc` for dependency
 compatibility; Plan 015 is the active, bounded Effect 4.0 range and current-RC
 upgrade.
+Re-audited on 2026-08-13 at the same source commit `e4257cc` for the next
+architecture stage. `NEXT-STAGE-ARCHITECTURE-AUDIT.md` records the live
+lifecycle trace, correctness findings, capability/ownership maps, primary-
+source Node/esbuild constraints, and independently vetted Fable Max advice.
+Plans 016-019 are the selected four-plan program: behavior-preserving lifecycle
+compression, one continuation-owned esbuild artifact, one internal exact Node
+SEA vertical slice, then an evidence-only public-promotion decision. Plan 015 remains the required
+first dependency. Its user-owned content was preserved except for one
+plan-only receipt-placeholder correction required to make its exactly-one
+receipt verifier executable.
 The decision gates opened by
 `FIRST-PRINCIPLES-REVIEW.md` (operator-audited, 2026-08-10) were answered by
 the operator on 2026-08-11 and are recorded under **Gate decisions** below.
@@ -24,6 +34,12 @@ Read the assigned plan fully before changing code. Honor its drift checks, dirty
 worktree boundary, verification gates, and STOP conditions. Do not add
 compatibility aliases, legacy fallbacks, a parallel “advanced” managed tier, or
 a raw-argv escape hatch.
+
+Plans 016-019 invoke build/test gates through Bun. Plan 017 uses the declared
+`pnpm@10.17.1` exactly once to add esbuild and update the authoritative
+`pnpm-lock.yaml`; using `bun add` there would create a parallel lockfile. The
+package's existing `verify` script may internally invoke pnpm sub-scripts; do
+not rewrite that unrelated contract inside this program.
 
 ## Gate decisions (recorded 2026-08-11)
 
@@ -110,6 +126,46 @@ of the 2026-08-11 gates:
    Bundling, type checking, task graphs, caching, publication, watch/dev servers,
    and generic Build services remain out.
 
+## Next-stage direction decisions (recorded 2026-08-13)
+
+These decisions govern Plans 016-019 and do not authorize a public API cut:
+
+1. **Level 1 is earned narrowly.** Keep the existing prepared-cell
+   representation, project one adapter request containing only semantic
+   compiler fields plus staged output, replace commit-bearing `AtomicOutput`
+   with an opaque staged-path-only candidate, keep destination/rename inside
+   one finalize operation, and delete the peer runner/service. A branded
+   validated peer with no separate consumer is rejected. Correct fat
+   Mach-O endianness and document rename's irreversible interruption boundary
+   in the same behavior-preserving plan.
+2. **Scalar total preflight is not current behavior.** Scalar runtime input
+   validates target/options only; matrix total preflight remains distinct.
+   Strengthening scalar decoding would require a separate public error/behavior
+   decision and is not hidden in Plan 016.
+3. **The second pipeline remains two concrete internal operations.** The
+   structured-library `Esbuild.withJavaScriptBundle` runs a consumer while one
+   temporary Node-compatible JS artifact is live; esbuild's unref'd global
+   native service remains package/host-process-owned. Exact selected CLI
+   `NodeSea.createExecutable` consumes it. Effect Scope does not statically
+   prevent returned-handle escape, so a raw `bundleScoped -> artifact` API is
+   rejected. Neither operation becomes a generic producer/compiler/executor
+   protocol.
+4. **The first SEA proof uses a separate direct-capable Node.** Repository and
+   orchestrator CI remain Node 24.14.1. The required producer lane pins Node
+   26.7.0 on exact Linux x64 GNU, uses built-in `--build-sea`, validates
+   observed externals against that Node's builtin authority and output target
+   against its inspected binary, and stops instead of accepting a version
+   range, postject, automatic downloads, cross-target output, or macOS signing.
+5. **Multi-stage provenance stays internal.** The proof records an exact ordered
+   esbuild/Node observation without changing public Artifact's singular `tool`
+   or claiming hermeticity/reproducibility. Public artifacts and receipts must
+   be one later replacing hard cut, not parallel fields/types.
+6. **Levels 2-3 remain evidence-gated.** Public inspection, artifacts, receipts,
+   SemanticPlan, BoundExecutionPlan, and replaceable executors require the
+   observable gates in Plan 019. Two local producers are not two backends;
+   closed inputs, content-identified toolchain requirements, binding, workspace,
+   transport, and real alternate-backend evidence are still absent.
+
 ## Execution order and status
 
 | Plan | Title | Priority | Effort | Depends on | Status |
@@ -128,7 +184,11 @@ of the 2026-08-11 gates:
 | 013 | Prove every provider target with required real evidence | P1 | L | 011 | DONE |
 | 012 | Build the typed executable target matrix | P1 | L | 013 | DONE |
 | 014 | Hard-cut the typed target matrix into the public product | P1 | M | 012, 013 | DONE |
-| 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | IN PROGRESS |
+| 015 | Support the evidenced Effect 4.0 line and current v4 RC | P1 | M | 014 | DONE |
+| 016 | Compress the executable lifecycle behind one validated publication boundary | P1 | M | 015 | TODO |
+| 017 | Build one continuation-owned esbuild JavaScript bundle artifact | P1 | M | 015, 016 | TODO |
+| 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | TODO |
+| 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -182,6 +242,26 @@ behavior, or the standalone operation invalidated that earlier work.
   Effect/platform development family to rc.108, and makes beta.104 plus rc.108
   fresh-consumer lanes required before publication. It does not multiply the
   compiler-target matrix or change an operation, schema, host, or target claim.
+- Plan 016 runs after Plan 015 so its Effect API and verification excerpts do
+  not drift across the rc.108 cut. It preserves the released surface while
+  narrowing adapter visibility to a staged-output request, collapsing
+  `CompilerRunner` into `CompilerService`, establishing one publication owner
+  and file inspector, fixing fat Mach-O endianness, and specifying the rename
+  point of no return.
+- Plan 017 depends on that lifecycle boundary and adds an exact direct esbuild
+  dependency. It proves one continuation-owned structured-library operation
+  and one five-field internal JavaScript artifact, including the external edges
+  esbuild actually observed. It explicitly does not claim arbitrary JavaScript
+  closure or ownership of esbuild's package-global service and adds no public
+  bundle operation.
+- Plan 018 is the sole complete second-pipeline proof. It retains Node 24 as
+  orchestrator, selects exact Node 26.7.0 as a separate Linux direct-SEA
+  producer, consumes Plan 017's artifact, and reuses Plan 016's native
+  validation/publication without a postject or download fallback.
+- Plan 019 runs only after both topologies have required real evidence. It
+  creates a consumer/gate/representation decision record and changes no source
+  or public API. An unmet gate stays internal/rejected rather than generating
+  another speculative plan.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 
@@ -303,8 +383,8 @@ user-owned unless explicitly listed in the assigned plan.
 - **Byte-identical parity with direct CLI**: rejected as a blanket claim.
   Sibling staging can be observable to compilers. Test runtime behavior,
   published bytes/digest, and target; document the divergence.
-- **Proof/attestation/security lattice**: rejected. An in-process library on the
-  builder cannot independently attest an untrusted builder. Artifact digest is
+- **Proof/attestation/security lattice**: rejected. Library code on the builder
+  cannot independently attest an untrusted builder. Artifact digest is
   useful data, not proof.
 - **Cache, remote execution, DAG, watch mode, auto-install**: deferred until a
   standalone use case demonstrates a distinct operation/lifecycle. None shapes
@@ -354,6 +434,35 @@ user-owned unless explicitly listed in the assigned plan.
 - **Bulk latest-tooling upgrades inside Plan 015**: deferred. TypeScript,
   Vitest, oxlint, dprint, pnpm, and Node types are development-only migrations
   with separate cross-major risks and do not widen the consumer Effect range.
+- **A total prepared lifecycle request or public candidate/validated/published
+  family**: rejected. Prepared cells and public `Artifact` remain canonical.
+  Plan 016 accepts only a transient adapter projection that removes final
+  outfile/cwd/digest visibility, replaces commit-bearing `AtomicOutput` with a
+  staged-path-only private candidate, and keeps validation/publication in one
+  owner. It adds no validated or public state class.
+- **A peer `SystemTarget`, public `ResolutionTarget`, or public
+  `ExecutionTarget`**: rejected. Root `Target` already owns system identity,
+  Node resolution is fixed, and the selected Node tool owns execution binding.
+  Only bundle syntax survives as a real downstream compatibility fact.
+- **Node 24/postject compatibility or automatic Node acquisition**: rejected.
+  The proof selects a direct-SEA-capable tool explicitly and stops on absence.
+- **A raw returned temporary bundle or an esbuild-only closure claim**:
+  rejected. Effect Scope does not make returned values linear, and esbuild
+  cannot observe arbitrary eval/Function/runtime module construction. The
+  continuation owns lifetime and records only observed external edges.
+- **Per-operation ownership of esbuild's native service**: rejected for this
+  producer mechanism. Context cancel/dispose is scoped; the exact package's
+  global unref'd service is wider. Calling global `stop()` could break
+  concurrent users and is not disguised as operation cleanup.
+- **A Node SEA runtime range beginning at 25.7**: rejected. The historical
+  capability floor does not prove every later active-development release; the
+  first slice accepts only exact tested 26.7.0/`linux-x64-gnu`.
+- **Immediate public plural provenance or versioned receipts**: rejected until
+  the complete internal topology works and a named durable consumer meets Plan
+  019's replacing-hard-cut gates.
+- **Fake-only SemanticPlan/BoundExecutionPlan/executor evidence**: rejected.
+  Portable plans require closed content identities and real multiple bindings;
+  replaceable executors require genuinely different backends.
 
 ## Quality bar
 
