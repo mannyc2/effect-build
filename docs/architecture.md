@@ -96,6 +96,26 @@ an Artifact having been returned. There is no rollback after that point.
 - Foreign target output is validated but not executed on the Linux support
   runner. Execution remains a separate current-host check.
 
+## Internal composed topology
+
+The released surface remains Bun/Deno scalar and homogeneous matrix. A
+package-private continuation-owned bundle -> exact selected Node SEA topology
+reuses the same native validation and publication boundary. Its bundle,
+configuration, candidate, and child are temporary Scope-owned state; only the
+validated final executable remains after both nested Scopes close.
+
+The internal ordered stages report that esbuild and the selected Node producer
+were observed doing work. Stage observations are not build receipts or
+reproducibility evidence. They do not establish closed inputs, identical
+invocations, or byte equality. Direct and composed operations are not
+replaceable executors: both still use the same local filesystem and process
+backend.
+
+Public promotion is controlled by the criterion-level record in
+[`plans/NEXT-STAGE-PROMOTION-DECISION.md`](../plans/NEXT-STAGE-PROMOTION-DECISION.md).
+The current evidence earns only package-private reuse; it adds no public
+operation, Artifact field, receipt, plan, executor, or support-matrix claim.
+
 ## Product boundary
 
 The package does not provide standalone bundling or transforms, type checking,
@@ -111,6 +131,8 @@ composition.
   `src/standalone/internal/Process.ts`.
 - Library source has no `node:*` imports and no `Effect.runPromise` calls.
 - Package exports and runtime keys match `tooling/public-api.json`.
+- Internal esbuild, Node SEA, lifecycle, and stage representations are not
+  package entrypoints.
 - All examples compile against a packed installation.
 - Provider target-table literals exactly equal the authored required cells in
   `tooling/support-matrix.json`.

@@ -188,7 +188,7 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
 | 016 | Compress the executable lifecycle behind one validated publication boundary | P1 | M | 015 | DONE |
 | 017 | Build one continuation-owned esbuild JavaScript bundle artifact | P1 | M | 015, 016 | DONE |
 | 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | DONE |
-| 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | TODO |
+| 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | DONE |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -267,10 +267,12 @@ behavior, or the standalone operation invalidated that earlier work.
   `31753557975`, then completed against exact source
   `577ffa7016a7236edba26d82c549bdfc70fdce4f`. Required run `31754891708`
   passed the full `node-sea-v1` contract, including the real private pipeline.
-- Plan 019 runs only after both topologies have required real evidence. It
-  creates a consumer/gate/representation decision record and changes no source
-  or public API. An unmet gate stays internal/rejected rather than generating
-  another speculative plan.
+- Plan 019 compared both receipt-backed topologies at program-start source
+  `61d1c0c9f04c4a4254163d4f85ebf6248a67b9bf` and changed no source or public
+  API. Inspection remains an earned internal capability; public inspection,
+  common Artifact/provenance, and build receipts are `NOT MET`, while semantic/
+  bound plans and replaceable executors are `REJECTED` pending real consumers
+  and genuinely different backends.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 

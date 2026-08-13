@@ -167,6 +167,23 @@ describe("documentation contract", () => {
     expect(architecture).toMatch(/never import provider public\s+modules, adapters, discovery, or execution code/i);
   });
 
+  it("documents the proven private topology without expanding the exact public surface", async () => {
+    const architecture = await readFile(resolve(root, "docs/architecture.md"), "utf8");
+    const publicApi = JSON.parse(await readFile(resolve(root, "tooling/public-api.json"), "utf8"));
+
+    expect(architecture).toContain("The released surface remains Bun/Deno scalar and homogeneous matrix");
+    expect(architecture).toContain("package-private continuation-owned bundle -> exact selected Node SEA topology");
+    expect(architecture).toMatch(/Stage observations are not build receipts or\s+reproducibility evidence/);
+    expect(architecture).toMatch(/Direct and composed operations are not\s+replaceable executors/);
+    expect(architecture).toContain("NEXT-STAGE-PROMOTION-DECISION.md");
+    expect(publicApi).toEqual({
+      version: 1,
+      subpaths: [".", "./bun", "./deno"],
+      rootRuntimeKeys: ["Artifact", "BuildError", "MatrixError", "Target"],
+      toolRuntimeKeys: ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+    });
+  });
+
   it("rejects obsolete product language everywhere user-facing", async () => {
     const text = [
       await readFile(resolve(root, "README.md"), "utf8"),
@@ -181,8 +198,6 @@ describe("documentation contract", () => {
         "input closure",
         "truthful terminal record",
         "byte[- ]identical",
-        "hermetic",
-        "provenance",
         "Configured" + "Observed",
         "Resolved" + "Build",
         "material" + "ize",
@@ -194,5 +209,6 @@ describe("documentation contract", () => {
       "i",
     );
     expect(text).not.toMatch(prohibited);
+    expect(text).not.toMatch(/(?:guarantees|proves|provides) (?:hermeticity|reproducibility|provenance)/i);
   });
 });
