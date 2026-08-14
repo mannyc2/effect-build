@@ -831,10 +831,9 @@ describe("standalone matrix execution", () => {
     expect(targets.slice(2).some((target) => existsSync(join(sentinels, `${target}.pid`)))).toBe(false);
 
     const interrupting = Effect.runPromise(Fiber.interrupt(fiber));
-    await waitUntil(() =>
-      readEvents(events).filter((event) => ["SIGINT", "SIGTERM"].includes(event.event)).length === 2
-    );
-    expect(pids.every(pidIsAlive)).toBe(true);
+    const signalEvents = () => readEvents(events).filter((event) => ["SIGINT", "SIGTERM"].includes(event.event));
+    await waitUntil(() => pids.every((pid) => signalEvents().some((event) => event.pid === pid)));
+    expect(new Set(signalEvents().map((event) => event.pid))).toEqual(new Set(pids));
     await interrupting;
     const exit = await Effect.runPromise(Fiber.await(fiber));
     expect(Exit.hasInterrupts(exit)).toBe(true);
