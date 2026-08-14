@@ -190,7 +190,7 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
 | 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | DONE |
 | 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | DONE |
 | 020 | Hard-cut to a four-package Bun workspace and publish Node SEA as a provider | P1 | XL | 015-019 | DONE |
-| 021 | Adopt certified ts-release 0.2.0 for the four-package release | P1 | L | 020 | BLOCKED: public ts-release 0.2.0 absent |
+| 021 | Adopt the certified ts-release 0.2 line for the four-package release | P1 | L | 020 | BLOCKED: 0.2.2 is singular-package and fails clean npm install |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -284,9 +284,13 @@ behavior, or the standalone operation invalidated that earlier work.
   `4f26c02de66db3326932e610b7225fcd0eec8b69`, creates four lockstep public
   packages at the available next version `0.3.0`, and retains every rejected
   inspector/receipt/plan/executor/registry/fallback boundary.
-- Plan 021 remains separately gated on a real certified public ts-release
-  0.2.0 and immutable four-package coordination evidence. Its absence never
-  weakens or blocks Plan 020 implementation; it blocks only release activation.
+- Plan 021 accepts the exact current patch from the certified public ts-release
+  0.2 line. Public 0.2.2 exists and has valid one-package release evidence, but
+  its stock schema/Action emits one npm subject, no durable content-addressed
+  run proves one four-package candidate, its explicit Bun peer graph warns and
+  duplicates `platform-node-shared`, and a clean supported npm/Node strict
+  install fails peer resolution. Those failures never weaken or block Plan 020
+  implementation; they block only release activation.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 
