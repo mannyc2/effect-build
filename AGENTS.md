@@ -1,13 +1,18 @@
 # effect-build execution rules
 
-- Keep exactly two public operations: scalar `compileExecutable` and homogeneous-provider `compileExecutableMatrix`.
-- Select exactly one provider package (`effect-build-bun`, `effect-build-deno`, or `effect-build-node-sea`). There is no registry, fallback, raw argv, retry, or automatic installation.
-- Keep package manager, orchestrator runtime, compiler, and artifact target independent. Applications provide one official Effect platform layer at composition time.
-- Keep exactly four lockstep public packages: `effect-build`, `effect-build-bun`, `effect-build-deno`, and `effect-build-node-sea`. Providers depend one way on core.
-- Shared lifecycle code owns sibling staging, scoped child processes, candidate identity, executable validation, optional hashing, and atomic replacement. Provider packages own discovery inputs, probing, target mapping, argv, and diagnostics.
-- `effect-build/Provider.define` is the only provider-author SPI. It is closed to Bun, Deno, and Node SEA and never exposes lifecycle, publication, or raw process capabilities.
+- Architecture generation: `granular-integration-migration-v2`.
+- Plans 023, 024, and 025 form one no-publish migration. Plan 023 may temporarily retain the current four-package combined Node SEA facade while it establishes neutral core boundaries; Plan 024 must atomically split Esbuild and Node SEA without certifying that intermediate public cut; Plan 025 must add the selected Bun bundle producer, prove both bundle producers against Node SEA, and restamp this file to `granular-integration-v2`. No tag, package, release candidate, or publication may be produced before Plan 025 completes.
+- Keep Bun and Deno's existing public scalar `compileExecutable` and homogeneous-provider `compileExecutableMatrix` operations and behavior. Their provider packages remain explicit; there is no registry, fallback, retry, raw argv, or automatic installation.
+- The final state is exactly five lockstep public packages: `effect-build`, `effect-build-bun`, `effect-build-deno`, `effect-build-esbuild`, and `effect-build-node-sea`. Every integration depends one way on core and never on an integration sibling.
+- In the final state, `effect-build` owns only provider-neutral Artifact/Target semantics plus the narrow `./Integration` and command-only `./Provider` author boundaries earned by current consumers. Do not add a generic builder, bundler, packager, plan, executor, store, cache, transport, or backend registry.
+- During Plan 023 only, the existing Node SEA package may retain its opaque combined compatibility facade and private Esbuild producer while both migrate onto the neutral core lifecycle. Plan 024 moves Esbuild to `effect-build-esbuild`, changes `effect-build-node-sea` to consume only the core bundle capability, and makes application Effect code own composition; it must delete the opaque combined facade with no alias or sibling dependency.
+- During Plan 023 only, core may retain the existing closed Artifact/MatrixError compatibility projections and composed Node SEA `Provider` branch required by that facade. Plan 024 must delete them rather than extend them; no new provider case or generic protocol may be added.
+- Shared lifecycle code exclusively owns sibling staging, scoped child processes, candidate identity, executable validation, optional hashing, lifetime-safe publication claims, and atomic replacement. Integrations own tool discovery/probing, native invocation, semantic input validation, and diagnostics.
+- In the final state, `effect-build/Provider.define` is a command-provider author SPI with Bun and Deno as its consumers. It may build a provider-specific service from one selected command so Bun compilation and Bun bundling cannot discover different tools; it does not expose that bound command to end users or define a generic bundler. Esbuild and Node SEA do not implement a guessed common provider protocol.
+- Plan 025 may add only `Bun.withJavaScriptBundle(input, use)` to the existing Bun service. Bun fixes Node resolution and exposes its pinned producer-default bundle behavior; exact Node syntax acceptance remains owned by `NodeSea.createExecutable`. Deno remains scalar/matrix only until a separately evidenced bundle operation exists.
+- `effect-build/Integration.executeCommand` is the one bounded/scoped integration-author command function. Do not expose a process handle, replaceable process service, candidate, commit, raw native inspector, or publication mutation capability.
+- Keep package manager, orchestrator runtime, build tool, and artifact target independent. Applications provide one official Effect platform Layer at composition time.
 - Library source uses Effect platform-neutral services. Do not import `node:*` or call `Effect.runPromise` under `packages/*/src/`.
-- Preserve compiler CLI behavior for project configuration and environment unless a future public option explicitly changes it.
-- Interruption closes the scope and terminates the compiler child. Do not translate interruption into a build error.
-- Keep internal adapters and process capabilities package-private.
+- Preserve compiler CLI project/environment behavior and Bun/Deno operation semantics unless a dedicated public decision explicitly changes them.
+- Interruption closes Scope and terminates active children. Do not translate interruption into a build error. Atomic rename remains the publication point of no return.
 - Run `bun run verify` before handing off a complete implementation.
