@@ -1,9 +1,10 @@
 # API
 
-The workspace publishes four packages with five public entry points:
+The workspace currently publishes four packages with six public entry points:
 
 ```ts
-import { Artifact, BuildError, MatrixError, Target } from "effect-build";
+import { Artifact, BuildError, JavaScriptBundle, MatrixError, Target } from "effect-build";
+import * as Integration from "effect-build/Integration";
 import { define } from "effect-build/Provider";
 ```
 
@@ -25,13 +26,26 @@ Or select the Node SEA provider:
 import * as NodeSea from "effect-build-node-sea";
 ```
 
-The core root runtime keys are `Artifact`, `BuildError`, `MatrixError`, and
-`Target`; its provider-author path has only `define`. Each provider package has
+The core root runtime keys are `Artifact`, `BuildError`, `JavaScriptBundle`,
+`MatrixError`, and `Target`. `effect-build/Integration` has exactly
+`executeCommand`, `inspectLiveJavaScriptBundle`, `produceExecutable`, and
+`withOwnedJavaScriptBundle`; its provider-author path has only `define`. Each provider package has
 exactly five runtime keys: `Compiler`, `Target`,
 `compileExecutable`, `compileExecutableMatrix`, and `layer`. Provider Artifact,
 input, options, and MatrixError aliases are type-only. There is no root compile
 operation or provider argument. `define` is the closed first-party authoring
 SPI, not an application build call.
+
+`JavaScriptBundle.Artifact` is a nominal, continuation-scoped capability. Its
+required digest and byte count are observed by core, and the handle is live
+only inside `JavaScriptBundle.withFile` or
+`Integration.withOwnedJavaScriptBundle`. It is not a serializable durable file
+descriptor. `Integration` is a narrow foundation for package authors, not a
+generic bundler, builder, executor, registry, or publication API.
+
+The Bun, Deno, and combined Node SEA scalar/matrix APIs remain unchanged in
+this migration stage. Plan 024 owns the atomic five-package cut that separates
+Esbuild production from Node SEA consumption.
 
 ## Scalar compile
 

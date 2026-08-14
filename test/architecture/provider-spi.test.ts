@@ -147,7 +147,7 @@ describe("closed provider SPI", () => {
     const coreManifest = JSON.parse(await readFile(resolve(root, "packages/effect-build/package.json"), "utf8")) as {
       exports: Record<string, unknown>;
     };
-    expect(Object.keys(coreManifest.exports)).toEqual([".", "./Provider"]);
+    expect(Object.keys(coreManifest.exports)).toEqual([".", "./Integration", "./Provider"]);
     const providerDeclaration = await readFile(resolve(root, "packages/effect-build/dist/Provider.d.ts"), "utf8");
     for (
       const capability of [
@@ -162,9 +162,9 @@ describe("closed provider SPI", () => {
     }
     expect(providerDeclaration).toContain("execute: ExecuteCommand");
     expect(providerDeclaration).toContain(
-      "export type ComposedProviderRequirements = FileSystem.FileSystem | Path.Path",
+      "export type ComposedProviderRequirements = FileSystem.FileSystem | Path.Path | Crypto.Crypto",
     );
     const internals = await readdir(resolve(root, "packages/effect-build/src/standalone/internal"));
-    expect(internals).toContain("Process.ts");
+    expect(internals).not.toContain("Process.ts");
   });
 });

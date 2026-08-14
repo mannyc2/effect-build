@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { targetSchemaFor } from "../internal/ProviderContracts.js";
+import { SystemTarget } from "./Target.js";
 
 const isAbsolutePath = (value: string): boolean =>
   (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)) && value.length > 1;
@@ -41,48 +42,74 @@ export type ByteCount = typeof ByteCount.Type;
 export const ToolName = Schema.Literals(["bun", "deno", "node-sea"] as const);
 export type ToolName = typeof ToolName.Type;
 
-const ToolFields = {
-  version: Schema.String.pipe(
-    Schema.check(
-      Schema.makeFilter((value: string) => value.length > 0 ? true : "tool version must be non-empty"),
-    ),
-  ),
-  path: AbsolutePath,
-} as const;
-
-const ArtifactFields = {
+export const FileArtifact = Schema.Struct({
   path: AbsolutePath,
   bytes: ByteCount,
   digest: Schema.optionalKey(Digest),
+});
+export type FileArtifact = typeof FileArtifact.Type;
+
+export const ToolObservation = Schema.Struct({
+  name: Schema.NonEmptyString,
+  version: Schema.NonEmptyString,
+  path: Schema.optionalKey(AbsolutePath),
+});
+export type ToolObservation = typeof ToolObservation.Type;
+
+export const StageObservation = Schema.Struct({
+  operation: Schema.NonEmptyString,
+  tool: ToolObservation,
+});
+export type StageObservation = typeof StageObservation.Type;
+
+export const ExecutableArtifact = Schema.Struct({
+  ...FileArtifact.fields,
+  target: SystemTarget,
+  stages: Schema.NonEmptyArray(StageObservation),
+});
+export type ExecutableArtifact = typeof ExecutableArtifact.Type;
+
+const commandToolFields = ToolObservation.fields;
+const bundleToolFields = {
+  name: ToolObservation.fields.name,
+  version: ToolObservation.fields.version,
 } as const;
 
 const BunCompileStage = Schema.Struct({
+  ...StageObservation.fields,
   operation: Schema.Literal("compile-executable"),
   tool: Schema.Struct({
+    ...commandToolFields,
     name: Schema.Literal("bun"),
-    ...ToolFields,
+    path: AbsolutePath,
   }),
 });
 
 const DenoCompileStage = Schema.Struct({
+  ...StageObservation.fields,
   operation: Schema.Literal("compile-executable"),
   tool: Schema.Struct({
+    ...commandToolFields,
     name: Schema.Literal("deno"),
-    ...ToolFields,
+    path: AbsolutePath,
   }),
 });
 
 const BundleStage = Schema.Struct({
+  ...StageObservation.fields,
   operation: Schema.Literal("bundle"),
   tool: Schema.Struct({
+    ...bundleToolFields,
     name: Schema.Literal("esbuild"),
     version: Schema.Literal("0.28.2"),
   }),
 });
 
 const AssembleNodeSeaStage = Schema.Struct({
+  ...StageObservation.fields,
   operation: Schema.Literal("assemble-node-sea"),
   tool: Schema.Struct({
+    ...commandToolFields,
     name: Schema.Literal("node"),
     version: Schema.Literal("26.7.0"),
     path: AbsolutePath,
@@ -90,21 +117,21 @@ const AssembleNodeSeaStage = Schema.Struct({
 });
 
 const BunArtifact = Schema.Struct({
-  ...ArtifactFields,
+  ...ExecutableArtifact.fields,
   provider: Schema.Literal("bun"),
   target: targetSchemaFor("bun"),
   stages: Schema.Tuple([BunCompileStage]),
 });
 
 const DenoArtifact = Schema.Struct({
-  ...ArtifactFields,
+  ...ExecutableArtifact.fields,
   provider: Schema.Literal("deno"),
   target: targetSchemaFor("deno"),
   stages: Schema.Tuple([DenoCompileStage]),
 });
 
 const NodeSeaArtifact = Schema.Struct({
-  ...ArtifactFields,
+  ...ExecutableArtifact.fields,
   provider: Schema.Literal("node-sea"),
   target: targetSchemaFor("node-sea"),
   stages: Schema.Tuple([BundleStage, AssembleNodeSeaStage]),

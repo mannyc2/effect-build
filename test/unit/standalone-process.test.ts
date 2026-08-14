@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { runProcess } from "../../packages/effect-build/src/standalone/internal/Process.js";
+import { executeCommand } from "../../packages/effect-build/src/Integration.js";
 
 const roots: string[] = [];
 const fixture = fileURLToPath(new URL("../fixtures/process/interruptible-compiler.mjs", import.meta.url));
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 const run = (argv: readonly string[]) =>
-  Effect.runPromise(runProcess(process.execPath, argv).pipe(Effect.provide(NodeServices.layer)));
+  Effect.runPromise(executeCommand(process.execPath, argv).pipe(Effect.provide(NodeServices.layer)));
 
 describe("standalone process", () => {
   it("captures normal and non-zero completion concurrently", async () => {
@@ -37,7 +37,7 @@ describe("standalone process", () => {
     roots.push(root);
     const sentinel = join(root, "pid");
     const fiber = Effect.runFork(
-      runProcess(process.execPath, [fixture, sentinel]).pipe(Effect.provide(NodeServices.layer)),
+      executeCommand(process.execPath, [fixture, sentinel]).pipe(Effect.provide(NodeServices.layer)),
     );
     for (let index = 0; index < 200 && !existsSync(sentinel); index++) {
       await new Promise((resolve) => setTimeout(resolve, 10));

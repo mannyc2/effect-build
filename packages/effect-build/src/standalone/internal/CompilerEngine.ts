@@ -1,4 +1,6 @@
 import { Crypto, Effect, FileSystem, Path, Result } from "effect";
+import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
+import * as Integration from "../../Integration.js";
 import type { StagesFor, ToolName } from "../Artifact.js";
 import { TargetUnsupported, ToolFailed } from "../BuildError.js";
 import { captureCellResult, makeMatrixFailedFor } from "../CompileExecutableMatrix.js";
@@ -14,17 +16,10 @@ import {
   type DiscoveredCompiler,
   type ProviderArtifact,
 } from "./CompilerAdapter.js";
-import {
-  acquireExecutableCandidate,
-  resolveExecutableDestination,
-  validateAndPublishExecutable,
-} from "./ExecutableLifecycle.js";
-import type { NativeExecutableObservation } from "./NativeExecutable.js";
-import { ChildProcessSpawner, runProcess } from "./Process.js";
 import { descriptorOf, matchesObservation, type TargetDescriptor, targetFromObservation } from "./TargetCatalog.js";
 
 const inferTarget = <SupportedTarget extends Target>(
-  observation: NativeExecutableObservation,
+  observation: Integration.NativeExecutableObservation,
   requested: SupportedTarget | undefined,
   fallback: SupportedTarget | undefined,
   resolve: (value: unknown) => SupportedTarget | undefined,
@@ -299,7 +294,7 @@ export function makeCompilerService<
 ): Effect.Effect<
   CompilerService<Name, SupportedTarget, Options>,
   never,
-  ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
+  EffectChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
 >;
 export function makeCompilerService<
   Options,
@@ -312,7 +307,7 @@ export function makeCompilerService<
 ): Effect.Effect<
   CompilerService<Name, SupportedTarget, Options>,
   never,
-  ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
+  EffectChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
 >;
 export function makeCompilerService<
   Options,
@@ -327,23 +322,23 @@ export function makeCompilerService<
 ): Effect.Effect<
   CompilerService<Name, SupportedTarget, Options>,
   never,
-  ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
+  EffectChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
 > {
   const commandAdapter = adapter as CommandCompilerAdapter<Options, Name, SupportedTarget, ValidatedOptions>;
   const producerEffect: Effect.Effect<
     CandidateProducer<Name, SupportedTarget, ValidatedOptions>,
     never,
-    ChildProcessSpawner
+    EffectChildProcessSpawner.ChildProcessSpawner
   > = "artifactTool" in source
     ? Effect.gen(function*() {
-      const spawner = yield* ChildProcessSpawner;
+      const spawner = yield* EffectChildProcessSpawner.ChildProcessSpawner;
       return {
         hostOs: source.hostOs,
         produceCandidate: (request) =>
           Effect.gen(function*() {
             const argv = yield* Effect.sync(() => commandAdapter.renderArgv(request));
-            const completion = yield* runProcess(source.artifactTool.path, argv, request.cwd).pipe(
-              Effect.provideService(ChildProcessSpawner, spawner),
+            const completion = yield* Integration.executeCommand(source.artifactTool.path, argv, request.cwd).pipe(
+              Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, spawner),
               Effect.mapError((error) =>
                 new ToolFailed({
                   tool: adapter.toolName,
@@ -365,7 +360,7 @@ export function makeCompilerService<
     : Effect.succeed(source);
   return Effect.flatMap(producerEffect, (producer) =>
     Effect.gen(function*() {
-      const spawner = yield* ChildProcessSpawner;
+      const spawner = yield* EffectChildProcessSpawner.ChildProcessSpawner;
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const crypto = yield* Crypto.Crypto;
@@ -376,25 +371,23 @@ export function makeCompilerService<
         const executableSuffix = cell.selection === undefined
           ? producer.hostOs === "windows" ? ".exe" : ""
           : cell.selection.descriptor.executableSuffix;
-        return Effect.scoped(
-          Effect.gen(function*() {
-            const destination = resolveExecutableDestination(path, {
-              outfile: cell.input.outfile,
-              ...(cell.input.cwd === undefined ? {} : { cwd: cell.input.cwd }),
-            });
-            const candidate = yield* acquireExecutableCandidate(fileSystem, path, {
-              destination,
-              executableSuffix,
-            });
-            const observedStages = yield* producer.produceCandidate({
+        return Integration.produceExecutable({
+          outfile: cell.input.outfile,
+          ...(cell.input.cwd === undefined ? {} : { cwd: cell.input.cwd }),
+          ...(cell.input.digest === undefined ? {} : { digest: cell.input.digest }),
+          executableSuffix,
+          prepare: () => Effect.succeed(cell),
+          produce: ({ stagedOutfile, resolvedDestination }) =>
+            producer.produceCandidate({
               entrypoint: cell.input.entrypoint,
               ...(cell.selection === undefined ? {} : { target: cell.selection.target }),
               options: cell.input.options,
-              stagedOutfile: candidate.staged,
-              resolvedDestination: destination,
+              stagedOutfile,
+              resolvedDestination,
               ...(cell.input.cwd === undefined ? {} : { cwd: cell.input.cwd }),
-            }).pipe(Effect.provideService(ChildProcessSpawner, spawner));
-            const stages = yield* Effect.try({
+            }).pipe(Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, spawner)),
+          decodeStages: (_prepared, observedStages) =>
+            Result.try({
               try: () => decodeStagesFor(adapter.toolName, observedStages),
               catch: (error) =>
                 new ToolFailed({
@@ -406,24 +399,24 @@ export function makeCompilerService<
                     truncated: false,
                   }],
                 }),
-            });
-
-            const published = yield* validateAndPublishExecutable(fileSystem, crypto, candidate, {
-              digest: cell.input.digest === true,
-              resolveTarget: (observation) =>
-                inferTarget(
-                  observation,
-                  cell.selection?.target,
-                  adapter.defaultTarget,
-                  adapter.targetTable.resolve,
-                ),
-            });
-            return {
+            }),
+          resolveTarget: (observation) =>
+            inferTarget(
+              observation,
+              cell.selection?.target,
+              adapter.defaultTarget,
+              adapter.targetTable.resolve,
+            ),
+        }).pipe(
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+          Effect.provideService(Crypto.Crypto, crypto),
+          Effect.map((published) =>
+            ({
               ...published,
               provider: adapter.toolName,
-              stages,
-            } as unknown as ProviderArtifact<Name, SupportedTarget>;
-          }),
+            }) as unknown as ProviderArtifact<Name, SupportedTarget>
+          ),
         );
       };
 

@@ -55,10 +55,14 @@ describe("documentation contract", () => {
       expect(text).toContain("compileExecutable");
       expect(text).toContain("compileExecutableMatrix");
     }
-    expect(agents).toContain("exactly two public operations");
-    expect(api).toContain("four packages with five public entry points");
+    expect(agents).toContain("Architecture generation: `granular-integration-migration-v2`");
+    expect(agents).toContain("During Plan 023 only");
+    expect(api).toContain("four packages with six public entry points");
     expect(api).toContain("exactly five runtime keys");
     expect(api).toContain("There is no root compile");
+    expect(api).toContain("effect-build/Integration");
+    expect(api).toContain("continuation-scoped capability");
+    expect(api).toContain("Plan 024 owns the atomic five-package cut");
     expect(api).toContain('import * as NodeSea from "effect-build-node-sea"');
   });
 

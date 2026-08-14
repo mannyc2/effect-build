@@ -169,7 +169,10 @@ export const inspectPackedPackage = async (tarball, expectedName) => {
     }
   }
   if (expectedName === "effect-build") {
-    if (manifest.dependencies !== undefined || JSON.stringify(Object.keys(exports)) !== JSON.stringify([".", "./Provider"])) {
+    if (
+      manifest.dependencies !== undefined
+      || JSON.stringify(Object.keys(exports)) !== JSON.stringify([".", "./Integration", "./Provider"])
+    ) {
       throw new Error("packed core dependency or export graph drifted");
     }
   } else {
@@ -202,8 +205,10 @@ const typeScriptSource = (provider) => {
   if (provider === undefined) {
     return [
       'import * as Core from "effect-build";',
+      'import * as Integration from "effect-build/Integration";',
       'import * as Provider from "effect-build/Provider";',
       "export const artifactSchema = Core.Artifact.Artifact;",
+      "export const executeCommand = Integration.executeCommand;",
       "export const defineProvider = Provider.define;",
     ].join("\n");
   }
@@ -237,7 +242,10 @@ const runtimeSource = (provider) => {
   const lines = [
     'import assert from "node:assert/strict";',
     'const core = await import("effect-build");',
-    'assert.deepEqual(Object.keys(core), ["Artifact", "BuildError", "MatrixError", "Target"]);',
+    'assert.deepEqual(Object.keys(core), ["Artifact", "BuildError", "JavaScriptBundle", "MatrixError", "Target"]);',
+    'assert.deepEqual(Object.keys(core.JavaScriptBundle), ["Format", "InvalidReason", "InvalidJavaScriptBundle", "JavaScriptBundleAccessOperation", "JavaScriptBundleAccessFailed", "JavaScriptBundleTemporaryDirectoryFailed", "withFile"]);',
+    'const integration = await import("effect-build/Integration");',
+    'assert.deepEqual(Object.keys(integration), ["executeCommand", "inspectLiveJavaScriptBundle", "produceExecutable", "withOwnedJavaScriptBundle"]);',
     'const author = await import("effect-build/Provider");',
     'assert.deepEqual(Object.keys(author), ["define"]);',
     'const removedBun = ["effect-build", "bun"].join("/");',

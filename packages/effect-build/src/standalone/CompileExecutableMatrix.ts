@@ -16,8 +16,8 @@ export interface CompileExecutableMatrixInput<SupportedTarget extends Target, Op
   readonly concurrency?: number;
 }
 
-type NarrowBuildError<Error, Name extends ToolName> = Error extends { readonly tool: ToolName }
-  ? Omit<Error, "tool"> & { readonly tool: Name }
+type NarrowBuildError<Error, Name extends ToolName> = Error extends { readonly tool: string }
+  ? Error & { readonly tool: Name }
   : Error;
 
 type BuildErrorFor<Name extends ToolName> = NarrowBuildError<BuildError, Name>;

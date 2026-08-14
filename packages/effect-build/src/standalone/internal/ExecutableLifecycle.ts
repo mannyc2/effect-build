@@ -59,8 +59,15 @@ export const isLockedRenameError = (error: PlatformError.PlatformError): boolean
   lockedReasons.has(error.reason._tag)
   || (error.reason._tag === "Unknown" && lockedErrnoCodes.has(errnoCode(error) ?? ""));
 
-const publicationFailed =
-  (path: string, operation: string) => (error: PlatformError.PlatformError): PublicationFailed =>
+export type LifecyclePublicationOperation =
+  | "make-directory"
+  | "make-staging"
+  | "rename"
+  | "resolve-destination-parent";
+
+export const makePublicationFailed =
+  (path: string, operation: LifecyclePublicationOperation) =>
+  (error: { readonly message: string }): PublicationFailed =>
     new PublicationFailed({ path, operation, reason: error.message });
 
 const withExeSuffix = (basename: string, executableSuffix: "" | ".exe"): string =>
@@ -83,19 +90,19 @@ export const acquireExecutableCandidate = (
     const executableSuffix = options.executableSuffix ?? "";
     const parent = path.dirname(destination);
     yield* fileSystem.makeDirectory(parent, { recursive: true }).pipe(
-      Effect.mapError(publicationFailed(destination, "make-directory")),
+      Effect.mapError(makePublicationFailed(destination, "make-directory")),
     );
     const stagingDirectory = yield* fileSystem.makeTempDirectoryScoped({
       directory: parent,
       prefix: ".effect-build-",
-    }).pipe(Effect.mapError(publicationFailed(destination, "make-staging")));
+    }).pipe(Effect.mapError(makePublicationFailed(destination, "make-staging")));
     const staged = path.join(stagingDirectory, withExeSuffix(path.basename(destination), executableSuffix));
     const candidate = Object.freeze({ staged, [CandidateTypeId]: CandidateTypeId }) as ExecutableCandidate;
     const publish = publicationSemaphore.withPermit(fileSystem.rename(staged, destination)).pipe(
       Effect.mapError((error) =>
         isLockedRenameError(error)
           ? new OutputLocked({ path: destination })
-          : publicationFailed(destination, "rename")(error)
+          : makePublicationFailed(destination, "rename")(error)
       ),
     );
     return yield* Effect.acquireRelease(

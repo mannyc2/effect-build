@@ -1,8 +1,10 @@
 # Errors
 
-The two public operations have separate closed tagged-error unions. Match
-`_tag` or use `Effect.catchTags`; do not parse diagnostic strings and do not add
-matrix coordination tags to scalar build handling.
+The two end-user compile operations have separate closed tagged-error unions.
+Match `_tag` or use `Effect.catchTags`; do not parse diagnostic strings and do
+not add matrix coordination tags to scalar build handling. Integration-author
+bundle operations have the separate `JavaScriptBundle.JavaScriptBundleError`
+union below.
 
 ## BuildError
 
@@ -47,6 +49,23 @@ not Layer acquisition.
 its provider, target, intended absolute path, and original
 `BuildError.BuildError`. These Artifacts have already been atomically committed.
 The matrix does not roll them back, and retry is an explicit caller decision.
+
+## JavaScriptBundleError
+
+`JavaScriptBundle.JavaScriptBundleError` belongs to the scoped integration-
+author boundary, not to either compile operation:
+
+| Tag                                        | Meaning                                                        |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| `InvalidJavaScriptBundle`                  | descriptor, liveness, identity, or owned-root invariant failed |
+| `JavaScriptBundleAccessFailed`             | realpath, stat, read, or digest platform operation failed      |
+| `JavaScriptBundleTemporaryDirectoryFailed` | core could not allocate the requested owned temporary root     |
+
+`InvalidJavaScriptBundle.reason` is a finite machine-readable vocabulary.
+Borrowed `withFile` and live inspection cannot return the temporary-directory
+error; only owned construction can. Integration packages map genuine errors
+through the classes' identity guards so an unrelated callback failure with the
+same structural `_tag` remains unchanged.
 
 ## Interruption
 

@@ -35,6 +35,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./Integration": {
+      "types": "./dist/Integration.d.ts",
+      "import": "./dist/Integration.js"
+    },
     "./Provider": {
       "types": "./dist/Provider.d.ts",
       "import": "./dist/Provider.js"

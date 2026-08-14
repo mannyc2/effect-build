@@ -1,6 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import type { Crypto, FileSystem, Layer, Path } from "effect";
 import { Effect } from "effect";
+import type { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +18,6 @@ import type {
   MatrixErrorFor,
 } from "../../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
 import type { CompileExecutableInput } from "../../packages/effect-build/src/standalone/Driver.js";
-import type { ChildProcessSpawner } from "../../packages/effect-build/src/standalone/internal/Process.js";
 import type { Target } from "../../packages/effect-build/src/standalone/Target.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/driver/fake-tool.mjs", import.meta.url));
@@ -32,7 +32,7 @@ export interface StandaloneDriverContractConfig<
   readonly layer: (options?: { readonly executable?: string }) => Layer.Layer<
     Self,
     ToolNotFound | ToolProbeFailed,
-    ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
+    EffectChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
   >;
   readonly compileExecutable: (
     input: CompileExecutableInput<Options, SupportedTarget>,

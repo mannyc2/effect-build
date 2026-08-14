@@ -13,6 +13,7 @@ const declarationFiles = Object.fromEntries(packageNames.map((name) => [
   resolve(root, `packages/${name}/dist/index.d.ts`),
 ])) as Record<typeof packageNames[number], string>;
 const providerDeclarationFile = resolve(root, "packages/effect-build/dist/Provider.d.ts");
+const integrationDeclarationFile = resolve(root, "packages/effect-build/dist/Integration.d.ts");
 
 const declarationExports = (): Readonly<Record<typeof packageNames[number], readonly string[]>> => {
   const program = ts.createProgram({
@@ -36,7 +37,7 @@ const declarationExports = (): Readonly<Record<typeof packageNames[number], read
 };
 
 const exactDeclarations = {
-  "effect-build": ["Artifact", "BuildError", "MatrixError", "Target"],
+  "effect-build": ["Artifact", "BuildError", "JavaScriptBundle", "MatrixError", "Target"],
   "effect-build-bun": [
     "Artifact",
     "CompileExecutableInput",
@@ -111,6 +112,30 @@ const exactProviderDeclarations = [
   "define",
 ] as const;
 
+const exactIntegrationDeclarations = [
+  "CommandCompletion",
+  "CommandOutput",
+  "ExecuteCommand",
+  "NativeExecutableObservation",
+  "PublishedExecutable",
+  "executeCommand",
+  "inspectLiveJavaScriptBundle",
+  "produceExecutable",
+  "withOwnedJavaScriptBundle",
+] as const;
+
+const exactJavaScriptBundleDeclarations = [
+  "Artifact",
+  "Format",
+  "Input",
+  "InvalidJavaScriptBundle",
+  "InvalidReason",
+  "JavaScriptBundleAccessFailed",
+  "JavaScriptBundleAccessOperation",
+  "JavaScriptBundleError",
+  "JavaScriptBundleTemporaryDirectoryFailed",
+] as const;
+
 const providerDeclarationExports = (): readonly string[] => {
   const program = ts.createProgram({
     rootNames: [providerDeclarationFile],
@@ -126,6 +151,44 @@ const providerDeclarationExports = (): readonly string[] => {
   const symbol = source === undefined ? undefined : checker.getSymbolAtLocation(source);
   if (source === undefined || symbol === undefined) throw new Error("missing effect-build/Provider declaration module");
   return checker.getExportsOfModule(symbol).map((entry) => entry.getName()).sort();
+};
+
+const declarationModuleExports = (file: string): readonly string[] => {
+  const program = ts.createProgram({
+    rootNames: [file],
+    options: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      skipLibCheck: true,
+    },
+  });
+  const source = program.getSourceFile(file);
+  const checker = program.getTypeChecker();
+  const symbol = source === undefined ? undefined : checker.getSymbolAtLocation(source);
+  if (source === undefined || symbol === undefined) throw new Error(`missing declaration module ${file}`);
+  return checker.getExportsOfModule(symbol).map((entry) => entry.getName()).sort();
+};
+
+const javaScriptBundleDeclarationExports = (): readonly string[] => {
+  const file = declarationFiles["effect-build"];
+  const program = ts.createProgram({
+    rootNames: [file],
+    options: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      skipLibCheck: true,
+    },
+  });
+  const source = program.getSourceFile(file);
+  const checker = program.getTypeChecker();
+  const moduleSymbol = source === undefined ? undefined : checker.getSymbolAtLocation(source);
+  const bundleSymbol = moduleSymbol === undefined
+    ? undefined
+    : checker.getExportsOfModule(moduleSymbol).find((entry) => entry.getName() === "JavaScriptBundle");
+  if (bundleSymbol === undefined) throw new Error("missing JavaScriptBundle declaration namespace");
+  return checker.getExportsOfModule(bundleSymbol).map((entry) => entry.getName()).sort();
 };
 
 const providerCallTypeParameterCounts = (): Readonly<Record<typeof providerPackages[number], readonly number[]>> => {
@@ -188,7 +251,21 @@ describe("built public API", () => {
       "Artifact",
       "ByteCount",
       "Digest",
+      "ExecutableArtifact",
+      "FileArtifact",
+      "StageObservation",
       "ToolName",
+      "ToolObservation",
+    ]);
+    expect(Object.keys(core.Target).sort()).toEqual(["ResolutionTarget", "SystemTarget", "Target"]);
+    expect(Object.keys(core.JavaScriptBundle)).toEqual([
+      "Format",
+      "InvalidReason",
+      "InvalidJavaScriptBundle",
+      "JavaScriptBundleAccessOperation",
+      "JavaScriptBundleAccessFailed",
+      "JavaScriptBundleTemporaryDirectoryFailed",
+      "withFile",
     ]);
   });
 
@@ -196,6 +273,12 @@ describe("built public API", () => {
     const exports = declarationExports();
     for (const name of packageNames) expect(exports[name], name).toEqual([...exactDeclarations[name]].sort());
     expect(providerDeclarationExports(), "effect-build/Provider").toEqual([...exactProviderDeclarations].sort());
+    expect(declarationModuleExports(integrationDeclarationFile), "effect-build/Integration").toEqual(
+      [...exactIntegrationDeclarations].sort(),
+    );
+    expect(javaScriptBundleDeclarationExports(), "effect-build.JavaScriptBundle").toEqual(
+      [...exactJavaScriptBundleDeclarations].sort(),
+    );
   });
 
   it("keeps all six provider calls concrete rather than publicly generic", () => {

@@ -4,14 +4,22 @@
     "effect-build": {
       "subpaths": [
         ".",
+        "./Integration",
         "./Provider"
       ],
       "runtimeKeys": {
         ".": [
           "Artifact",
           "BuildError",
+          "JavaScriptBundle",
           "MatrixError",
           "Target"
+        ],
+        "./Integration": [
+          "executeCommand",
+          "inspectLiveJavaScriptBundle",
+          "produceExecutable",
+          "withOwnedJavaScriptBundle"
         ],
         "./Provider": [
           "define"

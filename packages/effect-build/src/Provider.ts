@@ -1,6 +1,7 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import type { Crypto, FileSystem, Path, PlatformError } from "effect";
-import type { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
+import * as Integration from "./Integration.js";
 import type {
   ProviderName as ClosedProviderName,
   ProviderTargets as ClosedProviderTargets,
@@ -17,7 +18,6 @@ import type {
 import type { CompileExecutableInput as CommonInput } from "./standalone/Driver.js";
 import type { CandidateProducer } from "./standalone/internal/CompilerAdapter.js";
 import { makeCompilerService } from "./standalone/internal/CompilerEngine.js";
-import { ChildProcessSpawner as CoreChildProcessSpawner, runProcess } from "./standalone/internal/Process.js";
 import { makeProviderTargetTable } from "./standalone/internal/TargetTable.js";
 import { discoverTool } from "./standalone/internal/ToolDiscovery.js";
 
@@ -102,7 +102,7 @@ export type ProviderLayerRequirements =
   | Path.Path
   | Crypto.Crypto;
 
-export type ComposedProviderRequirements = FileSystem.FileSystem | Path.Path;
+export type ComposedProviderRequirements = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
 
 export interface CompilerService<
   Name extends ProviderName,
@@ -261,9 +261,11 @@ export function define<Self, const Name extends ProviderName, Options, Validated
           return yield* makeCompilerService(commandAdapter, tool);
         }
         const composedDefinition = definition as ComposedDefinition<Self, Options, Validated>;
-        const spawner = yield* CoreChildProcessSpawner;
+        const spawner = yield* EffectChildProcessSpawner.ChildProcessSpawner;
         const execute: ExecuteCommand = (executable, argv, cwd) =>
-          runProcess(executable, argv, cwd).pipe(Effect.provideService(CoreChildProcessSpawner, spawner));
+          Integration.executeCommand(executable, argv, cwd).pipe(
+            Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, spawner),
+          );
         const composed = yield* composedDefinition.makeProducer(options, execute);
         const producer: CandidateProducer<Name, TargetFor<Name>, Validated> = {
           produceCandidate: (request) =>

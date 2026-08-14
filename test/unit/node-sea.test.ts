@@ -37,8 +37,8 @@ import {
   nodeSeaSyntaxTarget,
   nodeSeaTarget,
   nodeSeaVersion,
-  type ProcessCompletion,
 } from "../../packages/effect-build-node-sea/src/internal/NodeSea.js";
+import type { CommandCompletion } from "../../packages/effect-build/src/Integration.js";
 
 const roots: string[] = [];
 const fixtureRoot = resolve(new URL("../fixtures/node-sea", import.meta.url).pathname);
@@ -82,7 +82,7 @@ const completion = (
   stdout = "",
   stderr = "",
   truncated = false,
-): ProcessCompletion => ({
+): CommandCompletion => ({
   exitCode,
   stdout: { text: stdout, truncated },
   stderr: { text: stderr, truncated },
@@ -125,9 +125,9 @@ interface RuntimeOptions {
   readonly architecture?: string;
   readonly glibc?: string | undefined;
   readonly spawnFailure?: boolean;
-  readonly buildCompletion?: ProcessCompletion;
+  readonly buildCompletion?: CommandCompletion;
   readonly output?: "valid" | "missing" | "invalid" | "wrong-target";
-  readonly buildEffect?: Effect.Effect<ProcessCompletion, PlatformError.PlatformError>;
+  readonly buildEffect?: Effect.Effect<CommandCompletion, PlatformError.PlatformError>;
 }
 
 const controlledRuntime = (options: RuntimeOptions): ControlledRuntime => {
@@ -283,7 +283,7 @@ const withMain = <A, E, R>(
       },
       use,
     );
-  });
+  }).pipe(Effect.provide(NodeServices.layer));
 
 const candidateInput = (
   main: JavaScriptBundleArtifact,

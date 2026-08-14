@@ -1,4 +1,4 @@
-import { Context, Effect, type FileSystem, type Path } from "effect";
+import { Context, type Crypto, Effect, type FileSystem, type Path } from "effect";
 import * as Provider from "effect-build/Provider";
 
 type Assert<T extends true> = T;
@@ -85,7 +85,7 @@ export type _ComposedSurface = Assert<
   Same<keyof typeof composedImplementation, "Target" | "compileExecutable" | "compileExecutableMatrix" | "layer">
 >;
 export type _ComposedRequirementsExcludeProcess = Assert<
-  Same<Provider.ComposedProviderRequirements, FileSystem.FileSystem | Path.Path>
+  Same<Provider.ComposedProviderRequirements, FileSystem.FileSystem | Path.Path | Crypto.Crypto>
 >;
 
 // @ts-expect-error Type '"esbuild"' is not assignable to type '"bun" | "deno" | "node-sea"'.

@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import type { CommandCompletion } from "../../Integration.js";
 import { type TargetFor, targetsFor } from "../../internal/ProviderContracts.js";
 import { Artifact, type ArtifactFor, type StagesFor, type ToolName } from "../Artifact.js";
 import type {
@@ -10,7 +11,6 @@ import type {
   ToolFailed,
 } from "../BuildError.js";
 import type { Target } from "../Target.js";
-import type { ProcessCompletion } from "./Process.js";
 import type { OperatingSystem } from "./TargetCatalog.js";
 import type { TargetTable } from "./TargetTable.js";
 
@@ -96,5 +96,5 @@ export interface CommandCompilerAdapter<
   readonly renderArgv: (
     request: PreparedExecutableRequest<ValidatedOptions, SupportedTarget>,
   ) => readonly string[];
-  readonly interpretFailure: (completion: ProcessCompletion) => ToolFailed;
+  readonly interpretFailure: (completion: CommandCompletion) => ToolFailed;
 }

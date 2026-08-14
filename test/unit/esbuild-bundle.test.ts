@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Fiber, FileSystem, Path, PlatformError, type Scope } from "effect";
+import * as Integration from "effect-build/Integration";
 import * as esbuild from "esbuild";
 import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -10,7 +11,6 @@ import {
   Esbuild as EsbuildServiceTag,
   type EsbuildApi,
   type EsbuildService,
-  getJavaScriptBundleArtifact,
   InvalidBundleInput,
   type JavaScriptBundleArtifact,
   JavaScriptBundleInvalid,
@@ -377,29 +377,35 @@ describe("internal esbuild bundle operation", () => {
         controlled.api,
         (service) =>
           service.withJavaScriptBundle(bundleInput, (artifact) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               callbackPath = artifact.path;
               retained = artifact;
               expect(existsSync(artifact.path)).toBe(true);
-              expect(getJavaScriptBundleArtifact(artifact)).toBe(artifact);
-              expect(getJavaScriptBundleArtifact({ ...artifact })).toBeUndefined();
-              expect(Reflect.ownKeys(artifact).sort()).toEqual([
+              expect(yield* Integration.inspectLiveJavaScriptBundle(artifact)).toBe(artifact);
+              const forged = yield* Integration.inspectLiveJavaScriptBundle({ ...artifact } as typeof artifact).pipe(
+                Effect.flip,
+              );
+              expect(forged).toMatchObject({ reason: "artifact-not-live" });
+              expect(Object.keys(artifact).sort()).toEqual([
+                "bytes",
+                "digest",
                 "format",
-                "nodeSyntaxTarget",
                 "observedExternalImports",
                 "path",
-                "stage",
+                "resolutionTarget",
+                "stages",
               ]);
               expect(artifact).toMatchObject({
                 format: "esm",
-                nodeSyntaxTarget: "node26.7",
+                resolutionTarget: "node",
                 observedExternalImports: ["node:fs", "node:path"],
-                stage: { operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } },
+                stages: [{ operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } }],
               });
               expect(Object.isFrozen(artifact)).toBe(true);
               expect(Object.isFrozen(artifact.observedExternalImports)).toBe(true);
-              expect(Object.isFrozen(artifact.stage)).toBe(true);
-              expect(Object.isFrozen(artifact.stage.tool)).toBe(true);
+              expect(Object.isFrozen(artifact.stages)).toBe(true);
+              expect(Object.isFrozen(artifact.stages[0])).toBe(true);
+              expect(Object.isFrozen(artifact.stages[0].tool)).toBe(true);
               return "used";
             })),
       ),
@@ -407,7 +413,10 @@ describe("internal esbuild bundle operation", () => {
 
     expect(result).toBe("used");
     expect(existsSync(callbackPath)).toBe(false);
-    expect(getJavaScriptBundleArtifact(retained)).toBeUndefined();
+    const stale = await Effect.runPromise(
+      Integration.inspectLiveJavaScriptBundle(retained!).pipe(Effect.provide(NodeServices.layer), Effect.flip),
+    );
+    expect(stale).toMatchObject({ reason: "artifact-not-live" });
     expect(controlled.events).toEqual(["context", "rebuild:start", "rebuild:end", ...cleanupEvents]);
     expect(controlled.options).toHaveLength(1);
     expect(controlled.options[0]).toMatchObject({
@@ -455,7 +464,10 @@ describe("internal esbuild bundle operation", () => {
       withService(controlled.api, (service) => service.withJavaScriptBundle(bundleInput, Effect.succeed)),
     );
     expect(existsSync(stale.path)).toBe(false);
-    expect(getJavaScriptBundleArtifact(stale)).toBeUndefined();
+    const error = await Effect.runPromise(
+      Integration.inspectLiveJavaScriptBundle(stale).pipe(Effect.provide(NodeServices.layer), Effect.flip),
+    );
+    expect(error).toMatchObject({ reason: "artifact-not-live" });
   });
 
   it("cleans up after callback typed failure and defect", async () => {
@@ -477,6 +489,20 @@ describe("internal esbuild bundle operation", () => {
       expect(existsSync(staged)).toBe(false);
       expect(controlled.events.slice(-4)).toEqual(cleanupEvents);
     }
+  });
+
+  it("passes through a same-tag caller error without the core family marker", async () => {
+    const controlled = controlledApi();
+    const callerError = { _tag: "InvalidJavaScriptBundle", reason: "caller-owned" } as const;
+    const observed = await Effect.runPromise(
+      withService(
+        controlled.api,
+        (service) => service.withJavaScriptBundle(bundleInput, () => Effect.fail(callerError)),
+      ).pipe(Effect.flip),
+    );
+
+    expect(observed).toBe(callerError);
+    expect(controlled.events.slice(-4)).toEqual(cleanupEvents);
   });
 
   it("does not invoke the callback for input, build, or structured validation failure", async () => {
@@ -580,7 +606,7 @@ describe("internal esbuild bundle operation", () => {
         operation: "make-temp",
         fileSystem: {
           ...hostFileSystem,
-          makeTempDirectoryScoped: () => Effect.fail(failure("makeTempDirectoryScoped")),
+          makeTempDirectory: () => Effect.fail(failure("makeTempDirectory")),
         },
       },
       {
@@ -820,7 +846,7 @@ describe("internal esbuild bundle operation", () => {
 
   it("keeps exact package-private tags", () => {
     expect(new InvalidBundleInput({ reason: "fixture" })._tag).toBe("InvalidBundleInput");
-    expect(new JavaScriptBundleInvalid({ reason: "fixture" })._tag).toBe("JavaScriptBundleInvalid");
+    expect(new JavaScriptBundleInvalid({ reason: "expected-one-output-file" })._tag).toBe("JavaScriptBundleInvalid");
     expect(EsbuildServiceTag.key).toBe("effect-build/internal/Esbuild");
   });
 });

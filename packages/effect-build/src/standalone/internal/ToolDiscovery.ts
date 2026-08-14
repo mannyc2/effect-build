@@ -1,7 +1,8 @@
 import { Effect, FileSystem, Path, Schema } from "effect";
+import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
+import { executeCommand } from "../../Integration.js";
 import type { ProviderName } from "../../Provider.js";
 import { ToolNotFound, ToolProbeFailed } from "../BuildError.js";
-import { ChildProcessSpawner, runProcess } from "./Process.js";
 import { OperatingSystem, type OperatingSystem as OperatingSystemType } from "./TargetCatalog.js";
 
 export interface ToolProbe<Name extends ProviderName> {
@@ -24,7 +25,7 @@ export const discoverTool = <const Name extends ProviderName>(
 ): Effect.Effect<
   DiscoveredCompiler<Name>,
   ToolNotFound | ToolProbeFailed,
-  ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+  EffectChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function*() {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -33,7 +34,7 @@ export const discoverTool = <const Name extends ProviderName>(
     if (executable !== undefined && !path.isAbsolute(executable)) {
       return yield* new ToolProbeFailed({ tool, reason: "explicit executable must be an absolute path" });
     }
-    const completion = yield* runProcess(command, probeArgv).pipe(
+    const completion = yield* executeCommand(command, probeArgv).pipe(
       Effect.mapError((error) =>
         error.reason._tag === "NotFound"
           ? new ToolNotFound({ tool, command })

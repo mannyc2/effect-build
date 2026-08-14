@@ -45,9 +45,13 @@ describe("source ownership boundaries", () => {
       expect(source, file).not.toMatch(/\b(?:exec|spawn)Sync\b|\bexecFileSync\b/);
     }
     expect(processImporters.sort()).toEqual([
+      "packages/effect-build/src/Integration.ts",
       "packages/effect-build/src/Provider.ts",
-      "packages/effect-build/src/standalone/internal/Process.ts",
+      "packages/effect-build/src/standalone/internal/CompilerEngine.ts",
+      "packages/effect-build/src/standalone/internal/ToolDiscovery.ts",
     ]);
+    const integration = await readFile(resolve(root, "packages/effect-build/src/Integration.ts"), "utf8");
+    expect(integration.match(/ChildProcess\.make\(/g)).toHaveLength(1);
     const nodeSea = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/NodeSea.ts"), "utf8");
     expect(nodeSea).not.toMatch(/postject|download|npm|pnpm|yarn|bun add|https?:\/\//i);
   });
@@ -111,7 +115,9 @@ describe("source ownership boundaries", () => {
         exports: Record<string, unknown>;
         engines?: unknown;
       };
-      expect(Object.keys(manifest.exports)).toEqual(name === "effect-build" ? [".", "./Provider"] : ["."]);
+      expect(Object.keys(manifest.exports)).toEqual(
+        name === "effect-build" ? [".", "./Integration", "./Provider"] : ["."],
+      );
       expect(manifest.engines).toBeUndefined();
       expect(Object.keys(manifest.exports).some((path) => /internal|standalone/.test(path))).toBe(false);
     }

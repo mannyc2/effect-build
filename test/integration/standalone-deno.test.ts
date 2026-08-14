@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { runProcess } from "../../packages/effect-build/src/standalone/internal/Process.js";
+import { executeCommand } from "../../packages/effect-build/src/Integration.js";
 
 const fixtures = fileURLToPath(new URL("../fixtures/standalone/", import.meta.url));
 const roots: string[] = [];
@@ -32,7 +32,7 @@ const build = (input: Deno.CompileExecutableInput) =>
     ),
   );
 
-const execute = (path: string) => Effect.runPromise(runProcess(path, []).pipe(Effect.provide(NodeServices.layer)));
+const execute = (path: string) => Effect.runPromise(executeCommand(path, []).pipe(Effect.provide(NodeServices.layer)));
 
 describe("real standalone Deno", () => {
   it("compiles, validates, publishes, hashes, and executes the returned artifact", async () => {

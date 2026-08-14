@@ -88,7 +88,9 @@ describe("Bun workspace package graph", () => {
       });
       expect(Object.keys(manifest)).not.toContain("engines");
       const exports = manifest.exports as Record<string, { types: string; import: string }>;
-      expect(Object.keys(exports).sort()).toEqual(name === "effect-build" ? [".", "./Provider"] : ["."]);
+      expect(Object.keys(exports).sort()).toEqual(
+        name === "effect-build" ? [".", "./Integration", "./Provider"] : ["."],
+      );
       for (const value of Object.values(exports)) {
         expect(value.types).toMatch(/^\.\/dist\/.*\.d\.ts$/);
         expect(value.import).toMatch(/^\.\/dist\/.*\.js$/);
@@ -100,7 +102,7 @@ describe("Bun workspace package graph", () => {
 
   it("has no legacy provider subpath or alternate public package", async () => {
     const core = await manifestFor("effect-build");
-    expect(Object.keys(core.exports as Record<string, unknown>)).toEqual([".", "./Provider"]);
+    expect(Object.keys(core.exports as Record<string, unknown>)).toEqual([".", "./Integration", "./Provider"]);
     expect((core.exports as Record<string, unknown>)["./bun"]).toBeUndefined();
     expect((core.exports as Record<string, unknown>)["./deno"]).toBeUndefined();
     expect((core.exports as Record<string, unknown>)["./node-sea"]).toBeUndefined();

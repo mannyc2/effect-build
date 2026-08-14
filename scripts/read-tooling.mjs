@@ -62,9 +62,15 @@ const expectedPublicApi = {
   version: 2,
   packages: {
     "effect-build": {
-      subpaths: [".", "./Provider"],
+      subpaths: [".", "./Integration", "./Provider"],
       runtimeKeys: {
-        ".": ["Artifact", "BuildError", "MatrixError", "Target"],
+        ".": ["Artifact", "BuildError", "JavaScriptBundle", "MatrixError", "Target"],
+        "./Integration": [
+          "executeCommand",
+          "inspectLiveJavaScriptBundle",
+          "produceExecutable",
+          "withOwnedJavaScriptBundle",
+        ],
         "./Provider": ["define"],
       },
     },

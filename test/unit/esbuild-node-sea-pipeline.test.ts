@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Exit, Fiber, FileSystem, HashSet, Latch, Path } from "effect";
+import { Crypto, Effect, Exit, Fiber, FileSystem, HashSet, Latch, Path } from "effect";
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,8 +19,8 @@ import {
   type NodeSeaRuntime,
   type NodeSeaService,
   type NodeSeaStages,
-  type ProcessCompletion,
 } from "../../packages/effect-build-node-sea/src/internal/NodeSea.js";
+import type { CommandCompletion } from "../../packages/effect-build/src/Integration.js";
 
 const fixtureRoot = fileURLToPath(new URL("../fixtures/esbuild/", import.meta.url));
 const roots: string[] = [];
@@ -35,7 +35,7 @@ const makeRoot = (): string => {
   return root;
 };
 
-const completion = (exitCode = 0, stdout = "", stderr = ""): ProcessCompletion => ({
+const completion = (exitCode = 0, stdout = "", stderr = ""): CommandCompletion => ({
   exitCode,
   stdout: { text: stdout, truncated: false },
   stderr: { text: stderr, truncated: false },
@@ -71,7 +71,7 @@ const makeRealNodeHarness = (
   root: string,
   behavior: "success" | "failed" | "invalid" | "wrong-target" | "hang" = "success",
   mapFileSystem: (fileSystem: FileSystem.FileSystem) => FileSystem.FileSystem = (fileSystem) => fileSystem,
-): Effect.Effect<RealNodeHarness, unknown, FileSystem.FileSystem | Path.Path> =>
+): Effect.Effect<RealNodeHarness, unknown, FileSystem.FileSystem | Path.Path | Crypto.Crypto> =>
   Effect.gen(function*() {
     const hostFileSystem = yield* FileSystem.FileSystem;
     const fileSystem = mapFileSystem(hostFileSystem);
@@ -186,7 +186,7 @@ const successfulNodeSea = (observe: (input: NodeSeaCandidateInput) => void): Nod
       if (!existsSync(input.main.path)) throw new Error("bundle must remain live during Node SEA");
       writeFileSync(input.stagedOutfile, "candidate-pipeline-executable");
       return [
-        input.main.stage,
+        input.main.stages[0],
         {
           operation: "assemble-node-sea",
           tool: { name: "node", version: "26.7.0", path: "/tools/node-26.7.0" },
@@ -212,7 +212,7 @@ describe("internal esbuild to Node SEA pipeline", () => {
       calls += 1;
       bundlePath = input.main.path;
       expect(input.main.format).toBe(format);
-      expect(input.main.nodeSyntaxTarget).toBe("node26.7");
+      expect(input.main.resolutionTarget).toBe("node");
       expect(input.assets).toEqual([{ key: "message", path: asset }]);
     });
 
