@@ -20,6 +20,40 @@ SEA vertical slice, then an evidence-only public-promotion decision. Plan 015 re
 first dependency. Its user-owned content was preserved except for one
 plan-only receipt-placeholder correction required to make its exactly-one
 receipt verifier executable.
+Re-audited on 2026-08-14 against current main `60259f9` after the maintainer
+selected a granular core-plus-integration API. `CORE-INTEGRATION-ARCHITECTURE-
+AUDIT.md` traces the implemented four-package source and identifies the exact
+minimum public core. Plans 023-026 are the active successor program: establish
+the core artifact/lifecycle primitives without changing current operation
+behavior, atomically split public Esbuild and Node SEA integrations, add Bun as
+a second scoped JavaScript bundle producer, then certify one exact five-package
+candidate without publishing it. No new Fable
+response was available: an Effect-specific Fable Max request failed local
+Claude authentication before prompt transmission, and no substitute model was
+used. Three independent `effect-ts` reviews were instead checked against both
+Effect beta.104 and rc.108 and tightened Plans 023-024 around Result-based
+validation, one SynchronizedRef claim authority, named Effect operations,
+identity-safe tagged-error mapping, deterministic finite reason codes, checked
+bigint-to-ByteCount conversion, class-preserving error refinements, and Layer
+dependency capture. The behavior-preserving step deliberately leaves public
+`PublicationFailed.operation` as `string` while making its internal writers
+exhaustive. Earlier
+Fable Scope/closure claims remain corrected by live Effect/esbuild evidence,
+while its rejection of universal producers and premature replaceable
+executors remains accepted.
+`GRANULAR-PROGRAM-EXECUTION-HANDOFF.md` is the authoritative operator runbook:
+it names Plan 020 as the last completed plan, freezes the plan-only file/hash
+bundle, explains how to start from clean current main, and sequences the
+required governance restart and Plans 023-026 without treating superseded Plan
+021 as executable.
+Execution is not yet authorized by the old repository generation: the live
+`AGENTS.md` still freezes four packages and exactly two public operations.
+Plan 023 Step 0 is therefore a separately authorized, `AGENTS.md`-only
+migration-governance restamp followed by a fresh executor context. Plan 024
+retains that migration generation during the atomic API cut; Plan 025 replaces
+it with the final generation after the Bun pressure test. Until the maintainer
+explicitly requests the initial transition, Plans 023-026 remain
+planned and source work must not begin.
 The decision gates opened by
 `FIRST-PRINCIPLES-REVIEW.md` (operator-audited, 2026-08-10) were answered by
 the operator on 2026-08-11 and are recorded under **Gate decisions** below.
@@ -166,6 +200,68 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
    closed inputs, content-identified toolchain requirements, binding, workspace,
    transport, and real alternate-backend evidence are still absent.
 
+## Granular integration decisions (recorded 2026-08-14)
+
+These decisions supersede only the active four-package/opaque-Node-SEA public
+direction. Plans 016-020 remain factual implementation history.
+
+1. **Split by integration, not pipeline stage.** The final graph is core with
+   four one-way integrations: Bun, Deno, Esbuild, and Node SEA. No integration
+   imports or declares another integration; application Effect code composes
+   Esbuild and Node SEA.
+2. **The minimum core is earned incrementally.** Core owns durable file /
+   executable observations, the existing native-system target canon, ordered
+   stage/tool observations, one nominal scoped JavaScript-bundle capability,
+   and the narrow publication/process functions required by integration
+   authors. Executable production runs an integration's preparation before
+   staging allocation, then keeps validation/hash/rename under one owner. It
+   does not own a universal builder or package registry.
+3. **Artifact lifetimes stay distinct.** A published executable is durable. An
+   Esbuild bundle is a live callback capability over temporary bytes and cannot
+   be reconstructed by Schema decode. Its required observed SHA-256 identity is
+   rechecked at use time so same-length rewrites do not retain stale metadata;
+   this is integrity, not provenance or a malicious-writer guarantee. Node SEA
+   then copies and rehashes that authenticated main in operation-private
+   staging and makes both Node reads consume the copy. A public
+   borrowed-file continuation permits a pre-existing compatible bundle without
+   making Node SEA depend on Esbuild. Core privately and symmetrically claims
+   live producer cleanup roots and prospective executable destinations. For an
+   owned bundle, core holds the root claim through producer/context teardown,
+   awaits physical root deletion, and releases the claim last, so no alternate
+   borrowed handle or teardown gap can lose a published result.
+4. **Target axes are introduced on demand.** The existing strings are named
+   `SystemTarget`; the bundle contract adds only Node resolution. Esbuild's
+   exact `node26.7` emission target and Bun's pinned producer-default behavior
+   stay integration-specific because Node SEA makes the same acceptance
+   decision for both. Exact Node 26.7.0 privately copies/authenticates the main
+   and owns parser acceptance before SEA assembly. `SyntaxTarget`,
+   `SyntaxMode`, `ExecutionTarget`, and an aggregate `BuildTarget` remain
+   deferred because no current operation needs them.
+5. **Granular operations replace the opaque Node facade.** Bun/Deno retain
+   scalar/matrix compilation. Esbuild and Bun independently expose
+   `withJavaScriptBundle(input, use)` on their existing integration services;
+   Node SEA exposes
+   `createExecutable({ main, outfile, ... })`. The current unreleased Node SEA
+   `compileExecutable`/matrix facade is deleted because preserving it would
+   choose a sibling bundler or require a guessed generic service.
+6. **Published v0.2 behavior and import identity are distinguished.** Bun/Deno
+   callable semantics and behavior remain; the already-selected breaking v0.3
+   package split documents `effect-build/bun` -> `effect-build-bun` and
+   `effect-build/deno` -> `effect-build-deno`. No cyclic legacy facade is added.
+7. **Observations are not receipts.** Public ordered stages report observed
+   work. They do not claim closed inputs, provenance, hermeticity,
+   reproducibility, same invocation, or same output bytes.
+8. **Release remains blocked.** Plan 026 may produce and verify five tarballs,
+   but Plan 021 must qualify a coordinator for five npm subjects plus GitHub
+   before any publication/tag/release mutation.
+9. **The provider catalog disappears only with the facade cut.** Plan 023
+   retains the temporary closed projection needed by current Node SEA. Plan 024
+   deletes all Bun/Deno/Node/esbuild literals from core Artifact/MatrixError
+   ownership and derives Bun/Deno refinements from their command definitions.
+   Plan 025 then lets Bun construct its provider-specific service around the
+   same selected command used by both compile and bundle operations without
+   exposing that bound command to applications.
+
 ## Execution order and status
 
 | Plan | Title | Priority | Effort | Depends on | Status |
@@ -190,7 +286,11 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
 | 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | DONE |
 | 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | DONE |
 | 020 | Hard-cut to a four-package Bun workspace and publish Node SEA as a provider | P1 | XL | 015-019 | DONE |
-| 021 | Adopt the certified ts-release 0.2 line for the four-package release | P1 | L | 020 | BLOCKED: 0.2.2 is singular-package and fails clean npm install |
+| 021 | Adopt the certified ts-release 0.2 line for the four-package release | P1 | L | 020 | BLOCKED/SUPERSEDED: historical four-package qualifier; restamp after Plan 026 |
+| 023 | Establish the core artifact and lifecycle primitives behind current operations | P1 | L | 015-020 | TODO |
+| 024 | Split Esbuild and Node SEA into independent granular integrations | P1 | XL | 023 | TODO |
+| 025 | Add Bun as a second scoped JavaScript bundle producer | P1 | L | 023-024 | TODO |
+| 026 | Certify the five-package granular public cut without publishing it | P1 | M | 023-025 | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -291,12 +391,32 @@ behavior, or the standalone operation invalidated that earlier work.
   duplicates `platform-node-shared`, and a clean supported npm/Node strict
   install fails peer resolution. Those failures never weaken or block Plan 020
   implementation; they block only release activation.
+- Plan 023 is the behavior-preserving foundation. It derives durable Artifact /
+  target/stage facts once, moves scoped bundle liveness to core, and wraps the
+  private candidate/validation/hash/rename owner without adding a new build
+  capability or dependency. It is not a release point.
+- Plan 024 is one atomic feature/API cut because moving Esbuild separately from
+  changing Node SEA would require duplicated source or an integration sibling
+  dependency. It creates `effect-build-esbuild`, changes Node SEA to consume a
+  core bundle, removes its combined compile/matrix facade, and deletes the
+  closed composed-provider branch.
+- Plan 025 is the second-producer pressure test. It additively exposes
+  `Bun.withJavaScriptBundle` on the existing Bun service, reuses the one selected
+  Bun command, characterizes its producer-default behavior, and makes exact
+  selected Node 26.7.0 private-copy authentication/parser acceptance part of
+  Node SEA preflight. It adds no generic bundler
+  service and does not change Bun/Deno compile behavior.
+- Plan 026 changes no source. It requires local and exact-SHA remote evidence,
+  five once-packed tarballs, ten isolated plus four composed consumers, and all
+  existing Bun/Deno/Effect/target/publication axes. It records earned/rejected
+  promotions but never publishes. Plan 021 remains the release-activation gate
+  and expands to five npm subjects plus GitHub if this program completes.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 
 ## Planned product contract
 
-Two cardinalities per tool over one executable lifecycle:
+Bun and Deno keep two cardinalities over one executable lifecycle:
 
 ```ts
 Bun.compileExecutable({
@@ -313,7 +433,26 @@ Bun.compileExecutableMatrix({
 })
 ```
 
-Fundamental options are deliberately few:
+The second topology is explicit composition of two independent integrations:
+
+```ts
+Esbuild.withJavaScriptBundle(
+  { entrypoint: "src/main.ts", format: "esm" },
+  (main) => NodeSea.createExecutable({ main, outfile: "dist/app" })
+)
+```
+
+Bun supplies a structurally different producer through the same live core
+artifact contract without pretending it performs Node-version lowering:
+
+```ts
+Bun.withJavaScriptBundle(
+  { entrypoint: "src/main.ts", format: "esm" },
+  (main) => NodeSea.createExecutable({ main, outfile: "dist/app" })
+)
+```
+
+Fundamental options remain deliberately few:
 
 | Kind | Fields | Rule |
 |---|---|---|
@@ -322,24 +461,30 @@ Fundamental options are deliberately few:
 | result detail | optional `digest` (default false) | the only field costing a separate full read |
 | compiler | optional `options` typed by the tool module | Bun and Deno stay different |
 | matrix | `outdir`, `name`, non-empty provider `targets`, optional positive `concurrency` | canonical `<name>-<target>[.exe]`, ordered collect-all |
+| Esbuild bundle | entrypoint, ESM/CJS, optional cwd | Node resolution; integration fixes `node26.7`; scoped continuation |
+| Bun bundle | entrypoint, ESM/CJS, optional cwd | Node resolution; pinned producer behavior; scoped continuation |
+| SEA | live `main`, outfile, optional cwd/digest/assets | exact Node 26.7.0 Linux assembly; no bundler choice |
 | provisioning | PATH discovery or explicit Layer executable | never a call field |
 | orchestrator | official Node/Bun/Deno services | supplied once by the app |
 
-The scalar result remains one plain serializable
-`Artifact { path, bytes, target, tool }`, plus `digest` exactly when requested,
-with the unchanged closed `BuildError`. The matrix returns provider-narrowed
-Artifacts in target input order. Its separate closed `MatrixError` reports all
-preflight issues or all typed cell failures plus committed partial artifacts.
-Fiber interruption remains interruption for both operations.
+Published executables remain plain serializable values with `path`, `bytes`,
+optional `digest`, provider-refined `target`, literal `provider`, and ordered
+observed `stages`. The matrix returns provider-narrowed Artifacts in target
+input order and reports all preflight issues or typed cell failures plus
+committed partial artifacts. A JavaScript bundle is not this durable value: it
+is an opaque live handle available only inside a continuation. Fiber
+interruption remains interruption for every operation.
 
 ## Architectural north star
 
 ```text
 application chooses official Node/Bun/Deno host services
--> explicitly selected compiler Layer discovers/probes Bun or Deno
+-> explicitly selected integration Layers acquire Bun, Deno, Esbuild, or Node SEA
 -> the provider table resolves typed target vocabulary to native CLI tokens
 -> scalar validates one destination, or matrix preflights every target/name
 -> matrix traverses prepared scalar cells with bounded collect-all semantics
+-> Esbuild or Bun may instead create one scoped Node-compatible bundle
+-> application may pass either live bundle to Node SEA
 -> core acquires sibling staging in the outfile filesystem
 -> Effect Scope spawns one compiler and drains bounded diagnostics
 -> failure or interruption kills/reaps child and removes staging
@@ -350,14 +495,17 @@ application chooses official Node/Bun/Deno host services
 The three axes are independent:
 
 1. **Orchestrator runtime**: which runtime executes the Effect program.
-2. **Build tool**: Bun or Deno performs compilation.
+2. **Build tool/integration**: Bun or Deno compiles directly; Esbuild or Bun
+   bundles; Node SEA assembles an executable.
 3. **Artifact target**: the OS/architecture/ABI of the output.
 
-Changing the orchestrator is only a host Layer change. Changing the build tool
-changes the imported tool module, its provider Target, and its typed options.
-Changing the artifact target is input data resolved by that tool module's sole
-target table. Cross-provider or heterogeneously named work composes scalar
-calls rather than widening the matrix.
+Changing the orchestrator is only a host Layer change. Changing a direct
+compiler changes its imported package, provider Target, and typed options.
+Changing the artifact target is input data resolved by that compiler's sole
+target table. Esbuild/Bun and Node SEA compose as separate Effects over the
+common scoped bundle contract; no integration selects or imports a sibling.
+Cross-provider or
+heterogeneously named work composes operations rather than widening a matrix.
 
 ## Effect API baseline
 
@@ -418,9 +566,12 @@ user-owned unless explicitly listed in the assigned plan.
 - **Cache, remote execution, DAG, watch mode, auto-install**: deferred until a
   standalone use case demonstrates a distinct operation/lifecycle. None shapes
   V1.
-- **A generic `Build` service or standalone `bundle` verb**: rejected for this
-  program. The product remains executable compilation; compiler-native bundle
-  and transform behavior stays provider options inside that operation.
+- **A generic `Build`/bundler service**: still rejected. A concrete standalone
+  Esbuild continuation and a structurally different Bun continuation now share
+  the scoped core artifact consumed by Node SEA. That earns the artifact
+  language, not provider interchangeability: their request capabilities,
+  execution mechanisms, syntax guarantees, and diagnostics remain different,
+  and no named caller needs to swap them behind one service.
 - **`TypeScript.check` as a sibling now**: deferred outside this package plan.
   It has different inputs, outputs, diagnostics, executable ownership, and no
   shared atomic publication lifecycle. Symmetry with compiler modules does not
@@ -469,10 +620,11 @@ user-owned unless explicitly listed in the assigned plan.
   outfile/cwd/digest visibility, replaces commit-bearing `AtomicOutput` with a
   staged-path-only private candidate, and keeps validation/publication in one
   owner. It adds no validated or public state class.
-- **A peer `SystemTarget`, public `ResolutionTarget`, or public
-  `ExecutionTarget`**: rejected. Root `Target` already owns system identity,
-  Node resolution is fixed, and the selected Node tool owns execution binding.
-  Only bundle syntax survives as a real downstream compatibility fact.
+- **Parallel target representations**: rejected. Plans 023-024 rename/project
+  the existing native target canon as `SystemTarget` and add only the Node
+  resolution plus `node26.7` syntax facts consumed by the bundle boundary.
+  `ExecutionTarget` and an aggregate `BuildTarget` remain rejected until a real
+  operation needs independent values.
 - **Node 24/postject compatibility or automatic Node acquisition**: rejected.
   The proof selects a direct-SEA-capable tool explicitly and stops on absence.
 - **A raw returned temporary bundle or an esbuild-only closure claim**:
@@ -486,9 +638,10 @@ user-owned unless explicitly listed in the assigned plan.
 - **A Node SEA runtime range beginning at 25.7**: rejected. The historical
   capability floor does not prove every later active-development release; the
   first slice accepts only exact tested 26.7.0/`linux-x64-gnu`.
-- **Immediate public plural provenance or versioned receipts**: rejected until
-  the complete internal topology works and a named durable consumer meets Plan
-  019's replacing-hard-cut gates.
+- **Calling public stage observations provenance or receipts**: rejected.
+  Ordered tool/stage observations become useful public result facts for the
+  multi-stage topology, but versioned receipts, closed-input provenance,
+  hermeticity, and reproducibility remain unearned.
 - **Fake-only SemanticPlan/BoundExecutionPlan/executor evidence**: rejected.
   Portable plans require closed content identities and real multiple bindings;
   replaceable executors require genuinely different backends.
@@ -497,10 +650,13 @@ user-owned unless explicitly listed in the assigned plan.
 
 Every active plan must leave a machine-checkable green slice, preserve dirty
 WIP outside scope, and identify exact real-tool/host acceptance separately from
-deterministic local tests. Plan 020 completion requires `bun run verify`,
-required real Bun/Deno and exact Linux Node SEA integration, atomic publication
-on each advertised OS, eight packed consumers, and no stale managed names or
-proof claims. Under Plan 013, all six Bun and six Deno provider targets are
-required compile-plus-header gates; only current-host artifacts are executed.
+deterministic local tests. Plan 026 completion requires `bun run verify`, both
+Effect endpoints, real Bun/Deno plus exact Linux public Esbuild -> Node SEA and
+Bun -> Node SEA integrations, atomic publication on each advertised OS, all 12
+direct compiler targets, ten isolated plus four composed packed consumers, and
+no stale combined facade or proof claims. Under Plan 013, all six Bun and six
+Deno provider
+targets remain required compile-plus-header gates; only current-host artifacts
+are executed.
 Optional Bun/Deno orchestrator-host lanes remain non-gating
 (gate 3: advertise-equals-test).
