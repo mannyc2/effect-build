@@ -1,6 +1,7 @@
-# Compiler modules
+# Compiler providers
 
-Importing a compiler subpath selects one CLI's semantics for both
+Importing `effect-build-bun`, `effect-build-deno`, or
+`effect-build-node-sea` selects one provider's semantics for both
 `compileExecutable` and `compileExecutableMatrix`. It does not select the
 runtime that hosts the Effect program. A matrix never mixes compilers.
 
@@ -12,7 +13,19 @@ explicit Layer option bypasses `PATH`:
 
 ```ts
 Bun.layer({ executable: "/opt/bun/bin/bun" });
+```
+
+The Deno provider has the same explicit selection:
+
+```ts
 Deno.layer({ executable: "/opt/deno/bin/deno" });
+```
+
+The Node SEA provider accepts the same exact executable override and requires
+that it identify Node 26.7.0 on Linux x64 GNU:
+
+```ts
+NodeSea.layer({ executable: "/opt/node-26.7.0/bin/node" });
 ```
 
 The explicit path must be absolute. A missing tool raises `ToolNotFound`; a bad
@@ -22,10 +35,10 @@ installs a compiler.
 
 ## Target authority
 
-Each provider's package-private target table is the single authority for its
-public `Target` schema, static target type, CLI mapping, native validation, and
-support-manifest equality test. Root Artifact and matrix-failure schemas use
-pure projections of those same tables to reject provider-invalid pairs. Target
+One private value in core is the single authority for both public `Target`
+schemas, static target types, native validation, root Artifact and
+matrix-failure correlation, and support-manifest equality. Each provider owns
+an exact native-token record whose keys must equal that closed set. Target
 literals are not copied into a registry or broad string overload.
 
 Matrix output paths are canonical:
@@ -75,6 +88,18 @@ Deno musl targets are absent from `Deno.Target` and reject at both the static
 and runtime schema boundaries. Deno 2.9.3 is the pinned support fixture used to
 compile and externally validate all six supported targets under the Node
 orchestrator.
+
+## Node SEA
+
+`NodeSea.Target` contains only `linux-x64-gnu`. Its required options are
+`format: "esm" | "cjs"`; optional assets have exact `{ key, path }` entries
+with unique non-empty keys. It bundles once with exact esbuild 0.28.2 and asks
+the selected exact Node 26.7.0 executable to assemble SEA directly. It never
+uses postject and never downloads or installs Node.
+
+The provider writes only the core-owned staged output. Core then validates the
+native executable, optionally hashes it, and atomically publishes it. The
+Artifact records the exact ordered esbuild and Node stages.
 
 ## Support evidence boundary
 

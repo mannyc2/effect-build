@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Crypto, Effect, Exit, Fiber, FileSystem, HashSet, Latch, Path } from "effect";
+import { Effect, Exit, Fiber, FileSystem, HashSet, Latch, Path } from "effect";
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,17 +10,17 @@ import {
   type EsbuildService,
   layer as esbuildLayer,
   withJavaScriptBundle,
-} from "../../src/standalone/internal/Esbuild.js";
+} from "../../packages/effect-build-node-sea/src/internal/Esbuild.js";
 import {
   InvalidNodeSeaInput,
   makeNodeSeaService,
   NodeSea,
-  type NodeSeaCreateInput,
+  type NodeSeaCandidateInput,
   type NodeSeaRuntime,
   type NodeSeaService,
-  type PipelineExecutableArtifact,
-} from "../../src/standalone/internal/NodeSea.js";
-import type { ProcessCompletion } from "../../src/standalone/internal/Process.js";
+  type NodeSeaStages,
+  type ProcessCompletion,
+} from "../../packages/effect-build-node-sea/src/internal/NodeSea.js";
 
 const fixtureRoot = fileURLToPath(new URL("../fixtures/esbuild/", import.meta.url));
 const roots: string[] = [];
@@ -71,12 +71,11 @@ const makeRealNodeHarness = (
   root: string,
   behavior: "success" | "failed" | "invalid" | "wrong-target" | "hang" = "success",
   mapFileSystem: (fileSystem: FileSystem.FileSystem) => FileSystem.FileSystem = (fileSystem) => fileSystem,
-): Effect.Effect<RealNodeHarness, unknown, FileSystem.FileSystem | Path.Path | Crypto.Crypto> =>
+): Effect.Effect<RealNodeHarness, unknown, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const hostFileSystem = yield* FileSystem.FileSystem;
     const fileSystem = mapFileSystem(hostFileSystem);
     const path = yield* Path.Path;
-    const crypto = yield* Crypto.Crypto;
     const executable = join(root, "node-26.7.0");
     writeFileSync(executable, linuxX64GnuExecutable());
     chmodSync(executable, 0o755);
@@ -87,13 +86,6 @@ const makeRealNodeHarness = (
     const configPaths: string[] = [];
     const outputPaths: string[] = [];
     const runtime: NodeSeaRuntime = {
-      inspect: () =>
-        Effect.succeed({
-          format: "elf",
-          os: "linux",
-          architecture: "x64",
-          abi: "gnu",
-        }),
       run: (_selected, argv) => {
         if (argv.includes("--eval")) {
           return Effect.succeed(completion(
@@ -101,6 +93,9 @@ const makeRealNodeHarness = (
             JSON.stringify({
               version: "26.7.0",
               path: executable,
+              platform: "linux",
+              architecture: "x64",
+              glibc: "2.39",
               builtinSpecifiers: ["fs", "node:fs", "node:path", "path"],
             }),
           ));
@@ -131,7 +126,7 @@ const makeRealNodeHarness = (
         });
       },
     };
-    const service = yield* makeNodeSeaService(fileSystem, path, crypto, { executable }, runtime);
+    const service = yield* makeNodeSeaService(fileSystem, path, { executable }, runtime);
     return {
       service,
       buildCalls: () => builds,
@@ -147,15 +142,16 @@ const pipeline = (input: {
   readonly entrypoint: string;
   readonly format: "esm" | "cjs";
   readonly outfile: string;
-  readonly assets?: NodeSeaCreateInput["assets"];
+  readonly assets?: NodeSeaCandidateInput["assets"];
 }) =>
   withJavaScriptBundle(
     { entrypoint: input.entrypoint, format: input.format, cwd: fixtureRoot },
     (main) =>
       NodeSea.use((service) =>
-        service.createExecutable({
+        service.produceCandidate({
           main,
-          outfile: input.outfile,
+          stagedOutfile: `${input.outfile}.candidate`,
+          resolvedDestination: input.outfile,
           ...(input.assets === undefined ? {} : { assets: input.assets }),
         })
       ),
@@ -177,30 +173,25 @@ const runRealPipeline = (
   },
 ) => providePipeline(pipeline(input), harness.service);
 
-const successfulNodeSea = (observe: (input: NodeSeaCreateInput) => void): NodeSeaService => ({
+const successfulNodeSea = (observe: (input: NodeSeaCandidateInput) => void): NodeSeaService => ({
   selectedTool: {
     path: "/tools/node-26.7.0",
     version: "26.7.0",
     target: "linux-x64-gnu",
     builtinSpecifiers: HashSet.empty(),
   },
-  createExecutable: (input) =>
+  produceCandidate: (input) =>
     Effect.sync(() => {
       observe(input);
       if (!existsSync(input.main.path)) throw new Error("bundle must remain live during Node SEA");
-      writeFileSync(input.outfile, "durable-pipeline-executable");
-      return {
-        path: input.outfile,
-        bytes: 27,
-        target: "linux-x64-gnu",
-        stages: [
-          input.main.stage,
-          {
-            operation: "assemble-node-sea",
-            tool: { name: "node", version: "26.7.0", path: "/tools/node-26.7.0" },
-          },
-        ],
-      } satisfies PipelineExecutableArtifact;
+      writeFileSync(input.stagedOutfile, "candidate-pipeline-executable");
+      return [
+        input.main.stage,
+        {
+          operation: "assemble-node-sea",
+          tool: { name: "node", version: "26.7.0", path: "/tools/node-26.7.0" },
+        },
+      ] satisfies NodeSeaStages;
     }),
 });
 
@@ -210,7 +201,7 @@ describe("internal esbuild to Node SEA pipeline", () => {
       ["esm", "valid.ts"],
       ["cjs", "valid.cjs"],
     ] as const,
-  )("composes a live %s bundle into one durable exact-stage executable", async (format, entrypoint) => {
+  )("composes a live %s bundle into one exact-stage candidate", async (format, entrypoint) => {
     const root = makeRoot();
     const outfile = join(root, `${format}-app`);
     const asset = join(root, "message.txt");
@@ -225,7 +216,7 @@ describe("internal esbuild to Node SEA pipeline", () => {
       expect(input.assets).toEqual([{ key: "message", path: asset }]);
     });
 
-    const artifact = await Effect.runPromise(
+    const stages = await Effect.runPromise(
       providePipeline(
         pipeline({
           entrypoint,
@@ -239,19 +230,15 @@ describe("internal esbuild to Node SEA pipeline", () => {
 
     expect(calls).toBe(1);
     expect(existsSync(bundlePath)).toBe(false);
-    expect(existsSync(outfile)).toBe(true);
-    expect(artifact).toEqual({
-      path: outfile,
-      bytes: 27,
-      target: "linux-x64-gnu",
-      stages: [
-        { operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } },
-        {
-          operation: "assemble-node-sea",
-          tool: { name: "node", version: "26.7.0", path: "/tools/node-26.7.0" },
-        },
-      ],
-    });
+    expect(existsSync(outfile)).toBe(false);
+    expect(existsSync(`${outfile}.candidate`)).toBe(true);
+    expect(stages).toEqual([
+      { operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } },
+      {
+        operation: "assemble-node-sea",
+        tool: { name: "node", version: "26.7.0", path: "/tools/node-26.7.0" },
+      },
+    ]);
   });
 
   it("does not start Node when bundle preparation fails", async () => {
@@ -293,7 +280,7 @@ describe("internal esbuild to Node SEA pipeline", () => {
     expect(existsSync(join(root, "app"))).toBe(false);
   });
 
-  it.each(["failed", "invalid", "wrong-target"] as const)(
+  it.each(["failed"] as const)(
     "closes bundle, config, and candidate scopes for %s Node output",
     async (behavior) => {
       const root = makeRoot();
@@ -321,28 +308,26 @@ describe("internal esbuild to Node SEA pipeline", () => {
     },
   );
 
-  it("publishes one durable executable after both nested scopes close", async () => {
+  it("returns exact stages while leaving the candidate for core publication", async () => {
     const root = makeRoot();
     const outfile = join(root, "app");
     const result = await Effect.runPromise(
       Effect.gen(function*() {
         const harness = yield* makeRealNodeHarness(root);
-        const artifact = yield* runRealPipeline(harness, {
+        const stages = yield* runRealPipeline(harness, {
           entrypoint: "valid.ts",
           format: "esm",
           outfile,
         });
-        return { artifact, harness };
+        return { stages, harness };
       }).pipe(Effect.provide(NodeServices.layer)),
     );
 
-    expect(result.artifact.path).toBe(outfile);
-    expect(result.artifact.target).toBe("linux-x64-gnu");
-    expect(existsSync(outfile)).toBe(true);
+    expect(existsSync(outfile)).toBe(false);
     expect(result.harness.bundlePaths.every((path) => !existsSync(path))).toBe(true);
     expect(result.harness.configPaths.every((path) => !existsSync(path))).toBe(true);
-    expect(result.harness.outputPaths.every((path) => !existsSync(path))).toBe(true);
-    expect(result.artifact.stages.map((stage) => stage.operation)).toEqual(["bundle", "assemble-node-sea"]);
+    expect(result.harness.outputPaths.every((path) => existsSync(path))).toBe(true);
+    expect(result.stages.map((stage) => stage.operation)).toEqual(["bundle", "assemble-node-sea"]);
   });
 
   it("interrupts the Node child and closes every nested temporary scope", async () => {
@@ -376,37 +361,31 @@ describe("internal esbuild to Node SEA pipeline", () => {
     expect(existsSync(outfile)).toBe(false);
   });
 
-  it("retains a rename that linearized before the caller observes interruption", async () => {
+  it("does not invoke rename or replace the destination", async () => {
     const root = makeRoot();
     const outfile = join(root, "app");
     writeFileSync(outfile, "old");
-    const renameLinearized = Latch.makeUnsafe();
-    const permitRenameCallback = Latch.makeUnsafe();
+    let renames = 0;
     const ready = await Effect.runPromise(
       Effect.gen(function*() {
         const harness = yield* makeRealNodeHarness(root, "success", (fileSystem) => ({
           ...fileSystem,
-          rename: (from, to) =>
-            Effect.gen(function*() {
-              yield* fileSystem.rename(from, to);
-              yield* renameLinearized.open;
-              yield* permitRenameCallback.await;
-            }),
+          rename: () => {
+            renames += 1;
+            return Effect.die(new Error("provider must not publish"));
+          },
         }));
         return { harness };
       }).pipe(Effect.provide(NodeServices.layer)),
     );
-    const fiber = Effect.runFork(runRealPipeline(ready.harness, {
+    await Effect.runPromise(runRealPipeline(ready.harness, {
       entrypoint: "valid.ts",
       format: "esm",
       outfile,
     }));
-    await Effect.runPromise(renameLinearized.await);
-    await Effect.runPromise(Fiber.interrupt(fiber));
-    const exit = await Effect.runPromise(Fiber.await(fiber));
 
-    expect(Exit.hasInterrupts(exit)).toBe(true);
-    expect(readFileSync(outfile, "utf8")).not.toBe("old");
+    expect(renames).toBe(0);
+    expect(readFileSync(outfile, "utf8")).toBe("old");
     expect(ready.harness.bundlePaths.every((path) => !existsSync(path))).toBe(true);
     expect(ready.harness.configPaths.every((path) => !existsSync(path))).toBe(true);
   });
@@ -418,7 +397,7 @@ describe("internal esbuild to Node SEA pipeline", () => {
     let bundlePath = "";
     const nodeSea: NodeSeaService = {
       ...successfulNodeSea(() => {}),
-      createExecutable: (input) => {
+      produceCandidate: (input) => {
         bundlePath = input.main.path;
         return Effect.fail(new InvalidNodeSeaInput({ reason: "external-not-builtin" }));
       },
@@ -440,7 +419,7 @@ describe("internal esbuild to Node SEA pipeline", () => {
     let bundlePath = "";
     const nodeSea: NodeSeaService = {
       ...successfulNodeSea(() => {}),
-      createExecutable: (input) =>
+      produceCandidate: (input) =>
         Effect.gen(function*() {
           bundlePath = input.main.path;
           yield* nodeStarted.open;

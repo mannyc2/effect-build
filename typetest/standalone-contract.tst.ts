@@ -1,14 +1,16 @@
 import { Context } from "effect";
 import type { Effect } from "effect";
-import * as Bun from "../src/Bun.js";
-import * as Deno from "../src/Deno.js";
-import type { Artifact as RootArtifact } from "../src/standalone/Artifact.js";
-import type { BuildError, TargetUnsupported } from "../src/standalone/BuildError.js";
-import { makeCompileExecutable } from "../src/standalone/CompileExecutable.js";
-import type { CompileExecutableMatrixInput } from "../src/standalone/CompileExecutableMatrix.js";
-import type { CompileExecutableInput, CompilerService } from "../src/standalone/Driver.js";
-import type { MatrixError as RootMatrixError } from "../src/standalone/MatrixError.js";
-import type { Target as RootTarget } from "../src/standalone/Target.js";
+import * as Bun from "effect-build-bun";
+import * as Deno from "effect-build-deno";
+import * as NodeSea from "effect-build-node-sea";
+import type { BuildError as PublicBuildError } from "effect-build/Provider";
+import type { Artifact as RootArtifact } from "../packages/effect-build/src/standalone/Artifact.js";
+import type { BuildError, TargetUnsupported } from "../packages/effect-build/src/standalone/BuildError.js";
+import { makeCompileExecutable } from "../packages/effect-build/src/standalone/CompileExecutable.js";
+import type { CompileExecutableMatrixInput } from "../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
+import type { CompileExecutableInput, CompilerService } from "../packages/effect-build/src/standalone/Driver.js";
+import type { MatrixError as RootMatrixError } from "../packages/effect-build/src/standalone/MatrixError.js";
+import type { Target as RootTarget } from "../packages/effect-build/src/standalone/Target.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -40,7 +42,7 @@ const denoLikeCompile = makeCompileExecutable(DenoLikeCompiler);
 type BunLikeEffect = ReturnType<typeof bunLikeCompile>;
 type DenoLikeEffect = ReturnType<typeof denoLikeCompile>;
 
-export type _BunLikeSuccess = Assert<Same<SuccessOf<BunLikeEffect>["tool"]["name"], "bun">>;
+export type _BunLikeSuccess = Assert<Same<SuccessOf<BunLikeEffect>["stages"][0]["tool"]["name"], "bun">>;
 export type _BunLikeTarget = Assert<Same<SuccessOf<BunLikeEffect>["target"], Bun.Target>>;
 export type _BunLikeError = Assert<Same<ErrorOf<BunLikeEffect>, BuildError>>;
 export type _BunLikeContext = Assert<Same<ContextOf<BunLikeEffect>, BunLikeCompiler>>;
@@ -88,38 +90,49 @@ type BunScalarEffect = ReturnType<typeof Bun.compileExecutable>;
 type DenoScalarEffect = ReturnType<typeof Deno.compileExecutable>;
 type BunMatrixEffect = ReturnType<typeof Bun.compileExecutableMatrix>;
 type DenoMatrixEffect = ReturnType<typeof Deno.compileExecutableMatrix>;
+type NodeSeaScalarEffect = ReturnType<typeof NodeSea.compileExecutable>;
+type NodeSeaMatrixEffect = ReturnType<typeof NodeSea.compileExecutableMatrix>;
 
 export type _BunScalarSuccess = Assert<Same<SuccessOf<BunScalarEffect>, Bun.Artifact>>;
 export type _DenoScalarSuccess = Assert<Same<SuccessOf<DenoScalarEffect>, Deno.Artifact>>;
-export type _BunScalarError = Assert<Same<ErrorOf<BunScalarEffect>, BuildError>>;
-export type _DenoScalarError = Assert<Same<ErrorOf<DenoScalarEffect>, BuildError>>;
+export type _BunScalarError = Assert<Same<ErrorOf<BunScalarEffect>, PublicBuildError>>;
+export type _DenoScalarError = Assert<Same<ErrorOf<DenoScalarEffect>, PublicBuildError>>;
 export type _BunScalarContext = Assert<Same<ContextOf<BunScalarEffect>, Bun.Compiler>>;
 export type _DenoScalarContext = Assert<Same<ContextOf<DenoScalarEffect>, Deno.Compiler>>;
-export type _BunArtifactTool = Assert<Same<Bun.Artifact["tool"]["name"], "bun">>;
-export type _DenoArtifactTool = Assert<Same<Deno.Artifact["tool"]["name"], "deno">>;
+export type _BunArtifactProvider = Assert<Same<Bun.Artifact["provider"], "bun">>;
+export type _DenoArtifactProvider = Assert<Same<Deno.Artifact["provider"], "deno">>;
+export type _NodeSeaArtifactProvider = Assert<Same<NodeSea.Artifact["provider"], "node-sea">>;
+export type _BunArtifactTool = Assert<Same<Bun.Artifact["stages"][0]["tool"]["name"], "bun">>;
+export type _DenoArtifactTool = Assert<Same<Deno.Artifact["stages"][0]["tool"]["name"], "deno">>;
+export type _NodeSeaStages = Assert<
+  Same<NodeSea.Artifact["stages"][number]["operation"], "bundle" | "assemble-node-sea">
+>;
 export type _BunArtifactTarget = Assert<Same<Bun.Artifact["target"], Bun.Target>>;
 export type _DenoArtifactTarget = Assert<Same<Deno.Artifact["target"], Deno.Target>>;
+export type _NodeSeaArtifactTarget = Assert<Same<NodeSea.Artifact["target"], "linux-x64-gnu">>;
 export type _ProviderArtifactsAreRootArtifacts = Assert<
-  Same<Bun.Artifact | Deno.Artifact extends RootArtifact ? true : false, true>
+  Same<Bun.Artifact | Deno.Artifact | NodeSea.Artifact extends RootArtifact ? true : false, true>
 >;
 export type _RootArtifactDoesNotWidenProviderCorrelation = Assert<
-  Same<RootArtifact extends Bun.Artifact | Deno.Artifact ? true : false, true>
+  Same<RootArtifact extends Bun.Artifact | Deno.Artifact | NodeSea.Artifact ? true : false, true>
 >;
 
 export type _BunMatrixSuccess = Assert<Same<SuccessOf<BunMatrixEffect>, readonly Bun.Artifact[]>>;
 export type _DenoMatrixSuccess = Assert<Same<SuccessOf<DenoMatrixEffect>, readonly Deno.Artifact[]>>;
+export type _NodeSeaScalarSuccess = Assert<Same<SuccessOf<NodeSeaScalarEffect>, NodeSea.Artifact>>;
+export type _NodeSeaMatrixSuccess = Assert<Same<SuccessOf<NodeSeaMatrixEffect>, readonly NodeSea.Artifact[]>>;
 export type _BunMatrixError = Assert<Same<ErrorOf<BunMatrixEffect>, Bun.MatrixError>>;
 export type _DenoMatrixError = Assert<Same<ErrorOf<DenoMatrixEffect>, Deno.MatrixError>>;
 export type _BunMatrixContext = Assert<Same<ContextOf<BunMatrixEffect>, Bun.Compiler>>;
 export type _DenoMatrixContext = Assert<Same<ContextOf<DenoMatrixEffect>, Deno.Compiler>>;
 export type _ProviderMatrixErrorsAreRootErrors = Assert<
-  Same<Bun.MatrixError | Deno.MatrixError extends RootMatrixError ? true : false, true>
+  Same<Bun.MatrixError | Deno.MatrixError | NodeSea.MatrixError extends RootMatrixError ? true : false, true>
 >;
 
 type BunFailed = Extract<Bun.MatrixError, { readonly _tag: "MatrixFailed" }>;
 type DenoFailed = Extract<Deno.MatrixError, { readonly _tag: "MatrixFailed" }>;
-export type _BunFailureTool = Assert<Same<BunFailed["failures"][number]["tool"], "bun">>;
-export type _DenoFailureTool = Assert<Same<DenoFailed["failures"][number]["tool"], "deno">>;
+export type _BunFailureProvider = Assert<Same<BunFailed["failures"][number]["provider"], "bun">>;
+export type _DenoFailureProvider = Assert<Same<DenoFailed["failures"][number]["provider"], "deno">>;
 export type _BunFailureTarget = Assert<Same<BunFailed["failures"][number]["target"], Bun.Target>>;
 export type _DenoFailureTarget = Assert<Same<DenoFailed["failures"][number]["target"], Deno.Target>>;
 export type _BunPartialArtifacts = Assert<Same<BunFailed["artifacts"], readonly Bun.Artifact[]>>;
@@ -172,6 +185,13 @@ export const _denoScalar = Deno.compileExecutable({
   outfile: "dist/app",
   target: "windows-aarch64",
   options: { bundle: true, minify: true, permissions: { read: true } },
+});
+
+export const _nodeSeaScalar = NodeSea.compileExecutable({
+  entrypoint: "src/main.ts",
+  outfile: "dist/app",
+  target: "linux-x64-gnu",
+  options: { format: "esm", assets: [{ key: "message", path: "message.txt" }] },
 });
 
 export const _bunMatrix = Bun.compileExecutableMatrix({
@@ -259,7 +279,7 @@ export type _NoStoreFields = Assert<
   Same<Extract<keyof RootArtifact, "id" | "ref" | "store" | "contentAddress">, never>
 >;
 export type _ArtifactFields = Assert<
-  Same<keyof RootArtifact, "path" | "bytes" | "digest" | "target" | "tool">
+  Same<keyof RootArtifact, "path" | "bytes" | "digest" | "provider" | "target" | "stages">
 >;
 export type _DigestOptIn = Assert<Same<RootArtifact["digest"], `sha256:${string}` | undefined>>;
 export type _PrivateMatrixInputMatches = Assert<

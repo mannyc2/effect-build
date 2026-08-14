@@ -1,283 +1,510 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { constants } from "node:fs";
+import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const execute = async (...arguments_) => {
+  try {
+    return await execFileAsync(...arguments_);
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    const output = [error.message, error.stdout, error.stderr]
+      .filter((value) => typeof value === "string" && value.trim() !== "")
+      .join("\n");
+    throw new Error(output, { cause: error });
+  }
+};
 const repository = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const temporaryPrefix = "effect-build-consumers-";
+const packageVersion = "0.3.0";
+const packageNames = ["effect-build", "effect-build-bun", "effect-build-deno", "effect-build-node-sea"];
+const providerNames = ["effect-build-bun", "effect-build-deno", "effect-build-node-sea"];
+const documentationContracts = [
+  { path: "README.md", owners: ["effect-build-bun", "effect-build-bun", "effect-build-bun"] },
+  {
+    path: "docs/api.md",
+    owners: [
+      undefined,
+      "effect-build-bun",
+      "effect-build-deno",
+      "effect-build-node-sea",
+      "effect-build-bun",
+      "effect-build-bun",
+      "effect-build-bun",
+      "effect-build-bun",
+      "effect-build-bun",
+      undefined,
+      "effect-build-bun",
+      "effect-build-bun",
+    ],
+  },
+  { path: "docs/drivers.md", owners: ["effect-build-bun", "effect-build-deno", "effect-build-node-sea"] },
+  { path: "packages/effect-build-bun/README.md", owners: ["effect-build-bun"] },
+  { path: "packages/effect-build-deno/README.md", owners: ["effect-build-deno"] },
+  { path: "packages/effect-build-node-sea/README.md", owners: ["effect-build-node-sea"] },
+];
 const exactSemver = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
-const arguments_ = process.argv.slice(2);
-if (arguments_.length > 1 || (arguments_.length === 1 && arguments_[0] !== "--fresh-install")) {
-  throw new Error("Usage: node scripts/test-built-consumer.mjs [--fresh-install]");
-}
-const freshInstall = arguments_[0] === "--fresh-install";
-const consumer = await mkdtemp(join(tmpdir(), "effect-build-consumer-"));
+
+export const parseArguments = (argv) => {
+  if (argv.length === 0 || (argv.length === 1 && argv[0] === "--fresh-install")) {
+    return { candidateDirectory: undefined, build: true };
+  }
+  if (argv.length === 1 && argv[0] === "--built") {
+    return { candidateDirectory: undefined, build: false };
+  }
+  if (argv.length === 2 && argv[0] === "--candidate-dir" && isAbsolute(argv[1])) {
+    return { candidateDirectory: resolve(argv[1]), build: false };
+  }
+  throw new Error("usage: test-built-consumer.mjs [--fresh-install | --built | --candidate-dir <absolute-directory>]");
+};
 
 const readInstalledVersion = async (root, packageName) => {
-  const packagePath = join(root, "node_modules", ...packageName.split("/"), "package.json");
-  const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
-  if (typeof packageJson.version !== "string" || !exactSemver.test(packageJson.version)) {
-    throw new Error(`${packageName} has no exact SemVer version in ${packagePath}`);
+  const manifest = JSON.parse(await readFile(join(root, "node_modules", ...packageName.split("/"), "package.json"), "utf8"));
+  if (typeof manifest.version !== "string" || !exactSemver.test(manifest.version)) {
+    throw new Error(`${packageName} does not have an exact installed SemVer version`);
   }
-  return packageJson.version;
+  return manifest.version;
 };
 
-const assertInstalledVersion = async (root, packageName, expectedVersion) => {
-  const actualVersion = await readInstalledVersion(root, packageName);
-  if (actualVersion !== expectedVersion) {
-    throw new Error(`Expected fresh ${packageName}@${expectedVersion}, received ${actualVersion}`);
+const readResolvedDependencyVersion = async (root, fromPackage, dependency) => {
+  const fromManifest = await realpath(join(root, "node_modules", ...fromPackage.split("/"), "package.json"));
+  const dependencyManifest = createRequire(fromManifest).resolve(`${dependency}/package.json`);
+  const manifest = JSON.parse(await readFile(dependencyManifest, "utf8"));
+  if (typeof manifest.version !== "string" || !exactSemver.test(manifest.version)) {
+    throw new Error(`${dependency} does not have an exact resolved SemVer version`);
   }
+  return manifest.version;
 };
 
-try {
-  const { stdout } = await execFileAsync("npm", ["pack", "--pack-destination", consumer], {
-    cwd: repository,
-    env: { ...process.env, npm_config_cache: join(consumer, "npm-cache") },
+const findExecutable = async (name, environment = process.env) => {
+  for (const directory of (environment.PATH ?? "").split(delimiter)) {
+    if (!isAbsolute(directory)) continue;
+    const candidate = join(directory, process.platform === "win32" ? `${name}.exe` : name);
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Continue through the caller's explicit PATH.
+    }
+  }
+  throw new Error(`${name} was not found on absolute PATH entries`);
+};
+
+export const bunInvocation = async (environment = process.env) => {
+  const npmExecPath = environment.npm_execpath;
+  let executable;
+  if (npmExecPath !== undefined && /(?:^|[\\/])bun(?:\.exe)?$/.test(npmExecPath)) {
+    if (!isAbsolute(npmExecPath)) throw new Error("Bun npm_execpath must be absolute");
+    await access(npmExecPath, constants.X_OK);
+    executable = npmExecPath;
+  } else {
+    executable = await findExecutable("bun", environment);
+  }
+  const { stdout } = await execute(executable, ["--version"], { env: environment });
+  if (stdout.trim() !== "1.3.14") throw new Error(`package-manager Bun must be 1.3.14, received ${stdout.trim()}`);
+  return executable;
+};
+
+const assertOwnedTemporaryRoot = (path) => {
+  const resolved = resolve(path);
+  if (resolve(resolved, "..") !== resolve(tmpdir()) || !basename(resolved).startsWith(temporaryPrefix)) {
+    throw new Error(`refusing to remove unowned consumer directory: ${resolved}`);
+  }
+  return resolved;
+};
+
+const tarEntries = async (tarball) => {
+  const { stdout } = await execute("tar", ["-tzf", tarball], { maxBuffer: 8 * 1024 * 1024 });
+  return stdout.trim().split("\n").filter(Boolean);
+};
+
+const packedManifest = async (tarball) => {
+  const { stdout } = await execute("tar", ["-xOf", tarball, "package/package.json"], {
+    maxBuffer: 8 * 1024 * 1024,
   });
-  const tarball = join(consumer, stdout.trim().split("\n").at(-1));
-  const modules = join(consumer, "node_modules");
-  let effectVersion;
-  let typeScriptBin;
+  return JSON.parse(stdout);
+};
 
-  if (freshInstall) {
-    const versions = Object.fromEntries(
-      await Promise.all(
-        ["effect", "@effect/platform-node", "typescript", "@types/node"].map(async (packageName) => [
-          packageName,
-          await readInstalledVersion(repository, packageName),
-        ]),
+const dependencySections = ["dependencies", "peerDependencies", "optionalDependencies", "devDependencies"];
+
+export const isNonRegistryDependency = (value) =>
+  typeof value !== "string"
+  || /^(?:workspace:|catalog:|file:|link:|portal:|\.{1,2}(?:[\\/]|$)|[\\/]|[A-Za-z]:[\\/])/.test(value);
+
+export const inspectPackedPackage = async (tarball, expectedName) => {
+  const manifest = await packedManifest(tarball);
+  const entries = await tarEntries(tarball);
+  if (manifest.name !== expectedName || manifest.version !== packageVersion) {
+    throw new Error(`unexpected packed identity for ${expectedName}`);
+  }
+  for (const section of dependencySections) {
+    for (const [name, value] of Object.entries(manifest[section] ?? {})) {
+      if (isNonRegistryDependency(value)) {
+        throw new Error(`${expectedName} packed ${section}.${name} leaks a non-registry dependency`);
+      }
+    }
+  }
+  const exports = manifest.exports;
+  if (exports === null || typeof exports !== "object" || Array.isArray(exports)) {
+    throw new Error(`${expectedName} has no packed export map`);
+  }
+  for (const [subpath, value] of Object.entries(exports)) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`${expectedName} has malformed packed export ${subpath}`);
+    }
+    for (const field of ["types", "import"]) {
+      const target = value[field];
+      if (typeof target !== "string" || !target.startsWith("./dist/") || target.includes("/src/")) {
+        throw new Error(`${expectedName} export ${subpath}.${field} must target built dist output`);
+      }
+      if (!entries.includes(`package/${target.slice(2)}`)) {
+        throw new Error(`${expectedName} export ${subpath}.${field} is missing from its tarball`);
+      }
+    }
+  }
+  if (expectedName === "effect-build") {
+    if (manifest.dependencies !== undefined || JSON.stringify(Object.keys(exports)) !== JSON.stringify([".", "./Provider"])) {
+      throw new Error("packed core dependency or export graph drifted");
+    }
+  } else {
+    if (manifest.dependencies?.["effect-build"] !== `^${packageVersion}` || Object.keys(exports).join() !== ".") {
+      throw new Error(`${expectedName} did not rewrite workspace:^ to ^${packageVersion}`);
+    }
+  }
+  return { manifest, entries };
+};
+
+const packPackages = async (bun, destination) => {
+  await mkdir(destination, { recursive: true });
+  const tarballs = new Map();
+  for (const name of packageNames) {
+    const filename = `${name}-${packageVersion}.tgz`;
+    const tarball = join(destination, filename);
+    await execute(bun, ["pm", "pack", "--destination", destination, "--ignore-scripts", "--quiet"], {
+      cwd: resolve(repository, "packages", name),
+      env: process.env,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    await access(tarball, constants.R_OK);
+    await inspectPackedPackage(tarball, name);
+    tarballs.set(name, tarball);
+  }
+  return tarballs;
+};
+
+const typeScriptSource = (provider) => {
+  if (provider === undefined) {
+    return [
+      'import * as Core from "effect-build";',
+      'import * as Provider from "effect-build/Provider";',
+      "export const artifactSchema = Core.Artifact.Artifact;",
+      "export const defineProvider = Provider.define;",
+    ].join("\n");
+  }
+  const alias = "Compiler";
+  const target = provider === "effect-build-bun"
+    ? "linux-x64-musl"
+    : provider === "effect-build-deno"
+    ? "windows-aarch64"
+    : "linux-x64-gnu";
+  const options = provider === "effect-build-bun"
+    ? "{ minify: true }"
+    : provider === "effect-build-deno"
+    ? "{ bundle: true, minify: true }"
+    : '{ format: "esm" }';
+  return [
+    'import { Effect } from "effect";',
+    `import * as ${alias} from ${JSON.stringify(provider)};`,
+    `export const scalar = ${alias}.compileExecutable({ entrypoint: "src/main.ts", outfile: "dist/app", target: ${JSON.stringify(target)}, options: ${options} });`,
+    `export const matrix = ${alias}.compileExecutableMatrix({ entrypoint: "src/main.ts", outdir: "dist", name: "app", targets: [${JSON.stringify(target)}] });`,
+    `export type ScalarContext = typeof scalar extends Effect.Effect<unknown, unknown, infer R> ? R : never;`,
+    `export const targetSchema: typeof ${alias}.Target = ${alias}.Target;`,
+  ].join("\n");
+};
+
+const runtimeSource = (provider) => {
+  const providerName = provider === "effect-build-bun"
+    ? "bun"
+    : provider === "effect-build-deno"
+    ? "deno"
+    : "node-sea";
+  const lines = [
+    'import assert from "node:assert/strict";',
+    'const core = await import("effect-build");',
+    'assert.deepEqual(Object.keys(core), ["Artifact", "BuildError", "MatrixError", "Target"]);',
+    'const author = await import("effect-build/Provider");',
+    'assert.deepEqual(Object.keys(author), ["define"]);',
+    'const removedBun = ["effect-build", "bun"].join("/");',
+    'const removedDeno = ["effect-build", "deno"].join("/");',
+    'for (const path of [removedBun, removedDeno, "effect-build/internal", "effect-build/standalone/internal/Process.js"]) {',
+    '  await import(path).then(() => { throw new Error(`private or legacy path resolved: ${path}`); }, () => undefined);',
+    '}',
+  ];
+  if (provider !== undefined) {
+    lines.push(
+      'const { Effect } = await import("effect");',
+      `const selected = await import(${JSON.stringify(provider)});`,
+      'assert.deepEqual(Object.keys(selected), ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"]);',
+      'const dispatches = [];',
+      'const artifactFor = (input, target) => ({',
+      '  path: input.outfile ?? `dist/app-${target}`,' ,
+      '  bytes: 1,',
+      '  target,',
+      `  provider: ${JSON.stringify(providerName)},`,
+      provider === "effect-build-node-sea"
+        ? '  stages: [{ operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } }, { operation: "assemble-node-sea", tool: { name: "node", version: "26.7.0", path: "/fixture/node" } }],'
+        : `  stages: [{ operation: "compile-executable", tool: { name: ${JSON.stringify(providerName)}, version: "fixture", path: "/fixture/compiler" } }],`,
+      '});',
+      'const fakeCompiler = {',
+      '  compileExecutable: (input) => {',
+      '    dispatches.push("scalar");',
+      '    return Effect.succeed(artifactFor(input, input.target));',
+      '  },',
+      '  compileExecutableMatrix: (input) => {',
+      '    dispatches.push("matrix");',
+      '    return Effect.succeed(input.targets.map((target) => artifactFor(input, target)));',
+      '  },',
+      '};',
+      'const target = selected.Target.literals[0];',
+      'const scalar = await Effect.runPromise(selected.compileExecutable({ entrypoint: "src/main.ts", outfile: "dist/app", target }).pipe(Effect.provideService(selected.Compiler, fakeCompiler)));',
+      'assert.equal(scalar.target, target);',
+      'const matrix = await Effect.runPromise(selected.compileExecutableMatrix({ entrypoint: "src/main.ts", outdir: "dist", name: "app", targets: [target] }).pipe(Effect.provideService(selected.Compiler, fakeCompiler)));',
+      'assert.deepEqual(matrix.map((artifact) => artifact.target), [target]);',
+      'assert.deepEqual(dispatches, ["scalar", "matrix"]);',
+      `await import(${JSON.stringify(`${provider}/Adapter`)}).then(() => { throw new Error("provider private path resolved"); }, () => undefined);`,
+      ...providerNames.filter((name) => name !== provider).map((name) =>
+        `await import(${JSON.stringify(name)}).then(() => { throw new Error("unselected provider resolved: ${name}"); }, () => undefined);`
       ),
     );
-    effectVersion = versions.effect;
-    if (effectVersion !== versions["@effect/platform-node"]) {
-      throw new Error(
-        `Installed effect@${effectVersion} does not match @effect/platform-node@${versions["@effect/platform-node"]}`,
+  }
+  return lines.join("\n");
+};
+
+const typeScriptBlocks = (markdown) =>
+  [...markdown.matchAll(/```(?:ts|typescript)\n([\s\S]*?)```/g)].map((match) => match[1]);
+
+const documentationSource = (source) => {
+  const imports = [];
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  if (/\bEffect\./.test(code) && !/import\s+\{[^}]*\bEffect\b[^}]*\}\s+from\s+["']effect["']/.test(code)) {
+    imports.push('import { Effect } from "effect";');
+  }
+  if (/\bNodeServices\./.test(code) && !/\bNodeServices\b[^\n]*from\s+["']@effect\/platform-node["']/.test(code)) {
+    imports.push('import { NodeServices } from "@effect/platform-node";');
+  }
+  if (/\bBun\./.test(code) && !/import\s+\*\s+as\s+Bun\s+from/.test(code)) {
+    imports.push('import * as Bun from "effect-build-bun";');
+  }
+  if (/\bDeno\./.test(code) && !/import\s+\*\s+as\s+Deno\s+from/.test(code)) {
+    imports.push('import * as Deno from "effect-build-deno";');
+  }
+  if (/\bNodeSea\./.test(code) && !/import\s+\*\s+as\s+NodeSea\s+from/.test(code)) {
+    imports.push('import * as NodeSea from "effect-build-node-sea";');
+  }
+  if (/\bBuildError\./.test(code) && !/\bBuildError\b[^\n]*from\s+["']effect-build["']/.test(code)) {
+    imports.push('import { BuildError } from "effect-build";');
+  }
+  if (/\bTarget\./.test(code) && !/\bTarget\b[^\n]*from\s+["']effect-build["']/.test(code)) {
+    imports.push('import { Target } from "effect-build";');
+  }
+  const trimmed = source.trim();
+  const body = trimmed.startsWith("Effect.Effect<")
+    ? `export type DocumentedEffect = ${trimmed.replace(/;$/, "")};`
+    : trimmed;
+  return `${imports.join("\n")}${imports.length === 0 ? "" : "\n"}${body}\n`;
+};
+
+const writeDocumentationSources = async (fixture, provider) => {
+  const directory = join(fixture, "documentation");
+  await mkdir(directory, { recursive: true });
+  let written = 0;
+  for (const contract of documentationContracts) {
+    const blocks = typeScriptBlocks(await readFile(join(repository, contract.path), "utf8"));
+    if (blocks.length !== contract.owners.length) {
+      throw new Error(`${contract.path} TypeScript block count drifted: expected ${contract.owners.length}, received ${blocks.length}`);
+    }
+    for (const [index, owner] of contract.owners.entries()) {
+      if (owner !== provider) continue;
+      const filename = `${contract.path.replaceAll("/", "-").replaceAll(".", "-")}-${index}.ts`;
+      await writeFile(join(directory, filename), documentationSource(blocks[index]));
+      written += 1;
+    }
+  }
+  if (written === 0) throw new Error(`no documentation consumer blocks assigned to ${provider ?? "effect-build"}`);
+};
+
+const installFixture = async ({ installer, provider, tarballs, root, bun, versions }) => {
+  const label = `${installer}-${provider ?? "core"}`;
+  const fixture = join(root, "fixtures", label);
+  const cache = join(root, "caches", label);
+  await mkdir(fixture, { recursive: true });
+  const dependencies = {
+    "@types/node": versions["@types/node"],
+    effect: versions.effect,
+    "effect-build": `file:${tarballs.get("effect-build")}`,
+    typescript: versions.typescript,
+    ...(provider === undefined
+      ? {}
+      : {
+        "@effect/platform-node": versions["@effect/platform-node"],
+        [provider]: `file:${tarballs.get(provider)}`,
+      }),
+  };
+  const manifest = {
+    name: `fixture-${label}`,
+    private: true,
+    type: "module",
+    dependencies,
+    ...(provider === undefined
+      ? {}
+      : {
+        overrides: {
+          "@effect/platform-node-shared": versions["@effect/platform-node-shared"],
+          ...(installer === "bun" ? { "effect-build": `file:${tarballs.get("effect-build")}` } : {}),
+        },
+      }),
+  };
+  await writeFile(join(fixture, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(join(fixture, ".npmrc"), "@jsr:registry=https://npm.jsr.io\n");
+  if (installer === "npm") {
+    await execute("npm", ["install", "--ignore-scripts", "--strict-peer-deps", "--cache", cache], {
+      cwd: fixture,
+      env: process.env,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+  } else {
+    await execute(bun, ["install", "--ignore-scripts", "--cache-dir", cache, "--no-progress"], {
+      cwd: fixture,
+      env: process.env,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+  }
+  for (const [name, version] of Object.entries(versions)) {
+    if (name === "@effect/platform-node" && provider === undefined) continue;
+    if (name === "typescript" || name === "@types/node" || name === "effect" || provider !== undefined) {
+      const installedVersion = name === "@effect/platform-node-shared"
+        ? await readResolvedDependencyVersion(fixture, "@effect/platform-node", name)
+        : await readInstalledVersion(fixture, name);
+      if (installedVersion !== version) throw new Error(`${label} resolved an unexpected ${name}`);
+    }
+  }
+  if (await readInstalledVersion(fixture, "effect-build") !== packageVersion) throw new Error(`${label} did not resolve core 0.3.0`);
+  if (provider !== undefined && await readInstalledVersion(fixture, provider) !== packageVersion) {
+    throw new Error(`${label} did not resolve ${provider}@0.3.0`);
+  }
+  if (provider === undefined) {
+    for (const name of providerNames) await access(join(fixture, "node_modules", name)).then(
+      () => { throw new Error(`${label} unexpectedly installed ${name}`); },
+      () => undefined,
+    );
+  } else {
+    for (const absent of providerNames.filter((name) => name !== provider)) {
+      await access(join(fixture, "node_modules", absent)).then(
+        () => { throw new Error(`${label} unexpectedly installed ${absent}`); },
+        () => undefined,
       );
     }
-
-    await writeFile(
-      join(consumer, "package.json"),
-      JSON.stringify(
-        {
-          name: "effect-build-consumer",
-          private: true,
-          type: "module",
-          dependencies: {
-            "@effect/platform-node": versions["@effect/platform-node"],
-            "@types/node": versions["@types/node"],
-            effect: effectVersion,
-            "effect-build": `file:./${basename(tarball)}`,
-            typescript: versions.typescript,
-          },
-        },
-        null,
-        2,
-      ),
-    );
-    const installArguments = [
-      "install",
-      "--strict-peer-dependencies",
-      "--store-dir",
-      join(consumer, "pnpm-store"),
-    ];
-    const packageManagerEntryPoint = process.env.npm_execpath;
-    if (packageManagerEntryPoint !== undefined && !isAbsolute(packageManagerEntryPoint)) {
-      throw new Error("npm_execpath must be absolute when provided");
+  }
+  await writeFile(join(fixture, "main.ts"), typeScriptSource(provider));
+  await writeDocumentationSources(fixture, provider);
+  if (provider !== undefined) {
+    const exampleProvider = provider === "effect-build-bun"
+      ? "bun"
+      : provider === "effect-build-deno"
+      ? "deno"
+      : "node-sea";
+    const examples = exampleProvider === "bun" ? ["compile.ts", "matrix.ts"] : ["compile.ts"];
+    const exampleDirectory = join(fixture, "examples");
+    await mkdir(exampleDirectory, { recursive: true });
+    for (const example of examples) {
+      await writeFile(
+        join(exampleDirectory, example),
+        await readFile(join(repository, "examples", exampleProvider, "src", example), "utf8"),
+      );
     }
-    const [installExecutable, installExecutableArguments] =
-      packageManagerEntryPoint !== undefined
-        ? [process.execPath, [packageManagerEntryPoint, ...installArguments]]
-        : ["pnpm", installArguments];
-    await execFileAsync(installExecutable, installExecutableArguments, {
-      cwd: consumer,
-      env: {
-        ...process.env,
-        npm_config_cache: join(consumer, "npm-cache"),
-        npm_config_cache_dir: join(consumer, "pnpm-cache"),
-        npm_config_state_dir: join(consumer, "pnpm-state"),
-      },
+  }
+  await writeFile(join(fixture, "runtime.mjs"), runtimeSource(provider));
+  await writeFile(join(fixture, "tsconfig.json"), `${JSON.stringify({
+    compilerOptions: {
+      target: "ES2022",
+      module: "NodeNext",
+      moduleResolution: "NodeNext",
+      strict: true,
+      noEmit: true,
+      skipLibCheck: true,
+      types: ["node"],
+    },
+    include: ["*.ts", "documentation/**/*.ts", "examples/**/*.ts"],
+  }, null, 2)}\n`);
+  await execute(process.execPath, [join(fixture, "node_modules", "typescript", "bin", "tsc"), "-p", "."], { cwd: fixture });
+  await execute(process.execPath, [join(fixture, "runtime.mjs")], { cwd: fixture });
+  console.log(`PASS packed consumer ${label}`);
+};
+
+const writeCandidateManifest = async (directory, tarballs) => {
+  const packages = [];
+  for (const name of packageNames) {
+    const tarball = tarballs.get(name);
+    const bytes = await readFile(tarball);
+    const manifest = await packedManifest(tarball);
+    packages.push({
+      name,
+      version: manifest.version,
+      filename: basename(tarball),
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      dependencies: manifest.dependencies ?? {},
+      peerDependencies: manifest.peerDependencies ?? {},
     });
+  }
+  await writeFile(join(directory, "manifest.json"), `${JSON.stringify({ version: 1, packages }, null, 2)}\n`);
+};
 
-    for (const [packageName, expectedVersion] of Object.entries(versions)) {
-      await assertInstalledVersion(consumer, packageName, expectedVersion);
+export const verifyPackedConsumers = async ({ candidateDirectory, build = true } = {}) => {
+  const bun = await bunInvocation();
+  if (build) {
+    await execute(bun, ["run", "build"], { cwd: repository, env: process.env, maxBuffer: 16 * 1024 * 1024 });
+  }
+  const temporaryRoot = assertOwnedTemporaryRoot(await mkdtemp(join(tmpdir(), temporaryPrefix)));
+  try {
+    const packDirectory = candidateDirectory ?? join(temporaryRoot, "tarballs");
+    const tarballs = await packPackages(bun, packDirectory);
+    const versions = Object.fromEntries(await Promise.all(
+      ["effect", "@effect/platform-node", "typescript", "@types/node"].map(
+        async (name) => [name, await readInstalledVersion(repository, name)],
+      ),
+    ));
+    versions["@effect/platform-node-shared"] = await readResolvedDependencyVersion(
+      repository,
+      "@effect/platform-node",
+      "@effect/platform-node-shared",
+    );
+    if (versions.effect !== versions["@effect/platform-node"]) {
+      throw new Error("workspace Effect and platform-node development versions differ");
     }
-    typeScriptBin = join(modules, "typescript", "bin", "tsc");
-  } else {
-    await execFileAsync("tar", ["-xzf", tarball, "-C", consumer]);
-
-    await mkdir(join(modules, "@effect"), { recursive: true });
-    await mkdir(join(modules, "@types"), { recursive: true });
-    await symlink(join(consumer, "package"), join(modules, "effect-build"), "dir");
-    await symlink(join(repository, "node_modules", "effect"), join(modules, "effect"), "dir");
-    await symlink(
-      join(repository, "node_modules", "@effect", "platform-node"),
-      join(modules, "@effect", "platform-node"),
-      "dir",
-    );
-    await symlink(join(repository, "node_modules", "@types", "node"), join(modules, "@types", "node"), "dir");
-
-    await writeFile(
-      join(consumer, "package.json"),
-      JSON.stringify({ name: "effect-build-consumer", private: true, type: "module" }, null, 2),
-    );
-    typeScriptBin = join(repository, "node_modules", "typescript", "bin", "tsc");
+    if (versions.effect !== versions["@effect/platform-node-shared"]) {
+      throw new Error("workspace Effect and platform-node-shared development versions differ");
+    }
+    for (const installer of ["npm", "bun"]) {
+      for (const provider of [undefined, ...providerNames]) {
+        await installFixture({ installer, provider, tarballs, root: temporaryRoot, bun, versions });
+      }
+    }
+    if (candidateDirectory !== undefined) await writeCandidateManifest(candidateDirectory, tarballs);
+    console.log("packed consumers verified: 8/8");
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
   }
+};
 
-  await mkdir(join(consumer, "examples"));
-  for (const example of ["bun-compile.ts", "bun-matrix.ts", "deno-compile.ts"]) {
-    await writeFile(
-      join(consumer, "examples", example),
-      await readFile(join(repository, "examples", example), "utf8"),
-    );
-  }
-
-  await writeFile(
-    join(consumer, "tsconfig.json"),
-    JSON.stringify(
-      {
-        compilerOptions: {
-          target: "ES2022",
-          module: "NodeNext",
-          moduleResolution: "NodeNext",
-          strict: true,
-          noEmit: true,
-          skipLibCheck: true,
-          types: ["node"],
-        },
-        include: ["main.ts", "examples/**/*.ts"],
-      },
-      null,
-      2,
-    ),
-  );
-
-  const readme = await readFile(join(repository, "README.md"), "utf8");
-  const readmeExample = /```ts\n(import \{ NodeServices \}[\s\S]*?)```/.exec(readme)?.[1];
-  if (readmeExample === undefined) throw new Error("README must open with the NodeServices consumer example");
-  const legacyBunSubpath = ["effect-build/bun/", "Bun", "Cli"].join("");
-  const legacyDenoSubpath = ["effect-build/deno/", "Deno", "Cli"].join("");
-
-  await writeFile(
-    join(consumer, "main.ts"),
-    [
-      readmeExample,
-      "",
-      "export const readmeArtifact: unknown = artifact;",
-      "",
-      'import * as EffectBuild from "effect-build";',
-      'import * as DenoCompiler from "effect-build/deno";',
-      'import * as BunCompiler from "effect-build/bun";',
-      "",
-      "type Assert<T extends true> = T;",
-      "type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;",
-      "type SuccessOf<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never;",
-      "type ErrorOf<T> = T extends Effect.Effect<infer _A, infer E, infer _R> ? E : never;",
-      "type ContextOf<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never;",
-      "type BunMatrix = ReturnType<typeof BunCompiler.compileExecutableMatrix>;",
-      "type DenoMatrix = ReturnType<typeof DenoCompiler.compileExecutableMatrix>;",
-      "export type BunMatrixSuccess = Assert<Same<SuccessOf<BunMatrix>, readonly BunCompiler.Artifact[]>>;",
-      "export type DenoMatrixSuccess = Assert<Same<SuccessOf<DenoMatrix>, readonly DenoCompiler.Artifact[]>>;",
-      "export type BunMatrixError = Assert<Same<ErrorOf<BunMatrix>, BunCompiler.MatrixError>>;",
-      "export type DenoMatrixError = Assert<Same<ErrorOf<DenoMatrix>, DenoCompiler.MatrixError>>;",
-      "export type BunMatrixContext = Assert<Same<ContextOf<BunMatrix>, BunCompiler.Compiler>>;",
-      "export type DenoMatrixContext = Assert<Same<ContextOf<DenoMatrix>, DenoCompiler.Compiler>>;",
-      "export type RootMatrixCompatibility = Assert<Same<BunCompiler.MatrixError | DenoCompiler.MatrixError extends EffectBuild.MatrixError.MatrixError ? true : false, true>>;",
-      "export type BunArtifactTool = Assert<Same<BunCompiler.Artifact['tool']['name'], 'bun'>>;",
-      "export type DenoArtifactTool = Assert<Same<DenoCompiler.Artifact['tool']['name'], 'deno'>>;",
-      "",
-      "export const bunTyped = BunCompiler.compileExecutable({",
-      '  entrypoint: "src/main.ts",',
-      '  outfile: "dist/app",',
-      '  target: "linux-x64-musl",',
-      "  digest: true,",
-      "  options: { minify: true, sourcemap: \"inline\", bytecode: true },",
-      "});",
-      "",
-      "export const denoTyped = DenoCompiler.compileExecutable({",
-      '  entrypoint: "src/main.ts",',
-      '  outfile: "dist/app",',
-      "  options: { bundle: true, minify: true, permissions: { read: true } },",
-      "});",
-      "",
-      "export const bunMatrixTyped = BunCompiler.compileExecutableMatrix({",
-      '  entrypoint: "src/main.ts",',
-      '  outdir: "dist",',
-      '  name: "app",',
-      '  targets: ["macos-aarch64", "linux-x64-musl", "windows-x64"],',
-      "  concurrency: 2,",
-      "  digest: true,",
-      "  options: { minify: true },",
-      "});",
-      "",
-      "export const denoMatrixTyped = DenoCompiler.compileExecutableMatrix({",
-      '  entrypoint: "src/main.ts",',
-      '  outdir: "dist",',
-      '  name: "app",',
-      '  targets: ["macos-x64", "linux-aarch64-gnu", "windows-aarch64"],',
-      "  options: { bundle: true, minify: true, permissions: { read: true } },",
-      "});",
-      "",
-      "export const bunRejectsEmptyMatrix = BunCompiler.compileExecutableMatrix({",
-      '  entrypoint: "src/main.ts",',
-      '  outdir: "dist",',
-      '  name: "app",',
-      "  // @ts-expect-error targets must be a non-empty tuple",
-      "  targets: [],",
-      "});",
-      "",
-      "export const denoRejectsMusl = DenoCompiler.compileExecutableMatrix({",
-      '  entrypoint: "src/main.ts",',
-      '  outdir: "dist",',
-      '  name: "app",',
-      "  // @ts-expect-error Deno does not support musl targets",
-      '  targets: ["linux-x64-musl"],',
-      "});",
-      "",
-      "export const denoRejectsBunOptions = DenoCompiler.compileExecutable({",
-      '  entrypoint: "src/main.ts",',
-      '  outfile: "dist/app",',
-      "  // @ts-expect-error bytecode is a Bun option",
-      "  options: { bytecode: true },",
-      "});",
-      "",
-      "// @ts-expect-error the managed driver subpath no longer resolves",
-      `import * as LegacyBun from ${JSON.stringify(legacyBunSubpath)};`,
-      "// @ts-expect-error the managed driver subpath no longer resolves",
-      `import * as LegacyDeno from ${JSON.stringify(legacyDenoSubpath)};`,
-      "export const legacy = [LegacyBun, LegacyDeno];",
-      "",
-      "export const artifactShape: EffectBuild.Artifact.Artifact | undefined = undefined;",
-      "export const matrixErrorShape: EffectBuild.MatrixError.MatrixError | undefined = undefined;",
-    ].join("\n"),
-  );
-
-  await execFileAsync(process.execPath, [typeScriptBin, "-p", "."], { cwd: consumer });
-
-  await writeFile(
-    join(consumer, "runtime.mjs"),
-    [
-      'import assert from "node:assert/strict";',
-      'const api = await import("effect-build");',
-      'assert.deepEqual(Object.keys(api), ["Artifact", "BuildError", "MatrixError", "Target"]);',
-      'assert.equal(typeof api.Artifact.Artifact, "function");',
-      'assert.equal(typeof api.MatrixError.MatrixError, "function");',
-      'const bun = await import("effect-build/bun");',
-      'assert.deepEqual(Object.keys(bun), ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"]);',
-      'assert.deepEqual(bun.Target.literals, ["macos-x64", "macos-aarch64", "linux-x64-gnu", "linux-x64-musl", "linux-aarch64-gnu", "windows-x64"]);',
-      'assert.equal(typeof bun.compileExecutableMatrix, "function");',
-      'const deno = await import("effect-build/deno");',
-      'assert.deepEqual(Object.keys(deno), ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"]);',
-      'assert.deepEqual(deno.Target.literals, ["macos-x64", "macos-aarch64", "linux-x64-gnu", "linux-aarch64-gnu", "windows-x64", "windows-aarch64"]);',
-      'assert.equal(typeof deno.compileExecutableMatrix, "function");',
-      `await import(${JSON.stringify(legacyBunSubpath)}).then(() => { throw new Error("legacy bun subpath resolved"); }, () => undefined);`,
-      `await import(${JSON.stringify(legacyDenoSubpath)}).then(() => { throw new Error("legacy deno subpath resolved"); }, () => undefined);`,
-      'await import("effect-build/standalone/internal/Process.js").then(() => { throw new Error("internal subpath resolved"); }, () => undefined);',
-    ].join("\n"),
-  );
-  await execFileAsync(process.execPath, [join(consumer, "runtime.mjs")], { cwd: consumer });
-  console.log(freshInstall ? `packed consumer verified with effect@${effectVersion}` : "packed consumer verified");
-} finally {
-  await rm(consumer, { recursive: true, force: true });
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  await verifyPackedConsumers(parseArguments(process.argv.slice(2))).catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
 }

@@ -1,8 +1,9 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Fiber, FileSystem, Path, PlatformError, type Scope } from "effect";
 import * as esbuild from "esbuild";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   type BundleContext,
@@ -16,11 +17,15 @@ import {
   layer,
   makeEsbuildService,
   withJavaScriptBundle,
-} from "../../src/standalone/internal/Esbuild.js";
+} from "../../packages/effect-build-node-sea/src/internal/Esbuild.js";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const fixtureRoot = resolve(root, "test/fixtures/esbuild");
 const outfile = resolve(fixtureRoot, "out/main.mjs");
+const installedEffectIndex = relative(
+  root,
+  resolve(dirname(realpathSync(createRequire(import.meta.url).resolve("effect/package.json"))), "dist/index.js"),
+).replaceAll("\\", "/");
 
 const logOverride = {
   "unsupported-dynamic-import": "error",
@@ -97,11 +102,7 @@ describe("pinned esbuild API contract", () => {
         { path: "test/fixtures/esbuild/dynamic.ts", kind: "dynamic-import", original: "./dynamic.js" },
       ]),
     );
-    expect(
-      Object.keys(esm.metafile?.inputs ?? {}).some((input) =>
-        input.startsWith("node_modules/.pnpm/effect@") && input.endsWith("/node_modules/effect/dist/index.js")
-      ),
-    ).toBe(true);
+    expect(Object.keys(esm.metafile?.inputs ?? {})).toContain(installedEffectIndex);
 
     const cjsOutfile = outfile.replace(/\.mjs$/, ".cjs");
     const cjs = await rebuild(optionsFor("valid.cjs", "cjs"));

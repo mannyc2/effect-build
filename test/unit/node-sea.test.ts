@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, HashSet, Path, PlatformError } from "effect";
+import { Cause, Effect, Exit, Fiber, FileSystem, HashSet, Path, PlatformError } from "effect";
 import type * as esbuild from "esbuild";
 import {
   chmodSync,
@@ -16,38 +16,32 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { definition, executionFailed } from "../../packages/effect-build-node-sea/src/Adapter.js";
+import type { Options } from "../../packages/effect-build-node-sea/src/index.js";
 import {
   type BundleContext,
   type EsbuildApi,
+  EsbuildFailed,
   type JavaScriptBundleArtifact,
   makeEsbuildService,
-} from "../../src/standalone/internal/Esbuild.js";
-import type { NativeExecutableObservation } from "../../src/standalone/internal/NativeExecutable.js";
+} from "../../packages/effect-build-node-sea/src/internal/Esbuild.js";
 import {
-  createExecutable,
-  layer,
   makeNodeSeaService,
-  NodeSea,
-  type NodeSeaCreateInput,
+  type NodeSeaCandidateInput,
+  NodeSeaFailed,
   nodeSeaMetadataProbeSource,
+  NodeSeaPreparationFailed,
   type NodeSeaRuntime,
   type NodeSeaService,
+  type NodeSeaStages,
   nodeSeaSyntaxTarget,
   nodeSeaTarget,
   nodeSeaVersion,
-  type PipelineExecutableArtifact,
-} from "../../src/standalone/internal/NodeSea.js";
-import type { ProcessCompletion } from "../../src/standalone/internal/Process.js";
+  type ProcessCompletion,
+} from "../../packages/effect-build-node-sea/src/internal/NodeSea.js";
 
 const roots: string[] = [];
 const fixtureRoot = resolve(new URL("../fixtures/node-sea", import.meta.url).pathname);
-const exactObservation: NativeExecutableObservation = {
-  format: "elf",
-  os: "linux",
-  architecture: "x64",
-  abi: "gnu",
-};
-
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -58,8 +52,8 @@ const makeRoot = (): string => {
   return root;
 };
 
-const elfX64Gnu = (): Uint8Array => {
-  const interpreter = new TextEncoder().encode("/lib64/ld-linux-x86-64.so.2\0");
+const elfX64 = (interpreterPath: string): Uint8Array => {
+  const interpreter = new TextEncoder().encode(`${interpreterPath}\0`);
   const bytes = new Uint8Array(120 + interpreter.byteLength);
   bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
   const view = new DataView(bytes.buffer);
@@ -74,7 +68,14 @@ const elfX64Gnu = (): Uint8Array => {
   return bytes;
 };
 
-const machoX64 = (): Uint8Array => new Uint8Array([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]);
+const elfX64Gnu = (): Uint8Array => elfX64("/lib64/ld-linux-x86-64.so.2");
+const elfX64Musl = (): Uint8Array => elfX64("/lib/ld-musl-x86_64.so.1");
+
+const machoX64 = (): Uint8Array => {
+  const bytes = new Uint8Array(64);
+  bytes.set([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]);
+  return bytes;
+};
 
 const completion = (
   exitCode = 0,
@@ -103,7 +104,6 @@ interface RunEvent {
 
 interface ControlledRuntime extends NodeSeaRuntime {
   readonly events: RunEvent[];
-  readonly inspected: string[];
   readonly configs: Record<string, unknown>[];
   readonly configPaths: string[];
   readonly buildCount: () => number;
@@ -111,6 +111,7 @@ interface ControlledRuntime extends NodeSeaRuntime {
 
 interface RuntimeOptions {
   readonly nodePath: string;
+  readonly selectedBytes?: Uint8Array;
   readonly version?: string;
   readonly metadataPath?: string;
   readonly builtinSpecifiers?: readonly string[];
@@ -120,8 +121,9 @@ interface RuntimeOptions {
   readonly help?: string;
   readonly helpExit?: number;
   readonly helpTruncated?: boolean;
-  readonly observation?: NativeExecutableObservation;
-  readonly inspectFailure?: boolean;
+  readonly platform?: string;
+  readonly architecture?: string;
+  readonly glibc?: string | undefined;
   readonly spawnFailure?: boolean;
   readonly buildCompletion?: ProcessCompletion;
   readonly output?: "valid" | "missing" | "invalid" | "wrong-target";
@@ -130,7 +132,6 @@ interface RuntimeOptions {
 
 const controlledRuntime = (options: RuntimeOptions): ControlledRuntime => {
   const events: RunEvent[] = [];
-  const inspected: string[] = [];
   const configs: Record<string, unknown>[] = [];
   const configPaths: string[] = [];
   let builds = 0;
@@ -140,6 +141,9 @@ const controlledRuntime = (options: RuntimeOptions): ControlledRuntime => {
       const metadata = options.malformedMetadata ?? JSON.stringify({
         version: options.version ?? nodeSeaVersion,
         path: options.metadataPath ?? options.nodePath,
+        platform: options.platform ?? "linux",
+        architecture: options.architecture ?? "x64",
+        glibc: Object.hasOwn(options, "glibc") ? options.glibc : "2.39",
         builtinSpecifiers: options.builtinSpecifiers ?? ["fs", "node:fs", "node:path", "path"],
       });
       return Effect.succeed(completion(
@@ -178,14 +182,7 @@ const controlledRuntime = (options: RuntimeOptions): ControlledRuntime => {
   };
   return {
     run,
-    inspect: (file) => {
-      inspected.push(file);
-      return options.inspectFailure === true
-        ? Effect.fail({ path: file, reason: "controlled inspection failure" })
-        : Effect.succeed(options.observation ?? exactObservation);
-    },
     events,
-    inspected,
     configs,
     configPaths,
     buildCount: () => builds,
@@ -245,15 +242,13 @@ const harness = (
     const platformFileSystem = yield* FileSystem.FileSystem;
     const fileSystem = configureFileSystem?.(platformFileSystem) ?? platformFileSystem;
     const path = yield* Path.Path;
-    const crypto = yield* Crypto.Crypto;
     const nodePath = join(root, "node-26.7.0");
-    writeFileSync(nodePath, elfX64Gnu());
+    writeFileSync(nodePath, runtimeOptions.selectedBytes ?? elfX64Gnu());
     chmodSync(nodePath, 0o755);
     const runtime = controlledRuntime({ nodePath, ...runtimeOptions });
     const service = yield* makeNodeSeaService(
       fileSystem,
       path,
-      crypto,
       discovery === "explicit" ? { executable: nodePath } : {},
       runtime,
     );
@@ -270,8 +265,8 @@ const withMain = <A, E, R>(
 ): Effect.Effect<
   A,
   | E
-  | import("../../src/standalone/internal/Esbuild.js").EsbuildBundleError
-  | import("../../src/standalone/internal/Esbuild.js").EsbuildVersionMismatch,
+  | import("../../packages/effect-build-node-sea/src/internal/Esbuild.js").EsbuildBundleError
+  | import("../../packages/effect-build-node-sea/src/internal/Esbuild.js").EsbuildVersionMismatch,
   Exclude<R, import("effect").Scope.Scope>
 > =>
   Effect.gen(function*() {
@@ -289,6 +284,16 @@ const withMain = <A, E, R>(
       use,
     );
   });
+
+const candidateInput = (
+  main: JavaScriptBundleArtifact,
+  resolvedDestination: string,
+  options: Pick<NodeSeaCandidateInput, "cwd" | "assets"> = {},
+): NodeSeaCandidateInput => {
+  const stagedOutfile = `${resolvedDestination}.candidate`;
+  mkdirSync(dirname(stagedOutfile), { recursive: true });
+  return { main, stagedOutfile, resolvedDestination, ...options };
+};
 
 const failureOf = (exit: Exit.Exit<unknown, unknown>): unknown =>
   Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined;
@@ -315,7 +320,6 @@ describe("exact selected Node SEA service", () => {
         argv: ["--input-type=module", "--eval", nodeSeaMetadataProbeSource],
       });
       expect(context.runtime.events[1]).toEqual({ executable: canonicalNodePath, argv: ["--help"] });
-      expect(context.runtime.inspected).toEqual([canonicalNodePath]);
       expect(context.service.selectedTool).toMatchObject({
         path: canonicalNodePath,
         version: "26.7.0",
@@ -338,11 +342,9 @@ describe("exact selected Node SEA service", () => {
         Effect.gen(function*() {
           const fileSystem = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const crypto = yield* Crypto.Crypto;
           return yield* makeNodeSeaService(
             fileSystem,
             path,
-            crypto,
             { executable: "node" },
             controlledRuntime({
               nodePath: join(root, "node"),
@@ -357,9 +359,11 @@ describe("exact selected Node SEA service", () => {
       ["truncated help", (root) => harness(root, { helpTruncated: true })],
       [
         "wrong target",
-        (root) => harness(root, { observation: { format: "elf", os: "linux", architecture: "x64", abi: "musl" } }),
+        (root) => harness(root, { glibc: undefined }),
       ],
-      ["inspection failure", (root) => harness(root, { inspectFailure: true })],
+      ["wrong architecture", (root) => harness(root, { architecture: "arm64" })],
+      ["Mach-O selected bytes", (root) => harness(root, { selectedBytes: machoX64() })],
+      ["musl selected bytes", (root) => harness(root, { selectedBytes: elfX64Musl() })],
     ];
     for (const [name, run] of cases) {
       const exit = await Effect.runPromise(Effect.exit(run(makeRoot())));
@@ -374,11 +378,9 @@ describe("exact selected Node SEA service", () => {
       Effect.gen(function*() {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const crypto = yield* Crypto.Crypto;
         return yield* makeNodeSeaService(
           fileSystem,
           path,
-          crypto,
           { executable: nodePath },
           controlledRuntime({ nodePath }),
         );
@@ -387,18 +389,40 @@ describe("exact selected Node SEA service", () => {
     expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaProbeFailed" });
   });
 
+  it("characterizes selected bytes before trusting executable-reported host metadata", async () => {
+    for (
+      const [selectedBytes, reason] of [
+        [machoX64(), "selected executable is not ELF"],
+        [elfX64Musl(), "selected executable does not use the GNU ELF interpreter"],
+      ] as const
+    ) {
+      const root = makeRoot();
+      const nodePath = join(root, "node-26.7.0");
+      writeFileSync(nodePath, selectedBytes);
+      chmodSync(nodePath, 0o755);
+      const runtime = controlledRuntime({ nodePath });
+      const exit = await Effect.runPromise(Effect.exit(
+        Effect.gen(function*() {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          return yield* makeNodeSeaService(fileSystem, path, { executable: nodePath }, runtime);
+        }).pipe(Effect.provide(NodeServices.layer)),
+      ));
+      expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaProbeFailed", reason });
+      expect(runtime.events).toEqual([]);
+    }
+  });
+
   it("maps PATH command absence to NodeSeaToolNotFound without fallback or installation", async () => {
     const root = makeRoot();
     const exit = await Effect.runPromise(Effect.exit(
       Effect.gen(function*() {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const crypto = yield* Crypto.Crypto;
         const runtime: NodeSeaRuntime = {
           run: () => Effect.fail(platformFailure("NotFound")),
-          inspect: (file) => Effect.fail({ path: file, reason: "unexpected" }),
         };
-        return yield* makeNodeSeaService(fileSystem, path, crypto, {}, runtime);
+        return yield* makeNodeSeaService(fileSystem, path, {}, runtime);
       }).pipe(Effect.provide(NodeServices.layer)),
     ));
     expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaToolNotFound", command: "node" });
@@ -406,8 +430,86 @@ describe("exact selected Node SEA service", () => {
   });
 });
 
-describe("internal Node SEA create operation", () => {
-  it("publishes exact ESM config, assets, digest, and frozen two-stage observation", async () => {
+describe("Node SEA public option and diagnostic mapping", () => {
+  it("validates the exact public option shape at the adapter boundary", () => {
+    const options: Options = { format: "esm", assets: [{ key: "message", path: "message.txt" }] };
+    expect(definition.validateOptions(options)).toEqual({
+      _tag: "Valid",
+      value: { format: "esm", assets: [{ key: "message", path: "message.txt" }] },
+    });
+
+    const longKey = "😀".repeat(257);
+    const tooManyAssets = Array.from({ length: 257 }, (_, index) => ({ key: `key-${index}`, path: "x" }));
+    for (
+      const [input, reason] of [
+        [undefined, "options must be an object"],
+        [{}, "format must be esm or cjs"],
+        [{ format: "iife" }, "format must be esm or cjs"],
+        [{ format: "esm", unknown: true }, "unknown Node SEA option"],
+        [{ format: "esm", assets: {} }, "assets must be an array of at most 256 items"],
+        [{ format: "esm", assets: tooManyAssets }, "assets must be an array of at most 256 items"],
+        [{ format: "esm", assets: [{}] }, "each asset must contain exactly key and path"],
+        [{ format: "esm", assets: [{ key: "", path: "x" }] }, "asset key must be a non-empty string without NUL"],
+        [{ format: "esm", assets: [{ key: "a", path: "" }] }, "asset path must be a non-empty string without NUL"],
+        [{ format: "esm", assets: [{ key: "a", path: "x" }, { key: "a", path: "y" }] }, "asset keys must be unique"],
+        [{ format: "esm", assets: [{ key: longKey, path: "x" }] }, "asset key is too long"],
+      ] as const
+    ) {
+      expect(definition.validateOptions(input)).toEqual({ _tag: "Invalid", reason });
+    }
+  });
+
+  it("preserves Node stdout/stderr diagnostics, exit code, and independent truncation flags", () => {
+    const mapped = executionFailed(
+      new NodeSeaFailed({
+        exitCode: 17,
+        diagnostics: [
+          { channel: "stdout", text: "partial output", truncated: true },
+          { channel: "stderr", text: "node failure", truncated: false },
+        ],
+      }),
+    );
+    expect(mapped).toMatchObject({
+      _tag: "ToolFailed",
+      tool: "node-sea",
+      exitCode: 17,
+      diagnostics: [
+        { channel: "stdout", text: "partial output", truncated: true },
+        { channel: "stderr", text: "node failure", truncated: false },
+      ],
+    });
+  });
+
+  it("keeps esbuild truncation and preparation path/operation evidence truthful", () => {
+    const esbuild = executionFailed(
+      new EsbuildFailed({
+        diagnostics: [{ id: "build", text: "bounded diagnostic" }],
+        truncated: true,
+      }),
+    );
+    expect(esbuild.diagnostics).toEqual([{
+      channel: "stderr",
+      text: 'EsbuildFailed: [{"id":"build","text":"bounded diagnostic"}]',
+      truncated: true,
+    }]);
+
+    const preparation = executionFailed(
+      new NodeSeaPreparationFailed({
+        path: "/tmp/sea-config.json",
+        operation: "write-config",
+        reason: "controlled failure",
+      }),
+    );
+    expect(preparation.diagnostics).toEqual([{
+      channel: "stderr",
+      text: "NodeSeaPreparationFailed (write-config /tmp/sea-config.json): controlled failure",
+      truncated: false,
+    }]);
+  });
+});
+
+describe("internal Node SEA candidate producer", () => {
+  it("writes the core-owned candidate with exact ESM config, assets, and frozen stages", async () => {
     const root = makeRoot();
     const context = await Effect.runPromise(harness(root));
     const canonicalNodePath = realpathSync(context.nodePath);
@@ -415,14 +517,16 @@ describe("internal Node SEA create operation", () => {
     writeFileSync(asset, "asset-value");
     const outfile = join(root, "dist", "app");
     let bundlePath = "";
-    const artifact: PipelineExecutableArtifact = await Effect.runPromise(
+    const stagedOutfile = `${outfile}.candidate`;
+    mkdirSync(dirname(stagedOutfile), { recursive: true });
+    const stages: NodeSeaStages = await Effect.runPromise(
       withMain(context, {}, (main) => {
         bundlePath = main.path;
-        return context.service.createExecutable({
+        return context.service.produceCandidate({
           main,
-          outfile,
+          stagedOutfile,
+          resolvedDestination: outfile,
           cwd: root,
-          digest: true,
           assets: [{ key: "message", path: "asset.txt" }],
         });
       }),
@@ -437,42 +541,35 @@ describe("internal Node SEA create operation", () => {
       main: bundlePath,
       mainFormat: "module",
       executable: canonicalNodePath,
-      output: expect.stringContaining("/.effect-build-"),
+      output: stagedOutfile,
       useSnapshot: false,
       useCodeCache: false,
       assets: { message: asset },
     });
-    expect(artifact).toMatchObject({
-      path: outfile,
-      target: "linux-x64-gnu",
-      stages: [
-        { operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } },
-        { operation: "assemble-node-sea", tool: { name: "node", version: "26.7.0", path: canonicalNodePath } },
-      ],
-    });
-    expect(artifact.bytes).toBe(readFileSync(outfile).byteLength);
-    expect(artifact.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(Object.keys(artifact).sort()).toEqual(["bytes", "digest", "path", "stages", "target"]);
-    expect(Object.isFrozen(artifact)).toBe(true);
-    expect(Object.isFrozen(artifact.stages)).toBe(true);
-    expect(existsSync(outfile)).toBe(true);
+    expect(stages).toEqual([
+      { operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } },
+      { operation: "assemble-node-sea", tool: { name: "node", version: "26.7.0", path: canonicalNodePath } },
+    ]);
+    expect(Object.isFrozen(stages)).toBe(true);
+    expect(existsSync(stagedOutfile)).toBe(true);
+    expect(existsSync(outfile)).toBe(false);
     expect(existsSync(bundlePath)).toBe(false);
     expect(existsSync(context.runtime.configPaths[0]!)).toBe(false);
   });
 
-  it("derives CommonJS and omits empty assets and digest", async () => {
+  it("derives CommonJS and omits empty assets", async () => {
     const root = makeRoot();
     const context = await Effect.runPromise(harness(root));
-    const artifact: PipelineExecutableArtifact = await Effect.runPromise(
+    const stages: NodeSeaStages = await Effect.runPromise(
       withMain(
         context,
         { format: "cjs", externalImports: ["fs", "path"] },
-        (main) => context.service.createExecutable({ main, outfile: join(root, "app") }),
+        (main) => context.service.produceCandidate(candidateInput(main, join(root, "app"))),
       ),
     );
     expect(context.runtime.configs[0]).toMatchObject({ mainFormat: "commonjs" });
     expect(context.runtime.configs[0]).not.toHaveProperty("assets");
-    expect(artifact.digest).toBeUndefined();
+    expect(stages.map((stage) => stage.operation)).toEqual(["bundle", "assemble-node-sea"]);
   });
 
   it("rejects malformed exact inputs and asset shapes before candidate/config/spawn", async () => {
@@ -480,34 +577,37 @@ describe("internal Node SEA create operation", () => {
     const context = await Effect.runPromise(harness(root));
     const longKey = "😀".repeat(257);
     const tooManyAssets = Array.from({ length: 257 }, (_, index) => ({ key: `key-${index}`, path: "missing" }));
+    const validShape = (main: JavaScriptBundleArtifact) => ({
+      main,
+      stagedOutfile: join(root, "candidate"),
+      resolvedDestination: join(root, "app"),
+    });
     const cases = [
-      (main: JavaScriptBundleArtifact) => ({ main, outfile: join(root, "app"), unknown: true }),
+      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), unknown: true }),
       (main: JavaScriptBundleArtifact) => ({ main }),
-      (main: JavaScriptBundleArtifact) => ({ main, outfile: "" }),
-      (main: JavaScriptBundleArtifact) => ({ main, outfile: "bad\0path" }),
-      (main: JavaScriptBundleArtifact) => ({ main, outfile: join(root, "app"), cwd: "" }),
-      (main: JavaScriptBundleArtifact) => ({ main, outfile: join(root, "app"), digest: "yes" }),
-      (main: JavaScriptBundleArtifact) => ({ main, outfile: join(root, "app"), assets: {} }),
-      (main: JavaScriptBundleArtifact) => ({ main, outfile: join(root, "app"), assets: tooManyAssets }),
-      (main: JavaScriptBundleArtifact) => ({ main, outfile: join(root, "app"), assets: [{ key: "", path: "x" }] }),
+      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), stagedOutfile: "" }),
+      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), resolvedDestination: "bad\0path" }),
+      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), cwd: "" }),
+      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), digest: "yes" }),
+      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), assets: {} }),
+      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), assets: tooManyAssets }),
+      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), assets: [{ key: "", path: "x" }] }),
       (main: JavaScriptBundleArtifact) => ({
-        main,
-        outfile: join(root, "app"),
+        ...validShape(main),
         assets: [{ key: "a", path: "x", extra: true }],
       }),
       (main: JavaScriptBundleArtifact) => ({
-        main,
-        outfile: join(root, "app"),
+        ...validShape(main),
         assets: [{ key: "a", path: "x" }, { key: "a", path: "y" }],
       }),
-      (main: JavaScriptBundleArtifact) => ({ main, outfile: join(root, "app"), assets: [{ key: longKey, path: "x" }] }),
+      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), assets: [{ key: longKey, path: "x" }] }),
     ];
     for (const makeInput of cases) {
       const exit = await Effect.runPromise(Effect.exit(
         withMain(
           context,
           {},
-          (main) => context.service.createExecutable(makeInput(main) as unknown as NodeSeaCreateInput),
+          (main) => context.service.produceCandidate(makeInput(main) as unknown as NodeSeaCandidateInput),
         ),
       ));
       expect(failureOf(exit)).toMatchObject({ _tag: "InvalidNodeSeaInput" });
@@ -522,21 +622,21 @@ describe("internal Node SEA create operation", () => {
     let stale: JavaScriptBundleArtifact | undefined;
     await Effect.runPromise(withMain(context, {}, (main) => Effect.sync(() => void (stale = main))));
     const staleExit = await Effect.runPromise(Effect.exit(
-      context.service.createExecutable({ main: stale!, outfile: join(root, "stale") }),
+      context.service.produceCandidate(candidateInput(stale!, join(root, "stale"))),
     ));
     expect(failureOf(staleExit)).toMatchObject({ _tag: "InvalidNodeSeaInput", reason: "main-artifact-not-live" });
     const forgedExit = await Effect.runPromise(Effect.exit(
-      context.service.createExecutable({
-        main: { ...stale!, path: join(root, "forged") },
-        outfile: join(root, "forged-out"),
-      }),
+      context.service.produceCandidate(candidateInput(
+        { ...stale!, path: join(root, "forged") },
+        join(root, "forged-out"),
+      )),
     ));
     expect(failureOf(forgedExit)).toMatchObject({ _tag: "InvalidNodeSeaInput", reason: "main-artifact-not-live" });
     const externalExit = await Effect.runPromise(Effect.exit(
       withMain(
         context,
         { externalImports: ["node:not-real"] },
-        (main) => context.service.createExecutable({ main, outfile: join(root, "external") }),
+        (main) => context.service.produceCandidate(candidateInput(main, join(root, "external"))),
       ),
     ));
     expect(failureOf(externalExit)).toMatchObject({
@@ -555,18 +655,19 @@ describe("internal Node SEA create operation", () => {
     mkdirSync(assetDirectory);
     const notDirectory = join(root, "not-directory");
     writeFileSync(notDirectory, "x");
-    const cases: Array<(main: JavaScriptBundleArtifact) => NodeSeaCreateInput> = [
-      (main) => ({ main, outfile: join(root, "missing-asset"), assets: [{ key: "x", path: join(root, "missing") }] }),
-      (main) => ({ main, outfile: join(root, "directory-asset"), assets: [{ key: "x", path: assetDirectory }] }),
-      (main) => ({ main, outfile: join(root, "bad-cwd"), cwd: notDirectory }),
-      (main) => ({ main, outfile: main.path }),
-      (main) => ({ main, outfile: context.nodePath }),
-      (main) => ({ main, outfile: asset, assets: [{ key: "x", path: asset }] }),
-      (main) => ({ main, outfile: join(dirname(main.path), "published-inside-scope") }),
+    const cases: Array<(main: JavaScriptBundleArtifact) => NodeSeaCandidateInput> = [
+      (main) =>
+        candidateInput(main, join(root, "missing-asset"), { assets: [{ key: "x", path: join(root, "missing") }] }),
+      (main) => candidateInput(main, join(root, "directory-asset"), { assets: [{ key: "x", path: assetDirectory }] }),
+      (main) => candidateInput(main, join(root, "bad-cwd"), { cwd: notDirectory }),
+      (main) => candidateInput(main, main.path),
+      (main) => candidateInput(main, context.nodePath),
+      (main) => candidateInput(main, asset, { assets: [{ key: "x", path: asset }] }),
+      (main) => candidateInput(main, join(dirname(main.path), "published-inside-scope")),
     ];
     for (const makeInput of cases) {
       const exit = await Effect.runPromise(Effect.exit(
-        withMain(context, {}, (main) => context.service.createExecutable(makeInput(main))),
+        withMain(context, {}, (main) => context.service.produceCandidate(makeInput(main))),
       ));
       expect(failureOf(exit)).toMatchObject({
         _tag: expect.stringMatching(/InvalidNodeSeaInput|NodeSeaPreparationFailed/),
@@ -583,7 +684,7 @@ describe("internal Node SEA create operation", () => {
         Effect.gen(function*() {
           const link = join(root, "bundle-link");
           symlinkSync(dirname(main.path), link, "dir");
-          return yield* context.service.createExecutable({ main, outfile: join(link, "app") });
+          return yield* context.service.produceCandidate(candidateInput(main, join(link, "app")));
         })),
     ));
     expect(failureOf(exit)).toMatchObject({
@@ -593,13 +694,10 @@ describe("internal Node SEA create operation", () => {
     expect(context.runtime.buildCount()).toBe(0);
   });
 
-  it("maps spawn, nonzero, missing, malformed, and wrong-target outputs to their exact owners", async () => {
+  it("maps spawn and nonzero process failures while leaving candidate validation to core", async () => {
     const cases = [
       [{ spawnFailure: true }, "NodeSeaSpawnFailed"],
       [{ buildCompletion: completion(17, "partial out", "node failure", true) }, "NodeSeaFailed"],
-      [{ output: "missing" as const }, "OutputMissing"],
-      [{ output: "invalid" as const }, "OutputInvalid"],
-      [{ output: "wrong-target" as const }, "OutputInvalid"],
     ] as const;
     for (const [runtimeOptions, tag] of cases) {
       const root = makeRoot();
@@ -607,7 +705,7 @@ describe("internal Node SEA create operation", () => {
       writeFileSync(destination, "old");
       const context = await Effect.runPromise(harness(root, runtimeOptions));
       const exit = await Effect.runPromise(Effect.exit(
-        withMain(context, {}, (main) => context.service.createExecutable({ main, outfile: destination })),
+        withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, destination))),
       ));
       expect(failureOf(exit)).toMatchObject({ _tag: tag });
       if (tag === "NodeSeaFailed") {
@@ -620,11 +718,17 @@ describe("internal Node SEA create operation", () => {
         });
       }
       expect(readFileSync(destination, "utf8")).toBe("old");
-      expect(readdirSync(root).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
     }
+
+    const root = makeRoot();
+    const context = await Effect.runPromise(harness(root, { output: "missing" }));
+    const stages = await Effect.runPromise(
+      withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, join(root, "app")))),
+    );
+    expect(stages.map((stage) => stage.operation)).toEqual(["bundle", "assemble-node-sea"]);
   });
 
-  it("maps config allocation/write and rename failures without replacing the destination", async () => {
+  it("maps config allocation/write failures and never invokes publication rename", async () => {
     const configCases = ["make-config", "write-config"] as const;
     for (const operation of configCases) {
       const root = makeRoot();
@@ -642,27 +746,29 @@ describe("internal Node SEA create operation", () => {
             : fileSystem.writeFileString(file, contents, options),
       })));
       const exit = await Effect.runPromise(Effect.exit(
-        withMain(context, {}, (main) => context.service.createExecutable({ main, outfile: destination })),
+        withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, destination))),
       ));
       expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaPreparationFailed", operation });
       expect(readFileSync(destination, "utf8")).toBe("old");
       expect(context.runtime.buildCount()).toBe(0);
     }
 
-    for (const [reason, expected] of [["Busy", "OutputLocked"], ["Unknown", "PublicationFailed"]] as const) {
-      const root = makeRoot();
-      const destination = join(root, "app");
-      writeFileSync(destination, "old");
-      const context = await Effect.runPromise(harness(root, {}, (fileSystem) => ({
-        ...fileSystem,
-        rename: () => Effect.fail(platformFailure(reason)),
-      })));
-      const exit = await Effect.runPromise(Effect.exit(
-        withMain(context, {}, (main) => context.service.createExecutable({ main, outfile: destination })),
-      ));
-      expect(failureOf(exit)).toMatchObject({ _tag: expected });
-      expect(readFileSync(destination, "utf8")).toBe("old");
-    }
+    const root = makeRoot();
+    const destination = join(root, "app");
+    writeFileSync(destination, "old");
+    let renames = 0;
+    const context = await Effect.runPromise(harness(root, {}, (fileSystem) => ({
+      ...fileSystem,
+      rename: () => {
+        renames += 1;
+        return Effect.fail(platformFailure());
+      },
+    })));
+    await Effect.runPromise(
+      withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, destination))),
+    );
+    expect(renames).toBe(0);
+    expect(readFileSync(destination, "utf8")).toBe("old");
   });
 
   it("keeps interruption as interruption and removes config/candidate/bundle state", async () => {
@@ -676,7 +782,7 @@ describe("internal Node SEA create operation", () => {
     }));
     const program = withMain(context, {}, (main) => {
       retainedBundlePath = main.path;
-      return context.service.createExecutable({ main, outfile: destination });
+      return context.service.produceCandidate(candidateInput(main, destination));
     });
     const fiber = Effect.runFork(program);
     for (let index = 0; index < 200 && !started; index++) {
@@ -691,21 +797,17 @@ describe("internal Node SEA create operation", () => {
     expect(readdirSync(root).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
   });
 
-  it("exposes the package-private accessor through an outer Layer with no public target/options", async () => {
+  it("exposes only the package-private candidate accessor", async () => {
     const typeOnly = (
-      _artifact: PipelineExecutableArtifact,
-      _effect: Effect.Effect<PipelineExecutableArtifact, unknown, NodeSea>,
+      _stages: NodeSeaStages,
+      _effect: Effect.Effect<NodeSeaStages, unknown>,
     ): void => undefined;
     void typeOnly;
-    void layer;
     const root = makeRoot();
     const context = await Effect.runPromise(harness(root));
     const result = await Effect.runPromise(
-      withMain(context, {}, (main) =>
-        createExecutable({ main, outfile: join(root, "app") }).pipe(
-          Effect.provideService(NodeSea, context.service),
-        )),
+      withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, join(root, "app")))),
     );
-    expect(result.target).toBe("linux-x64-gnu");
+    expect(result.map((stage) => stage.operation)).toEqual(["bundle", "assemble-node-sea"]);
   });
 });

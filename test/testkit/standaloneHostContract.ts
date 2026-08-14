@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Path } from "effect";
-import * as Bun from "../../src/Bun.js";
-import { type ChildProcessSpawner, runProcess } from "../../src/standalone/internal/Process.js";
+import * as Bun from "effect-build-bun";
+import { type ChildProcessSpawner, runProcess } from "../../packages/effect-build/src/standalone/internal/Process.js";
 
 export const standaloneHostContract: Effect.Effect<
   void,

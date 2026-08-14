@@ -133,15 +133,17 @@ union of two genuinely different producer topologies:
    hashing, and rename.
 2. `composed`: Node SEA provides exact acquisition and one scoped
    `produceCandidate` effect which writes only the core-owned staged path and
-   returns its exact stage tuple. Core still owns candidate identity,
+   returns its exact stage tuple. Core supplies the sole bounded command
+   executor and still owns child scope, output collection, candidate identity,
    output validation, digest, and rename.
 
 Direct command adapters never see final outfile, cwd, digest, destination, or
 candidate identity. The composed definition has a separate preflight boundary
 which may observe the resolved destination only to preserve Plan 018's
 source/tool/asset/scoped-directory disjointness proof; it receives no rename,
-candidate identity, filesystem lifecycle, or raw process capability from core.
-The union is closed data, not registration or fallback selection.
+candidate identity, filesystem lifecycle, raw process service, or process
+handle from core. The bounded executor is core-owned and non-replaceable; the
+union is closed data, not registration or fallback selection.
 
 ## Package-manager and packed-consumer contract
 
@@ -196,6 +198,38 @@ bun run test:consumer
 git diff --check
 ```
 
+### Local implementation receipt (2026-08-13)
+
+- Bun 1.3.14 `install --frozen-lockfile` reported 113 checked installs and no
+  changes; `pnpm-lock.yaml` and every operational pnpm invocation were removed.
+- `bun run verify` passed 150 unit tests with the existing single platform
+  skip, 40 architecture tests, both TSTyche files with 18 matched
+  suppressions, eight isolated npm/Bun packed consumers, lint, and formatting.
+- Exact endpoint copies passed the same build, check, TSTyche, 150-unit/one-skip,
+  and eight-consumer gates under Effect 4.0.0-beta.104 and 4.0.0-rc.108.
+- `EFFECT_BUILD_DENO_VERSION=2.9.5 bun run verify:real` passed all six current
+  Bun/Deno integration tests and the Node orchestrator smoke test;
+  `bun run test:host:extra` also passed the Bun and Deno orchestrator smokes.
+- The cold review found and closed four reconciliation regressions before the
+  source commit: Node SEA no longer copies scoped process execution, selected
+  Node bytes are again characterized as exact ELF64/x64/GNU, composed stage
+  tuples are decoded before publication, and the two lost invalid/wrong-target
+  publication cases are restored at the core boundary.
+- Local candidate directory `/private/tmp/effect-build-020-candidate.8rCZRR`
+  contains exactly four 0.3.0 tarballs plus one manifest. Its manifest records
+  core SHA-256 `b68f3727f6a6cf1eeb70e20e92629df8394144e4728a8e2bc2e2764b45bd04b5`,
+  Bun `12b274131da8a180e58ae03e0cdeb61934ff636a94b56eb066f9708c140d5f25`,
+  Deno `b31238271b04fccab26a34010f0443c15e09f47c5463b9cc2f9f1210f14eb54c`,
+  and Node SEA `ec063ad2eb86b4d3baec5a48e70ec2e97a2677998857ae39b6212cff3af0baae`,
+  with every provider dependency rewritten to `effect-build: ^0.3.0` and Node
+  SEA retaining exact `esbuild: 0.28.2`.
+- The macOS host's exact Node 26.7.0 package was correctly rejected as Mach-O
+  by the Linux-only provider before execution; exact positive Linux SEA and
+  12-target evidence remain assigned to the required Ubuntu CI jobs.
+- Exact Linux Node 26.7.0, 12-target, three-host, final-SHA CI, and uploaded
+  candidate evidence remain intentionally pending until the source commit is
+  pushed.
+
 Linux exact-SHA CI additionally requires 12/12 Bun/Deno target cells and the
 exact Node 26.7.0 SEA integration. Publication semantics remain required on
 Ubuntu, macOS, and Windows. The manual candidate workflow is read-only and
@@ -235,4 +269,3 @@ publish Node SEA, a packed manifest leaks workspace/source/private paths, an
 existing evidence axis would be skipped/weakened, or a focused correction
 fails twice. ts-release absence does not stop this plan; it stops Plan 021's
 activation only.
-

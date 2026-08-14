@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import * as Bun from "../../src/Bun.js";
-import { bunAdapter } from "../../src/standalone/internal/BunAdapter.js";
+import { definition, targetTokens } from "../../packages/effect-build-bun/src/Adapter.js";
+import * as Bun from "../../packages/effect-build-bun/src/index.js";
 import { describeStandaloneDriverContract } from "../testkit/standaloneDriverContract.js";
 
 describeStandaloneDriverContract<Bun.Compiler, Bun.Options, Bun.Target, Bun.Artifact>({
@@ -22,6 +22,24 @@ describeStandaloneDriverContract<Bun.Compiler, Bun.Options, Bun.Target, Bun.Arti
 
 const roots: string[] = [];
 const fixture = fileURLToPath(new URL("../fixtures/driver/fake-tool.mjs", import.meta.url));
+const bunAdapter = {
+  validateOptions: definition.validateOptions,
+  renderArgv: (input: {
+    readonly entrypoint: string;
+    readonly target?: Bun.Target;
+    readonly options: Parameters<typeof definition.renderArgv>[0]["input"]["options"];
+    readonly stagedOutfile: string;
+  }) =>
+    definition.renderArgv({
+      input: {
+        entrypoint: input.entrypoint,
+        ...(input.target === undefined ? {} : { target: input.target }),
+        options: input.options,
+      },
+      ...(input.target === undefined ? {} : { nativeTarget: targetTokens[input.target] }),
+      stagedOutfile: input.stagedOutfile,
+    }),
+};
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -67,7 +85,7 @@ describe("standalone Bun driver", () => {
   it("renders only requested native flags and exact target mapping", () => {
     const options = bunAdapter.validateOptions({ minify: true, sourcemap: "inline", bytecode: true });
     expect(options._tag).toBe("Valid");
-    if (options._tag !== "Valid") throw options.error;
+    if (options._tag !== "Valid") throw new Error(options.reason);
     expect(bunAdapter.renderArgv({
       entrypoint: "src/main.ts",
       target: "linux-aarch64-gnu",
@@ -88,7 +106,7 @@ describe("standalone Bun driver", () => {
   it("rejects unknown runtime options", () => {
     expect(bunAdapter.validateOptions({ rawArgs: ["--x"] })).toMatchObject({
       _tag: "Invalid",
-      error: { _tag: "InvalidDriverOptions" },
+      reason: "unknown Bun option",
     });
   });
 
@@ -107,7 +125,7 @@ describe("standalone Bun driver", () => {
     };
     const validated = bunAdapter.validateOptions(source);
     expect(validated._tag).toBe("Valid");
-    if (validated._tag !== "Valid") throw validated.error;
+    if (validated._tag !== "Valid") throw new Error(validated.reason);
     expect(bunAdapter.renderArgv({
       entrypoint: "a.ts",
       target: "macos-x64",

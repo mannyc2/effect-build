@@ -7,9 +7,8 @@ import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
-import { layer as esbuildLayer, withJavaScriptBundle } from "../../src/standalone/internal/Esbuild.js";
-import { inspectNativeExecutable } from "../../src/standalone/internal/NativeExecutable.js";
-import { createExecutable, layer as nodeSeaLayer } from "../../src/standalone/internal/NodeSea.js";
+import * as NodeSea from "../../packages/effect-build-node-sea/src/index.js";
+import { inspectNativeExecutable } from "../../packages/effect-build/src/standalone/internal/NativeExecutable.js";
 
 const execFileAsync = promisify(execFile);
 const fixtures = fileURLToPath(new URL("../fixtures/node-sea/", import.meta.url));
@@ -154,7 +153,7 @@ describe("exact Node 26.7 direct SEA characterization", () => {
     expect(`${String(failure?.stdout ?? "")}${String(failure?.stderr ?? "")}`.trim()).not.toBe("");
   }, 60_000);
 
-  it("runs the complete private esbuild-to-Node-SEA pipeline under the separate producer", async () => {
+  it("runs the complete public effect-build-node-sea provider", async () => {
     const executable = requiredSelectedNode();
     const asset = join(fixtures, "message.txt");
 
@@ -166,22 +165,20 @@ describe("exact Node 26.7 direct SEA characterization", () => {
     ) {
       const output = join(root, `pipeline-${format}`);
       const artifact = await Effect.runPromise(
-        withJavaScriptBundle(
-          { entrypoint, format, cwd: fixtures },
-          (main) =>
-            createExecutable({
-              main,
-              outfile: output,
-              assets: [{ key: "message", path: asset }],
-            }),
-        ).pipe(
-          Effect.provide(nodeSeaLayer({ executable })),
-          Effect.provide(esbuildLayer),
+        NodeSea.compileExecutable({
+          entrypoint,
+          outfile: output,
+          cwd: fixtures,
+          target: "linux-x64-gnu",
+          options: { format, assets: [{ key: "message", path: asset }] },
+        }).pipe(
+          Effect.provide(NodeSea.layer({ executable })),
           Effect.provide(NodeServices.layer),
         ),
       );
 
       expect(artifact.path).toBe(output);
+      expect(artifact.provider).toBe("node-sea");
       expect(artifact.target).toBe("linux-x64-gnu");
       expect(artifact.stages).toEqual([
         { operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } },

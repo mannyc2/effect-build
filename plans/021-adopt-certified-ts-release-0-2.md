@@ -20,6 +20,12 @@ Public npm still exposes only `@mannyc1/ts-release@0.0.7` as latest and has no
 Plan 020 proceeds with one manual, read-only candidate workflow containing no
 publication authority.
 
+Requalification after the completed local Plan 020 gates on 2026-08-13 found
+the same external state: npm versions end at 0.0.7 with `latest: 0.0.7`, and
+GitHub returns 404 for both release and tag `v0.2.0`. No Plan 021 workflow or
+configuration edit is therefore authorized by the plan's own qualification
+boundary.
+
 ## Required qualification
 
 Before the first implementation edit, prove all of the following from immutable
@@ -72,4 +78,3 @@ keep this plan blocked, and report the exact external gate.
       preserves strict dependency order and truthful outcomes.
 - [ ] Authorized live release completes without reusing `v0.2.0` or publishing
       any package version twice.
-

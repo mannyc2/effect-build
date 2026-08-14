@@ -6,12 +6,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Artifact } from "../../src/standalone/Artifact.js";
-import type { BuildError, ToolNotFound, ToolProbeFailed } from "../../src/standalone/BuildError.js";
-import type { CompileExecutableMatrixInput, MatrixErrorFor } from "../../src/standalone/CompileExecutableMatrix.js";
-import type { CompileExecutableInput } from "../../src/standalone/Driver.js";
-import type { ChildProcessSpawner } from "../../src/standalone/internal/Process.js";
-import type { Target } from "../../src/standalone/Target.js";
+import type { Artifact } from "../../packages/effect-build/src/standalone/Artifact.js";
+import type {
+  BuildError,
+  ToolNotFound,
+  ToolProbeFailed,
+} from "../../packages/effect-build/src/standalone/BuildError.js";
+import type {
+  CompileExecutableMatrixInput,
+  MatrixErrorFor,
+} from "../../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
+import type { CompileExecutableInput } from "../../packages/effect-build/src/standalone/Driver.js";
+import type { ChildProcessSpawner } from "../../packages/effect-build/src/standalone/internal/Process.js";
+import type { Target } from "../../packages/effect-build/src/standalone/Target.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/driver/fake-tool.mjs", import.meta.url));
 
@@ -19,7 +26,7 @@ export interface StandaloneDriverContractConfig<
   Self,
   Options,
   SupportedTarget extends Target,
-  ProviderArtifact extends Artifact,
+  ProviderArtifact extends Extract<Artifact, { readonly provider: "bun" | "deno" }>,
 > {
   readonly tool: "bun" | "deno";
   readonly layer: (options?: { readonly executable?: string }) => Layer.Layer<
@@ -34,7 +41,7 @@ export interface StandaloneDriverContractConfig<
     input: CompileExecutableMatrixInput<SupportedTarget, Options>,
   ) => Effect.Effect<
     readonly ProviderArtifact[],
-    MatrixErrorFor<ProviderArtifact["tool"]["name"], SupportedTarget>,
+    MatrixErrorFor<ProviderArtifact["provider"], SupportedTarget>,
     Self
   >;
   readonly matrixTarget: SupportedTarget;
@@ -48,7 +55,7 @@ export const describeStandaloneDriverContract = <
   Self,
   Options,
   SupportedTarget extends Target,
-  ProviderArtifact extends Artifact,
+  ProviderArtifact extends Extract<Artifact, { readonly provider: "bun" | "deno" }>,
 >(
   config: StandaloneDriverContractConfig<Self, Options, SupportedTarget, ProviderArtifact>,
 ): void => {
@@ -130,9 +137,10 @@ export const describeStandaloneDriverContract = <
         outfile: join(root, "out", "app"),
       });
       expect(artifact.path).toBe(join(root, "out", "app"));
-      expect(artifact.tool.name).toBe(config.tool);
-      expect(artifact.tool.version).toBe("9.9.9");
-      expect(artifact.tool.path.startsWith("/")).toBe(true);
+      expect(artifact.provider).toBe(config.tool);
+      expect(artifact.stages[0].tool.name).toBe(config.tool);
+      expect(artifact.stages[0].tool.version).toBe("9.9.9");
+      expect(artifact.stages[0].tool.path.startsWith("/")).toBe(true);
       const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
       expect(lines).toHaveLength(2);
       expect(lines[0]?.[0]).toBe(config.probeFirstArg);

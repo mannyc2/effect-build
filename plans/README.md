@@ -8,15 +8,15 @@ managed-proof design. Plans 007-010 record the hard cutover to the standalone
 compile operation. Plans 011-014 are the completed typed-target and matrix
 program. Re-audited again on 2026-08-12 against the completed `v0.2.0` product
 tag at commit `29f8cfb` and planning baseline `e4257cc` for dependency
-compatibility; Plan 015 is the active, bounded Effect 4.0 range and current-RC
+compatibility; Plan 015 completed the bounded Effect 4.0 range and current-RC
 upgrade.
 Re-audited on 2026-08-13 at the same source commit `e4257cc` for the next
 architecture stage. `NEXT-STAGE-ARCHITECTURE-AUDIT.md` records the live
 lifecycle trace, correctness findings, capability/ownership maps, primary-
 source Node/esbuild constraints, and independently vetted Fable Max advice.
-Plans 016-019 are the selected four-plan program: behavior-preserving lifecycle
+Plans 016-019 completed the selected four-plan program: behavior-preserving lifecycle
 compression, one continuation-owned esbuild artifact, one internal exact Node
-SEA vertical slice, then an evidence-only public-promotion decision. Plan 015 remains the required
+SEA vertical slice, then an evidence-only public-promotion decision. Plan 015 remained the required
 first dependency. Its user-owned content was preserved except for one
 plan-only receipt-placeholder correction required to make its exactly-one
 receipt verifier executable.
@@ -493,10 +493,10 @@ user-owned unless explicitly listed in the assigned plan.
 
 Every active plan must leave a machine-checkable green slice, preserve dirty
 WIP outside scope, and identify exact real-tool/host acceptance separately from
-deterministic local tests. Final completion requires `pnpm verify`, required
-real Bun/Deno integration, the required Node host run, atomic publication on
-each advertised OS, a packed consumer, and no stale managed names or proof
-claims. Under Plan 013, all six Bun and six Deno provider targets are
+deterministic local tests. Plan 020 completion requires `bun run verify`,
+required real Bun/Deno and exact Linux Node SEA integration, atomic publication
+on each advertised OS, eight packed consumers, and no stale managed names or
+proof claims. Under Plan 013, all six Bun and six Deno provider targets are
 required compile-plus-header gates; only current-host artifacts are executed.
 Optional Bun/Deno orchestrator-host lanes remain non-gating
 (gate 3: advertise-equals-test).

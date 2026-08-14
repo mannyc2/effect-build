@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import * as Bun from "effect-build-bun";
 import { it } from "vitest";
-import * as Bun from "../../src/Bun.js";
 import { standaloneHostContract } from "../testkit/standaloneHostContract.js";
 
 it("runs the identical standalone build call under official Node services", () => {

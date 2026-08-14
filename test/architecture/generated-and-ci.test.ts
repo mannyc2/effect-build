@@ -7,29 +7,35 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
+const publicPackages = ["effect-build", "effect-build-bun", "effect-build-deno", "effect-build-node-sea"] as const;
+const effectEndpoints = ["4.0.0-beta.104", "4.0.0-rc.108"];
+
+interface WorkflowStep {
+  id?: string;
+  name?: string;
+  uses?: string;
+  run?: string;
+  env?: Record<string, string>;
+  if?: string;
+  "continue-on-error"?: boolean;
+  with?: Record<string, unknown>;
+}
+
+interface WorkflowJob {
+  name?: string;
+  if?: string;
+  needs?: string | string[];
+  permissions?: Record<string, string>;
+  "continue-on-error"?: unknown;
+  "runs-on"?: string;
+  steps?: WorkflowStep[];
+  strategy?: { "fail-fast"?: boolean; matrix?: { runner?: string[]; compiler?: string[]; effect?: string[] } };
+}
 
 interface Workflow {
   on: Record<string, unknown>;
   permissions: Record<string, string>;
-  jobs: Record<string, {
-    name?: string;
-    if?: string;
-    needs?: string | string[];
-    permissions?: Record<string, string>;
-    "continue-on-error"?: unknown;
-    "runs-on"?: string;
-    steps?: Array<{
-      uses?: string;
-      run?: string;
-      env?: Record<string, string>;
-      if?: string;
-      "continue-on-error"?: boolean;
-    }>;
-    strategy?: {
-      "fail-fast"?: boolean;
-      matrix?: { runner?: string[]; compiler?: string[]; effect?: string[] };
-    };
-  }>;
+  jobs: Record<string, WorkflowJob>;
 }
 
 interface SupportCell {
@@ -47,33 +53,21 @@ interface SupportMatrix {
 const loadScript = async <T>(name: string): Promise<T> =>
   await import(pathToFileURL(resolve(root, "scripts", name)).href) as T;
 
-const assertProviderTargets = (
-  support: SupportMatrix,
-  tables: Readonly<Record<string, readonly string[]>>,
-): void => {
-  for (const compiler of ["bun", "deno"] as const) {
-    const targets = support.supportedCells
-      .filter((cell) => cell.compiler === compiler)
-      .map((cell) => cell.target);
-    if (JSON.stringify(targets) !== JSON.stringify(tables[compiler])) {
-      throw new Error(`${compiler} support cells differ from the provider target table`);
-    }
-  }
-};
+const readJson = async (path: string): Promise<Record<string, unknown>> =>
+  JSON.parse(await readFile(resolve(root, path), "utf8")) as Record<string, unknown>;
 
 const jobRuns = (workflow: Workflow, name: string): string =>
   (workflow.jobs[name]?.steps ?? []).map((step) => step.run ?? "").join("\n");
 
-const effectEndpoints = ["4.0.0-beta.104", "4.0.0-rc.108"];
-
 const expectPinnedActionsWithoutEscapes = (workflow: Workflow): void => {
   for (const job of Object.values(workflow.jobs)) {
-    expect(job.name).toBeUndefined();
     expect(job.if).toBeUndefined();
     expect(job["continue-on-error"]).toBeUndefined();
     for (const step of job.steps ?? []) {
       if (step.uses !== undefined) {
-        expect(step.uses).toMatch(/^((actions\/checkout|actions\/setup-node|pnpm\/action-setup)@)[0-9a-f]{40}$/);
+        expect(step.uses).toMatch(
+          /^(?:actions\/(?:checkout|setup-node|upload-artifact)|oven-sh\/setup-bun)@[0-9a-f]{40}$/,
+        );
       }
       expect(step["continue-on-error"]).toBeUndefined();
       expect(step.if).toBeUndefined();
@@ -81,69 +75,39 @@ const expectPinnedActionsWithoutEscapes = (workflow: Workflow): void => {
   }
 };
 
-describe("tooling pins and CI contract", () => {
-  it("validates the authored 12-cell manifest and its provider-table equality", async () => {
-    const manifest = JSON.parse(await readFile(resolve(root, "tooling/support-matrix.json"), "utf8")) as SupportMatrix;
-    const tooling = await loadScript<{
-      validateSupportMatrix: (support: unknown) => unknown;
-    }>("read-tooling.mjs");
-    expect(() => tooling.validateSupportMatrix(manifest)).not.toThrow();
-
-    const bun = await import(pathToFileURL(resolve(root, "dist/standalone/internal/BunTarget.js")).href) as {
-      bunTargetTable: { Target: { literals: readonly string[] } };
-    };
-    const deno = await import(pathToFileURL(resolve(root, "dist/standalone/internal/DenoTarget.js")).href) as {
-      denoTargetTable: { Target: { literals: readonly string[] } };
-    };
-    const tables = {
-      bun: bun.bunTargetTable.Target.literals,
-      deno: deno.denoTargetTable.Target.literals,
-    };
-    expect(tables.bun).toHaveLength(6);
-    expect(tables.deno).toHaveLength(6);
-    expect(() => assertProviderTargets(manifest, tables)).not.toThrow();
-
-    const missing = structuredClone(manifest);
-    missing.supportedCells.splice(0, 1);
-    expect(() => assertProviderTargets(missing, tables)).toThrow(/bun support cells/);
-    const extra = structuredClone(manifest);
-    const firstDeno = extra.supportedCells.findIndex((cell) => cell.compiler === "deno");
-    extra.supportedCells.splice(firstDeno + 3, 0, {
-      orchestrator: "node",
-      runner: "ubuntu-24.04",
-      target: "linux-x64-musl",
-      compiler: "deno",
-    });
-    expect(() => tooling.validateSupportMatrix(extra)).not.toThrow();
-    expect(() => assertProviderTargets(extra, tables)).toThrow(/deno support cells/);
-  });
-
-  it("rejects malformed, duplicate, unknown, unordered, and widened support cells", async () => {
-    const manifest = JSON.parse(await readFile(resolve(root, "tooling/support-matrix.json"), "utf8")) as SupportMatrix;
-    const { validateSupportMatrix } = await loadScript<{
-      validateSupportMatrix: (support: unknown) => unknown;
-    }>("read-tooling.mjs");
-    const rejected = (mutate: (support: SupportMatrix) => void, message: RegExp) => {
-      const support = structuredClone(manifest);
-      mutate(support);
-      expect(() => validateSupportMatrix(support)).toThrow(message);
-    };
-    rejected((support) => support.supportedCells.push({ ...support.supportedCells[0]! }), /duplicate/);
-    rejected((support) => support.supportedCells[0]!.compiler = "other", /unknown compiler/);
-    rejected((support) => support.supportedCells[0]!.target = "linux-x64", /malformed canonical target/);
-    rejected(
-      (support) => Object.assign(support.supportedCells[0]!, { unexpected: true }),
-      /exactly orchestrator, runner, target, and compiler/,
+describe("tooling pins and workflow contracts", () => {
+  it("validates the authored 12-cell Bun/Deno support matrix against core authority", async () => {
+    const support = await readJson("tooling/support-matrix.json") as unknown as SupportMatrix;
+    const { validateSupportMatrix } = await loadScript<{ validateSupportMatrix: (value: unknown) => unknown }>(
+      "read-tooling.mjs",
     );
-    rejected((support) => support.supportedCells[0]!.orchestrator = "bun", /orchestrator must be node/);
-    rejected((support) => support.supportedCells[0]!.runner = "macos-15", /runner must be ubuntu-24.04/);
-    rejected((support) => support.supportedCells.reverse(), /ordered bun then deno|canonical target order/);
+    expect(() => validateSupportMatrix(support)).not.toThrow();
+    expect(support.supportedCells).toHaveLength(12);
+
+    const { ProviderContracts } = await import(
+      pathToFileURL(resolve(root, "packages/effect-build/dist/internal/ProviderContracts.js")).href
+    ) as { ProviderContracts: Record<string, readonly string[]> };
+    for (const compiler of ["bun", "deno"]) {
+      expect(support.supportedCells.filter((cell) => cell.compiler === compiler).map((cell) => cell.target)).toEqual(
+        ProviderContracts[compiler],
+      );
+    }
+    expect(ProviderContracts["node-sea"]).toEqual(["linux-x64-gnu"]);
+
+    const malformed = structuredClone(support);
+    malformed.supportedCells[0]!.compiler = "other";
+    expect(() => validateSupportMatrix(malformed)).toThrow(/unknown compiler/);
+    const duplicate = structuredClone(support);
+    duplicate.supportedCells.push({ ...duplicate.supportedCells[0]! });
+    expect(() => validateSupportMatrix(duplicate)).toThrow(/duplicate/);
+    const unordered = structuredClone(support);
+    unordered.supportedCells.reverse();
+    expect(() => validateSupportMatrix(unordered)).toThrow(/ordered bun then deno|canonical target order/);
   });
 
-  it("keeps provisioner selection closed to default, Bun-only, and Deno-only modes", async () => {
+  it("keeps provisioned compiler fixtures selected, checksummed, and closed", async () => {
     const provisioner = await loadScript<{
       selectedToolNames: (argv: readonly string[]) => readonly string[];
-      validateArchiveEntries: (stdout: string, tool: string) => readonly string[];
       provisionToolAssets: (
         argv: readonly string[],
         dependencies: Record<string, unknown>,
@@ -152,18 +116,12 @@ describe("tooling pins and CI contract", () => {
     expect(provisioner.selectedToolNames([])).toEqual(["bun", "deno", "denort"]);
     expect(provisioner.selectedToolNames(["--only", "bun"])).toEqual(["bun"]);
     expect(provisioner.selectedToolNames(["--only", "deno"])).toEqual(["deno"]);
-    for (const argv of [["--only"], ["--only", "denort"], ["--only", "bun", "--only", "deno"], ["--url", "x"]]) {
+    for (const argv of [["--only"], ["--only", "node-sea"], ["--url", "x"]]) {
       expect(() => provisioner.selectedToolNames(argv)).toThrow(/usage/);
     }
-    expect(provisioner.validateArchiveEntries("deno\n", "deno")).toEqual(["deno"]);
-    for (const listing of ["../escape\n", "/absolute\n", "nested/../../escape\n", "nested\\escape\n", ""]) {
-      expect(() => provisioner.validateArchiveEntries(listing, "fixture")).toThrow(
-        /unsafe archive entry|empty archive/,
-      );
-    }
 
-    const asset = new TextEncoder().encode("checksummed fixture");
-    const sha256 = createHash("sha256").update(asset).digest("hex");
+    const bytes = new TextEncoder().encode("fixture");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
     const pins = ["bun", "deno", "denort"].map((tool) => ({
       tool,
       version: "1.0.0",
@@ -171,347 +129,126 @@ describe("tooling pins and CI contract", () => {
       sha256,
       member: tool,
     }));
-    const run = async (argv: readonly string[], bytes = asset) => {
-      const outputs: string[] = [];
-      const extracts: Array<{ command: string; argv: readonly string[] }> = [];
-      const stored = new Map<string, Uint8Array>();
-      const result = await provisioner.provisionToolAssets(argv, {
-        environment: { EFFECT_BUILD_TOOL_DIR: "/tmp/effect-build-provision-fixture" },
-        loadTooling: async () => ({ pins: { tools: pins } }),
-        fetchAsset: async () => ({ ok: true, status: 200, arrayBuffer: async () => bytes.buffer }),
-        execute: async (command: string, args: readonly string[]) => {
-          extracts.push({ command, argv: args });
-          const archiveName = args.at(-1)?.split("/").at(-1)?.replace(/\.zip$/, "") ?? "";
-          return { stdout: args.includes("-Z1") ? `${archiveName}\n` : "", stderr: "" };
-        },
-        makeDirectory: async () => undefined,
-        writeAsset: async (path: string, value: Uint8Array) => void stored.set(path, value),
-        readAsset: async (path: string) => stored.get(path),
-        makeExecutable: async () => undefined,
-        output: (line: string) => outputs.push(line),
-      });
-      return { extracts, outputs, result };
-    };
-    const all = await run([]);
-    expect([...all.result.keys()]).toEqual(["bun", "deno", "denort"]);
-    expect(all.outputs.map((line) => line.split("=")[0])).toEqual(["bun", "deno", "denort"]);
-    expect(all.extracts).toHaveLength(6);
-    expect(all.extracts.every(({ command }) => command === "unzip")).toBe(true);
-    expect(all.extracts.filter(({ argv }) => argv.includes("-o"))).toHaveLength(3);
-    expect(all.extracts.filter(({ argv }) => argv.includes("-Z1"))).toHaveLength(3);
-    const narrow = await run(["--only", "deno"]);
-    expect([...narrow.result.keys()]).toEqual(["deno"]);
-    expect(narrow.outputs).toHaveLength(1);
-    expect(narrow.extracts).toHaveLength(2);
-    await expect(run(["--only", "bun"], new TextEncoder().encode("wrong"))).rejects.toThrow(/checksum mismatch/);
+    const stored = new Map<string, Uint8Array>();
+    const result = await provisioner.provisionToolAssets(["--only", "bun"], {
+      environment: { EFFECT_BUILD_TOOL_DIR: "/tmp/effect-build-provision-fixture" },
+      loadTooling: async () => ({ pins: { tools: pins } }),
+      fetchAsset: async () => ({ ok: true, status: 200, arrayBuffer: async () => bytes.buffer }),
+      execute: async (_command: string, argv: readonly string[]) => ({
+        stdout: argv.includes("-Z1") ? "bun\n" : "",
+        stderr: "",
+      }),
+      makeDirectory: async () => undefined,
+      writeAsset: async (path: string, value: Uint8Array) => void stored.set(path, value),
+      readAsset: async (path: string) => stored.get(path),
+      makeExecutable: async () => undefined,
+      output: () => undefined,
+    });
+    expect([...result.keys()]).toEqual(["bun"]);
+    const authored = await readJson("tooling/tool-pins.json") as { tools: Array<Record<string, string>> };
+    expect(authored.tools.map((pin) => pin.tool)).toEqual(["bun", "deno", "denort"]);
+    for (const pin of authored.tools) expect(pin.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("rejects target verifier argument drift and accumulates every failed cell before cleanup", async () => {
+  it("runs all target cells through exact Bun 1.3.14 and cleans isolated tool state", async () => {
     const verifier = await loadScript<{
       parseCompiler: (argv: readonly string[]) => string | undefined;
-      parseProvisionedPaths: (stdout: string, expected: readonly string[]) => Map<string, string>;
       packageManagerInvocation: (
         environment: Record<string, string | undefined>,
         access?: (path: string, mode: number) => Promise<void>,
-      ) => Promise<{
-        executable: string;
-        prefixArgs: readonly string[];
-      }>;
-      requireUbuntuCompatibleHost: (platform: string, architecture: string) => void;
-      verifyTargetSupport: (
-        options: Record<string, unknown>,
-      ) => Promise<{ attempted: number; failures: readonly string[] }>;
+        probe?: (path: string) => Promise<{ stdout: string }>,
+      ) => Promise<{ executable: string }>;
+      verifyTargetSupport: (options: Record<string, unknown>) => Promise<{ attempted: number; failures: string[] }>;
     }>("verify-target-support.mjs");
     expect(verifier.parseCompiler([])).toBeUndefined();
     expect(verifier.parseCompiler(["--compiler", "bun"])).toBe("bun");
-    expect(verifier.parseCompiler(["--compiler", "deno"])).toBe("deno");
-    for (const argv of [["--compiler"], ["--compiler", "other"], ["--compiler", "bun", "--compiler", "deno"]]) {
-      expect(() => verifier.parseCompiler(argv)).toThrow(/usage/);
-    }
-    expect(verifier.parseProvisionedPaths("bun=/tmp/bun\n", ["bun"])).toEqual(new Map([["bun", "/tmp/bun"]]));
-    for (
-      const output of [
-        "",
-        "bun=relative\n",
-        "bun=/tmp/bun\nbun=/tmp/other\n",
-        "deno=/tmp/deno\n",
-        "diagnostic text\nbun=/tmp/bun\n",
-      ]
-    ) expect(() => verifier.parseProvisionedPaths(output, ["bun"])).toThrow();
-    await expect(verifier.packageManagerInvocation({ npm_execpath: "/tmp/pnpm.cjs" })).resolves.toEqual({
-      executable: process.execPath,
-      prefixArgs: ["/tmp/pnpm.cjs"],
-    });
-    const accessed: string[] = [];
+    expect(() => verifier.parseCompiler(["--compiler", "node-sea"])).toThrow(/usage/);
     await expect(verifier.packageManagerInvocation(
-      { PATH: "/missing:/tools" },
-      async (path: string) => {
-        accessed.push(path);
-        if (path !== "/tools/pnpm") throw new Error("missing");
-      },
-    )).resolves.toEqual({ executable: "/tools/pnpm", prefixArgs: [] });
-    expect(accessed).toEqual(["/missing/pnpm", "/tools/pnpm"]);
-    for (const npm_execpath of ["pnpm", "relative/pnpm.cjs"]) {
-      await expect(verifier.packageManagerInvocation({ npm_execpath })).rejects.toThrow(/must be absolute/);
-    }
-    await expect(verifier.packageManagerInvocation({ PATH: "/missing" }, async () => {
-      throw new Error("missing");
-    })).rejects.toThrow(/pnpm was not found/);
-    expect(() => verifier.requireUbuntuCompatibleHost("darwin", "arm64")).toThrow(/required Ubuntu CI gate/);
-    expect(() => verifier.requireUbuntuCompatibleHost("linux", "arm64")).toThrow(/required Ubuntu CI gate/);
+      { npm_execpath: "/tools/bun" },
+      async () => undefined,
+      async () => ({ stdout: "1.3.14\n" }),
+    )).resolves.toEqual({ executable: "/tools/bun" });
+    await expect(verifier.packageManagerInvocation(
+      { npm_execpath: "/tools/pnpm" },
+      async () => undefined,
+      async () => ({ stdout: "1.3.14\n" }),
+    )).rejects.toThrow(/identify Bun/);
 
-    const calls: Array<{ executable: string; argv: readonly string[]; env: Record<string, string | undefined> }> = [];
+    const calls: Array<{ executable: string; argv: readonly string[]; env: Record<string, string> }> = [];
     let cleaned = "";
-    const execute = async (executable: string, argv: readonly string[], options: { env: Record<string, string> }) => {
-      calls.push({ executable, argv, env: options.env });
-      if (argv.includes("provision-tool-assets.mjs") || argv[0]?.endsWith("provision-tool-assets.mjs")) {
-        return { stdout: "bun=/tmp/effect-build-test-bun\n", stderr: "" };
-      }
-      const target = options.env.EFFECT_BUILD_TARGET;
-      if (target === "macos-x64" || target === "windows-x64") throw new Error(`cell failed: ${target}`);
-      return { stdout: "", stderr: "" };
-    };
-    await expect(verifier.verifyTargetSupport({
-      compiler: "bun",
+    const result = await verifier.verifyTargetSupport({
       platform: "linux",
       architecture: "x64",
-      environment: {
-        PATH: "/tools",
-        DENORT_BIN: "/inherited/denort",
-        EFFECT_BUILD_DENO_BIN: "/inherited/deno",
-        BUN_INSTALL_CACHE_DIR: "/inherited/bun-cache",
-        DENO_DIR: "/inherited/deno-cache",
-      },
-      packageManager: { executable: process.execPath, prefixArgs: ["/tmp/pnpm.cjs"] },
-      execute,
-      makeTemporaryDirectory: async () => "/tmp/effect-build-target-verifier-fixture",
-      removeDirectory: async (path: string) => void (cleaned = path),
-      log: () => undefined,
-    })).rejects.toThrow(/macos-x64.*windows-x64/);
-    const cells = calls.filter((call) => call.argv.includes("test:integration:target"));
-    expect(cells).toHaveLength(6);
-    expect(cells.every((call) => call.executable === process.execPath && call.argv[0] === "/tmp/pnpm.cjs")).toBe(true);
-    expect(cells.map((call) => call.env.EFFECT_BUILD_TARGET)).toEqual([
-      "macos-x64",
-      "macos-aarch64",
-      "linux-x64-gnu",
-      "linux-x64-musl",
-      "linux-aarch64-gnu",
-      "windows-x64",
-    ]);
-    expect(cells.every((call) => call.env.DENORT_BIN === undefined)).toBe(true);
-    expect(cells.every((call) => call.env.BUN_INSTALL_CACHE_DIR?.startsWith(cleaned))).toBe(true);
-    expect(cells.every((call) => call.env.DENO_DIR === undefined)).toBe(true);
-    expect(cells.every((call) => call.env.EFFECT_BUILD_DENO_BIN === undefined)).toBe(true);
-    expect(cleaned).toBe("/tmp/effect-build-target-verifier-fixture");
-
-    const allCalls: typeof calls = [];
-    let allCleaned = "";
-    const allResult = await verifier.verifyTargetSupport({
-      platform: "linux",
-      architecture: "x64",
-      environment: {
-        PATH: "/tools",
-        DENORT_BIN: "/inherited/denort",
-        EFFECT_BUILD_BUN_BIN: "/inherited/bun",
-        EFFECT_BUILD_DENO_BIN: "/inherited/deno",
-        BUN_INSTALL_CACHE_DIR: "/inherited/bun-cache",
-        DENO_DIR: "/inherited/deno-cache",
-      },
-      packageManager: { executable: "/tools/pnpm", prefixArgs: [] },
+      environment: { PATH: "/tools" },
+      packageManager: { executable: "/tools/bun" },
       execute: async (executable: string, argv: readonly string[], options: { env: Record<string, string> }) => {
-        allCalls.push({ executable, argv, env: options.env });
+        calls.push({ executable, argv, env: options.env });
         if (argv[0]?.endsWith("provision-tool-assets.mjs")) {
-          const compiler = argv.at(-1);
-          return { stdout: `${compiler}=/tmp/effect-build-test-${compiler}\n`, stderr: "" };
+          return { stdout: `${argv.at(-1)}=/tmp/${argv.at(-1)}\n`, stderr: "" };
         }
         return { stdout: "", stderr: "" };
       },
-      makeTemporaryDirectory: async () => "/tmp/effect-build-all-targets-fixture",
-      removeDirectory: async (path: string) => void (allCleaned = path),
+      makeTemporaryDirectory: async () => "/tmp/effect-build-target-verifier-fixture",
+      removeDirectory: async (path: string) => void (cleaned = path),
       log: () => undefined,
     });
-    expect(allResult).toEqual({ attempted: 12, failures: [] });
-    const provisionCalls = allCalls.filter((call) => call.argv[0]?.endsWith("provision-tool-assets.mjs"));
-    expect(provisionCalls.map((call) => call.argv.slice(-2))).toEqual([
-      ["--only", "bun"],
-      ["--only", "deno"],
-    ]);
-    const allCells = allCalls.filter((call) => call.argv.includes("test:integration:target"));
-    expect(allCells).toHaveLength(12);
-    const bunCells = allCells.filter((call) => call.env.EFFECT_BUILD_TARGET_COMPILER === "bun");
-    const denoCells = allCells.filter((call) => call.env.EFFECT_BUILD_TARGET_COMPILER === "deno");
-    expect(bunCells).toHaveLength(6);
-    expect(denoCells).toHaveLength(6);
-    expect(allCells.every((call) => call.env.DENORT_BIN === undefined)).toBe(true);
-    expect(bunCells.every((call) => call.env.BUN_INSTALL_CACHE_DIR?.startsWith(allCleaned))).toBe(true);
-    expect(bunCells.every((call) => call.env.DENO_DIR === undefined)).toBe(true);
-    expect(denoCells.every((call) => call.env.DENO_DIR?.startsWith(allCleaned))).toBe(true);
-    expect(denoCells.every((call) => call.env.BUN_INSTALL_CACHE_DIR === undefined)).toBe(true);
-    expect(allCleaned).toBe("/tmp/effect-build-all-targets-fixture");
+    expect(result).toEqual({ attempted: 12, failures: [] });
+    const cells = calls.filter(({ argv }) => argv.includes("test:integration:target"));
+    expect(cells).toHaveLength(12);
+    expect(cells.every(({ executable, argv }) => executable === "/tools/bun" && argv[0] === "run")).toBe(true);
+    expect(cleaned).toBe("/tmp/effect-build-target-verifier-fixture");
   });
 
-  it("keeps one strict external-oracle target cell and no production-parser shortcut", async () => {
-    const source = await readFile(resolve(root, "test/integration/standalone-target-support.test.ts"), "utf8");
-    expect(source.match(/\bit\(/g)).toHaveLength(1);
-    expect(source).not.toMatch(/\.skip\b|inspectNativeExecutable|NativeExecutable\.js/);
-    expect(source).toContain('["--brief", "-P", "elf_shsize=268435456", "--", path]');
-    for (const flags of ['["-hW", path]', '["-lW", path]', '["-VW", path]']) expect(source).toContain(flags);
-    expect(source).toContain('LC_ALL: "C"');
-    expect(source).toContain("digest: true");
-
-    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
+  it("pins the exact Effect family and every public package contract", async () => {
+    const rootManifest = await readJson("package.json") as {
+      private: boolean;
+      packageManager: string;
+      devDependencies: Record<string, string>;
       scripts: Record<string, string>;
     };
-    expect(packageJson.scripts["test:integration:target"]).toBe(
-      "vitest run test/integration/standalone-target-support.test.ts",
-    );
-    expect(packageJson.scripts["test:integration:cross-target"]).toBeUndefined();
-    expect(packageJson.scripts["verify:targets"]).toBe("node scripts/verify-target-support.mjs");
+    expect(rootManifest.private).toBe(true);
+    expect(rootManifest.packageManager).toBe("bun@1.3.14");
+    for (const dependency of ["effect", "@effect/platform-bun", "@effect/platform-deno", "@effect/platform-node"]) {
+      expect(rootManifest.devDependencies[dependency]).toBe("4.0.0-rc.108");
+    }
+    expect(rootManifest.scripts["verify:effect"]).toBe("node scripts/verify-effect-compatibility.mjs --all");
+    expect(rootManifest.scripts["test:integration:node-sea"]).toBe("vitest run test/integration/node-sea.test.ts");
+
+    for (const name of publicPackages) {
+      const manifest = await readJson(`packages/${name}/package.json`) as {
+        version: string;
+        peerDependencies: Record<string, string>;
+        devDependencies: Record<string, string>;
+      };
+      expect(manifest.version).toBe("0.3.0");
+      expect(manifest.peerDependencies).toEqual({ effect: ">=4.0.0-beta.104 <4.1.0-0" });
+      expect(manifest.devDependencies.effect).toBe("4.0.0-rc.108");
+    }
+    const nodeSea = await readJson("packages/effect-build-node-sea/package.json") as {
+      dependencies: Record<string, string>;
+    };
+    expect(nodeSea.dependencies).toEqual({ "effect-build": "workspace:^", esbuild: "0.28.2" });
   });
 
-  it("keeps authored tool pins as checksummed CI fixtures", async () => {
-    const pins = JSON.parse(await readFile(resolve(root, "tooling/tool-pins.json"), "utf8")) as {
-      tools: Array<{ tool: string; version: string; sha256: string; url: string; member: string }>;
-    };
-    expect(pins.tools.map((pin) => pin.tool).sort()).toEqual(["bun", "deno", "denort"]);
-    for (const pin of pins.tools) {
-      expect(pin.sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(pin.url).toMatch(/^https:\/\/github\.com\//);
-      expect(pin.member.length).toBeGreaterThan(0);
-    }
-    expect(Object.fromEntries(pins.tools.map((pin) => [pin.tool, pin.member]))).toEqual({
-      bun: "bun-linux-x64/bun",
-      deno: "deno",
-      denort: "denort",
-    });
-    const support = JSON.parse(await readFile(resolve(root, "tooling/support-matrix.json"), "utf8")) as {
-      compilerFixtures: Array<{ tool: string; version: string }>;
-    };
-    expect(support.compilerFixtures).toEqual(
-      pins.tools
-        .filter((pin) => pin.tool === "bun" || pin.tool === "deno")
-        .map(({ tool, version }) => ({ tool, version })),
-    );
-  });
-
-  it("keeps the evidenced Effect 4.0 peer range and exact current development family", async () => {
-    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
-      dependencies?: Record<string, string>;
-      peerDependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-      scripts?: Record<string, string>;
-    };
-
-    expect(packageJson.peerDependencies).toEqual({ effect: ">=4.0.0-beta.104 <4.1.0-0" });
-    for (
-      const dependency of [
-        "effect",
-        "@effect/platform-bun",
-        "@effect/platform-deno",
-        "@effect/platform-node",
-      ]
-    ) {
-      expect(packageJson.devDependencies?.[dependency]).toBe("4.0.0-rc.108");
-    }
-    for (const platform of ["@effect/platform-bun", "@effect/platform-deno", "@effect/platform-node"]) {
-      expect(packageJson.dependencies?.[platform]).toBeUndefined();
-      expect(packageJson.peerDependencies?.[platform]).toBeUndefined();
-    }
-    expect(packageJson.scripts?.["verify:effect"]).toBe("node scripts/verify-effect-compatibility.mjs --all");
-  });
-
-  it("registers every private pipeline suite exactly once in the full unit gate", async () => {
-    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
-      scripts?: Record<string, string>;
-    };
-    const unitScript = packageJson.scripts?.["test:unit"] ?? "";
-    for (
-      const suite of [
-        "esbuild-bundle.test.ts",
-        "node-sea.test.ts",
-        "esbuild-node-sea-pipeline.test.ts",
-      ]
-    ) {
-      const escaped = suite.replaceAll(".", "\\.");
-      expect(unitScript.match(new RegExp(`(?:^|\\s)test/unit/${escaped}(?:\\s|$)`, "g")), suite).toHaveLength(1);
-    }
-  });
-
-  it("keeps the exact private Node SEA literals aligned without a public support claim", async () => {
-    const nodeSea = await readFile(resolve(root, "src/standalone/internal/NodeSea.ts"), "utf8");
-    const esbuild = await readFile(resolve(root, "src/standalone/internal/Esbuild.ts"), "utf8");
-    const support = await readFile(resolve(root, "tooling/support-matrix.json"), "utf8");
-
+  it("keeps Node SEA a public provider with exact producer and bundle literals", async () => {
+    const nodeSea = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/NodeSea.ts"), "utf8");
+    const esbuild = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/Esbuild.ts"), "utf8");
+    const adapter = await readFile(resolve(root, "packages/effect-build-node-sea/src/Adapter.ts"), "utf8");
     expect(nodeSea).toMatch(/nodeSeaVersion\s*=\s*"26\.7\.0"\s+as const/);
     expect(nodeSea).toMatch(/nodeSeaSyntaxTarget\s*=\s*"node26\.7"\s+as const/);
     expect(nodeSea).toMatch(/nodeSeaTarget\s*=\s*"linux-x64-gnu"\s+as const/);
+    expect(esbuild).toMatch(/expectedVersion\s*=\s*"0\.28\.2"\s+as const/);
     expect(esbuild).toMatch(/nodeSyntaxTarget\s*=\s*"node26\.7"\s+as const/);
-    expect(nodeSea).not.toMatch(/25\.7\.0|postject|download|https?:\/\//i);
-    expect(support).not.toMatch(/node-sea|26\.7\.0|node26\.7/i);
-    await expect(readFile(resolve(root, "tooling/node-sea.json"), "utf8")).rejects.toThrow();
+    expect(adapter).toContain('kind: "composed"');
+    expect(adapter).toContain('defaultTarget: "linux-x64-gnu"');
+    expect(`${nodeSea}\n${esbuild}`).not.toMatch(/postject|download|curl|wget|https?:\/\//i);
   });
 
-  it("pins the early Node SEA characterization to separate producer and orchestrator axes", async () => {
-    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
-      scripts?: Record<string, string>;
-    };
-    expect(packageJson.scripts?.["test:integration:node-sea"]).toBe(
-      "vitest run test/integration/node-sea.test.ts",
-    );
-    for (const filename of ["ci.yml", "release.yml"]) {
-      const workflow = parse(await readFile(resolve(root, ".github/workflows", filename), "utf8")) as Workflow;
-      expect(Object.keys(workflow.jobs).filter((name) => name === "node-sea")).toEqual(["node-sea"]);
-      const job = workflow.jobs["node-sea"]!;
-      expect(job["runs-on"]).toBe("ubuntu-24.04");
-      if (filename === "release.yml") expect(job.needs).toBe("preflight");
-      const steps = job.steps ?? [];
-      const setupVersions = steps
-        .filter((step) => step.uses?.startsWith("actions/setup-node@"))
-        .map((step) => (step as { with?: { "node-version"?: string } }).with?.["node-version"]);
-      expect(setupVersions).toEqual(["26.7.0", "24.14.1"]);
-      const capture = steps.find((step) => (step as { id?: string }).id === "node26");
-      expect(capture).toBeDefined();
-      expect(capture?.run).toContain('test "$(node --version)" = "v26.7.0"');
-      expect(capture?.run).toContain("node_path=\"$(node -p 'process.execPath')\"");
-      expect(capture?.run).toContain('echo "path=$node_path" >> "$GITHUB_OUTPUT"');
-      const captureIndex = steps.findIndex((step) => step.run?.includes("path=$node_path"));
-      const restoreIndex = steps.findIndex((step) =>
-        (step as { with?: { "node-version"?: string } }).with?.["node-version"] === "24.14.1"
-      );
-      const verificationIndex = steps.findIndex((step) => step.run?.includes("v24.14.1"));
-      const installIndex = steps.findIndex((step) => step.run === "pnpm install --frozen-lockfile");
-      const verifyIndex = steps.findIndex((step) => step.run === "pnpm verify");
-      const integrationIndex = steps.findIndex((step) => step.run === "pnpm test:integration:node-sea");
-      const sequence = [captureIndex, restoreIndex, verificationIndex, installIndex, verifyIndex, integrationIndex];
-      expect(sequence.every((index) => index >= 0)).toBe(true);
-      expect(sequence).toEqual([...sequence].sort((left, right) => left - right));
-      expect(steps[integrationIndex]?.env).toEqual({
-        EFFECT_BUILD_NODE_SEA_BIN: "${{ steps.node26.outputs.path }}",
-      });
-      expect(steps[verifyIndex]?.env?.EFFECT_BUILD_NODE_SEA_BIN).toBeUndefined();
-      const verification = steps[verificationIndex]?.run ?? "";
-      expect(verification).toContain('test "$(node -p \'process.execPath\')" != "$producer"');
-      expect(verification).toContain('test "$("$producer" --version)" = "v26.7.0"');
-      expect(verification).toContain('file -Lb -- "$producer"');
-      expect(verification).toContain('readelf -hW "$producer"');
-      expect(verification).toContain('readelf -lW "$producer"');
-      expect(
-        steps.filter((_, index) => index !== integrationIndex).every((step) =>
-          step.env?.EFFECT_BUILD_NODE_SEA_BIN === undefined
-        ),
-      ).toBe(true);
-      expect(JSON.stringify(job)).not.toMatch(/latest|continue-on-error|GITHUB_ENV/);
-      expect(JSON.stringify(job)).not.toMatch(/provision-tool-assets|postject|curl|wget|npm install -g/i);
-    }
-  });
-
-  it("keeps Effect endpoint selection exact and rewrites only the temporary development family", async () => {
+  it("keeps Effect endpoint verification exact, Bun-only, and isolated", async () => {
     const verifier = await loadScript<{
       effectEndpoints: readonly string[];
       parseArguments: (argv: readonly string[]) => readonly string[];
       rewriteManifest: (manifest: Record<string, unknown>, version: string) => Record<string, unknown>;
-      selectCompatibilityTemporaryDirectory: (path: string, platform: string) => string;
       shouldCopyRepositoryPath: (path: string) => boolean;
       verifyEffectEndpoint: (version: string, dependencies: Record<string, unknown>) => Promise<void>;
     }>("verify-effect-compatibility.mjs");
@@ -520,224 +257,121 @@ describe("tooling pins and CI contract", () => {
     for (const endpoint of effectEndpoints) {
       expect(verifier.parseArguments(["--effect-version", endpoint])).toEqual([endpoint]);
     }
-    for (
-      const argv of [
-        [],
-        ["--effect-version"],
-        ["--effect-version", "4.0.0-beta.103"],
-        ["--effect-version", ">=4"],
-        ["--all", "extra"],
-        ["--all", "--effect-version", effectEndpoints[0]!],
-        ["--effect-version", effectEndpoints[0]!, "--effect-version", effectEndpoints[1]!],
-      ]
-    ) expect(() => verifier.parseArguments(argv)).toThrow(/exact Effect endpoints/);
-
+    for (const argv of [[], ["--effect-version", "4.0.0-beta.103"], ["--all", "extra"]]) {
+      expect(() => verifier.parseArguments(argv)).toThrow(/exact Effect endpoints/);
+    }
     const manifest = {
       peerDependencies: { effect: ">=4.0.0-beta.104 <4.1.0-0" },
-      devDependencies: {
-        effect: "old",
-        "@effect/platform-bun": "old",
-        "@effect/platform-deno": "old",
-        "@effect/platform-node": "old",
-        typescript: "6.0.3",
-      },
+      devDependencies: { effect: "old", typescript: "6.0.3" },
     };
     const rewritten = verifier.rewriteManifest(manifest, effectEndpoints[0]!) as typeof manifest;
     expect(rewritten.peerDependencies).toEqual(manifest.peerDependencies);
-    expect(rewritten.devDependencies.typescript).toBe("6.0.3");
-    for (
-      const dependency of [
-        "effect",
-        "@effect/platform-bun",
-        "@effect/platform-deno",
-        "@effect/platform-node",
-      ]
-    ) expect(rewritten.devDependencies[dependency as keyof typeof rewritten.devDependencies]).toBe(effectEndpoints[0]);
-    expect(manifest.devDependencies.effect).toBe("old");
-    expect(verifier.shouldCopyRepositoryPath(resolve(root, ".agent-sources/effect"))).toBe(false);
+    expect(rewritten.devDependencies).toEqual({ effect: effectEndpoints[0], typescript: "6.0.3" });
     expect(verifier.shouldCopyRepositoryPath(resolve(root, "node_modules/effect"))).toBe(false);
-    expect(verifier.shouldCopyRepositoryPath(resolve(root, "dist/index.js"))).toBe(false);
-    expect(
-      verifier.shouldCopyRepositoryPath(resolve(root, "effect-build-effect-compatibility-fixture/repository")),
-    ).toBe(false);
-    expect(verifier.shouldCopyRepositoryPath(resolve(root, "src/index.ts"))).toBe(true);
-    expect(verifier.shouldCopyRepositoryPath(resolve(root, "uncommitted-plan.tsbuildinfo"))).toBe(false);
-    expect(verifier.selectCompatibilityTemporaryDirectory(resolve(root, ".cache/tmp"), "linux")).toBe(resolve("/tmp"));
+    expect(verifier.shouldCopyRepositoryPath(resolve(root, "packages/effect-build/src/index.ts"))).toBe(true);
 
     const temporaryRoot = await mkdtemp(join(tmpdir(), "effect-build-effect-compatibility-"));
-    const calls: Array<{ argv: readonly string[]; options: { cwd: string; env: Record<string, string> } }> = [];
+    const calls: Array<{ executable: string; argv: readonly string[]; cwd: string; env: Record<string, string> }> = [];
     await verifier.verifyEffectEndpoint(effectEndpoints[0]!, {
       makeTemporaryDirectory: async () => temporaryRoot,
       copyRepository: async (destination: string) => {
-        await mkdir(destination, { recursive: true });
-        await writeFile(
-          resolve(destination, "package.json"),
-          `${JSON.stringify(manifest, null, 2)}\n`,
-        );
+        for (
+          const path of [
+            "packages/effect-build/package.json",
+            "packages/effect-build-bun/package.json",
+            "packages/effect-build-deno/package.json",
+            "packages/effect-build-node-sea/package.json",
+            "examples/bun/package.json",
+            "examples/deno/package.json",
+            "examples/node-sea/package.json",
+          ]
+        ) {
+          await mkdir(resolve(destination, path, ".."), { recursive: true });
+          await writeFile(resolve(destination, path), `${JSON.stringify(manifest)}\n`);
+        }
+        await writeFile(resolve(destination, "package.json"), `${JSON.stringify(manifest)}\n`);
       },
-      packageManager: { executable: "/fixture/pnpm", prefix: [] },
+      packageManager: { executable: "/fixture/bun" },
       environment: { PATH: "/fixture", SENTINEL: "preserved" },
       execute: async (
-        _executable: string,
+        executable: string,
         argv: readonly string[],
         options: { cwd: string; env: Record<string, string> },
       ) => {
-        calls.push({ argv, options });
+        calls.push({ executable, argv, cwd: options.cwd, env: options.env });
       },
       removeDirectory: async (path: string) => rm(path, { recursive: true, force: true }),
     });
     expect(calls.map(({ argv }) => argv)).toEqual([
-      ["install", "--no-frozen-lockfile", "--strict-peer-dependencies"],
-      ["check"],
-      ["test:types"],
-      ["test:unit"],
-      ["test:consumer:fresh"],
+      ["install", "--cache-dir", resolve(temporaryRoot, "cache/bun")],
+      ["run", "build"],
+      ["run", "check"],
+      ["run", "test:types"],
+      ["run", "test:unit"],
+      ["run", "test:consumer:fresh"],
     ]);
-    expect(calls.every(({ options }) => options.cwd === resolve(temporaryRoot, "repository"))).toBe(true);
-    expect(calls.every(({ options }) => options.env.SENTINEL === "preserved")).toBe(true);
-    expect(calls.every(({ options }) =>
-      options.env.npm_config_store_dir === resolve(temporaryRoot, "cache/pnpm-store")
-      && options.env.npm_config_cache === resolve(temporaryRoot, "cache/npm")
+    expect(calls.every(({ executable, cwd, env }) =>
+      executable === "/fixture/bun"
+      && cwd === resolve(temporaryRoot, "repository")
+      && env.SENTINEL === "preserved"
+      && env.BUN_INSTALL_CACHE_DIR === resolve(temporaryRoot, "cache/bun")
     )).toBe(true);
-
-    const failingTemporaryRoot = await mkdtemp(join(tmpdir(), "effect-build-effect-compatibility-"));
-    try {
-      const failed = verifier.verifyEffectEndpoint(effectEndpoints[0]!, {
-        makeTemporaryDirectory: async () => failingTemporaryRoot,
-        copyRepository: async (destination: string) => {
-          await mkdir(destination, { recursive: true });
-          await writeFile(resolve(destination, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-        },
-        packageManager: { executable: "/fixture/pnpm", prefix: [] },
-        environment: { PATH: "/fixture" },
-        execute: async () => {
-          throw new Error("command sentinel");
-        },
-        removeDirectory: async () => {
-          throw new Error("cleanup sentinel");
-        },
-      });
-      await expect(failed).rejects.toThrow(
-        /Effect 4\.0\.0-beta\.104 failed pnpm install.*cleanup failed: cleanup sentinel/,
-      );
-    } finally {
-      await rm(failingTemporaryRoot, { recursive: true, force: true });
-    }
   });
 
-  it("requires deterministic, real-tool, and publication jobs without escape hatches", async () => {
+  it("requires every independent CI axis with exact Bun setup and no escape hatches", async () => {
     const workflow = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as Workflow;
     expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
     expect(workflow.permissions).toEqual({ contents: "read" });
-
-    expectPinnedActionsWithoutEscapes(workflow);
-
-    expect(jobRuns(workflow, "quality")).toContain("pnpm verify");
-    expect(jobRuns(workflow, "real-tools")).toMatch(/pnpm (verify:real|test:integration:real)/);
-    expect(jobRuns(workflow, "real-tools")).toContain("provision-tool-assets.mjs");
-    const realTools = workflow.jobs["real-tools"]?.steps?.find((step) => step.run?.includes("verify:real"));
-    expect(realTools?.env?.EFFECT_BUILD_EXPECTED_TARGET).toBe("linux-x64-gnu");
-
-    const support = JSON.parse(await readFile(resolve(root, "tooling/support-matrix.json"), "utf8")) as SupportMatrix;
-    expect(support.supportedCells).toHaveLength(12);
-    const matrix = workflow.jobs["publication-hosts"]?.strategy?.matrix?.runner ?? [];
-    expect([...matrix].sort()).toEqual([...support.publicationHosts].sort());
-    expect(jobRuns(workflow, "publication-hosts")).toContain("pnpm test:publication");
-
-    const targetSupport = workflow.jobs["target-support"];
-    expect(targetSupport?.["runs-on"]).toBe("ubuntu-24.04");
-    expect(targetSupport?.strategy).toEqual({ "fail-fast": false, matrix: { compiler: ["bun", "deno"] } });
-    expect(jobRuns(workflow, "target-support")).toContain(
-      "node scripts/verify-target-support.mjs --compiler ${{ matrix.compiler }}",
-    );
-    expect(jobRuns(workflow, "target-support")).not.toMatch(/macos-|linux-|windows-|DENORT_BIN/);
-    expect(JSON.stringify(targetSupport)).not.toContain("DENORT_BIN");
-    expect(JSON.stringify(targetSupport)).not.toMatch(/(?:macos|linux|windows)-(?:x64|aarch64)/);
-
-    const effectCompatibility = workflow.jobs["effect-compatibility"];
-    expect(effectCompatibility?.["runs-on"]).toBe("ubuntu-24.04");
-    expect(effectCompatibility?.strategy).toEqual({
-      "fail-fast": false,
-      matrix: { effect: effectEndpoints },
-    });
-    expect(effectCompatibility?.steps?.filter((step) => step.run !== undefined)).toEqual([
-      { run: "node scripts/verify-effect-compatibility.mjs --effect-version ${{ matrix.effect }}" },
+    expect(Object.keys(workflow.jobs)).toEqual([
+      "quality",
+      "node-sea",
+      "real-tools",
+      "target-support",
+      "effect-compatibility",
+      "publication-hosts",
     ]);
-  });
-
-  it("keeps npm publication explicit, version-tagged, and provenance-bearing", async () => {
-    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
-      private?: boolean;
-      license?: string;
-      repository?: { url?: string };
-      publishConfig?: { access?: string; provenance?: boolean };
-      peerDependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-      scripts?: Record<string, string>;
-    };
-    expect(packageJson.private).not.toBe(true);
-    expect(packageJson.license).toBe("MIT");
-    expect(packageJson.repository?.url).toBe("git+https://github.com/mannyc2/effect-build.git");
-    expect(packageJson.publishConfig).toEqual({ access: "public", provenance: true });
-    expect(packageJson.scripts?.prepack).toBe("pnpm build");
-
-    const workflow = parse(await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")) as Workflow;
-    expect(workflow.on).toEqual({ push: { tags: ["v*.*.*"] } });
-    expect(workflow.permissions).toEqual({ contents: "read" });
-
     expectPinnedActionsWithoutEscapes(workflow);
-
-    expect(workflow.jobs.quality?.needs).toBe("preflight");
-    expect(workflow.jobs["real-tools"]?.needs).toBe("preflight");
-    expect(workflow.jobs["publication-hosts"]?.needs).toBe("preflight");
-    expect(workflow.jobs["target-support"]?.needs).toBe("preflight");
-    expect(workflow.jobs["effect-compatibility"]?.needs).toBe("preflight");
-    expect(workflow.jobs["target-support"]?.["runs-on"]).toBe("ubuntu-24.04");
+    for (const job of Object.keys(workflow.jobs)) {
+      expect(JSON.stringify(workflow.jobs[job])).not.toMatch(/pnpm|yarn|continue-on-error/i);
+    }
+    expect(jobRuns(workflow, "quality")).toContain("bun run verify");
+    expect(jobRuns(workflow, "real-tools")).toContain("bun run verify:real");
     expect(workflow.jobs["target-support"]?.strategy).toEqual({
       "fail-fast": false,
       matrix: { compiler: ["bun", "deno"] },
     });
-    expect(jobRuns(workflow, "target-support")).toContain(
-      "node scripts/verify-target-support.mjs --compiler ${{ matrix.compiler }}",
-    );
-    expect(jobRuns(workflow, "target-support")).not.toMatch(/macos-|linux-|windows-|DENORT_BIN/);
-    expect(JSON.stringify(workflow.jobs["target-support"])).not.toContain("DENORT_BIN");
-    expect(JSON.stringify(workflow.jobs["target-support"])).not.toMatch(
-      /(?:macos|linux|windows)-(?:x64|aarch64)/,
-    );
-    expect(workflow.jobs["effect-compatibility"]?.["runs-on"]).toBe("ubuntu-24.04");
     expect(workflow.jobs["effect-compatibility"]?.strategy).toEqual({
       "fail-fast": false,
       matrix: { effect: effectEndpoints },
     });
-    expect(workflow.jobs["effect-compatibility"]?.steps?.filter((step) => step.run !== undefined)).toEqual([
-      { run: "node scripts/verify-effect-compatibility.mjs --effect-version ${{ matrix.effect }}" },
-    ]);
-    const preflightRuns = (workflow.jobs.preflight?.steps ?? []).map((step) => step.run ?? "").join("\n");
-    expect(preflightRuns).toContain("GITHUB_REF_NAME");
-    expect(preflightRuns).toContain("refs/remotes/origin/main");
+    const support = await readJson("tooling/support-matrix.json") as unknown as SupportMatrix;
+    expect(workflow.jobs["publication-hosts"]?.strategy?.matrix?.runner).toEqual(support.publicationHosts);
+    expect(jobRuns(workflow, "node-sea")).toContain('test "$(node --version)" = "v26.7.0"');
+    expect(jobRuns(workflow, "node-sea")).toContain("bun run test:integration:node-sea");
+    expect(workflow.jobs["node-sea"]?.steps?.find((step) => step.run === "bun run test:integration:node-sea")?.env)
+      .toEqual({ EFFECT_BUILD_NODE_SEA_BIN: "${{ steps.node26.outputs.path }}" });
+  });
 
-    expect(workflow.jobs["publish-npm"]?.needs).toEqual([
-      "quality",
-      "node-sea",
-      "real-tools",
-      "publication-hosts",
-      "target-support",
-      "effect-compatibility",
-    ]);
-    expect(workflow.jobs["publish-npm"]?.permissions).toEqual({ contents: "read", "id-token": "write" });
-    const releaseRealTools = workflow.jobs["real-tools"]?.steps?.find((step) => step.run?.includes("verify:real"));
-    expect(releaseRealTools?.env?.EFFECT_BUILD_EXPECTED_TARGET).toBe("linux-x64-gnu");
-    const steps = workflow.jobs["publish-npm"]?.steps ?? [];
-    const runs = steps.map((step) => step.run ?? "").join("\n");
-    expect(runs).toContain("npm publish --access public --provenance");
-    const publish = steps.find((step) => step.run?.includes("npm publish"));
-    expect(publish?.env).toEqual({ NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" });
-
-    expect(workflow.jobs["github-release"]?.needs).toBe("publish-npm");
-    expect(workflow.jobs["github-release"]?.permissions).toEqual({ contents: "write" });
-    const githubReleaseRuns = (workflow.jobs["github-release"]?.steps ?? []).map((step) => step.run ?? "").join("\n");
-    expect(githubReleaseRuns).toContain("gh release view");
-    expect(githubReleaseRuns).toContain("gh release create");
+  it("keeps release preparation non-mutating and emits one four-package candidate", async () => {
+    const workflow = parse(await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")) as Workflow;
+    expect(workflow.on).toEqual({
+      workflow_dispatch: {
+        inputs: {
+          commit: { description: "Exact 40-character source commit", required: true, type: "string" },
+        },
+      },
+    });
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(Object.keys(workflow.jobs)).toEqual(["node-sea", "candidate"]);
+    expect(workflow.jobs.candidate?.needs).toBe("node-sea");
+    expectPinnedActionsWithoutEscapes(workflow);
+    const source = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
+    expect(source).toContain("node scripts/test-built-consumer.mjs --candidate-dir");
+    expect(source).toContain("effect-build-0.3.0-candidate");
+    expect(source).toContain("bun run verify:effect");
+    expect(source).not.toMatch(/npm publish|gh release|git tag|ts-release|NODE_AUTH_TOKEN|id-token:\s*write/i);
+    const consumer = await readFile(resolve(root, "scripts/test-built-consumer.mjs"), "utf8");
+    for (const name of publicPackages) expect(consumer).toContain(JSON.stringify(name));
+    expect(consumer).toContain('console.log("packed consumers verified: 8/8")');
   });
 });

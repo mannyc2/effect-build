@@ -1,6 +1,6 @@
 import { BunServices } from "@effect/platform-bun";
 import { Effect } from "effect";
-import * as BunCompiler from "../../src/Bun.js";
+import * as BunCompiler from "effect-build-bun";
 import { standaloneHostContract } from "../testkit/standaloneHostContract.js";
 
 const executable = (globalThis as typeof globalThis & { Bun: { env: Record<string, string | undefined> } }).Bun.env
