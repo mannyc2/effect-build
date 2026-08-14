@@ -1,87 +1,119 @@
 import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
+const packagesRoot = resolve(root, "packages");
+const providerPackages = ["effect-build-bun", "effect-build-deno", "effect-build-node-sea"] as const;
 
 const sourceFiles = async (): Promise<string[]> => {
-  const entries = await readdir(resolve(root, "src"), { recursive: true });
-  return entries.filter((entry) => entry.endsWith(".ts")).map((entry) => resolve(root, "src", entry));
+  const entries = await readdir(packagesRoot, { recursive: true });
+  return entries
+    .filter((entry) => !entry.includes("node_modules/") && /(?:^|\/)src\/.*\.ts$/.test(entry))
+    .map((entry) => resolve(packagesRoot, entry));
 };
 
 const importSpecifiers = (source: string): ReadonlyArray<string> =>
   [...source.matchAll(/(?:from\s+|import\s*\(|import\s+)(["'])([^"']+)\1/g)].map((match) => match[2]!);
 
-const compilerSpecific = new Set([
-  resolve(root, "src/Bun.ts"),
-  resolve(root, "src/Deno.ts"),
-  resolve(root, "src/standalone/internal/BunAdapter.ts"),
-  resolve(root, "src/standalone/internal/DenoAdapter.ts"),
-]);
-
 describe("source ownership boundaries", () => {
-  it("keeps library source on Effect platform-neutral services", async () => {
+  it("keeps every public-package source on Effect platform-neutral services", async () => {
     for (const file of await sourceFiles()) {
       const source = await readFile(file, "utf8");
-      expect(source, file).not.toMatch(/from "node:/);
+      expect(source, file).not.toMatch(/^import[^;\n]*from ["']node:/m);
       expect(source, file).not.toContain("Effect.runPromise");
     }
   });
 
-  it("confines effect/unstable/process to the private process module", async () => {
-    const allowed = [
-      resolve(root, "src/standalone/internal/Process.ts"),
-    ];
+  it("confines esbuild to the Node SEA package-private bundle producer", async () => {
+    const allowed = resolve(root, "packages/effect-build-node-sea/src/internal/Esbuild.ts");
     const found: string[] = [];
     for (const file of await sourceFiles()) {
-      if ((await readFile(file, "utf8")).includes("effect/unstable/process")) found.push(file);
+      if (importSpecifiers(await readFile(file, "utf8")).includes("esbuild")) found.push(file);
     }
-    expect(found.sort()).toEqual(allowed.sort());
+    expect(found).toEqual([allowed]);
+    const producer = await readFile(allowed, "utf8");
+    expect(producer).not.toContain(".watch(");
+    expect(producer).not.toContain("esbuild.stop");
   });
 
-  it("keeps core standalone modules free of compiler-specific imports", async () => {
+  it("keeps one core-owned process implementation and forbids shell or download escapes", async () => {
+    const processImporters: string[] = [];
     for (const file of await sourceFiles()) {
-      if (compilerSpecific.has(file) || file === resolve(root, "src/index.ts")) continue;
       const source = await readFile(file, "utf8");
-      expect(source, file).not.toMatch(/from "[./]*Bun\.js"|from "[./]*Deno\.js"/);
-      expect(source, file).not.toMatch(/BunAdapter|DenoAdapter/);
+      if (source.includes("effect/unstable/process")) processImporters.push(relative(root, file));
+      expect(source, file).not.toMatch(/\b(?:exec|spawn)Sync\b|\bexecFileSync\b/);
     }
+    expect(processImporters.sort()).toEqual([
+      "packages/effect-build/src/Provider.ts",
+      "packages/effect-build/src/standalone/internal/Process.ts",
+    ]);
+    const nodeSea = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/NodeSea.ts"), "utf8");
+    expect(nodeSea).not.toMatch(/postject|download|npm|pnpm|yarn|bun add|https?:\/\//i);
   });
 
-  it("keeps provider target tables pure and dependent only on the shared table primitive", async () => {
-    for (const name of ["BunTarget.ts", "DenoTarget.ts"]) {
-      const file = resolve(root, "src/standalone/internal", name);
-      expect(importSpecifiers(await readFile(file, "utf8")), file).toEqual(["./TargetTable.js"]);
-    }
-  });
-
-  it("allowlists every source module that imports a provider target contract", async () => {
-    const importers: string[] = [];
-    for (const file of await sourceFiles()) {
-      if (
-        importSpecifiers(await readFile(file, "utf8")).some((specifier) =>
-          /(?:BunTarget|DenoTarget)\.js$/.test(specifier)
-        )
-      ) {
-        importers.push(file);
+  it("keeps core provider-neutral and provider dependencies one-way", async () => {
+    for (
+      const file of (await sourceFiles()).filter((path) => path.startsWith(resolve(root, "packages/effect-build/src")))
+    ) {
+      for (const specifier of importSpecifiers(await readFile(file, "utf8"))) {
+        expect(specifier, file).not.toMatch(/^effect-build-(?:bun|deno|node-sea)(?:\/|$)/);
       }
     }
-    expect(importers.sort()).toEqual([
-      resolve(root, "src/Bun.ts"),
-      resolve(root, "src/Deno.ts"),
-      resolve(root, "src/standalone/Artifact.ts"),
-      resolve(root, "src/standalone/MatrixError.ts"),
-      resolve(root, "src/standalone/internal/BunAdapter.ts"),
-      resolve(root, "src/standalone/internal/DenoAdapter.ts"),
-    ].sort());
+    for (const provider of providerPackages) {
+      for (
+        const file of (await sourceFiles()).filter((path) => path.startsWith(resolve(root, `packages/${provider}/src`)))
+      ) {
+        for (const specifier of importSpecifiers(await readFile(file, "utf8"))) {
+          expect(specifier, file).not.toMatch(/^effect-build\/(?:internal|standalone)/);
+          for (const sibling of providerPackages) {
+            if (sibling !== provider) expect(specifier, file).not.toMatch(new RegExp(`^${sibling}(?:/|$)`));
+          }
+        }
+      }
+    }
   });
 
-  it("keeps the package export map at exactly the three public paths", async () => {
-    const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
-      exports: Record<string, unknown>;
-      engines?: unknown;
-    };
-    expect(Object.keys(packageJson.exports).sort()).toEqual([".", "./bun", "./deno"]);
-    expect(packageJson.engines).toBeUndefined();
+  it("keeps lifecycle and Node SEA stage implementations out of public entrypoints", async () => {
+    const lifecycle = await readFile(
+      resolve(root, "packages/effect-build/src/standalone/internal/ExecutableLifecycle.ts"),
+      "utf8",
+    );
+    expect(lifecycle).not.toMatch(/effect-build-(?:bun|deno|node-sea)/);
+
+    for (const provider of providerPackages) {
+      const source = await readFile(resolve(root, `packages/${provider}/src/index.ts`), "utf8");
+      expect(source).not.toMatch(/ExecutableLifecycle|ChildProcessSpawner|JavaScriptBundleArtifact|NodeSeaService/);
+    }
+    const coreIndex = await readFile(resolve(root, "packages/effect-build/src/index.ts"), "utf8");
+    expect(coreIndex).not.toMatch(/Esbuild|NodeSea|ExecutableLifecycle|Process/);
+  });
+
+  it("keeps one closed provider-target authority", async () => {
+    const authority = await readFile(resolve(root, "packages/effect-build/src/internal/ProviderContracts.ts"), "utf8");
+    expect(authority.match(/export const ProviderContracts\b/g)).toHaveLength(1);
+    for (const provider of ["bun", "deno"]) expect(authority).toContain(`${provider}:`);
+    expect(authority).toContain('"node-sea":');
+
+    for (const provider of providerPackages) {
+      const sources = (await sourceFiles()).filter((path) =>
+        path.startsWith(resolve(root, `packages/${provider}/src`))
+      );
+      for (const file of sources) {
+        expect(await readFile(file, "utf8"), file).not.toContain("ProviderContracts");
+      }
+    }
+  });
+
+  it("publishes only package roots plus the closed provider-author SPI", async () => {
+    for (const name of ["effect-build", ...providerPackages]) {
+      const manifest = JSON.parse(await readFile(resolve(root, `packages/${name}/package.json`), "utf8")) as {
+        exports: Record<string, unknown>;
+        engines?: unknown;
+      };
+      expect(Object.keys(manifest.exports)).toEqual(name === "effect-build" ? [".", "./Provider"] : ["."]);
+      expect(manifest.engines).toBeUndefined();
+      expect(Object.keys(manifest.exports).some((path) => /internal|standalone/.test(path))).toBe(false);
+    }
   });
 });

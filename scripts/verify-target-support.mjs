@@ -10,25 +10,35 @@ import { readTooling } from "./read-tooling.mjs";
 const execFileAsync = promisify(execFile);
 const repository = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
-export const packageManagerInvocation = async (environment = process.env, executableAccess = access) => {
+export const packageManagerInvocation = async (
+  environment = process.env,
+  executableAccess = access,
+  probe = (executable) => execFileAsync(executable, ["--version"], { env: environment }),
+) => {
   const executable = environment.npm_execpath;
   if (executable !== undefined) {
     if (typeof executable !== "string" || !isAbsolute(executable)) {
       throw new Error("npm_execpath must be absolute when provided");
     }
-    return { executable: process.execPath, prefixArgs: [executable] };
+    await executableAccess(executable, constants.X_OK);
+    if (!/(?:^|[\\/])bun(?:\.exe)?$/.test(executable)) throw new Error("npm_execpath must identify Bun");
+    const { stdout } = await probe(executable);
+    if (stdout.trim() !== "1.3.14") throw new Error(`package-manager Bun must be 1.3.14, received ${stdout.trim()}`);
+    return { executable };
   }
   for (const directory of (environment.PATH ?? "").split(delimiter)) {
     if (directory.length === 0 || !isAbsolute(directory)) continue;
-    const candidate = join(directory, process.platform === "win32" ? "pnpm.cmd" : "pnpm");
+    const candidate = join(directory, process.platform === "win32" ? "bun.exe" : "bun");
     try {
       await executableAccess(candidate, constants.X_OK);
-      return { executable: candidate, prefixArgs: [] };
+      const { stdout } = await probe(candidate);
+      if (stdout.trim() !== "1.3.14") throw new Error(`package-manager Bun must be 1.3.14, received ${stdout.trim()}`);
+      return { executable: candidate };
     } catch {
       // Continue through the caller's explicit PATH.
     }
   }
-  throw new Error("pnpm was not found on PATH and npm_execpath was not provided");
+  throw new Error("Bun was not found on absolute PATH entries and npm_execpath was not provided");
 };
 
 export const parseCompiler = (argv) => {
@@ -128,7 +138,7 @@ export const verifyTargetSupport = async ({
       try {
         await execute(
           packageManagerCommand.executable,
-          [...packageManagerCommand.prefixArgs, "test:integration:target"],
+          ["run", "test:integration:target"],
           {
           cwd: repository,
             env: cellEnvironment,

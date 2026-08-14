@@ -1,5 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import * as Bun from "effect-build-bun";
+import * as Deno from "effect-build-deno";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -8,10 +10,6 @@ import { basename, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
-import * as Bun from "../../src/Bun.js";
-import * as Deno from "../../src/Deno.js";
-import { bunTargetTable } from "../../src/standalone/internal/BunTarget.js";
-import { denoTargetTable } from "../../src/standalone/internal/DenoTarget.js";
 
 const execFileAsync = promisify(execFile);
 const root = mkdtempSync(join(tmpdir(), "effect-build-target-support-"));
@@ -112,9 +110,10 @@ describe("required provider target support", () => {
     let target: Bun.Target | Deno.Target;
     let artifact: Bun.Artifact | Deno.Artifact;
     if (compiler === "bun") {
-      const resolved = bunTargetTable.resolve(requested);
-      if (resolved === undefined) throw new Error(`${compiler}/${requested} is not in the provider target table`);
-      target = resolved;
+      if (!Schema.is(Bun.Target)(requested)) {
+        throw new Error(`${compiler}/${requested} is not in the provider target table`);
+      }
+      target = requested;
       const outfile = join(root, `${compiler}-${target}${target.startsWith("windows-") ? ".exe" : ""}`);
       artifact = await Effect.runPromise(
         Bun.compileExecutable({ entrypoint, outfile, target, digest: true }).pipe(
@@ -123,9 +122,10 @@ describe("required provider target support", () => {
         ),
       );
     } else {
-      const resolved = denoTargetTable.resolve(requested);
-      if (resolved === undefined) throw new Error(`${compiler}/${requested} is not in the provider target table`);
-      target = resolved;
+      if (!Schema.is(Deno.Target)(requested)) {
+        throw new Error(`${compiler}/${requested} is not in the provider target table`);
+      }
+      target = requested;
       const outfile = join(root, `${compiler}-${target}${target.startsWith("windows-") ? ".exe" : ""}`);
       artifact = await Effect.runPromise(
         Deno.compileExecutable({ entrypoint, outfile, target, digest: true }).pipe(
@@ -144,7 +144,11 @@ describe("required provider target support", () => {
       path: outfile,
       bytes: bytes.byteLength,
       target,
-      tool: { name: compiler, version: expectedVersion, path: executable },
+      provider: compiler,
+      stages: [{
+        operation: "compile-executable",
+        tool: { name: compiler, version: expectedVersion, path: executable },
+      }],
     });
     expect(artifact.digest).toBe(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
     expect(isAbsolute(artifact.path)).toBe(true);

@@ -1,6 +1,12 @@
 import { Context, Effect, Exit, Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { Artifact } from "../../src/standalone/Artifact.js";
+import { targetTokens as bunTargetTokens } from "../../packages/effect-build-bun/src/Adapter.js";
+import {
+  definition as denoDefinition,
+  targetTokens as denoTargetTokens,
+} from "../../packages/effect-build-deno/src/Adapter.js";
+import type { TargetFor } from "../../packages/effect-build/src/Provider.js";
+import { Artifact } from "../../packages/effect-build/src/standalone/Artifact.js";
 import {
   BuildError,
   InvalidDriverOptions,
@@ -12,21 +18,24 @@ import {
   ToolFailed,
   ToolNotFound,
   ToolProbeFailed,
-} from "../../src/standalone/BuildError.js";
-import { makeCompileExecutable } from "../../src/standalone/CompileExecutable.js";
-import type { CompileExecutableInput, CompilerService } from "../../src/standalone/Driver.js";
-import { type BunTarget, bunTargetTable } from "../../src/standalone/internal/BunTarget.js";
-import type { ProviderArtifact } from "../../src/standalone/internal/CompilerAdapter.js";
-import { denoAdapter } from "../../src/standalone/internal/DenoAdapter.js";
-import { type DenoTarget, denoTargetTable } from "../../src/standalone/internal/DenoTarget.js";
+} from "../../packages/effect-build/src/standalone/BuildError.js";
+import { makeCompileExecutable } from "../../packages/effect-build/src/standalone/CompileExecutable.js";
+import type { CompileExecutableInput, CompilerService } from "../../packages/effect-build/src/standalone/Driver.js";
+import type {
+  PreparedExecutableRequest,
+  ProviderArtifact,
+} from "../../packages/effect-build/src/standalone/internal/CompilerAdapter.js";
 import {
   inspectNativeExecutable,
   inspectNativeExecutableChunks,
   NativeExecutableRangeRequired,
-} from "../../src/standalone/internal/NativeExecutable.js";
-import { descriptorOf } from "../../src/standalone/internal/TargetCatalog.js";
-import { makeTargetTable } from "../../src/standalone/internal/TargetTable.js";
-import { Target } from "../../src/standalone/Target.js";
+} from "../../packages/effect-build/src/standalone/internal/NativeExecutable.js";
+import { descriptorOf } from "../../packages/effect-build/src/standalone/internal/TargetCatalog.js";
+import {
+  makeProviderTargetTable,
+  makeTargetTable,
+} from "../../packages/effect-build/src/standalone/internal/TargetTable.js";
+import { Target } from "../../packages/effect-build/src/standalone/Target.js";
 
 const _bunMuslTarget: BunTarget = "linux-x64-musl";
 void _bunMuslTarget;
@@ -40,20 +49,36 @@ void _rejectBunWindowsArm64Target;
 const _denoMuslTarget: DenoTarget = "linux-x64-musl";
 void _denoMuslTarget;
 const _rejectDenoMuslAtAdapterBoundary = () => {
-  const options = denoAdapter.validateOptions(undefined);
-  if (options._tag !== "Valid") throw options.error;
-  return denoAdapter.renderArgv({
+  const options = denoDefinition.validateOptions(undefined);
+  if (options._tag !== "Valid") throw new Error(options.reason);
+  return denoDefinition.renderArgv({
     input: {
       entrypoint: "main.ts",
-      outfile: "app",
       // @ts-expect-error The private Deno adapter boundary must reject root-only musl targets.
       target: "linux-x64-musl",
       options: options.value,
     },
+    nativeTarget: "x86_64-unknown-linux-gnu",
     stagedOutfile: "/tmp/app",
   });
 };
 void _rejectDenoMuslAtAdapterBoundary;
+
+const assertPreparedExecutableRequestNarrowing = (
+  request: PreparedExecutableRequest<Record<string, never>, BunTarget>,
+): void => {
+  void request.entrypoint;
+  void request.target;
+  void request.options;
+  void request.stagedOutfile;
+  // @ts-expect-error Final outfile is lifecycle-owned, not adapter-visible.
+  void request.outfile;
+  void request.cwd;
+  // @ts-expect-error Digest policy is lifecycle-owned, not adapter-visible.
+  void request.digest;
+  void request.resolvedDestination;
+};
+void assertPreparedExecutableRequestNarrowing;
 
 const decodeTarget = Schema.decodeUnknownSync(Target);
 const decodeArtifact = Schema.decodeUnknownSync(Artifact);
@@ -77,7 +102,26 @@ const validArtifact = {
   bytes: 12_345,
   digest: `sha256:${"a".repeat(64)}`,
   target: "macos-aarch64",
-  tool: { name: "bun", version: "1.3.9", path: "/usr/local/bin/bun" },
+  provider: "bun",
+  stages: [{
+    operation: "compile-executable",
+    tool: { name: "bun", version: "1.3.9", path: "/usr/local/bin/bun" },
+  }],
+};
+
+const fatMacho = (
+  byteOrder: "big" | "little",
+  cpuTypes: readonly number[],
+): Uint8Array => {
+  const bytes = new Uint8Array(8 + cpuTypes.length * 20);
+  const view = new DataView(bytes.buffer);
+  const little = byteOrder === "little";
+  bytes.set(little ? [0xbe, 0xba, 0xfe, 0xca] : [0xca, 0xfe, 0xba, 0xbe], 0);
+  view.setUint32(4, cpuTypes.length, little);
+  for (let index = 0; index < cpuTypes.length; index++) {
+    view.setUint32(8 + index * 20, cpuTypes[index]!, little);
+  }
+  return bytes;
 };
 
 describe("standalone contract: target and artifact", () => {
@@ -179,6 +223,32 @@ describe("standalone contract: target and artifact", () => {
     ).toThrow("invalid-interpreter");
   });
 
+  it("decodes a standard big-endian FAT_MAGIC Mach-O with one x64 slice", () => {
+    expect(inspectNativeExecutable(fatMacho("big", [0x01000007]))).toEqual({
+      format: "macho",
+      os: "macos",
+      architecture: "x64",
+    });
+  });
+
+  it("decodes a byte-swapped FAT_CIGAM Mach-O with one aarch64 slice", () => {
+    expect(inspectNativeExecutable(fatMacho("little", [0x0100000c]))).toEqual({
+      format: "macho",
+      os: "macos",
+      architecture: "aarch64",
+    });
+  });
+
+  it("retains the explicit ambiguity rejection for a universal x64 and aarch64 Mach-O", () => {
+    expect(() => inspectNativeExecutable(fatMacho("big", [0x01000007, 0x0100000c])))
+      .toThrow("ambiguous-fat-architecture");
+  });
+
+  it("rejects a fat Mach-O whose slices have only unknown CPU types", () => {
+    expect(() => inspectNativeExecutable(fatMacho("big", [0x12345678])))
+      .toThrow("ambiguous-fat-architecture");
+  });
+
   it("accepts every canonical target", () => {
     for (const target of canonicalTargets) {
       expect(decodeTarget(target)).toBe(target);
@@ -217,9 +287,10 @@ describe("standalone contract: target and artifact", () => {
         expect(decodeArtifact({
           path: `/work/dist/${name}-${target}`,
           bytes: 64,
+          provider: name,
           target,
-          tool: { name, version: "1.0.0", path: `/tools/${name}` },
-        })).toMatchObject({ target, tool: { name } });
+          stages: [{ operation: "compile-executable", tool: { name, version: "1.0.0", path: `/tools/${name}` } }],
+        })).toMatchObject({ provider: name, target, stages: [{ tool: { name } }] });
       }
     }
 
@@ -254,7 +325,7 @@ describe("standalone contract: target and artifact", () => {
     expect(() =>
       decodeArtifact({
         ...validArtifact,
-        tool: { ...validArtifact.tool, path: "bun" },
+        stages: [{ ...validArtifact.stages[0], tool: { ...validArtifact.stages[0]!.tool, path: "bun" } }],
       })
     ).toThrow();
   });
@@ -283,13 +354,13 @@ describe("standalone contract: target and artifact", () => {
     expect(() =>
       decodeArtifact({
         ...validArtifact,
-        tool: { ...validArtifact.tool, version: "" },
+        stages: [{ ...validArtifact.stages[0], tool: { ...validArtifact.stages[0]!.tool, version: "" } }],
       })
     ).toThrow();
     expect(() =>
       decodeArtifact({
         ...validArtifact,
-        tool: { ...validArtifact.tool, name: "node" },
+        stages: [{ ...validArtifact.stages[0], tool: { ...validArtifact.stages[0]!.tool, name: "node" } }],
       })
     ).toThrow();
   });
@@ -395,7 +466,11 @@ const fakeService = <const Name extends "bun" | "deno", SupportedTarget extends 
         bytes: 64,
         ...(input.digest === true ? { digest: `sha256:${"b".repeat(64)}` } : {}),
         target: input.target ?? defaultTarget,
-        tool: { name, version: "0.0.1", path: `/usr/local/bin/${name}` },
+        provider: name,
+        stages: [{
+          operation: "compile-executable",
+          tool: { name, version: "0.0.1", path: `/usr/local/bin/${name}` },
+        }],
       }) as ProviderArtifact<Name, SupportedTarget>
     ),
   compileExecutableMatrix: () => Effect.die("unused matrix operation"),
@@ -412,7 +487,8 @@ describe("standalone contract: driver correlation", () => {
       ),
     );
     expect(artifact.path).toBe("/work/dist/app");
-    expect(artifact.tool.name).toBe("bun");
+    expect(artifact.provider).toBe("bun");
+    expect(artifact.stages[0].tool.name).toBe("bun");
     expect(artifact.digest).toBeUndefined();
 
     const denoArtifact = Effect.runSync(
@@ -428,7 +504,7 @@ describe("standalone contract: driver correlation", () => {
         ),
       ),
     );
-    expect(denoArtifact.tool.name).toBe("deno");
+    expect(denoArtifact.provider).toBe("deno");
     expect(denoArtifact.digest).toBe(`sha256:${"b".repeat(64)}`);
   });
 
@@ -464,3 +540,7 @@ describe("standalone contract: driver correlation", () => {
     expect(observed?._tag).toBe("ToolFailed");
   });
 });
+type BunTarget = TargetFor<"bun">;
+type DenoTarget = TargetFor<"deno">;
+const bunTargetTable = makeProviderTargetTable("bun", bunTargetTokens);
+const denoTargetTable = makeProviderTargetTable("deno", denoTargetTokens);

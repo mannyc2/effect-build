@@ -1,13 +1,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import * as Deno from "effect-build-deno";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import * as Deno from "../../src/Deno.js";
-import { runProcess } from "../../src/standalone/internal/Process.js";
+import { runProcess } from "../../packages/effect-build/src/standalone/internal/Process.js";
 
 const fixtures = fileURLToPath(new URL("../fixtures/standalone/", import.meta.url));
 const roots: string[] = [];
@@ -44,7 +44,11 @@ describe("real standalone Deno", () => {
     const bytes = readFileSync(artifact.path);
     expect(artifact.bytes).toBe(bytes.byteLength);
     expect(artifact.digest).toBe(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
-    expect(artifact.tool).toMatchObject({ name: "deno", version: process.env.EFFECT_BUILD_DENO_VERSION ?? "2.9.3" });
+    expect(artifact.provider).toBe("deno");
+    expect(artifact.stages[0].tool).toMatchObject({
+      name: "deno",
+      version: process.env.EFFECT_BUILD_DENO_VERSION ?? "2.9.3",
+    });
     if (process.env.EFFECT_BUILD_EXPECTED_TARGET !== undefined) {
       expect(artifact.target).toBe(process.env.EFFECT_BUILD_EXPECTED_TARGET);
     }

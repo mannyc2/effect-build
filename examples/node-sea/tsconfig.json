@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.examples.json",
+  "compilerOptions": {},
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/effect-build-node-sea"
+    }
+  ]
+}

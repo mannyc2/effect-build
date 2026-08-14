@@ -1,13 +1,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import * as Bun from "effect-build-bun";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import * as Bun from "../../src/Bun.js";
-import { runProcess } from "../../src/standalone/internal/Process.js";
+import { runProcess } from "../../packages/effect-build/src/standalone/internal/Process.js";
 
 const fixtures = fileURLToPath(new URL("../fixtures/standalone/", import.meta.url));
 const roots: string[] = [];
@@ -44,11 +44,12 @@ describe("real standalone Bun", () => {
     const bytes = readFileSync(artifact.path);
     expect(artifact.bytes).toBe(bytes.byteLength);
     expect(artifact.digest).toBe(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
-    expect(artifact.tool).toMatchObject({ name: "bun", version: "1.3.9" });
+    expect(artifact.provider).toBe("bun");
+    expect(artifact.stages[0].tool).toMatchObject({ name: "bun", version: "1.3.9" });
     if (process.env.EFFECT_BUILD_EXPECTED_TARGET !== undefined) {
       expect(artifact.target).toBe(process.env.EFFECT_BUILD_EXPECTED_TARGET);
     }
-    expect(artifact.tool.path.startsWith("/")).toBe(true);
+    expect(artifact.stages[0].tool.path.startsWith("/")).toBe(true);
     const completion = await execute(artifact.path);
     expect(completion).toMatchObject({ exitCode: 0, stdout: { text: "effect-build-ok\n" } });
   }, 60_000);

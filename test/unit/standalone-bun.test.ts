@@ -1,11 +1,12 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import * as Bun from "../../src/Bun.js";
-import { bunAdapter } from "../../src/standalone/internal/BunAdapter.js";
+import { definition, targetTokens } from "../../packages/effect-build-bun/src/Adapter.js";
+import * as Bun from "../../packages/effect-build-bun/src/index.js";
 import { describeStandaloneDriverContract } from "../testkit/standaloneDriverContract.js";
 
 describeStandaloneDriverContract<Bun.Compiler, Bun.Options, Bun.Target, Bun.Artifact>({
@@ -20,6 +21,25 @@ describeStandaloneDriverContract<Bun.Compiler, Bun.Options, Bun.Target, Bun.Arti
 });
 
 const roots: string[] = [];
+const fixture = fileURLToPath(new URL("../fixtures/driver/fake-tool.mjs", import.meta.url));
+const bunAdapter = {
+  validateOptions: definition.validateOptions,
+  renderArgv: (input: {
+    readonly entrypoint: string;
+    readonly target?: Bun.Target;
+    readonly options: Parameters<typeof definition.renderArgv>[0]["input"]["options"];
+    readonly stagedOutfile: string;
+  }) =>
+    definition.renderArgv({
+      input: {
+        entrypoint: input.entrypoint,
+        ...(input.target === undefined ? {} : { target: input.target }),
+        options: input.options,
+      },
+      ...(input.target === undefined ? {} : { nativeTarget: targetTokens[input.target] }),
+      stagedOutfile: input.stagedOutfile,
+    }),
+};
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -34,6 +54,20 @@ const fakeTool = (): string => {
   );
   chmodSync(executable, 0o755);
   return executable;
+};
+
+const fakeCompileTool = (): { readonly executable: string; readonly log: string } => {
+  const root = mkdtempSync(join(tmpdir(), "effect-build-tool-"));
+  roots.push(root);
+  const executable = join(root, "bun");
+  const log = join(root, "spawns.log");
+  writeFileSync(log, "");
+  writeFileSync(
+    executable,
+    `#!/bin/sh\nprintf 'cwd:%s\\n' "$PWD" >> "${log}"\nEFFECT_BUILD_FAKE_HOST_OS=macos EFFECT_BUILD_FAKE_TOOL_PATH="$0" exec "${process.execPath}" "${fixture}" bun "${log}" "$@"\n`,
+  );
+  chmodSync(executable, 0o755);
+  return { executable, log };
 };
 
 describe("standalone Bun driver", () => {
@@ -51,14 +85,11 @@ describe("standalone Bun driver", () => {
   it("renders only requested native flags and exact target mapping", () => {
     const options = bunAdapter.validateOptions({ minify: true, sourcemap: "inline", bytecode: true });
     expect(options._tag).toBe("Valid");
-    if (options._tag !== "Valid") throw options.error;
+    if (options._tag !== "Valid") throw new Error(options.reason);
     expect(bunAdapter.renderArgv({
-      input: {
-        entrypoint: "src/main.ts",
-        outfile: "dist/app",
-        target: "linux-aarch64-gnu",
-        options: options.value,
-      },
+      entrypoint: "src/main.ts",
+      target: "linux-aarch64-gnu",
+      options: options.value,
       stagedOutfile: "/tmp/.effect-build/app",
     })).toEqual([
       "build",
@@ -75,7 +106,7 @@ describe("standalone Bun driver", () => {
   it("rejects unknown runtime options", () => {
     expect(bunAdapter.validateOptions({ rawArgs: ["--x"] })).toMatchObject({
       _tag: "Invalid",
-      error: { _tag: "InvalidDriverOptions" },
+      reason: "unknown Bun option",
     });
   });
 
@@ -94,9 +125,11 @@ describe("standalone Bun driver", () => {
     };
     const validated = bunAdapter.validateOptions(source);
     expect(validated._tag).toBe("Valid");
-    if (validated._tag !== "Valid") throw validated.error;
+    if (validated._tag !== "Valid") throw new Error(validated.reason);
     expect(bunAdapter.renderArgv({
-      input: { entrypoint: "a.ts", outfile: "app", target: "macos-x64", options: validated.value },
+      entrypoint: "a.ts",
+      target: "macos-x64",
+      options: validated.value,
       stagedOutfile: "/tmp/app",
     })).toEqual([
       "build",
@@ -108,6 +141,40 @@ describe("standalone Bun driver", () => {
       "a.ts",
     ]);
     expect({ minifyReads, sourcemapReads }).toEqual({ minifyReads: 1, sourcemapReads: 1 });
+  });
+
+  it("retains scalar typed-field trust and provider CLI pass-through", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "effect-build-bun-cwd-"));
+    roots.push(cwd);
+    writeFileSync(join(cwd, "bunfig.toml"), "# compiler-owned project configuration\n");
+    const { executable, log } = fakeCompileTool();
+    const previous = process.env.EFFECT_BUILD_CONTRACT_ENV;
+    process.env.EFFECT_BUILD_CONTRACT_ENV = "provider-local-bun";
+    try {
+      const artifact = await Effect.runPromise(
+        Bun.compileExecutable({
+          entrypoint: "src/provider-entry.ts",
+          outfile: "dist/app",
+          cwd,
+          // Scalar retains the typed-only boundary: only literal true hashes.
+          digest: "yes" as never,
+        }).pipe(
+          Effect.provide(Bun.layer({ executable })),
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+      const lines = readFileSync(log, "utf8").trim().split("\n");
+      const compileArgv = JSON.parse(lines.find((line) => line.startsWith('["build"')) ?? "[]") as string[];
+      expect(artifact.path).toBe(join(cwd, "dist", "app"));
+      expect(artifact.digest).toBeUndefined();
+      expect(lines).toContain(`cwd:${realpathSync(cwd)}`);
+      expect(lines).toContain("env:provider-local-bun");
+      expect(compileArgv.at(-1)).toBe("src/provider-entry.ts");
+      expect(compileArgv.some((arg) => arg.includes("bunfig") || arg === "--config")).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.EFFECT_BUILD_CONTRACT_ENV;
+      else process.env.EFFECT_BUILD_CONTRACT_ENV = previous;
+    }
   });
 
   it("probes an explicit absolute executable while constructing the Layer", async () => {

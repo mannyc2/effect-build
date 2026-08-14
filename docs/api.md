@@ -1,18 +1,37 @@
 # API
 
-The package has exactly three entry points:
+The workspace publishes four packages with five public entry points:
 
 ```ts
 import { Artifact, BuildError, MatrixError, Target } from "effect-build";
-import * as Bun from "effect-build/bun";
-import * as Deno from "effect-build/deno";
+import { define } from "effect-build/Provider";
 ```
 
-The root runtime keys are `Artifact`, `BuildError`, `MatrixError`, and `Target`.
-Each compiler module has exactly five runtime keys: `Compiler`, `Target`,
+Select the Bun provider:
+
+```ts
+import * as Bun from "effect-build-bun";
+```
+
+Or select the Deno provider:
+
+```ts
+import * as Deno from "effect-build-deno";
+```
+
+Or select the Node SEA provider:
+
+```ts
+import * as NodeSea from "effect-build-node-sea";
+```
+
+The core root runtime keys are `Artifact`, `BuildError`, `MatrixError`, and
+`Target`; its provider-author path has only `define`. Each provider package has
+exactly five runtime keys: `Compiler`, `Target`,
 `compileExecutable`, `compileExecutableMatrix`, and `layer`. Provider Artifact,
 input, options, and MatrixError aliases are type-only. There is no root compile
-operation or provider argument.
+operation or provider argument. `define` is the closed first-party authoring
+SPI, not an application build call.
 
 ## Scalar compile
 
@@ -23,13 +42,14 @@ interface CompileExecutableInput {
   readonly entrypoint: string;
   readonly outfile: string;
   readonly cwd?: string;
-  readonly target?: Bun.Target; // Deno.Target in the Deno module
+  readonly target?: Bun.Target; // Deno.Target or NodeSea.Target in those modules
   readonly digest?: boolean;
-  readonly options?: Bun.Options; // Deno.Options in the Deno module
+  readonly options?: Bun.Options; // provider-specific Options in the other modules
 }
 ```
 
-`entrypoint` and `outfile` are the only required fields. Relative paths are
+`entrypoint` and `outfile` are the only common required fields. Node SEA also
+requires `options.format` to be `"esm"` or `"cjs"`. Relative paths are
 resolved using `cwd` when supplied. `target` is `Bun.Target` or `Deno.Target`,
 never a broad string. `digest: true` reads the completed output and adds its
 SHA-256 digest. Options remain provider-specific.
@@ -98,23 +118,40 @@ Interruption stays in the Effect Cause and is not returned as `MatrixError`.
 ## Artifact
 
 ```ts
+type ObservedStage =
+  | {
+    readonly operation: "compile-executable";
+    readonly tool: {
+      readonly name: "bun" | "deno";
+      readonly version: string;
+      readonly path: string;
+    };
+  }
+  | {
+    readonly operation: "bundle";
+    readonly tool: { readonly name: "esbuild"; readonly version: "0.28.2" };
+  }
+  | {
+    readonly operation: "assemble-node-sea";
+    readonly tool: { readonly name: "node"; readonly version: "26.7.0"; readonly path: string };
+  };
+
 interface Artifact {
   readonly path: string;
   readonly bytes: number;
   readonly digest?: `sha256:${string}`;
   readonly target: Target.Target;
-  readonly tool: {
-    readonly name: "bun" | "deno";
-    readonly version: string;
-    readonly path: string;
-  };
+  readonly provider: "bun" | "deno" | "node-sea";
+  readonly stages: readonly [ObservedStage, ...ObservedStage[]];
 }
 ```
 
-The root `Artifact.Artifact` runtime schema is a provider-correlated Bun/Deno
-union. It accepts only target and tool pairs present in the provider target
-tables. Provider Artifact aliases narrow both `target` and `tool.name` without
-adding another runtime schema.
+The root `Artifact.Artifact` runtime schema is a provider-correlated
+Bun/Deno/Node-SEA union. Bun and Deno have one `compile-executable` stage.
+Node SEA has exactly a `bundle` stage for esbuild 0.28.2 followed by an
+`assemble-node-sea` stage for Node 26.7.0. It accepts only provider, target,
+and stage tuples present in the closed contracts. Stages report observed work;
+they are not provenance, receipts, or reproducibility claims.
 
 ## Exhaustive scalar error handling
 
@@ -142,7 +179,8 @@ const scalar: Effect.Effect<Bun.Artifact, never, Bun.Compiler> = Bun.compileExec
 
 ## Exhaustive matrix error handling
 
-`Bun.MatrixError` and `Deno.MatrixError` are provider-narrowed type aliases of
+`Bun.MatrixError`, `Deno.MatrixError`, and `NodeSea.MatrixError` are
+provider-narrowed type aliases of
 the separate root `MatrixError.MatrixError` schema. Exhaustive matrix handling
 has exactly two cases:
 

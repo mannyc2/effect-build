@@ -11,16 +11,19 @@
     "preferHanging": false
   },
   "includes": [
-    "src/**/*.ts",
+    "packages/**/*.ts",
+    "packages/**/*.json",
     "test/**/*.ts",
     "typetest/**/*.ts",
     "examples/**/*.ts",
+    "examples/**/*.json",
     "*.ts",
     "*.json",
     "README.md",
     "AGENTS.md",
     "docs/**/*.md",
-    "examples/**/*.md"
+    "examples/**/*.md",
+    "packages/**/*.md"
   ],
   "excludes": ["node_modules", "dist", ".agent-sources", "plans"]
 }
