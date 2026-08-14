@@ -17,6 +17,8 @@
 - **Category**: public API / packages / architecture / release preparation
 - **Execution branch**: `codex/020-node-sea-bun-workspaces`
 - **Initial state**: `IN PROGRESS`
+- **Completion state**: `DONE` for implementation SHA
+  `7058cf2a29b1f3aaceaa7d32ade6cb5e9d625ba7`
 - **Selected breaking lockstep version**: `0.3.0`
 
 ## Restamped evidence
@@ -227,38 +229,66 @@ git diff --check
   by the Linux-only provider before execution; exact positive Linux SEA and
   12-target evidence remain assigned to the required Ubuntu CI jobs.
 - Exact Linux Node 26.7.0, 12-target, three-host, final-SHA CI, and uploaded
-  candidate evidence remain intentionally pending until the source commit is
-  pushed.
+  candidate evidence are recorded below against the same implementation SHA.
 
 Linux exact-SHA CI additionally requires 12/12 Bun/Deno target cells and the
 exact Node 26.7.0 SEA integration. Publication semantics remain required on
 Ubuntu, macOS, and Windows. The manual candidate workflow is read-only and
 emits exactly four tarballs plus one manifest from one pack operation.
 
+### Exact-source remote receipt (2026-08-13)
+
+- Implementation SHA
+  `7058cf2a29b1f3aaceaa7d32ade6cb5e9d625ba7` has exact completed CI run
+  [31762785453](https://github.com/mannyc2/effect-build/actions/runs/31762785453).
+  All ten required jobs passed: quality, real tools, both target-support cells,
+  three publication hosts, exact Node 26.7.0 SEA, and both Effect endpoints.
+- The read-only candidate workflow ran at the same exact SHA in
+  [31762941814](https://github.com/mannyc2/effect-build/actions/runs/31762941814).
+  Its exact-source guard, Node SEA job, deterministic verification, real tools,
+  12-target verification, both Effect endpoints, eight packed consumers, and
+  artifact upload all passed.
+- Uploaded artifact `9205360023`, `effect-build-0.3.0-candidate`, is 75,327
+  bytes with GitHub archive digest
+  `sha256:97a4fbf16d08dc6f793c297f1cc3a7fa9ab8556301e2a636e9ce88858d2ea06b`.
+  An independent download to
+  `/private/tmp/effect-build-020-upload.G88R9N` contained exactly four tarballs
+  plus `manifest.json`.
+- Independently recomputed tarball SHA-256 values exactly match the manifest:
+  core `b68f3727f6a6cf1eeb70e20e92629df8394144e4728a8e2bc2e2764b45bd04b5`,
+  Bun `12b274131da8a180e58ae03e0cdeb61934ff636a94b56eb066f9708c140d5f25`,
+  Deno `b31238271b04fccab26a34010f0443c15e09f47c5463b9cc2f9f1210f14eb54c`,
+  and Node SEA
+  `ec063ad2eb86b4d3baec5a48e70ec2e97a2677998857ae39b6212cff3af0baae`.
+  The manifest SHA-256 is
+  `17a76fbe065cabcd05372cce99404593dc030bed60c3a1f66692cb4f86bc61a5`.
+- The workflow has only `contents: read`; no npm publication, Git tag, GitHub
+  Release, trusted-publisher mutation, or release-byte repack occurred.
+
 ## Done criteria
 
-- [ ] Exact `4f26c02` is an ancestor and Plans 015-019 remain unmodified
+- [x] Exact `4f26c02` is an ancestor and Plans 015-019 remain unmodified
       historical records except the index's successor notes.
-- [ ] Bun 1.3.14 plus one `bun.lock` is the only operational package-manager
+- [x] Bun 1.3.14 plus one `bun.lock` is the only operational package-manager
       authority; no operational pnpm path remains outside historical plans.
-- [ ] Exactly four public packages at 0.3.0 have the dependency graph above.
-- [ ] Core imports no provider; provider packages import no sibling/private
+- [x] Exactly four public packages at 0.3.0 have the dependency graph above.
+- [x] Core imports no provider; provider packages import no sibling/private
       core path; no lifecycle/process implementation is copied.
-- [ ] Provider SPI is the exact closed command/composed union and exposes no
+- [x] Provider SPI is the exact closed command/composed union and exposes no
       lifecycle, rename, candidate, or raw process capability.
-- [ ] Node SEA is a real packed public provider retaining exact Plan-017/018
+- [x] Node SEA is a real packed public provider retaining exact Plan-017/018
       behavior and exact Linux/Node/esbuild pins.
-- [ ] Artifact has only provider-correlated target plus the exact non-empty
+- [x] Artifact has only provider-correlated target plus the exact non-empty
       stage representation; singular `tool` and private durable peers are gone.
-- [ ] Rejected Plan-019 inspectors, receipts, plans, executors, registries,
+- [x] Rejected Plan-019 inspectors, receipts, plans, executors, registries,
       cache, remote, fallback, signing, postject, and downloads remain absent.
-- [ ] Eight isolated npm/Bun tarball consumers plus negative legacy/sibling
+- [x] Eight isolated npm/Bun tarball consumers plus negative legacy/sibling
       checks pass with no workspace/source leakage.
-- [ ] Both Effect endpoints, current real tools, every existing Bun/Deno target,
+- [x] Both Effect endpoints, current real tools, every existing Bun/Deno target,
       exact Node SEA, and three-host publication gates remain required.
-- [ ] Native CI and non-mutating candidate run are green at one exact SHA and
+- [x] Native CI and non-mutating candidate run are green at one exact SHA and
       candidate metadata contains four tarballs plus one manifest.
-- [ ] `git diff --check` is silent and no sibling/user-owned work changed.
+- [x] `git diff --check` is silent and no sibling/user-owned work changed.
 
 ## STOP conditions
 

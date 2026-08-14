@@ -189,7 +189,7 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
 | 017 | Build one continuation-owned esbuild JavaScript bundle artifact | P1 | M | 015, 016 | DONE |
 | 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | DONE |
 | 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | DONE |
-| 020 | Hard-cut to a four-package Bun workspace and publish Node SEA as a provider | P1 | XL | 015-019 | IN PROGRESS |
+| 020 | Hard-cut to a four-package Bun workspace and publish Node SEA as a provider | P1 | XL | 015-019 | DONE |
 | 021 | Adopt certified ts-release 0.2.0 for the four-package release | P1 | L | 020 | BLOCKED: public ts-release 0.2.0 absent |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
