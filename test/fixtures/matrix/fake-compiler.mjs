@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const values = new Map();
@@ -28,12 +28,6 @@ if (!Number.isSafeInteger(delay) || delay < 0) throw new Error("--delay must be 
 if (!["success", "fail", "hang", "missing", "invalid"].includes(mode)) throw new Error(`unknown mode: ${mode}`);
 
 const record = (event) => appendFileSync(events, `${JSON.stringify({ event, target, pid: process.pid, marker })}\n`);
-record("start");
-if (sentinels !== undefined) {
-  mkdirSync(sentinels, { recursive: true });
-  writeFileSync(join(sentinels, `${target}.pid`), String(process.pid));
-}
-
 let stopping = false;
 const stop = (signal) => {
   if (stopping) return;
@@ -44,6 +38,16 @@ const stop = (signal) => {
 };
 process.on("SIGINT", () => stop("SIGINT"));
 process.on("SIGTERM", () => stop("SIGTERM"));
+
+// A sentinel means the fixture is ready to observe both graceful-stop signals.
+record("start");
+if (sentinels !== undefined) {
+  mkdirSync(sentinels, { recursive: true });
+  const sentinel = join(sentinels, `${target}.pid`);
+  const stagedSentinel = `${sentinel}.${process.pid}.tmp`;
+  writeFileSync(stagedSentinel, String(process.pid));
+  renameSync(stagedSentinel, sentinel);
+}
 
 const u16 = (bytes, offset, value) => {
   bytes[offset] = value & 0xff;
