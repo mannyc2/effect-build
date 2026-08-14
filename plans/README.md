@@ -189,6 +189,8 @@ These decisions govern Plans 016-019 and do not authorize a public API cut:
 | 017 | Build one continuation-owned esbuild JavaScript bundle artifact | P1 | M | 015, 016 | DONE |
 | 018 | Consume the temporary bundle with exact Node SEA and atomically publish an executable | P1 | L | 015-017 | DONE |
 | 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | DONE |
+| 020 | Hard-cut to a four-package Bun workspace and publish Node SEA as a provider | P1 | XL | 015-019 | IN PROGRESS |
+| 021 | Adopt certified ts-release 0.2.0 for the four-package release | P1 | L | 020 | BLOCKED: public ts-release 0.2.0 absent |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -273,6 +275,18 @@ behavior, or the standalone operation invalidated that earlier work.
   common Artifact/provenance, and build receipts are `NOT MET`, while semantic/
   bound plans and replaceable executors are `REJECTED` pending real consumers
   and genuinely different backends.
+- After Plan 019 closed, the maintainer selected Node SEA as a real public
+  product and retained Bun as the repository package manager. Plan 020 is the
+  explicit breaking successor: it does not rewrite Plan 019's historical
+  evidence, and it promotes only the Node SEA provider plus the one canonical
+  observed-stage Artifact representation required to return its result.
+- Plan 020 uses exact completed lifecycle source
+  `4f26c02de66db3326932e610b7225fcd0eec8b69`, creates four lockstep public
+  packages at the available next version `0.3.0`, and retains every rejected
+  inspector/receipt/plan/executor/registry/fallback boundary.
+- Plan 021 remains separately gated on a real certified public ts-release
+  0.2.0 and immutable four-package coordination evidence. Its absence never
+  weakens or blocks Plan 020 implementation; it blocks only release activation.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 
