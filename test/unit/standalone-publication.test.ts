@@ -320,12 +320,24 @@ describe("standalone atomic publication", () => {
       await expect(
         Effect.runPromise(
           Effect.gen(function*() {
-            const service = yield* makeCompilerService(nodeSeaAdapter, producer);
-            return yield* service.compileExecutable({
-              entrypoint: "unused.ts",
-              outfile,
-              target: "linux-x64-gnu",
-            });
+            const platformFileSystem = yield* FileSystem.FileSystem;
+            const executableCandidateFileSystem: FileSystem.FileSystem = {
+              ...platformFileSystem,
+              stat: (path) =>
+                platformFileSystem.stat(path).pipe(
+                  Effect.map((information) =>
+                    path === staged ? { ...information, mode: information.mode | 0o111 } : information
+                  ),
+                ),
+            };
+            return yield* Effect.gen(function*() {
+              const service = yield* makeCompilerService(nodeSeaAdapter, producer);
+              return yield* service.compileExecutable({
+                entrypoint: "unused.ts",
+                outfile,
+                target: "linux-x64-gnu",
+              });
+            }).pipe(Effect.provideService(FileSystem.FileSystem, executableCandidateFileSystem));
           }).pipe(Effect.provide(NodeServices.layer)),
         ),
       ).rejects.toMatchObject({
