@@ -144,7 +144,11 @@ describe("required provider target support", () => {
       path: outfile,
       bytes: bytes.byteLength,
       target,
-      tool: { name: compiler, version: expectedVersion, path: executable },
+      provider: compiler,
+      stages: [{
+        operation: "compile-executable",
+        tool: { name: compiler, version: expectedVersion, path: executable },
+      }],
     });
     expect(artifact.digest).toBe(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
     expect(isAbsolute(artifact.path)).toBe(true);
