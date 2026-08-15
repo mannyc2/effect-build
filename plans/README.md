@@ -306,9 +306,9 @@ direction. Plans 016-020 remain factual implementation history.
 | 030 | Make scalar executable input preflight total | P0 | M | 027 | DONE |
 | 031 | Make native executable inspection total and canonical | P0 | M | 027 | DONE |
 | 032 | Harden workflow data flow and packed-consumer installs | P0 | L | 028-031 | DONE |
-| 033 | Add dependency automation and reduce non-release CI duplication | P1 | M | 032 | TODO |
-| 034 | Bound native-inspection allocation and document digest cost | P1 | M | 031 | TODO |
-| 035 | Qualify ts-release for ordered prepacked multi-package releases | P0 | XL | 032, external approval | TODO |
+| 033 | Add dependency automation and reduce non-release CI duplication | P1 | M | 032 | DONE |
+| 034 | Bound native-inspection allocation and document digest cost | P1 | M | 031 | DONE |
+| 035 | Qualify ts-release for ordered prepacked multi-package releases | P0 | XL | 032, external approval | DONE |
 | 036 | Bootstrap npm namespaces and one trusted publisher | P0 | M | 032, 035, approval | TODO |
 | 037 | Recertify and release the exact five-package bytes | P0 | L | 028-036, approval | TODO |
 | 038 | Evaluate JavaScriptBundler and ExecutableBuilder promotion | P1 | L | 037, approval for public cut | TODO |
@@ -481,10 +481,17 @@ behavior, or the standalone operation invalidated that earlier work.
   `3c70be6df80aa3aa5c700250dfbe6d118c0226d0`. Digesting remains an explicit
   separate full-file one-shot operation. Exact-SHA run `31866882172` passed all
   twelve jobs without changing any public API or package edge.
-- Plan 035 is deliberately external to effect-build. It extends ts-release's
-  existing prepared-subject/coordinator architecture rather than creating an
-  effect-build release engine. It requires parent approval before changing the
-  other repository and performs no live publication.
+- Plan 035 extends ts-release's existing prepared-subject/coordinator
+  architecture rather than creating an effect-build release engine. Exact
+  source `105b6b5cc39757f5284c30b082e7cfd71b9959b2` preserves five authored
+  prepacked npm subjects and their bytes through the existing coordinator,
+  then GitHub, without `npm pack`. Exact-SHA workflow-dispatch run
+  `31869706521` passed Agent-host, Ubuntu portable/native-Action, and macOS
+  portable jobs. The qualified effect-build invocation is only that immutable
+  checked bundled Action on the stock no-adapter path: the public npm
+  library/CLI remains unqualified because a strict rc.108 consumer reproduces
+  its exact beta.83 peer conflict. This plan merged no branch and performed no
+  npm, trust, tag, or GitHub Release mutation.
 - Plan 036 is a distinct irreversible namespace/trust bootstrap. Four absent
   npm names cannot receive trusted-publisher configuration or staged first
   releases, so the recommended route is an explicitly approved reservation

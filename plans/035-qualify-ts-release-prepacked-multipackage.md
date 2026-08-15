@@ -14,6 +14,7 @@
 - Risk: HIGH
 - Depends on: effect-build 032; external approval
 - Audited ts-release source: `1e9efd717ff9d5dc2dbe5e079894cd8e92eb7ed3`, 2026-08-14
+- Completion: `DONE`
 
 ## Outcome
 
@@ -145,3 +146,100 @@ Expected ts-release files:
 Reuses one coordinator and one prepared-blob model. Replaces singular
 source-pack authority with ordered verified prepacked subjects; adds no release
 logic to effect-build.
+
+## Receipt
+
+- The parent approved one isolated external branch from the audited clean
+  baseline `1e9efd717ff9d5dc2dbe5e079894cd8e92eb7ed3`. The completed ts-release
+  source is `105b6b5cc39757f5284c30b082e7cfd71b9959b2` on
+  `codex/prepacked-multipackage-release`; its direct parent is the approved
+  baseline and the local and remote refs were observed equal with clean
+  worktrees. The parent separately approved exactly one non-force branch push
+  and exactly one `CI` workflow dispatch. No merge or second source mutation
+  is part of this receipt.
+- Before authoring, exact baseline `1e9efd717ff9d5dc2dbe5e079894cd8e92eb7ed3`
+  passed `bun install --frozen-lockfile`, `bun run build`,
+  `bun run check:portable`, and `bun run check:agents` under Bun `1.3.14`; the
+  main full-suite `bun test` phase within the portable gate reported 387
+  passed, four expected platform skips, and zero failures. No exact red-phase
+  command/output was retained, so this receipt does not misrepresent
+  final-green evidence as a durable red-run receipt.
+- The coherent external diff contains 29 files and 2,671 insertions / 227
+  deletions. Its bounded scope is authored config/resolution/graph,
+  preparation and prepared-store persistence, capability/inspection support,
+  a strict bounded npm-tarball inspector, generated schema and documentation,
+  focused config/preparation/protocol fixtures, packed-consumer qualification,
+  and the checked Action bundle plus its isolated external-consumer harness.
+  `src/publication/coordinator.ts` and `src/publication/npm.ts` are unchanged:
+  `publishReleaseSubjects` and its existing npm observation, mutation, and
+  recovery protocol remain the sole coordinator/kernel. Package manifests and
+  `bun.lock` are also unchanged.
+- `publish.prepackedNpm` is an ordered nonempty authored collection. Preparation
+  verifies each declared path, lowercase SHA-256, package name/version,
+  registry policy, bounded compressed and expanded archive shape, safe tar
+  entries, and the absence of workspace/file/link/portal or platform-local
+  dependency references. It stages and captures each blob once, never calls
+  `npm pack`, and preserves exact bytes and authored order through graph
+  resolution, encode/decode, prepared-store reload, publication subjects, and
+  GitHub-last prerequisites. Mixing source-pack and prepacked modes fails
+  closed and the historical singular prepared `kind: "package"` contract
+  remains accepted.
+- The aggregate focused config, preparation, compatibility, publication, and
+  feature-census set passed all 32 tests; the no-network five-blob publication
+  protocol fixture itself contributes eight of those tests. It covers all
+  absent, every partial-resume prefix, conflict at each coordinate, a
+  separate-invocation retry after pre-dispatch rejection, response-loss
+  re-observation, bounded unknown non-convergence, GitHub-only continuation,
+  GitHub last, and exact publisher/GitHub byte identity. The clean Action
+  fixture copies the checked bundle into an isolated directory with no
+  `node_modules`, uses an explicit allowlisted environment, creates ignored
+  untracked candidate tarballs after the fixture source commit, and proves
+  five distinct blobs in authored
+  `core -> Bun -> Deno -> Esbuild -> Node SEA -> GitHub` order with
+  `npmPack: "not-used"`. The checked Action bundle SHA-256 is
+  `7f7a4847438438267d8e6af34cbd7a5ec4deae93d97afbbe8c5c3537c061412e`.
+- Exact local package manager Bun was `1.3.14`. `bun run build`, the focused
+  config/preparation/protocol tests, `bun run check`, generated schema,
+  capabilities, examples, README, recovery, import, tree-shaking, exports,
+  CLI-bundle, and Action-bundle gates passed. The full `bun test` receipt was
+  414 passed, three expected platform skips, and zero failures;
+  `bun run check:portable` and `bun run check:agents` passed. A clean packed
+  consumer on Node `22.22.2` / npm `11.11.0` passed with the repository's four
+  Effect/platform endpoints aligned at `4.0.0-beta.83` and result shapes
+  1/2/5. Local macOS `bun run check:release-candidate` reached a ready
+  self-release context and then stopped at its existing Linux-only preparation
+  boundary; it was not reported as a local success.
+- A clean strict npm consumer combining effect-build's `4.0.0-rc.108` Effect
+  family with public `@mannyc1/ts-release@0.2.2` reproduced `ERESOLVE` against
+  ts-release's exact `@effect/platform-bun@4.0.0-beta.83` peer. A trial rc.108
+  repository alignment produced broad Effect API incompatibilities and was
+  fully reverted before the clean frozen beta.83 install and checked-bundle
+  rebuild. Therefore the qualified effect-build invocation is only the checked
+  bundled GitHub Action at the immutable commit above, with the stock
+  no-custom-adapter path. The npm-installed library/CLI remains explicitly
+  unqualified; no dependency or lock widening is claimed.
+- The one approved exact-SHA dispatch produced
+  [CI run `31869706521`](https://github.com/mannyc2/ts-release/actions/runs/31869706521)
+  with `workflowName=CI`, `event=workflow_dispatch`, head branch
+  `codex/prepacked-multipackage-release`, and head SHA
+  `105b6b5cc39757f5284c30b082e7cfd71b9959b2`. It completed successfully:
+  [Agent host validation `94976323840`](https://github.com/mannyc2/ts-release/actions/runs/31869706521/job/94976323840),
+  [Ubuntu portable `94976323863`](https://github.com/mannyc2/ts-release/actions/runs/31869706521/job/94976323863),
+  and [macOS portable `94976323914`](https://github.com/mannyc2/ts-release/actions/runs/31869706521/job/94976323914)
+  all concluded `success`. Ubuntu supplies the native-Linux checked-Action
+  qualification. The only annotations were GitHub's Node 20 action-runtime
+  deprecation notices.
+- The effect-build receipt diff was verified under exact Bun `1.3.14`.
+  `bun x vitest run test/architecture/docs-contract.test.ts` passed 9/9.
+  `bun run verify` passed five typetest files, 230 unit tests with one
+  intentional skip, 14/14 fresh npm/Bun packed consumers, 68 architecture
+  tests, lint, and formatting. Its first sandbox-restricted attempt could not
+  obtain fresh npm metadata and reported `effect@undefined`; the unchanged
+  strict fixture passed when rerun with read-only registry access, without any
+  peer relaxation or source change. `bun run verify:effect` then passed both
+  exact endpoints `4.0.0-beta.104` and `4.0.0-rc.108`; each ran the same 230
+  unit tests with one skip and 14/14 fresh packed consumers.
+- Qualification caused no npm login, reservation, ownership/trust change,
+  publication, tag, GitHub Release, npm or publication credential acquisition
+  or use, or effect-build source mutation. It does not merge the ts-release
+  branch or authorize Plans 036 or 037 public-state gates.
