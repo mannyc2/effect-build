@@ -447,6 +447,8 @@ behavior, or the standalone operation invalidated that earlier work.
   bundle callback. It isolates caller completion as a full Exit, maps only
   producer-owned core failures with full-Cause semantics, and proves cleanup
   plus Fail+Interrupt preservation without changing the public operation.
+  Exact-SHA run `31860468342` passed all twelve jobs at receipt SHA
+  `88a008021cdf8b865013dd4803e7390465d6c71d`.
 - Plan 035 is deliberately external to effect-build. It extends ts-release's
   existing prepared-subject/coordinator architecture rather than creating an
   effect-build release engine. It requires parent approval before changing the

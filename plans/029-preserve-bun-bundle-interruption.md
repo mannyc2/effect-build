@@ -105,6 +105,13 @@ Adds no public state.
   Final `bun run verify:effect` passed both `4.0.0-beta.104` and
   `4.0.0-rc.108`, each with 183 unit tests, one intentional skip, and 14/14
   packed consumers.
+- Exact-SHA CI run `31860468342` completed successfully at receipt SHA
+  `88a008021cdf8b865013dd4803e7390465d6c71d`. All twelve jobs passed: esbuild
+  `94952854580`, real-tools `94952854583`, node-sea `94952854584`, Deno target
+  support `94952854588`, bun-bundle `94952854599`, macOS publication
+  `94952854634`, Bun target support `94952854639`, Ubuntu publication
+  `94952854642`, Windows publication `94952854643`, Effect beta.104
+  `94952854670`, quality `94952854678`, and Effect rc.108 `94952854684`.
 - `git diff --check` passed. The implementation changed only `Bundle.ts` and
   its focused unit test, and the worktree was clean immediately after the
   source commit. This receipt and README status are plan-only evidence.
