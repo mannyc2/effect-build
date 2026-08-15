@@ -1,4 +1,16 @@
-import { Context, Crypto, Effect, FileSystem, HashSet, Layer, Path, type PlatformError, Result, Schema } from "effect";
+import {
+  Cause,
+  Context,
+  Crypto,
+  Effect,
+  FileSystem,
+  HashSet,
+  Layer,
+  Path,
+  type PlatformError,
+  Result,
+  Schema,
+} from "effect";
 import * as Core from "effect-build";
 import * as Integration from "effect-build/Integration";
 import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
@@ -379,7 +391,7 @@ const validateSelectedFile = (
     if (information.type !== "File") return yield* probeFailed("selected executable is not a regular file");
     if ((information.mode & 0o111) === 0) return yield* probeFailed("selected executable is not executable");
     yield* inspectSelectedNodeExecutable(fileSystem, canonical, information.size).pipe(
-      Effect.mapError((error) => probeFailed(error.reason)),
+      Effect.catchCause((cause) => Effect.failCause(Cause.map(cause, (error) => probeFailed(error.reason)))),
     );
     return canonical as Core.Artifact.AbsolutePath;
   });

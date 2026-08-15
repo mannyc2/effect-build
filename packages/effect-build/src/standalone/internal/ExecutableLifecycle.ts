@@ -1,4 +1,5 @@
 import {
+  Cause,
   Crypto,
   Effect,
   type FileSystem,
@@ -12,6 +13,7 @@ import {
 import { OutputInvalid, OutputLocked, OutputMissing, PublicationFailed } from "../BuildError.js";
 import {
   inspectNativeExecutableChunks,
+  NativeExecutableInvalid,
   type NativeExecutableObservation,
   NativeExecutableRangeRequired,
 } from "./NativeExecutable.js";
@@ -123,38 +125,54 @@ const collectRange = (fileSystem: FileSystem.FileSystem, file: string, offset: n
     }),
   );
 
+const mapFailureCause = <A, E, R, E2>(
+  operation: Effect.Effect<A, E, R>,
+  mapError: (error: E) => E2,
+): Effect.Effect<A, E2, R> =>
+  Effect.catchCause(
+    operation,
+    (cause) => Effect.failCause(Cause.map(cause, mapError)),
+  );
+
 export const inspectNativeExecutableFile = (
   fileSystem: FileSystem.FileSystem,
   file: string,
   size: number,
 ): Effect.Effect<NativeExecutableObservation, NativeExecutableInspectionError> =>
   Effect.gen(function*() {
+    const readRange = (offset: number, length: number) =>
+      mapFailureCause(
+        collectRange(fileSystem, file, offset, length),
+        (): NativeExecutableInspectionError => ({ path: file, reason: "read-failed" }),
+      );
     const initialLength = Math.min(size, 1024 * 1024);
     const initial = initialLength === 0
       ? new Uint8Array(0)
-      : yield* collectRange(fileSystem, file, 0, initialLength);
-    if (initial.byteLength !== initialLength) return yield* Effect.fail(new Error("truncated-header"));
+      : yield* readRange(0, initialLength);
+    if (initial.byteLength !== initialLength) {
+      return yield* Effect.fail({ path: file, reason: "truncated-header" });
+    }
     const chunks = [{ offset: 0, bytes: initial }];
     for (let reads = 0;; reads++) {
-      const step = yield* Effect.sync(() => {
-        try {
-          return { _tag: "Done", value: inspectNativeExecutableChunks(size, chunks) } as const;
-        } catch (error) {
-          return error instanceof NativeExecutableRangeRequired
-            ? { _tag: "Read", request: error } as const
-            : { _tag: "Failed", error } as const;
-        }
+      const parsed = Result.try({
+        try: () => inspectNativeExecutableChunks(size, chunks),
+        catch: (error) => error,
       });
-      if (step._tag === "Done") return step.value;
-      if (step._tag === "Failed") return yield* Effect.fail(step.error);
-      if (reads === 4) return yield* Effect.fail(new Error("too-many-header-ranges"));
-      const bytes = yield* collectRange(fileSystem, file, step.request.offset, step.request.length);
-      if (bytes.byteLength !== step.request.length) return yield* Effect.fail(new Error("truncated-header"));
-      chunks.push({ offset: step.request.offset, bytes });
+      if (Result.isSuccess(parsed)) return parsed.success;
+      if (parsed.failure instanceof NativeExecutableInvalid) {
+        return yield* Effect.fail({ path: file, reason: parsed.failure.reason });
+      }
+      if (!(parsed.failure instanceof NativeExecutableRangeRequired)) {
+        return yield* Effect.fail({ path: file, reason: "invalid-native-executable" });
+      }
+      if (reads === 4) return yield* Effect.fail({ path: file, reason: "too-many-header-ranges" });
+      const bytes = yield* readRange(parsed.failure.offset, parsed.failure.length);
+      if (bytes.byteLength !== parsed.failure.length) {
+        return yield* Effect.fail({ path: file, reason: "truncated-header" });
+      }
+      chunks.push({ offset: parsed.failure.offset, bytes });
     }
-  }).pipe(
-    Effect.mapError((error): NativeExecutableInspectionError => ({ path: file, reason: String(error) })),
-  );
+  });
 
 const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
@@ -192,8 +210,9 @@ export const validateAndPublishExecutable = <Target>(
       return yield* new OutputInvalid({ path: candidate.staged, reason: "invalid-byte-count" });
     }
     const bytes = Number(information.size);
-    const observation = yield* inspectNativeExecutableFile(fileSystem, candidate.staged, bytes).pipe(
-      Effect.mapError((error) => new OutputInvalid({ path: error.path, reason: error.reason })),
+    const observation = yield* mapFailureCause(
+      inspectNativeExecutableFile(fileSystem, candidate.staged, bytes),
+      (error) => new OutputInvalid({ path: error.path, reason: error.reason }),
     );
     const resolved = yield* Effect.sync(() => options.resolveTarget(observation));
     if (Result.isFailure(resolved)) {

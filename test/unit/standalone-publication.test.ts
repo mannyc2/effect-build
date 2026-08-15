@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, Latch, Path, PlatformError, Result } from "effect";
+import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, Latch, Path, PlatformError, Result, Stream } from "effect";
 import { createHash } from "node:crypto";
 import {
   closeSync,
@@ -11,9 +11,10 @@ import {
   readFileSync,
   rmSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { ToolFailed } from "../../packages/effect-build/src/standalone/BuildError.js";
@@ -36,6 +37,44 @@ const windowsHost = process.platform === "win32";
 const hostTarget = windowsHost ? "windows-x64" as const : "macos-aarch64" as const;
 const successMode = windowsHost ? "pe" : "success";
 
+const fat64 = (byteOrder: "big" | "little"): Uint8Array => {
+  const bytes = new Uint8Array(40);
+  bytes.set(byteOrder === "big" ? [0xca, 0xfe, 0xba, 0xbf] : [0xbf, 0xba, 0xfe, 0xca], 0);
+  new DataView(bytes.buffer).setUint32(4, 1, byteOrder === "little");
+  return bytes;
+};
+
+const unsafeElfProgramHeaderOffset = (): Uint8Array => {
+  const bytes = new Uint8Array(64);
+  bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+  bytes.set([0x3e, 0x00], 18);
+  new DataView(bytes.buffer).setBigUint64(32, BigInt(Number.MAX_SAFE_INTEGER) + 1n, true);
+  new DataView(bytes.buffer).setUint16(54, 56, true);
+  new DataView(bytes.buffer).setUint16(56, 1, true);
+  return bytes;
+};
+
+const malformedPublicationCases = [
+  {
+    name: "big-endian FAT64",
+    bytes: fat64("big"),
+    reason: "unsupported-fat64",
+    preserveOldDestination: false,
+  },
+  {
+    name: "byte-swapped FAT64",
+    bytes: fat64("little"),
+    reason: "unsupported-fat64",
+    preserveOldDestination: true,
+  },
+  {
+    name: "unsafe ELF program-header offset",
+    bytes: unsafeElfProgramHeaderOffset(),
+    reason: "header-offset-overflow",
+    preserveOldDestination: true,
+  },
+] as const;
+
 const targetTable = makeTargetTable(
   [
     ["macos-aarch64", "test-macos-aarch64"],
@@ -54,6 +93,14 @@ const failureOf = (exit: Exit.Exit<unknown, unknown>): unknown =>
 const discoveredCompiler = () => ({
   artifactTool: { name: "bun" as const, version: "test", path: process.execPath },
 });
+
+const platformFailure = () =>
+  PlatformError.systemError({
+    _tag: "Unknown",
+    module: "test",
+    method: "stream",
+    cause: new Error("controlled platform failure"),
+  });
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -135,6 +182,169 @@ const assertCandidateCapabilityIsStagedPathOnly = (candidate: ExecutableCandidat
 void assertCandidateCapabilityIsStagedPathOnly;
 
 describe("standalone atomic publication", () => {
+  it.each(malformedPublicationCases)(
+    "maps $name to a typed finite publication failure without replacing destination bytes",
+    async ({ bytes, reason, preserveOldDestination }) => {
+      const root = makeRoot();
+      const destination = join(root, "nested", "app");
+      if (preserveOldDestination) {
+        mkdirSync(dirname(destination), { recursive: true });
+        writeFileSync(destination, "old", { flush: true });
+      }
+
+      let staged = "";
+      let targetResolutions = 0;
+      const exit = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function*() {
+            const fileSystem = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const crypto = yield* Crypto.Crypto;
+            const candidate = yield* acquireExecutableCandidate(fileSystem, path, { destination });
+            staged = candidate.staged;
+            yield* fileSystem.writeFile(candidate.staged, bytes);
+            yield* fileSystem.chmod(candidate.staged, 0o755);
+            return yield* validateAndPublishExecutable(fileSystem, path, crypto, candidate, {
+              digest: false,
+              resolveTarget: () => {
+                targetResolutions += 1;
+                return Result.succeed(hostTarget);
+              },
+            }).pipe(Effect.exit);
+          }),
+        ).pipe(Effect.provide(NodeServices.layer)),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(Exit.hasDies(exit)).toBe(false);
+      const failure = failureOf(exit);
+      expect(failure).toMatchObject({
+        _tag: "OutputInvalid",
+        path: staged,
+      });
+      expect(targetResolutions).toBe(0);
+      if (preserveOldDestination) expect(readFileSync(destination, "utf8")).toBe("old");
+      else expect(existsSync(destination)).toBe(false);
+      expect(existsSync(dirname(staged))).toBe(false);
+      expect(failure).toMatchObject({ reason });
+    },
+  );
+
+  it("preserves interruption combined with a native-inspection read failure and cleans staging", async () => {
+    const root = makeRoot();
+    const destination = join(root, "nested", "app");
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, "old", { flush: true });
+    const interruptor = 31_031;
+    const mixed = Cause.combine(Cause.fail(platformFailure()), Cause.interrupt(interruptor));
+    let staged = "";
+
+    const exit = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const hostFileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const crypto = yield* Crypto.Crypto;
+          const fileSystem: FileSystem.FileSystem = {
+            ...hostFileSystem,
+            stream: () => Stream.failCause(mixed),
+          };
+          const candidate = yield* acquireExecutableCandidate(fileSystem, path, { destination });
+          staged = candidate.staged;
+          yield* fileSystem.writeFile(candidate.staged, new Uint8Array(64));
+          yield* fileSystem.chmod(candidate.staged, 0o755);
+          return yield* validateAndPublishExecutable(fileSystem, path, crypto, candidate, {
+            digest: false,
+            resolveTarget: () => Result.succeed(hostTarget),
+          }).pipe(Effect.exit);
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) throw new Error("expected native inspection to fail");
+    expect([...Cause.interruptors(exit.cause)]).toContain(interruptor);
+    expect(failureOf(exit)).toMatchObject({
+      _tag: "OutputInvalid",
+      path: staged,
+      reason: "read-failed",
+    });
+    expect(readFileSync(destination, "utf8")).toBe("old");
+    expect(existsSync(dirname(staged))).toBe(false);
+  });
+
+  it("publishes through the production bounded range reader for a sparse distant ELF", async () => {
+    const root = makeRoot();
+    const destination = join(root, "nested", "app");
+    const programHeaderOffset = 2_000_000;
+    const interpreterOffset = 3_000_000;
+    const interpreter = new TextEncoder().encode("/lib64/ld-linux-x86-64.so.2\0");
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+    let staged = "";
+
+    const artifact = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const hostFileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const crypto = yield* Crypto.Crypto;
+          const fileSystem: FileSystem.FileSystem = {
+            ...hostFileSystem,
+            stream: (file, options) => {
+              requests.push({
+                offset: Number(options?.offset ?? 0),
+                length: Number(options?.bytesToRead ?? 0),
+              });
+              return hostFileSystem.stream(file, options);
+            },
+          };
+          const candidate = yield* acquireExecutableCandidate(fileSystem, path, { destination });
+          staged = candidate.staged;
+          const header = new Uint8Array(64);
+          header.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+          const headerView = new DataView(header.buffer);
+          headerView.setUint16(18, 62, true);
+          headerView.setBigUint64(32, BigInt(programHeaderOffset), true);
+          headerView.setUint16(54, 56, true);
+          headerView.setUint16(56, 1, true);
+          const programHeader = new Uint8Array(56);
+          const programHeaderView = new DataView(programHeader.buffer);
+          programHeaderView.setUint32(0, 3, true);
+          programHeaderView.setBigUint64(8, BigInt(interpreterOffset), true);
+          programHeaderView.setBigUint64(32, BigInt(interpreter.byteLength), true);
+          const handle = openSync(candidate.staged, "w");
+          try {
+            writeSync(handle, header, 0, header.byteLength, 0);
+            writeSync(handle, programHeader, 0, programHeader.byteLength, programHeaderOffset);
+            writeSync(handle, interpreter, 0, interpreter.byteLength, interpreterOffset);
+          } finally {
+            closeSync(handle);
+          }
+          yield* fileSystem.chmod(candidate.staged, 0o755);
+          return yield* validateAndPublishExecutable(fileSystem, path, crypto, candidate, {
+            digest: false,
+            resolveTarget: (observation) =>
+              observation.format === "elf"
+                && observation.os === "linux"
+                && observation.architecture === "x64"
+                && observation.abi === "gnu"
+                ? Result.succeed("linux-x64-gnu" as const)
+                : Result.fail("unexpected-observation"),
+          });
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(artifact).toMatchObject({ path: destination, target: "linux-x64-gnu" });
+    expect(requests).toEqual([
+      { offset: 0, length: 1024 * 1024 },
+      { offset: programHeaderOffset, length: 56 },
+      { offset: interpreterOffset, length: interpreter.byteLength },
+    ]);
+    expect(existsSync(destination)).toBe(true);
+    expect(existsSync(dirname(staged))).toBe(false);
+  });
+
   it("rejects forged and scope-closed candidates as defects before filesystem effects", async () => {
     const root = makeRoot();
     const hostFileSystem = await Effect.runPromise(

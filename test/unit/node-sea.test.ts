@@ -19,6 +19,10 @@ import {
   nodeSeaTarget,
   nodeSeaVersion,
 } from "../../packages/effect-build-node-sea/src/internal/NodeSea.js";
+import {
+  inspectSelectedNodeExecutable,
+  SelectedNodeExecutableInvalid,
+} from "../../packages/effect-build-node-sea/src/internal/SelectedNodeExecutable.js";
 import type { CommandCompletion } from "../../packages/effect-build/src/Integration.js";
 
 const roots: string[] = [];
@@ -50,6 +54,105 @@ const elfX64 = (interpreterPath: string): Uint8Array => {
 };
 
 const elfX64Gnu = (): Uint8Array => elfX64("/lib64/ld-linux-x86-64.so.2");
+
+const selectedNodeElf = (
+  mutate: (view: DataView, bytes: Uint8Array) => void,
+): Uint8Array => {
+  const interpreter = new TextEncoder().encode("/lib64/ld-linux-x86-64.so.2\0");
+  const bytes = new Uint8Array(176 + interpreter.byteLength);
+  bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+  const view = new DataView(bytes.buffer);
+  view.setUint16(18, 62, true);
+  view.setBigUint64(32, 64n, true);
+  view.setUint16(54, 56, true);
+  view.setUint16(56, 1, true);
+  view.setUint32(64, 3, true);
+  view.setBigUint64(72, 176n, true);
+  view.setBigUint64(96, BigInt(interpreter.byteLength), true);
+  bytes.set(interpreter, 176);
+  mutate(view, bytes);
+  return bytes;
+};
+
+interface MalformedSelectedNodeCase {
+  readonly name: string;
+  readonly bytes?: Uint8Array;
+  readonly byteSize: bigint;
+  readonly reason: string;
+}
+
+const unsafeUint64 = BigInt(Number.MAX_SAFE_INTEGER) + 1n;
+
+const malformedSelectedNodeCases: readonly MalformedSelectedNodeCase[] = [
+  {
+    name: "unsafe ELF64 program-header offset",
+    bytes: selectedNodeElf((view) => view.setBigUint64(32, unsafeUint64, true)),
+    byteSize: 64n,
+    reason: "elf-offset-overflow",
+  },
+  {
+    name: "unsafe ELF64 interpreter offset",
+    bytes: selectedNodeElf((view) => view.setBigUint64(72, unsafeUint64, true)),
+    byteSize: 256n,
+    reason: "elf-offset-overflow",
+  },
+  {
+    name: "unsafe ELF64 interpreter byte count",
+    bytes: selectedNodeElf((view) => view.setBigUint64(96, unsafeUint64, true)),
+    byteSize: 256n,
+    reason: "elf-offset-overflow",
+  },
+  {
+    name: "safe ELF64 range operands whose sum overflows",
+    bytes: selectedNodeElf((view) => {
+      view.setBigUint64(72, BigInt(Number.MAX_SAFE_INTEGER - 1), true);
+      view.setBigUint64(96, 4n, true);
+    }),
+    byteSize: BigInt(Number.MAX_SAFE_INTEGER),
+    reason: "elf-offset-overflow",
+  },
+  {
+    name: "truncated ELF64 program-header table",
+    bytes: selectedNodeElf(() => undefined),
+    byteSize: 100n,
+    reason: "truncated-elf-range",
+  },
+  {
+    name: "truncated ELF64 interpreter",
+    bytes: selectedNodeElf((view, bytes) => {
+      view.setBigUint64(72, BigInt(bytes.byteLength - 2), true);
+      view.setBigUint64(96, 4n, true);
+    }),
+    byteSize: BigInt(176 + new TextEncoder().encode("/lib64/ld-linux-x86-64.so.2\0").byteLength),
+    reason: "truncated-elf-range",
+  },
+  {
+    name: "duplicate ELF64 PT_INTERP entries",
+    bytes: selectedNodeElf((view) => {
+      view.setUint16(56, 2, true);
+      view.setUint32(120, 3, true);
+    }),
+    byteSize: 256n,
+    reason: "multiple ELF interpreters",
+  },
+  {
+    name: "zero ELF64 program-header count",
+    bytes: selectedNodeElf((view) => view.setUint16(56, 0, true)),
+    byteSize: 256n,
+    reason: "invalid ELF64 program headers",
+  },
+  {
+    name: "excessive ELF64 program-header count",
+    bytes: selectedNodeElf((view) => view.setUint16(56, 4097, true)),
+    byteSize: 256n,
+    reason: "invalid ELF64 program headers",
+  },
+  {
+    name: "missing selected executable",
+    byteSize: 64n,
+    reason: "open-failed",
+  },
+];
 
 const completion = (
   exitCode = 0,
@@ -249,6 +352,65 @@ describe("granular Node SEA service", () => {
       const exit = await Effect.runPromise(Effect.exit(makeHarness(makeRoot(), options)));
       expect(failureOf(exit)).toBeInstanceOf(NodeSeaProbeFailed);
     }
+  });
+
+  it.each(malformedSelectedNodeCases)(
+    "returns a typed SelectedNodeExecutableInvalid without a Die for $name",
+    async ({ byteSize, bytes, reason }) => {
+      const root = makeRoot();
+      const executable = join(root, "selected-node");
+      if (bytes !== undefined) writeFileSync(executable, bytes);
+      const exit = await Effect.runPromise(
+        Effect.gen(function*() {
+          const fileSystem = yield* FileSystem.FileSystem;
+          return yield* inspectSelectedNodeExecutable(fileSystem, executable, byteSize);
+        }).pipe(
+          Effect.provide(NodeServices.layer),
+          Effect.exit,
+        ),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(Exit.hasDies(exit)).toBe(false);
+      const failure = failureOf(exit);
+      expect(failure).toBeInstanceOf(SelectedNodeExecutableInvalid);
+      expect(failure).toMatchObject({ reason });
+    },
+  );
+
+  it("preserves interruption combined with selected-executable inspection failure", async () => {
+    const root = makeRoot();
+    const nodePath = join(root, "node-26.7.0");
+    writeFileSync(nodePath, elfX64Gnu());
+    chmodSync(nodePath, 0o755);
+    const interruptor = 31_032;
+    const mixed = Cause.combine(Cause.fail(platformFailure()), Cause.interrupt(interruptor));
+    const exit = await Effect.runPromise(
+      Effect.gen(function*() {
+        const hostFileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const crypto = yield* Crypto.Crypto;
+        const fileSystem: FileSystem.FileSystem = {
+          ...hostFileSystem,
+          open: () => Effect.failCause(mixed),
+        };
+        return yield* makeNodeSeaService(
+          fileSystem,
+          path,
+          crypto,
+          { executable: nodePath },
+          controlledRuntime({ nodePath }),
+        );
+      }).pipe(
+        Effect.provide(NodeServices.layer),
+        Effect.exit,
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) throw new Error("expected selected executable inspection to fail");
+    expect([...Cause.interruptors(exit.cause)]).toContain(interruptor);
+    expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaProbeFailed", reason: "open-failed" });
   });
 
   it.each(

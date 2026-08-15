@@ -27,6 +27,7 @@ import type {
 import {
   inspectNativeExecutable,
   inspectNativeExecutableChunks,
+  NativeExecutableInvalid,
   NativeExecutableRangeRequired,
 } from "../../packages/effect-build/src/standalone/internal/NativeExecutable.js";
 import { descriptorOf } from "../../packages/effect-build/src/standalone/internal/TargetCatalog.js";
@@ -104,19 +105,88 @@ const validArtifact = {
   }],
 };
 
+const thinMacho = (cpuType: number): Uint8Array => {
+  const bytes = new Uint8Array(8);
+  bytes.set([0xcf, 0xfa, 0xed, 0xfe], 0);
+  new DataView(bytes.buffer).setUint32(4, cpuType, true);
+  return bytes;
+};
+
 const fatMacho = (
   byteOrder: "big" | "little",
   cpuTypes: readonly number[],
 ): Uint8Array => {
-  const bytes = new Uint8Array(8 + cpuTypes.length * 20);
+  const tableLength = 8 + cpuTypes.length * 20;
+  const sliceLength = 8;
+  const bytes = new Uint8Array(tableLength + cpuTypes.length * sliceLength);
   const view = new DataView(bytes.buffer);
   const little = byteOrder === "little";
   bytes.set(little ? [0xbe, 0xba, 0xfe, 0xca] : [0xca, 0xfe, 0xba, 0xbe], 0);
   view.setUint32(4, cpuTypes.length, little);
   for (let index = 0; index < cpuTypes.length; index++) {
-    view.setUint32(8 + index * 20, cpuTypes[index]!, little);
+    const entry = 8 + index * 20;
+    const sliceOffset = tableLength + index * sliceLength;
+    view.setUint32(entry, cpuTypes[index]!, little);
+    view.setUint32(entry + 8, sliceOffset, little);
+    view.setUint32(entry + 12, sliceLength, little);
+    bytes.set(thinMacho(cpuTypes[index]!), sliceOffset);
   }
   return bytes;
+};
+
+const patchFatSlice = (
+  source: Uint8Array,
+  byteOrder: "big" | "little",
+  index: number,
+  patch: { readonly offset?: number; readonly size?: number; readonly cpuType?: number; readonly nested?: boolean },
+): Uint8Array => {
+  const bytes = source.slice();
+  const view = new DataView(bytes.buffer);
+  const little = byteOrder === "little";
+  const entry = 8 + index * 20;
+  const currentOffset = view.getUint32(entry + 8, little);
+  if (patch.offset !== undefined) view.setUint32(entry + 8, patch.offset, little);
+  if (patch.size !== undefined) view.setUint32(entry + 12, patch.size, little);
+  if (patch.cpuType !== undefined) view.setUint32(currentOffset + 4, patch.cpuType, true);
+  if (patch.nested === true) bytes.set([0xca, 0xfe, 0xba, 0xbe], currentOffset);
+  return bytes;
+};
+
+const elf64 = (interpreterPaths: readonly string[]): Uint8Array => {
+  const encoded = interpreterPaths.map((path) => new TextEncoder().encode(`${path}\0`));
+  const programHeaderOffset = 64;
+  const programHeaderLength = interpreterPaths.length * 56;
+  const interpreterOffset = programHeaderOffset + programHeaderLength;
+  const bytes = new Uint8Array(
+    interpreterOffset + encoded.reduce((total, interpreter) => total + interpreter.byteLength, 0),
+  );
+  const view = new DataView(bytes.buffer);
+  bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+  view.setUint16(18, 62, true);
+  view.setBigUint64(32, BigInt(programHeaderOffset), true);
+  view.setUint16(54, 56, true);
+  view.setUint16(56, interpreterPaths.length, true);
+  let nextInterpreterOffset = interpreterOffset;
+  for (let index = 0; index < encoded.length; index++) {
+    const entry = programHeaderOffset + index * 56;
+    const interpreter = encoded[index]!;
+    view.setUint32(entry, 3, true);
+    view.setBigUint64(entry + 8, BigInt(nextInterpreterOffset), true);
+    view.setBigUint64(entry + 32, BigInt(interpreter.byteLength), true);
+    bytes.set(interpreter, nextInterpreterOffset);
+    nextInterpreterOffset += interpreter.byteLength;
+  }
+  return bytes;
+};
+
+const thrownReason = (evaluate: () => unknown): string => {
+  try {
+    evaluate();
+  } catch (error) {
+    expect(error).toBeInstanceOf(NativeExecutableInvalid);
+    return (error as NativeExecutableInvalid).reason;
+  }
+  throw new Error("expected native executable inspection to fail");
 };
 
 describe("standalone contract: target and artifact", () => {
@@ -174,7 +244,7 @@ describe("standalone contract: target and artifact", () => {
       .toThrow("provider targetEntries must not contain duplicate targets");
   });
 
-  it("inspects a valid ELF whose program headers are stored in a distant range", () => {
+  it("satisfies two bounded sequential range requests for a distant ELF table and interpreter", () => {
     const header = new Uint8Array(64);
     header.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
     header.set([0x3e, 0x00], 18);
@@ -184,22 +254,95 @@ describe("standalone contract: target and artifact", () => {
 
     const programHeader = new Uint8Array(56);
     new DataView(programHeader.buffer).setUint32(0, 3, true);
-    new DataView(programHeader.buffer).setBigUint64(8, 128n, true);
-    new DataView(programHeader.buffer).setBigUint64(32, 28n, true);
+    new DataView(programHeader.buffer).setBigUint64(8, 3_000_000n, true);
     const interpreter = new TextEncoder().encode("/lib64/ld-linux-x86-64.so.2\0");
-    const chunks = [
-      { offset: 0, bytes: header },
-      { offset: 128, bytes: interpreter },
+    new DataView(programHeader.buffer).setBigUint64(32, BigInt(interpreter.byteLength), true);
+    const available = [
       { offset: 2_000_000, bytes: programHeader },
+      { offset: 3_000_000, bytes: interpreter },
     ];
+    const chunks = [{ offset: 0, bytes: header }];
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+    let observation: ReturnType<typeof inspectNativeExecutableChunks> | undefined;
 
-    expect(() => inspectNativeExecutableChunks(2_000_056, [chunks[0]!])).toThrow(NativeExecutableRangeRequired);
-    expect(inspectNativeExecutableChunks(2_000_056, chunks)).toEqual({
+    for (let attempt = 0; attempt < 3 && observation === undefined; attempt++) {
+      try {
+        observation = inspectNativeExecutableChunks(3_000_000 + interpreter.byteLength, chunks);
+      } catch (error) {
+        expect(error).toBeInstanceOf(NativeExecutableRangeRequired);
+        const request = error as NativeExecutableRangeRequired;
+        requests.push({ offset: request.offset, length: request.length });
+        const supplied = available.find(
+          (chunk) => chunk.offset === request.offset && chunk.bytes.byteLength === request.length,
+        );
+        expect(supplied).toBeDefined();
+        chunks.push(supplied!);
+      }
+    }
+
+    expect(requests).toEqual([
+      { offset: 2_000_000, length: 56 },
+      { offset: 3_000_000, length: interpreter.byteLength },
+    ]);
+    expect(observation).toEqual({
       format: "elf",
       os: "linux",
       architecture: "x64",
       abi: "gnu",
     });
+  });
+
+  it.each(
+    [
+      [
+        "an unsafe ELF program-header offset",
+        () => {
+          const bytes = elf64(["/lib64/ld-linux-x86-64.so.2"]);
+          new DataView(bytes.buffer).setBigUint64(32, BigInt(Number.MAX_SAFE_INTEGER) + 1n, true);
+          return bytes;
+        },
+        "header-offset-overflow",
+      ],
+      [
+        "an unsafe ELF interpreter offset",
+        () => {
+          const bytes = elf64(["/lib64/ld-linux-x86-64.so.2"]);
+          new DataView(bytes.buffer).setBigUint64(72, BigInt(Number.MAX_SAFE_INTEGER) + 1n, true);
+          return bytes;
+        },
+        "header-offset-overflow",
+      ],
+      [
+        "an unsafe ELF interpreter byte count",
+        () => {
+          const bytes = elf64(["/lib64/ld-linux-x86-64.so.2"]);
+          new DataView(bytes.buffer).setBigUint64(96, BigInt(Number.MAX_SAFE_INTEGER) + 1n, true);
+          return bytes;
+        },
+        "header-offset-overflow",
+      ],
+      [
+        "overflow while adding the ELF table offset and length",
+        () => {
+          const bytes = elf64(["/lib64/ld-linux-x86-64.so.2"]);
+          new DataView(bytes.buffer).setBigUint64(32, BigInt(Number.MAX_SAFE_INTEGER - 27), true);
+          return bytes;
+        },
+        "invalid-header-range",
+      ],
+      [
+        "a truncated ELF program-header table",
+        () => elf64(["/lib64/ld-linux-x86-64.so.2"]).slice(0, 119),
+        "truncated-header",
+      ],
+      [
+        "a second ELF PT_INTERP entry",
+        () => elf64(["/lib64/ld-linux-x86-64.so.2", "/lib/ld-musl-x86_64.so.1"]),
+        "multiple-elf-interpreters",
+      ],
+    ] as const,
+  )("rejects %s", (_name, makeBytes, reason) => {
+    expect(thrownReason(() => inspectNativeExecutable(makeBytes()))).toBe(reason);
   });
 
   it("rejects ELF ranges beyond the artifact and oversized interpreters", () => {
@@ -236,6 +379,49 @@ describe("standalone contract: target and artifact", () => {
     });
   });
 
+  it("ignores a valid unsupported FAT32 slice after resolving one supported architecture", () => {
+    const bytes = fatMacho("big", [0x01000007, 7]);
+    const view = new DataView(bytes.buffer);
+    const unsupportedOffset = view.getUint32(8 + 20 + 8, false);
+    bytes.set([0xce, 0xfa, 0xed, 0xfe], unsupportedOffset);
+
+    expect(inspectNativeExecutable(bytes)).toEqual({
+      format: "macho",
+      os: "macos",
+      architecture: "x64",
+    });
+  });
+
+  it("bounds distant FAT32 inspection to one deterministic architecture-bearing range", () => {
+    const cpuTypes = [7, 12, 18, 0x01000012, 0x01000006, 0x01000007] as const;
+    const table = new Uint8Array(8 + cpuTypes.length * 20);
+    const view = new DataView(table.buffer);
+    table.set([0xca, 0xfe, 0xba, 0xbe], 0);
+    view.setUint32(4, cpuTypes.length, false);
+    for (let index = 0; index < cpuTypes.length; index++) {
+      const entry = 8 + index * 20;
+      view.setUint32(entry, cpuTypes[index]!, false);
+      view.setUint32(entry + 8, 2_000_000 + index * 1_000_000, false);
+      view.setUint32(entry + 12, 8, false);
+    }
+    const supportedOffset = 2_000_000 + (cpuTypes.length - 1) * 1_000_000;
+    const size = supportedOffset + 8;
+    let request: NativeExecutableRangeRequired | undefined;
+    try {
+      inspectNativeExecutableChunks(size, [{ offset: 0, bytes: table }]);
+    } catch (error) {
+      expect(error).toBeInstanceOf(NativeExecutableRangeRequired);
+      request = error as NativeExecutableRangeRequired;
+    }
+    expect(request).toMatchObject({ offset: supportedOffset, length: 8 });
+    expect(
+      inspectNativeExecutableChunks(size, [
+        { offset: 0, bytes: table },
+        { offset: supportedOffset, bytes: thinMacho(0x01000007) },
+      ]),
+    ).toEqual({ format: "macho", os: "macos", architecture: "x64" });
+  });
+
   it("retains the explicit ambiguity rejection for a universal x64 and aarch64 Mach-O", () => {
     expect(() => inspectNativeExecutable(fatMacho("big", [0x01000007, 0x0100000c])))
       .toThrow("ambiguous-fat-architecture");
@@ -244,6 +430,70 @@ describe("standalone contract: target and artifact", () => {
   it("rejects a fat Mach-O whose slices have only unknown CPU types", () => {
     expect(() => inspectNativeExecutable(fatMacho("big", [0x12345678])))
       .toThrow("ambiguous-fat-architecture");
+  });
+
+  it.each(
+    [
+      [
+        "big-endian FAT64 magic",
+        () => Uint8Array.from([0xca, 0xfe, 0xba, 0xbf, 0, 0, 0, 1]),
+        "unsupported-fat64",
+      ],
+      [
+        "byte-swapped FAT64 magic",
+        () => Uint8Array.from([0xbf, 0xba, 0xfe, 0xca, 1, 0, 0, 0]),
+        "unsupported-fat64",
+      ],
+      [
+        "a zero FAT32 slice count",
+        () => Uint8Array.from([0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 0]),
+        "invalid-fat-header",
+      ],
+      [
+        "an excessive FAT32 slice count",
+        () => Uint8Array.from([0xca, 0xfe, 0xba, 0xbe, 0, 0, 0x10, 0x01]),
+        "invalid-fat-header",
+      ],
+      [
+        "a zero-length FAT32 slice",
+        () => patchFatSlice(fatMacho("big", [0x01000007]), "big", 0, { size: 0 }),
+        "invalid-fat-slice-range",
+      ],
+      [
+        "a FAT32 slice overlapping its table",
+        () => patchFatSlice(fatMacho("big", [0x01000007]), "big", 0, { offset: 8 }),
+        "invalid-fat-slice-range",
+      ],
+      [
+        "a FAT32 slice beyond the artifact",
+        () => {
+          const bytes = fatMacho("big", [0x01000007]);
+          return patchFatSlice(bytes, "big", 0, { offset: bytes.byteLength - 4, size: 8 });
+        },
+        "invalid-fat-slice-range",
+      ],
+      [
+        "overlapping FAT32 slices",
+        () => {
+          const bytes = fatMacho("big", [0x01000007, 0x12345678]);
+          const firstOffset = new DataView(bytes.buffer).getUint32(16, false);
+          return patchFatSlice(bytes, "big", 1, { offset: firstOffset + 4 });
+        },
+        "overlapping-fat-slices",
+      ],
+      [
+        "a FAT32 table and thin-slice CPU mismatch",
+        () => patchFatSlice(fatMacho("big", [0x01000007]), "big", 0, { cpuType: 0x0100000c }),
+        "invalid-fat-slice",
+      ],
+      [
+        "a recursively nested FAT32 slice",
+        () => patchFatSlice(fatMacho("big", [0x01000007]), "big", 0, { nested: true }),
+        "invalid-fat-slice",
+      ],
+    ] as const,
+  )("rejects %s", (_name, makeBytes, reason) => {
+    expect(thrownReason(() => inspectNativeExecutable(makeBytes()))).toBe(reason);
   });
 
   it("accepts every canonical target", () => {
