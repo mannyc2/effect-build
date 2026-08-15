@@ -10,6 +10,7 @@
 - Risk: MEDIUM public behavior
 - Depends on: 027; may run after 028
 - Planned at: `e8c1557509a9236df8e5eb236293527c3f4fd21d`
+- Completion: `DONE`
 
 ## Problem and invariant
 
@@ -78,5 +79,56 @@ rejects it.
 
 ## Maintenance / compression ledger
 
-Replaces scalar raw forwarding plus matrix decoding with one decoder/prepared
-cell path. New behavior is only the rejection of invalid runtime values.
+Replaces scalar raw forwarding and duplicate common-field validation with
+shared field decoders feeding the existing prepared-cell path. New behavior is
+only the rejection of invalid runtime values.
+
+## Receipt
+
+- **Implementation source SHA**:
+  `22a28ce68c8662686c531ff89cb3b61b35b45a2a`.
+- The focused table was added first. Against the old scalar path, the null case
+  defected with `TypeError: Cannot read properties of null`, and the combined
+  common-field case returned the provider-options error instead of the first
+  `entrypoint` issue. The red run had two failures while the other 65 focused
+  tests stayed green.
+- Scalar preflight now accepts `unknown`, rejects nonobject/null/array input
+  and unknown own fields, and decodes `entrypoint`, `outfile`, target, own
+  `cwd`, own `digest`, and provider options in deterministic order. Shared
+  package-private `Result` field decoders also serve matrix preflight; scalar
+  and matrix both assemble the existing prepared-cell representation. No
+  request DTO, public error, export, package edge, or compatibility path was
+  added. Matrix excess-key tolerance and existing issue order remain pinned.
+- Invalid targets retain the existing `TargetUnsupported` shape and run before
+  provider-option evaluation. Provider-option failures retain the adapter's
+  exact existing `InvalidDriverOptions` instance and reason. The only public
+  behavior change is rejection of malformed untyped fields that were formerly
+  forwarded or ignored; valid TypeScript callers and successful argv,
+  destination, Artifact, project-config, environment, and cleanup behavior are
+  unchanged.
+- A direct `makeCompilerService` harness with an injected discovered tool and
+  counted FileSystem/spawner services covers 22 malformed shapes and proves
+  zero selected-tool access, filesystem calls, rendering, child starts, or
+  output staging. This is the truthful zero-probe seam because discovery is
+  structurally absent. Fresh public Bun and Deno Layers necessarily perform
+  their one selection/probe before the service sees the request; dedicated
+  tests prove that boundary is probe-only with no compile/staging/output. This
+  explicitly reconciles the plan's broader “before tool discovery” wording.
+- Exact package-manager Bun was `1.3.14` (`0d9b296a`). `bun run build` passed;
+  the focused Bun/Deno/matrix run passed 69 tests; `bun run test:types` passed
+  five files; and `bun run test:architecture` passed 41 tests.
+- Final `bun run verify` passed 187 unit tests with one intentional skip,
+  14/14 once-packed consumers, 41 architecture tests, lint, and formatting.
+  Final `bun run verify:effect` passed both `4.0.0-beta.104` and
+  `4.0.0-rc.108`, each with 187 unit tests, one intentional skip, and 14/14
+  packed consumers.
+- Exact-SHA CI run `31861576129` completed successfully at the implementation
+  SHA. All twelve jobs passed: quality `94955806642`, Effect beta.104
+  `94955806668`, Deno target support `94955806670`, Windows publication
+  `94955806676`, Bun target support `94955806680`, esbuild `94955806688`, macOS
+  publication `94955806693`, bun-bundle `94955806702`, Ubuntu publication
+  `94955806705`, node-sea `94955806707`, Effect rc.108 `94955806776`, and
+  real-tools `94955806792`.
+- `git diff --check` and formatting passed. The source commit changed only the
+  nine files authorized by Plan 030, and the worktree was clean immediately
+  after it. This receipt and README status are plan-only evidence.
