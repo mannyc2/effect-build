@@ -156,7 +156,9 @@ describe("documentation contract", () => {
     expect(release).toMatch(/manifest v2/i);
     expect(release).toMatch(/not\s+(?:a\s+)?hermeticity|does not claim hermeticity/i);
     expect(release).toMatch(/same exact tarball bytes/i);
-    expect(release).not.toMatch(/npm publish|id-token:\s*write|NODE_AUTH_TOKEN/i);
+    expect(release).toMatch(/protected `npm`\s+environment/i);
+    expect(release).toMatch(/id-token:\s*write/i);
+    expect(release).not.toMatch(/npm publish|NODE_AUTH_TOKEN|NPM_TOKEN/i);
   });
 
   it("rejects legacy package and release language in user-facing material", async () => {

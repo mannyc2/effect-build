@@ -40,11 +40,21 @@ interface WorkflowJob {
   name?: string;
   if?: string;
   needs?: string | string[];
+  environment?: string;
+  outputs?: Record<string, string>;
   permissions?: Record<string, string>;
   "continue-on-error"?: unknown;
   "runs-on"?: string;
   steps?: WorkflowStep[];
-  strategy?: { "fail-fast"?: boolean; matrix?: { runner?: string[]; compiler?: string[]; effect?: string[] } };
+  strategy?: {
+    "fail-fast"?: boolean;
+    matrix?: {
+      runner?: string[];
+      compiler?: string[];
+      effect?: string[];
+      include?: Array<{ gate: string; runner: string }>;
+    };
+  };
 }
 
 interface Workflow {
@@ -74,42 +84,71 @@ const readJson = async (path: string): Promise<Record<string, unknown>> =>
 const jobRuns = (workflow: Workflow, name: string): string =>
   (workflow.jobs[name]?.steps ?? []).map((step) => step.run ?? "").join("\n");
 
+const checkoutAction = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd";
+const setupNodeAction = "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e";
+const setupBunAction = "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6";
+const cacheAction = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
+const uploadArtifactAction = "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02";
+const qualifiedReleaseAction = "mannyc2/ts-release/apps/ts-release-action@105b6b5cc39757f5284c30b082e7cfd71b9959b2";
+const approvedActions = new Set([
+  checkoutAction,
+  setupNodeAction,
+  setupBunAction,
+  cacheAction,
+  uploadArtifactAction,
+  qualifiedReleaseAction,
+]);
+const approvedPackageTree = "9ad55683899ec7447b608cff7997ac5a2572a996";
+const packageTreeGuard = `test "$(git rev-parse HEAD:packages)" = "${approvedPackageTree}"`;
+const forbiddenPublishPackageCommand =
+  /\b(?:bun|npm|pnpm|yarn)\s+install\b|\b(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?build\b|\b(?:bun|npm|pnpm|yarn)\s+(?:(?:run|pm)\s+)?pack\b/;
+
 const expectPinnedActionsWithoutEscapes = (workflow: Workflow): void => {
   for (const job of Object.values(workflow.jobs)) {
-    expect(job.if).toBeUndefined();
+    if (job.if !== undefined) {
+      expect(["${{ inputs.command == 'candidate' }}", "${{ inputs.command == 'publish' }}"]).toContain(job.if);
+    }
     expect(job["continue-on-error"]).toBeUndefined();
     for (const step of job.steps ?? []) {
       if (step.uses !== undefined) {
-        expect(step.uses).toMatch(
-          /^(?:actions\/(?:cache|checkout|setup-node|upload-artifact)|oven-sh\/setup-bun)@[0-9a-f]{40}$/,
-        );
+        expect(approvedActions).toContain(step.uses);
       }
       expect(step["continue-on-error"]).toBeUndefined();
-      expect(step.if).toBeUndefined();
+      if (step.if !== undefined) {
+        expect(step.if).toMatch(
+          /^\$\{\{ always\(\) && steps\.(?:prepare|publish)\.outputs\.report-ref != '' \}\}$/,
+        );
+      }
     }
   }
 };
 
-const checkoutAction = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd";
-const exactAction = /^[a-z0-9-]+\/[a-z0-9-]+@[0-9a-f]{40}$/;
-
-const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "dispatch"): string[] => {
+const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "release"): string[] => {
   const errors: string[] = [];
   if (JSON.stringify(workflow.permissions) !== JSON.stringify({ contents: "read" })) {
     errors.push("workflow permissions must be exactly contents: read");
   }
   for (const [jobName, job] of Object.entries(workflow.jobs)) {
-    if (
-      job.permissions !== undefined
-      && JSON.stringify(job.permissions) !== JSON.stringify({ contents: "read" })
-    ) {
-      errors.push(`${jobName} job permissions must be exactly contents: read`);
+    const publishJob = kind === "release" && jobName === "publish";
+    const expectedPermissions = publishJob
+      ? { actions: "read", contents: "write", "id-token": "write" }
+      : kind === "release" && jobName === "candidate"
+      ? { actions: "read", contents: "read" }
+      : { contents: "read" };
+    if (job.permissions !== undefined && JSON.stringify(job.permissions) !== JSON.stringify(expectedPermissions)) {
+      errors.push(`${jobName} job permissions must be exactly ${
+        publishJob
+          ? "release mutation permissions"
+          : kind === "release" && jobName === "candidate"
+          ? "candidate artifact read permissions"
+          : "contents: read"
+      }`);
     }
-    if (job.permissions?.["id-token"] === "write") errors.push(`${jobName} grants id-token: write`);
+    if (!publishJob && job.permissions?.["id-token"] === "write") errors.push(`${jobName} grants id-token: write`);
     const steps = job.steps ?? [];
     for (const [index, step] of steps.entries()) {
-      if (step.uses !== undefined && !exactAction.test(step.uses)) {
-        errors.push(`${jobName} step ${index} action is not pinned by exact SHA`);
+      if (step.uses !== undefined && !approvedActions.has(step.uses)) {
+        errors.push(`${jobName} step ${index} action is not the approved exact identity`);
       }
       if (step.run?.includes("${{")) errors.push(`${jobName} step ${index} interpolates workflow data in shell text`);
       if (step.run?.includes("GITHUB_ENV")) errors.push(`${jobName} step ${index} writes global workflow environment`);
@@ -128,18 +167,34 @@ const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "dispatch"): s
       ) {
         errors.push(`${jobName} lacks the immediate exact-SHA HEAD guard`);
       }
-    } else {
+    } else if (!publishJob) {
       const lexical = steps[0];
       const checkout = steps[1];
       const guard = steps[2];
       if (
         lexical?.id !== "source"
         || lexical.env?.REQUESTED_SOURCE !== "${{ inputs.commit }}"
+        || lexical.env?.REQUESTED_COMMAND !== "${{ inputs.command }}"
+        || lexical.env?.WORKFLOW_SOURCE !== "${{ github.sha }}"
+        || lexical.env?.WORKFLOW_REF !== "${{ github.ref }}"
         || lexical.shell !== "bash"
         || !lexical.run?.includes("^[0-9a-f]{40}$")
+        || !lexical.run.includes('test "$REQUESTED_COMMAND" = "candidate"')
+        || !lexical.run.includes('test -z "$CANDIDATE_RUN_ID"')
+        || !lexical.run.includes('test -z "$CANDIDATE_ARTIFACT_ID"')
+        || !lexical.run.includes('test -z "$CANDIDATE_ARTIFACT_DIGEST"')
+        || !lexical.run.includes('test -z "$PREPARED_REF"')
+        || !lexical.run.includes('test "$REQUESTED_SOURCE" = "$WORKFLOW_SOURCE"')
+        || !lexical.run.includes(
+          'test "$WORKFLOW_REF" = "refs/heads/codex/granular-integration-program"',
+        )
+        || !lexical.run.includes(
+          'test "$WORKFLOW_IDENTITY" = "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/codex/granular-integration-program"',
+        )
+        || !lexical.run.includes('test "$REPOSITORY" = "mannyc2/effect-build"')
         || !lexical.run.includes("GITHUB_OUTPUT")
       ) {
-        errors.push(`${jobName} lacks the pre-checkout lexical source guard`);
+        errors.push(`${jobName} lacks the pre-checkout command/branch/workflow/source guard`);
       }
       if (checkout?.uses !== checkoutAction) errors.push(`${jobName} must checkout only after lexical validation`);
       if (checkout?.with?.ref !== "${{ steps.source.outputs.sha }}") {
@@ -156,6 +211,149 @@ const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "dispatch"): s
       ) {
         errors.push(`${jobName} lacks the immediate input/workflow/HEAD equality guard`);
       }
+      if (!guard?.run?.includes(packageTreeGuard)) {
+        errors.push(`${jobName} lacks the exact approved package-tree guard`);
+      }
+    } else {
+      const lexical = steps[0];
+      if (
+        lexical?.id !== "source"
+        || lexical.env?.REQUESTED_COMMAND !== "${{ inputs.command }}"
+        || lexical.env?.REQUESTED_SOURCE !== "${{ inputs.commit }}"
+        || lexical.env?.WORKFLOW_SOURCE !== "${{ github.sha }}"
+        || lexical.env?.WORKFLOW_REF !== "${{ github.ref }}"
+        || lexical.shell !== "bash"
+        || !lexical.run?.includes('test "$REQUESTED_COMMAND" = "publish"')
+        || !lexical.run.includes("^[0-9a-f]{40}$")
+        || !lexical.run.includes("^sha256:[0-9a-f]{64}$")
+        || !lexical.run.includes("^prepared:gha:mannyc2/effect-build/")
+        || !lexical.run.includes('test "$REQUESTED_SOURCE" = "$WORKFLOW_SOURCE"')
+        || !lexical.run.includes(
+          'test "$WORKFLOW_REF" = "refs/heads/codex/granular-integration-program"',
+        )
+        || !lexical.run.includes(
+          'test "$WORKFLOW_IDENTITY" = "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/codex/granular-integration-program"',
+        )
+        || !lexical.run.includes('test "$REPOSITORY" = "mannyc2/effect-build"')
+      ) {
+        errors.push("publish lacks the pre-mutation command/branch/workflow/source guard");
+      }
+      if (steps.some((step) => step.uses === checkoutAction)) errors.push("publish checks out repository source");
+    }
+  }
+  return errors;
+};
+
+const candidateTransportErrors = (workflow: Workflow): string[] => {
+  const errors: string[] = [];
+  const steps = workflow.jobs.candidate?.steps ?? [];
+  if (steps.some((step) => step.uses?.startsWith("actions/download-artifact@"))) {
+    errors.push("candidate trusts download-artifact extraction without proving the transferred ZIP digest");
+  }
+  const authorityIndex = steps.findIndex((step) => step.run?.includes(".total_count == 1"));
+  const transferIndex = steps.findIndex((step) => step.run?.includes("/actions/artifacts/$CANDIDATE_ARTIFACT_ID/zip"));
+  const prepareIndex = steps.findIndex((step) => step.id === "prepare");
+  if (
+    authorityIndex < 0
+    || transferIndex <= authorityIndex
+    || prepareIndex <= transferIndex
+  ) {
+    errors.push("candidate transport must follow REST authority and precede preparation");
+    return errors;
+  }
+  const transfer = steps[transferIndex]!;
+  if (
+    transfer.shell !== "bash"
+    || transfer.env?.GH_TOKEN !== "${{ github.token }}"
+    || transfer.env?.REPOSITORY !== "${{ github.repository }}"
+    || transfer.env?.CANDIDATE_ARTIFACT_ID !== "${{ steps.upload-candidate.outputs.artifact-id }}"
+    || transfer.env?.CANDIDATE_ARTIFACT_DIGEST !== "sha256:${{ steps.upload-candidate.outputs.artifact-digest }}"
+    || transfer.env?.CANDIDATE_ZIP !== "${{ runner.temp }}/effect-build-candidate.zip"
+    || transfer.env?.CANDIDATE_DIRECTORY !== "${{ github.workspace }}/outputs/effect-build-candidate"
+  ) {
+    errors.push("candidate transport lacks exact artifact identity and bounded paths");
+  }
+  const run = transfer.run ?? "";
+  const download = 'gh api "/repos/$REPOSITORY/actions/artifacts/$CANDIDATE_ARTIFACT_ID/zip" > "$CANDIDATE_ZIP"';
+  const hash = 'test "sha256:$(sha256sum "$CANDIDATE_ZIP" | awk \'{print $1}\')" = "$CANDIDATE_ARTIFACT_DIGEST"';
+  const extract = 'unzip -q "$CANDIDATE_ZIP" -d "$CANDIDATE_DIRECTORY"';
+  const downloadIndex = run.indexOf(download);
+  const hashIndex = run.indexOf(hash);
+  const extractIndex = run.indexOf(extract);
+  if (downloadIndex < 0 || hashIndex <= downloadIndex || extractIndex <= hashIndex) {
+    errors.push("candidate transport must hash the downloaded ZIP before extracting it");
+  }
+  return errors;
+};
+
+const candidatePreparationErrors = (workflow: Workflow): string[] => {
+  const errors: string[] = [];
+  const steps = workflow.jobs.candidate?.steps ?? [];
+  const packIndex = steps.findIndex((step) => step.run?.includes("test-built-consumer.mjs --candidate-dir"));
+  const preUploadVerifyIndex = steps.findIndex((step) => step.name === "Verify the packed candidate before transfer");
+  const uploadIndex = steps.findIndex((step) => step.id === "upload-candidate");
+  const authorityIndex = steps.findIndex((step) => step.run?.includes(".total_count == 1"));
+  const transferIndex = steps.findIndex((step) => step.run?.includes("/actions/artifacts/$CANDIDATE_ARTIFACT_ID/zip"));
+  const postTransferIndex = steps.findIndex((step) =>
+    step.name === "Verify the transferred candidate and write release config"
+  );
+  const prepareIndex = steps.findIndex((step) => step.id === "prepare");
+  const sequence = [
+    packIndex,
+    preUploadVerifyIndex,
+    uploadIndex,
+    authorityIndex,
+    transferIndex,
+    postTransferIndex,
+    prepareIndex,
+  ];
+  if (
+    sequence.some((index) => index < 0)
+    || sequence.some((index, position) => position > 0 && index <= sequence[position - 1]!)
+  ) {
+    errors.push(
+      "candidate preparation order must be pack, verify, upload, authenticate, transfer, verify/config, prepare",
+    );
+    return errors;
+  }
+  const verificationCommand =
+    'node scripts/verify-candidate.mjs --directory "$CANDIDATE_DIRECTORY" --source "$CANDIDATE_SOURCE"';
+  if (!steps[preUploadVerifyIndex]?.run?.includes(verificationCommand)) {
+    errors.push("candidate must verify the packed bytes before upload");
+  }
+  const postTransfer = steps[postTransferIndex]?.run ?? "";
+  const verificationIndex = postTransfer.indexOf(verificationCommand);
+  const configIndex = postTransfer.indexOf("node scripts/write-release-config.mjs --manifest");
+  if (verificationIndex < 0 || configIndex <= verificationIndex) {
+    errors.push("candidate release config must be generated only after post-transfer verification");
+  }
+  return errors;
+};
+
+const qualifiedActionInputErrors = (workflow: Workflow): string[] => {
+  const errors: string[] = [];
+  const expected = {
+    candidate: {
+      env: { GITHUB_TOKEN: "${{ github.token }}" },
+      with: { command: "prepare", config: "outputs/release.config.json" },
+    },
+    publish: {
+      env: { GITHUB_TOKEN: "${{ github.token }}" },
+      with: { command: "publish", prepared: "${{ inputs.prepared_ref }}" },
+    },
+  } as const;
+  for (const jobName of ["candidate", "publish"] as const) {
+    const actions = (workflow.jobs[jobName]?.steps ?? []).filter((step) => step.uses === qualifiedReleaseAction);
+    if (actions.length !== 1) {
+      errors.push(`${jobName} must invoke the qualified Action exactly once`);
+      continue;
+    }
+    const action = actions[0]!;
+    if (
+      JSON.stringify(action.env) !== JSON.stringify(expected[jobName].env)
+      || JSON.stringify(action.with) !== JSON.stringify(expected[jobName].with)
+    ) {
+      errors.push(`${jobName} qualified Action inputs must be literally exact`);
     }
   }
   return errors;
@@ -689,28 +887,227 @@ describe("tooling pins and workflow contracts", () => {
       .toEqual({ EFFECT_BUILD_NODE_SEA_BIN: "${{ steps.node26.outputs.path }}" });
   });
 
-  it("keeps release preparation non-mutating and emits one five-package candidate", async () => {
+  it("closes release dispatch around one exact candidate or one authenticated publication", async () => {
     const workflow = parse(await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")) as Workflow;
-    expect(workflowAuthorityErrors(workflow, "dispatch")).toEqual([]);
+    expect(workflowAuthorityErrors(workflow, "release")).toEqual([]);
     expect(workflow.on).toEqual({
       workflow_dispatch: {
         inputs: {
-          commit: { description: "Exact 40-character source commit", required: true, type: "string" },
+          command: {
+            description: "Candidate preparation or exact prepared publication",
+            required: true,
+            default: "candidate",
+            type: "choice",
+            options: ["candidate", "publish"],
+          },
+          commit: {
+            description: "Exact workflow and candidate source commit",
+            required: true,
+            type: "string",
+          },
+          candidate_run_id: {
+            description: "Successful candidate workflow run ID; publish only",
+            required: false,
+            default: "",
+            type: "string",
+          },
+          candidate_artifact_id: {
+            description: "Raw candidate artifact ID; publish only",
+            required: false,
+            default: "",
+            type: "string",
+          },
+          candidate_artifact_digest: {
+            description: "Raw candidate artifact sha256 digest; publish only",
+            required: false,
+            default: "",
+            type: "string",
+          },
+          prepared_ref: {
+            description: "Qualified Action prepared:gha reference; publish only",
+            required: false,
+            default: "",
+            type: "string",
+          },
         },
       },
     });
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(Object.keys(workflow.jobs)).toEqual(["esbuild", "node-sea", "bun-bundle", "candidate"]);
-    expect(workflow.jobs.candidate?.needs).toEqual(["esbuild", "node-sea", "bun-bundle"]);
+    const candidateChecks = ["candidate-gates", "node-sea", "bun-bundle"];
+    const candidateGateMatrix = [
+      { gate: "quality", runner: "ubuntu-24.04" },
+      { gate: "esbuild", runner: "ubuntu-24.04" },
+      { gate: "real-tools", runner: "ubuntu-24.04" },
+      { gate: "target-bun", runner: "ubuntu-24.04" },
+      { gate: "target-deno", runner: "ubuntu-24.04" },
+      { gate: "effect-beta", runner: "ubuntu-24.04" },
+      { gate: "effect-rc", runner: "ubuntu-24.04" },
+      { gate: "publication-ubuntu", runner: "ubuntu-24.04" },
+      { gate: "publication-macos", runner: "macos-15" },
+      { gate: "publication-windows", runner: "windows-2025" },
+    ];
+    expect(Object.keys(workflow.jobs)).toEqual([...candidateChecks, "candidate", "publish"]);
+    expect(workflow.jobs.candidate?.needs).toEqual(candidateChecks);
+    expect(workflow.jobs.candidate?.permissions).toEqual({ actions: "read", contents: "read" });
+    expect(workflow.jobs.candidate?.outputs).toEqual({
+      "candidate-artifact-id": "${{ steps.upload-candidate.outputs.artifact-id }}",
+      "candidate-artifact-digest": "sha256:${{ steps.upload-candidate.outputs.artifact-digest }}",
+      "prepared-ref": "${{ steps.prepare.outputs.prepared-ref }}",
+    });
+    for (const name of [...candidateChecks, "candidate"]) {
+      expect(workflow.jobs[name]?.if).toBe("${{ inputs.command == 'candidate' }}");
+    }
+    expect(workflow.jobs.publish).toMatchObject({
+      if: "${{ inputs.command == 'publish' }}",
+      environment: "npm",
+      permissions: { actions: "read", contents: "write", "id-token": "write" },
+      "runs-on": "ubuntu-24.04",
+    });
+    expect(workflow.jobs.publish?.needs).toBeUndefined();
     expectPinnedActionsWithoutEscapes(workflow);
+    expect(qualifiedActionInputErrors(workflow)).toEqual([]);
+
     const source = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
-    expect(source).toContain("node scripts/test-built-consumer.mjs --candidate-dir");
+    expect(source.match(/node scripts\/test-built-consumer\.mjs --candidate-dir/g)).toHaveLength(1);
     expect(source).toContain("node scripts/verify-candidate.mjs --directory");
+    expect(source).toContain("node scripts/write-release-config.mjs --manifest");
+    expect(source).toContain("for verifier in verify-release-artifact.mjs verify-candidate.mjs");
+    expect(source).toContain('node "$EVIDENCE_ROOT/verifiers/verify-release-artifact.mjs"');
     expect(source).toContain("effect-build-0.3.0-candidate");
-    expect(source).toContain("bun run verify:effect");
-    expect(source).not.toMatch(/npm publish|gh release|git tag|ts-release|NODE_AUTH_TOKEN|id-token:\s*write/i);
+    expect(source).toContain("effect-build-0.3.0-prepare-report-");
+    expect(source).not.toMatch(/npm\s+pack|npm\s+publish|gh\s+release|git\s+tag|NODE_AUTH_TOKEN|NPM_TOKEN/i);
+
+    expect(workflow.jobs["candidate-gates"]?.strategy).toEqual({
+      "fail-fast": false,
+      matrix: { include: candidateGateMatrix },
+    });
+    expect(jobRuns(workflow, "candidate-gates")).toContain("bun run verify");
+    expect(jobRuns(workflow, "candidate-gates")).toContain("bun run verify:real");
+    expect(jobRuns(workflow, "candidate-gates")).toContain("--compiler bun");
+    expect(jobRuns(workflow, "candidate-gates")).toContain("--compiler deno");
+    expect(jobRuns(workflow, "candidate-gates")).toContain("--effect-version 4.0.0-beta.104");
+    expect(jobRuns(workflow, "candidate-gates")).toContain("--effect-version 4.0.0-rc.108");
+    expect(jobRuns(workflow, "candidate-gates")).toContain("bun run test:publication");
+    expect(jobRuns(workflow, "node-sea")).toContain("bun run test:integration:node-sea");
+    expect(jobRuns(workflow, "bun-bundle")).toContain("bun run test:integration:bun-bundle");
+    expect(jobRuns(workflow, "bun-bundle")).toContain("bun run test:integration:bun-node-sea");
+
+    const candidateActions = workflow.jobs.candidate?.steps?.filter((step) => step.uses === qualifiedReleaseAction);
+    expect(candidateActions).toEqual([expect.objectContaining({
+      id: "prepare",
+      env: { GITHUB_TOKEN: "${{ github.token }}" },
+      with: { command: "prepare", config: "outputs/release.config.json" },
+    })]);
+    const candidateSteps = workflow.jobs.candidate!.steps!;
+    const packIndex = candidateSteps.findIndex((step) => step.run?.includes("test-built-consumer.mjs --candidate-dir"));
+    const preUploadVerifyIndex = candidateSteps.findIndex((step) =>
+      step.name === "Verify the packed candidate before transfer"
+    );
+    const rawUploadIndex = candidateSteps.findIndex((step) => step.id === "upload-candidate");
+    const rawAuthorityIndex = candidateSteps.findIndex((step) => step.run?.includes(".total_count == 1"));
+    const rawTransferIndex = candidateSteps.findIndex((step) =>
+      step.run?.includes("/actions/artifacts/$CANDIDATE_ARTIFACT_ID/zip")
+    );
+    const postTransferVerifyIndex = candidateSteps.findIndex((step) =>
+      step.name === "Verify the transferred candidate and write release config"
+    );
+    const prepareIndex = candidateSteps.findIndex((step) => step.id === "prepare");
+    expect(
+      Math.min(
+        packIndex,
+        preUploadVerifyIndex,
+        rawUploadIndex,
+        rawAuthorityIndex,
+        rawTransferIndex,
+        postTransferVerifyIndex,
+        prepareIndex,
+      ),
+    ).toBeGreaterThan(-1);
+    const candidateSequence = [
+      packIndex,
+      preUploadVerifyIndex,
+      rawUploadIndex,
+      rawAuthorityIndex,
+      rawTransferIndex,
+      postTransferVerifyIndex,
+      prepareIndex,
+    ];
+    expect(candidateSequence).toEqual(candidateSequence.slice().sort((left, right) => left - right));
+    expect(candidateTransportErrors(workflow)).toEqual([]);
+    expect(candidatePreparationErrors(workflow)).toEqual([]);
+    expect(candidateSteps[rawUploadIndex]).toMatchObject({
+      uses: "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+      with: {
+        name: "effect-build-0.3.0-candidate",
+        path: "${{ runner.temp }}/effect-build-candidate",
+        "if-no-files-found": "error",
+        "retention-days": 7,
+      },
+    });
+    expect(candidateSteps[rawAuthorityIndex]).toMatchObject({
+      env: {
+        GH_TOKEN: "${{ github.token }}",
+        CANDIDATE_RUN_ID: "${{ github.run_id }}",
+        CANDIDATE_SOURCE: "${{ steps.source.outputs.sha }}",
+        CANDIDATE_ARTIFACT_ID: "${{ steps.upload-candidate.outputs.artifact-id }}",
+        CANDIDATE_ARTIFACT_DIGEST: "sha256:${{ steps.upload-candidate.outputs.artifact-digest }}",
+      },
+    });
+    expect(candidateSteps.filter((step) => step.uses?.startsWith("actions/upload-artifact@"))).toHaveLength(2);
+    expect(candidateSteps.find((step) => step.with?.name?.toString().startsWith("effect-build-0.3.0-prepare-report-")))
+      .toMatchObject({ with: { name: "effect-build-0.3.0-prepare-report-${{ github.run_attempt }}" } });
+    const publishActions = workflow.jobs.publish?.steps?.filter((step) => step.uses === qualifiedReleaseAction);
+    expect(publishActions).toEqual([expect.objectContaining({
+      id: "publish",
+      env: { GITHUB_TOKEN: "${{ github.token }}" },
+      with: { command: "publish", prepared: "${{ inputs.prepared_ref }}" },
+    })]);
+
+    const publishRuns = jobRuns(workflow, "publish");
+    const releaseEvidenceStep = workflow.jobs.publish!.steps!.find((step) =>
+      step.run?.includes("verify-release-artifact.mjs")
+    )!;
+    expect(releaseEvidenceStep.env).toMatchObject({
+      VERIFY_RELEASE_ARTIFACT_SHA256: createHash("sha256")
+        .update(await readFile(resolve(root, "scripts/verify-release-artifact.mjs")))
+        .digest("hex"),
+      VERIFY_CANDIDATE_SHA256: createHash("sha256")
+        .update(await readFile(resolve(root, "scripts/verify-candidate.mjs")))
+        .digest("hex"),
+    });
+    expect(releaseEvidenceStep.env?.VERIFY_RELEASE_ARTIFACT_SHA256).toMatch(/^[0-9a-f]{64}$/);
+    expect(releaseEvidenceStep.env?.VERIFY_CANDIDATE_SHA256).toMatch(/^[0-9a-f]{64}$/);
+    expect(publishRuns).toContain("actions/runs/$CANDIDATE_RUN_ID");
+    expect(publishRuns).toContain("actions/artifacts/$CANDIDATE_ARTIFACT_ID");
+    expect(publishRuns).toContain("contents/scripts/$verifier?ref=$REQUESTED_SOURCE");
+    expect(publishRuns).toContain(
+      'test "sha256:$(sha256sum "$EVIDENCE_ROOT/candidate.zip" | awk \'{print $1}\')" = "$CANDIDATE_ARTIFACT_DIGEST"',
+    );
+    expect(publishRuns).toContain(
+      'test "sha256:$(sha256sum "$EVIDENCE_ROOT/report.zip" | awk \'{print $1}\')" = "$report_artifact_digest"',
+    );
+    expect(publishRuns).toContain(
+      'test "$(sha256sum "$destination" | awk \'{print $1}\')" = "$expected_sha256"',
+    );
+    expect(publishRuns).not.toMatch(forbiddenPublishPackageCommand);
+    expect(workflow.jobs.publish?.steps?.some((step) => step.uses === checkoutAction)).toBe(false);
+    expect(workflow.jobs.publish?.steps?.findIndex((step) => step.uses === qualifiedReleaseAction)).toBeGreaterThan(
+      workflow.jobs.publish?.steps?.findIndex((step) => step.run?.includes("verify-release-artifact.mjs")) ?? -1,
+    );
+
     const consumer = await readFile(resolve(root, "scripts/test-built-consumer.mjs"), "utf8");
-    for (const name of publicPackages) expect(consumer).toContain(JSON.stringify(name));
+    const packageList = consumer.match(/const packageNames = (\[[\s\S]*?\]);\nconst integrationNames/);
+    expect(packageList).not.toBeNull();
+    expect(JSON.parse(packageList![1]!.replace(/,\s*]$/, "]"))).toEqual(publicPackages);
+    expect(consumer.match(/\bpackPackages\(/g)).toHaveLength(1);
+    expect(consumer).toContain("const tarballs = await packPackages(bun, packDirectory);");
+    expect(consumer.match(/\["pm", "pack",/g)).toHaveLength(1);
+    const packerStart = consumer.indexOf("const packPackages = async (bun, destination) => {");
+    const packerEnd = consumer.indexOf("\nconst compilerTypeScriptSource", packerStart);
+    expect(Math.min(packerStart, packerEnd)).toBeGreaterThan(-1);
+    const packer = consumer.slice(packerStart, packerEnd);
+    expect(packer).toContain("for (const name of packageNames) {");
+    expect(packer.match(/await execute\(bun, \["pm", "pack",/g)).toHaveLength(1);
     expect(consumer).toContain('console.log("packed consumers verified: 14/14")');
     expect(consumer).toContain('for (const producer of ["esbuild", "bun"])');
   });
@@ -719,7 +1116,7 @@ describe("tooling pins and workflow contracts", () => {
     const ci = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as Workflow;
     const dispatch = parse(await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")) as Workflow;
     expect(workflowAuthorityErrors(ci, "ci")).toEqual([]);
-    expect(workflowAuthorityErrors(dispatch, "dispatch")).toEqual([]);
+    expect(workflowAuthorityErrors(dispatch, "release")).toEqual([]);
 
     const wrongRef = structuredClone(ci);
     wrongRef.jobs.quality!.steps![0]!.with!.ref = "refs/heads/main";
@@ -735,34 +1132,132 @@ describe("tooling pins and workflow contracts", () => {
 
     const unpinned = structuredClone(ci);
     unpinned.jobs.quality!.steps![0]!.uses = "actions/checkout@v4";
-    expect(workflowAuthorityErrors(unpinned, "ci")).toContain("quality step 0 action is not pinned by exact SHA");
+    expect(workflowAuthorityErrors(unpinned, "ci")).toContain(
+      "quality step 0 action is not the approved exact identity",
+    );
+
+    const alternateCommit = structuredClone(ci);
+    alternateCommit.jobs.quality!.steps![0]!.uses = `actions/checkout@${"a".repeat(40)}`;
+    expect(workflowAuthorityErrors(alternateCommit, "ci")).toContain(
+      "quality step 0 action is not the approved exact identity",
+    );
 
     const maliciousOutput = structuredClone(dispatch);
     maliciousOutput.jobs["node-sea"]!.steps!.push({
       run: 'producer="${{ steps.node26.outputs.path }}$(touch /tmp/escaped)"',
     });
-    expect(workflowAuthorityErrors(maliciousOutput, "dispatch")).toContain(
+    expect(workflowAuthorityErrors(maliciousOutput, "release")).toContain(
       `node-sea step ${maliciousOutput.jobs["node-sea"]!.steps!.length - 1} interpolates workflow data in shell text`,
     );
 
     const wrongDispatchRef = structuredClone(dispatch);
-    wrongDispatchRef.jobs.esbuild!.steps![1]!.with!.ref = "${{ inputs.commit }}";
-    expect(workflowAuthorityErrors(wrongDispatchRef, "dispatch")).toContain(
-      "esbuild checkout ref is not the validated source output",
+    wrongDispatchRef.jobs["candidate-gates"]!.steps![1]!.with!.ref = "${{ inputs.commit }}";
+    expect(workflowAuthorityErrors(wrongDispatchRef, "release")).toContain(
+      "candidate-gates checkout ref is not the validated source output",
     );
 
     const missingEquality = structuredClone(dispatch);
-    missingEquality.jobs.esbuild!.steps![2]!.run = missingEquality.jobs.esbuild!.steps![2]!.run!.replace(
-      'test "$REQUESTED_SOURCE" = "$WORKFLOW_SOURCE"\n',
-      "",
+    missingEquality.jobs["candidate-gates"]!.steps![2]!.run = missingEquality.jobs["candidate-gates"]!.steps![2]!.run!
+      .replace(
+        'test "$REQUESTED_SOURCE" = "$WORKFLOW_SOURCE"\n',
+        "",
+      );
+    expect(workflowAuthorityErrors(missingEquality, "release")).toContain(
+      "candidate-gates lacks the immediate input/workflow/HEAD equality guard",
     );
-    expect(workflowAuthorityErrors(missingEquality, "dispatch")).toContain(
-      "esbuild lacks the immediate input/workflow/HEAD equality guard",
+
+    const missingPackageTree = structuredClone(dispatch);
+    missingPackageTree.jobs["candidate-gates"]!.steps![2]!.run = missingPackageTree.jobs["candidate-gates"]!.steps![2]!
+      .run!.replace(`${packageTreeGuard}\n`, "");
+    expect(workflowAuthorityErrors(missingPackageTree, "release")).toContain(
+      "candidate-gates lacks the exact approved package-tree guard",
+    );
+
+    const wrongPackageTree = structuredClone(dispatch);
+    wrongPackageTree.jobs["candidate-gates"]!.steps![2]!.run = wrongPackageTree.jobs["candidate-gates"]!.steps![2]!.run!
+      .replace(approvedPackageTree, "b".repeat(40));
+    expect(workflowAuthorityErrors(wrongPackageTree, "release")).toContain(
+      "candidate-gates lacks the exact approved package-tree guard",
     );
 
     const publishPermission = structuredClone(dispatch);
     publishPermission.jobs.candidate!.permissions = { "id-token": "write" };
-    expect(workflowAuthorityErrors(publishPermission, "dispatch")).toContain("candidate grants id-token: write");
+    expect(workflowAuthorityErrors(publishPermission, "release")).toContain("candidate grants id-token: write");
+
+    const unverifiedCandidateTransfer = structuredClone(dispatch);
+    const transfer = unverifiedCandidateTransfer.jobs.candidate!.steps!.find((step) =>
+      step.run?.includes("/actions/artifacts/$CANDIDATE_ARTIFACT_ID/zip")
+    )!;
+    transfer.run = transfer.run!.replace(
+      'test "sha256:$(sha256sum "$CANDIDATE_ZIP" | awk \'{print $1}\')" = "$CANDIDATE_ARTIFACT_DIGEST"\n',
+      "",
+    );
+    expect(candidateTransportErrors(unverifiedCandidateTransfer)).toContain(
+      "candidate transport must hash the downloaded ZIP before extracting it",
+    );
+
+    const prematurelyExtractedCandidate = structuredClone(dispatch);
+    const reorderedTransfer = prematurelyExtractedCandidate.jobs.candidate!.steps!.find((step) =>
+      step.run?.includes("/actions/artifacts/$CANDIDATE_ARTIFACT_ID/zip")
+    )!;
+    const hashLine = 'test "sha256:$(sha256sum "$CANDIDATE_ZIP" | awk \'{print $1}\')" = "$CANDIDATE_ARTIFACT_DIGEST"';
+    const extractLine = 'unzip -q "$CANDIDATE_ZIP" -d "$CANDIDATE_DIRECTORY"';
+    reorderedTransfer.run = reorderedTransfer.run!.replace(
+      `${hashLine}\n${extractLine}`,
+      `${extractLine}\n${hashLine}`,
+    );
+    expect(candidateTransportErrors(prematurelyExtractedCandidate)).toContain(
+      "candidate transport must hash the downloaded ZIP before extracting it",
+    );
+
+    const actionExtractedCandidate = structuredClone(dispatch);
+    actionExtractedCandidate.jobs.candidate!.steps!.splice(9, 0, {
+      uses: "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    });
+    expect(candidateTransportErrors(actionExtractedCandidate)).toContain(
+      "candidate trusts download-artifact extraction without proving the transferred ZIP digest",
+    );
+
+    const verifyCommand =
+      'node scripts/verify-candidate.mjs --directory "$CANDIDATE_DIRECTORY" --source "$CANDIDATE_SOURCE"';
+    const unverifiedUpload = structuredClone(dispatch);
+    const preUploadVerification = unverifiedUpload.jobs.candidate!.steps!.find((step) =>
+      step.name === "Verify the packed candidate before transfer"
+    )!;
+    preUploadVerification.run = preUploadVerification.run!.replace(`${verifyCommand}\n`, "");
+    expect(candidatePreparationErrors(unverifiedUpload)).toContain(
+      "candidate must verify the packed bytes before upload",
+    );
+
+    const prematureConfig = structuredClone(dispatch);
+    const postTransfer = prematureConfig.jobs.candidate!.steps!.find((step) =>
+      step.name === "Verify the transferred candidate and write release config"
+    )!;
+    const configCommand = postTransfer.run!.split("\n").find((line) =>
+      line.startsWith("node scripts/write-release-config.mjs --manifest")
+    )!;
+    postTransfer.run = postTransfer.run!.replace(
+      `${verifyCommand}\n${configCommand}`,
+      `${configCommand}\n${verifyCommand}`,
+    );
+    expect(candidatePreparationErrors(prematureConfig)).toContain(
+      "candidate release config must be generated only after post-transfer verification",
+    );
+
+    for (const command of ["npm pack", "bun pack", "bun pm pack", "pnpm pack", "yarn pack"]) {
+      const repackingPublish = structuredClone(dispatch);
+      repackingPublish.jobs.publish!.steps!.splice(-1, 0, { run: command });
+      expect(jobRuns(repackingPublish, "publish"), command).toMatch(forbiddenPublishPackageCommand);
+    }
+
+    for (const jobName of ["candidate", "publish"] as const) {
+      const widenedAction = structuredClone(dispatch);
+      const action = widenedAction.jobs[jobName]!.steps!.find((step) => step.uses === qualifiedReleaseAction)!;
+      action.with!.fallback = "true";
+      expect(qualifiedActionInputErrors(widenedAction)).toContain(
+        `${jobName} qualified Action inputs must be literally exact`,
+      );
+    }
 
     const writePermission = structuredClone(ci);
     writePermission.jobs.quality!.permissions = { contents: "write" };

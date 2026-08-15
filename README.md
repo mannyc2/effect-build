@@ -163,6 +163,25 @@ argv escape hatch, or generic build executor. Stage values and observed
 external imports are observations,
 not manifests, receipts, provenance, hermeticity, or reproducibility claims.
 
+## Release boundary
+
+The unreleased `0.3.0` cut is certified and released by two separately
+authorized workflow dispatches. Candidate mode checks one exact descendant
+source SHA, packs the five public packages once, exercises those exact tarball
+bytes in locked consumers, and asks the immutable qualified ts-release Action
+at `105b6b5cc39757f5284c30b082e7cfd71b9959b2` to prepare them. Publish mode
+checks out no source and performs no package dependency install, build, or
+pack. It authenticates the exact candidate run, raw artifact, and prepared
+reference before the same Action observes and resumes core, Bun, Deno,
+Esbuild, Node SEA, then GitHub.
+
+Only the checked bundled Action is qualified for this repository's Effect
+`4.0.0-rc.108` release. The npm-installed ts-release library and CLI are not a
+fallback. Publication uses the protected `npm` environment and trusted OIDC;
+manual publication, long-lived npm tokens, repacking, and blind retries are
+not accepted recovery paths. No release is claimed until registry, tag,
+GitHub Release, exact-byte, and public-consumer observations all converge.
+
 ## Documentation
 
 - [API](docs/api.md)
@@ -170,6 +189,7 @@ not manifests, receipts, provenance, hermeticity, or reproducibility claims.
 - [Integrations](docs/drivers.md)
 - [Errors](docs/errors.md)
 - [Candidate and workflow security](docs/release-security.md)
+- [Changelog](CHANGELOG.md)
 - [Runnable examples](examples/README.md)
 
 Run `bun run verify` for the deterministic local gate.

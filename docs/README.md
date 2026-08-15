@@ -13,6 +13,7 @@ compose integrations explicitly.
 | [Integrations](drivers.md)              | Bun, Deno, Esbuild, and Node SEA behavior                              |
 | [Errors](errors.md)                     | Separate tagged-error boundaries and interruption                      |
 | [Release security](release-security.md) | Exact-source workflows, locked consumers, and candidate evidence       |
+| [Changelog](../CHANGELOG.md)            | Unreleased package cut and release-visible behavior                    |
 
 Runnable installed-consumer examples are under [`examples/`](../examples).
 Repository constraints are in [`AGENTS.md`](../AGENTS.md).

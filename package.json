@@ -1,5 +1,6 @@
 {
   "name": "effect-build-workspace",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.14",
@@ -16,7 +17,7 @@
     "build": "bun run clean && tsc -b tsconfig.packages.json --force",
     "test:types": "tstyche",
     "test:unit": "vitest run test/unit/core-artifact.test.ts test/unit/standalone-contract.test.ts test/unit/standalone-process.test.ts test/unit/standalone-publication.test.ts test/unit/standalone-bun.test.ts test/unit/standalone-deno.test.ts test/unit/standalone-matrix.test.ts test/unit/esbuild-bundle.test.ts test/unit/bun-bundle.test.ts test/unit/node-sea.test.ts test/unit/esbuild-node-sea-pipeline.test.ts test/unit/bun-node-sea-pipeline.test.ts",
-    "test:architecture": "vitest run test/architecture/import-boundaries.test.ts test/architecture/public-api.test.ts test/architecture/generated-and-ci.test.ts test/architecture/workflow-and-consumer-security.test.ts test/architecture/docs-contract.test.ts test/architecture/workspace-topology.test.ts test/architecture/provider-spi.test.ts",
+    "test:architecture": "vitest run test/architecture/import-boundaries.test.ts test/architecture/public-api.test.ts test/architecture/generated-and-ci.test.ts test/architecture/release-config-and-artifact.test.ts test/architecture/workflow-and-consumer-security.test.ts test/architecture/docs-contract.test.ts test/architecture/workspace-topology.test.ts test/architecture/provider-spi.test.ts",
     "test:consumer": "node scripts/test-built-consumer.mjs",
     "test:consumer:fresh": "node scripts/test-built-consumer.mjs --fresh-install",
     "test:publication": "vitest run test/unit/standalone-publication.test.ts",

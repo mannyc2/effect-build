@@ -59,3 +59,39 @@ hermeticity, input-closure, provenance, or cross-platform reproducibility claim.
 tarballs are packed once; consumer verification and any later coordinated
 release must consume the same exact tarball bytes. This candidate workflow is
 read-only and grants no registry or release mutation authority.
+
+## Ordered release activation
+
+Release activation is a second, separately approved dispatch at the unchanged
+candidate branch and exact SHA. The candidate dispatch is the sole producer of
+the raw six-file artifact: five tarballs plus manifest v2. The immutable
+qualified ts-release Action at
+`105b6b5cc39757f5284c30b082e7cfd71b9959b2` copies those blobs into its durable
+prepared store without running `npm pack`. A redacted preparation report is
+evidence, not a second candidate.
+
+The publish job runs on GitHub-hosted Ubuntu in the protected `npm`
+environment. It alone receives `actions: read`, `contents: write`, and
+`id-token: write`. It has no checkout, build, dependency install, package cache,
+or pack step. The pinned Bun setup supplies the qualified Action's host runtime;
+it does not install repository dependencies. Before the Action's publish path
+can run, the job authenticates the candidate workflow, event, branch, head SHA,
+terminal conclusion, raw artifact ID/name/digest/expiry, and the Action-owned
+prepared reference. The downloaded raw-candidate and report ZIPs must match
+their authenticated REST digests before extraction. The workflow source and
+candidate manifest name the descendant release commit as their authority; a
+package-tree comparison separately proves that `packages/**` is unchanged from
+the corrected pre-release source
+`a989fd12c377534b36fb468a2c4e8baf00330410`.
+
+The existing ts-release coordinator remains the only mutation kernel. It
+observes and resumes, in order, `effect-build`, Bun, Deno, Esbuild, Node SEA,
+and finally the GitHub tag/release. Equivalent existing bytes converge;
+conflicts or unresolved unknown outcomes stop later subjects. There is no
+custom publisher adapter, manual or token fallback, repack, blind retry, or
+GitHub-first path. The npm-installed ts-release library/CLI is not qualified;
+only the checked bundled Action at the immutable commit above may be used.
+
+These rules describe the unreleased `0.3.0` protocol. They do not claim that an
+npm version, tag, or GitHub Release exists before the separately approved
+publish dispatch and final anonymous verification succeed.
