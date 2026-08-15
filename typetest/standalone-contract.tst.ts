@@ -159,6 +159,16 @@ export const _denoRejectsMusl = Deno.compileExecutable({
   // @ts-expect-error!
   target: "linux-x64-musl",
 });
+export const _bunRejectsNonBooleanDigest = Bun.compileExecutable({
+  entrypoint: "src/main.ts",
+  outfile: "dist/app",
+  // @ts-expect-error!
+  digest: "yes",
+});
+// @ts-expect-error!
+export const _denoRejectsMissingEntrypoint = Deno.compileExecutable({
+  outfile: "dist/app",
+});
 export const _matrixRejectsEmpty = Bun.compileExecutableMatrix({
   entrypoint: "src/main.ts",
   outdir: "dist",

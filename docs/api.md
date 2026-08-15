@@ -41,6 +41,16 @@ The scalar result is the provider-refined executable Artifact. Its error
 channel is `BuildError.BuildError`, and its environment is the selected
 provider service.
 
+Scalar runtime input is totally decoded in deterministic field order. Malformed
+untyped scalar inputs now fail before request-owned filesystem, argv-rendering,
+staging, or compiler-child work. The existing `InvalidDriverOptions` carries a
+provider-attributed `<field> <reason>` for envelope and common-field failures;
+provider-option failures retain their adapter's existing exact reason, and
+invalid targets retain `TargetUnsupported`. Valid TypeScript callers remain
+source-compatible. Layer construction is a separate acquisition boundary: a
+freshly provided Layer still selects and probes the command before scalar
+request preflight, while a reused Layer shares that acquisition.
+
 The homogeneous matrix input shares one entrypoint, output directory, name,
 options value, and non-empty target tuple. `concurrency` defaults to one and
 must be a positive safe integer. Total preflight runs before any filesystem,

@@ -42,6 +42,14 @@ reference is exactly `4.0.0-rc.108`.
 `compileExecutable` and homogeneous-provider `compileExecutableMatrix`
 operations.
 
+Malformed untyped scalar inputs now fail deterministically instead of being
+forwarded to the compiler. Unknown fields, missing or invalid paths, explicitly
+undefined `cwd` or `digest`, and invalid provider options use
+`InvalidDriverOptions`; invalid targets retain `TargetUnsupported`. Valid
+TypeScript callers remain source-compatible. A freshly provided compiler Layer
+still selects and probes its command before scalar request preflight; after the
+service is acquired, rejection performs no staging or compile child work.
+
 ```ts
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";

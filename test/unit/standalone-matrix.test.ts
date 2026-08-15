@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit, Fiber, Path, Result, Schema } from "effect";
+import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, Path, Result, Schema } from "effect";
+import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
@@ -241,6 +242,21 @@ const runnerFor = <const Name extends string, SupportedTarget extends SystemTarg
   );
 };
 
+const countServiceCalls = <Service extends object>(
+  service: Service,
+  onCall: () => void,
+): Service =>
+  new Proxy(service, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver) as unknown;
+      if (typeof value !== "function") return value;
+      return (...args: readonly unknown[]) => {
+        onCall();
+        return Reflect.apply(value, target, args);
+      };
+    },
+  });
+
 interface FixtureEvent {
   readonly event: string;
   readonly target: string;
@@ -365,6 +381,216 @@ const assertConstructorRejects = (value: unknown): void => {
 };
 
 describe("standalone matrix execution", () => {
+  it("totally rejects malformed scalar requests before tool, filesystem, render, or child work", async () => {
+    const root = makeRoot();
+    const events = join(root, "events.jsonl");
+    const outputDirectory = join(root, "out");
+    let fileSystemCalls = 0;
+    let childProcessCalls = 0;
+    let selectedToolReads = 0;
+    let validations = 0;
+    let renders = 0;
+    const services = await Effect.runPromise(
+      Effect.gen(function*() {
+        return {
+          crypto: yield* Crypto.Crypto,
+          fileSystem: yield* FileSystem.FileSystem,
+          path: yield* Path.Path,
+          spawner: yield* EffectChildProcessSpawner.ChildProcessSpawner,
+        };
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+    const adapter = fixtureAdapter("bun", bunTargetTable, {
+      events,
+      onValidate: () => validations += 1,
+      onRender: () => renders += 1,
+    });
+    const tool: DiscoveredCompiler<"bun"> = {
+      artifactTool: {
+        name: "bun",
+        version: "1.3.9",
+        get path() {
+          selectedToolReads += 1;
+          return process.execPath;
+        },
+      },
+    };
+    const runner = await Effect.runPromise(
+      makeCompilerService(adapter, tool).pipe(
+        Effect.provideService(Crypto.Crypto, services.crypto),
+        Effect.provideService(
+          FileSystem.FileSystem,
+          countServiceCalls(services.fileSystem, () => fileSystemCalls += 1),
+        ),
+        Effect.provideService(Path.Path, services.path),
+        Effect.provideService(
+          EffectChildProcessSpawner.ChildProcessSpawner,
+          countServiceCalls(services.spawner, () => childProcessCalls += 1),
+        ),
+      ),
+    );
+    const base = {
+      entrypoint: "unused.ts",
+      outfile: join(outputDirectory, "app"),
+      target: "macos-x64",
+    } as const;
+    const cases: ReadonlyArray<readonly [string, unknown, Readonly<Record<string, unknown>>]> = [
+      ["null", null, { _tag: "InvalidDriverOptions", reason: "input must be a non-null object" }],
+      ["undefined", undefined, { _tag: "InvalidDriverOptions", reason: "input must be a non-null object" }],
+      ["array", [], { _tag: "InvalidDriverOptions", reason: "input must be a non-null object" }],
+      ["nonobject", 42, { _tag: "InvalidDriverOptions", reason: "input must be a non-null object" }],
+      ["unknown field", { ...base, extra: true }, {
+        _tag: "InvalidDriverOptions",
+        reason: "input must not contain unknown fields",
+      }],
+      ["missing entrypoint", { outfile: base.outfile, target: base.target }, {
+        _tag: "InvalidDriverOptions",
+        reason: "entrypoint must be a non-empty string",
+      }],
+      ["nonstring entrypoint", { ...base, entrypoint: 1 }, {
+        _tag: "InvalidDriverOptions",
+        reason: "entrypoint must be a non-empty string",
+      }],
+      ["empty entrypoint", { ...base, entrypoint: "" }, {
+        _tag: "InvalidDriverOptions",
+        reason: "entrypoint must be a non-empty string",
+      }],
+      ["NUL entrypoint", { ...base, entrypoint: "main\0.ts" }, {
+        _tag: "InvalidDriverOptions",
+        reason: "entrypoint must not contain NUL",
+      }],
+      ["missing outfile", { entrypoint: base.entrypoint, target: base.target }, {
+        _tag: "InvalidDriverOptions",
+        reason: "outfile must be a non-empty string",
+      }],
+      ["nonstring outfile", { ...base, outfile: 1 }, {
+        _tag: "InvalidDriverOptions",
+        reason: "outfile must be a non-empty string",
+      }],
+      ["empty outfile", { ...base, outfile: "" }, {
+        _tag: "InvalidDriverOptions",
+        reason: "outfile must be a non-empty string",
+      }],
+      ["NUL outfile", { ...base, outfile: "app\0" }, {
+        _tag: "InvalidDriverOptions",
+        reason: "outfile must not contain NUL",
+      }],
+      ["undefined cwd", { ...base, cwd: undefined }, {
+        _tag: "InvalidDriverOptions",
+        reason: "cwd must be a string",
+      }],
+      ["nonstring cwd", { ...base, cwd: 1 }, {
+        _tag: "InvalidDriverOptions",
+        reason: "cwd must be a string",
+      }],
+      ["NUL cwd", { ...base, cwd: "work\0dir" }, {
+        _tag: "InvalidDriverOptions",
+        reason: "cwd must not contain NUL",
+      }],
+      ["undefined digest", { ...base, digest: undefined }, {
+        _tag: "InvalidDriverOptions",
+        reason: "digest must be boolean",
+      }],
+      ["nonboolean digest", { ...base, digest: "yes" }, {
+        _tag: "InvalidDriverOptions",
+        reason: "digest must be boolean",
+      }],
+      ["unsupported target", { ...base, target: "not-a-target" }, {
+        _tag: "TargetUnsupported",
+        requested: "not-a-target",
+      }],
+      ["invalid provider options", { ...base, options: { marker: 1 } }, {
+        _tag: "InvalidDriverOptions",
+        reason: "invalid fixture options",
+      }],
+      ["first deterministic issue", {
+        ...base,
+        entrypoint: "",
+        outfile: "",
+        target: "not-a-target",
+        cwd: 1,
+        digest: "yes",
+        options: { marker: 1 },
+      }, {
+        _tag: "InvalidDriverOptions",
+        reason: "entrypoint must be a non-empty string",
+      }],
+      ["target precedes later field issues", {
+        ...base,
+        target: "not-a-target",
+        cwd: 1,
+        digest: "yes",
+        options: { marker: 1 },
+      }, {
+        _tag: "TargetUnsupported",
+        requested: "not-a-target",
+      }],
+    ];
+
+    for (const [label, input, expected] of cases) {
+      const before = { fileSystemCalls, childProcessCalls, selectedToolReads, validations, renders };
+      const failure = await Effect.runPromise(runner.compileExecutable(input as never)).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure, label).toMatchObject({ tool: "bun", ...expected });
+      expect(validations - before.validations, label).toBe(label === "invalid provider options" ? 1 : 0);
+      expect({ fileSystemCalls, childProcessCalls, selectedToolReads, renders }, label).toEqual({
+        fileSystemCalls: before.fileSystemCalls,
+        childProcessCalls: before.childProcessCalls,
+        selectedToolReads: before.selectedToolReads,
+        renders: before.renders,
+      });
+      expect(readEvents(events), label).toEqual([]);
+      expect(existsSync(outputDirectory), label).toBe(false);
+    }
+    expect(validations).toBeGreaterThan(0);
+  });
+
+  it("uses the same first common-field issue for scalar and one-cell matrix preflight", async () => {
+    const root = makeRoot();
+    const events = join(root, "events.jsonl");
+    const runner = await runnerFor("bun", bunTargetTable, { events });
+    const scalarFailure = await Effect.runPromise(runner.compileExecutable({
+      entrypoint: "",
+      outfile: join(root, "out", "app"),
+      target: "macos-x64",
+      cwd: 1,
+      digest: "yes",
+      options: { marker: 1 },
+    } as never)).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    const matrixFailure = await Effect.runPromise(runner.compileExecutableMatrix({
+      entrypoint: "",
+      outdir: join(root, "out"),
+      name: "app",
+      targets: ["macos-x64"],
+      cwd: 1,
+      digest: "yes",
+      options: { marker: 1 },
+    } as never)).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(scalarFailure).toMatchObject({
+      _tag: "InvalidDriverOptions",
+      reason: "entrypoint must be a non-empty string",
+    });
+    expect(matrixFailure).toMatchObject({
+      _tag: "InvalidMatrixInput",
+      issues: [
+        { field: "entrypoint", reason: "must be a non-empty string" },
+        { field: "cwd", reason: "must be a string" },
+        { field: "digest", reason: "must be boolean" },
+        { field: "options", reason: "invalid fixture options" },
+      ],
+    });
+    expect(readEvents(events)).toEqual([]);
+  });
+
   it("publishes every Bun and Deno target under the canonical ordered filenames", async () => {
     const root = makeRoot();
     const bunEvents = join(root, "bun-events.jsonl");
@@ -534,6 +760,7 @@ describe("standalone matrix execution", () => {
       digest: "yes",
       options: { marker: "x" },
       concurrency: 0,
+      extraMatrixField: true,
     } as never;
     const error = await Effect.runPromise(runner.compileExecutableMatrix(invalidInput)).then(
       () => undefined,

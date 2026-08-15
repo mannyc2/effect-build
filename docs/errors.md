@@ -10,6 +10,15 @@ The public operations keep separate closed tagged-error boundaries. Match
 `OutputMissing`, `OutputInvalid`, `OutputLocked`, and `PublicationFailed`.
 Diagnostics keep stdout and stderr separate and bounded.
 
+Malformed untyped scalar envelopes and common fields fail with the existing
+provider-attributed `InvalidDriverOptions`; its deterministic reason is
+`<field> <finite reason>` (for example, `digest must be boolean`). Provider
+option failures preserve their existing exact reason, such as
+`unknown Bun option`. Unknown own fields fail as an `input` issue. Unsupported
+runtime targets keep the existing `TargetUnsupported` tag. These rejections
+occur before scalar staging or compiler execution, after any command selection
+and probe required to construct a fresh provider Layer.
+
 `compileExecutableMatrix` uses the separate `InvalidMatrixInput | MatrixFailed`
 union. Invalid input reports every deterministic preflight issue before any
 filesystem work. `MatrixFailed` preserves already committed Artifacts and all

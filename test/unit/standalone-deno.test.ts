@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Result } from "effect";
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -169,7 +169,7 @@ describe("standalone Deno driver", () => {
     expect(permissionReads).toBe(1);
   });
 
-  it("retains scalar typed-field trust and provider CLI pass-through", async () => {
+  it("preserves scalar provider project and environment behavior for valid typed fields", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "effect-build-deno-cwd-"));
     roots.push(cwd);
     writeFileSync(join(cwd, "deno.json"), "{}\n");
@@ -182,8 +182,7 @@ describe("standalone Deno driver", () => {
           entrypoint: "src/provider-entry.ts",
           outfile: "dist/app",
           cwd,
-          // Scalar retains the typed-only boundary: only literal true hashes.
-          digest: "yes" as never,
+          digest: false,
         }).pipe(
           Effect.provide(Deno.layer({ executable })),
           Effect.provide(NodeServices.layer),
@@ -201,6 +200,31 @@ describe("standalone Deno driver", () => {
       if (previous === undefined) delete process.env.EFFECT_BUILD_CONTRACT_ENV;
       else process.env.EFFECT_BUILD_CONTRACT_ENV = previous;
     }
+  });
+
+  it("rejects a malformed scalar digest after the Layer probe without staging or compiling", async () => {
+    const { executable, log } = fakeCompileTool();
+    const outputDirectory = join(executable, "..", "invalid-out");
+    await expect(Effect.runPromise(
+      Deno.compileExecutable({
+        entrypoint: "src/main.ts",
+        outfile: join(outputDirectory, "app"),
+        digest: "yes" as never,
+      }).pipe(
+        Effect.provide(Deno.layer({ executable })),
+        Effect.provide(NodeServices.layer),
+      ),
+    )).rejects.toMatchObject({
+      _tag: "InvalidDriverOptions",
+      tool: "deno",
+      reason: "digest must be boolean",
+    });
+    const argv = readFileSync(log, "utf8").trim().split("\n")
+      .filter((line) => line.startsWith("["))
+      .map((line) => JSON.parse(line) as string[]);
+    expect(argv).toHaveLength(1);
+    expect(argv[0]?.[0]).toBe("eval");
+    expect(existsSync(outputDirectory)).toBe(false);
   });
 
   it("probes an explicit absolute executable while constructing the Layer", async () => {

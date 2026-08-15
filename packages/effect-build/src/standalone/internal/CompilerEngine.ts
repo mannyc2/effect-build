@@ -1,7 +1,7 @@
 import { Crypto, Effect, FileSystem, Path, Result } from "effect";
 import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
 import * as Integration from "../../Integration.js";
-import { TargetUnsupported, ToolFailed } from "../BuildError.js";
+import { InvalidDriverOptions, TargetUnsupported, ToolFailed } from "../BuildError.js";
 import { captureCellResult, makeMatrixFailedFor } from "../CompileExecutableMatrix.js";
 import type { CompilerService } from "../Driver.js";
 import { InvalidMatrixInput, type MatrixIssue } from "../MatrixError.js";
@@ -101,6 +101,124 @@ const issue = (
   context: { readonly index?: number; readonly value?: string } = {},
 ): MatrixIssue => ({ field, reason, ...context });
 
+const decodeRequiredPath = (
+  field: "entrypoint" | "outdir" | "output",
+  value: unknown,
+): Result.Result<string, MatrixIssue> => {
+  if (typeof value !== "string" || value.length === 0) {
+    return Result.fail(issue(field, "must be a non-empty string", { value: describeUnknownValue(value) }));
+  }
+  return value.includes("\0")
+    ? Result.fail(issue(field, "must not contain NUL"))
+    : Result.succeed(value);
+};
+
+const decodeCwd = (present: boolean, value: unknown): Result.Result<string | undefined, MatrixIssue> => {
+  if (!present) return Result.succeed(undefined);
+  if (typeof value !== "string") {
+    return Result.fail(issue("cwd", "must be a string", { value: describeUnknownValue(value) }));
+  }
+  return value.includes("\0")
+    ? Result.fail(issue("cwd", "must not contain NUL"))
+    : Result.succeed(value);
+};
+
+const decodeDigest = (present: boolean, value: unknown): Result.Result<boolean | undefined, MatrixIssue> => {
+  if (!present) return Result.succeed(undefined);
+  return typeof value === "boolean"
+    ? Result.succeed(value)
+    : Result.fail(issue("digest", "must be boolean", { value: describeUnknownValue(value) }));
+};
+
+const scalarInputFields = new Set<PropertyKey>([
+  "entrypoint",
+  "outfile",
+  "cwd",
+  "target",
+  "digest",
+  "options",
+]);
+
+const scalarIssueError = <const Name extends string>(
+  tool: Name,
+  fieldIssue: MatrixIssue,
+): InvalidDriverOptions =>
+  new InvalidDriverOptions({
+    tool,
+    reason: `${fieldIssue.field === "output" ? "outfile" : fieldIssue.field} ${fieldIssue.reason}`,
+  });
+
+const preflightScalar = <
+  const Name extends string,
+  SupportedTarget extends SystemTarget,
+  Stages extends ProviderStages<Name>,
+  ValidatedOptions,
+>(
+  adapter: CommandCompilerAdapter<Name, SupportedTarget, Stages, ValidatedOptions>,
+  rawInput: unknown,
+): Result.Result<PreparedCell<ValidatedOptions, SupportedTarget>, InvalidDriverOptions | TargetUnsupported> => {
+  if (typeof rawInput !== "object" || rawInput === null || Array.isArray(rawInput)) {
+    return Result.fail(
+      new InvalidDriverOptions({
+        tool: adapter.toolName,
+        reason: "input must be a non-null object",
+      }),
+    );
+  }
+
+  const record = rawInput as Readonly<Record<string, unknown>>;
+  if (Reflect.ownKeys(record).some((field) => !scalarInputFields.has(field))) {
+    return Result.fail(
+      new InvalidDriverOptions({
+        tool: adapter.toolName,
+        reason: "input must not contain unknown fields",
+      }),
+    );
+  }
+
+  const entrypoint = decodeRequiredPath("entrypoint", record.entrypoint);
+  if (Result.isFailure(entrypoint)) return Result.fail(scalarIssueError(adapter.toolName, entrypoint.failure));
+
+  const outfile = decodeRequiredPath("output", record.outfile);
+  if (Result.isFailure(outfile)) return Result.fail(scalarIssueError(adapter.toolName, outfile.failure));
+
+  const unsafeTarget = record.target;
+  const requestedTarget = unsafeTarget === undefined ? undefined : adapter.targetTable.resolve(unsafeTarget);
+  if (unsafeTarget !== undefined && requestedTarget === undefined) {
+    return Result.fail(
+      new TargetUnsupported({
+        tool: adapter.toolName,
+        requested: typeof unsafeTarget === "string" ? unsafeTarget : describeUnknownTarget(unsafeTarget),
+        available: [...adapter.targetTable.Target.literals],
+      }),
+    );
+  }
+
+  const cwdPresent = Object.hasOwn(record, "cwd");
+  const cwd = decodeCwd(cwdPresent, cwdPresent ? record.cwd : undefined);
+  if (Result.isFailure(cwd)) return Result.fail(scalarIssueError(adapter.toolName, cwd.failure));
+
+  const digestPresent = Object.hasOwn(record, "digest");
+  const digest = decodeDigest(digestPresent, digestPresent ? record.digest : undefined);
+  if (Result.isFailure(digest)) return Result.fail(scalarIssueError(adapter.toolName, digest.failure));
+
+  const options = adapter.validateOptions(record.options);
+  if (options._tag === "Invalid") return Result.fail(options.error);
+
+  return Result.succeed({
+    input: {
+      entrypoint: entrypoint.success,
+      outfile: outfile.success,
+      ...(cwd.success === undefined ? {} : { cwd: cwd.success }),
+      ...(digest.success === undefined ? {} : { digest: digest.success }),
+      options: options.value,
+    },
+    ...(requestedTarget === undefined
+      ? {}
+      : { selection: { target: requestedTarget, descriptor: descriptorOf(requestedTarget) } }),
+  });
+};
+
 const preflightMatrix = <
   const Name extends string,
   SupportedTarget extends SystemTarget,
@@ -135,25 +253,11 @@ const preflightMatrix = <
   const concurrencyPresent = Object.hasOwn(record, "concurrency");
   const concurrencyValue = record.concurrency;
 
+  const entrypoint = decodeRequiredPath("entrypoint", entrypointValue);
+  const outdir = decodeRequiredPath("outdir", outdirValue);
   const issues: MatrixIssue[] = [];
-
-  let entrypoint: string | undefined;
-  if (typeof entrypointValue !== "string" || entrypointValue.length === 0) {
-    issues.push(issue("entrypoint", "must be a non-empty string", { value: describeUnknownValue(entrypointValue) }));
-  } else if (entrypointValue.includes("\0")) {
-    issues.push(issue("entrypoint", "must not contain NUL"));
-  } else {
-    entrypoint = entrypointValue;
-  }
-
-  let outdir: string | undefined;
-  if (typeof outdirValue !== "string" || outdirValue.length === 0) {
-    issues.push(issue("outdir", "must be a non-empty string", { value: describeUnknownValue(outdirValue) }));
-  } else if (outdirValue.includes("\0")) {
-    issues.push(issue("outdir", "must not contain NUL"));
-  } else {
-    outdir = outdirValue;
-  }
+  if (Result.isFailure(entrypoint)) issues.push(entrypoint.failure);
+  if (Result.isFailure(outdir)) issues.push(outdir.failure);
 
   let name: string | undefined;
   if (typeof nameValue !== "string") {
@@ -193,35 +297,14 @@ const preflightMatrix = <
     }
   }
 
-  let cwd: string | undefined;
-  if (cwdPresent) {
-    if (typeof cwdValue !== "string") {
-      issues.push(issue("cwd", "must be a string", { value: describeUnknownValue(cwdValue) }));
-    } else if (cwdValue.includes("\0")) {
-      issues.push(issue("cwd", "must not contain NUL"));
-    } else {
-      cwd = cwdValue;
-    }
-  }
+  const cwd = decodeCwd(cwdPresent, cwdValue);
+  if (Result.isFailure(cwd)) issues.push(cwd.failure);
 
-  let digest: boolean | undefined;
-  if (digestPresent) {
-    if (typeof digestValue !== "boolean") {
-      issues.push(issue("digest", "must be boolean", { value: describeUnknownValue(digestValue) }));
-    } else {
-      digest = digestValue;
-    }
-  }
+  const digest = decodeDigest(digestPresent, digestValue);
+  if (Result.isFailure(digest)) issues.push(digest.failure);
 
-  const optionsValidation = adapter.validateOptions(optionsValue);
-  let validatedOptions: ValidatedOptions | undefined;
-  let optionsValid = false;
-  if (optionsValidation._tag === "Invalid") {
-    issues.push(issue("options", optionsValidation.error.reason));
-  } else {
-    validatedOptions = optionsValidation.value;
-    optionsValid = true;
-  }
+  const options = adapter.validateOptions(optionsValue);
+  if (options._tag === "Invalid") issues.push(issue("options", options.error.reason));
 
   let concurrency = 1;
   if (concurrencyPresent) {
@@ -236,16 +319,16 @@ const preflightMatrix = <
 
   const cells: PreparedMatrixCell<ValidatedOptions, SupportedTarget>[] = [];
   if (
-    entrypoint !== undefined
-    && outdir !== undefined
+    Result.isSuccess(entrypoint)
+    && Result.isSuccess(outdir)
     && name !== undefined
     && targetsValid
     && targets.length > 0
-    && (!cwdPresent || cwd !== undefined)
-    && (!digestPresent || digest !== undefined)
-    && optionsValid
+    && Result.isSuccess(cwd)
+    && Result.isSuccess(digest)
+    && options._tag === "Valid"
   ) {
-    const resolvedOutdir = path.normalize(path.resolve(cwd ?? "", outdir));
+    const resolvedOutdir = path.normalize(path.resolve(cwd.success ?? "", outdir.success));
     const destinations = new Set<string>();
     for (let index = 0; index < targets.length; index++) {
       const target = targets[index]!;
@@ -258,11 +341,11 @@ const preflightMatrix = <
       }
       cells.push({
         input: {
-          entrypoint,
+          entrypoint: entrypoint.success,
           outfile,
-          ...(cwd === undefined ? {} : { cwd }),
-          ...(digest === undefined ? {} : { digest }),
-          options: validatedOptions as ValidatedOptions,
+          ...(cwd.success === undefined ? {} : { cwd: cwd.success }),
+          ...(digest.success === undefined ? {} : { digest: digest.success }),
+          options: options.value,
         },
         selection: { target, descriptor },
       });
@@ -367,31 +450,9 @@ export const makeCompilerService = <
       `effect-build/${adapter.toolName}.compileExecutable`,
     )((input) =>
       Effect.gen(function*() {
-        const unsafeTarget: unknown = input.target;
-        const requestedTarget = unsafeTarget === undefined ? undefined : adapter.targetTable.resolve(unsafeTarget);
-        if (unsafeTarget !== undefined && requestedTarget === undefined) {
-          return yield* new TargetUnsupported({
-            tool: adapter.toolName,
-            requested: typeof unsafeTarget === "string" ? unsafeTarget : describeUnknownTarget(unsafeTarget),
-            available: [...adapter.targetTable.Target.literals],
-          });
-        }
-
-        const optionsValidation = yield* Effect.sync(() => adapter.validateOptions(input.options));
-        if (optionsValidation._tag === "Invalid") return yield* optionsValidation.error;
-
-        return yield* compilePreparedCell({
-          input: {
-            entrypoint: input.entrypoint,
-            outfile: input.outfile,
-            ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-            ...(input.digest === undefined ? {} : { digest: input.digest }),
-            options: optionsValidation.value,
-          },
-          ...(requestedTarget === undefined
-            ? {}
-            : { selection: { target: requestedTarget, descriptor: descriptorOf(requestedTarget) } }),
-        });
+        const preflight = yield* Effect.sync(() => preflightScalar(adapter, input));
+        if (Result.isFailure(preflight)) return yield* preflight.failure;
+        return yield* compilePreparedCell(preflight.success);
       })
     );
 

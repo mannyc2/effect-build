@@ -112,6 +112,9 @@ describe("documentation contract", () => {
   it("documents total preflight, collect-all, atomic publication, and interruption", async () => {
     const text = await readAll(docs, "docs");
     expect(text).toMatch(/total preflight/i);
+    expect(text).toMatch(/Malformed\s+untyped scalar inputs now fail/);
+    expect(text).toMatch(/Valid TypeScript callers remain\s+source-compatible/);
+    expect(text).toMatch(/freshly provided Layer still selects and probes[\s\S]*before scalar\s+request preflight/);
     expect(text).toMatch(/before (?:any )?filesystem/i);
     expect(text).toMatch(/positive safe integer/i);
     expect(text).toMatch(/collect-all/i);
