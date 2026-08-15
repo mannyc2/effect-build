@@ -309,8 +309,8 @@ direction. Plans 016-020 remain factual implementation history.
 | 033 | Add dependency automation and reduce non-release CI duplication | P1 | M | 032 | DONE |
 | 034 | Bound native-inspection allocation and document digest cost | P1 | M | 031 | DONE |
 | 035 | Qualify ts-release for ordered prepacked multi-package releases | P0 | XL | 032, external approval | DONE |
-| 036 | Bootstrap npm namespaces and one trusted publisher | P0 | M | 032, 035, approval | TODO |
-| 037 | Recertify and release the exact five-package bytes | P0 | L | 028-036, approval | TODO |
+| 036 | Bootstrap npm namespaces and one trusted publisher | P0 | M | 032, 035, approval | DONE |
+| 037 | Recertify and release the exact five-package bytes | P0 | L | 028-036, approval | DONE |
 | 038 | Evaluate JavaScriptBundler and ExecutableBuilder promotion | P1 | L | 037, approval for public cut | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or

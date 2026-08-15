@@ -14,6 +14,7 @@
 - Risk: CRITICAL external state
 - Depends on: 032, approved/qualified Plan 035 invocation, explicit approval
 - Planned at: `e8c1557509a9236df8e5eb236293527c3f4fd21d`
+- Completion: `DONE`
 
 ## Why a decision is unavoidable
 
@@ -93,3 +94,55 @@ read-only. Plan/README receipts may be updated. No tag or GitHub Release.
 
 Adds one visible bootstrap version per new namespace and one publisher identity
 per package. It removes manual-token publication as an accepted release path.
+
+## Receipt
+
+- The authenticated bootstrap ran as npm account `mannyc1` with pinned
+  Node `24.14.1` and npm `11.19.0`. npm's published tarball for npm 11.19.0
+  matched the approved integrity
+  `sha512-SDd/hHg3KqHE5Ht2NHWxNYNtqCQ2pXAPLl6OtQhPyED5PHsRfrOtO199MZTIG2cQoQ1ZRI9t28shrD+2cr3AAw==`.
+  The isolated configuration and reservation roots were created under
+  `/tmp/effect-build-plan036-phase-a.PE4qLN` with restrictive permissions;
+  no token, OTP, cookie, raw userconfig, or session output was recorded.
+- Each reservation root contained only `package/package.json` and
+  `package/README.md`, with no lifecycle script or dependency. The four
+  once-packed and published `0.0.0-reserved.0` tarballs were:
+
+  | Package | Bytes | SHA-1 | SHA-256 | SHA-512 |
+  |---|---:|---|---|---|
+  | `effect-build-bun` | 346 | `0df747c6f72976d887166e292a5e8f4e70f8ef62` | `10546f3bbf0d619b7c5d7e38020fad95cb82185866c5b1a09bafe3c8d78ef15b` | `f0acb71c4dcbfa2babeca60b62cbf8ac34d877af22eba8b371f2eb36838607d526a1cf94527a7c83cfc44e7d67ca0500f58dc89f404c25360419ca10c4e1373f` |
+  | `effect-build-deno` | 347 | `60c0f80eddf3470db26833eb5bccc4f4a083e65d` | `ed03701dfd0e316bc27ebda31b8a3ecc037e942c19db069c85b0d7871c23a47a` | `71399d934a9556dc08dcf65cd8b893634a985a1a42156e05fc8cfa36a84ebafc8d0e7923ee4b12d09c3411a9491b3045a34d29f8712801d39aaa43f01faa4195` |
+  | `effect-build-esbuild` | 346 | `4ca211af17926e7b1437648b1a10a41ed9ac4f66` | `9a30344312dd6817ad75e9ca768418a96a4a132ad910aee73f90b6d31724dc63` | `d65059d44b2945de31dc32e6d9ccce7839edd71d510e8a2475bc54face81c60fabe462c2585645e1963c8fa1af80938ef876bdcdf6e65df203561a05508c46d2` |
+  | `effect-build-node-sea` | 349 | `77482f437e83aa10a9a12b99bbe803a7ec805cdb` | `ea79995e3528e7cdf3bd4e670695a44e58a07ca425a3397e8c8e8fd26c1e5350` | `f00f997fc0f9c8307ae5586cfeb2a96bd0369a94f5d0b0ad1e25914124e3326c62b49a77089bc0e283cb8c62b62ac8a2c25ebf52eb3580678cc477fbd15de606` |
+
+  Anonymous registry reads reproduced the exact SHA-1/SHA-512 values and
+  two-file inventories. npm necessarily assigned `latest` during each first
+  publication; the parent explicitly approved that temporary behavior after
+  observation. Plan 037 subsequently moved every `latest` tag to `0.3.0` and
+  left `reserved` on each integration reservation. All five packages resolve
+  publicly and list only maintainer `mannyc1`.
+- GitHub environment `npm` was created with required reviewer `mannyc2`
+  (user id `126291407`), `prevent_self_review=false`, and one custom exact
+  branch policy `codex/granular-integration-program`. Five npm trusted
+  publishers were authenticated and independently read back as type `github`,
+  repository `mannyc2/effect-build`, workflow `release.yml`, environment
+  `npm`, and permissions `[createPackage]`:
+
+  | Package | Trust id |
+  |---|---|
+  | `effect-build` | `48a728c5-a42b-45f8-8713-dd52e9b6a16e` |
+  | `effect-build-bun` | `26336ea3-9c56-41e8-b235-aff8aa521f61` |
+  | `effect-build-deno` | `81d4ceca-4c49-47f9-8188-eeb5e6e9eebd` |
+  | `effect-build-esbuild` | `10e9270b-6f66-41a8-b19e-7801b79522ea` |
+  | `effect-build-node-sea` | `48550345-c34f-4d80-aaff-114a6276debe` |
+
+- The temporary `effect-build` granular access token remains remotely active
+  at the maintainer's explicit direction, with expiry
+  `2026-08-19T09:58:45.796Z`; its later revocation is non-blocking
+  housekeeping. Its local staged file and isolated auth configuration were
+  discarded. It was not used by the functional release and remains forbidden
+  as a manual or fallback publisher. Plan 037 used only the verified OIDC
+  workload identities and qualified coordinator.
+- The bootstrap changed no effect-build source, package manifest, certified
+  `0.3.0` tarball, tag, or GitHub Release. Unknown outcomes were observed
+  before continuation; no blind retry occurred.
