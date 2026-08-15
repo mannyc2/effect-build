@@ -10,8 +10,9 @@ import type {
   ToolFailed,
 } from "../BuildError.js";
 import type { SystemTarget } from "../Target.js";
-import type { OperatingSystem } from "./TargetCatalog.js";
 import type { TargetTable } from "./TargetTable.js";
+
+export type { DiscoveredCompiler } from "./ToolDiscovery.js";
 
 export type ProviderStages<Name extends string> = readonly [
   StageObservation & { readonly tool: StageObservation["tool"] & { readonly name: Name } },
@@ -42,15 +43,6 @@ export interface PreparedExecutableRequest<ValidatedOptions, SupportedTarget ext
   readonly stagedOutfile: string;
   readonly resolvedDestination: string;
   readonly cwd?: string;
-}
-
-export interface DiscoveredCompiler<Name extends string> {
-  readonly artifactTool: {
-    readonly name: Name;
-    readonly version: string;
-    readonly path: string;
-  };
-  readonly hostOs: OperatingSystem;
 }
 
 export interface CommandCompilerAdapter<

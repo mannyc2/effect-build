@@ -4,7 +4,10 @@
 
 `Bun.layer()` discovers one Bun command on `PATH`, or accepts an absolute
 `executable` override. The Layer probes once and the same selected command
-serves scalar and matrix calls.
+serves scalar and matrix calls. The probe reports only its canonical absolute
+path and version; an explicit override must resolve to that same path. PATH
+discovery ignores empty and relative entries and considers only regular
+executables from absolute entries.
 
 ```ts
 Bun.layer({ executable: "/opt/bun/bin/bun" });
@@ -21,6 +24,10 @@ Pinned support evidence uses Bun 1.3.9.
 `bundle`, `minify` when bundling, and typed permissions. `Deno.Target` is
 exactly `macos-x64`, `macos-aarch64`, `linux-x64-gnu`, `linux-aarch64-gnu`,
 `windows-x64`, and `windows-aarch64`. Pinned support evidence uses Deno 2.9.3.
+
+Untargeted staging suffixes and execute-bit validation follow the host
+filesystem described by the supplied Effect `Path` service, never a compiler
+OS report or the output target suffix.
 
 Bun and Deno each retain `compileExecutable` and
 `compileExecutableMatrix`. Their target authority lives in their package, not

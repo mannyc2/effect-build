@@ -8,7 +8,6 @@ if (argv[0] === probeFirst) {
   process.stdout.write(JSON.stringify({
     path: process.env.EFFECT_BUILD_FAKE_TOOL_PATH,
     version: "9.9.9",
-    hostOs: process.env.EFFECT_BUILD_FAKE_HOST_OS ?? "macos",
   }));
   process.exit(0);
 }

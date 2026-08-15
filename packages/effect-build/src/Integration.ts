@@ -506,7 +506,7 @@ export const produceExecutable: <
             });
             const decoded = input.decodeStages(prepared, rawStages);
             if (Result.isFailure(decoded)) return yield* Effect.fail(decoded.failure);
-            const published = yield* validateAndPublishExecutable(fileSystem, crypto, candidate, {
+            const published = yield* validateAndPublishExecutable(fileSystem, path, crypto, candidate, {
               digest: input.digest === true,
               resolveTarget: (observation: InternalNativeExecutableObservation) => input.resolveTarget(observation),
             });

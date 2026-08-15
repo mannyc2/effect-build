@@ -117,7 +117,7 @@ const complete = () => {
   }
   mkdirSync(dirname(outfile), { recursive: true });
   writeFileSync(outfile, mode === "invalid" ? new Uint8Array([1, 2, 3, 4]) : nativeBytes());
-  if (!target.startsWith("windows-")) chmodSync(outfile, 0o755);
+  chmodSync(outfile, 0o755);
   record(mode === "invalid" ? "invalid" : "finish");
 };
 

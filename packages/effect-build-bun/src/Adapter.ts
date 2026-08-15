@@ -74,7 +74,7 @@ export const Stages = Schema.Tuple([
 export const definition = {
   probeArgv: [
     "-e",
-    'process.stdout.write(JSON.stringify({path:process.execPath,version:Bun.version,hostOs:process.platform==="darwin"?"macos":process.platform==="win32"?"windows":process.platform==="linux"?"linux":process.platform}))',
+    "process.stdout.write(JSON.stringify({path:process.execPath,version:Bun.version}))",
   ],
   targetEntries,
   Stages,

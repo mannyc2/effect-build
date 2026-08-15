@@ -25,7 +25,6 @@ import {
   isLockedRenameError,
   validateAndPublishExecutable,
 } from "../../packages/effect-build/src/standalone/internal/ExecutableLifecycle.js";
-import type { OperatingSystem } from "../../packages/effect-build/src/standalone/internal/TargetCatalog.js";
 import { makeTargetTable } from "../../packages/effect-build/src/standalone/internal/TargetTable.js";
 
 const roots: string[] = [];
@@ -49,9 +48,11 @@ type BunStages = readonly [{
   readonly tool: { readonly name: "bun"; readonly version: string; readonly path: string };
 }];
 
-const discoveredCompiler = (hostOs: OperatingSystem = windowsHost ? "windows" : "macos") => ({
+const failureOf = (exit: Exit.Exit<unknown, unknown>): unknown =>
+  Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined;
+
+const discoveredCompiler = () => ({
   artifactTool: { name: "bun" as const, version: "test", path: process.execPath },
-  hostOs,
 });
 
 afterEach(() => {
@@ -63,6 +64,8 @@ const makeRoot = () => {
   roots.push(root);
   return root;
 };
+
+const pathWithSeparator = (path: Path.Path, sep: "/" | "\\"): Path.Path => ({ ...path, sep });
 
 const adapter = (mode = successMode): CommandCompilerAdapter<
   "bun",
@@ -155,8 +158,9 @@ describe("standalone atomic publication", () => {
     };
     const check = (candidate: ExecutableCandidate) =>
       Effect.gen(function*() {
+        const path = yield* Path.Path;
         const crypto = yield* Crypto.Crypto;
-        return yield* validateAndPublishExecutable(countingFileSystem, crypto, candidate, {
+        return yield* validateAndPublishExecutable(countingFileSystem, path, crypto, candidate, {
           digest: false,
           resolveTarget: () => Result.succeed(hostTarget),
         });
@@ -224,12 +228,12 @@ describe("standalone atomic publication", () => {
             ]),
           );
           yield* fileSystem.chmod(candidate.staged, 0o755);
-          const first = yield* validateAndPublishExecutable(countingFileSystem, crypto, candidate, {
+          const first = yield* validateAndPublishExecutable(countingFileSystem, path, crypto, candidate, {
             digest: false,
             resolveTarget: () => Result.succeed("macos-aarch64" as const),
           });
           const effectsAfterFirst = fileEffects;
-          const second = yield* validateAndPublishExecutable(countingFileSystem, crypto, candidate, {
+          const second = yield* validateAndPublishExecutable(countingFileSystem, path, crypto, candidate, {
             digest: false,
             resolveTarget: () => Result.succeed("macos-aarch64" as const),
           }).pipe(Effect.exit);
@@ -241,6 +245,76 @@ describe("standalone atomic publication", () => {
     expect(result.first.path).toBe(join(root, "published"));
     expect(Exit.hasDies(result.second)).toBe(true);
     expect(fileEffects).toBe(result.effectsAfterFirst);
+  });
+
+  it("uses host Path semantics for execute bits independently of the output target suffix", async () => {
+    const root = makeRoot();
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const crypto = yield* Crypto.Crypto;
+
+          const windowsHostCandidate = yield* acquireExecutableCandidate(
+            fileSystem,
+            pathWithSeparator(path, "\\"),
+            { destination: join(root, "windows-host-linux-target") },
+          );
+          const elf = new Uint8Array(120);
+          elf.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+          elf.set([0x3e, 0x00], 18);
+          new DataView(elf.buffer).setBigUint64(32, 64n, true);
+          new DataView(elf.buffer).setUint16(54, 56, true);
+          new DataView(elf.buffer).setUint16(56, 1, true);
+          yield* fileSystem.writeFile(windowsHostCandidate.staged, elf);
+          const windowsHostArtifact = yield* validateAndPublishExecutable(
+            fileSystem,
+            pathWithSeparator(path, "\\"),
+            crypto,
+            windowsHostCandidate,
+            {
+              digest: false,
+              resolveTarget: (observation) =>
+                observation.format === "elf"
+                  && observation.os === "linux"
+                  && observation.architecture === "x64"
+                  ? Result.succeed("linux-x64-gnu" as const)
+                  : Result.fail("not-linux-x64"),
+            },
+          );
+
+          const posixHostCandidate = yield* acquireExecutableCandidate(
+            fileSystem,
+            pathWithSeparator(path, "/"),
+            { destination: join(root, "posix-host-windows-target"), executableSuffix: ".exe" },
+          );
+          const pe = new Uint8Array(72);
+          pe.set([0x4d, 0x5a], 0);
+          pe[60] = 64;
+          pe.set([0x50, 0x45, 0x00, 0x00], 64);
+          pe.set([0x64, 0x86], 68);
+          yield* fileSystem.writeFile(posixHostCandidate.staged, pe);
+          const posixHostExit = yield* validateAndPublishExecutable(
+            fileSystem,
+            pathWithSeparator(path, "/"),
+            crypto,
+            posixHostCandidate,
+            {
+              digest: false,
+              resolveTarget: () => Result.succeed("windows-x64" as const),
+            },
+          ).pipe(Effect.exit);
+          return { windowsHostArtifact, posixHostExit };
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(result.windowsHostArtifact.target).toBe("linux-x64-gnu");
+    expect(failureOf(result.posixHostExit)).toMatchObject({
+      _tag: "OutputInvalid",
+      reason: "not-executable",
+    });
   });
 
   it("recognizes normalized locks and Windows rename EPERM", () => {
@@ -423,7 +497,7 @@ describe("standalone atomic publication", () => {
     };
     const artifact = await Effect.runPromise(
       Effect.gen(function*() {
-        const service = yield* makeCompilerService(windows, discoveredCompiler("windows"));
+        const service = yield* makeCompilerService(windows, discoveredCompiler());
         return yield* service.compileExecutable({
           entrypoint: "unused.ts",
           outfile,
@@ -438,7 +512,7 @@ describe("standalone atomic publication", () => {
     expect(existsSync(`${outfile}.exe`)).toBe(false);
   });
 
-  it("uses the compiler host OS for omitted-target Windows staging without leaking it", async () => {
+  it("uses the host Path separator for omitted-target Windows staging without leaking it", async () => {
     const root = makeRoot();
     const outfile = join(root, "host-win-app");
     let staged = "";
@@ -459,11 +533,15 @@ describe("standalone atomic publication", () => {
       interpretFailure: adapter().interpretFailure,
       decodeStages: adapter().decodeStages,
     };
+    const hostPath = await Effect.runPromise(Path.Path.pipe(Effect.provide(NodeServices.layer)));
     const artifact = await Effect.runPromise(
       Effect.gen(function*() {
-        const service = yield* makeCompilerService(windows, discoveredCompiler("windows"));
+        const service = yield* makeCompilerService(windows, discoveredCompiler());
         return yield* service.compileExecutable({ entrypoint: "unused.ts", outfile });
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(
+        Effect.provideService(Path.Path, pathWithSeparator(hostPath, "\\")),
+        Effect.provide(NodeServices.layer),
+      ),
     );
 
     expect(basename(staged)).toBe("host-win-app.exe");
@@ -471,7 +549,6 @@ describe("standalone atomic publication", () => {
     expect(artifact.target).toBe("windows-x64");
     expect(artifact.provider).toBe("bun");
     expect(Object.keys(artifact.stages[0].tool).sort()).toEqual(["name", "path", "version"]);
-    expect(Object.hasOwn(artifact.stages[0].tool, "hostOs")).toBe(false);
     expect(existsSync(outfile)).toBe(true);
     expect(existsSync(`${outfile}.exe`)).toBe(false);
   });
@@ -497,7 +574,7 @@ describe("standalone atomic publication", () => {
     await expect(
       Effect.runPromise(
         Effect.gen(function*() {
-          const service = yield* makeCompilerService(windowsOnly, discoveredCompiler("windows"));
+          const service = yield* makeCompilerService(windowsOnly, discoveredCompiler());
           return yield* service.compileExecutable({ entrypoint: "unused.ts", outfile });
         }).pipe(Effect.provide(NodeServices.layer)),
       ),

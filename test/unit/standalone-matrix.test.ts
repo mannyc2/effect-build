@@ -225,7 +225,6 @@ const discoveredCompiler = <const Name extends string>(toolName: Name): Discover
     version: toolName === "bun" ? "1.3.9" : "2.9.3",
     path: process.execPath,
   },
-  hostOs: "macos",
 });
 
 const runnerFor = <const Name extends string, SupportedTarget extends SystemTarget>(

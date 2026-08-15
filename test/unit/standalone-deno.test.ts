@@ -48,13 +48,18 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-const fakeTool = (): string => {
+const fakeTool = (reportedPath: "self" | "other" = "self"): string => {
   const root = mkdtempSync(join(tmpdir(), "effect-build-tool-"));
   roots.push(root);
   const executable = join(root, "deno");
+  const reportedExecutable = reportedPath === "self" ? executable : join(root, "different-deno");
+  if (reportedPath === "other") {
+    writeFileSync(reportedExecutable, "different executable\n");
+    chmodSync(reportedExecutable, 0o755);
+  }
   writeFileSync(
     executable,
-    `#!/bin/sh\nprintf '{"path":"${executable}","version":"8.8.8","hostOs":"macos"}'\n`,
+    `#!/bin/sh\nprintf '{"path":"${reportedExecutable}","version":"8.8.8"}'\n`,
   );
   chmodSync(executable, 0o755);
   return executable;
@@ -68,7 +73,7 @@ const fakeCompileTool = (): { readonly executable: string; readonly log: string 
   writeFileSync(log, "");
   writeFileSync(
     executable,
-    `#!/bin/sh\nprintf 'cwd:%s\\n' "$PWD" >> "${log}"\nEFFECT_BUILD_FAKE_HOST_OS=macos EFFECT_BUILD_FAKE_TOOL_PATH="$0" exec "${process.execPath}" "${fixture}" deno "${log}" "$@"\n`,
+    `#!/bin/sh\nprintf 'cwd:%s\\n' "$PWD" >> "${log}"\nEFFECT_BUILD_FAKE_TOOL_PATH="$0" exec "${process.execPath}" "${fixture}" deno "${log}" "$@"\n`,
   );
   chmodSync(executable, 0o755);
   return { executable, log };
@@ -211,6 +216,16 @@ describe("standalone Deno driver", () => {
     await expect(Effect.runPromise(
       Deno.Compiler.pipe(
         Effect.provide(Deno.layer({ executable: "relative/deno" })),
+        Effect.provide(NodeServices.layer),
+      ),
+    )).rejects.toMatchObject({ _tag: "ToolProbeFailed" });
+  });
+
+  it("rejects an explicit executable whose probe reports a different canonical file", async () => {
+    const executable = fakeTool("other");
+    await expect(Effect.runPromise(
+      Deno.Compiler.pipe(
+        Effect.provide(Deno.layer({ executable })),
         Effect.provide(NodeServices.layer),
       ),
     )).rejects.toMatchObject({ _tag: "ToolProbeFailed" });

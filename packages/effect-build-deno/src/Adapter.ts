@@ -168,7 +168,7 @@ export const Stages = Schema.Tuple([
 export const definition = {
   probeArgv: [
     "eval",
-    'console.log(JSON.stringify({path:Deno.execPath(),version:Deno.version.deno,hostOs:Deno.build.os==="darwin"?"macos":Deno.build.os}))',
+    "console.log(JSON.stringify({path:Deno.execPath(),version:Deno.version.deno}))",
   ],
   targetEntries,
   Stages,

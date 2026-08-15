@@ -37,7 +37,6 @@ export interface NativeExecutableInspectionError {
 
 interface CandidateState {
   readonly destination: string;
-  readonly executableSuffix: "" | ".exe";
   readonly publish: Effect.Effect<void, OutputLocked | PublicationFailed>;
 }
 
@@ -107,7 +106,7 @@ export const acquireExecutableCandidate = (
     );
     return yield* Effect.acquireRelease(
       Effect.sync(() => {
-        candidateStates.set(candidate, { destination, executableSuffix, publish });
+        candidateStates.set(candidate, { destination, publish });
         return candidate;
       }),
       (registered) => Effect.sync(() => candidateStates.delete(registered)),
@@ -161,6 +160,7 @@ const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toStrin
 
 export const validateAndPublishExecutable = <Target>(
   fileSystem: FileSystem.FileSystem,
+  path: Path.Path,
   crypto: Crypto.Crypto,
   candidate: ExecutableCandidate,
   options: {
@@ -185,7 +185,7 @@ export const validateAndPublishExecutable = <Target>(
     if (information.type !== "File") {
       return yield* new OutputInvalid({ path: candidate.staged, reason: "not-regular" });
     }
-    if (state.executableSuffix !== ".exe" && (information.mode & 0o111) === 0) {
+    if (path.sep !== "\\" && (information.mode & 0o111) === 0) {
       return yield* new OutputInvalid({ path: candidate.staged, reason: "not-executable" });
     }
     if (information.size < 0n || information.size > BigInt(Number.MAX_SAFE_INTEGER)) {

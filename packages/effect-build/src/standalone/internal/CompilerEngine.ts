@@ -304,7 +304,7 @@ export const makeCompilerService = <
       cell: PreparedCell<ValidatedOptions, SupportedTarget>,
     ): Effect.Effect<ProviderArtifact<Name, SupportedTarget, Stages>, CellExecutionError> => {
       const executableSuffix = cell.selection === undefined
-        ? tool.hostOs === "windows" ? ".exe" : ""
+        ? path.sep === "\\" ? ".exe" : ""
         : cell.selection.descriptor.executableSuffix;
       return Integration.produceExecutable({
         outfile: cell.input.outfile,

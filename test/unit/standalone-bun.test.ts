@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer, Result } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, FileSystem, Layer, Path, PlatformError, Result } from "effect";
+import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { definition, targetEntries } from "../../packages/effect-build-bun/src/Adapter.js";
 import * as Bun from "../../packages/effect-build-bun/src/index.js";
+import { discoverTool } from "../../packages/effect-build/src/standalone/internal/ToolDiscovery.js";
 import { describeStandaloneDriverContract } from "../testkit/standaloneDriverContract.js";
 
 describeStandaloneDriverContract<Bun.Compiler, Bun.Options, Bun.Target, Bun.Artifact>({
@@ -46,13 +48,18 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-const fakeTool = (): string => {
+const fakeTool = (reportedPath: "self" | "other" = "self"): string => {
   const root = mkdtempSync(join(tmpdir(), "effect-build-tool-"));
   roots.push(root);
   const executable = join(root, "bun");
+  const reportedExecutable = reportedPath === "self" ? executable : join(root, "different-bun");
+  if (reportedPath === "other") {
+    writeFileSync(reportedExecutable, "different executable\n");
+    chmodSync(reportedExecutable, 0o755);
+  }
   writeFileSync(
     executable,
-    `#!/bin/sh\nprintf '{"path":"${executable}","version":"9.9.9","hostOs":"macos"}'\n`,
+    `#!/bin/sh\nprintf '{"path":"${reportedExecutable}","version":"9.9.9"}'\n`,
   );
   chmodSync(executable, 0o755);
   return executable;
@@ -66,7 +73,7 @@ const fakeCompileTool = (): { readonly executable: string; readonly log: string 
   writeFileSync(log, "");
   writeFileSync(
     executable,
-    `#!/bin/sh\nprintf 'cwd:%s\\n' "$PWD" >> "${log}"\nEFFECT_BUILD_FAKE_HOST_OS=macos EFFECT_BUILD_FAKE_TOOL_PATH="$0" exec "${process.execPath}" "${fixture}" bun "${log}" "$@"\n`,
+    `#!/bin/sh\nprintf 'cwd:%s\\n' "$PWD" >> "${log}"\nEFFECT_BUILD_FAKE_TOOL_PATH="$0" exec "${process.execPath}" "${fixture}" bun "${log}" "$@"\n`,
   );
   chmodSync(executable, 0o755);
   return { executable, log };
@@ -86,7 +93,7 @@ const path = require("node:path");
 const argv = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(argv) + "\\n");
 if (argv[0] === "-e") {
-  process.stdout.write(JSON.stringify({ path: process.argv[1], version: "1.3.9", hostOs: "macos" }));
+  process.stdout.write(JSON.stringify({ path: process.argv[1], version: "1.3.9" }));
   process.exit(0);
 }
 const outfile = argv.find((value) => value.startsWith("--outfile="))?.slice(10);
@@ -232,6 +239,95 @@ describe("standalone Bun driver", () => {
         Effect.provide(NodeServices.layer),
       ),
     )).rejects.toMatchObject({ _tag: "ToolProbeFailed" });
+  });
+
+  it("rejects an explicit executable whose probe reports a different canonical file", async () => {
+    const executable = fakeTool("other");
+    await expect(Effect.runPromise(
+      Bun.Compiler.pipe(
+        Effect.provide(Bun.layer({ executable })),
+        Effect.provide(NodeServices.layer),
+      ),
+    )).rejects.toMatchObject({ _tag: "ToolProbeFailed" });
+  });
+
+  it("preserves interruption combined with a PATH filesystem failure", async () => {
+    const services = await Effect.runPromise(
+      Effect.gen(function*() {
+        return {
+          fileSystem: yield* FileSystem.FileSystem,
+          path: yield* Path.Path,
+          spawner: yield* EffectChildProcessSpawner.ChildProcessSpawner,
+        };
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+    const platformError = PlatformError.systemError({
+      _tag: "PermissionDenied",
+      module: "FileSystem",
+      method: "realPath",
+    });
+    const interruptor = 28_028;
+    const cause = Cause.combine(Cause.fail(platformError), Cause.interrupt(interruptor));
+    const fileSystem: FileSystem.FileSystem = {
+      ...services.fileSystem,
+      realPath: () => Effect.failCause(cause),
+    };
+    const exit = await Effect.runPromise(
+      Effect.exit(
+        discoverTool({ toolName: "bun", probeArgv: ["--version"] }, undefined).pipe(
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, services.path),
+          Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, services.spawner),
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromUnknown({ PATH: services.path.resolve("effect-build-path") }),
+          ),
+        ),
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) throw new Error("expected PATH inspection to fail");
+    expect([...Cause.interruptors(exit.cause)]).toContain(interruptor);
+    expect(exit.cause.reasons.find(Cause.isFailReason)?.error).toMatchObject({
+      _tag: "ToolProbeFailed",
+    });
+  });
+
+  it("uses semicolon PATH entries and a bounded .exe candidate under an injected Windows Path", async () => {
+    const root = mkdtempSync(join(tmpdir(), "effect-build-windows-path-"));
+    roots.push(root);
+    const executable = join(root, "bun.exe");
+    writeFileSync(
+      executable,
+      `#!${process.execPath}\nprocess.stdout.write(${
+        JSON.stringify(JSON.stringify({ path: executable, version: "9.9.9" }))
+      });\n`,
+    );
+    chmodSync(executable, 0o755);
+    const services = await Effect.runPromise(
+      Effect.gen(function*() {
+        return {
+          fileSystem: yield* FileSystem.FileSystem,
+          path: yield* Path.Path,
+          spawner: yield* EffectChildProcessSpawner.ChildProcessSpawner,
+        };
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+    const windowsPath: Path.Path = { ...services.path, sep: "\\" };
+    const discovered = await Effect.runPromise(
+      discoverTool({ toolName: "bun", probeArgv: ["--version"] }, undefined).pipe(
+        Effect.provideService(FileSystem.FileSystem, services.fileSystem),
+        Effect.provideService(Path.Path, windowsPath),
+        Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, services.spawner),
+        Effect.provideService(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({ PATH: `relative;${root}` }),
+        ),
+      ),
+    );
+
+    expect(discovered.artifactTool.path).toBe(realpathSync(executable));
   });
 
   it("shares one selected command across direct compilation and scoped bundling", async () => {

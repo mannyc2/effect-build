@@ -45,6 +45,11 @@ staging, runs the selected command in Scope, validates the native output,
 optionally hashes it, and atomically renames it. The compiler never writes
 directly to the requested destination.
 
+The selected command reports one canonical absolute executable path and
+version. An explicit executable must resolve to that same reported path. Host
+filename and execute-bit policy comes only from the application-provided
+`Path.sep`; it is independent of the requested or observed output target.
+
 Matrix total preflight validates the entire request before any filesystem or
 child-process activity. Bounded collect-all traversal preserves target input
 order. Successful cells commit independently; `MatrixFailed` returns their
