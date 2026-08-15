@@ -14,6 +14,7 @@
 - Risk: LOW
 - Depends on: completed Plan 026
 - Planned at: `e8c1557509a9236df8e5eb236293527c3f4fd21d`, 2026-08-14
+- Completion: `DONE`
 
 ## Outcome
 
@@ -101,3 +102,24 @@ GitHub tags/releases, and the ts-release repository.
 
 This plan replaces an ambiguous collection of old 027-037 drafts with one
 ordered program. It introduces no runtime representation.
+
+## Receipt
+
+- Plan-only import commit: `f1052a83f9da93851e9a8e3f5853e7dfa465ef4a`;
+  its parent is exact baseline
+  `e8c1557509a9236df8e5eb236293527c3f4fd21d`, and its tree matches supplied
+  plan commit `747923943d34802ebb9b744c80fcdea7b1dfd69d`.
+- Governance implementation commit:
+  `56c9abba2be605ac47b904a027b7bc80e3a6bab5`.
+- The parent approved the exact governance restamp and then explicitly widened
+  this plan by one assertion after the first architecture run proved
+  `test/architecture/docs-contract.test.ts` hard-coded the superseded marker.
+  No surrounding positive or negative contract assertion changed.
+- Exact package-manager gate used Bun `1.3.14` (`0d9b296a`). The frozen install
+  reported 116 installs across 181 packages with no change.
+- `bun run build` passed. `bun run test:architecture` passed 6 files and 41
+  tests. `git diff --check` passed, and the implementation diff contained only
+  `AGENTS.md`, this plan's scope correction, and the one-line architecture
+  assertion.
+- The worktree was clean immediately after the governance implementation
+  commit. This receipt and the matching README status are plan-only evidence.

@@ -300,7 +300,7 @@ direction. Plans 016-020 remain factual implementation history.
 | 024 | Split Esbuild and Node SEA into independent granular integrations | P1 | XL | 023 | DONE |
 | 025 | Add Bun as a second scoped JavaScript bundle producer | P1 | L | 023-024 | DONE |
 | 026 | Certify the five-package granular public cut without publishing it | P1 | M | 023-025 | DONE |
-| 027 | Import and authorize the completion/release program | P0 | S | 026 | TODO |
+| 027 | Import and authorize the completion/release program | P0 | S | 026 | DONE |
 | 028 | Canonicalize tool identity and host publication semantics | P0 | M | 027 | TODO |
 | 029 | Preserve interruption through the Bun bundle continuation | P0 | S | 027 | TODO |
 | 030 | Make scalar executable input preflight total | P0 | M | 027 | TODO |
