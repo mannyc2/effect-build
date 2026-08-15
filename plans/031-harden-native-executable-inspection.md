@@ -7,6 +7,7 @@
 - Risk: HIGH correctness/security
 - Depends on: 027; compatible with 028
 - Planned at: `e8c1557509a9236df8e5eb236293527c3f4fd21d`
+- Completion: `DONE`
 
 ## Evidence and invariant
 
@@ -137,6 +138,14 @@ not a second executable representation.
   once-packed consumers, 41 architecture tests, lint, and formatting. Final
   `bun run verify:effect` passed both `4.0.0-beta.104` and `4.0.0-rc.108`, each
   with 221 unit tests, one intentional skip, and 14/14 packed consumers.
-- The implementation source SHA and exact-SHA CI receipt will be appended after
-  the coherent source commit exists. Plan 031 remains not DONE until all twelve
-  CI jobs pass at that exact SHA and the final plan/README receipt is committed.
+- The coherent implementation source commit is
+  `dc155461612026ff1dcb82e4695b99ddb943b4fd`. Exact-SHA CI run
+  `31863227257` completed successfully at that SHA. All twelve jobs passed:
+  node-sea `94960034767`, quality `94960034779`, bun-bundle `94960034790`,
+  Ubuntu publication `94960034795`, Bun target support `94960034808`, esbuild
+  `94960034813`, macOS publication `94960034821`, Effect rc.108 `94960034826`,
+  Deno target support `94960034827`, Effect beta.104 `94960034828`, real-tools
+  `94960034835`, and Windows publication `94960034876`.
+- The source commit changed only the eight files in the reconciled Plan 031
+  scope. Its worktree was clean after commit and push. This final receipt and
+  README status are plan-only evidence.

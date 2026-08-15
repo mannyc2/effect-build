@@ -304,7 +304,7 @@ direction. Plans 016-020 remain factual implementation history.
 | 028 | Canonicalize tool identity and host publication semantics | P0 | M | 027 | DONE |
 | 029 | Preserve interruption through the Bun bundle continuation | P0 | S | 027 | DONE |
 | 030 | Make scalar executable input preflight total | P0 | M | 027 | DONE |
-| 031 | Make native executable inspection total and canonical | P0 | M | 027 | TODO |
+| 031 | Make native executable inspection total and canonical | P0 | M | 027 | DONE |
 | 032 | Harden workflow data flow and packed-consumer installs | P0 | L | 028-031 | TODO |
 | 033 | Add dependency automation and reduce non-release CI duplication | P1 | M | 032 | TODO |
 | 034 | Bound native-inspection allocation and document digest cost | P1 | M | 031 | TODO |
@@ -455,6 +455,11 @@ behavior, or the standalone operation invalidated that earlier work.
   and matrix excess-key behavior; only malformed untyped scalar values tighten.
   Exact-SHA run `31861576129` passed all twelve jobs at implementation SHA
   `22a28ce68c8662686c531ff89cb3b61b35b45a2a`.
+- Plan 031 makes both native inspectors total over malformed bytes, rejects
+  duplicate ELF interpreters and FAT64 deterministically, bounds FAT32 slice
+  inspection, and preserves mixed-cause topology at publication and Node SEA
+  call sites. Exact-SHA run `31863227257` passed all twelve jobs at
+  implementation SHA `dc155461612026ff1dcb82e4695b99ddb943b4fd`.
 - Plan 035 is deliberately external to effect-build. It extends ts-release's
   existing prepared-subject/coordinator architecture rather than creating an
   effect-build release engine. It requires parent approval before changing the
