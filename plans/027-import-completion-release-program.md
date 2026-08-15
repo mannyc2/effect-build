@@ -34,6 +34,8 @@ unchanged here.
 May modify only:
 
 - `AGENTS.md`;
+- `test/architecture/docs-contract.test.ts` (parent-approved generation-marker
+  assertion update only);
 - `plans/027-import-completion-release-program.md` receipt/status;
 - `plans/README.md`.
 

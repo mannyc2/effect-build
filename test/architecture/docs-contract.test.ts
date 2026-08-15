@@ -73,7 +73,7 @@ describe("documentation contract", () => {
     }
     expect(agents).toContain("compileExecutable");
     expect(agents).toContain("compileExecutableMatrix");
-    expect(agents).toContain("Architecture generation: `granular-integration-v2`");
+    expect(agents).toContain("Architecture generation: `completion-release-program-v1`");
     expect(agents).toContain("Bun additionally exposes one scoped Node-resolution JavaScript-bundle continuation");
     expect(agents).toContain("Esbuild and Bun independently produce the core scoped JavaScript-bundle capability");
     expect(agents).not.toContain("granular-integration-migration-v2");
