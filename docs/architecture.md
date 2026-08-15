@@ -50,6 +50,24 @@ version. An explicit executable must resolve to that same reported path. Host
 filename and execute-bit policy comes only from the application-provided
 `Path.sep`; it is independent of the requested or observed output target.
 
+Native inspection starts with at most 64 bytes and permits at most two further
+exact range requests. A third request fails through the typed
+`too-many-header-ranges` path. Current supported-container maxima are:
+
+| Container   | Maximum stream calls | Maximum requested bytes |
+| ----------- | -------------------: | ----------------------: |
+| ELF64       |                    3 |                 233,536 |
+| PE          |                    2 |                      70 |
+| thin Mach-O |                    1 |                      64 |
+| FAT32       |                    3 |                  81,992 |
+
+Calls include the initial seed and byte totals sum requested range lengths;
+declared offsets may be distant without allocating or reading the intervening
+gap. Optional digesting remains a separate full-file `FileSystem.readFile`
+followed by one one-shot Effect `Crypto.digest`. It therefore has full-file IO
+and memory cost rather than a constant-memory guarantee. Incremental hashing is
+deferred until Effect provides a platform-neutral incremental digest service.
+
 Matrix total preflight validates the entire request before any filesystem or
 child-process activity. Bounded collect-all traversal preserves target input
 order. Successful cells commit independently; `MatrixFailed` returns their

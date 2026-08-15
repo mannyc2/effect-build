@@ -58,6 +58,22 @@ argv-rendering, or child-process work. Execution is bounded and collect-all.
 `MatrixFailed` keeps already committed Artifacts and every cell failure in
 target input order; it does not roll them back.
 
+### Native inspection and digest cost
+
+Before publishing an executable Artifact, core reads an initial range of at
+most 64 bytes and follows at most two exact ranges declared by the native
+parser. A distant table or slice offset does not allocate or read the gap. These
+are internal validation bounds, not a public executable-inspection operation.
+
+When `digest` is absent or false, validation performs no whole-file read. When
+`digest: true`, core separately loads the complete staged executable with
+`FileSystem.readFile` after range inspection, then passes that exact buffer to
+the current one-shot `Crypto.digest("SHA-256", contents)` service. Digesting
+therefore adds memory and IO proportional to the complete executable; it does
+not have a constant-memory guarantee. An incremental implementation remains
+future work until Effect exposes a platform-neutral incremental digest service;
+core does not substitute a Node-only crypto adapter.
+
 ## Scoped JavaScript bundles
 
 `JavaScriptBundle.Artifact<Stages>` is a nominal, continuation-scoped capability,

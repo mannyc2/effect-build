@@ -167,7 +167,7 @@ export const inspectNativeExecutableFile = (
         collectRange(fileSystem, file, offset, length),
         (): NativeExecutableInspectionError => ({ path: file, reason: "read-failed" }),
       );
-    const initialLength = Math.min(size, 1024 * 1024);
+    const initialLength = Math.min(size, 64);
     const initial = initialLength === 0
       ? new Uint8Array(0)
       : yield* readRange(0, initialLength);
@@ -187,7 +187,7 @@ export const inspectNativeExecutableFile = (
       if (!(parsed.failure instanceof NativeExecutableRangeRequired)) {
         return yield* Effect.fail({ path: file, reason: "invalid-native-executable" });
       }
-      if (reads === 4) return yield* Effect.fail({ path: file, reason: "too-many-header-ranges" });
+      if (reads === 2) return yield* Effect.fail({ path: file, reason: "too-many-header-ranges" });
       const bytes = yield* readRange(parsed.failure.offset, parsed.failure.length);
       if (bytes.byteLength !== parsed.failure.length) {
         return yield* Effect.fail({ path: file, reason: "truncated-header" });

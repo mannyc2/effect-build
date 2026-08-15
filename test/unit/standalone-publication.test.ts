@@ -129,6 +129,60 @@ const distantElfHeader = (programHeaderOffset: number): Uint8Array => {
   return header;
 };
 
+const maximalElf64 = (): Uint8Array => {
+  const programHeaderOffset = 2_000_000;
+  const programHeaderCount = 4096;
+  const interpreterOffset = 5_000_000;
+  const interpreterLength = 4096;
+  const bytes = new Uint8Array(interpreterOffset + interpreterLength);
+  bytes.set(distantElfHeader(programHeaderOffset));
+  const view = new DataView(bytes.buffer);
+  view.setUint16(56, programHeaderCount, true);
+  const interpreterEntry = programHeaderOffset + (programHeaderCount - 1) * 56;
+  view.setUint32(interpreterEntry, 3, true);
+  view.setBigUint64(interpreterEntry + 8, BigInt(interpreterOffset), true);
+  view.setBigUint64(interpreterEntry + 32, BigInt(interpreterLength), true);
+  bytes.set(new TextEncoder().encode("/lib64/ld-linux-x86-64.so.2\0"), interpreterOffset);
+  return bytes;
+};
+
+const distantPe = (): Uint8Array => {
+  const signatureOffset = 2_000_000;
+  const bytes = new Uint8Array(signatureOffset + 6);
+  bytes.set([0x4d, 0x5a], 0);
+  new DataView(bytes.buffer).setUint32(60, signatureOffset, true);
+  bytes.set([0x50, 0x45, 0, 0, 0x64, 0x86], signatureOffset);
+  return bytes;
+};
+
+const paddedThinMacho = (): Uint8Array => {
+  const bytes = new Uint8Array(64);
+  bytes.set([0xcf, 0xfa, 0xed, 0xfe], 0);
+  new DataView(bytes.buffer).setUint32(4, 0x01000007, true);
+  return bytes;
+};
+
+const maximalFat32 = (): Uint8Array => {
+  const count = 4096;
+  const tableEnd = 8 + count * 20;
+  const sliceLength = 8;
+  const bytes = new Uint8Array(tableEnd + count * sliceLength);
+  const view = new DataView(bytes.buffer);
+  bytes.set([0xca, 0xfe, 0xba, 0xbe], 0);
+  view.setUint32(4, count, false);
+  for (let index = 0; index < count; index++) {
+    const entry = 8 + index * 20;
+    const sliceOffset = tableEnd + index * sliceLength;
+    view.setUint32(entry, index === count - 1 ? 0x01000007 : 7, false);
+    view.setUint32(entry + 8, sliceOffset, false);
+    view.setUint32(entry + 12, sliceLength, false);
+  }
+  const selectedOffset = tableEnd + (count - 1) * sliceLength;
+  bytes.set([0xcf, 0xfa, 0xed, 0xfe], selectedOffset);
+  view.setUint32(selectedOffset + 4, 0x01000007, true);
+  return bytes;
+};
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -317,7 +371,72 @@ describe("standalone atomic publication", () => {
     );
 
     expect(observation).toEqual({ format: "macho", os: "macos", architecture: "x64" });
-    expect(requests).toEqual([{ offset: 0, length: bytes.byteLength }]);
+    expect(requests).toEqual([{ offset: 0, length: 64 }]);
+  });
+
+  it.each(
+    [
+      {
+        name: "ELF64",
+        makeBytes: maximalElf64,
+        observation: { format: "elf", os: "linux", architecture: "x64", abi: "gnu" },
+        requests: [
+          { offset: 0, length: 64 },
+          { offset: 2_000_000, length: 229_376 },
+          { offset: 5_000_000, length: 4096 },
+        ],
+        calls: 3,
+        requestedBytes: 233_536,
+      },
+      {
+        name: "PE",
+        makeBytes: distantPe,
+        observation: { format: "pe", os: "windows", architecture: "x64" },
+        requests: [
+          { offset: 0, length: 64 },
+          { offset: 2_000_000, length: 6 },
+        ],
+        calls: 2,
+        requestedBytes: 70,
+      },
+      {
+        name: "thin Mach-O",
+        makeBytes: paddedThinMacho,
+        observation: { format: "macho", os: "macos", architecture: "x64" },
+        requests: [{ offset: 0, length: 64 }],
+        calls: 1,
+        requestedBytes: 64,
+      },
+      {
+        name: "FAT32",
+        makeBytes: maximalFat32,
+        observation: { format: "macho", os: "macos", architecture: "x64" },
+        requests: [
+          { offset: 0, length: 64 },
+          { offset: 8, length: 81_920 },
+          { offset: 114_688, length: 8 },
+        ],
+        calls: 3,
+        requestedBytes: 81_992,
+      },
+    ] as const,
+  )("bounds $name native inspection to $calls calls and $requestedBytes requested bytes", async (fixture) => {
+    const bytes = fixture.makeBytes();
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+
+    const observation = await Effect.runPromise(
+      inspectWithStream(bytes.byteLength, (_file, options) => {
+        const offset = Number(options?.offset ?? 0);
+        const length = Number(options?.bytesToRead ?? bytes.byteLength - offset);
+        requests.push({ offset, length });
+        return Stream.make(bytes.slice(offset, offset + length));
+      }),
+    );
+
+    expect(observation).toEqual(fixture.observation);
+    expect(requests).toEqual(fixture.requests);
+    expect(requests).toHaveLength(fixture.calls);
+    expect(requests.reduce((total, request) => total + request.length, 0)).toBe(fixture.requestedBytes);
   });
 
   it.each(
@@ -349,7 +468,7 @@ describe("standalone atomic publication", () => {
     expect(Exit.hasDies(exit)).toBe(false);
     expect(failureOf(exit)).toEqual({ path: virtualNativePath, reason: "truncated-header" });
     expect(requests).toEqual([
-      { offset: 0, length: 1024 * 1024 },
+      { offset: 0, length: 64 },
       { offset: programHeaderOffset, length: 56 },
     ]);
   });
@@ -384,7 +503,7 @@ describe("standalone atomic publication", () => {
     expect([...Cause.interruptors(exit.cause)]).toContain(interruptor);
     expect(failureOf(exit)).toEqual({ path: virtualNativePath, reason: "read-failed" });
     expect(requests).toEqual([
-      { offset: 0, length: 1024 * 1024 },
+      { offset: 0, length: 64 },
       { offset: programHeaderOffset, length: 56 },
     ]);
   });
@@ -453,7 +572,7 @@ describe("standalone atomic publication", () => {
 
     expect(artifact).toMatchObject({ path: destination, target: "linux-x64-gnu" });
     expect(requests).toEqual([
-      { offset: 0, length: 1024 * 1024 },
+      { offset: 0, length: 64 },
       { offset: programHeaderOffset, length: 56 },
       { offset: interpreterOffset, length: interpreter.byteLength },
     ]);
@@ -655,6 +774,75 @@ describe("standalone atomic publication", () => {
     expect(isLockedRenameError(platformError("Busy"))).toBe(true);
     expect(isLockedRenameError(platformError("Unknown", "EPERM"))).toBe(true);
     expect(isLockedRenameError(platformError("Unknown", "ENOENT"))).toBe(false);
+  });
+
+  it("digests the exact staged bytes through one separate full-file read only when requested", async () => {
+    const root = makeRoot();
+    const bytes = paddedThinMacho();
+    let readFileCalls = 0;
+    let readsAfterWithoutDigest = -1;
+    let fullReadContents: Uint8Array | undefined;
+    let digestCalls = 0;
+    let digestAlgorithm: Crypto.DigestAlgorithm | undefined;
+    let digestContents: Uint8Array | undefined;
+
+    const artifacts = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const hostFileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const crypto = yield* Crypto.Crypto;
+          const fileSystem: FileSystem.FileSystem = {
+            ...hostFileSystem,
+            readFile: (file) =>
+              hostFileSystem.readFile(file).pipe(
+                Effect.map((contents) => {
+                  readFileCalls += 1;
+                  fullReadContents = contents;
+                  return contents;
+                }),
+              ),
+          };
+          const recordingCrypto: Crypto.Crypto = {
+            ...crypto,
+            digest: (algorithm, contents) => {
+              digestCalls += 1;
+              digestAlgorithm = algorithm;
+              digestContents = contents;
+              return crypto.digest(algorithm, contents);
+            },
+          };
+          const publish = (name: string, digest: boolean) =>
+            Effect.gen(function*() {
+              const candidate = yield* acquireExecutableCandidate(fileSystem, path, {
+                destination: join(root, name),
+              });
+              yield* fileSystem.writeFile(candidate.staged, bytes);
+              yield* fileSystem.chmod(candidate.staged, 0o755);
+              return yield* validateAndPublishExecutable(fileSystem, path, recordingCrypto, candidate, {
+                digest,
+                resolveTarget: () => Result.succeed("macos-x64" as const),
+              });
+            });
+
+          const withoutDigest = yield* publish("without-digest", false);
+          readsAfterWithoutDigest = readFileCalls;
+          const withDigest = yield* publish("with-digest", true);
+          return { withoutDigest, withDigest };
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(artifacts.withoutDigest.digest).toBeUndefined();
+    expect(readsAfterWithoutDigest).toBe(0);
+    expect(readFileCalls).toBe(1);
+    expect(digestCalls).toBe(1);
+    expect(digestAlgorithm).toBe("SHA-256");
+    expect(digestContents).toBe(fullReadContents);
+    expect([...fullReadContents!]).toEqual([...bytes]);
+    expect(artifacts.withDigest.digest).toBe(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
+    expect([...readFileSync(artifacts.withoutDigest.path)]).toEqual([...bytes]);
+    expect([...readFileSync(artifacts.withDigest.path)]).toEqual([...bytes]);
   });
 
   it("publishes a validated artifact and replaces old bytes atomically", async () => {
