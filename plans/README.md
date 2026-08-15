@@ -469,6 +469,12 @@ behavior, or the standalone operation invalidated that earlier work.
   consumer observations. Downloaded artifact `9242018446` independently
   matched every manifest tarball hash. Locks and trees remain producer
   observations rather than artifact inputs or reproducibility claims.
+- Plan 033 adds bounded Bun Dependabot groups, a high-severity audit gate, and
+  download-only caches in exactly seven ordinary CI jobs while release remains
+  cold. The audit required the narrow `vitest@3.2.6` security patch. Source
+  `a034e3bafcbed5ab7639fa28ed40840e21b3c012` passed all twelve jobs in run
+  `31867293489`; Node SEA duplicate work fell, but no end-to-end wall-time
+  improvement is claimed.
 - Plan 034 removes repeated native-range concatenation in behavior-preserving
   commit `ddc163d736907267fd27e22878a8c095cd7a3198`, then freezes a 64-byte seed
   and at most two additional exact ranges in source
