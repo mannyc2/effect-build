@@ -311,12 +311,13 @@ direction. Plans 016-020 remain factual implementation history.
 | 035 | Qualify ts-release for ordered prepacked multi-package releases | P0 | XL | 032, external approval | DONE |
 | 036 | Bootstrap npm namespaces and one trusted publisher | P0 | M | 032, 035, approval | DONE |
 | 037 | Recertify and release the exact five-package bytes | P0 | L | 028-036, approval | DONE |
-| 038 | Evaluate JavaScriptBundler and ExecutableBuilder promotion | P1 | L | 037, approval for public cut | TODO |
+| 038 | Evaluate JavaScriptBundler and ExecutableBuilder promotion | P1 | L | 037, approval for public cut | DONE (NOT EARNED) |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
 the implementation happened; it does not make that design part of the active
-product.
+product. `DONE (NOT EARNED)` is the completed evidence-backed decision variant
+for a promotion plan whose proposed public abstraction failed its rent gate.
 
 **Historical note (hard cut, 2026-08-11).** The managed proof system built by
 Plans 002-005 was a functioning prototype: its happy path through snapshot,

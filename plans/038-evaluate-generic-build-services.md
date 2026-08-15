@@ -13,6 +13,7 @@
 - Depends on: 037 (or a maintainer decision to run against an unreleased clean
   certified baseline)
 - Planned at: `e8c1557509a9236df8e5eb236293527c3f4fd21d`
+- Completion: `DONE` — decision `NOT EARNED`
 
 ## Motivation and current asymmetry
 
@@ -140,3 +141,51 @@ or expanded packed consumers from one exact SHA.
 The only acceptable new abstraction removes provider selection from a real
 application while retaining direct integration value. Otherwise the plan adds
 no API and records why.
+
+## Decision receipt: NOT EARNED
+
+Plan 037 published the exact five-package `0.3.0` release before this durable
+decision was recorded. The experiment remained private and is not part of the
+release source, tag, package tarballs, manifests, tooling API declarations, or
+exports. No governance restamp, compatibility wrapper, target family, generic
+Context tag, or experimental package was added.
+
+The private rent test did prove implementability. One unchanged fixture
+application accepted a synthetic `JavaScriptBundler` service, built both ESM
+and CJS, consumed the live neutral bundle with Node SEA, and ran under either a
+Bun or Esbuild Layer. Its focused runtime suite passed 18/18 and its targeted
+and full type fixtures passed. Artifact liveness, cleanup, caller error
+identity, mixed Fail/Interrupt/Die topology, and continuation interruption were
+explicitly exercised. This establishes that an adapter can be written; it does
+not establish public demand or maintenance rent.
+
+| Proposed surface | Truthful common evidence | Provider/lifecycle rent | Decision |
+|---|---|---|---|
+| `JavaScriptBundler` request | Exactly three fields are common: `entrypoint`, `format: "esm" \| "cjs"`, and optional `cwd`. Both return the same continuation-owned core `JavaScriptBundle.Artifact`. | A generic portable error still needs `provider`, normalized `kind`, normalized diagnostics, provider tag, and retained provider error identity. Bun additionally owns command discovery/version/spawn and Bun-specific metafile/import reasons; Esbuild owns its process-global context/version and richer id/location diagnostics. The adapter removes no direct provider error branch and must preserve the existing Exit sandwich, cause topology, cleanup, and Layer requirements. | `NOT EARNED` |
+| `ExecutableBuilder` | Source-to-executable operations exist for Bun and Deno; live-bundle-to-executable exists for Node SEA. | One name would conflate incompatible input topology and lifecycle: source requests versus a scoped live artifact. A union input would be a lie and duplicate the existing Integration lifecycle seam. | `NOT EARNED` |
+| `ExecutableAssembler` | The name truthfully describes Node SEA's live-bundle-to-executable role. | It has one implementation and no application that swaps another assembler Layer. A structural type adds a second representation without removing a branch. | `NOT EARNED` |
+
+Repository-wide production-source and example inspection found direct Bun and
+Esbuild calls and application-owned Esbuild/Bun -> Node SEA composition, but no
+named production consumer that asks to swap a generic bundler or assembler
+Layer. The only swapping consumer was the synthetic private fixture. Existing
+`effect-build/Integration` already owns the shared process, liveness,
+validation, staging, and publication work, so the generic surface would add
+provider/kind/diagnostic adapters without deleting shared machinery or a
+caller decision.
+
+The experiment also exposed Esbuild's pre-existing continuation-boundary bug:
+provider handlers surrounded arbitrary caller effects and could capture a
+genuine core error while losing a sibling interrupt. That bounded correctness
+defect was fixed without adding a generic API in commit
+`a989fd12c377534b36fb468a2c4e8baf00330410`; exact-SHA CI
+[run `31873882878`](https://github.com/mannyc2/effect-build/actions/runs/31873882878)
+passed all twelve jobs. The released descendant preserves that correction.
+
+Reopen `JavaScriptBundler` only when a named production application must swap
+Bun and Esbuild unchanged and the abstraction demonstrably removes provider
+selection while retaining provider diagnostics and exact interruption/liveness
+semantics. Reopen a source compiler or bundle assembler only after at least two
+truthful implementations share the same input topology and a real consumer
+swaps them. Until then, direct provider APIs plus the existing Integration seam
+are the smaller and more accurate public architecture.
