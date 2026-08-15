@@ -23,6 +23,7 @@ import { makeCompilerService } from "../../packages/effect-build/src/standalone/
 import {
   acquireExecutableCandidate,
   type ExecutableCandidate,
+  inspectNativeExecutableFile,
   isLockedRenameError,
   validateAndPublishExecutable,
 } from "../../packages/effect-build/src/standalone/internal/ExecutableLifecycle.js";
@@ -101,6 +102,32 @@ const platformFailure = () =>
     method: "stream",
     cause: new Error("controlled platform failure"),
   });
+
+const virtualNativePath = "/virtual/native-executable";
+
+const inspectWithStream = (
+  size: number,
+  stream: FileSystem.FileSystem["stream"],
+) =>
+  Effect.gen(function*() {
+    const hostFileSystem = yield* FileSystem.FileSystem;
+    return yield* inspectNativeExecutableFile(
+      { ...hostFileSystem, stream },
+      virtualNativePath,
+      size,
+    );
+  }).pipe(Effect.provide(NodeServices.layer));
+
+const distantElfHeader = (programHeaderOffset: number): Uint8Array => {
+  const header = new Uint8Array(64);
+  const view = new DataView(header.buffer);
+  header.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+  view.setUint16(18, 62, true);
+  view.setBigUint64(32, BigInt(programHeaderOffset), true);
+  view.setUint16(54, 56, true);
+  view.setUint16(56, 1, true);
+  return header;
+};
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -271,6 +298,95 @@ describe("standalone atomic publication", () => {
     });
     expect(readFileSync(destination, "utf8")).toBe("old");
     expect(existsSync(dirname(staged))).toBe(false);
+  });
+
+  it("collects a native inspection range from one-byte stream chunks without changing its observation", async () => {
+    const bytes = new Uint8Array(257);
+    bytes.set([0xcf, 0xfa, 0xed, 0xfe], 0);
+    new DataView(bytes.buffer).setUint32(4, 0x01000007, true);
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+
+    const observation = await Effect.runPromise(
+      inspectWithStream(bytes.byteLength, (_file, options) => {
+        const offset = Number(options?.offset ?? 0);
+        const length = Number(options?.bytesToRead ?? bytes.byteLength - offset);
+        requests.push({ offset, length });
+        const range = bytes.slice(offset, offset + length);
+        return Stream.fromIterable([...range].map((byte) => Uint8Array.of(byte)));
+      }),
+    );
+
+    expect(observation).toEqual({ format: "macho", os: "macos", architecture: "x64" });
+    expect(requests).toEqual([{ offset: 0, length: bytes.byteLength }]);
+  });
+
+  it.each(
+    [
+      ["short", -1],
+      ["excess", 1],
+    ] as const,
+  )("rejects a %s additional native-inspection range", async (_name, byteDelta) => {
+    const programHeaderOffset = 2_000_000;
+    const size = programHeaderOffset + 56;
+    const header = distantElfHeader(programHeaderOffset);
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+
+    const exit = await Effect.runPromise(
+      inspectWithStream(size, (_file, options) => {
+        const offset = Number(options?.offset ?? 0);
+        const length = Number(options?.bytesToRead ?? size - offset);
+        requests.push({ offset, length });
+        if (offset === 0) {
+          const initial = new Uint8Array(length);
+          initial.set(header);
+          return Stream.make(initial);
+        }
+        return Stream.make(new Uint8Array(length + byteDelta));
+      }).pipe(Effect.exit),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(Exit.hasDies(exit)).toBe(false);
+    expect(failureOf(exit)).toEqual({ path: virtualNativePath, reason: "truncated-header" });
+    expect(requests).toEqual([
+      { offset: 0, length: 1024 * 1024 },
+      { offset: programHeaderOffset, length: 56 },
+    ]);
+  });
+
+  it("preserves Fail plus Interrupt emitted after an excess native-inspection range", async () => {
+    const programHeaderOffset = 2_000_000;
+    const size = programHeaderOffset + 56;
+    const header = distantElfHeader(programHeaderOffset);
+    const interruptor = 34_034;
+    const mixed = Cause.combine(Cause.fail(platformFailure()), Cause.interrupt(interruptor));
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+
+    const exit = await Effect.runPromise(
+      inspectWithStream(size, (_file, options) => {
+        const offset = Number(options?.offset ?? 0);
+        const length = Number(options?.bytesToRead ?? size - offset);
+        requests.push({ offset, length });
+        if (offset === 0) {
+          const initial = new Uint8Array(length);
+          initial.set(header);
+          return Stream.make(initial);
+        }
+        return Stream.concat(
+          Stream.make(new Uint8Array(length + 1)),
+          Stream.failCause(mixed),
+        );
+      }).pipe(Effect.exit),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) throw new Error("expected native inspection to fail");
+    expect([...Cause.interruptors(exit.cause)]).toContain(interruptor);
+    expect(failureOf(exit)).toEqual({ path: virtualNativePath, reason: "read-failed" });
+    expect(requests).toEqual([
+      { offset: 0, length: 1024 * 1024 },
+      { offset: programHeaderOffset, length: 56 },
+    ]);
   });
 
   it("publishes through the production bounded range reader for a sparse distant ELF", async () => {

@@ -117,10 +117,32 @@ export const acquireExecutableCandidate = (
 
 const collectRange = (fileSystem: FileSystem.FileSystem, file: string, offset: number, bytesToRead: number) =>
   fileSystem.stream(file, { offset, bytesToRead }).pipe(
-    Stream.runFold(() => new Uint8Array(0), (current, chunk) => {
-      const combined = new Uint8Array(current.byteLength + chunk.byteLength);
-      combined.set(current);
-      combined.set(chunk, current.byteLength);
+    Stream.runFold(
+      () => ({ chunks: [] as Array<Uint8Array>, byteLength: 0, excess: false }),
+      (collected, chunk) => {
+        if (collected.excess || chunk.byteLength === 0) return collected;
+        const byteLength = collected.byteLength + chunk.byteLength;
+        if (byteLength > bytesToRead) {
+          collected.excess = true;
+          return collected;
+        }
+        collected.chunks.push(chunk);
+        collected.byteLength = byteLength;
+        return collected;
+      },
+    ),
+    Effect.map((collected) => {
+      if (collected.excess || collected.byteLength !== bytesToRead) {
+        // The caller converts every length mismatch to a typed truncated-header
+        // failure. Do not copy bytes that cannot be inspected.
+        return new Uint8Array(0);
+      }
+      const combined = new Uint8Array(bytesToRead);
+      let writeOffset = 0;
+      for (const chunk of collected.chunks) {
+        combined.set(chunk, writeOffset);
+        writeOffset += chunk.byteLength;
+      }
       return combined;
     }),
   );
