@@ -32,11 +32,19 @@
       ],
       "runtimeKeys": {
         ".": [
+          "BunBundleFailed",
+          "BunBundleInvalid",
+          "BunBundleMaterializationFailed",
+          "BunBundleMaterializationOperation",
+          "BunBundleSpawnFailed",
+          "BunBundleVersionMismatch",
           "Compiler",
+          "InvalidBundleInput",
           "Target",
           "compileExecutable",
           "compileExecutableMatrix",
-          "layer"
+          "layer",
+          "withJavaScriptBundle"
         ]
       }
     },

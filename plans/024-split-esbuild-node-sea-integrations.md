@@ -1466,9 +1466,31 @@ commit. Record that commit, then leave this receipt and the matching
 keeps the candidate source SHA non-circular: the receipt observes the source
 commit; it is not part of the source commit it names.
 
-- **Implementation status**: `PENDING`
-- **Implementation source SHA**: `PENDING`
-- **Verification summary**: `PENDING`
-- **Pinned real-tool local evidence / Plan 026 CI assignment**: `PENDING`
+- **Implementation status**: `DONE`
+- **Implementation source SHA**: `e3dfece1ac92fdf215abf6670195b86bb7f475c6`
+- **Verification summary**: exact Bun `1.3.14`; clean exact-SHA
+  `bun install --frozen-lockfile`, `bun run verify`, `bun run verify:effect`,
+  optional `bun run test:host:extra`, and `git diff --check` passed. The
+  deterministic suites reported 148 unit tests passed with one intentional
+  skip, 41 architecture tests passed, four TSTyche files passed, and all twelve
+  npm/Bun packed consumers passed at both Effect `4.0.0-beta.104` and
+  `4.0.0-rc.108`.
+- **Pinned real-tool local evidence / Plan 026 CI assignment**: local host was
+  `Darwin-arm64`, so pinned Linux-x86_64 Bun/Deno assets and exact Node 26.7.0
+  Linux SEA execution were `UNAVAILABLE`; Plan 026's exact-SHA `real-tools`
+  and `node-sea` jobs remain mandatory. Optional Bun/Deno host smoke passed
+  with local Deno `2.9.5`.
+- **Authorized local integrity fixture**: the source task explicitly authorized
+  one disposable, non-promoted six-file fixture solely for this frozen gate;
+  no upload, publication, tag, release, or trusted-publisher mutation was
+  permitted or performed. `scripts/test-built-consumer.mjs` passed `12/12` and
+  `scripts/verify-candidate.mjs` accepted exact source and five packages at
+  `/private/tmp/effect-build-024-candidate.1AHWvb`. Tarball SHA-256 values were
+  `effect-build` `2a86adf71e68eaf3550b286ebc5fc26bc5e147165be6f5851e595f9f1f849246`,
+  `effect-build-bun` `303a2a877b18e8be1cf644f430a6df97464543ba78bf39f3f54e0c984d4faca5`,
+  `effect-build-deno` `d55fde9fb27ed555ce1685529d84d314c6312b4c18054cffc53aca099f436db6`,
+  `effect-build-esbuild` `3731347d4c509858cf747ca928641a902f6d71b3699dbda344683a0eef0b7994`,
+  and `effect-build-node-sea`
+  `efb0c811dd0abd2c66f75006922e65ede1d57881600647a46a84b95d93c0deb5`.
 - **Allowed plan-only handoff changes**:
   `plans/024-split-esbuild-node-sea-integrations.md`, `plans/README.md`

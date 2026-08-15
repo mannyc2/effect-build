@@ -36,6 +36,18 @@ const defineFixture = (
   Provider.define({
     name: (overrides.name ?? "fixture") as "fixture",
     service: FixtureCompiler,
+    makeService: (
+      context: Provider.CommandServiceContext<
+        "fixture",
+        Record<string, never>,
+        "linux-x64-gnu",
+        Stages
+      >,
+    ) =>
+      Object.freeze({
+        compileExecutable: context.compileExecutable,
+        compileExecutableMatrix: context.compileExecutableMatrix,
+      }),
     targetEntries: (overrides.targetEntries ?? targetEntries) as typeof targetEntries,
     Stages: (overrides.Stages ?? Stages) as typeof Stages,
     ...(overrides.defaultTarget === undefined

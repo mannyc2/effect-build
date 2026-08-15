@@ -21,8 +21,10 @@ used by Bun and Deno; it is not a registry or application operation.
 
 ## Command compilers
 
-Bun and Deno each expose exactly `Compiler`, `Target`, `compileExecutable`,
-`compileExecutableMatrix`, and `layer` at runtime. Their scalar input is:
+Bun and Deno both expose `Compiler`, `Target`, `compileExecutable`,
+`compileExecutableMatrix`, and `layer` at runtime. Bun also exposes the scoped
+bundle operation and its closed error Schemas described below. Their scalar
+input is:
 
 ```ts
 interface CompileExecutableInput<Options, Target> {
@@ -73,6 +75,30 @@ Its fixed producer behavior is one Node-resolving bundle, one JavaScript
 output, Esbuild 0.28.2, ESM or CJS, no splitting, no plugins, and explicit
 `node26.7` lowering.
 
+The existing Bun `Compiler` service and Layer additionally expose:
+
+```ts
+declare const withJavaScriptBundle: <A, E, R>(
+  input: JavaScriptBundleInput,
+  use: (
+    bundle: JavaScriptBundle.Artifact<
+      readonly [{
+        readonly operation: "bundle-javascript";
+        readonly tool: { readonly name: "bun"; readonly version: "1.3.9"; readonly path: string };
+      }]
+    >,
+  ) => Effect.Effect<A, E, R>,
+) => Effect.Effect<A, Bun.BunBundleError | E, Bun.Compiler | Exclude<R, Scope.Scope>>;
+```
+
+The same selected Bun command serves scalar compile, matrix compile, and bundle
+calls. Bundling fixes `target=node`, packages bundled, one output, and the
+pinned Bun 1.3.9 producer defaults. Here `node` controls resolution and builtin
+handling; it cannot select Node 26.7 or a syntax-lowering level. Metafile
+`external: true` edges are sorted observations, not a complete import closure.
+Bun's generated `import.meta.main` behavior is intentionally documented as
+different from Esbuild when an ESM bundle is imported.
+
 ## Node SEA
 
 `effect-build-node-sea` exposes granular assembly rather than compile/matrix:
@@ -93,7 +119,8 @@ declare const createExecutable: <const MainStages extends readonly Artifact.Stag
 
 The result keeps the main's exact stage prefix and appends one observed
 Node 26.7.0 `assemble-node-sea` stage. A borrowed bundle with no stages therefore
-produces exactly one stage; an Esbuild bundle produces Esbuild then Node.
+produces exactly one stage; an Esbuild bundle produces Esbuild then Node; a
+Bun bundle produces Bun then Node.
 
 Application Effect code owns composition:
 
@@ -107,7 +134,7 @@ const executable = Esbuild.withJavaScriptBundle(
 Node SEA accepts only Node-resolution bundles, validates externals against the
 selected Node builtin set, authenticates a private main copy, runs `--check`,
 and then performs direct SEA assembly. Exact syntax acceptance belongs to the
-selected Node tool, not a neutral core syntax mode.
+selected Node tool for every producer, not a neutral core syntax mode.
 
 ## Artifacts and errors
 

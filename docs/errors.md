@@ -31,6 +31,18 @@ Layer failure is `EsbuildVersionMismatch`. The scoped operation fails with
 Schemas; external platform messages appear only in infrastructure `reason`
 fields.
 
+## Bun bundling
+
+The existing Bun Layer still uses `ToolNotFound | ToolProbeFailed`; exact Bun
+1.3.9 is enforced only when `withJavaScriptBundle` runs. Its operation union is
+`BunBundleVersionMismatch`, `InvalidBundleInput`, `BunBundleSpawnFailed`,
+`BunBundleFailed`, `BunBundleInvalid`, or
+`BunBundleMaterializationFailed`. A spawn failure never stands for a completed
+nonzero child, and a nonzero child retains separate bounded stdout/stderr
+diagnostics. Input, invalid-output, and materialization-operation vocabularies
+are finite. Genuine core bundle errors are mapped before caller code runs, so
+a caller error with a colliding `_tag` retains its identity.
+
 ## Node SEA
 
 Layer failure is `NodeSeaToolNotFound | NodeSeaProbeFailed`. Assembly fails

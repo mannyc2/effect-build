@@ -2,8 +2,9 @@
 
 `effect-build` supplies provider-neutral lifecycle and narrow integration-author
 contracts. Bun and Deno expose `compileExecutable` and
-`compileExecutableMatrix`. Esbuild exposes `withJavaScriptBundle`; Node SEA
-exposes `createExecutable`. Applications compose integrations explicitly.
+`compileExecutableMatrix`. Bun additionally exposes `withJavaScriptBundle`, as
+does Esbuild independently; Node SEA exposes `createExecutable`. Applications
+compose integrations explicitly.
 
 | Document                        | Covers                                                                 |
 | ------------------------------- | ---------------------------------------------------------------------- |

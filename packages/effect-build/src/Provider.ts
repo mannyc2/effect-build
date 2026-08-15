@@ -1,8 +1,8 @@
 import { Context, Effect, Layer, Result, Schema } from "effect";
-import type { Crypto, FileSystem, Path } from "effect";
+import type { Crypto, FileSystem, Path, PlatformError } from "effect";
 import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
-import type { CommandCompletion } from "./Integration.js";
-import type { ExecutableArtifact, StageObservation, ToolObservation } from "./standalone/Artifact.js";
+import { type CommandCompletion, executeCommand } from "./Integration.js";
+import type { ExecutableArtifact, FileArtifact, StageObservation, ToolObservation } from "./standalone/Artifact.js";
 import { ExecutableArtifact as ExecutableArtifactSchema } from "./standalone/Artifact.js";
 import type { BuildError as CoreBuildError, Diagnostic } from "./standalone/BuildError.js";
 import { InvalidDriverOptions, ToolFailed, type ToolNotFound, type ToolProbeFailed } from "./standalone/BuildError.js";
@@ -93,6 +93,27 @@ export interface CompilerService<
   ) => Effect.Effect<readonly ProviderArtifact<Name, Target, Stages>[], ProviderMatrixError<Name, Target, Stages>>;
 }
 
+export interface BoundCommand<Name extends string> {
+  readonly tool: {
+    readonly name: Name;
+    readonly version: string;
+    readonly path: FileArtifact["path"];
+  };
+  readonly execute: (
+    argv: readonly string[],
+    cwd?: string,
+  ) => Effect.Effect<CommandCompletion, PlatformError.PlatformError>;
+}
+
+export interface CommandServiceContext<
+  Name extends string,
+  Options,
+  Target extends SystemTarget,
+  Stages extends ProviderStages<Name>,
+> extends CompilerService<Name, Options, Target, Stages> {
+  readonly command: BoundCommand<Name>;
+}
+
 export interface CommandDefinition<
   Self,
   Name extends string,
@@ -100,9 +121,13 @@ export interface CommandDefinition<
   Stages extends ProviderStages<Name>,
   Options,
   Validated,
+  Service extends CompilerService<Name, Options, Entries[number][0], Stages>,
 > {
   readonly name: NonEmptyProviderName<Name>;
-  readonly service: Context.Service<Self, CompilerService<Name, Options, Entries[number][0], Stages>>;
+  readonly service: Context.Service<Self, Service>;
+  readonly makeService: (
+    context: CommandServiceContext<Name, Options, Entries[number][0], Stages>,
+  ) => Service;
   readonly targetEntries: Entries;
   readonly Stages: Schema.ConstraintDecoder<Stages, never>;
   readonly defaultTarget?: Entries[number][0];
@@ -163,6 +188,34 @@ const authorError = (message: string): never => {
 const freezeStages = <Stages extends readonly StageObservation[]>(stages: readonly StageObservation[]): Stages =>
   Object.freeze(stages.map((stage) => Object.freeze({ ...stage, tool: Object.freeze({ ...stage.tool }) }))) as Stages;
 
+const captureAdditionalServiceEffects = <
+  Name extends string,
+  Options,
+  Target extends SystemTarget,
+  Stages extends ProviderStages<Name>,
+  Service extends CompilerService<Name, Options, Target, Stages>,
+>(
+  service: Service,
+  platform: Context.Context<ProviderLayerRequirements>,
+): Service => {
+  const captured: Record<PropertyKey, unknown> = {};
+  for (const key of Reflect.ownKeys(service)) {
+    const value = service[key as keyof Service];
+    captured[key] = key === "compileExecutable" || key === "compileExecutableMatrix" || typeof value !== "function"
+      ? value
+      : (...args: readonly unknown[]) =>
+        Effect.provide(
+          Reflect.apply(
+            value as (...args: readonly unknown[]) => Effect.Effect<unknown, unknown, unknown>,
+            service,
+            args,
+          ),
+          platform,
+        );
+  }
+  return Object.freeze(captured) as Service;
+};
+
 export const define = <
   Self,
   const Name extends string,
@@ -170,8 +223,9 @@ export const define = <
   Stages extends ProviderStages<Name>,
   Options,
   Validated,
+  Service extends CompilerService<Name, Options, Entries[number][0], Stages>,
 >(
-  definition: CommandDefinition<Self, Name, Entries, Stages, Options, Validated>,
+  definition: CommandDefinition<Self, Name, Entries, Stages, Options, Validated, Service>,
 ): Defined<Self, Name, Entries, Stages, Options> => {
   if (!Schema.is(Schema.NonEmptyString)(definition.name)) {
     return authorError("provider name must be non-empty");
@@ -295,7 +349,23 @@ export const define = <
           { toolName: name, probeArgv: definition.probeArgv },
           options.executable,
         );
-        return yield* makeCompilerService<Options, Name, Entries[number][0], Stages, Validated>(adapter, tool);
+        const platform = yield* Effect.context<ProviderLayerRequirements>();
+        const spawner = yield* EffectChildProcessSpawner.ChildProcessSpawner;
+        const compiler = yield* makeCompilerService<Options, Name, Entries[number][0], Stages, Validated>(
+          adapter,
+          tool,
+        );
+        const command: BoundCommand<Name> = Object.freeze({
+          tool: Object.freeze(tool.artifactTool),
+          execute: (argv: readonly string[], cwd?: string) =>
+            executeCommand(tool.artifactTool.path, argv, cwd).pipe(
+              Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, spawner),
+            ),
+        });
+        return captureAdditionalServiceEffects<Name, Options, Entries[number][0], Stages, Service>(
+          definition.makeService(Object.freeze({ ...compiler, command })),
+          platform,
+        );
       }),
     );
 

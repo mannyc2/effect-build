@@ -31,9 +31,11 @@ integration, not the runtime hosting the Effect program.
 | cleanup-root and destination claims         | application-selected composition                      |
 
 Core contains no Bun, Deno, Esbuild, or Node SEA catalog. The Provider author
-SPI is command-only and is earned by Bun and Deno. Esbuild and Node SEA use the
-narrow Integration functions directly; there is no guessed common bundler or
-packager service.
+SPI is command-only and is earned by Bun and Deno. It constructs each provider
+service from one selected bound command, so Bun compile and bundle calls cannot
+select different tools. The command is not an end-user service. Esbuild and
+Node SEA use the narrow Integration functions directly; there is no guessed
+common bundler or packager service.
 
 ## Compiler lifecycle
 
@@ -62,11 +64,12 @@ published beneath a live producer root and prevent a new producer root from
 capturing an already claimed destination. Copying handle fields does not copy
 authority.
 
-## Esbuild to Node SEA
+## Independent bundle producers to Node SEA
 
-`effect-build-esbuild` produces one scoped bundle. Application code passes that
-handle to `effect-build-node-sea`; neither package knows the other exists.
-Node SEA also accepts a valid borrowed or future producer handle.
+`effect-build-esbuild` and `effect-build-bun` independently produce one scoped
+bundle. Application code passes either handle to `effect-build-node-sea`;
+none of the packages knows a sibling exists. Node SEA also accepts a valid
+borrowed or future producer handle.
 
 Before candidate acquisition, Node SEA authenticates the live handle, requires
 Node resolution, validates externals against the selected exact Node builtin
@@ -78,7 +81,10 @@ The final stage tuple is the authenticated main prefix followed by one Node
 
 Node SEA supports exact `linux-x64-gnu`, never uses postject, and never
 downloads or installs Node. Esbuild retains its fixed `node26.7` producer
-target, but exact syntax acceptance is owned by selected Node.
+target. Bun's `target=node` controls resolution and builtins, not a Node release
+or syntax lowering. Exact syntax acceptance is owned by selected Node for both
+producers. Bun metafile external edges are observations rather than a closed
+dependency graph; generated code can contain imports absent from that record.
 
 ## Atomic publication
 

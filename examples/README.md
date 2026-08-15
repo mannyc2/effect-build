@@ -11,5 +11,6 @@ provides one official Node platform Layer. The Node SEA example uses exact
 Esbuild 0.28.2 bundle production and an already-installed exact Node 26.7.0
 Linux x64 GNU producer. It does not use an integration sibling dependency.
 
-`bun run test:consumer` packs all five packages once and checks isolated npm
-and Bun consumers plus explicit Esbuild-to-Node-SEA applications.
+`bun run test:consumer` packs all five packages once and checks fourteen cases:
+ten isolated npm/Bun consumers, two explicit Esbuild-to-Node-SEA applications,
+and two explicit Bun-to-Node-SEA applications.

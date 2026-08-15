@@ -223,6 +223,14 @@ describe("tooling pins and workflow contracts", () => {
     }
     expect(rootManifest.scripts["verify:effect"]).toBe("node scripts/verify-effect-compatibility.mjs --all");
     expect(rootManifest.scripts["test:integration:node-sea"]).toBe("vitest run test/integration/node-sea.test.ts");
+    expect(rootManifest.scripts["test:integration:bun-bundle"]).toBe(
+      "vitest run test/integration/bun-bundle.test.ts",
+    );
+    expect(rootManifest.scripts["test:integration:bun-node-sea"]).toBe(
+      "vitest run test/integration/bun-node-sea.test.ts",
+    );
+    expect(rootManifest.scripts["test:unit"]).toContain("test/unit/bun-bundle.test.ts");
+    expect(rootManifest.scripts["test:unit"]).toContain("test/unit/bun-node-sea-pipeline.test.ts");
 
     for (const name of publicPackages) {
       const manifest = await readJson(`packages/${name}/package.json`) as {
@@ -436,6 +444,7 @@ describe("tooling pins and workflow contracts", () => {
       "quality",
       "esbuild",
       "node-sea",
+      "bun-bundle",
       "real-tools",
       "target-support",
       "effect-compatibility",
@@ -448,6 +457,11 @@ describe("tooling pins and workflow contracts", () => {
     expect(jobRuns(workflow, "quality")).toContain("bun run verify");
     expect(jobRuns(workflow, "esbuild")).toContain("test/unit/esbuild-bundle.test.ts");
     expect(jobRuns(workflow, "esbuild")).toContain("node scripts/test-built-consumer.mjs --built");
+    expect(jobRuns(workflow, "bun-bundle")).toContain("bun run test:integration:bun-bundle");
+    expect(jobRuns(workflow, "bun-bundle")).toContain("bun run test:integration:bun-node-sea");
+    expect(jobRuns(workflow, "bun-bundle")).toContain('test "$(bun --version)" = "1.3.14"');
+    expect(jobRuns(workflow, "bun-bundle")).toContain('test "$("$selected_bun" --version)" = "1.3.9"');
+    expect(jobRuns(workflow, "bun-bundle")).toContain('test "$("$selected_node" --version)" = "v26.7.0"');
     expect(jobRuns(workflow, "real-tools")).toContain("bun run verify:real");
     expect(workflow.jobs["target-support"]?.strategy).toEqual({
       "fail-fast": false,
@@ -475,8 +489,8 @@ describe("tooling pins and workflow contracts", () => {
       },
     });
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(Object.keys(workflow.jobs)).toEqual(["esbuild", "node-sea", "candidate"]);
-    expect(workflow.jobs.candidate?.needs).toEqual(["esbuild", "node-sea"]);
+    expect(Object.keys(workflow.jobs)).toEqual(["esbuild", "node-sea", "bun-bundle", "candidate"]);
+    expect(workflow.jobs.candidate?.needs).toEqual(["esbuild", "node-sea", "bun-bundle"]);
     expectPinnedActionsWithoutEscapes(workflow);
     const source = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
     expect(source).toContain("node scripts/test-built-consumer.mjs --candidate-dir");
@@ -486,6 +500,7 @@ describe("tooling pins and workflow contracts", () => {
     expect(source).not.toMatch(/npm publish|gh release|git tag|ts-release|NODE_AUTH_TOKEN|id-token:\s*write/i);
     const consumer = await readFile(resolve(root, "scripts/test-built-consumer.mjs"), "utf8");
     for (const name of publicPackages) expect(consumer).toContain(JSON.stringify(name));
-    expect(consumer).toContain('console.log("packed consumers verified: 12/12")');
+    expect(consumer).toContain('console.log("packed consumers verified: 14/14")');
+    expect(consumer).toContain('for (const producer of ["esbuild", "bun"])');
   });
 });

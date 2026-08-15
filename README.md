@@ -30,6 +30,9 @@ uses directly:
 bun add effect-build effect-build-esbuild effect-build-node-sea effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
 ```
 
+For Bun-to-Node-SEA composition, replace `effect-build-esbuild` with
+`effect-build-bun`; each application declares the producer it actually uses.
+
 All five packages accept Effect `>=4.0.0-beta.104 <4.1.0-0`; the repository
 reference is exactly `4.0.0-rc.108`.
 
@@ -81,9 +84,10 @@ successful cells retain their already committed Artifacts, and there is no
 matrix-wide rollback. Interruption terminates active children, skips queued
 cells, and propagates the exact interruption Cause.
 
-## Esbuild and Node SEA composition
+## JavaScript bundles and Node SEA composition
 
-`effect-build-esbuild` produces a continuation-scoped JavaScript bundle.
+`effect-build-esbuild` and `effect-build-bun` independently produce the same
+continuation-scoped core JavaScript-bundle capability.
 `effect-build-node-sea` consumes that neutral core capability and creates one
 Linux x64 GNU executable with an already-installed exact Node 26.7.0 tool.
 
@@ -102,6 +106,26 @@ const program = Esbuild.withJavaScriptBundle(
   Effect.provide(NodeServices.layer),
 );
 ```
+
+The Bun form is explicit application composition too:
+
+```ts
+const bunProgram = Bun.withJavaScriptBundle(
+  { entrypoint: "src/main.ts", format: "cjs" },
+  (main) => NodeSea.createExecutable({ main, outfile: "dist/bun-app" }),
+).pipe(
+  Effect.provide(Bun.layer()),
+  Effect.provide(NodeSea.layer()),
+  Effect.provide(NodeServices.layer),
+);
+```
+
+Bun `target=node` selects Node resolution and builtin handling; it does not
+select Node 26.7 or a syntax-lowering level. Bun emits with pinned producer
+defaults. The selected Node 26.7.0 tool privately stabilizes the main and owns
+syntax acceptance for both producers. Metafile-derived observed external
+imports are evidence Bun reported, not a complete dependency or hermeticity
+claim.
 
 Bundle handles are live only inside their continuation. Node SEA authenticates
 and privately copies the main, then runs selected Node `--check` against that
@@ -127,7 +151,8 @@ The earlier combined Node SEA candidate was unreleased and is superseded by
 explicit application composition.
 
 There is no registry, fallback compiler, retry, automatic installation, raw
-argv escape hatch, or generic build executor. Stage values are observations,
+argv escape hatch, or generic build executor. Stage values and observed
+external imports are observations,
 not manifests, receipts, provenance, hermeticity, or reproducibility claims.
 
 ## Documentation

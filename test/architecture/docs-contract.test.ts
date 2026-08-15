@@ -65,22 +65,26 @@ describe("documentation contract", () => {
     const agents = await readFile(resolve(root, "AGENTS.md"), "utf8");
     const api = await readFile(resolve(root, "docs/api.md"), "utf8");
     const index = await readFile(resolve(root, "docs/README.md"), "utf8");
-    for (const text of [agents, api, index]) {
+    for (const text of [api, index]) {
       expect(text).toContain("compileExecutable");
       expect(text).toContain("compileExecutableMatrix");
       expect(text).toContain("withJavaScriptBundle");
       expect(text).toContain("createExecutable");
     }
-    expect(agents).toContain("Architecture generation: `granular-integration-migration-v2`");
-    expect(agents).toContain("Plans 023 and 024 are completed, unpublished migration steps");
-    expect(agents).toContain("Plan 025 may add only `Bun.withJavaScriptBundle(input, use)`");
-    expect(agents).not.toContain("During Plan 023 only");
+    expect(agents).toContain("compileExecutable");
+    expect(agents).toContain("compileExecutableMatrix");
+    expect(agents).toContain("Architecture generation: `granular-integration-v2`");
+    expect(agents).toContain("Bun additionally exposes one scoped Node-resolution JavaScript-bundle continuation");
+    expect(agents).toContain("Esbuild and Bun independently produce the core scoped JavaScript-bundle capability");
+    expect(agents).not.toContain("granular-integration-migration-v2");
     expect(api).toContain("five packages with seven public entry points");
     expect(api).toContain("There is no root compile");
     expect(api).toContain("effect-build/Integration");
     expect(api).toContain("continuation-scoped capability");
     expect(api).toContain('import * as Esbuild from "effect-build-esbuild"');
     expect(api).toContain('import * as NodeSea from "effect-build-node-sea"');
+    expect(api).toContain("cannot select Node 26.7 or a syntax-lowering level");
+    expect(api).toContain("not a complete import closure");
   });
 
   it("documents the neutral Artifact and exact granular stage behavior", async () => {
@@ -128,11 +132,13 @@ describe("documentation contract", () => {
     expect(text).toContain("linux-x64-gnu");
     expect(text).toContain("Esbuild 0.28.2");
     expect(text).toContain("Node 26.7.0");
+    expect(text).toContain("Bun");
     expect(text).toMatch(/never\s+uses\s+postject/i);
     expect(text).toMatch(/never downloads|never downloads or installs/i);
     expect(architecture).toMatch(/four separate choices/i);
     expect(architecture).toMatch(/rejects inspection products, public receipts, semantic plans/);
     expect(text).toMatch(/private (?:operation directory|copy)/i);
+    expect(text).toMatch(/resolution and builtins|resolution and builtin handling/i);
   });
 
   it("rejects legacy package and release language in user-facing material", async () => {

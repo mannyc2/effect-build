@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Result } from "effect";
+import { Effect, Layer, Result } from "effect";
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,6 +70,43 @@ const fakeCompileTool = (): { readonly executable: string; readonly log: string 
   );
   chmodSync(executable, 0o755);
   return { executable, log };
+};
+
+const fakeSharedTool = (): { readonly executable: string; readonly log: string; readonly root: string } => {
+  const root = mkdtempSync(join(tmpdir(), "effect-build-tool-"));
+  roots.push(root);
+  const executable = join(root, "bun");
+  const log = join(root, "spawns.log");
+  writeFileSync(log, "");
+  writeFileSync(
+    executable,
+    `#!${process.execPath}
+const fs = require("node:fs");
+const path = require("node:path");
+const argv = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(argv) + "\\n");
+if (argv[0] === "-e") {
+  process.stdout.write(JSON.stringify({ path: process.argv[1], version: "1.3.9", hostOs: "macos" }));
+  process.exit(0);
+}
+const outfile = argv.find((value) => value.startsWith("--outfile="))?.slice(10);
+if (!outfile) process.exit(2);
+fs.mkdirSync(path.dirname(outfile), { recursive: true });
+if (argv.includes("--compile")) {
+  fs.writeFileSync(outfile, "not-a-native-executable");
+  process.exit(0);
+}
+const metafile = argv.find((value) => value.startsWith("--metafile="))?.slice(11);
+const entrypoint = argv.at(-1);
+fs.writeFileSync(outfile, "console.log('bundle')\\n");
+fs.writeFileSync(metafile, JSON.stringify({
+  inputs: { [entrypoint]: { imports: [] } },
+  outputs: { [outfile.endsWith(".mjs") ? "./main.mjs" : "./main.cjs"]: { entryPoint: entrypoint } }
+}));
+`,
+  );
+  chmodSync(executable, 0o755);
+  return { executable, log, root };
 };
 
 describe("standalone Bun driver", () => {
@@ -195,5 +232,43 @@ describe("standalone Bun driver", () => {
         Effect.provide(NodeServices.layer),
       ),
     )).rejects.toMatchObject({ _tag: "ToolProbeFailed" });
+  });
+
+  it("shares one selected command across direct compilation and scoped bundling", async () => {
+    const { executable, log, root } = fakeSharedTool();
+    const entrypoint = join(root, "entry.ts");
+    writeFileSync(entrypoint, "console.log('entry')\n");
+    const compiler = Bun.layer({ executable });
+    const bundle = await Effect.runPromise(
+      Effect.gen(function*() {
+        const compileExit = yield* Effect.exit(Bun.compileExecutable({
+          entrypoint,
+          outfile: join(root, "app"),
+        }));
+        expect(compileExit).toMatchObject({ _tag: "Failure" });
+        return yield* Bun.withJavaScriptBundle(
+          { entrypoint, format: "esm", cwd: root },
+          (main) => Effect.succeed({ tool: main.stages[0].tool, path: main.path }),
+        );
+      }).pipe(
+        Effect.provide(compiler),
+        Effect.provide(NodeServices.layer),
+      ),
+    );
+    expect(bundle.tool).toEqual({ name: "bun", version: "1.3.9", path: realpathSync(executable) });
+    expect(readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line)[0])).toEqual([
+      "-e",
+      "build",
+      "build",
+    ]);
+
+    const capturedPlatformLayer = Bun.layer({ executable }).pipe(Layer.provide(NodeServices.layer));
+    const second = await Effect.runPromise(
+      Bun.withJavaScriptBundle(
+        { entrypoint, format: "cjs", cwd: root },
+        (main) => Effect.succeed(main.format),
+      ).pipe(Effect.provide(capturedPlatformLayer)),
+    );
+    expect(second).toBe("cjs");
   });
 });

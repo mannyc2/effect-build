@@ -6,15 +6,25 @@ export type { Options, Permissions, PermissionValue } from "./Adapter.js";
 
 type TargetType = (typeof targetEntries)[number][0];
 type StageType = typeof Stages.Type;
+type Service = Provider.CompilerService<"deno", Options, TargetType, StageType>;
 
 export class Compiler extends Context.Service<
   Compiler,
-  Provider.CompilerService<"deno", Options, TargetType, StageType>
+  Service
 >()("effect-build-deno/Compiler") {}
+
+const makeService = (
+  context: Provider.CommandServiceContext<"deno", Options, TargetType, StageType>,
+): Service =>
+  Object.freeze({
+    compileExecutable: context.compileExecutable,
+    compileExecutableMatrix: context.compileExecutableMatrix,
+  });
 
 const implementation = Provider.define({
   name: "deno",
   service: Compiler,
+  makeService,
   ...definition,
 });
 

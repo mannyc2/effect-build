@@ -77,7 +77,21 @@ const expectedPublicApi = {
     "effect-build-bun": {
       subpaths: ["."],
       runtimeKeys: {
-        ".": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+        ".": [
+          "BunBundleFailed",
+          "BunBundleInvalid",
+          "BunBundleMaterializationFailed",
+          "BunBundleMaterializationOperation",
+          "BunBundleSpawnFailed",
+          "BunBundleVersionMismatch",
+          "Compiler",
+          "InvalidBundleInput",
+          "Target",
+          "compileExecutable",
+          "compileExecutableMatrix",
+          "layer",
+          "withJavaScriptBundle",
+        ],
       },
     },
     "effect-build-deno": {

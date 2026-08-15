@@ -30,6 +30,7 @@ const Stages = Schema.Tuple([
 ]);
 type Stages = typeof Stages.Type;
 type Target = (typeof targetEntries)[number][0];
+type Service = Provider.CompilerService<"fixture", Options, Target, Stages>;
 
 class FixtureCompiler extends Context.Service<
   FixtureCompiler,
@@ -42,10 +43,15 @@ const definition: Provider.CommandDefinition<
   typeof targetEntries,
   Stages,
   Options,
-  Options
+  Options,
+  Service
 > = {
   name: "fixture",
   service: FixtureCompiler,
+  makeService: ({ compileExecutable, compileExecutableMatrix }) => ({
+    compileExecutable,
+    compileExecutableMatrix,
+  }),
   targetEntries,
   Stages,
   defaultTarget: "macos-aarch64",
@@ -99,7 +105,8 @@ const _optionsResult: ReturnType<
     typeof targetEntries,
     Stages,
     Options,
-    Options
+    Options,
+    Service
   >["validateOptions"]
 > = Result.succeed({});
 void _optionsResult;

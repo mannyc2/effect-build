@@ -216,6 +216,12 @@ const compilerTypeScriptSource = (name) => {
     `import * as ${alias} from ${JSON.stringify(name)};`,
     `export const scalar = ${alias}.compileExecutable({ entrypoint: "src/main.ts", outfile: "dist/app", target: ${JSON.stringify(target)}, options: ${options} });`,
     `export const matrix = ${alias}.compileExecutableMatrix({ entrypoint: "src/main.ts", outdir: "dist", name: "app", targets: [${JSON.stringify(target)}] });`,
+    ...(name === "effect-build-bun"
+      ? [
+        'export const bundle = Bun.withJavaScriptBundle({ entrypoint: "src/main.ts", format: "esm" }, (main) => Effect.succeed(main.stages));',
+        "export type BundleContext = typeof bundle extends Effect.Effect<unknown, unknown, infer R> ? R : never;",
+      ]
+      : []),
     `export type ScalarContext = typeof scalar extends Effect.Effect<unknown, unknown, infer R> ? R : never;`,
     `export const targetSchema: typeof ${alias}.Target = ${alias}.Target;`,
   ].join("\n");
@@ -253,7 +259,11 @@ const typeScriptSource = (name) => {
 };
 
 const runtimeKeys = {
-  "effect-build-bun": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+  "effect-build-bun": [
+    "BunBundleFailed", "BunBundleInvalid", "BunBundleMaterializationFailed", "BunBundleMaterializationOperation",
+    "BunBundleSpawnFailed", "BunBundleVersionMismatch", "Compiler", "InvalidBundleInput", "Target",
+    "compileExecutable", "compileExecutableMatrix", "layer", "withJavaScriptBundle",
+  ],
   "effect-build-deno": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
   "effect-build-esbuild": [
     "BundleMaterializationFailed", "BundleMaterializationOperation", "Esbuild", "EsbuildDiagnostic",
@@ -430,23 +440,28 @@ const installIsolatedFixture = async ({ installer, name, tarballs, root, bun, ve
   console.log(`PASS packed consumer ${label}`);
 };
 
-const compositionTypeScriptSource = [
-  'import { NodeServices } from "@effect/platform-node";',
-  'import { Effect } from "effect";',
-  'import * as Esbuild from "effect-build-esbuild";',
-  'import * as NodeSea from "effect-build-node-sea";',
-  "export const program = Esbuild.withJavaScriptBundle(",
-  '  { entrypoint: "src/main.ts", format: "esm" },',
-  '  (main) => NodeSea.createExecutable({ main, outfile: "dist/app", digest: true }),',
-  ").pipe(",
-  "  Effect.provide(Esbuild.layer),",
-  "  Effect.provide(NodeSea.layer()),",
-  "  Effect.provide(NodeServices.layer),",
-  ");",
-].join("\n");
+const compositionTypeScriptSource = (producer) => {
+  const alias = producer === "esbuild" ? "Esbuild" : "Bun";
+  const packageName = `effect-build-${producer}`;
+  return [
+    'import { NodeServices } from "@effect/platform-node";',
+    'import { Effect } from "effect";',
+    `import * as ${alias} from ${JSON.stringify(packageName)};`,
+    'import * as NodeSea from "effect-build-node-sea";',
+    `export const program = ${alias}.withJavaScriptBundle(`,
+    '  { entrypoint: "src/main.ts", format: "esm" },',
+    '  (main) => NodeSea.createExecutable({ main, outfile: "dist/app", digest: true }),',
+    ").pipe(",
+    `  Effect.provide(${alias}.layer${producer === "bun" ? "()" : ""}),`,
+    "  Effect.provide(NodeSea.layer()),",
+    "  Effect.provide(NodeServices.layer),",
+    ");",
+  ].join("\n");
+};
 
-const installComposedFixture = async ({ installer, tarballs, root, bun, versions }) => {
-  const label = `${installer}-esbuild-node-sea`;
+const installComposedFixture = async ({ installer, producer, tarballs, root, bun, versions }) => {
+  const producerPackage = `effect-build-${producer}`;
+  const label = `${installer}-${producer}-node-sea`;
   const fixture = join(root, "fixtures", label);
   const cache = join(root, "caches", label);
   await mkdir(fixture, { recursive: true });
@@ -462,26 +477,27 @@ const installComposedFixture = async ({ installer, tarballs, root, bun, versions
       dependencies: {
         ...commonDependencies(versions, tarballs),
         "@effect/platform-node": versions["@effect/platform-node"],
-        "effect-build-esbuild": `file:${tarballs.get("effect-build-esbuild")}`,
+        [producerPackage]: `file:${tarballs.get(producerPackage)}`,
         "effect-build-node-sea": `file:${tarballs.get("effect-build-node-sea")}`,
       },
       overrides: commonOverrides(versions, installer, tarballs),
     },
   });
   await verifyDevelopmentDependencies(fixture, versions, true);
-  for (const name of ["effect-build", "effect-build-esbuild", "effect-build-node-sea"]) {
+  for (const name of ["effect-build", producerPackage, "effect-build-node-sea"]) {
     if (await readInstalledVersion(fixture, name) !== packageVersion) {
       throw new Error(`${label} did not resolve ${name}@${packageVersion}`);
     }
   }
-  await assertCannotResolve(fixture, "effect-build-bun", label);
+  await assertCannotResolve(fixture, producer === "bun" ? "effect-build-esbuild" : "effect-build-bun", label);
   await assertCannotResolve(fixture, "effect-build-deno", label);
-  await writeFile(join(fixture, "main.ts"), compositionTypeScriptSource);
+  if (producer !== "esbuild") await assertCannotResolve(fixture, "esbuild", label);
+  await writeFile(join(fixture, "main.ts"), compositionTypeScriptSource(producer));
   await writeFile(join(fixture, "runtime.mjs"), [
     'import assert from "node:assert/strict";',
-    'const Esbuild = await import("effect-build-esbuild");',
+    `const Producer = await import(${JSON.stringify(producerPackage)});`,
     'const NodeSea = await import("effect-build-node-sea");',
-    'assert.equal(typeof Esbuild.withJavaScriptBundle, "function");',
+    'assert.equal(typeof Producer.withJavaScriptBundle, "function");',
     'assert.equal(typeof NodeSea.createExecutable, "function");',
   ].join("\n"));
   await runTypeAndRuntimeChecks(fixture);
@@ -547,10 +563,12 @@ export const verifyPackedConsumers = async ({ candidateDirectory, build = true }
       for (const name of packageNames) {
         await installIsolatedFixture({ installer, name, tarballs, root: temporaryRoot, bun, versions });
       }
-      await installComposedFixture({ installer, tarballs, root: temporaryRoot, bun, versions });
+      for (const producer of ["esbuild", "bun"]) {
+        await installComposedFixture({ installer, producer, tarballs, root: temporaryRoot, bun, versions });
+      }
     }
     if (candidateDirectory !== undefined) await writeCandidateManifest(candidateDirectory, tarballs);
-    console.log("packed consumers verified: 12/12");
+    console.log("packed consumers verified: 14/14");
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }

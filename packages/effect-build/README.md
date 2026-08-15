@@ -11,8 +11,10 @@ record.
 `effect-build/Integration` exposes only bounded command execution, live bundle
 inspection, owned bundle production, and executable production for integration
 authors. `effect-build/Provider` exposes only the command-provider `define`
-factory used by Bun and Deno. Neither is a registry, generic builder, bundler,
-packager, executor, candidate, cache, or publication API.
+factory used by Bun and Deno. It constructs an integration-specific service
+from one selected bound command, but that command is type-only author context
+and never an end-user service. Neither subpath is a registry, generic builder,
+bundler, packager, executor, candidate, cache, or publication API.
 
 Applications import operations from `effect-build-bun`, `effect-build-deno`,
 `effect-build-esbuild`, or `effect-build-node-sea`. Stage observations are not

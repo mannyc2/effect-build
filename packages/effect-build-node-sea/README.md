@@ -25,6 +25,8 @@ authenticates the live main, privately copies it, verifies the copy, and runs
 selected Node `--check`. Both Node reads use only that private copy. The package
 never uses postject and never downloads or installs Node.
 
-Applications may supply an Esbuild bundle, a borrowed core bundle, or another
-future compatible producer. Composition belongs to application Effect code;
+Applications may supply an Esbuild bundle, a Bun bundle, a borrowed core
+bundle, or another future compatible producer. Bun's Node target governs
+resolution rather than Node-version syntax; selected Node owns `--check` for
+every producer. Composition belongs to application Effect code;
 integration packages never depend on siblings.

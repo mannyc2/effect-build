@@ -113,6 +113,9 @@ describe("source ownership boundaries", () => {
 
     const esbuild = await readFile(resolve(root, "packages/effect-build-esbuild/src/internal/Esbuild.ts"), "utf8");
     expect(esbuild.match(/Effect\.fn\(\s*"effect-build-esbuild\/Esbuild\.withJavaScriptBundle"/g)).toHaveLength(1);
+    const bun = await readFile(resolve(root, "packages/effect-build-bun/src/Bundle.ts"), "utf8");
+    expect(bun.match(/Effect\.fn\(\s*"Bun\.withJavaScriptBundle"/g)).toHaveLength(1);
+    expect(bun).not.toMatch(/Bun\.build|globalThis\.Bun|node:/);
     const nodeSea = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/NodeSea.ts"), "utf8");
     expect(nodeSea.match(/Effect\.fn\(\s*"effect-build-node-sea\/NodeSea\.createExecutable"/g)).toHaveLength(1);
   });
