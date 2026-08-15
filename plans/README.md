@@ -41,19 +41,26 @@ exhaustive. Earlier
 Fable Scope/closure claims remain corrected by live Effect/esbuild evidence,
 while its rejection of universal producers and premature replaceable
 executors remains accepted.
-`GRANULAR-PROGRAM-EXECUTION-HANDOFF.md` is the authoritative operator runbook:
-it names Plan 020 as the last completed plan, freezes the plan-only file/hash
-bundle, explains how to start from clean current main, and sequences the
-required governance restart and Plans 023-026 without treating superseded Plan
-021 as executable.
-Execution is not yet authorized by the old repository generation: the live
-`AGENTS.md` still freezes four packages and exactly two public operations.
-Plan 023 Step 0 is therefore a separately authorized, `AGENTS.md`-only
-migration-governance restamp followed by a fresh executor context. Plan 024
-retains that migration generation during the atomic API cut; Plan 025 replaces
-it with the final generation after the Bun pressure test. Until the maintainer
-explicitly requests the initial transition, Plans 023-026 remain
-planned and source work must not begin.
+`GRANULAR-PROGRAM-EXECUTION-HANDOFF.md` is the historical operator runbook for
+Plans 023-026. Those plans are now complete. Plan 026 is the last completed
+plan: implementation source `2dda53151e877ab89708d0b0fbafa5f00d06ad58`
+passed twelve exact-SHA CI jobs in run `31855513747`; non-mutating candidate
+run `31855652066` produced five once-packed tarballs plus one manifest and
+passed 14/14 consumer cases.
+
+Re-audited again on 2026-08-14 at receipt commit
+`e8c1557509a9236df8e5eb236293527c3f4fd21d` for completion and release.
+`COMPLETION-RELEASE-ARCHITECTURE-AUDIT.md` reconciles the old unexecuted
+027-037 drafts with live source and the current ts-release coordinator. Plans
+027-038 are the successor program: close repository correctness and workflow
+gaps, qualify exact prepacked multi-package release coordination, explicitly
+bootstrap four absent npm namespaces and one trusted publisher, recertify and
+release only the exact tested bytes, then evaluate generic build services as a
+separate post-release decision. Plans 035-038 have explicit parent-task
+approval gates; missing approval never authorizes a manual fallback.
+`COMPLETION-RELEASE-EXECUTION-HANDOFF.md` is the zero-context executor runbook
+for that program, including the dependency graph and parent-task approval
+routing.
 The decision gates opened by
 `FIRST-PRINCIPLES-REVIEW.md` (operator-audited, 2026-08-10) were answered by
 the operator on 2026-08-11 and are recorded under **Gate decisions** below.
@@ -251,9 +258,11 @@ direction. Plans 016-020 remain factual implementation history.
 7. **Observations are not receipts.** Public ordered stages report observed
    work. They do not claim closed inputs, provenance, hermeticity,
    reproducibility, same invocation, or same output bytes.
-8. **Release remains blocked.** Plan 026 may produce and verify five tarballs,
-   but Plan 021 must qualify a coordinator for five npm subjects plus GitHub
-   before any publication/tag/release mutation.
+8. **Release remains blocked but the missing boundary is now exact.** Plan 026
+   certified five tarballs. Plan 035 extends ts-release's singular/repacking
+   authoring edge to five ordered prepacked subjects while retaining its
+   existing coordinator. Plan 036 separately proves namespace ownership and
+   trusted publishing. Plan 037 alone may publish after explicit approval.
 9. **The provider catalog disappears only with the facade cut.** Plan 023
    retains the temporary closed projection needed by current Node SEA. Plan 024
    deletes all Bun/Deno/Node/esbuild literals from core Artifact/MatrixError
@@ -291,6 +300,18 @@ direction. Plans 016-020 remain factual implementation history.
 | 024 | Split Esbuild and Node SEA into independent granular integrations | P1 | XL | 023 | DONE |
 | 025 | Add Bun as a second scoped JavaScript bundle producer | P1 | L | 023-024 | DONE |
 | 026 | Certify the five-package granular public cut without publishing it | P1 | M | 023-025 | DONE |
+| 027 | Import and authorize the completion/release program | P0 | S | 026 | TODO |
+| 028 | Canonicalize tool identity and host publication semantics | P0 | M | 027 | TODO |
+| 029 | Preserve interruption through the Bun bundle continuation | P0 | S | 027 | TODO |
+| 030 | Make scalar executable input preflight total | P0 | M | 027 | TODO |
+| 031 | Make native executable inspection total and canonical | P0 | M | 027 | TODO |
+| 032 | Harden workflow data flow and packed-consumer installs | P0 | L | 028-031 | TODO |
+| 033 | Add dependency automation and reduce non-release CI duplication | P1 | M | 032 | TODO |
+| 034 | Bound native-inspection allocation and document digest cost | P1 | M | 031 | TODO |
+| 035 | Qualify ts-release for ordered prepacked multi-package releases | P0 | XL | 032, external approval | TODO |
+| 036 | Bootstrap npm namespaces and one trusted publisher | P0 | M | 032, 035, approval | TODO |
+| 037 | Recertify and release the exact five-package bytes | P0 | L | 028-036, approval | TODO |
+| 038 | Evaluate JavaScriptBundler and ExecutableBuilder promotion | P1 | L | 037, approval for public cut | TODO |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -413,6 +434,27 @@ behavior, or the standalone operation invalidated that earlier work.
   local/downloaded hashes and 14/14 consumers. It records earned/rejected
   promotions but did not publish. Plan 021 remains the blocked release-
   activation gate and must be restamped for five npm subjects plus GitHub.
+- Plan 027 imports the audited successor bundle and restamps only transitional
+  governance. Plans 028-031 are independent correctness slices after it; Plan
+  032 consumes all four because its exact-source candidate becomes the release
+  evidence base. Plans 033 and 034 may then run independently.
+- Plan 035 is deliberately external to effect-build. It extends ts-release's
+  existing prepared-subject/coordinator architecture rather than creating an
+  effect-build release engine. It requires parent approval before changing the
+  other repository and performs no live publication.
+- Plan 036 is a distinct irreversible namespace/trust bootstrap. Four absent
+  npm names cannot receive trusted-publisher configuration or staged first
+  releases, so the recommended route is an explicitly approved reservation
+  prerelease followed by one trusted workflow across all five names.
+- Plan 037 rebuilds and recertifies after every source fix, downloads the exact
+  candidate artifact, and lets the qualified coordinator publish those bytes
+  core-to-integrations with GitHub last. It has a second explicit approval gate
+  immediately before mutation.
+- Plan 038 does not block 0.3. It tests whether Bun and Esbuild can provide a
+  genuine `JavaScriptBundler` service to one unchanged application and whether
+  `ExecutableBuilder` is truthfully a parameterized protocol family rather
+  than a union of source and bundle inputs. Public promotion requires another
+  explicit maintainer decision.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 
