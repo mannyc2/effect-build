@@ -4,9 +4,10 @@ import { constants } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
+import { basename, delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { parse as parseYaml } from "yaml";
 
 const execFileAsync = promisify(execFile);
 const execute = async (...arguments_) => {
@@ -33,7 +34,37 @@ const packageNames = [
   "effect-build-node-sea",
 ];
 const integrationNames = packageNames.slice(1);
+const npmInstaller = "npm@11.11.0";
+const bunInstaller = "bun@1.3.14";
 const exactSemver = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+const isSha512Integrity = (value) => {
+  if (typeof value !== "string" || !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+  return Buffer.from(value.slice("sha512-".length), "base64").byteLength === 64;
+};
+
+const isExactRegistrySpecifier = (value) => {
+  if (typeof value !== "string") return false;
+  if (exactSemver.test(value)) return true;
+  if (!value.startsWith("npm:")) return false;
+  const versionSeparator = value.lastIndexOf("@");
+  return versionSeparator > "npm:".length && exactSemver.test(value.slice(versionSeparator + 1));
+};
+
+const isPinnedHttpsLocator = (value) => {
+  if (typeof value !== "string") return false;
+  try {
+    const locator = new URL(value);
+    return locator.protocol === "https:"
+      && locator.username === ""
+      && locator.password === ""
+      && locator.hash === "";
+  } catch {
+    return false;
+  }
+};
+
+const isExactResolvedIdentity = (value) => isExactRegistrySpecifier(value) || isPinnedHttpsLocator(value);
 
 const expectedDependencies = (name) => name === "effect-build"
   ? {}
@@ -138,6 +169,265 @@ const dependencySections = ["dependencies", "peerDependencies", "optionalDepende
 export const isNonRegistryDependency = (value) =>
   typeof value !== "string"
   || /^(?:workspace:|catalog:|file:|link:|portal:|\.{1,2}(?:[\\/]|$)|[\\/]|[A-Za-z]:[\\/])/.test(value);
+
+const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+
+const candidateMap = (expectation) => {
+  if (
+    !isRecord(expectation)
+    || typeof expectation.fixtureName !== "string"
+    || expectation.fixtureName === ""
+    || typeof expectation.fixtureDirectory !== "string"
+    || !isAbsolute(expectation.fixtureDirectory)
+  ) {
+    throw new Error("consumer lock expectation requires one fixture name");
+  }
+  if (!Array.isArray(expectation.candidates)) {
+    throw new Error("consumer lock expectation requires candidate tarballs");
+  }
+  const candidates = new Map();
+  for (const candidate of expectation.candidates) {
+    if (
+      !isRecord(candidate)
+      || typeof candidate.name !== "string"
+      || candidate.name === ""
+      || !exactSemver.test(candidate.version)
+      || typeof candidate.tarball !== "string"
+      || !isAbsolute(candidate.tarball)
+      || !isSha512Integrity(candidate.integrity)
+      || candidates.has(candidate.name)
+    ) {
+      throw new Error("consumer lock expectation contains an invalid candidate tarball");
+    }
+    candidates.set(candidate.name, candidate);
+  }
+  return candidates;
+};
+
+const assertDirectDependencies = (dependencies, candidates) => {
+  if (!isRecord(dependencies)) throw new Error("consumer lock has no direct dependencies");
+  for (const [name, specifier] of Object.entries(dependencies)) {
+    const candidate = candidates.get(name);
+    if (candidate !== undefined) {
+      if (specifier !== `file:${candidate.tarball}`) {
+        throw new Error(`${name} direct candidate tarball identity does not match`);
+      }
+      continue;
+    }
+    if (!isExactRegistrySpecifier(specifier)) {
+      throw new Error(`${name} direct dependency must be an exact registry version`);
+    }
+  }
+};
+
+const assertRegistryDependencyLocators = (dependencies, label) => {
+  if (dependencies === undefined) return;
+  if (!isRecord(dependencies)) throw new Error(`${label} dependencies are malformed`);
+  for (const [name, specifier] of Object.entries(dependencies)) {
+    if (isNonRegistryDependency(specifier)) {
+      throw new Error(`${label} dependency ${name} contains an unauthorized locator`);
+    }
+  }
+};
+
+const npmPackageName = (path) => {
+  const marker = "node_modules/";
+  const start = path.lastIndexOf(marker);
+  if (start < 0) return undefined;
+  const segments = path.slice(start + marker.length).split("/");
+  return segments[0]?.startsWith("@") ? segments.slice(0, 2).join("/") : segments[0];
+};
+
+export const validateNpmLock = (lock, expectation) => {
+  const candidates = candidateMap(expectation);
+  if (
+    !isRecord(lock)
+    || lock.lockfileVersion !== 3
+    || lock.name !== expectation.fixtureName
+    || !isRecord(lock.packages)
+    || !isRecord(lock.packages[""])
+    || lock.packages[""].name !== expectation.fixtureName
+  ) {
+    throw new Error("npm lock fixture name or schema does not match");
+  }
+  const root = lock.packages[""];
+  assertDirectDependencies(root.dependencies, candidates);
+  for (const section of ["devDependencies", "optionalDependencies", "peerDependencies"]) {
+    if (root[section] !== undefined && Object.keys(root[section]).length !== 0) {
+      throw new Error(`npm consumer lock has unexpected root ${section}`);
+    }
+  }
+  for (const [path, entry] of Object.entries(lock.packages)) {
+    if (path === "") continue;
+    if (!isRecord(entry) || !exactSemver.test(entry.version) || !isSha512Integrity(entry.integrity)) {
+      throw new Error(`${path} npm lock integrity or version is invalid`);
+    }
+    const name = npmPackageName(path);
+    const candidate = name === undefined ? undefined : candidates.get(name);
+    if (candidate !== undefined) {
+      if (
+        path !== `node_modules/${candidate.name}`
+        || root.dependencies[candidate.name] === undefined
+        || entry.version !== candidate.version
+        || entry.integrity !== candidate.integrity
+        || typeof entry.resolved !== "string"
+        || !entry.resolved.startsWith("file:")
+        || resolve(expectation.fixtureDirectory, entry.resolved.slice("file:".length)) !== candidate.tarball
+      ) {
+        throw new Error(`${name} npm candidate tarball identity or integrity does not match`);
+      }
+    } else if (!isPinnedHttpsLocator(entry.resolved)) {
+      throw new Error(`${path} npm lock contains an unauthorized locator`);
+    }
+    assertRegistryDependencyLocators(entry.dependencies, path);
+    assertRegistryDependencyLocators(entry.optionalDependencies, path);
+    assertRegistryDependencyLocators(entry.peerDependencies, path);
+  }
+  for (const candidate of candidates.values()) {
+    if (
+      root.dependencies[candidate.name] !== undefined
+      && !isRecord(lock.packages[`node_modules/${candidate.name}`])
+    ) {
+      throw new Error(`${candidate.name} npm candidate lock record is missing`);
+    }
+  }
+};
+
+const bunIdentity = (identity) => {
+  if (typeof identity !== "string") return undefined;
+  const separator = identity.lastIndexOf("@");
+  if (separator <= 0) return undefined;
+  return { name: identity.slice(0, separator), locator: identity.slice(separator + 1) };
+};
+
+const assertBunPackageDependencies = (tuple, label) => {
+  for (const metadata of tuple.slice(1, -1)) {
+    if (!isRecord(metadata)) continue;
+    assertRegistryDependencyLocators(metadata.dependencies, label);
+    assertRegistryDependencyLocators(metadata.optionalDependencies, label);
+    assertRegistryDependencyLocators(metadata.peerDependencies, label);
+  }
+};
+
+const assertBunOverrides = (overrides, directDependencies, candidates) => {
+  if (overrides === undefined) return;
+  if (!isRecord(overrides)) throw new Error("Bun lock overrides are malformed");
+  for (const [name, specifier] of Object.entries(overrides)) {
+    const candidate = candidates.get(name);
+    if (
+      candidate !== undefined
+      && directDependencies[name] === `file:${candidate.tarball}`
+      && specifier === `file:${candidate.tarball}`
+    ) {
+      continue;
+    }
+    if (!isExactRegistrySpecifier(specifier)) {
+      throw new Error(`${name} Bun override contains an unauthorized locator`);
+    }
+  }
+};
+
+export const validateBunLock = (input, expectation) => {
+  const candidates = candidateMap(expectation);
+  const lock = typeof input === "string" || input instanceof Uint8Array
+    ? parseYaml(typeof input === "string" ? input : new TextDecoder().decode(input))
+    : input;
+  if (
+    !isRecord(lock)
+    || lock.lockfileVersion !== 1
+    || !isRecord(lock.workspaces)
+    || Object.keys(lock.workspaces).length !== 1
+    || !isRecord(lock.workspaces[""])
+    || lock.workspaces[""].name !== expectation.fixtureName
+    || !isRecord(lock.packages)
+  ) {
+    throw new Error("Bun lock fixture name or schema does not match");
+  }
+  const workspace = lock.workspaces[""];
+  assertDirectDependencies(workspace.dependencies, candidates);
+  for (const section of ["devDependencies", "optionalDependencies", "peerDependencies"]) {
+    if (workspace[section] !== undefined && Object.keys(workspace[section]).length !== 0) {
+      throw new Error(`Bun consumer lock has unexpected root ${section}`);
+    }
+  }
+  for (const [key, value] of Object.entries(workspace)) {
+    if (
+      key !== "name"
+      && key !== "dependencies"
+      && !["devDependencies", "optionalDependencies", "peerDependencies"].includes(key)
+      && value !== undefined
+    ) {
+      throw new Error(`Bun root workspace contains unexpected ${key}`);
+    }
+  }
+  for (const [key, tuple] of Object.entries(lock.packages)) {
+    if (!Array.isArray(tuple) || tuple.length < 3) throw new Error(`${key} Bun lock record is malformed`);
+    const identity = bunIdentity(tuple[0]);
+    const integrity = tuple.at(-1);
+    if (identity === undefined || !isSha512Integrity(integrity)) {
+      throw new Error(`${key} Bun lock integrity or identity is invalid`);
+    }
+    const candidate = candidates.get(key) ?? candidates.get(identity.name);
+    if (candidate !== undefined) {
+      if (
+        key !== candidate.name
+        || workspace.dependencies[candidate.name] === undefined
+        || tuple[0] !== `${candidate.name}@${candidate.tarball}`
+        || integrity !== candidate.integrity
+      ) {
+        throw new Error(`${identity.name} Bun candidate tarball identity or integrity does not match`);
+      }
+    } else if (!isExactResolvedIdentity(identity.locator)) {
+      throw new Error(`${key} Bun lock does not contain an exact registry identity`);
+    }
+    assertBunPackageDependencies(tuple, `${key} Bun lock record`);
+  }
+  for (const candidate of candidates.values()) {
+    if (
+      workspace.dependencies[candidate.name] !== undefined
+      && !Array.isArray(lock.packages[candidate.name])
+    ) {
+      throw new Error(`${candidate.name} Bun candidate lock record is missing`);
+    }
+  }
+  assertBunOverrides(lock.overrides, workspace.dependencies, candidates);
+  for (const key of Object.keys(lock)) {
+    if (!["lockfileVersion", "configVersion", "workspaces", "packages", "overrides"].includes(key)) {
+      throw new Error(`Bun lock contains unexpected top-level ${key}`);
+    }
+  }
+};
+
+export const assertLockUnchanged = (before, after) => {
+  if (!(before instanceof Uint8Array) || !(after instanceof Uint8Array) || before.byteLength !== after.byteLength) {
+    throw new Error("consumer lock bytes changed during frozen install");
+  }
+  for (let index = 0; index < before.byteLength; index++) {
+    if (before[index] !== after[index]) throw new Error("consumer lock bytes changed during frozen install");
+  }
+};
+
+export const normalizeDependencyTree = (tree) => {
+  if (!Array.isArray(tree) || tree.length === 0) throw new Error("installed dependency inventory is malformed");
+  const paths = new Set();
+  return tree.map((entry) => {
+    if (
+      !isRecord(entry)
+      || typeof entry.path !== "string"
+      || entry.path === ""
+      || isAbsolute(entry.path)
+      || entry.path.startsWith("../")
+      || typeof entry.name !== "string"
+      || entry.name === ""
+      || !exactSemver.test(entry.version)
+      || paths.has(entry.path)
+    ) {
+      throw new Error("installed dependency inventory is malformed");
+    }
+    paths.add(entry.path);
+    return { path: entry.path, name: entry.name, version: entry.version };
+  }).sort((left, right) => left.path.localeCompare(right.path));
+};
 
 export const inspectPackedPackage = async (tarball, expectedName) => {
   const manifest = await packedManifest(tarball);
@@ -325,22 +615,160 @@ const writeExampleSources = async (fixture, name) => {
   }
 };
 
-const install = async ({ installer, fixture, cache, manifest, bun }) => {
+const sha256 = (contents) => createHash("sha256").update(contents).digest("hex");
+const sha512 = (contents) => `sha512-${createHash("sha512").update(contents).digest("base64")}`;
+
+export const assertCandidateBytesUnchanged = (candidate, contents) => {
+  if (
+    !isRecord(candidate)
+    || !(contents instanceof Uint8Array)
+    || contents.byteLength !== candidate.bytes
+    || sha256(contents) !== candidate.sha256
+    || sha512(contents) !== candidate.integrity
+  ) {
+    throw new Error(`${candidate?.name ?? "candidate"} tarball bytes changed after packing`);
+  }
+};
+
+const candidateDescriptors = async (tarballs) => await Promise.all(packageNames.map(async (name) => {
+  const tarball = tarballs.get(name);
+  const contents = await readFile(tarball);
+  const manifest = await packedManifest(tarball);
+  return {
+    filename: basename(tarball),
+    name,
+    version: manifest.version,
+    tarball: resolve(tarball),
+    bytes: contents.byteLength,
+    sha256: sha256(contents),
+    integrity: sha512(contents),
+    dependencies: manifest.dependencies ?? {},
+    peerDependencies: manifest.peerDependencies ?? {},
+    optionalDependencies: manifest.optionalDependencies ?? {},
+  };
+}));
+
+const installedTree = async (fixture) => {
+  const packages = [];
+  const scanPackage = async (directory) => {
+    const manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
+    if (typeof manifest.name !== "string" || !exactSemver.test(manifest.version)) {
+      throw new Error(`installed package at ${directory} has no exact identity`);
+    }
+    packages.push({
+      path: relative(fixture, directory).split(sep).join("/"),
+      name: manifest.name,
+      version: manifest.version,
+    });
+    await scanNodeModules(join(directory, "node_modules"));
+  };
+  const scanNodeModules = async (directory) => {
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+      if (entry.name === ".bin" || !entry.isDirectory()) continue;
+      if (entry.name === ".bun") {
+        const store = join(directory, entry.name);
+        for (const stored of (await readdir(store, { withFileTypes: true }))
+          .filter((item) => item.isDirectory())
+          .sort((left, right) => left.name.localeCompare(right.name))) {
+          await scanNodeModules(join(store, stored.name, "node_modules"));
+        }
+      } else if (entry.name.startsWith("@")) {
+        const scope = join(directory, entry.name);
+        for (const scoped of (await readdir(scope, { withFileTypes: true }))
+          .filter((item) => item.isDirectory())
+          .sort((left, right) => left.name.localeCompare(right.name))) {
+          await scanPackage(join(scope, scoped.name));
+        }
+      } else {
+        await scanPackage(join(directory, entry.name));
+      }
+    }
+  };
+  await scanNodeModules(join(fixture, "node_modules"));
+  return packages.sort((left, right) => left.path.localeCompare(right.path));
+};
+
+const install = async ({ installer, fixture, label, cache, manifest, bun, candidates }) => {
   await writeFile(join(fixture, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(join(fixture, ".npmrc"), "@jsr:registry=https://npm.jsr.io\n");
+  const expectation = { fixtureName: manifest.name, fixtureDirectory: fixture, candidates };
+  const lockfile = installer === "npm" ? "package-lock.json" : "bun.lock";
+  const lock = join(fixture, lockfile);
   if (installer === "npm") {
-    await execute("npm", ["install", "--ignore-scripts", "--strict-peer-deps", "--cache", cache], {
+    await execute("npm", [
+      "install",
+      "--package-lock-only",
+      "--ignore-scripts",
+      "--strict-peer-deps",
+      "--cache",
+      cache,
+    ], {
+      cwd: fixture,
+      env: process.env,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    validateNpmLock(JSON.parse(await readFile(lock, "utf8")), expectation);
+  } else {
+    await execute(bun, [
+      "install",
+      "--lockfile-only",
+      "--ignore-scripts",
+      "--cache-dir",
+      cache,
+      "--no-progress",
+    ], {
+      cwd: fixture,
+      env: process.env,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    validateBunLock(await readFile(lock), expectation);
+  }
+  await rm(join(fixture, "node_modules"), { recursive: true, force: true });
+  const locked = await readFile(lock);
+  if (installer === "npm") {
+    await execute("npm", ["ci", "--ignore-scripts", "--strict-peer-deps", "--cache", cache], {
       cwd: fixture,
       env: process.env,
       maxBuffer: 16 * 1024 * 1024,
     });
   } else {
-    await execute(bun, ["install", "--ignore-scripts", "--cache-dir", cache, "--no-progress"], {
+    await execute(bun, [
+      "install",
+      "--frozen-lockfile",
+      "--ignore-scripts",
+      "--cache-dir",
+      cache,
+      "--no-progress",
+    ], {
       cwd: fixture,
       env: process.env,
       maxBuffer: 16 * 1024 * 1024,
     });
   }
+  assertLockUnchanged(locked, await readFile(lock));
+  const tree = normalizeDependencyTree(await installedTree(fixture));
+  for (const candidate of candidates) {
+    if (
+      manifest.dependencies[candidate.name] !== undefined
+      && !tree.some((entry) => entry.name === candidate.name && entry.version === candidate.version)
+    ) {
+      throw new Error(`${label} installed tree is missing ${candidate.name}@${candidate.version}`);
+    }
+  }
+  return {
+    fixture: label,
+    installer: installer === "npm" ? npmInstaller : bunInstaller,
+    lockfile,
+    lockSha256: sha256(locked),
+    treeSha256: sha256(JSON.stringify(tree)),
+  };
 };
 
 const commonDependencies = (versions, tarballs) => ({
@@ -393,7 +821,7 @@ const runTypeAndRuntimeChecks = async (fixture) => {
   await execute(process.execPath, [join(fixture, "runtime.mjs")], { cwd: fixture });
 };
 
-const installIsolatedFixture = async ({ installer, name, tarballs, root, bun, versions }) => {
+const installIsolatedFixture = async ({ installer, name, tarballs, root, bun, versions, candidates }) => {
   const label = `${installer}-${name}`;
   const fixture = join(root, "fixtures", label);
   const cache = join(root, "caches", label);
@@ -404,11 +832,13 @@ const installIsolatedFixture = async ({ installer, name, tarballs, root, bun, ve
     ...(withPlatform ? { "@effect/platform-node": versions["@effect/platform-node"] } : {}),
     ...(name === "effect-build" ? {} : { [name]: `file:${tarballs.get(name)}` }),
   };
-  await install({
+  const receipt = await install({
     installer,
     fixture,
+    label,
     cache,
     bun,
+    candidates,
     manifest: {
       name: `fixture-${label}`,
       private: true,
@@ -438,6 +868,7 @@ const installIsolatedFixture = async ({ installer, name, tarballs, root, bun, ve
   await writeFile(join(fixture, "runtime.mjs"), runtimeSource(name));
   await runTypeAndRuntimeChecks(fixture);
   console.log(`PASS packed consumer ${label}`);
+  return receipt;
 };
 
 const compositionTypeScriptSource = (producer) => {
@@ -459,17 +890,19 @@ const compositionTypeScriptSource = (producer) => {
   ].join("\n");
 };
 
-const installComposedFixture = async ({ installer, producer, tarballs, root, bun, versions }) => {
+const installComposedFixture = async ({ installer, producer, tarballs, root, bun, versions, candidates }) => {
   const producerPackage = `effect-build-${producer}`;
   const label = `${installer}-${producer}-node-sea`;
   const fixture = join(root, "fixtures", label);
   const cache = join(root, "caches", label);
   await mkdir(fixture, { recursive: true });
-  await install({
+  const receipt = await install({
     installer,
     fixture,
+    label,
     cache,
     bun,
+    candidates,
     manifest: {
       name: `fixture-${label}`,
       private: true,
@@ -502,6 +935,7 @@ const installComposedFixture = async ({ installer, producer, tarballs, root, bun
   ].join("\n"));
   await runTypeAndRuntimeChecks(fixture);
   console.log(`PASS packed consumer ${label}`);
+  return receipt;
 };
 
 const sourceCommit = async () => {
@@ -511,31 +945,33 @@ const sourceCommit = async () => {
   return source;
 };
 
-const writeCandidateManifest = async (directory, tarballs) => {
+const writeCandidateManifest = async (directory, candidates, consumers) => {
   const packages = [];
-  for (const name of packageNames) {
-    const tarball = tarballs.get(name);
-    const contents = await readFile(tarball);
-    const manifest = await packedManifest(tarball);
+  for (const candidate of candidates) {
+    assertCandidateBytesUnchanged(candidate, await readFile(candidate.tarball));
     packages.push({
-      filename: basename(tarball),
-      name,
-      version: manifest.version,
-      bytes: contents.byteLength,
-      sha256: createHash("sha256").update(contents).digest("hex"),
-      dependencies: manifest.dependencies ?? {},
-      peerDependencies: manifest.peerDependencies ?? {},
-      optionalDependencies: manifest.optionalDependencies ?? {},
+      filename: candidate.filename,
+      name: candidate.name,
+      version: candidate.version,
+      bytes: candidate.bytes,
+      sha256: candidate.sha256,
+      dependencies: candidate.dependencies,
+      peerDependencies: candidate.peerDependencies,
+      optionalDependencies: candidate.optionalDependencies,
     });
   }
   await writeFile(
     join(directory, "manifest.json"),
-    `${JSON.stringify({ version: 1, source: await sourceCommit(), packages }, null, 2)}\n`,
+    `${JSON.stringify({ version: 2, source: await sourceCommit(), packages, consumers }, null, 2)}\n`,
   );
 };
 
 export const verifyPackedConsumers = async ({ candidateDirectory, build = true } = {}) => {
   const bun = await bunInvocation();
+  const { stdout: npmVersion } = await execute("npm", ["--version"], { env: process.env });
+  if (npmVersion.trim() !== npmInstaller.slice("npm@".length)) {
+    throw new Error(`consumer npm must be ${npmInstaller}, received npm@${npmVersion.trim()}`);
+  }
   if (build) {
     await execute(bun, ["run", "build"], { cwd: repository, env: process.env, maxBuffer: 16 * 1024 * 1024 });
   }
@@ -543,6 +979,7 @@ export const verifyPackedConsumers = async ({ candidateDirectory, build = true }
   try {
     const packDirectory = candidateDirectory ?? join(temporaryRoot, "tarballs");
     const tarballs = await packPackages(bun, packDirectory);
+    const candidates = await candidateDescriptors(tarballs);
     const versions = Object.fromEntries(await Promise.all(
       ["effect", "@effect/platform-node", "typescript", "@types/node"].map(
         async (name) => [name, await readInstalledVersion(repository, name)],
@@ -559,15 +996,32 @@ export const verifyPackedConsumers = async ({ candidateDirectory, build = true }
     ) {
       throw new Error("workspace Effect and platform development versions differ");
     }
+    const consumers = [];
     for (const installer of ["npm", "bun"]) {
       for (const name of packageNames) {
-        await installIsolatedFixture({ installer, name, tarballs, root: temporaryRoot, bun, versions });
+        consumers.push(await installIsolatedFixture({
+          installer,
+          name,
+          tarballs,
+          root: temporaryRoot,
+          bun,
+          versions,
+          candidates,
+        }));
       }
       for (const producer of ["esbuild", "bun"]) {
-        await installComposedFixture({ installer, producer, tarballs, root: temporaryRoot, bun, versions });
+        consumers.push(await installComposedFixture({
+          installer,
+          producer,
+          tarballs,
+          root: temporaryRoot,
+          bun,
+          versions,
+          candidates,
+        }));
       }
     }
-    if (candidateDirectory !== undefined) await writeCandidateManifest(candidateDirectory, tarballs);
+    if (candidateDirectory !== undefined) await writeCandidateManifest(candidateDirectory, candidates, consumers);
     console.log("packed consumers verified: 14/14");
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });

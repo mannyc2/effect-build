@@ -15,6 +15,14 @@ const publicPackages = [
   "effect-build-node-sea",
 ] as const;
 const effectEndpoints = ["4.0.0-beta.104", "4.0.0-rc.108"];
+const consumerFixtures = [
+  ...publicPackages.map((name) => `npm-${name}`),
+  "npm-esbuild-node-sea",
+  "npm-bun-node-sea",
+  ...publicPackages.map((name) => `bun-${name}`),
+  "bun-esbuild-node-sea",
+  "bun-bun-node-sea",
+] as const;
 
 interface WorkflowStep {
   id?: string;
@@ -22,6 +30,7 @@ interface WorkflowStep {
   uses?: string;
   run?: string;
   env?: Record<string, string>;
+  shell?: string;
   if?: string;
   "continue-on-error"?: boolean;
   with?: Record<string, unknown>;
@@ -79,6 +88,77 @@ const expectPinnedActionsWithoutEscapes = (workflow: Workflow): void => {
       expect(step.if).toBeUndefined();
     }
   }
+};
+
+const checkoutAction = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd";
+const exactAction = /^[a-z0-9-]+\/[a-z0-9-]+@[0-9a-f]{40}$/;
+
+const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "dispatch"): string[] => {
+  const errors: string[] = [];
+  if (JSON.stringify(workflow.permissions) !== JSON.stringify({ contents: "read" })) {
+    errors.push("workflow permissions must be exactly contents: read");
+  }
+  for (const [jobName, job] of Object.entries(workflow.jobs)) {
+    if (
+      job.permissions !== undefined
+      && JSON.stringify(job.permissions) !== JSON.stringify({ contents: "read" })
+    ) {
+      errors.push(`${jobName} job permissions must be exactly contents: read`);
+    }
+    if (job.permissions?.["id-token"] === "write") errors.push(`${jobName} grants id-token: write`);
+    const steps = job.steps ?? [];
+    for (const [index, step] of steps.entries()) {
+      if (step.uses !== undefined && !exactAction.test(step.uses)) {
+        errors.push(`${jobName} step ${index} action is not pinned by exact SHA`);
+      }
+      if (step.run?.includes("${{")) errors.push(`${jobName} step ${index} interpolates workflow data in shell text`);
+      if (step.run?.includes("GITHUB_ENV")) errors.push(`${jobName} step ${index} writes global workflow environment`);
+    }
+    if (kind === "ci") {
+      const checkout = steps[0];
+      const guard = steps[1];
+      if (checkout?.uses !== checkoutAction) errors.push(`${jobName} must checkout first`);
+      if (checkout?.with?.ref !== "${{ github.sha }}") errors.push(`${jobName} checkout ref is not github.sha`);
+      if (checkout?.with?.["persist-credentials"] !== false) errors.push(`${jobName} checkout persists credentials`);
+      if (
+        guard?.env?.SOURCE_SHA !== "${{ github.sha }}"
+        || guard.shell !== "bash"
+        || !guard.run?.includes("^[0-9a-f]{40}$")
+        || !guard.run.includes('test "$(git rev-parse HEAD)" = "$SOURCE_SHA"')
+      ) {
+        errors.push(`${jobName} lacks the immediate exact-SHA HEAD guard`);
+      }
+    } else {
+      const lexical = steps[0];
+      const checkout = steps[1];
+      const guard = steps[2];
+      if (
+        lexical?.id !== "source"
+        || lexical.env?.REQUESTED_SOURCE !== "${{ inputs.commit }}"
+        || lexical.shell !== "bash"
+        || !lexical.run?.includes("^[0-9a-f]{40}$")
+        || !lexical.run.includes("GITHUB_OUTPUT")
+      ) {
+        errors.push(`${jobName} lacks the pre-checkout lexical source guard`);
+      }
+      if (checkout?.uses !== checkoutAction) errors.push(`${jobName} must checkout only after lexical validation`);
+      if (checkout?.with?.ref !== "${{ steps.source.outputs.sha }}") {
+        errors.push(`${jobName} checkout ref is not the validated source output`);
+      }
+      if (checkout?.with?.["persist-credentials"] !== false) errors.push(`${jobName} checkout persists credentials`);
+      if (
+        guard?.env?.REQUESTED_SOURCE !== "${{ steps.source.outputs.sha }}"
+        || guard.env?.WORKFLOW_SOURCE !== "${{ github.sha }}"
+        || guard.shell !== "bash"
+        || !guard.run?.includes("^[0-9a-f]{40}$")
+        || !guard.run.includes('test "$REQUESTED_SOURCE" = "$WORKFLOW_SOURCE"')
+        || !guard.run.includes('test "$(git rev-parse HEAD)" = "$REQUESTED_SOURCE"')
+      ) {
+        errors.push(`${jobName} lacks the immediate input/workflow/HEAD equality guard`);
+      }
+    }
+  }
+  return errors;
 };
 
 describe("tooling pins and workflow contracts", () => {
@@ -384,10 +464,6 @@ describe("tooling pins and workflow contracts", () => {
           optionalDependencies: {},
         });
       }
-      await writeFile(
-        join(directory, "manifest.json"),
-        `${JSON.stringify({ version: 1, source, packages: records }, null, 2)}\n`,
-      );
       const inspectTarball = async (tarball: string) => {
         const filename = tarball.slice(tarball.lastIndexOf("/") + 1);
         const name = filenames.includes(filename) ? names[filenames.indexOf(filename)]! : "";
@@ -413,7 +489,39 @@ describe("tooling pins and workflow contracts", () => {
         };
       };
       const input = verifier.parseArguments(["--directory", directory, "--source", source]);
-      await expect(verifier.verifyCandidate(input, { inspectTarball })).resolves.toEqual({ source, packages: 5 });
+      const consumers = consumerFixtures.map((fixture, index) => ({
+        fixture,
+        installer: fixture.startsWith("npm-") ? "npm@11.11.0" : "bun@1.3.14",
+        lockfile: fixture.startsWith("npm-") ? "package-lock.json" : "bun.lock",
+        lockSha256: index.toString(16).padStart(64, "0"),
+        treeSha256: (index + consumerFixtures.length).toString(16).padStart(64, "0"),
+      }));
+      // Locks and trees are intentionally not candidate artifacts. This
+      // independent verifier checks the producer observation schema/order;
+      // the producer's real 14-fixture run establishes their values.
+      const candidateManifest = { version: 2, source, packages: records, consumers };
+      await writeFile(join(directory, "manifest.json"), `${JSON.stringify(candidateManifest, null, 2)}\n`);
+      await expect(verifier.verifyCandidate(input, { inspectTarball })).resolves.toEqual({
+        source,
+        packages: 5,
+        consumers: 14,
+      });
+
+      for (
+        const malformed of [
+          { ...candidateManifest, consumers: consumers.slice(0, -1) },
+          { ...candidateManifest, consumers: [consumers[1], consumers[0], ...consumers.slice(2)] },
+          { ...candidateManifest, consumers: [...consumers.slice(0, -1), consumers[0]] },
+          {
+            ...candidateManifest,
+            consumers: consumers.map((record, index) => index === 0 ? { ...record, lockSha256: "ABC" } : record),
+          },
+        ]
+      ) {
+        await writeFile(join(directory, "manifest.json"), `${JSON.stringify(malformed, null, 2)}\n`);
+        await expect(verifier.verifyCandidate(input, { inspectTarball })).rejects.toThrow(/consumer/);
+      }
+      await writeFile(join(directory, "manifest.json"), `${JSON.stringify(candidateManifest, null, 2)}\n`);
 
       await rm(join(directory, filenames[0]!));
       await expect(verifier.verifyCandidate(input, { inspectTarball })).rejects.toThrow(/inventory/);
@@ -438,6 +546,7 @@ describe("tooling pins and workflow contracts", () => {
 
   it("requires every independent CI axis with exact Bun setup and no escape hatches", async () => {
     const workflow = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as Workflow;
+    expect(workflowAuthorityErrors(workflow, "ci")).toEqual([]);
     expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(Object.keys(workflow.jobs)).toEqual([
@@ -481,6 +590,7 @@ describe("tooling pins and workflow contracts", () => {
 
   it("keeps release preparation non-mutating and emits one five-package candidate", async () => {
     const workflow = parse(await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")) as Workflow;
+    expect(workflowAuthorityErrors(workflow, "dispatch")).toEqual([]);
     expect(workflow.on).toEqual({
       workflow_dispatch: {
         inputs: {
@@ -502,5 +612,61 @@ describe("tooling pins and workflow contracts", () => {
     for (const name of publicPackages) expect(consumer).toContain(JSON.stringify(name));
     expect(consumer).toContain('console.log("packed consumers verified: 14/14")');
     expect(consumer).toContain('for (const producer of ["esbuild", "bun"])');
+  });
+
+  it("rejects workflow authority regressions and shell-source interpolation", async () => {
+    const ci = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as Workflow;
+    const dispatch = parse(await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")) as Workflow;
+    expect(workflowAuthorityErrors(ci, "ci")).toEqual([]);
+    expect(workflowAuthorityErrors(dispatch, "dispatch")).toEqual([]);
+
+    const wrongRef = structuredClone(ci);
+    wrongRef.jobs.quality!.steps![0]!.with!.ref = "refs/heads/main";
+    expect(workflowAuthorityErrors(wrongRef, "ci")).toContain("quality checkout ref is not github.sha");
+
+    const delayedGuard = structuredClone(ci);
+    delayedGuard.jobs.quality!.steps!.splice(1, 1);
+    expect(workflowAuthorityErrors(delayedGuard, "ci")).toContain("quality lacks the immediate exact-SHA HEAD guard");
+
+    const credentials = structuredClone(ci);
+    credentials.jobs.quality!.steps![0]!.with!["persist-credentials"] = true;
+    expect(workflowAuthorityErrors(credentials, "ci")).toContain("quality checkout persists credentials");
+
+    const unpinned = structuredClone(ci);
+    unpinned.jobs.quality!.steps![0]!.uses = "actions/checkout@v4";
+    expect(workflowAuthorityErrors(unpinned, "ci")).toContain("quality step 0 action is not pinned by exact SHA");
+
+    const maliciousOutput = structuredClone(dispatch);
+    maliciousOutput.jobs["node-sea"]!.steps!.push({
+      run: 'producer="${{ steps.node26.outputs.path }}$(touch /tmp/escaped)"',
+    });
+    expect(workflowAuthorityErrors(maliciousOutput, "dispatch")).toContain(
+      `node-sea step ${maliciousOutput.jobs["node-sea"]!.steps!.length - 1} interpolates workflow data in shell text`,
+    );
+
+    const wrongDispatchRef = structuredClone(dispatch);
+    wrongDispatchRef.jobs.esbuild!.steps![1]!.with!.ref = "${{ inputs.commit }}";
+    expect(workflowAuthorityErrors(wrongDispatchRef, "dispatch")).toContain(
+      "esbuild checkout ref is not the validated source output",
+    );
+
+    const missingEquality = structuredClone(dispatch);
+    missingEquality.jobs.esbuild!.steps![2]!.run = missingEquality.jobs.esbuild!.steps![2]!.run!.replace(
+      'test "$REQUESTED_SOURCE" = "$WORKFLOW_SOURCE"\n',
+      "",
+    );
+    expect(workflowAuthorityErrors(missingEquality, "dispatch")).toContain(
+      "esbuild lacks the immediate input/workflow/HEAD equality guard",
+    );
+
+    const publishPermission = structuredClone(dispatch);
+    publishPermission.jobs.candidate!.permissions = { "id-token": "write" };
+    expect(workflowAuthorityErrors(publishPermission, "dispatch")).toContain("candidate grants id-token: write");
+
+    const writePermission = structuredClone(ci);
+    writePermission.jobs.quality!.permissions = { contents: "write" };
+    expect(workflowAuthorityErrors(writePermission, "ci")).toContain(
+      "quality job permissions must be exactly contents: read",
+    );
   });
 });

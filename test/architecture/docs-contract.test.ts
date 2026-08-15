@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
-const docs = ["README.md", "api.md", "architecture.md", "drivers.md", "errors.md"];
+const docs = ["README.md", "api.md", "architecture.md", "drivers.md", "errors.md", "release-security.md"];
 const examples = [
   "README.md",
   "bun/package.json",
@@ -142,6 +142,21 @@ describe("documentation contract", () => {
     expect(architecture).toMatch(/rejects inspection products, public receipts, semantic plans/);
     expect(text).toMatch(/private (?:operation directory|copy)/i);
     expect(text).toMatch(/resolution and builtins|resolution and builtin handling/i);
+  });
+
+  it("documents exact-source workflow authority and locked candidate evidence", async () => {
+    const release = await readFile(resolve(root, "docs/release-security.md"), "utf8");
+    expect(release).toMatch(/lowercase 40-hex/i);
+    expect(release).toMatch(/before\s+repository-controlled code/i);
+    expect(release).toContain("persist-credentials: false");
+    expect(release).toMatch(/lock-only.*validate.*frozen install/is);
+    expect(release).toMatch(/exact direct candidate tarball/i);
+    expect(release).toMatch(/workspace.*link.*other file/is);
+    expect(release).toContain("14");
+    expect(release).toMatch(/manifest v2/i);
+    expect(release).toMatch(/not\s+(?:a\s+)?hermeticity|does not claim hermeticity/i);
+    expect(release).toMatch(/same exact tarball bytes/i);
+    expect(release).not.toMatch(/npm publish|id-token:\s*write|NODE_AUTH_TOKEN/i);
   });
 
   it("rejects legacy package and release language in user-facing material", async () => {

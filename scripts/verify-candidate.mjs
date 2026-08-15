@@ -16,7 +16,15 @@ const packageNames = [
   "effect-build-node-sea",
 ];
 const filenames = packageNames.map((name) => `${name}-${packageVersion}.tgz`);
-const exactManifestKeys = ["version", "source", "packages"];
+const consumerFixtures = [
+  ...packageNames.map((name) => `npm-${name}`),
+  "npm-esbuild-node-sea",
+  "npm-bun-node-sea",
+  ...packageNames.map((name) => `bun-${name}`),
+  "bun-esbuild-node-sea",
+  "bun-bun-node-sea",
+];
+const exactManifestKeys = ["version", "source", "packages", "consumers"];
 const exactPackageKeys = [
   "filename",
   "name",
@@ -27,6 +35,7 @@ const exactPackageKeys = [
   "peerDependencies",
   "optionalDependencies",
 ];
+const exactConsumerKeys = ["fixture", "installer", "lockfile", "lockSha256", "treeSha256"];
 
 const exactKeys = (value, expected) =>
   value !== null
@@ -132,11 +141,28 @@ export const verifyCandidate = async ({ directory, source }, dependencies = {}) 
     throw new Error("candidate inventory must contain exactly five tarballs and manifest.json");
   }
   const manifest = JSON.parse(await read(join(directory, "manifest.json"), "utf8"));
-  if (!exactKeys(manifest, exactManifestKeys) || manifest.version !== 1 || manifest.source !== source) {
+  if (!exactKeys(manifest, exactManifestKeys) || manifest.version !== 2 || manifest.source !== source) {
     throw new Error("candidate manifest schema or source does not match");
   }
   if (!Array.isArray(manifest.packages) || manifest.packages.length !== packageNames.length) {
     throw new Error("candidate manifest must contain exactly five package records");
+  }
+  if (!Array.isArray(manifest.consumers) || manifest.consumers.length !== consumerFixtures.length) {
+    throw new Error("candidate consumer observations must contain exactly fourteen records");
+  }
+  for (const [index, fixture] of consumerFixtures.entries()) {
+    const record = manifest.consumers[index];
+    const npm = fixture.startsWith("npm-");
+    if (
+      !exactKeys(record, exactConsumerKeys)
+      || record.fixture !== fixture
+      || record.installer !== (npm ? "npm@11.11.0" : "bun@1.3.14")
+      || record.lockfile !== (npm ? "package-lock.json" : "bun.lock")
+      || !/^[0-9a-f]{64}$/.test(record.lockSha256)
+      || !/^[0-9a-f]{64}$/.test(record.treeSha256)
+    ) {
+      throw new Error(`candidate consumer observation ${fixture} does not match`);
+    }
   }
   for (const [index, name] of packageNames.entries()) {
     const record = manifest.packages[index];
@@ -168,12 +194,13 @@ export const verifyCandidate = async ({ directory, source }, dependencies = {}) 
     const { manifest: packed, entries } = await inspect(tarball);
     verifyPackedManifest(name, packed, entries);
   }
-  return { source, packages: packageNames.length };
+  return { source, packages: packageNames.length, consumers: consumerFixtures.length };
 };
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   await verifyCandidate(parseArguments(process.argv.slice(2))).then(
-    ({ source, packages }) => console.log(`candidate verified: ${packages} packages at ${source}`),
+    ({ source, packages, consumers }) =>
+      console.log(`candidate verified: ${packages} packages and ${consumers} consumer observations at ${source}`),
     (error) => {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;

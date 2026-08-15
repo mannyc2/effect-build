@@ -169,6 +169,7 @@ not manifests, receipts, provenance, hermeticity, or reproducibility claims.
 - [Architecture](docs/architecture.md)
 - [Integrations](docs/drivers.md)
 - [Errors](docs/errors.md)
+- [Candidate and workflow security](docs/release-security.md)
 - [Runnable examples](examples/README.md)
 
 Run `bun run verify` for the deterministic local gate.

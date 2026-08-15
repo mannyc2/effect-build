@@ -37,9 +37,12 @@ transitive versions may be legitimate.
 - `scripts/test-built-consumer.mjs`
 - `scripts/verify-candidate.mjs`
 - `test/architecture/generated-and-ci.test.ts`
+- `test/architecture/workflow-and-consumer-security.test.ts`
+- `test/architecture/docs-contract.test.ts`
 - any new focused unit fixture under `test/architecture/fixtures/**`
 - `package.json` only to register an explicit new test file
-- security/release docs, this plan, `plans/README.md`
+- `README.md`, `docs/README.md`, and security/release docs
+- this plan and `plans/README.md`
 
 Do not add publish/OIDC mutation in this plan.
 
@@ -109,3 +112,68 @@ Do not add publish/OIDC mutation in this plan.
 Replaces string-interpolated workflow authority with env data and replaces
 floating consumer resolution with per-fixture locked resolution. Adds lock
 hash evidence only.
+
+## Receipt
+
+- **Implementation baseline SHA**:
+  `85879365797439bfd180d6d1338dfcdb6186d8de`, the clean Plan 031 receipt
+  commit. The bounded scope list above was reconciled before commit to name the
+  new registered security test, its documentation-contract assertion, and the
+  two documentation indexes that expose the new release-security contract.
+- Tests were written first. The initial workflow characterization reported 20
+  CI and 23 dispatch authority violations, including absent exact-ref guards
+  and shell-source interpolation. The candidate-schema assertion rejected the
+  old v1 manifest; the focused consumer file began with all ten tests red
+  because its lock/tree helpers did not exist; and the documentation contract
+  failed before the release-security document was added. Review-generated red
+  cases then reproduced wrong npm candidate resolution, floating Bun identity,
+  short SRI, job-level permission escalation, unvalidated root install
+  sections, a transitive reuse of an exact candidate locator, non-locator Bun
+  metadata, npm/Bun remote-tarball policy drift, and missing/misbound canonical
+  candidate records before each correction.
+- Every CI job now checks out only `github.sha` and immediately proves a
+  lowercase 40-hex SHA equals HEAD. Every dispatch job lexically validates its
+  requested source before checkout, then proves requested source, workflow
+  source, and HEAD are identical before repository code. Checkouts keep
+  credentials disabled; permissions remain read-only; actions remain exact-SHA
+  pinned; and context values enter shell commands only through step-local
+  environment data.
+- Bun 1.3.14 and npm 11.11.0 were characterized with local tarballs. Their
+  script-disabled lock-only operations created locks without `node_modules` or
+  lifecycle markers, and their script-disabled frozen installs preserved raw
+  lock bytes. Each of fourteen fixtures now performs lock-only -> contextual
+  lock validation -> remove `node_modules` -> frozen install -> unchanged-lock
+  proof -> type/runtime checks.
+- The plan's broad no-`file:` wording is resolved at the only executable
+  boundary: unpublished packages necessarily appear as the exact five direct
+  candidate tarballs. Those name/version/path/SHA-512 identities are the sole
+  permitted local locators, including only a matching direct Bun override;
+  every other workspace/file/link/portal/path locator is rejected. Dependency
+  sections are inspected contextually so legitimate metadata such as `bin`
+  paths is not mistaken for a dependency. SRI-pinned HTTPS resolutions are
+  accepted consistently while non-HTTPS remote tarballs are rejected.
+- Candidate manifest v2 preserves the ordered five package records and adds
+  exactly fourteen ordered consumer observations containing fixture,
+  installer, lockfile, raw-lock SHA-256, and normalized installed-tree SHA-256.
+  Tree normalization retains distinct package locations and duplicate
+  transitive versions. Initial candidate byte identity is authoritative and
+  rechecked before manifest emission, so the manifest cannot bless bytes that
+  changed after consumer testing. These hashes are observations, not claims of
+  input closure, provenance, or reproducibility. Their producing run establishes
+  their values; because transient locks and trees are intentionally excluded
+  from the six-file artifact, its independent verifier checks their exact
+  schema/order rather than claiming to recompute them. Tarball byte hashes,
+  manifests, entries, and exports remain independently recomputed.
+- Exact package-manager Bun was `1.3.14` (`0d9b296a`). The focused
+  security/docs run passed 40 tests. `bun run verify` passed five typetest
+  files, 221 unit tests with one intentional skip, 14/14 locked consumers, 64
+  architecture tests, lint, and formatting. `bun run verify:effect` passed
+  both `4.0.0-beta.104` and `4.0.0-rc.108`; each endpoint passed the same 221
+  unit tests, one intentional skip, and 14/14 locked consumers.
+- Independent final review found no remaining P0/P1 correctness blocker. Its
+  own exact-diff focused run passed 40/40 tests, the architecture suite passed
+  64/64, and `git diff --check` was clean.
+- The coherent implementation commit, exact-SHA twelve-job push CI, and one
+  non-mutating candidate workflow receipt remain to be recorded before this
+  plan can be marked `DONE`. No publish, OIDC, registry, tag, or release
+  mutation is authorized by this preliminary receipt.
