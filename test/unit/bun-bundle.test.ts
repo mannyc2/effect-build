@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Latch } from "effect";
 import { JavaScriptBundle } from "effect-build";
 import * as Integration from "effect-build/Integration";
 import type * as Provider from "effect-build/Provider";
@@ -317,6 +317,35 @@ describe("Bun scoped JavaScript bundle producer", () => {
       () => Effect.fail(callerError),
     )));
     expect(failureOf(exit)).toBe(callerError);
+  });
+
+  it("preserves a caller failure combined with interruption and removes the owned root", async () => {
+    const input = makeEntrypoint();
+    const harness = makeHarness();
+    const callerError = { _tag: "CallerFailure", detail: "exact identity" } as const;
+    const interruptor = 29_029;
+    const mixed = Cause.combine(Cause.fail(callerError), Cause.interrupt(interruptor));
+    const entered = await Effect.runPromise(Deferred.make<string>());
+    const release = Latch.makeUnsafe();
+    const fiber = Effect.runFork(
+      harness.service.withJavaScriptBundle(
+        { entrypoint: input.path, format: "esm" },
+        (main) =>
+          Deferred.succeed(entered, main.path).pipe(
+            Effect.andThen(release.await),
+            Effect.andThen(Effect.failCause(mixed)),
+          ),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+    const bundlePath = await Effect.runPromise(Deferred.await(entered));
+    expect(existsSync(bundlePath)).toBe(true);
+    await Effect.runPromise(release.open);
+    const exit = await Effect.runPromise(Fiber.await(fiber));
+
+    expect(failureOf(exit)).toBe(callerError);
+    if (Exit.isSuccess(exit)) throw new Error("expected mixed caller cause");
+    expect([...Cause.interruptors(exit.cause)]).toContain(interruptor);
+    expect(existsSync(bundlePath)).toBe(false);
   });
 
   it("removes the owned root after a callback defect", async () => {

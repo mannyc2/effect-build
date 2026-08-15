@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Path, Result, Schema, type Scope } from "effect";
+import { Cause, Effect, FileSystem, Path, Result, Schema, type Scope } from "effect";
 import { Artifact, BuildError, JavaScriptBundle } from "effect-build";
 import * as Integration from "effect-build/Integration";
 import type * as Provider from "effect-build/Provider";
@@ -353,6 +353,16 @@ const mapCoreBundleError = (
   });
 };
 
+const mapOwnedCoreBundleError = <E>(
+  error: E,
+  resolvedCwd: string,
+): E | BunBundleInvalid | BunBundleMaterializationFailed =>
+  JavaScriptBundle.InvalidJavaScriptBundle.is(error)
+    || JavaScriptBundle.JavaScriptBundleAccessFailed.is(error)
+    || JavaScriptBundle.JavaScriptBundleTemporaryDirectoryFailed.is(error)
+    ? mapCoreBundleError(error, resolvedCwd)
+    : error;
+
 export const makeService = (
   context: Provider.CommandServiceContext<"bun", Options, Target, ExecutableStages>,
 ): Service => {
@@ -383,7 +393,7 @@ export const makeService = (
         ),
       );
       if (information.type !== "File") return yield* invalidInput("entrypoint-not-regular");
-      const result = yield* Integration.withOwnedJavaScriptBundle(
+      const exit = yield* Integration.withOwnedJavaScriptBundle(
         {
           temporaryPrefix: "effect-build-bun-",
           produce: (cleanupRoot) =>
@@ -437,16 +447,13 @@ export const makeService = (
               });
             }),
         },
-        (main) => Effect.result(use(main)),
+        (main) => Effect.exit(use(main)),
       ).pipe(
-        Effect.catchIf(JavaScriptBundle.InvalidJavaScriptBundle.is, (error) =>
-          Effect.fail(mapCoreBundleError(error, resolvedCwd))),
-        Effect.catchIf(JavaScriptBundle.JavaScriptBundleAccessFailed.is, (error) =>
-          Effect.fail(mapCoreBundleError(error, resolvedCwd))),
-        Effect.catchIf(JavaScriptBundle.JavaScriptBundleTemporaryDirectoryFailed.is, (error) =>
-          Effect.fail(mapCoreBundleError(error, resolvedCwd))),
+        Effect.catchCause((cause) =>
+          Effect.failCause(Cause.map(cause, (error) => mapOwnedCoreBundleError(error, resolvedCwd)))
+        ),
       );
-      return yield* Effect.fromResult(result);
+      return yield* exit;
     }) as Effect.Effect<A, BunBundleError | E, Exclude<R, Scope.Scope>>
   );
   return Object.freeze({
