@@ -301,7 +301,7 @@ direction. Plans 016-020 remain factual implementation history.
 | 025 | Add Bun as a second scoped JavaScript bundle producer | P1 | L | 023-024 | DONE |
 | 026 | Certify the five-package granular public cut without publishing it | P1 | M | 023-025 | DONE |
 | 027 | Import and authorize the completion/release program | P0 | S | 026 | DONE |
-| 028 | Canonicalize tool identity and host publication semantics | P0 | M | 027 | TODO |
+| 028 | Canonicalize tool identity and host publication semantics | P0 | M | 027 | DONE |
 | 029 | Preserve interruption through the Bun bundle continuation | P0 | S | 027 | TODO |
 | 030 | Make scalar executable input preflight total | P0 | M | 027 | TODO |
 | 031 | Make native executable inspection total and canonical | P0 | M | 027 | TODO |
@@ -438,6 +438,11 @@ behavior, or the standalone operation invalidated that earlier work.
   governance. Plans 028-031 are independent correctness slices after it; Plan
   032 consumes all four because its exact-source candidate becomes the release
   evidence base. Plans 033 and 034 may then run independently.
+- Plan 028 removes provider-authored host identity, makes canonical executable
+  path/version the whole selected-tool fact, resolves PATH only through
+  absolute executable candidates, and derives host publication policy solely
+  from the official Effect `Path` service. It changes no public declaration or
+  package edge.
 - Plan 035 is deliberately external to effect-build. It extends ts-release's
   existing prepared-subject/coordinator architecture rather than creating an
   effect-build release engine. It requires parent approval before changing the

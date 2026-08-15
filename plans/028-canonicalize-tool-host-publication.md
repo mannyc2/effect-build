@@ -10,6 +10,7 @@
 - Risk: MEDIUM
 - Depends on: 027
 - Planned at: `e8c1557509a9236df8e5eb236293527c3f4fd21d`
+- Completion: `DONE`
 
 ## Evidence and desired invariant
 
@@ -117,3 +118,43 @@ No manifest, public declaration, or package split change.
 
 Removes provider probe OS, its duplicate interface, and target-as-host branches.
 Adds no new public state; `Path` remains the sole host-filesystem authority.
+
+## Receipt
+
+- **Implementation source SHA**:
+  `1a803ca760e2b943ef33d93131c10ea1ca271f0b`.
+- Tool discovery now selects only absolute candidates from `PATH`, ignores
+  empty/relative entries, accepts only regular executables, uses `;` plus the
+  bounded names `bun`/`bun.exe` or `deno`/`deno.exe` under an injected Windows
+  `Path`, and accepts a shim-reported canonical executable identity. It adds no
+  `.cmd`/`.bat`, shell, current-directory, or raw-host fallback.
+- Explicit executable selection canonicalizes both the requested and reported
+  paths and rejects a mismatch as `ToolProbeFailed`. The probe payload and
+  stored compiler identity contain only canonical `{name, version, path}`.
+- Host filename and mode policy now derives at use time from the official
+  Effect `Path` service. Windows-host/Linux-target and
+  POSIX-host/Windows-target tests prove that target suffix is no longer used as
+  a host-mode proxy.
+- Installed Effect `4.0.0-rc.108` source and a live regression demonstrated
+  that `Effect.option`/`Effect.mapError` would lose sibling interruption from a
+  mixed cause. Discovery instead maps owned typed failures with `Cause.map`
+  and `Effect.failCause`; the focused Fail+Interrupt test retains both the
+  mapped `ToolProbeFailed` and interruptor.
+- **Scope reconciliation**: `packages/effect-build/src/Integration.ts` is the
+  required call site for passing the captured `Path` authority into lifecycle
+  validation. `test/testkit/standaloneDriverContract.ts` and the driver,
+  matrix, and publication fixtures are the bounded shared evidence needed to
+  remove `hostOs`, characterize PATH selection, and keep POSIX candidates
+  executable. No manifest, declaration, export, or package topology changed.
+- Exact package-manager Bun was `1.3.14` (`0d9b296a`). `bun run build` passed;
+  the focused four-file run passed 81 tests with one intentional skip;
+  `bun run test:types` passed five files; and `bun run test:architecture`
+  passed six files and 41 tests.
+- `bun run verify` passed 182 unit tests with one intentional skip, 14/14
+  once-packed consumers, all architecture checks, lint, and formatting.
+  `bun run verify:effect` passed both `4.0.0-beta.104` and
+  `4.0.0-rc.108`, each with 182 unit tests, one intentional skip, and 14/14
+  packed consumers.
+- `git diff --check` passed, `rg -n 'hostOs' packages test typetest` returned
+  no result, and the implementation worktree was clean immediately after the
+  source commit. This receipt and README status are plan-only evidence.
