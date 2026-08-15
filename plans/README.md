@@ -469,6 +469,12 @@ behavior, or the standalone operation invalidated that earlier work.
   consumer observations. Downloaded artifact `9242018446` independently
   matched every manifest tarball hash. Locks and trees remain producer
   observations rather than artifact inputs or reproducibility claims.
+- Plan 034 removes repeated native-range concatenation in behavior-preserving
+  commit `ddc163d736907267fd27e22878a8c095cd7a3198`, then freezes a 64-byte seed
+  and at most two additional exact ranges in source
+  `3c70be6df80aa3aa5c700250dfbe6d118c0226d0`. Digesting remains an explicit
+  separate full-file one-shot operation. Exact-SHA run `31866882172` passed all
+  twelve jobs without changing any public API or package edge.
 - Plan 035 is deliberately external to effect-build. It extends ts-release's
   existing prepared-subject/coordinator architecture rather than creating an
   effect-build release engine. It requires parent approval before changing the
