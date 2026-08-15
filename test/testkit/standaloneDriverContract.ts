@@ -7,26 +7,26 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Artifact } from "../../packages/effect-build/src/standalone/Artifact.js";
+import type { ExecutableArtifact } from "../../packages/effect-build/src/standalone/Artifact.js";
 import type {
   BuildError,
   ToolNotFound,
   ToolProbeFailed,
 } from "../../packages/effect-build/src/standalone/BuildError.js";
-import type {
-  CompileExecutableMatrixInput,
-  MatrixErrorFor,
-} from "../../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
+import type { CompileExecutableMatrixInput } from "../../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
 import type { CompileExecutableInput } from "../../packages/effect-build/src/standalone/Driver.js";
-import type { Target } from "../../packages/effect-build/src/standalone/Target.js";
+import type { SystemTarget } from "../../packages/effect-build/src/standalone/Target.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/driver/fake-tool.mjs", import.meta.url));
 
 export interface StandaloneDriverContractConfig<
   Self,
   Options,
-  SupportedTarget extends Target,
-  ProviderArtifact extends Extract<Artifact, { readonly provider: "bun" | "deno" }>,
+  SupportedTarget extends SystemTarget,
+  ProviderArtifact extends ExecutableArtifact & {
+    readonly provider: "bun" | "deno";
+    readonly target: SupportedTarget;
+  },
 > {
   readonly tool: "bun" | "deno";
   readonly layer: (options?: { readonly executable?: string }) => Layer.Layer<
@@ -41,21 +41,24 @@ export interface StandaloneDriverContractConfig<
     input: CompileExecutableMatrixInput<SupportedTarget, Options>,
   ) => Effect.Effect<
     readonly ProviderArtifact[],
-    MatrixErrorFor<ProviderArtifact["provider"], SupportedTarget>,
+    unknown,
     Self
   >;
   readonly matrixTarget: SupportedTarget;
   readonly probeFirstArg: string;
   readonly compileFirstArg: string;
   readonly invalidOptions: Options;
-  readonly unsupportedTarget?: Target;
+  readonly unsupportedTarget?: SystemTarget;
 }
 
 export const describeStandaloneDriverContract = <
   Self,
   Options,
-  SupportedTarget extends Target,
-  ProviderArtifact extends Extract<Artifact, { readonly provider: "bun" | "deno" }>,
+  SupportedTarget extends SystemTarget,
+  ProviderArtifact extends ExecutableArtifact & {
+    readonly provider: "bun" | "deno";
+    readonly target: SupportedTarget;
+  },
 >(
   config: StandaloneDriverContractConfig<Self, Options, SupportedTarget, ProviderArtifact>,
 ): void => {
@@ -114,7 +117,7 @@ export const describeStandaloneDriverContract = <
       config.compileExecutable(input).pipe(
         Effect.provide(config.layer(layerOptions)),
         Effect.provide(NodeServices.layer),
-      ) as Effect.Effect<Artifact, unknown, never>,
+      ) as Effect.Effect<ExecutableArtifact, unknown, never>,
     ).then((artifact) => ({ artifact: artifact as ProviderArtifact, root }));
 
   const matrixInput = (
@@ -140,7 +143,7 @@ export const describeStandaloneDriverContract = <
       expect(artifact.provider).toBe(config.tool);
       expect(artifact.stages[0].tool.name).toBe(config.tool);
       expect(artifact.stages[0].tool.version).toBe("9.9.9");
-      expect(artifact.stages[0].tool.path.startsWith("/")).toBe(true);
+      expect(artifact.stages[0].tool.path!.startsWith("/")).toBe(true);
       const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
       expect(lines).toHaveLength(2);
       expect(lines[0]?.[0]).toBe(config.probeFirstArg);

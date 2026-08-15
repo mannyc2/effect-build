@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
@@ -20,36 +20,26 @@ const execute = async (...arguments_) => {
     throw new Error(output, { cause: error });
   }
 };
+
 const repository = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporaryPrefix = "effect-build-consumers-";
 const packageVersion = "0.3.0";
-const packageNames = ["effect-build", "effect-build-bun", "effect-build-deno", "effect-build-node-sea"];
-const providerNames = ["effect-build-bun", "effect-build-deno", "effect-build-node-sea"];
-const documentationContracts = [
-  { path: "README.md", owners: ["effect-build-bun", "effect-build-bun", "effect-build-bun"] },
-  {
-    path: "docs/api.md",
-    owners: [
-      undefined,
-      "effect-build-bun",
-      "effect-build-deno",
-      "effect-build-node-sea",
-      "effect-build-bun",
-      "effect-build-bun",
-      "effect-build-bun",
-      "effect-build-bun",
-      "effect-build-bun",
-      undefined,
-      "effect-build-bun",
-      "effect-build-bun",
-    ],
-  },
-  { path: "docs/drivers.md", owners: ["effect-build-bun", "effect-build-deno", "effect-build-node-sea"] },
-  { path: "packages/effect-build-bun/README.md", owners: ["effect-build-bun"] },
-  { path: "packages/effect-build-deno/README.md", owners: ["effect-build-deno"] },
-  { path: "packages/effect-build-node-sea/README.md", owners: ["effect-build-node-sea"] },
+const effectPeer = ">=4.0.0-beta.104 <4.1.0-0";
+const packageNames = [
+  "effect-build",
+  "effect-build-bun",
+  "effect-build-deno",
+  "effect-build-esbuild",
+  "effect-build-node-sea",
 ];
+const integrationNames = packageNames.slice(1);
 const exactSemver = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+const expectedDependencies = (name) => name === "effect-build"
+  ? {}
+  : name === "effect-build-esbuild"
+  ? { "effect-build": `^${packageVersion}`, esbuild: "0.28.2" }
+  : { "effect-build": `^${packageVersion}` };
 
 export const parseArguments = (argv) => {
   if (argv.length === 0 || (argv.length === 1 && argv[0] === "--fresh-install")) {
@@ -65,7 +55,9 @@ export const parseArguments = (argv) => {
 };
 
 const readInstalledVersion = async (root, packageName) => {
-  const manifest = JSON.parse(await readFile(join(root, "node_modules", ...packageName.split("/"), "package.json"), "utf8"));
+  const manifest = JSON.parse(
+    await readFile(join(root, "node_modules", ...packageName.split("/"), "package.json"), "utf8"),
+  );
   if (typeof manifest.version !== "string" || !exactSemver.test(manifest.version)) {
     throw new Error(`${packageName} does not have an exact installed SemVer version`);
   }
@@ -80,6 +72,16 @@ const readResolvedDependencyVersion = async (root, fromPackage, dependency) => {
     throw new Error(`${dependency} does not have an exact resolved SemVer version`);
   }
   return manifest.version;
+};
+
+const assertCannotResolve = async (root, packageName, label) => {
+  const resolver = createRequire(join(root, "package.json"));
+  try {
+    resolver.resolve(`${packageName}/package.json`);
+  } catch {
+    return;
+  }
+  throw new Error(`${label} unexpectedly resolves ${packageName}`);
 };
 
 const findExecutable = async (name, environment = process.env) => {
@@ -150,9 +152,22 @@ export const inspectPackedPackage = async (tarball, expectedName) => {
       }
     }
   }
+  if (JSON.stringify(manifest.dependencies ?? {}) !== JSON.stringify(expectedDependencies(expectedName))) {
+    throw new Error(`${expectedName} packed dependency graph drifted`);
+  }
+  if (JSON.stringify(manifest.peerDependencies ?? {}) !== JSON.stringify({ effect: effectPeer })) {
+    throw new Error(`${expectedName} packed Effect peer drifted`);
+  }
+  if (manifest.optionalDependencies !== undefined) {
+    throw new Error(`${expectedName} unexpectedly packed optional dependencies`);
+  }
   const exports = manifest.exports;
   if (exports === null || typeof exports !== "object" || Array.isArray(exports)) {
     throw new Error(`${expectedName} has no packed export map`);
+  }
+  const expectedSubpaths = expectedName === "effect-build" ? [".", "./Integration", "./Provider"] : ["."];
+  if (JSON.stringify(Object.keys(exports)) !== JSON.stringify(expectedSubpaths)) {
+    throw new Error(`${expectedName} packed export graph drifted`);
   }
   for (const [subpath, value] of Object.entries(exports)) {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -168,23 +183,14 @@ export const inspectPackedPackage = async (tarball, expectedName) => {
       }
     }
   }
-  if (expectedName === "effect-build") {
-    if (
-      manifest.dependencies !== undefined
-      || JSON.stringify(Object.keys(exports)) !== JSON.stringify([".", "./Integration", "./Provider"])
-    ) {
-      throw new Error("packed core dependency or export graph drifted");
-    }
-  } else {
-    if (manifest.dependencies?.["effect-build"] !== `^${packageVersion}` || Object.keys(exports).join() !== ".") {
-      throw new Error(`${expectedName} did not rewrite workspace:^ to ^${packageVersion}`);
-    }
-  }
   return { manifest, entries };
 };
 
 const packPackages = async (bun, destination) => {
   await mkdir(destination, { recursive: true });
+  if ((await readdir(destination)).length !== 0) {
+    throw new Error(`candidate directory must start empty: ${destination}`);
+  }
   const tarballs = new Map();
   for (const name of packageNames) {
     const filename = `${name}-${packageVersion}.tgz`;
@@ -201,31 +207,13 @@ const packPackages = async (bun, destination) => {
   return tarballs;
 };
 
-const typeScriptSource = (provider) => {
-  if (provider === undefined) {
-    return [
-      'import * as Core from "effect-build";',
-      'import * as Integration from "effect-build/Integration";',
-      'import * as Provider from "effect-build/Provider";',
-      "export const artifactSchema = Core.Artifact.Artifact;",
-      "export const executeCommand = Integration.executeCommand;",
-      "export const defineProvider = Provider.define;",
-    ].join("\n");
-  }
-  const alias = "Compiler";
-  const target = provider === "effect-build-bun"
-    ? "linux-x64-musl"
-    : provider === "effect-build-deno"
-    ? "windows-aarch64"
-    : "linux-x64-gnu";
-  const options = provider === "effect-build-bun"
-    ? "{ minify: true }"
-    : provider === "effect-build-deno"
-    ? "{ bundle: true, minify: true }"
-    : '{ format: "esm" }';
+const compilerTypeScriptSource = (name) => {
+  const alias = name === "effect-build-bun" ? "Bun" : "Deno";
+  const target = name === "effect-build-bun" ? "linux-x64-musl" : "windows-aarch64";
+  const options = name === "effect-build-bun" ? "{ minify: true }" : "{ bundle: true, minify: true }";
   return [
     'import { Effect } from "effect";',
-    `import * as ${alias} from ${JSON.stringify(provider)};`,
+    `import * as ${alias} from ${JSON.stringify(name)};`,
     `export const scalar = ${alias}.compileExecutable({ entrypoint: "src/main.ts", outfile: "dist/app", target: ${JSON.stringify(target)}, options: ${options} });`,
     `export const matrix = ${alias}.compileExecutableMatrix({ entrypoint: "src/main.ts", outdir: "dist", name: "app", targets: [${JSON.stringify(target)}] });`,
     `export type ScalarContext = typeof scalar extends Effect.Effect<unknown, unknown, infer R> ? R : never;`,
@@ -233,12 +221,53 @@ const typeScriptSource = (provider) => {
   ].join("\n");
 };
 
-const runtimeSource = (provider) => {
-  const providerName = provider === "effect-build-bun"
-    ? "bun"
-    : provider === "effect-build-deno"
-    ? "deno"
-    : "node-sea";
+const typeScriptSource = (name) => {
+  if (name === "effect-build") {
+    return [
+      'import * as Core from "effect-build";',
+      'import * as Integration from "effect-build/Integration";',
+      'import * as Provider from "effect-build/Provider";',
+      "export type Executable = Core.Artifact.ExecutableArtifact;",
+      "export const executeCommand = Integration.executeCommand;",
+      "export const defineProvider = Provider.define;",
+    ].join("\n");
+  }
+  if (name === "effect-build-bun" || name === "effect-build-deno") return compilerTypeScriptSource(name);
+  if (name === "effect-build-esbuild") {
+    return [
+      'import { Effect } from "effect";',
+      'import * as Esbuild from "effect-build-esbuild";',
+      "export const bundle = Esbuild.withJavaScriptBundle(",
+      '  { entrypoint: "src/main.ts", format: "esm" },',
+      "  (artifact) => Effect.succeed({ path: artifact.path, stages: artifact.stages }),",
+      ");",
+      "export type BundleContext = typeof bundle extends Effect.Effect<unknown, unknown, infer R> ? R : never;",
+    ].join("\n");
+  }
+  return [
+    'import { JavaScriptBundle } from "effect-build";',
+    'import * as NodeSea from "effect-build-node-sea";',
+    "declare const main: JavaScriptBundle.Artifact<readonly []>;",
+    'export const executable = NodeSea.createExecutable({ main, outfile: "dist/app", digest: true });',
+  ].join("\n");
+};
+
+const runtimeKeys = {
+  "effect-build-bun": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+  "effect-build-deno": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+  "effect-build-esbuild": [
+    "BundleMaterializationFailed", "BundleMaterializationOperation", "Esbuild", "EsbuildDiagnostic",
+    "EsbuildFailed", "EsbuildVersionMismatch", "InvalidBundleInput", "JavaScriptBundleInvalid", "layer",
+    "withJavaScriptBundle",
+  ],
+  "effect-build-node-sea": [
+    "InvalidNodeSeaInput", "NodeSea", "NodeSeaFailed", "NodeSeaPreparationFailed", "NodeSeaPreparationOperation",
+    "NodeSeaProbeFailed", "NodeSeaSpawnFailed", "NodeSeaSyntaxCheckFailed", "NodeSeaToolNotFound", "createExecutable",
+    "layer",
+  ],
+};
+
+const runtimeSource = (name) => {
   const lines = [
     'import assert from "node:assert/strict";',
     'const core = await import("effect-build");',
@@ -248,136 +277,45 @@ const runtimeSource = (provider) => {
     'assert.deepEqual(Object.keys(integration), ["executeCommand", "inspectLiveJavaScriptBundle", "produceExecutable", "withOwnedJavaScriptBundle"]);',
     'const author = await import("effect-build/Provider");',
     'assert.deepEqual(Object.keys(author), ["define"]);',
-    'const removedBun = ["effect-build", "bun"].join("/");',
-    'const removedDeno = ["effect-build", "deno"].join("/");',
-    'for (const path of [removedBun, removedDeno, "effect-build/internal", "effect-build/standalone/internal/Process.js"]) {',
+    'for (const path of [["effect-build", "bun"].join("/"), ["effect-build", "deno"].join("/"), "effect-build/internal", "effect-build/standalone/internal/Process.js"]) {',
     '  await import(path).then(() => { throw new Error(`private or legacy path resolved: ${path}`); }, () => undefined);',
     '}',
   ];
-  if (provider !== undefined) {
+  if (name !== "effect-build") {
     lines.push(
-      'const { Effect } = await import("effect");',
-      `const selected = await import(${JSON.stringify(provider)});`,
-      'assert.deepEqual(Object.keys(selected), ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"]);',
-      'const dispatches = [];',
-      'const artifactFor = (input, target) => ({',
-      '  path: input.outfile ?? `dist/app-${target}`,' ,
-      '  bytes: 1,',
-      '  target,',
-      `  provider: ${JSON.stringify(providerName)},`,
-      provider === "effect-build-node-sea"
-        ? '  stages: [{ operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } }, { operation: "assemble-node-sea", tool: { name: "node", version: "26.7.0", path: "/fixture/node" } }],'
-        : `  stages: [{ operation: "compile-executable", tool: { name: ${JSON.stringify(providerName)}, version: "fixture", path: "/fixture/compiler" } }],`,
-      '});',
-      'const fakeCompiler = {',
-      '  compileExecutable: (input) => {',
-      '    dispatches.push("scalar");',
-      '    return Effect.succeed(artifactFor(input, input.target));',
-      '  },',
-      '  compileExecutableMatrix: (input) => {',
-      '    dispatches.push("matrix");',
-      '    return Effect.succeed(input.targets.map((target) => artifactFor(input, target)));',
-      '  },',
-      '};',
-      'const target = selected.Target.literals[0];',
-      'const scalar = await Effect.runPromise(selected.compileExecutable({ entrypoint: "src/main.ts", outfile: "dist/app", target }).pipe(Effect.provideService(selected.Compiler, fakeCompiler)));',
-      'assert.equal(scalar.target, target);',
-      'const matrix = await Effect.runPromise(selected.compileExecutableMatrix({ entrypoint: "src/main.ts", outdir: "dist", name: "app", targets: [target] }).pipe(Effect.provideService(selected.Compiler, fakeCompiler)));',
-      'assert.deepEqual(matrix.map((artifact) => artifact.target), [target]);',
-      'assert.deepEqual(dispatches, ["scalar", "matrix"]);',
-      `await import(${JSON.stringify(`${provider}/Adapter`)}).then(() => { throw new Error("provider private path resolved"); }, () => undefined);`,
-      ...providerNames.filter((name) => name !== provider).map((name) =>
-        `await import(${JSON.stringify(name)}).then(() => { throw new Error("unselected provider resolved: ${name}"); }, () => undefined);`
-      ),
+      `const selected = await import(${JSON.stringify(name)});`,
+      `assert.deepEqual(Object.keys(selected), ${JSON.stringify(runtimeKeys[name])});`,
+      `await import(${JSON.stringify(`${name}/internal`)}).then(() => { throw new Error("integration private path resolved"); }, () => undefined);`,
     );
   }
   return lines.join("\n");
 };
 
-const typeScriptBlocks = (markdown) =>
-  [...markdown.matchAll(/```(?:ts|typescript)\n([\s\S]*?)```/g)].map((match) => match[1]);
-
-const documentationSource = (source) => {
-  const imports = [];
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-  if (/\bEffect\./.test(code) && !/import\s+\{[^}]*\bEffect\b[^}]*\}\s+from\s+["']effect["']/.test(code)) {
-    imports.push('import { Effect } from "effect";');
+const writeExampleSources = async (fixture, name) => {
+  const exampleName = name === "effect-build-bun"
+    ? "bun"
+    : name === "effect-build-deno"
+    ? "deno"
+    : name === "effect-build-esbuild"
+    ? "esbuild"
+    : undefined;
+  if (exampleName === undefined) return;
+  const exampleDirectory = join(fixture, "examples");
+  await mkdir(exampleDirectory, { recursive: true });
+  const filenames = exampleName === "bun"
+    ? ["compile.ts", "matrix.ts"]
+    : exampleName === "esbuild"
+    ? ["bundle.ts"]
+    : ["compile.ts"];
+  for (const filename of filenames) {
+    await writeFile(
+      join(exampleDirectory, filename),
+      await readFile(join(repository, "examples", exampleName, "src", filename), "utf8"),
+    );
   }
-  if (/\bNodeServices\./.test(code) && !/\bNodeServices\b[^\n]*from\s+["']@effect\/platform-node["']/.test(code)) {
-    imports.push('import { NodeServices } from "@effect/platform-node";');
-  }
-  if (/\bBun\./.test(code) && !/import\s+\*\s+as\s+Bun\s+from/.test(code)) {
-    imports.push('import * as Bun from "effect-build-bun";');
-  }
-  if (/\bDeno\./.test(code) && !/import\s+\*\s+as\s+Deno\s+from/.test(code)) {
-    imports.push('import * as Deno from "effect-build-deno";');
-  }
-  if (/\bNodeSea\./.test(code) && !/import\s+\*\s+as\s+NodeSea\s+from/.test(code)) {
-    imports.push('import * as NodeSea from "effect-build-node-sea";');
-  }
-  if (/\bBuildError\./.test(code) && !/\bBuildError\b[^\n]*from\s+["']effect-build["']/.test(code)) {
-    imports.push('import { BuildError } from "effect-build";');
-  }
-  if (/\bTarget\./.test(code) && !/\bTarget\b[^\n]*from\s+["']effect-build["']/.test(code)) {
-    imports.push('import { Target } from "effect-build";');
-  }
-  const trimmed = source.trim();
-  const body = trimmed.startsWith("Effect.Effect<")
-    ? `export type DocumentedEffect = ${trimmed.replace(/;$/, "")};`
-    : trimmed;
-  return `${imports.join("\n")}${imports.length === 0 ? "" : "\n"}${body}\n`;
 };
 
-const writeDocumentationSources = async (fixture, provider) => {
-  const directory = join(fixture, "documentation");
-  await mkdir(directory, { recursive: true });
-  let written = 0;
-  for (const contract of documentationContracts) {
-    const blocks = typeScriptBlocks(await readFile(join(repository, contract.path), "utf8"));
-    if (blocks.length !== contract.owners.length) {
-      throw new Error(`${contract.path} TypeScript block count drifted: expected ${contract.owners.length}, received ${blocks.length}`);
-    }
-    for (const [index, owner] of contract.owners.entries()) {
-      if (owner !== provider) continue;
-      const filename = `${contract.path.replaceAll("/", "-").replaceAll(".", "-")}-${index}.ts`;
-      await writeFile(join(directory, filename), documentationSource(blocks[index]));
-      written += 1;
-    }
-  }
-  if (written === 0) throw new Error(`no documentation consumer blocks assigned to ${provider ?? "effect-build"}`);
-};
-
-const installFixture = async ({ installer, provider, tarballs, root, bun, versions }) => {
-  const label = `${installer}-${provider ?? "core"}`;
-  const fixture = join(root, "fixtures", label);
-  const cache = join(root, "caches", label);
-  await mkdir(fixture, { recursive: true });
-  const dependencies = {
-    "@types/node": versions["@types/node"],
-    effect: versions.effect,
-    "effect-build": `file:${tarballs.get("effect-build")}`,
-    typescript: versions.typescript,
-    ...(provider === undefined
-      ? {}
-      : {
-        "@effect/platform-node": versions["@effect/platform-node"],
-        [provider]: `file:${tarballs.get(provider)}`,
-      }),
-  };
-  const manifest = {
-    name: `fixture-${label}`,
-    private: true,
-    type: "module",
-    dependencies,
-    ...(provider === undefined
-      ? {}
-      : {
-        overrides: {
-          "@effect/platform-node-shared": versions["@effect/platform-node-shared"],
-          ...(installer === "bun" ? { "effect-build": `file:${tarballs.get("effect-build")}` } : {}),
-        },
-      }),
-  };
+const install = async ({ installer, fixture, cache, manifest, bun }) => {
   await writeFile(join(fixture, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(join(fixture, ".npmrc"), "@jsr:registry=https://npm.jsr.io\n");
   if (installer === "npm") {
@@ -393,51 +331,40 @@ const installFixture = async ({ installer, provider, tarballs, root, bun, versio
       maxBuffer: 16 * 1024 * 1024,
     });
   }
-  for (const [name, version] of Object.entries(versions)) {
-    if (name === "@effect/platform-node" && provider === undefined) continue;
-    if (name === "typescript" || name === "@types/node" || name === "effect" || provider !== undefined) {
-      const installedVersion = name === "@effect/platform-node-shared"
-        ? await readResolvedDependencyVersion(fixture, "@effect/platform-node", name)
-        : await readInstalledVersion(fixture, name);
-      if (installedVersion !== version) throw new Error(`${label} resolved an unexpected ${name}`);
+};
+
+const commonDependencies = (versions, tarballs) => ({
+  "@types/node": versions["@types/node"],
+  effect: versions.effect,
+  "effect-build": `file:${tarballs.get("effect-build")}`,
+  typescript: versions.typescript,
+});
+
+const commonOverrides = (versions, installer, tarballs) => ({
+  "@effect/platform-node-shared": versions["@effect/platform-node-shared"],
+  ...(installer === "bun" ? { "effect-build": `file:${tarballs.get("effect-build")}` } : {}),
+});
+
+const verifyDevelopmentDependencies = async (fixture, versions, withPlatform) => {
+  for (const name of ["effect", "typescript", "@types/node"]) {
+    if (await readInstalledVersion(fixture, name) !== versions[name]) {
+      throw new Error(`consumer resolved an unexpected ${name}`);
     }
   }
-  if (await readInstalledVersion(fixture, "effect-build") !== packageVersion) throw new Error(`${label} did not resolve core 0.3.0`);
-  if (provider !== undefined && await readInstalledVersion(fixture, provider) !== packageVersion) {
-    throw new Error(`${label} did not resolve ${provider}@0.3.0`);
-  }
-  if (provider === undefined) {
-    for (const name of providerNames) await access(join(fixture, "node_modules", name)).then(
-      () => { throw new Error(`${label} unexpectedly installed ${name}`); },
-      () => undefined,
-    );
-  } else {
-    for (const absent of providerNames.filter((name) => name !== provider)) {
-      await access(join(fixture, "node_modules", absent)).then(
-        () => { throw new Error(`${label} unexpectedly installed ${absent}`); },
-        () => undefined,
-      );
+  if (withPlatform) {
+    if (await readInstalledVersion(fixture, "@effect/platform-node") !== versions["@effect/platform-node"]) {
+      throw new Error("consumer resolved an unexpected @effect/platform-node");
+    }
+    if (
+      await readResolvedDependencyVersion(fixture, "@effect/platform-node", "@effect/platform-node-shared")
+      !== versions["@effect/platform-node-shared"]
+    ) {
+      throw new Error("consumer resolved an unexpected @effect/platform-node-shared");
     }
   }
-  await writeFile(join(fixture, "main.ts"), typeScriptSource(provider));
-  await writeDocumentationSources(fixture, provider);
-  if (provider !== undefined) {
-    const exampleProvider = provider === "effect-build-bun"
-      ? "bun"
-      : provider === "effect-build-deno"
-      ? "deno"
-      : "node-sea";
-    const examples = exampleProvider === "bun" ? ["compile.ts", "matrix.ts"] : ["compile.ts"];
-    const exampleDirectory = join(fixture, "examples");
-    await mkdir(exampleDirectory, { recursive: true });
-    for (const example of examples) {
-      await writeFile(
-        join(exampleDirectory, example),
-        await readFile(join(repository, "examples", exampleProvider, "src", example), "utf8"),
-      );
-    }
-  }
-  await writeFile(join(fixture, "runtime.mjs"), runtimeSource(provider));
+};
+
+const runTypeAndRuntimeChecks = async (fixture) => {
   await writeFile(join(fixture, "tsconfig.json"), `${JSON.stringify({
     compilerOptions: {
       target: "ES2022",
@@ -448,29 +375,147 @@ const installFixture = async ({ installer, provider, tarballs, root, bun, versio
       skipLibCheck: true,
       types: ["node"],
     },
-    include: ["*.ts", "documentation/**/*.ts", "examples/**/*.ts"],
+    include: ["*.ts", "examples/**/*.ts"],
   }, null, 2)}\n`);
-  await execute(process.execPath, [join(fixture, "node_modules", "typescript", "bin", "tsc"), "-p", "."], { cwd: fixture });
+  await execute(process.execPath, [join(fixture, "node_modules", "typescript", "bin", "tsc"), "-p", "."], {
+    cwd: fixture,
+  });
   await execute(process.execPath, [join(fixture, "runtime.mjs")], { cwd: fixture });
+};
+
+const installIsolatedFixture = async ({ installer, name, tarballs, root, bun, versions }) => {
+  const label = `${installer}-${name}`;
+  const fixture = join(root, "fixtures", label);
+  const cache = join(root, "caches", label);
+  await mkdir(fixture, { recursive: true });
+  const withPlatform = name !== "effect-build";
+  const dependencies = {
+    ...commonDependencies(versions, tarballs),
+    ...(withPlatform ? { "@effect/platform-node": versions["@effect/platform-node"] } : {}),
+    ...(name === "effect-build" ? {} : { [name]: `file:${tarballs.get(name)}` }),
+  };
+  await install({
+    installer,
+    fixture,
+    cache,
+    bun,
+    manifest: {
+      name: `fixture-${label}`,
+      private: true,
+      type: "module",
+      dependencies,
+      ...(withPlatform ? { overrides: commonOverrides(versions, installer, tarballs) } : {}),
+    },
+  });
+  await verifyDevelopmentDependencies(fixture, versions, withPlatform);
+  if (await readInstalledVersion(fixture, "effect-build") !== packageVersion) {
+    throw new Error(`${label} did not resolve core ${packageVersion}`);
+  }
+  if (name !== "effect-build" && await readInstalledVersion(fixture, name) !== packageVersion) {
+    throw new Error(`${label} did not resolve ${name}@${packageVersion}`);
+  }
+  for (const absent of integrationNames.filter((candidate) => candidate !== name)) {
+    await assertCannotResolve(fixture, absent, label);
+  }
+  if (name !== "effect-build-esbuild") await assertCannotResolve(fixture, "esbuild", label);
+  if (name === "effect-build-esbuild") {
+    if (await readResolvedDependencyVersion(fixture, name, "esbuild") !== "0.28.2") {
+      throw new Error(`${label} did not resolve exact esbuild 0.28.2`);
+    }
+  }
+  await writeFile(join(fixture, "main.ts"), typeScriptSource(name));
+  await writeExampleSources(fixture, name);
+  await writeFile(join(fixture, "runtime.mjs"), runtimeSource(name));
+  await runTypeAndRuntimeChecks(fixture);
   console.log(`PASS packed consumer ${label}`);
+};
+
+const compositionTypeScriptSource = [
+  'import { NodeServices } from "@effect/platform-node";',
+  'import { Effect } from "effect";',
+  'import * as Esbuild from "effect-build-esbuild";',
+  'import * as NodeSea from "effect-build-node-sea";',
+  "export const program = Esbuild.withJavaScriptBundle(",
+  '  { entrypoint: "src/main.ts", format: "esm" },',
+  '  (main) => NodeSea.createExecutable({ main, outfile: "dist/app", digest: true }),',
+  ").pipe(",
+  "  Effect.provide(Esbuild.layer),",
+  "  Effect.provide(NodeSea.layer()),",
+  "  Effect.provide(NodeServices.layer),",
+  ");",
+].join("\n");
+
+const installComposedFixture = async ({ installer, tarballs, root, bun, versions }) => {
+  const label = `${installer}-esbuild-node-sea`;
+  const fixture = join(root, "fixtures", label);
+  const cache = join(root, "caches", label);
+  await mkdir(fixture, { recursive: true });
+  await install({
+    installer,
+    fixture,
+    cache,
+    bun,
+    manifest: {
+      name: `fixture-${label}`,
+      private: true,
+      type: "module",
+      dependencies: {
+        ...commonDependencies(versions, tarballs),
+        "@effect/platform-node": versions["@effect/platform-node"],
+        "effect-build-esbuild": `file:${tarballs.get("effect-build-esbuild")}`,
+        "effect-build-node-sea": `file:${tarballs.get("effect-build-node-sea")}`,
+      },
+      overrides: commonOverrides(versions, installer, tarballs),
+    },
+  });
+  await verifyDevelopmentDependencies(fixture, versions, true);
+  for (const name of ["effect-build", "effect-build-esbuild", "effect-build-node-sea"]) {
+    if (await readInstalledVersion(fixture, name) !== packageVersion) {
+      throw new Error(`${label} did not resolve ${name}@${packageVersion}`);
+    }
+  }
+  await assertCannotResolve(fixture, "effect-build-bun", label);
+  await assertCannotResolve(fixture, "effect-build-deno", label);
+  await writeFile(join(fixture, "main.ts"), compositionTypeScriptSource);
+  await writeFile(join(fixture, "runtime.mjs"), [
+    'import assert from "node:assert/strict";',
+    'const Esbuild = await import("effect-build-esbuild");',
+    'const NodeSea = await import("effect-build-node-sea");',
+    'assert.equal(typeof Esbuild.withJavaScriptBundle, "function");',
+    'assert.equal(typeof NodeSea.createExecutable, "function");',
+  ].join("\n"));
+  await runTypeAndRuntimeChecks(fixture);
+  console.log(`PASS packed consumer ${label}`);
+};
+
+const sourceCommit = async () => {
+  const { stdout } = await execute("git", ["rev-parse", "HEAD"], { cwd: repository });
+  const source = stdout.trim();
+  if (!/^[0-9a-f]{40}$/.test(source)) throw new Error("HEAD is not an exact 40-character lowercase commit SHA");
+  return source;
 };
 
 const writeCandidateManifest = async (directory, tarballs) => {
   const packages = [];
   for (const name of packageNames) {
     const tarball = tarballs.get(name);
-    const bytes = await readFile(tarball);
+    const contents = await readFile(tarball);
     const manifest = await packedManifest(tarball);
     packages.push({
+      filename: basename(tarball),
       name,
       version: manifest.version,
-      filename: basename(tarball),
-      sha256: createHash("sha256").update(bytes).digest("hex"),
+      bytes: contents.byteLength,
+      sha256: createHash("sha256").update(contents).digest("hex"),
       dependencies: manifest.dependencies ?? {},
       peerDependencies: manifest.peerDependencies ?? {},
+      optionalDependencies: manifest.optionalDependencies ?? {},
     });
   }
-  await writeFile(join(directory, "manifest.json"), `${JSON.stringify({ version: 1, packages }, null, 2)}\n`);
+  await writeFile(
+    join(directory, "manifest.json"),
+    `${JSON.stringify({ version: 1, source: await sourceCommit(), packages }, null, 2)}\n`,
+  );
 };
 
 export const verifyPackedConsumers = async ({ candidateDirectory, build = true } = {}) => {
@@ -492,19 +537,20 @@ export const verifyPackedConsumers = async ({ candidateDirectory, build = true }
       "@effect/platform-node",
       "@effect/platform-node-shared",
     );
-    if (versions.effect !== versions["@effect/platform-node"]) {
-      throw new Error("workspace Effect and platform-node development versions differ");
-    }
-    if (versions.effect !== versions["@effect/platform-node-shared"]) {
-      throw new Error("workspace Effect and platform-node-shared development versions differ");
+    if (
+      versions.effect !== versions["@effect/platform-node"]
+      || versions.effect !== versions["@effect/platform-node-shared"]
+    ) {
+      throw new Error("workspace Effect and platform development versions differ");
     }
     for (const installer of ["npm", "bun"]) {
-      for (const provider of [undefined, ...providerNames]) {
-        await installFixture({ installer, provider, tarballs, root: temporaryRoot, bun, versions });
+      for (const name of packageNames) {
+        await installIsolatedFixture({ installer, name, tarballs, root: temporaryRoot, bun, versions });
       }
+      await installComposedFixture({ installer, tarballs, root: temporaryRoot, bun, versions });
     }
     if (candidateDirectory !== undefined) await writeCandidateManifest(candidateDirectory, tarballs);
-    console.log("packed consumers verified: 8/8");
+    console.log("packed consumers verified: 12/12");
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }

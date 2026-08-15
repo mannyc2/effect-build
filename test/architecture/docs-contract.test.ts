@@ -13,6 +13,9 @@ const examples = [
   "deno/package.json",
   "deno/src/compile.ts",
   "deno/tsconfig.json",
+  "esbuild/package.json",
+  "esbuild/src/bundle.ts",
+  "esbuild/tsconfig.json",
   "node-sea/package.json",
   "node-sea/src/compile.ts",
   "node-sea/tsconfig.json",
@@ -35,48 +38,59 @@ describe("documentation contract", () => {
     expect(actualExamples).toEqual([...examples].sort());
   });
 
-  it("documents Bun installation, the exact Effect interval, and four packages", async () => {
+  it("documents direct installs, the exact Effect interval, and five packages", async () => {
     const readme = await readFile(resolve(root, "README.md"), "utf8");
     expect(readme).toContain(
       "bun add effect-build effect-build-bun effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108",
     );
+    expect(readme).toContain(
+      "bun add effect-build effect-build-esbuild effect-build-node-sea effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108",
+    );
     expect(readme).toContain("`>=4.0.0-beta.104 <4.1.0-0`");
     expect(readme).not.toContain("4.0.0-beta.107");
-    for (const name of ["effect-build", "effect-build-bun", "effect-build-deno", "effect-build-node-sea"]) {
+    for (
+      const name of [
+        "effect-build",
+        "effect-build-bun",
+        "effect-build-deno",
+        "effect-build-esbuild",
+        "effect-build-node-sea",
+      ]
+    ) {
       expect(`${readme}\n${await readFile(resolve(root, `packages/${name}/README.md`), "utf8")}`).toContain(name);
     }
   });
 
-  it("documents exactly two operation names on all three providers", async () => {
+  it("documents command compilers separately from granular integrations", async () => {
     const agents = await readFile(resolve(root, "AGENTS.md"), "utf8");
     const api = await readFile(resolve(root, "docs/api.md"), "utf8");
     const index = await readFile(resolve(root, "docs/README.md"), "utf8");
     for (const text of [agents, api, index]) {
       expect(text).toContain("compileExecutable");
       expect(text).toContain("compileExecutableMatrix");
+      expect(text).toContain("withJavaScriptBundle");
+      expect(text).toContain("createExecutable");
     }
     expect(agents).toContain("Architecture generation: `granular-integration-migration-v2`");
-    expect(agents).toContain("During Plan 023 only");
-    expect(api).toContain("four packages with six public entry points");
-    expect(api).toContain("exactly five runtime keys");
+    expect(agents).toContain("Plans 023 and 024 are completed, unpublished migration steps");
+    expect(agents).toContain("Plan 025 may add only `Bun.withJavaScriptBundle(input, use)`");
+    expect(agents).not.toContain("During Plan 023 only");
+    expect(api).toContain("five packages with seven public entry points");
     expect(api).toContain("There is no root compile");
     expect(api).toContain("effect-build/Integration");
     expect(api).toContain("continuation-scoped capability");
-    expect(api).toContain("Plan 024 owns the atomic five-package cut");
+    expect(api).toContain('import * as Esbuild from "effect-build-esbuild"');
     expect(api).toContain('import * as NodeSea from "effect-build-node-sea"');
   });
 
-  it("documents the provider-correlated stage hard cut", async () => {
+  it("documents the neutral Artifact and exact granular stage behavior", async () => {
     const api = await readFile(resolve(root, "docs/api.md"), "utf8");
-    expect(api).toContain('readonly provider: "bun" | "deno" | "node-sea"');
-    expect(api).toContain("readonly stages: readonly [ObservedStage, ...ObservedStage[]]");
-    expect(api).toContain("`compile-executable` stage");
-    expect(api).toContain("esbuild 0.28.2");
+    expect(api).toContain("provider-neutral");
+    expect(api).toContain("the main's exact stage prefix");
+    expect(api).toContain("Esbuild 0.28.2");
     expect(api).toContain("Node 26.7.0");
-    const artifact = api.match(/interface Artifact \{([\s\S]*?)\n\}/)?.[1] ?? "";
-    expect(artifact).not.toMatch(/readonly tools?:/);
-    expect(api).not.toContain("tool pairs present");
-    expect(api).toMatch(/not provenance, receipts, or reproducibility claims/);
+    expect(api).toMatch(/not provenance, receipts, or\s+reproducibility claims/);
+    expect(api).not.toMatch(/Artifact\.Artifact|Target\.Target/);
   });
 
   it("documents homogeneous matrix invariants and one composition boundary", async () => {
@@ -112,12 +126,13 @@ describe("documentation contract", () => {
     const text = `${architecture}\n${drivers}\n${nodeReadme}`;
     expect(text).toContain("effect-build-node-sea");
     expect(text).toContain("linux-x64-gnu");
-    expect(text).toContain("esbuild 0.28.2");
+    expect(text).toContain("Esbuild 0.28.2");
     expect(text).toContain("Node 26.7.0");
     expect(text).toMatch(/never\s+uses\s+postject/i);
     expect(text).toMatch(/never downloads|never downloads or installs/i);
     expect(architecture).toMatch(/four separate choices/i);
-    expect(architecture).toMatch(/rejected inspection, receipt, semantic-plan/);
+    expect(architecture).toMatch(/rejects inspection products, public receipts, semantic plans/);
+    expect(text).toMatch(/private (?:operation directory|copy)/i);
   });
 
   it("rejects legacy package and release language in user-facing material", async () => {
@@ -128,9 +143,11 @@ describe("documentation contract", () => {
       await readAll(examples, "examples"),
     ].join("\n");
     expect(text).not.toMatch(
-      /exactly three lockstep public packages|publishes three packages|pnpm add|pnpm run|pnpm verify/i,
+      /exactly three lockstep public packages|four public packages|publishes three packages|pnpm add|pnpm run|pnpm verify/i,
     );
-    expect(text).not.toMatch(/one public operation|Effect\.all\(\[mac, linux\]/i);
+    expect(text).not.toMatch(/one public operation|combined Node SEA provider|Effect\.all\(\[mac, linux\]/i);
     expect(text).not.toMatch(/(?:guarantees|provides) (?:hermeticity|reproducibility|provenance)/i);
+    expect(text).toContain("effect-build/bun  -> effect-build-bun");
+    expect(text).toContain("effect-build/deno -> effect-build-deno");
   });
 });

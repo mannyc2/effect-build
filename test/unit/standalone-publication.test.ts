@@ -2,7 +2,6 @@ import { NodeServices } from "@effect/platform-node";
 import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, Latch, Path, PlatformError, Result } from "effect";
 import { createHash } from "node:crypto";
 import {
-  chmodSync,
   closeSync,
   existsSync,
   mkdirSync,
@@ -18,11 +17,7 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { ToolFailed } from "../../packages/effect-build/src/standalone/BuildError.js";
-import type {
-  CandidateProducer,
-  CommandCompilerAdapter,
-  CompilerAdapter,
-} from "../../packages/effect-build/src/standalone/internal/CompilerAdapter.js";
+import type { CommandCompilerAdapter } from "../../packages/effect-build/src/standalone/internal/CompilerAdapter.js";
 import { makeCompilerService } from "../../packages/effect-build/src/standalone/internal/CompilerEngine.js";
 import {
   acquireExecutableCandidate,
@@ -43,35 +38,16 @@ const hostTarget = windowsHost ? "windows-x64" as const : "macos-aarch64" as con
 const successMode = windowsHost ? "pe" : "success";
 
 const targetTable = makeTargetTable(
-  {
-    "macos-aarch64": "test-macos-aarch64",
-    "windows-x64": "test-windows-x64",
-  } as const,
-);
-type TestTarget = typeof targetTable.Target.Type;
-
-const nodeSeaTargetTable = makeTargetTable({ "linux-x64-gnu": "linux-x64-gnu" } as const);
-type NodeSeaTarget = typeof nodeSeaTargetTable.Target.Type;
-
-const nodeSeaAdapter: CompilerAdapter<Record<string, never>, "node-sea", NodeSeaTarget> = {
-  toolName: "node-sea",
-  targetTable: nodeSeaTargetTable,
-  defaultTarget: "linux-x64-gnu",
-  validateOptions: () => ({ _tag: "Valid", value: {} }),
-};
-
-const nodeSeaStages = Object.freeze(
   [
-    Object.freeze({
-      operation: "bundle" as const,
-      tool: Object.freeze({ name: "esbuild" as const, version: "0.28.2" as const }),
-    }),
-    Object.freeze({
-      operation: "assemble-node-sea" as const,
-      tool: Object.freeze({ name: "node" as const, version: "26.7.0" as const, path: process.execPath }),
-    }),
+    ["macos-aarch64", "test-macos-aarch64"],
+    ["windows-x64", "test-windows-x64"],
   ] as const,
 );
+type TestTarget = typeof targetTable.Target.Type;
+type BunStages = readonly [{
+  readonly operation: "compile-executable";
+  readonly tool: { readonly name: "bun"; readonly version: string; readonly path: string };
+}];
 
 const discoveredCompiler = (hostOs: OperatingSystem = windowsHost ? "windows" : "macos") => ({
   artifactTool: { name: "bun" as const, version: "test", path: process.execPath },
@@ -88,7 +64,12 @@ const makeRoot = () => {
   return root;
 };
 
-const adapter = (mode = successMode): CommandCompilerAdapter<Record<string, never>, "bun", TestTarget> => ({
+const adapter = (mode = successMode): CommandCompilerAdapter<
+  "bun",
+  TestTarget,
+  BunStages,
+  Record<string, never>
+> => ({
   toolName: "bun",
   targetTable,
   validateOptions: () => ({ _tag: "Valid", value: {} }),
@@ -102,6 +83,18 @@ const adapter = (mode = successMode): CommandCompilerAdapter<Record<string, neve
         { channel: "stderr", ...completion.stderr },
       ],
     }),
+  decodeStages: (input) =>
+    Array.isArray(input)
+      && input.length === 1
+      && typeof input[0] === "object"
+      && input[0] !== null
+      && "tool" in input[0]
+      && typeof input[0].tool === "object"
+      && input[0].tool !== null
+      && "name" in input[0].tool
+      && input[0].tool.name === "bun"
+      ? Result.succeed(input as unknown as BunStages)
+      : Result.fail(new ToolFailed({ tool: "bun", exitCode: 1, diagnostics: [] })),
 });
 
 const compile = (root: string, mode = successMode, digest = true) =>
@@ -293,71 +286,10 @@ describe("standalone atomic publication", () => {
     expect(readdirSync(join(root, "nested")).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
   });
 
-  it.each(["invalid", "wrong-target"] as const)(
-    "rejects a composed Node SEA %s candidate through core publication",
-    async (behavior) => {
-      const root = makeRoot();
-      const outfile = join(root, "nested", "app");
-      mkdirSync(join(root, "nested"));
-      writeFileSync(outfile, "old", { flush: true });
-      let staged = "";
-      const producer: CandidateProducer<"node-sea", NodeSeaTarget, Record<string, never>> = {
-        hostOs: "linux",
-        produceCandidate: (request) =>
-          Effect.sync(() => {
-            staged = request.stagedOutfile;
-            writeFileSync(
-              staged,
-              behavior === "invalid"
-                ? "not-native"
-                : new Uint8Array([0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0x00, 0x00, 0x01]),
-            );
-            chmodSync(staged, 0o755);
-            return nodeSeaStages;
-          }),
-      };
-
-      await expect(
-        Effect.runPromise(
-          Effect.gen(function*() {
-            const platformFileSystem = yield* FileSystem.FileSystem;
-            const executableCandidateFileSystem: FileSystem.FileSystem = {
-              ...platformFileSystem,
-              stat: (path) =>
-                platformFileSystem.stat(path).pipe(
-                  Effect.map((information) =>
-                    path === staged ? { ...information, mode: information.mode | 0o111 } : information
-                  ),
-                ),
-            };
-            return yield* Effect.gen(function*() {
-              const service = yield* makeCompilerService(nodeSeaAdapter, producer);
-              return yield* service.compileExecutable({
-                entrypoint: "unused.ts",
-                outfile,
-                target: "linux-x64-gnu",
-              });
-            }).pipe(Effect.provideService(FileSystem.FileSystem, executableCandidateFileSystem));
-          }).pipe(Effect.provide(NodeServices.layer)),
-        ),
-      ).rejects.toMatchObject({
-        _tag: "OutputInvalid",
-        reason: expect.stringContaining(
-          behavior === "invalid" ? "invalid-native-magic" : "native target does not match requested target",
-        ),
-      });
-
-      expect(staged).not.toBe("");
-      expect(existsSync(staged)).toBe(false);
-      expect(readFileSync(outfile, "utf8")).toBe("old");
-      expect(readdirSync(join(root, "nested")).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
-    },
-  );
-
   it("uses the destination basename for the staged compiler path", async () => {
     const root = makeRoot();
     let staged = "";
-    const capturing: CommandCompilerAdapter<Record<string, never>, "bun", TestTarget> = {
+    const capturing: CommandCompilerAdapter<"bun", TestTarget, BunStages, Record<string, never>> = {
       ...adapter(),
       renderArgv: ({ stagedOutfile }) => {
         staged = stagedOutfile;
@@ -385,7 +317,7 @@ describe("standalone atomic publication", () => {
     mkdirSync(join(root, "nested"));
     writeFileSync(outfile, "old", { flush: true });
     const sentinel = join(root, "started");
-    const hanging: CommandCompilerAdapter<Record<string, never>, "bun", TestTarget> = {
+    const hanging: CommandCompilerAdapter<"bun", TestTarget, BunStages, Record<string, never>> = {
       ...adapter(),
       renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, "hang", sentinel],
     };
@@ -472,11 +404,12 @@ describe("standalone atomic publication", () => {
     const root = makeRoot();
     const outfile = join(root, "win-app");
     let staged = "";
-    const windowsTargetTable = makeTargetTable({ "windows-x64": "test-windows-x64" } as const);
+    const windowsTargetTable = makeTargetTable([["windows-x64", "test-windows-x64"]] as const);
     const windows: CommandCompilerAdapter<
-      Record<string, never>,
       "bun",
-      typeof windowsTargetTable.Target.Type
+      typeof windowsTargetTable.Target.Type,
+      BunStages,
+      Record<string, never>
     > = {
       toolName: "bun",
       targetTable: windowsTargetTable,
@@ -486,6 +419,7 @@ describe("standalone atomic publication", () => {
         return [fixture, stagedOutfile, "pe"];
       },
       interpretFailure: adapter().interpretFailure,
+      decodeStages: adapter().decodeStages,
     };
     const artifact = await Effect.runPromise(
       Effect.gen(function*() {
@@ -508,11 +442,12 @@ describe("standalone atomic publication", () => {
     const root = makeRoot();
     const outfile = join(root, "host-win-app");
     let staged = "";
-    const windowsTargetTable = makeTargetTable({ "windows-x64": "test-windows-x64" } as const);
+    const windowsTargetTable = makeTargetTable([["windows-x64", "test-windows-x64"]] as const);
     const windows: CommandCompilerAdapter<
-      Record<string, never>,
       "bun",
-      typeof windowsTargetTable.Target.Type
+      typeof windowsTargetTable.Target.Type,
+      BunStages,
+      Record<string, never>
     > = {
       toolName: "bun",
       targetTable: windowsTargetTable,
@@ -522,6 +457,7 @@ describe("standalone atomic publication", () => {
         return [fixture, stagedOutfile, "pe"];
       },
       interpretFailure: adapter().interpretFailure,
+      decodeStages: adapter().decodeStages,
     };
     const artifact = await Effect.runPromise(
       Effect.gen(function*() {
@@ -543,17 +479,19 @@ describe("standalone atomic publication", () => {
   it("rejects an observed canonical target outside the selected provider table", async () => {
     const root = makeRoot();
     const outfile = join(root, "outside-provider");
-    const windowsTargetTable = makeTargetTable({ "windows-x64": "test-windows-x64" } as const);
+    const windowsTargetTable = makeTargetTable([["windows-x64", "test-windows-x64"]] as const);
     const windowsOnly: CommandCompilerAdapter<
-      Record<string, never>,
       "bun",
-      typeof windowsTargetTable.Target.Type
+      typeof windowsTargetTable.Target.Type,
+      BunStages,
+      Record<string, never>
     > = {
       toolName: "bun",
       targetTable: windowsTargetTable,
       validateOptions: () => ({ _tag: "Valid", value: {} }),
       renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, "success"],
       interpretFailure: adapter().interpretFailure,
+      decodeStages: adapter().decodeStages,
     };
 
     await expect(
@@ -577,17 +515,23 @@ describe("standalone atomic publication", () => {
     mkdirSync(join(root, "nested"));
     writeFileSync(outfile, "old", { flush: true });
     const wideTargetTable = makeTargetTable(
-      {
-        "macos-x64": "test-macos-x64",
-        "macos-aarch64": "test-macos-aarch64",
-      } as const,
+      [
+        ["macos-x64", "test-macos-x64"],
+        ["macos-aarch64", "test-macos-aarch64"],
+      ] as const,
     );
-    const wide: CommandCompilerAdapter<Record<string, never>, "bun", typeof wideTargetTable.Target.Type> = {
+    const wide: CommandCompilerAdapter<
+      "bun",
+      typeof wideTargetTable.Target.Type,
+      BunStages,
+      Record<string, never>
+    > = {
       toolName: "bun",
       targetTable: wideTargetTable,
       validateOptions: () => ({ _tag: "Valid", value: {} }),
       renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, successMode],
       interpretFailure: adapter().interpretFailure,
+      decodeStages: adapter().decodeStages,
     };
     await expect(
       Effect.runPromise(
@@ -608,7 +552,7 @@ describe("standalone atomic publication", () => {
   it("rejects an unsupported target before rendering or spawning", async () => {
     const root = makeRoot();
     let rendered = 0;
-    const counting: CommandCompilerAdapter<Record<string, never>, "bun", TestTarget> = {
+    const counting: CommandCompilerAdapter<"bun", TestTarget, BunStages, Record<string, never>> = {
       ...adapter(),
       renderArgv: ({ stagedOutfile }) => {
         rendered += 1;

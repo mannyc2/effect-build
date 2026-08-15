@@ -1,3 +1,6 @@
+import { Result, Schema } from "effect";
+import * as Core from "effect-build";
+import type * as Integration from "effect-build/Integration";
 import type * as Provider from "effect-build/Provider";
 
 export interface Options {
@@ -12,14 +15,11 @@ export interface ValidatedOptions {
   readonly bytecode?: boolean;
 }
 
-const invalid = (reason: string): Provider.Validation<ValidatedOptions> => ({
-  _tag: "Invalid",
-  reason,
-});
+const invalid = (reason: string): Result.Result<never, string> => Result.fail(reason);
 
 const validateOptions = (
   input: unknown,
-): Provider.Validation<ValidatedOptions> => {
+): Result.Result<ValidatedOptions, string> => {
   const value: unknown = input ?? {};
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return invalid("options must be an object");
@@ -44,34 +44,40 @@ const validateOptions = (
   ) {
     return invalid("sourcemap must be linked or inline");
   }
-  return {
-    _tag: "Valid",
-    value: {
-      ...(minify === undefined ? {} : { minify }),
-      ...(sourcemap === undefined ? {} : { sourcemap }),
-      ...(bytecode === undefined ? {} : { bytecode }),
-    },
-  };
+  return Result.succeed({
+    ...(minify === undefined ? {} : { minify }),
+    ...(sourcemap === undefined ? {} : { sourcemap }),
+    ...(bytecode === undefined ? {} : { bytecode }),
+  });
 };
 
-export const targetTokens = {
-  "macos-x64": "bun-darwin-x64",
-  "macos-aarch64": "bun-darwin-arm64",
-  "linux-x64-gnu": "bun-linux-x64",
-  "linux-x64-musl": "bun-linux-x64-musl",
-  "linux-aarch64-gnu": "bun-linux-arm64",
-  "windows-x64": "bun-windows-x64",
-} as const satisfies Readonly<
-  Record<Provider.TargetFor<"bun">, string>
->;
+export const targetEntries = [
+  ["macos-x64", "bun-darwin-x64"],
+  ["macos-aarch64", "bun-darwin-arm64"],
+  ["linux-x64-gnu", "bun-linux-x64"],
+  ["linux-x64-musl", "bun-linux-x64-musl"],
+  ["linux-aarch64-gnu", "bun-linux-arm64"],
+  ["windows-x64", "bun-windows-x64"],
+] as const;
+
+export const Stages = Schema.Tuple([
+  Schema.Struct({
+    operation: Schema.Literal("compile-executable"),
+    tool: Schema.Struct({
+      name: Schema.Literal("bun"),
+      version: Schema.NonEmptyString,
+      path: Core.Artifact.AbsolutePath,
+    }),
+  }),
+]);
 
 export const definition = {
-  kind: "command",
   probeArgv: [
     "-e",
     'process.stdout.write(JSON.stringify({path:process.execPath,version:Bun.version,hostOs:process.platform==="darwin"?"macos":process.platform==="win32"?"windows":process.platform==="linux"?"linux":process.platform}))',
   ],
-  targetTokens,
+  targetEntries,
+  Stages,
   validateOptions,
   renderArgv: ({
     input,
@@ -80,7 +86,7 @@ export const definition = {
   }: {
     readonly input: Provider.PreparedCommandInput<
       ValidatedOptions,
-      Provider.TargetFor<"bun">
+      (typeof targetEntries)[number][0]
     >;
     readonly nativeTarget?: string;
     readonly stagedOutfile: string;
@@ -100,8 +106,8 @@ export const definition = {
     ];
   },
   interpretFailure: (
-    completion: Provider.CommandCompletion,
-  ): readonly Provider.Diagnostic[] => [
+    completion: Integration.CommandCompletion,
+  ): readonly Core.BuildError.Diagnostic[] => [
     { channel: "stdout", ...completion.stdout },
     { channel: "stderr", ...completion.stderr },
   ],

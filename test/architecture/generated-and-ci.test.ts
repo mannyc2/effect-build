@@ -7,7 +7,13 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
-const publicPackages = ["effect-build", "effect-build-bun", "effect-build-deno", "effect-build-node-sea"] as const;
+const publicPackages = [
+  "effect-build",
+  "effect-build-bun",
+  "effect-build-deno",
+  "effect-build-esbuild",
+  "effect-build-node-sea",
+] as const;
 const effectEndpoints = ["4.0.0-beta.104", "4.0.0-rc.108"];
 
 interface WorkflowStep {
@@ -76,7 +82,7 @@ const expectPinnedActionsWithoutEscapes = (workflow: Workflow): void => {
 };
 
 describe("tooling pins and workflow contracts", () => {
-  it("validates the authored 12-cell Bun/Deno support matrix against core authority", async () => {
+  it("validates the authored 12-cell Bun/Deno support matrix against integration-local authority", async () => {
     const support = await readJson("tooling/support-matrix.json") as unknown as SupportMatrix;
     const { validateSupportMatrix } = await loadScript<{ validateSupportMatrix: (value: unknown) => unknown }>(
       "read-tooling.mjs",
@@ -84,15 +90,19 @@ describe("tooling pins and workflow contracts", () => {
     expect(() => validateSupportMatrix(support)).not.toThrow();
     expect(support.supportedCells).toHaveLength(12);
 
-    const { ProviderContracts } = await import(
-      pathToFileURL(resolve(root, "packages/effect-build/dist/internal/ProviderContracts.js")).href
-    ) as { ProviderContracts: Record<string, readonly string[]> };
+    const targets = Object.fromEntries(
+      await Promise.all(["bun", "deno"].map(async (compiler) => {
+        const provider = await import(
+          pathToFileURL(resolve(root, `packages/effect-build-${compiler}/dist/index.js`)).href
+        ) as { Target: { literals: readonly string[] } };
+        return [compiler, provider.Target.literals] as const;
+      })),
+    ) as Record<string, readonly string[]>;
     for (const compiler of ["bun", "deno"]) {
       expect(support.supportedCells.filter((cell) => cell.compiler === compiler).map((cell) => cell.target)).toEqual(
-        ProviderContracts[compiler],
+        targets[compiler],
       );
     }
-    expect(ProviderContracts["node-sea"]).toEqual(["linux-x64-gnu"]);
 
     const malformed = structuredClone(support);
     malformed.supportedCells[0]!.compiler = "other";
@@ -224,23 +234,32 @@ describe("tooling pins and workflow contracts", () => {
       expect(manifest.peerDependencies).toEqual({ effect: ">=4.0.0-beta.104 <4.1.0-0" });
       expect(manifest.devDependencies.effect).toBe("4.0.0-rc.108");
     }
+    const esbuild = await readJson("packages/effect-build-esbuild/package.json") as {
+      dependencies: Record<string, string>;
+    };
+    expect(esbuild.dependencies).toEqual({ "effect-build": "workspace:^", esbuild: "0.28.2" });
     const nodeSea = await readJson("packages/effect-build-node-sea/package.json") as {
       dependencies: Record<string, string>;
     };
-    expect(nodeSea.dependencies).toEqual({ "effect-build": "workspace:^", esbuild: "0.28.2" });
+    expect(nodeSea.dependencies).toEqual({ "effect-build": "workspace:^" });
   });
 
-  it("keeps Node SEA a public provider with exact producer and bundle literals", async () => {
+  it("keeps Esbuild and Node SEA independent with exact producer literals", async () => {
     const nodeSea = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/NodeSea.ts"), "utf8");
-    const esbuild = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/Esbuild.ts"), "utf8");
-    const adapter = await readFile(resolve(root, "packages/effect-build-node-sea/src/Adapter.ts"), "utf8");
+    const esbuild = await readFile(resolve(root, "packages/effect-build-esbuild/src/internal/Esbuild.ts"), "utf8");
     expect(nodeSea).toMatch(/nodeSeaVersion\s*=\s*"26\.7\.0"\s+as const/);
-    expect(nodeSea).toMatch(/nodeSeaSyntaxTarget\s*=\s*"node26\.7"\s+as const/);
     expect(nodeSea).toMatch(/nodeSeaTarget\s*=\s*"linux-x64-gnu"\s+as const/);
     expect(esbuild).toMatch(/expectedVersion\s*=\s*"0\.28\.2"\s+as const/);
     expect(esbuild).toMatch(/nodeSyntaxTarget\s*=\s*"node26\.7"\s+as const/);
-    expect(adapter).toContain('kind: "composed"');
-    expect(adapter).toContain('defaultTarget: "linux-x64-gnu"');
+    expect(nodeSea).toContain('"--check"');
+    expect(nodeSea).toContain("privateMainPath");
+    expect(nodeSea).not.toMatch(/Esbuild|esbuild|compileExecutableMatrix|Composed/);
+    await expect(
+      readFile(resolve(root, "packages/effect-build-node-sea/src/internal/Esbuild.ts"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(resolve(root, "packages/effect-build-node-sea/src/Adapter.ts"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
     expect(`${nodeSea}\n${esbuild}`).not.toMatch(/postject|download|curl|wget|https?:\/\//i);
   });
 
@@ -280,9 +299,11 @@ describe("tooling pins and workflow contracts", () => {
             "packages/effect-build/package.json",
             "packages/effect-build-bun/package.json",
             "packages/effect-build-deno/package.json",
+            "packages/effect-build-esbuild/package.json",
             "packages/effect-build-node-sea/package.json",
             "examples/bun/package.json",
             "examples/deno/package.json",
+            "examples/esbuild/package.json",
             "examples/node-sea/package.json",
           ]
         ) {
@@ -318,12 +339,102 @@ describe("tooling pins and workflow contracts", () => {
     )).toBe(true);
   });
 
+  it("independently rejects incomplete, extra, changed, and wrong-source candidates", async () => {
+    const verifier = await loadScript<{
+      parseArguments: (argv: readonly string[]) => { directory: string; source: string };
+      verifyCandidate: (
+        input: { directory: string; source: string },
+        dependencies?: Record<string, unknown>,
+      ) => Promise<unknown>;
+    }>("verify-candidate.mjs");
+    const source = "a".repeat(40);
+    const directory = await mkdtemp(join(tmpdir(), "effect-build-candidate-verifier-"));
+    const names = [...publicPackages];
+    const filenames = names.map((name) => `${name}-0.3.0.tgz`);
+    const dependenciesFor = (name: string): Record<string, string> =>
+      name === "effect-build"
+        ? {}
+        : name === "effect-build-esbuild"
+        ? { "effect-build": "^0.3.0", esbuild: "0.28.2" }
+        : { "effect-build": "^0.3.0" };
+    const contents = new Map<string, Uint8Array>();
+    try {
+      const records = [];
+      for (const [index, name] of names.entries()) {
+        const filename = filenames[index]!;
+        const bytes = new TextEncoder().encode(`fixture:${name}`);
+        contents.set(filename, bytes);
+        await writeFile(join(directory, filename), bytes);
+        records.push({
+          filename,
+          name,
+          version: "0.3.0",
+          bytes: bytes.byteLength,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+          dependencies: dependenciesFor(name),
+          peerDependencies: { effect: ">=4.0.0-beta.104 <4.1.0-0" },
+          optionalDependencies: {},
+        });
+      }
+      await writeFile(
+        join(directory, "manifest.json"),
+        `${JSON.stringify({ version: 1, source, packages: records }, null, 2)}\n`,
+      );
+      const inspectTarball = async (tarball: string) => {
+        const filename = tarball.slice(tarball.lastIndexOf("/") + 1);
+        const name = filenames.includes(filename) ? names[filenames.indexOf(filename)]! : "";
+        const exports = name === "effect-build"
+          ? {
+            ".": { types: "./dist/index.d.ts", import: "./dist/index.js" },
+            "./Integration": { types: "./dist/Integration.d.ts", import: "./dist/Integration.js" },
+            "./Provider": { types: "./dist/Provider.d.ts", import: "./dist/Provider.js" },
+          }
+          : { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } };
+        return {
+          manifest: {
+            name,
+            version: "0.3.0",
+            dependencies: dependenciesFor(name),
+            peerDependencies: { effect: ">=4.0.0-beta.104 <4.1.0-0" },
+            exports,
+          },
+          entries: Object.values(exports).flatMap((entry) => [
+            `package/${entry.types.slice(2)}`,
+            `package/${entry.import.slice(2)}`,
+          ]),
+        };
+      };
+      const input = verifier.parseArguments(["--directory", directory, "--source", source]);
+      await expect(verifier.verifyCandidate(input, { inspectTarball })).resolves.toEqual({ source, packages: 5 });
+
+      await rm(join(directory, filenames[0]!));
+      await expect(verifier.verifyCandidate(input, { inspectTarball })).rejects.toThrow(/inventory/);
+      await writeFile(join(directory, filenames[0]!), contents.get(filenames[0]!)!);
+
+      await writeFile(join(directory, "extra"), "unexpected");
+      await expect(verifier.verifyCandidate(input, { inspectTarball })).rejects.toThrow(/inventory/);
+      await rm(join(directory, "extra"));
+
+      await writeFile(join(directory, filenames[1]!), "changed");
+      await expect(verifier.verifyCandidate(input, { inspectTarball })).rejects.toThrow(/size|SHA-256/);
+      await writeFile(join(directory, filenames[1]!), contents.get(filenames[1]!)!);
+
+      await expect(
+        verifier.verifyCandidate({ directory, source: "b".repeat(40) }, { inspectTarball }),
+      ).rejects.toThrow(/source/);
+      expect(() => verifier.parseArguments(["--directory", directory, "--source", "ABC"])).toThrow(/usage/);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("requires every independent CI axis with exact Bun setup and no escape hatches", async () => {
     const workflow = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as Workflow;
     expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(Object.keys(workflow.jobs)).toEqual([
       "quality",
+      "esbuild",
       "node-sea",
       "real-tools",
       "target-support",
@@ -335,6 +446,8 @@ describe("tooling pins and workflow contracts", () => {
       expect(JSON.stringify(workflow.jobs[job])).not.toMatch(/pnpm|yarn|continue-on-error/i);
     }
     expect(jobRuns(workflow, "quality")).toContain("bun run verify");
+    expect(jobRuns(workflow, "esbuild")).toContain("test/unit/esbuild-bundle.test.ts");
+    expect(jobRuns(workflow, "esbuild")).toContain("node scripts/test-built-consumer.mjs --built");
     expect(jobRuns(workflow, "real-tools")).toContain("bun run verify:real");
     expect(workflow.jobs["target-support"]?.strategy).toEqual({
       "fail-fast": false,
@@ -352,7 +465,7 @@ describe("tooling pins and workflow contracts", () => {
       .toEqual({ EFFECT_BUILD_NODE_SEA_BIN: "${{ steps.node26.outputs.path }}" });
   });
 
-  it("keeps release preparation non-mutating and emits one four-package candidate", async () => {
+  it("keeps release preparation non-mutating and emits one five-package candidate", async () => {
     const workflow = parse(await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")) as Workflow;
     expect(workflow.on).toEqual({
       workflow_dispatch: {
@@ -362,16 +475,17 @@ describe("tooling pins and workflow contracts", () => {
       },
     });
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(Object.keys(workflow.jobs)).toEqual(["node-sea", "candidate"]);
-    expect(workflow.jobs.candidate?.needs).toBe("node-sea");
+    expect(Object.keys(workflow.jobs)).toEqual(["esbuild", "node-sea", "candidate"]);
+    expect(workflow.jobs.candidate?.needs).toEqual(["esbuild", "node-sea"]);
     expectPinnedActionsWithoutEscapes(workflow);
     const source = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
     expect(source).toContain("node scripts/test-built-consumer.mjs --candidate-dir");
+    expect(source).toContain("node scripts/verify-candidate.mjs --directory");
     expect(source).toContain("effect-build-0.3.0-candidate");
     expect(source).toContain("bun run verify:effect");
     expect(source).not.toMatch(/npm publish|gh release|git tag|ts-release|NODE_AUTH_TOKEN|id-token:\s*write/i);
     const consumer = await readFile(resolve(root, "scripts/test-built-consumer.mjs"), "utf8");
     for (const name of publicPackages) expect(consumer).toContain(JSON.stringify(name));
-    expect(consumer).toContain('console.log("packed consumers verified: 8/8")');
+    expect(consumer).toContain('console.log("packed consumers verified: 12/12")');
   });
 });

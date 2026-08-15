@@ -21,9 +21,11 @@ const workspaceManifestPaths = [
   "packages/effect-build/package.json",
   "packages/effect-build-bun/package.json",
   "packages/effect-build-deno/package.json",
+  "packages/effect-build-esbuild/package.json",
   "packages/effect-build-node-sea/package.json",
   "examples/bun/package.json",
   "examples/deno/package.json",
+  "examples/esbuild/package.json",
   "examples/node-sea/package.json",
 ];
 

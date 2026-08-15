@@ -1,11 +1,11 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { definition, targetTokens } from "../../packages/effect-build-deno/src/Adapter.js";
+import { definition, targetEntries } from "../../packages/effect-build-deno/src/Adapter.js";
 import * as Deno from "../../packages/effect-build-deno/src/index.js";
 import { describeStandaloneDriverContract } from "../testkit/standaloneDriverContract.js";
 
@@ -38,7 +38,9 @@ const denoAdapter = {
         ...(input.target === undefined ? {} : { target: input.target }),
         options: input.options,
       },
-      ...(input.target === undefined ? {} : { nativeTarget: targetTokens[input.target] }),
+      ...(input.target === undefined
+        ? {}
+        : { nativeTarget: targetEntries.find(([target]) => target === input.target)![1] }),
       stagedOutfile: input.stagedOutfile,
     }),
 };
@@ -90,12 +92,12 @@ describe("standalone Deno driver", () => {
       minify: true,
       permissions: { read: true, net: ["example.com:443"], env: ["PORT"] },
     });
-    expect(options._tag).toBe("Valid");
-    if (options._tag !== "Valid") throw new Error(options.reason);
+    expect(Result.isSuccess(options)).toBe(true);
+    if (Result.isFailure(options)) throw new Error(options.failure);
     expect(denoAdapter.renderArgv({
       entrypoint: "src/main.ts",
       target: "windows-x64",
-      options: options.value,
+      options: options.success,
       stagedOutfile: "/tmp/.effect-build/app.exe",
     })).toEqual([
       "compile",
@@ -114,8 +116,8 @@ describe("standalone Deno driver", () => {
 
   it("rejects invalid option combinations and omits Deno musl targets", () => {
     expect(denoAdapter.validateOptions({ bundle: false, minify: true })).toMatchObject({
-      _tag: "Invalid",
-      reason: "minify requires bundle",
+      _tag: "Failure",
+      failure: "minify requires bundle",
     });
     expect(denoAdapter.targetTable.Target.literals).not.toContain("linux-x64-musl");
     expect(denoAdapter.targetTable.Target.literals).not.toContain("linux-aarch64-musl");
@@ -123,8 +125,8 @@ describe("standalone Deno driver", () => {
 
   it("rejects a non-boolean allow-all permission at scalar option preflight", () => {
     expect(denoAdapter.validateOptions({ permissions: { all: "yes" } })).toMatchObject({
-      _tag: "Invalid",
-      reason: "all permission must be boolean",
+      _tag: "Failure",
+      failure: "all permission must be boolean",
     });
   });
 
@@ -139,14 +141,14 @@ describe("standalone Deno driver", () => {
     };
     const source = { bundle: true as const, minify: true, permissions };
     const validated = denoAdapter.validateOptions(source);
-    expect(validated._tag).toBe("Valid");
-    if (validated._tag !== "Valid") throw new Error(validated.reason);
+    expect(Result.isSuccess(validated)).toBe(true);
+    if (Result.isFailure(validated)) throw new Error(validated.failure);
     hosts[0] = "mutated.example:443";
     source.minify = false;
     expect(denoAdapter.renderArgv({
       entrypoint: "a.ts",
       target: "macos-x64",
-      options: validated.value,
+      options: validated.success,
       stagedOutfile: "/tmp/app",
     })).toEqual([
       "compile",

@@ -4,8 +4,14 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
-const providerPackages = ["effect-build-bun", "effect-build-deno", "effect-build-node-sea"] as const;
-const packageNames = ["effect-build", ...providerPackages] as const;
+const providerPackages = ["effect-build-bun", "effect-build-deno"] as const;
+const integrationPackages = [
+  "effect-build-bun",
+  "effect-build-deno",
+  "effect-build-esbuild",
+  "effect-build-node-sea",
+] as const;
+const packageNames = ["effect-build", ...integrationPackages] as const;
 const providerRuntimeKeys = ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"];
 
 const declarationFiles = Object.fromEntries(packageNames.map((name) => [
@@ -66,49 +72,60 @@ const exactDeclarations = {
     "compileExecutableMatrix",
     "layer",
   ],
+  "effect-build-esbuild": [
+    "BundleMaterializationFailed",
+    "BundleMaterializationOperation",
+    "Esbuild",
+    "EsbuildBundleError",
+    "EsbuildDiagnostic",
+    "EsbuildFailed",
+    "EsbuildLayerError",
+    "EsbuildVersionMismatch",
+    "InvalidBundleInput",
+    "JavaScriptBundleInput",
+    "JavaScriptBundleInvalid",
+    "Service",
+    "layer",
+    "withJavaScriptBundle",
+  ],
   "effect-build-node-sea": [
     "Artifact",
-    "CompileExecutableInput",
-    "CompileExecutableMatrixInput",
-    "Compiler",
+    "CreateExecutableInput",
+    "InvalidNodeSeaInput",
     "LayerOptions",
-    "MatrixError",
-    "Options",
-    "Target",
-    "compileExecutable",
-    "compileExecutableMatrix",
+    "NodeSea",
+    "NodeSeaCreateError",
+    "NodeSeaFailed",
+    "NodeSeaLayerError",
+    "NodeSeaPreparationFailed",
+    "NodeSeaPreparationOperation",
+    "NodeSeaProbeFailed",
+    "NodeSeaSpawnFailed",
+    "NodeSeaStage",
+    "NodeSeaSyntaxCheckFailed",
+    "NodeSeaToolNotFound",
+    "Service",
+    "createExecutable",
     "layer",
   ],
 } as const;
 
 const exactProviderDeclarations = [
   "BuildError",
-  "CommandCompletion",
   "CommandDefinition",
-  "CommandOutput",
-  "CommandProviderName",
   "CompileExecutableInput",
   "CompileExecutableMatrixInput",
   "CompilerService",
-  "ComposedCandidateInput",
-  "ComposedDefinition",
-  "ComposedProducer",
-  "ComposedProviderRequirements",
   "Defined",
-  "Definition",
-  "Diagnostic",
-  "ExecuteCommand",
   "LayerOptions",
-  "MatrixErrorFor",
   "PreparedCommandInput",
   "ProviderArtifact",
   "ProviderLayerRequirements",
-  "ProviderName",
-  "ProviderTargets",
-  "TargetFor",
+  "ProviderMatrixError",
+  "ProviderStage",
+  "ProviderStages",
   "ToolNotFound",
   "ToolProbeFailed",
-  "Validation",
   "define",
 ] as const;
 
@@ -240,7 +257,7 @@ describe("built public API", () => {
       expect(Object.keys(packageJson.exports)).toEqual(contract.subpaths);
       for (const subpath of contract.subpaths) {
         const built = await import(resolve(root, `packages/${name}`, packageJson.exports[subpath]!.import));
-        expect(Object.keys(built), `${name}${subpath === "." ? "" : subpath.slice(1)}`).toEqual(
+        expect(Object.keys(built).sort(), `${name}${subpath === "." ? "" : subpath.slice(1)}`).toEqual(
           contract.runtimeKeys[subpath],
         );
       }
@@ -248,16 +265,14 @@ describe("built public API", () => {
     const core = await import(resolve(root, "packages/effect-build/dist/index.js"));
     expect(Object.keys(core.Artifact).sort()).toEqual([
       "AbsolutePath",
-      "Artifact",
       "ByteCount",
       "Digest",
       "ExecutableArtifact",
       "FileArtifact",
       "StageObservation",
-      "ToolName",
       "ToolObservation",
     ]);
-    expect(Object.keys(core.Target).sort()).toEqual(["ResolutionTarget", "SystemTarget", "Target"]);
+    expect(Object.keys(core.Target).sort()).toEqual(["ResolutionTarget", "SystemTarget"]);
     expect(Object.keys(core.JavaScriptBundle)).toEqual([
       "Format",
       "InvalidReason",
@@ -281,11 +296,10 @@ describe("built public API", () => {
     );
   });
 
-  it("keeps all six provider calls concrete rather than publicly generic", () => {
+  it("keeps all four command-provider calls concrete rather than publicly generic", () => {
     expect(providerCallTypeParameterCounts()).toEqual({
       "effect-build-bun": [0, 0],
       "effect-build-deno": [0, 0],
-      "effect-build-node-sea": [0, 0],
     });
   });
 
@@ -320,14 +334,13 @@ describe("built public API", () => {
 
   it("keeps build output package-local", async () => {
     await expect(access(resolve(root, "dist"))).rejects.toThrow();
-    for (const name of providerPackages) {
+    for (const name of integrationPackages) {
       const entries = await readdir(resolve(root, `packages/${name}/dist`), { withFileTypes: true });
       expect(entries.some((entry) => entry.isFile() && entry.name === "index.js"), name).toBe(true);
       expect(entries.some((entry) => entry.isFile() && entry.name === "index.d.ts"), name).toBe(true);
     }
     const coreEntries = await readdir(resolve(root, "packages/effect-build/dist"), { withFileTypes: true });
     expect(coreEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()).toEqual([
-      "internal",
       "standalone",
     ]);
     expect(providerRuntimeKeys).toHaveLength(5);

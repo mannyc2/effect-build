@@ -287,7 +287,7 @@ direction. Plans 016-020 remain factual implementation history.
 | 019 | Compare both executable topologies and decide public promotion by evidence | P2 | M | 015-018 | DONE |
 | 020 | Hard-cut to a four-package Bun workspace and publish Node SEA as a provider | P1 | XL | 015-019 | DONE |
 | 021 | Adopt the certified ts-release 0.2 line for the four-package release | P1 | L | 020 | BLOCKED/SUPERSEDED: historical four-package qualifier; restamp after Plan 026 |
-| 023 | Establish the core artifact and lifecycle primitives behind current operations | P1 | L | 015-020 | TODO |
+| 023 | Establish the core artifact and lifecycle primitives behind current operations | P1 | L | 015-020 | DONE |
 | 024 | Split Esbuild and Node SEA into independent granular integrations | P1 | XL | 023 | TODO |
 | 025 | Add Bun as a second scoped JavaScript bundle producer | P1 | L | 023-024 | TODO |
 | 026 | Certify the five-package granular public cut without publishing it | P1 | M | 023-025 | TODO |

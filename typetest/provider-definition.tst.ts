@@ -1,141 +1,123 @@
-import { Context, type Crypto, Effect, type FileSystem, type Path } from "effect";
+import { Context, Result, Schema } from "effect";
+import type { Effect } from "effect";
 import * as Provider from "effect-build/Provider";
+import type { MatrixFailed } from "../packages/effect-build/src/standalone/MatrixError.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type SuccessOf<T> = T extends Effect.Effect<infer A, unknown, unknown> ? A : never;
+type ErrorOf<T> = T extends Effect.Effect<unknown, infer E, unknown> ? E : never;
+type ContextOf<T> = T extends Effect.Effect<unknown, unknown, infer R> ? R : never;
 
 interface Options {
   readonly minify?: boolean;
 }
 
-class BunCompiler extends Context.Service<
-  BunCompiler,
-  Provider.CompilerService<"bun", Options>
->()("typetest/provider-definition/BunCompiler") {}
+const targetEntries = [
+  ["macos-aarch64", "fixture-darwin-arm64"],
+  ["linux-x64-gnu", "fixture-linux-x64"],
+] as const;
 
-class DenoCompiler extends Context.Service<
-  DenoCompiler,
-  Provider.CompilerService<"deno", Options>
->()("typetest/provider-definition/DenoCompiler") {}
+const Stages = Schema.Tuple([
+  Schema.Struct({
+    operation: Schema.Literal("compile-executable"),
+    tool: Schema.Struct({
+      name: Schema.Literal("fixture"),
+      version: Schema.NonEmptyString,
+      path: Schema.optionalKey(Schema.String),
+    }),
+  }),
+]);
+type Stages = typeof Stages.Type;
+type Target = (typeof targetEntries)[number][0];
 
-class NodeSeaCompiler extends Context.Service<
-  NodeSeaCompiler,
-  Provider.CompilerService<"node-sea", Record<string, never>>
->()("typetest/provider-definition/NodeSeaCompiler") {}
+class FixtureCompiler extends Context.Service<
+  FixtureCompiler,
+  Provider.CompilerService<"fixture", Options, Target, Stages>
+>()("typetest/provider-definition/FixtureCompiler") {}
 
-const bunTargetTokens = {
-  "macos-x64": "bun-darwin-x64",
-  "macos-aarch64": "bun-darwin-arm64",
-  "linux-x64-gnu": "bun-linux-x64",
-  "linux-x64-musl": "bun-linux-x64-musl",
-  "linux-aarch64-gnu": "bun-linux-arm64",
-  "windows-x64": "bun-windows-x64",
-} as const satisfies Readonly<Record<Provider.TargetFor<"bun">, string>>;
-
-const implementation = Provider.define({
-  name: "bun",
-  kind: "command",
-  service: BunCompiler,
+const definition: Provider.CommandDefinition<
+  FixtureCompiler,
+  "fixture",
+  typeof targetEntries,
+  Stages,
+  Options,
+  Options
+> = {
+  name: "fixture",
+  service: FixtureCompiler,
+  targetEntries,
+  Stages,
+  defaultTarget: "macos-aarch64",
+  validateOptions: (_input: unknown) => Result.succeed({} as Options),
   probeArgv: ["--version"],
-  targetTokens: bunTargetTokens,
-  validateOptions: (_input: unknown): Provider.Validation<Options> => ({ _tag: "Valid", value: {} }),
   renderArgv: ({ input, nativeTarget, stagedOutfile }) => [
     ...(input.options.minify === true ? ["--minify"] : []),
     ...(nativeTarget === undefined ? [] : [nativeTarget]),
     stagedOutfile,
   ],
   interpretFailure: (completion) => [{ channel: "stderr", ...completion.stderr }],
-});
+};
 
-const composedImplementation = Provider.define({
-  name: "node-sea",
-  kind: "composed",
-  service: NodeSeaCompiler,
-  defaultTarget: "linux-x64-gnu",
-  targetTokens: { "linux-x64-gnu": "linux-x64-gnu" },
-  validateOptions: (_input: unknown) => ({ _tag: "Valid" as const, value: {} }),
-  makeProducer: (_options, execute) => {
-    void execute("/tools/node", ["--help"]);
-    // @ts-expect-error Property 'spawner' does not exist on type 'ExecuteCommand'.
-    void execute.spawner;
-    return Effect.succeed({
-      produceCandidate: () =>
-        Effect.succeed(
-          [
-            { operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } },
-            {
-              operation: "assemble-node-sea",
-              tool: { name: "node", version: "26.7.0", path: "/tools/node" },
-            },
-          ] as const,
-        ),
-    });
-  },
-});
+const implementation = Provider.define(definition);
 
-export type _ClosedName = Assert<Same<Provider.ProviderName, "bun" | "deno" | "node-sea">>;
-export type _BunTarget = Assert<Same<typeof implementation.Target.Type, Provider.TargetFor<"bun">>>;
+export type _Target = Assert<Same<typeof implementation.Target.Type, Target>>;
 export type _Surface = Assert<
-  Same<keyof typeof implementation, "Target" | "compileExecutable" | "compileExecutableMatrix" | "layer">
+  Same<
+    keyof typeof implementation,
+    "Target" | "Artifact" | "MatrixError" | "compileExecutable" | "compileExecutableMatrix" | "layer"
+  >
 >;
-export type _ImmutableCompletion = Assert<
-  Same<Readonly<Provider.CommandCompletion>, Provider.CommandCompletion>
+type Scalar = ReturnType<typeof implementation.compileExecutable>;
+type Matrix = ReturnType<typeof implementation.compileExecutableMatrix>;
+export type _ScalarSuccess = Assert<
+  Same<SuccessOf<Scalar>, Provider.ProviderArtifact<"fixture", Target, Stages>>
 >;
-export type _ComposedSurface = Assert<
-  Same<keyof typeof composedImplementation, "Target" | "compileExecutable" | "compileExecutableMatrix" | "layer">
+export type _ScalarContext = Assert<Same<ContextOf<Scalar>, FixtureCompiler>>;
+export type _StageName = Assert<Same<SuccessOf<Scalar>["stages"][0]["tool"]["name"], "fixture">>;
+export type _MatrixSuccess = Assert<
+  Same<SuccessOf<Matrix>, readonly Provider.ProviderArtifact<"fixture", Target, Stages>[]>
 >;
-export type _ComposedRequirementsExcludeProcess = Assert<
-  Same<Provider.ComposedProviderRequirements, FileSystem.FileSystem | Path.Path | Crypto.Crypto>
+export type _MatrixError = Assert<
+  Same<ErrorOf<Matrix>, Provider.ProviderMatrixError<"fixture", Target, Stages>>
+>;
+type Failed = Extract<ErrorOf<Matrix>, { readonly _tag: "MatrixFailed" }>;
+export type _MatrixClassPreserved = Assert<Failed extends MatrixFailed ? true : false>;
+export type _MatrixYieldable = Assert<Failed extends Iterable<unknown> ? true : false>;
+export type _MatrixPipe = Assert<"pipe" extends keyof Failed ? true : false>;
+export type _MatrixJson = Assert<"toJSON" extends keyof Failed ? true : false>;
+export type _FailureProvider = Assert<Same<Failed["failures"][number]["provider"], "fixture">>;
+export type _FailureTarget = Assert<Same<Failed["failures"][number]["target"], Target>>;
+export type _PartialArtifacts = Assert<
+  Failed["artifacts"] extends readonly Provider.ProviderArtifact<"fixture", Target, Stages>[] ? true : false
 >;
 
-// @ts-expect-error Type '"esbuild"' is not assignable to type '"bun" | "deno" | "node-sea"'.
-const invalidProviderName: Provider.ProviderName = "esbuild";
-void invalidProviderName;
+const _optionsResult: ReturnType<
+  Provider.CommandDefinition<
+    FixtureCompiler,
+    "fixture",
+    typeof targetEntries,
+    Stages,
+    Options,
+    Options
+  >["validateOptions"]
+> = Result.succeed({});
+void _optionsResult;
 
-export type _InvalidNodeSeaArtifactIsImpossible = Assert<
-  Same<Provider.ProviderArtifact<"node-sea", "macos-x64">, never>
->;
-export type _InvalidNodeSeaMatrixIsImpossible = Assert<
-  Same<Provider.MatrixErrorFor<"node-sea", "macos-x64">, never>
->;
+// @ts-expect-error!
+Provider.define({ ...definition, name: "" });
 
-const missingBunTarget = {
-  "macos-x64": "bun-darwin-x64",
-  "macos-aarch64": "bun-darwin-arm64",
-  "linux-x64-gnu": "bun-linux-x64",
-  "linux-x64-musl": "bun-linux-x64-musl",
-  "linux-aarch64-gnu": "bun-linux-arm64",
-  // @ts-expect-error Property '"windows-x64"' is missing
-} satisfies Readonly<Record<Provider.TargetFor<"bun">, string>>;
-void missingBunTarget;
+// @ts-expect-error!
+type _NoBespokeValidation = Provider.Validation<Options>;
+// @ts-expect-error!
+type _NoComposedDefinition = Provider.ComposedDefinition<FixtureCompiler, Options, Options>;
 
-const extraBunTarget = {
-  "macos-x64": "bun-darwin-x64",
-  "macos-aarch64": "bun-darwin-arm64",
-  "linux-x64-gnu": "bun-linux-x64",
-  "linux-x64-musl": "bun-linux-x64-musl",
-  "linux-aarch64-gnu": "bun-linux-arm64",
-  "windows-x64": "bun-windows-x64",
-  // @ts-expect-error Object literal may only specify known properties
-  "windows-aarch64": "bun-windows-arm64",
-} satisfies Readonly<Record<Provider.TargetFor<"bun">, string>>;
-void extraBunTarget;
+const TwoStages = Schema.Tuple([Stages.elements[0], Stages.elements[0]]);
+// @ts-expect-error!
+const _invalidStages: Provider.ProviderStages<"fixture"> = {} as typeof TwoStages.Type;
+void _invalidStages;
 
-Provider.define<BunCompiler, "bun", Options, Options>({
-  name: "bun",
-  kind: "command",
-  // @ts-expect-error Type 'typeof DenoCompiler' is not assignable to type 'Service<BunCompiler
-  service: DenoCompiler,
-  probeArgv: ["--version"],
-  targetTokens: bunTargetTokens,
-  validateOptions: (_input: unknown) => ({ _tag: "Valid", value: {} }),
-  renderArgv: () => [],
-  interpretFailure: () => [],
-});
-
-// @ts-expect-error Property 'adapter' does not exist
+// @ts-expect-error!
 implementation.adapter;
-// @ts-expect-error Property 'process' does not exist
+// @ts-expect-error!
 implementation.process;
-// @ts-expect-error Property 'discoverTool' does not exist
-implementation.discoverTool;

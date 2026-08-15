@@ -81,31 +81,7 @@ describe("core artifact vocabulary", () => {
       "windows-x64",
       "windows-aarch64",
     ]);
-    expect(Core.Target.Target).toBe(Core.Target.SystemTarget);
     expect(Core.Target.ResolutionTarget.literals).toEqual(["node"]);
-  });
-
-  it("keeps the temporary provider projections derived from the durable base", () => {
-    const artifact = Schema.decodeUnknownSync(Core.Artifact.Artifact, { onExcessProperty: "error" })({
-      path: "/tmp/app",
-      bytes: 1,
-      provider: "bun",
-      target: "linux-x64-gnu",
-      stages: [{
-        operation: "compile-executable",
-        tool: { name: "bun", version: "1.3.9", path: "/tools/bun" },
-      }],
-    });
-    expect(artifact).toEqual({
-      path: "/tmp/app",
-      bytes: 1,
-      provider: "bun",
-      target: "linux-x64-gnu",
-      stages: [{
-        operation: "compile-executable",
-        tool: { name: "bun", version: "1.3.9", path: "/tools/bun" },
-      }],
-    });
   });
 
   it("authenticates a borrowed bundle only for its callback and never deletes it", async () => {

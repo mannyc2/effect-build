@@ -1,24 +1,21 @@
 import { Crypto, Effect, FileSystem, Path, Result } from "effect";
 import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
 import * as Integration from "../../Integration.js";
-import type { StagesFor, ToolName } from "../Artifact.js";
 import { TargetUnsupported, ToolFailed } from "../BuildError.js";
 import { captureCellResult, makeMatrixFailedFor } from "../CompileExecutableMatrix.js";
 import type { CompilerService } from "../Driver.js";
 import { InvalidMatrixInput, type MatrixIssue } from "../MatrixError.js";
-import type { Target } from "../Target.js";
+import type { SystemTarget } from "../Target.js";
 import {
-  type CandidateProducer,
   type CellExecutionError,
   type CommandCompilerAdapter,
-  type CompilerAdapter,
-  decodeStagesFor,
   type DiscoveredCompiler,
   type ProviderArtifact,
+  type ProviderStages,
 } from "./CompilerAdapter.js";
 import { descriptorOf, matchesObservation, type TargetDescriptor, targetFromObservation } from "./TargetCatalog.js";
 
-const inferTarget = <SupportedTarget extends Target>(
+const inferTarget = <SupportedTarget extends SystemTarget>(
   observation: Integration.NativeExecutableObservation,
   requested: SupportedTarget | undefined,
   fallback: SupportedTarget | undefined,
@@ -51,7 +48,7 @@ interface PreparedCellInput<ValidatedOptions> {
   readonly options: ValidatedOptions;
 }
 
-interface PreparedCell<ValidatedOptions, SupportedTarget extends Target> {
+interface PreparedCell<ValidatedOptions, SupportedTarget extends SystemTarget> {
   readonly input: PreparedCellInput<ValidatedOptions>;
   readonly selection?: {
     readonly target: SupportedTarget;
@@ -59,7 +56,7 @@ interface PreparedCell<ValidatedOptions, SupportedTarget extends Target> {
   };
 }
 
-interface PreparedMatrixCell<ValidatedOptions, SupportedTarget extends Target>
+interface PreparedMatrixCell<ValidatedOptions, SupportedTarget extends SystemTarget>
   extends PreparedCell<ValidatedOptions, SupportedTarget>
 {
   readonly selection: {
@@ -68,7 +65,7 @@ interface PreparedMatrixCell<ValidatedOptions, SupportedTarget extends Target>
   };
 }
 
-type MatrixPreflight<ValidatedOptions, SupportedTarget extends Target> =
+type MatrixPreflight<ValidatedOptions, SupportedTarget extends SystemTarget> =
   | { readonly _tag: "Invalid"; readonly error: InvalidMatrixInput }
   | {
     readonly _tag: "Valid";
@@ -105,12 +102,12 @@ const issue = (
 ): MatrixIssue => ({ field, reason, ...context });
 
 const preflightMatrix = <
-  Options,
-  const Name extends ToolName,
-  SupportedTarget extends Target,
+  const Name extends string,
+  SupportedTarget extends SystemTarget,
+  Stages extends ProviderStages<Name>,
   ValidatedOptions,
 >(
-  adapter: CompilerAdapter<Options, Name, SupportedTarget, ValidatedOptions>,
+  adapter: CommandCompilerAdapter<Name, SupportedTarget, Stages, ValidatedOptions>,
   path: Path.Path,
   rawInput: unknown,
 ): MatrixPreflight<ValidatedOptions, SupportedTarget> => {
@@ -283,61 +280,51 @@ const preflightMatrix = <
   return { _tag: "Valid", cells, concurrency };
 };
 
-export function makeCompilerService<
+export const makeCompilerService = <
   Options,
-  const Name extends ToolName,
-  SupportedTarget extends Target,
+  const Name extends string,
+  SupportedTarget extends SystemTarget,
+  Stages extends ProviderStages<Name>,
   ValidatedOptions,
 >(
-  adapter: CompilerAdapter<Options, Name, SupportedTarget, ValidatedOptions>,
-  producer: CandidateProducer<Name, SupportedTarget, ValidatedOptions>,
-): Effect.Effect<
-  CompilerService<Name, SupportedTarget, Options>,
-  never,
-  EffectChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
->;
-export function makeCompilerService<
-  Options,
-  const Name extends ToolName,
-  SupportedTarget extends Target,
-  ValidatedOptions,
->(
-  adapter: CommandCompilerAdapter<Options, Name, SupportedTarget, ValidatedOptions>,
+  adapter: CommandCompilerAdapter<Name, SupportedTarget, Stages, ValidatedOptions>,
   tool: DiscoveredCompiler<Name>,
 ): Effect.Effect<
-  CompilerService<Name, SupportedTarget, Options>,
+  CompilerService<Name, SupportedTarget, Stages, Options>,
   never,
   EffectChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
->;
-export function makeCompilerService<
-  Options,
-  const Name extends ToolName,
-  SupportedTarget extends Target,
-  ValidatedOptions,
->(
-  adapter: CompilerAdapter<Options, Name, SupportedTarget, ValidatedOptions>,
-  source:
-    | CandidateProducer<Name, SupportedTarget, ValidatedOptions>
-    | DiscoveredCompiler<Name>,
-): Effect.Effect<
-  CompilerService<Name, SupportedTarget, Options>,
-  never,
-  EffectChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
-> {
-  const commandAdapter = adapter as CommandCompilerAdapter<Options, Name, SupportedTarget, ValidatedOptions>;
-  const producerEffect: Effect.Effect<
-    CandidateProducer<Name, SupportedTarget, ValidatedOptions>,
-    never,
-    EffectChildProcessSpawner.ChildProcessSpawner
-  > = "artifactTool" in source
-    ? Effect.gen(function*() {
-      const spawner = yield* EffectChildProcessSpawner.ChildProcessSpawner;
-      return {
-        hostOs: source.hostOs,
-        produceCandidate: (request) =>
+> =>
+  Effect.gen(function*() {
+    const spawner = yield* EffectChildProcessSpawner.ChildProcessSpawner;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const crypto = yield* Crypto.Crypto;
+
+    const compilePreparedCell = (
+      cell: PreparedCell<ValidatedOptions, SupportedTarget>,
+    ): Effect.Effect<ProviderArtifact<Name, SupportedTarget, Stages>, CellExecutionError> => {
+      const executableSuffix = cell.selection === undefined
+        ? tool.hostOs === "windows" ? ".exe" : ""
+        : cell.selection.descriptor.executableSuffix;
+      return Integration.produceExecutable({
+        outfile: cell.input.outfile,
+        ...(cell.input.cwd === undefined ? {} : { cwd: cell.input.cwd }),
+        ...(cell.input.digest === undefined ? {} : { digest: cell.input.digest }),
+        executableSuffix,
+        prepare: () => Effect.succeed(cell),
+        produce: ({ stagedOutfile, resolvedDestination }) =>
           Effect.gen(function*() {
-            const argv = yield* Effect.sync(() => commandAdapter.renderArgv(request));
-            const completion = yield* Integration.executeCommand(source.artifactTool.path, argv, request.cwd).pipe(
+            const argv = yield* Effect.sync(() =>
+              adapter.renderArgv({
+                entrypoint: cell.input.entrypoint,
+                ...(cell.selection === undefined ? {} : { target: cell.selection.target }),
+                options: cell.input.options,
+                stagedOutfile,
+                resolvedDestination,
+                ...(cell.input.cwd === undefined ? {} : { cwd: cell.input.cwd }),
+              })
+            );
+            const completion = yield* Integration.executeCommand(tool.artifactTool.path, argv, cell.input.cwd).pipe(
               Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, spawner),
               Effect.mapError((error) =>
                 new ToolFailed({
@@ -347,111 +334,69 @@ export function makeCompilerService<
                 })
               ),
             );
-            if (completion.exitCode !== 0) return yield* commandAdapter.interpretFailure(completion);
+            if (completion.exitCode !== 0) return yield* adapter.interpretFailure(completion);
             return Object.freeze([
               Object.freeze({
                 operation: "compile-executable" as const,
-                tool: Object.freeze(source.artifactTool),
+                tool: Object.freeze(tool.artifactTool),
               }),
-            ]) as unknown as StagesFor<Name>;
+            ]);
           }),
-      };
-    })
-    : Effect.succeed(source);
-  return Effect.flatMap(producerEffect, (producer) =>
-    Effect.gen(function*() {
-      const spawner = yield* EffectChildProcessSpawner.ChildProcessSpawner;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const crypto = yield* Crypto.Crypto;
-
-      const compilePreparedCell = (
-        cell: PreparedCell<ValidatedOptions, SupportedTarget>,
-      ): Effect.Effect<ProviderArtifact<Name, SupportedTarget>, CellExecutionError> => {
-        const executableSuffix = cell.selection === undefined
-          ? producer.hostOs === "windows" ? ".exe" : ""
-          : cell.selection.descriptor.executableSuffix;
-        return Integration.produceExecutable({
-          outfile: cell.input.outfile,
-          ...(cell.input.cwd === undefined ? {} : { cwd: cell.input.cwd }),
-          ...(cell.input.digest === undefined ? {} : { digest: cell.input.digest }),
-          executableSuffix,
-          prepare: () => Effect.succeed(cell),
-          produce: ({ stagedOutfile, resolvedDestination }) =>
-            producer.produceCandidate({
-              entrypoint: cell.input.entrypoint,
-              ...(cell.selection === undefined ? {} : { target: cell.selection.target }),
-              options: cell.input.options,
-              stagedOutfile,
-              resolvedDestination,
-              ...(cell.input.cwd === undefined ? {} : { cwd: cell.input.cwd }),
-            }).pipe(Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, spawner)),
-          decodeStages: (_prepared, observedStages) =>
-            Result.try({
-              try: () => decodeStagesFor(adapter.toolName, observedStages),
-              catch: (error) =>
-                new ToolFailed({
-                  tool: adapter.toolName,
-                  exitCode: 1,
-                  diagnostics: [{
-                    channel: "stderr",
-                    text: error instanceof Error ? error.message : String(error),
-                    truncated: false,
-                  }],
-                }),
-            }),
-          resolveTarget: (observation) =>
-            inferTarget(
-              observation,
-              cell.selection?.target,
-              adapter.defaultTarget,
-              adapter.targetTable.resolve,
-            ),
-        }).pipe(
-          Effect.provideService(FileSystem.FileSystem, fileSystem),
-          Effect.provideService(Path.Path, path),
-          Effect.provideService(Crypto.Crypto, crypto),
-          Effect.map((published) =>
-            ({
-              ...published,
-              provider: adapter.toolName,
-            }) as unknown as ProviderArtifact<Name, SupportedTarget>
+        decodeStages: (_prepared, observedStages) => adapter.decodeStages(observedStages),
+        resolveTarget: (observation) =>
+          inferTarget(
+            observation,
+            cell.selection?.target,
+            adapter.defaultTarget,
+            adapter.targetTable.resolve,
           ),
-        );
-      };
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.map((published) =>
+          ({
+            ...published,
+            provider: adapter.toolName,
+          }) as unknown as ProviderArtifact<Name, SupportedTarget, Stages>
+        ),
+      );
+    };
 
-      const compileExecutable: CompilerService<Name, SupportedTarget, Options>["compileExecutable"] = (input) =>
-        Effect.gen(function*() {
-          const unsafeTarget: unknown = input.target;
-          const requestedTarget = unsafeTarget === undefined ? undefined : adapter.targetTable.resolve(unsafeTarget);
-          if (unsafeTarget !== undefined && requestedTarget === undefined) {
-            return yield* new TargetUnsupported({
-              tool: adapter.toolName,
-              requested: typeof unsafeTarget === "string" ? unsafeTarget : describeUnknownTarget(unsafeTarget),
-              available: [...adapter.targetTable.Target.literals],
-            });
-          }
-
-          const optionsValidation = yield* Effect.sync(() => adapter.validateOptions(input.options));
-          if (optionsValidation._tag === "Invalid") return yield* optionsValidation.error;
-
-          return yield* compilePreparedCell({
-            input: {
-              entrypoint: input.entrypoint,
-              outfile: input.outfile,
-              ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-              ...(input.digest === undefined ? {} : { digest: input.digest }),
-              options: optionsValidation.value,
-            },
-            ...(requestedTarget === undefined
-              ? {}
-              : { selection: { target: requestedTarget, descriptor: descriptorOf(requestedTarget) } }),
+    const compileExecutable: CompilerService<Name, SupportedTarget, Stages, Options>["compileExecutable"] = Effect.fn(
+      `effect-build/${adapter.toolName}.compileExecutable`,
+    )((input) =>
+      Effect.gen(function*() {
+        const unsafeTarget: unknown = input.target;
+        const requestedTarget = unsafeTarget === undefined ? undefined : adapter.targetTable.resolve(unsafeTarget);
+        if (unsafeTarget !== undefined && requestedTarget === undefined) {
+          return yield* new TargetUnsupported({
+            tool: adapter.toolName,
+            requested: typeof unsafeTarget === "string" ? unsafeTarget : describeUnknownTarget(unsafeTarget),
+            available: [...adapter.targetTable.Target.literals],
           });
-        });
+        }
 
-      const compileExecutableMatrix: CompilerService<Name, SupportedTarget, Options>["compileExecutableMatrix"] = (
-        input,
-      ) =>
+        const optionsValidation = yield* Effect.sync(() => adapter.validateOptions(input.options));
+        if (optionsValidation._tag === "Invalid") return yield* optionsValidation.error;
+
+        return yield* compilePreparedCell({
+          input: {
+            entrypoint: input.entrypoint,
+            outfile: input.outfile,
+            ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+            ...(input.digest === undefined ? {} : { digest: input.digest }),
+            options: optionsValidation.value,
+          },
+          ...(requestedTarget === undefined
+            ? {}
+            : { selection: { target: requestedTarget, descriptor: descriptorOf(requestedTarget) } }),
+        });
+      })
+    );
+
+    const compileExecutableMatrix: CompilerService<Name, SupportedTarget, Stages, Options>["compileExecutableMatrix"] =
+      Effect.fn(`effect-build/${adapter.toolName}.compileExecutableMatrix`)((input) =>
         Effect.gen(function*() {
           const preflight = yield* Effect.sync(() => preflightMatrix(adapter, path, input));
           if (preflight._tag === "Invalid") return yield* preflight.error;
@@ -460,7 +405,7 @@ export function makeCompilerService<
             (cell) => captureCellResult(compilePreparedCell(cell)),
             { concurrency: preflight.concurrency },
           );
-          const artifacts: ProviderArtifact<Name, SupportedTarget>[] = [];
+          const artifacts: ProviderArtifact<Name, SupportedTarget, Stages>[] = [];
           const failures: Array<{
             readonly provider: Name;
             readonly target: SupportedTarget;
@@ -483,11 +428,16 @@ export function makeCompilerService<
           }
           const [first, ...rest] = failures;
           if (first !== undefined) {
-            return yield* Effect.fail(makeMatrixFailedFor({ artifacts, failures: [first, ...rest] }));
+            return yield* Effect.fail(
+              makeMatrixFailedFor<Name, SupportedTarget, Stages>({
+                artifacts,
+                failures: [first, ...rest],
+              }) as unknown as import("../../Provider.js").ProviderMatrixError<Name, SupportedTarget, Stages>,
+            );
           }
           return artifacts;
-        });
+        })
+      );
 
-      return { compileExecutable, compileExecutableMatrix };
-    }));
-}
+    return { compileExecutable, compileExecutableMatrix };
+  });

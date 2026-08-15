@@ -7,6 +7,7 @@
     "packages/*",
     "examples/bun",
     "examples/deno",
+    "examples/esbuild",
     "examples/node-sea"
   ],
   "scripts": {
@@ -42,6 +43,7 @@
     "effect-build": "workspace:*",
     "effect-build-bun": "workspace:*",
     "effect-build-deno": "workspace:*",
+    "effect-build-esbuild": "workspace:*",
     "effect-build-node-sea": "workspace:*",
     "esbuild": "0.28.2",
     "oxlint": "0.15.1",

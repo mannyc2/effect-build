@@ -1,11 +1,11 @@
 import { Cause, Effect, Result } from "effect";
-import type { ToolName } from "./Artifact.js";
+import type { StageObservation } from "./Artifact.js";
 import type { BuildError } from "./BuildError.js";
-import type { CellExecutionError, ProviderArtifact } from "./internal/CompilerAdapter.js";
+import type { CellExecutionError, ProviderArtifact, ProviderStages } from "./internal/CompilerAdapter.js";
 import { type CellFailure, type InvalidMatrixInput, MatrixFailed } from "./MatrixError.js";
-import type { Target } from "./Target.js";
+import type { SystemTarget } from "./Target.js";
 
-export interface CompileExecutableMatrixInput<SupportedTarget extends Target, Options> {
+export interface CompileExecutableMatrixInput<SupportedTarget extends SystemTarget, Options> {
   readonly entrypoint: string;
   readonly outdir: string;
   readonly name: string;
@@ -16,13 +16,13 @@ export interface CompileExecutableMatrixInput<SupportedTarget extends Target, Op
   readonly concurrency?: number;
 }
 
-type NarrowBuildError<Error, Name extends ToolName> = Error extends { readonly tool: string }
+type NarrowBuildError<Error, Name extends string> = Error extends { readonly tool: string }
   ? Error & { readonly tool: Name }
   : Error;
 
-type BuildErrorFor<Name extends ToolName> = NarrowBuildError<BuildError, Name>;
+type BuildErrorFor<Name extends string> = NarrowBuildError<BuildError, Name>;
 
-export type CellFailureFor<Name extends ToolName, SupportedTarget extends Target> =
+export type CellFailureFor<Name extends string, SupportedTarget extends SystemTarget> =
   & Omit<CellFailure, "provider" | "target" | "error">
   & {
     readonly provider: Name;
@@ -30,22 +30,34 @@ export type CellFailureFor<Name extends ToolName, SupportedTarget extends Target
     readonly error: BuildErrorFor<Name>;
   };
 
-export type MatrixFailedFor<Name extends ToolName, SupportedTarget extends Target> =
+export type MatrixFailedFor<
+  Name extends string,
+  SupportedTarget extends SystemTarget,
+  Stages extends ProviderStages<Name>,
+> =
   & Omit<MatrixFailed, "artifacts" | "failures">
   & {
-    readonly artifacts: readonly ProviderArtifact<Name, SupportedTarget>[];
+    readonly artifacts: readonly ProviderArtifact<Name, SupportedTarget, Stages>[];
     readonly failures: readonly [
       CellFailureFor<Name, SupportedTarget>,
       ...CellFailureFor<Name, SupportedTarget>[],
     ];
   };
 
-export type MatrixErrorFor<Name extends ToolName, SupportedTarget extends Target> =
+export type MatrixErrorFor<
+  Name extends string,
+  SupportedTarget extends SystemTarget,
+  Stages extends ProviderStages<Name>,
+> =
   | InvalidMatrixInput
-  | MatrixFailedFor<Name, SupportedTarget>;
+  | MatrixFailedFor<Name, SupportedTarget, Stages>;
 
-export const makeMatrixFailedFor = <Name extends ToolName, SupportedTarget extends Target>(input: {
-  readonly artifacts: readonly ProviderArtifact<Name, SupportedTarget>[];
+export const makeMatrixFailedFor = <
+  Name extends string,
+  SupportedTarget extends SystemTarget,
+  Stages extends readonly [StageObservation & { readonly tool: { readonly name: Name } }],
+>(input: {
+  readonly artifacts: readonly ProviderArtifact<Name, SupportedTarget, Stages>[];
   readonly failures: readonly [
     {
       readonly provider: Name;
@@ -60,11 +72,15 @@ export const makeMatrixFailedFor = <Name extends ToolName, SupportedTarget exten
       readonly error: CellExecutionError;
     }>,
   ];
-}): MatrixFailedFor<Name, SupportedTarget> =>
+}): MatrixFailedFor<Name, SupportedTarget, Stages> =>
   // MatrixFailed performs the runtime provider, target, path, and nested-tool
   // checks. This is the sole assertion that projects that checked root value
   // back to the private provider-correlated type.
-  new MatrixFailed(input as ConstructorParameters<typeof MatrixFailed>[0]) as MatrixFailedFor<Name, SupportedTarget>;
+  new MatrixFailed(input as ConstructorParameters<typeof MatrixFailed>[0]) as MatrixFailedFor<
+    Name,
+    SupportedTarget,
+    Stages
+  >;
 
 export const captureCellResult = <A, E, R>(
   effect: Effect.Effect<A, E, R>,

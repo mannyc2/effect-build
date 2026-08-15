@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import { targetSchemaFor } from "../internal/ProviderContracts.js";
 import { SystemTarget } from "./Target.js";
 
 const isAbsolutePath = (value: string): boolean =>
@@ -39,9 +38,6 @@ export const ByteCount = Schema.Number.pipe(
 );
 export type ByteCount = typeof ByteCount.Type;
 
-export const ToolName = Schema.Literals(["bun", "deno", "node-sea"] as const);
-export type ToolName = typeof ToolName.Type;
-
 export const FileArtifact = Schema.Struct({
   path: AbsolutePath,
   bytes: ByteCount,
@@ -68,77 +64,3 @@ export const ExecutableArtifact = Schema.Struct({
   stages: Schema.NonEmptyArray(StageObservation),
 });
 export type ExecutableArtifact = typeof ExecutableArtifact.Type;
-
-const commandToolFields = ToolObservation.fields;
-const bundleToolFields = {
-  name: ToolObservation.fields.name,
-  version: ToolObservation.fields.version,
-} as const;
-
-const BunCompileStage = Schema.Struct({
-  ...StageObservation.fields,
-  operation: Schema.Literal("compile-executable"),
-  tool: Schema.Struct({
-    ...commandToolFields,
-    name: Schema.Literal("bun"),
-    path: AbsolutePath,
-  }),
-});
-
-const DenoCompileStage = Schema.Struct({
-  ...StageObservation.fields,
-  operation: Schema.Literal("compile-executable"),
-  tool: Schema.Struct({
-    ...commandToolFields,
-    name: Schema.Literal("deno"),
-    path: AbsolutePath,
-  }),
-});
-
-const BundleStage = Schema.Struct({
-  ...StageObservation.fields,
-  operation: Schema.Literal("bundle"),
-  tool: Schema.Struct({
-    ...bundleToolFields,
-    name: Schema.Literal("esbuild"),
-    version: Schema.Literal("0.28.2"),
-  }),
-});
-
-const AssembleNodeSeaStage = Schema.Struct({
-  ...StageObservation.fields,
-  operation: Schema.Literal("assemble-node-sea"),
-  tool: Schema.Struct({
-    ...commandToolFields,
-    name: Schema.Literal("node"),
-    version: Schema.Literal("26.7.0"),
-    path: AbsolutePath,
-  }),
-});
-
-const BunArtifact = Schema.Struct({
-  ...ExecutableArtifact.fields,
-  provider: Schema.Literal("bun"),
-  target: targetSchemaFor("bun"),
-  stages: Schema.Tuple([BunCompileStage]),
-});
-
-const DenoArtifact = Schema.Struct({
-  ...ExecutableArtifact.fields,
-  provider: Schema.Literal("deno"),
-  target: targetSchemaFor("deno"),
-  stages: Schema.Tuple([DenoCompileStage]),
-});
-
-const NodeSeaArtifact = Schema.Struct({
-  ...ExecutableArtifact.fields,
-  provider: Schema.Literal("node-sea"),
-  target: targetSchemaFor("node-sea"),
-  stages: Schema.Tuple([BundleStage, AssembleNodeSeaStage]),
-});
-
-export const Artifact = Schema.Union([BunArtifact, DenoArtifact, NodeSeaArtifact]);
-export type Artifact = typeof Artifact.Type;
-
-export type ArtifactFor<Name extends ToolName> = Extract<Artifact, { readonly provider: Name }>;
-export type StagesFor<Name extends ToolName> = ArtifactFor<Name>["stages"];

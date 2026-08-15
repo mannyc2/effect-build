@@ -188,10 +188,10 @@ export const validateAndPublishExecutable = <Target>(
     if (state.executableSuffix !== ".exe" && (information.mode & 0o111) === 0) {
       return yield* new OutputInvalid({ path: candidate.staged, reason: "not-executable" });
     }
-    const bytes = Number(information.size);
-    if (!Number.isSafeInteger(bytes) || bytes < 0) {
+    if (information.size < 0n || information.size > BigInt(Number.MAX_SAFE_INTEGER)) {
       return yield* new OutputInvalid({ path: candidate.staged, reason: "invalid-byte-count" });
     }
+    const bytes = Number(information.size);
     const observation = yield* inspectNativeExecutableFile(fileSystem, candidate.staged, bytes).pipe(
       Effect.mapError((error) => new OutputInvalid({ path: error.path, reason: error.reason })),
     );

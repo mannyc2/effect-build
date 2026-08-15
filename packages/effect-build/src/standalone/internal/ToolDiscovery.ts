@@ -1,16 +1,15 @@
 import { Effect, FileSystem, Path, Schema } from "effect";
 import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
 import { executeCommand } from "../../Integration.js";
-import type { ProviderName } from "../../Provider.js";
 import { ToolNotFound, ToolProbeFailed } from "../BuildError.js";
 import { OperatingSystem, type OperatingSystem as OperatingSystemType } from "./TargetCatalog.js";
 
-export interface ToolProbe<Name extends ProviderName> {
+export interface ToolProbe<Name extends string> {
   readonly toolName: Name;
   readonly probeArgv: readonly string[];
 }
 
-export interface DiscoveredCompiler<Name extends ProviderName> {
+export interface DiscoveredCompiler<Name extends string> {
   readonly artifactTool: {
     readonly name: Name;
     readonly version: string;
@@ -19,7 +18,7 @@ export interface DiscoveredCompiler<Name extends ProviderName> {
   readonly hostOs: OperatingSystemType;
 }
 
-export const discoverTool = <const Name extends ProviderName>(
+export const discoverTool = <const Name extends string>(
   { probeArgv, toolName: tool }: ToolProbe<Name>,
   executable: string | undefined,
 ): Effect.Effect<

@@ -1,47 +1,28 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit, Fiber, FileSystem, HashSet, Path, PlatformError } from "effect";
-import type * as esbuild from "esbuild";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, HashSet, Path, PlatformError, Schema } from "effect";
+import * as Core from "effect-build";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { definition, executionFailed } from "../../packages/effect-build-node-sea/src/Adapter.js";
-import type { Options } from "../../packages/effect-build-node-sea/src/index.js";
 import {
-  type BundleContext,
-  type EsbuildApi,
-  EsbuildFailed,
-  type JavaScriptBundleArtifact,
-  makeEsbuildService,
-} from "../../packages/effect-build-node-sea/src/internal/Esbuild.js";
-import {
+  InvalidNodeSeaInput,
   makeNodeSeaService,
-  type NodeSeaCandidateInput,
   NodeSeaFailed,
   nodeSeaMetadataProbeSource,
   NodeSeaPreparationFailed,
+  NodeSeaProbeFailed,
   type NodeSeaRuntime,
   type NodeSeaService,
-  type NodeSeaStages,
-  nodeSeaSyntaxTarget,
+  NodeSeaSpawnFailed,
+  NodeSeaSyntaxCheckFailed,
   nodeSeaTarget,
   nodeSeaVersion,
 } from "../../packages/effect-build-node-sea/src/internal/NodeSea.js";
 import type { CommandCompletion } from "../../packages/effect-build/src/Integration.js";
 
 const roots: string[] = [];
-const fixtureRoot = resolve(new URL("../fixtures/node-sea", import.meta.url).pathname);
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -69,13 +50,6 @@ const elfX64 = (interpreterPath: string): Uint8Array => {
 };
 
 const elfX64Gnu = (): Uint8Array => elfX64("/lib64/ld-linux-x86-64.so.2");
-const elfX64Musl = (): Uint8Array => elfX64("/lib/ld-musl-x86_64.so.1");
-
-const machoX64 = (): Uint8Array => {
-  const bytes = new Uint8Array(64);
-  bytes.set([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]);
-  return bytes;
-};
 
 const completion = (
   exitCode = 0,
@@ -88,9 +62,9 @@ const completion = (
   stderr: { text: stderr, truncated },
 });
 
-const platformFailure = (tag: PlatformError.SystemErrorTag = "Unknown") =>
+const platformFailure = () =>
   PlatformError.systemError({
-    _tag: tag,
+    _tag: "Unknown",
     module: "test",
     method: "run",
     cause: new Error("controlled platform failure"),
@@ -102,80 +76,77 @@ interface RunEvent {
   readonly cwd?: string;
 }
 
-interface ControlledRuntime extends NodeSeaRuntime {
+interface RuntimeControl {
   readonly events: RunEvent[];
   readonly configs: Record<string, unknown>[];
   readonly configPaths: string[];
+  readonly privateMainPaths: string[];
+  readonly checkCount: () => number;
   readonly buildCount: () => number;
+  readonly interrupted: () => boolean;
 }
 
 interface RuntimeOptions {
   readonly nodePath: string;
-  readonly selectedBytes?: Uint8Array;
   readonly version?: string;
   readonly metadataPath?: string;
   readonly builtinSpecifiers?: readonly string[];
   readonly malformedMetadata?: string;
-  readonly metadataExit?: number;
-  readonly metadataTruncated?: boolean;
   readonly help?: string;
-  readonly helpExit?: number;
-  readonly helpTruncated?: boolean;
-  readonly platform?: string;
-  readonly architecture?: string;
-  readonly glibc?: string | undefined;
-  readonly spawnFailure?: boolean;
+  readonly syntaxCompletion?: CommandCompletion;
   readonly buildCompletion?: CommandCompletion;
-  readonly output?: "valid" | "missing" | "invalid" | "wrong-target";
-  readonly buildEffect?: Effect.Effect<CommandCompletion, PlatformError.PlatformError>;
+  readonly syntaxSpawnFailure?: boolean;
+  readonly buildSpawnFailure?: boolean;
+  readonly hangBuild?: boolean;
+  readonly output?: "valid" | "missing" | "invalid";
 }
 
-const controlledRuntime = (options: RuntimeOptions): ControlledRuntime => {
+const controlledRuntime = (options: RuntimeOptions): NodeSeaRuntime & RuntimeControl => {
   const events: RunEvent[] = [];
   const configs: Record<string, unknown>[] = [];
   const configPaths: string[] = [];
+  const privateMainPaths: string[] = [];
+  let checks = 0;
   let builds = 0;
+  let wasInterrupted = false;
   const run: NodeSeaRuntime["run"] = (executable, argv, cwd) => {
     events.push({ executable, argv, ...(cwd === undefined ? {} : { cwd }) });
     if (argv[0] === "--input-type=module") {
-      const metadata = options.malformedMetadata ?? JSON.stringify({
-        version: options.version ?? nodeSeaVersion,
-        path: options.metadataPath ?? options.nodePath,
-        platform: options.platform ?? "linux",
-        architecture: options.architecture ?? "x64",
-        glibc: Object.hasOwn(options, "glibc") ? options.glibc : "2.39",
-        builtinSpecifiers: options.builtinSpecifiers ?? ["fs", "node:fs", "node:path", "path"],
-      });
       return Effect.succeed(completion(
-        options.metadataExit ?? 0,
-        metadata,
-        "metadata-error",
-        options.metadataTruncated ?? false,
+        0,
+        options.malformedMetadata ?? JSON.stringify({
+          version: options.version ?? nodeSeaVersion,
+          path: options.metadataPath ?? options.nodePath,
+          platform: "linux",
+          architecture: "x64",
+          glibc: "2.39",
+          builtinSpecifiers: options.builtinSpecifiers ?? ["fs", "node:fs", "node:path", "path"],
+        }),
       ));
     }
     if (argv[0] === "--help") {
-      return Effect.succeed(completion(
-        options.helpExit ?? 0,
-        options.help ?? "Usage: node --build-sea config",
-        "",
-        options.helpTruncated ?? false,
-      ));
+      return Effect.succeed(completion(0, options.help ?? "Usage: node --build-sea config"));
     }
+    if (argv[0] === "--check") {
+      checks += 1;
+      privateMainPaths.push(argv[1]!);
+      if (options.syntaxSpawnFailure === true) return Effect.fail(platformFailure());
+      return Effect.succeed(options.syntaxCompletion ?? completion());
+    }
+    if (argv[0] !== "--build-sea") return Effect.die(new Error(`unexpected argv: ${argv.join(" ")}`));
     builds += 1;
-    if (options.spawnFailure === true) return Effect.fail(platformFailure());
-    if (options.buildEffect !== undefined) return options.buildEffect;
+    if (options.buildSpawnFailure === true) return Effect.fail(platformFailure());
+    if (options.hangBuild === true) {
+      return Effect.never.pipe(Effect.onInterrupt(() => Effect.sync(() => wasInterrupted = true)));
+    }
     const configPath = argv[1]!;
     configPaths.push(configPath);
     const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
     configs.push(config);
+    privateMainPaths.push(String(config.main));
     if (options.output !== "missing") {
       const output = String(config.output);
-      const bytes = options.output === "wrong-target"
-        ? machoX64()
-        : options.output === "invalid"
-        ? new TextEncoder().encode("not an executable")
-        : elfX64Gnu();
-      writeFileSync(output, bytes);
+      writeFileSync(output, options.output === "invalid" ? "not executable" : elfX64Gnu());
       chmodSync(output, 0o755);
     }
     return Effect.succeed(options.buildCompletion ?? completion());
@@ -185,629 +156,298 @@ const controlledRuntime = (options: RuntimeOptions): ControlledRuntime => {
     events,
     configs,
     configPaths,
+    privateMainPaths,
+    checkCount: () => checks,
     buildCount: () => builds,
+    interrupted: () => wasInterrupted,
   };
 };
 
-type BundleOptions = esbuild.BuildOptions & { readonly write: false; readonly metafile: true };
-
-const bundleApi = (externalImports: readonly string[] = ["node:fs"]): EsbuildApi => ({
-  version: "0.28.2",
-  context: async (options: BundleOptions): Promise<BundleContext> => ({
-    rebuild: async () => {
-      const outfile = options.outfile!;
-      const entrypoint = (options.entryPoints as readonly string[])[0]!;
-      const kind = options.format === "cjs" ? "require-call" : "import-statement";
-      const text = "console.log('bundle')\n";
-      return {
-        errors: [],
-        warnings: [],
-        outputFiles: [{ path: outfile, contents: new TextEncoder().encode(text), hash: "fixture", text }],
-        metafile: {
-          inputs: { [entrypoint]: { bytes: 1, imports: [], format: options.format! as "esm" | "cjs" } },
-          outputs: {
-            [outfile]: {
-              bytes: text.length,
-              inputs: { [entrypoint]: { bytesInOutput: 1 } },
-              imports: externalImports.map((path) => ({ path, kind, external: true })),
-              exports: [],
-              entryPoint: entrypoint,
-            },
-          },
-        },
-        mangleCache: {},
-      } as esbuild.BuildResult<BundleOptions>;
-    },
-    cancel: async () => undefined,
-    dispose: async () => undefined,
-  }),
-});
-
 interface Harness {
-  readonly fileSystem: FileSystem.FileSystem;
-  readonly path: Path.Path;
   readonly root: string;
   readonly nodePath: string;
-  readonly runtime: ControlledRuntime;
+  readonly runtime: NodeSeaRuntime & RuntimeControl;
   readonly service: NodeSeaService;
 }
 
-const harness = (
+const makeHarness = (
   root: string,
-  runtimeOptions: Omit<RuntimeOptions, "nodePath"> = {},
-  configureFileSystem?: (fileSystem: FileSystem.FileSystem) => FileSystem.FileSystem,
-  discovery: "explicit" | "path" = "explicit",
+  options: Omit<RuntimeOptions, "nodePath"> = {},
 ): Effect.Effect<Harness, unknown, never> =>
   Effect.gen(function*() {
-    const platformFileSystem = yield* FileSystem.FileSystem;
-    const fileSystem = configureFileSystem?.(platformFileSystem) ?? platformFileSystem;
+    const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const crypto = yield* Crypto.Crypto;
     const nodePath = join(root, "node-26.7.0");
-    writeFileSync(nodePath, runtimeOptions.selectedBytes ?? elfX64Gnu());
+    writeFileSync(nodePath, elfX64Gnu());
     chmodSync(nodePath, 0o755);
-    const runtime = controlledRuntime({ nodePath, ...runtimeOptions });
-    const service = yield* makeNodeSeaService(
-      fileSystem,
-      path,
-      discovery === "explicit" ? { executable: nodePath } : {},
-      runtime,
-    );
-    return { fileSystem, path, root, nodePath, runtime, service };
+    const runtime = controlledRuntime({ nodePath, ...options });
+    const service = yield* makeNodeSeaService(fileSystem, path, crypto, { executable: nodePath }, runtime);
+    return { root, nodePath, runtime, service };
   }).pipe(Effect.provide(NodeServices.layer));
 
-const withMain = <A, E, R>(
-  context: Harness,
-  options: {
-    readonly format?: "esm" | "cjs";
-    readonly externalImports?: readonly string[];
-  },
-  use: (main: JavaScriptBundleArtifact) => Effect.Effect<A, E, R>,
-): Effect.Effect<
-  A,
-  | E
-  | import("../../packages/effect-build-node-sea/src/internal/Esbuild.js").EsbuildBundleError
-  | import("../../packages/effect-build-node-sea/src/internal/Esbuild.js").EsbuildVersionMismatch,
-  Exclude<R, import("effect").Scope.Scope>
-> =>
-  Effect.gen(function*() {
-    const esbuildService = yield* makeEsbuildService(
-      context.fileSystem,
-      context.path,
-      bundleApi(options.externalImports),
-    );
-    return yield* esbuildService.withJavaScriptBundle(
-      {
-        entrypoint: options.format === "cjs" ? "main.cjs" : "main.mjs",
-        format: options.format ?? "esm",
-        cwd: fixtureRoot,
-      },
-      use,
-    );
-  }).pipe(Effect.provide(NodeServices.layer));
+interface BuildOptions {
+  readonly format?: "esm" | "cjs";
+  readonly stages?: readonly Core.Artifact.StageObservation[];
+  readonly observedExternalImports?: readonly string[];
+  readonly assets?: readonly { readonly key: string; readonly path: string }[];
+  readonly digest?: boolean;
+}
 
-const candidateInput = (
-  main: JavaScriptBundleArtifact,
-  resolvedDestination: string,
-  options: Pick<NodeSeaCandidateInput, "cwd" | "assets"> = {},
-): NodeSeaCandidateInput => {
-  const stagedOutfile = `${resolvedDestination}.candidate`;
-  mkdirSync(dirname(stagedOutfile), { recursive: true });
-  return { main, stagedOutfile, resolvedDestination, ...options };
+const buildWithMain = (
+  harness: Harness,
+  outfile: string,
+  options: BuildOptions = {},
+) => {
+  const main = join(harness.root, options.format === "cjs" ? "main.cjs" : "main.mjs");
+  if (!existsSync(main)) writeFileSync(main, "console.log('bundle')\n");
+  return Core.JavaScriptBundle.withFile(
+    {
+      path: main,
+      format: options.format ?? "esm",
+      resolutionTarget: "node",
+      observedExternalImports: options.observedExternalImports ?? [],
+      stages: options.stages ?? [],
+    },
+    (artifact) =>
+      harness.service.createExecutable({
+        main: artifact,
+        outfile,
+        ...(options.assets === undefined ? {} : { assets: options.assets }),
+        ...(options.digest === undefined ? {} : { digest: options.digest }),
+      }),
+  ).pipe(Effect.provide(NodeServices.layer));
 };
 
 const failureOf = (exit: Exit.Exit<unknown, unknown>): unknown =>
   Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined;
 
-describe("exact selected Node SEA service", () => {
-  it("pins the producer, syntax, target, and metadata probe contract", () => {
+describe("granular Node SEA service", () => {
+  it("pins the selected producer and validates one explicit tool once", async () => {
+    const harness = await Effect.runPromise(makeHarness(makeRoot()));
     expect(nodeSeaVersion).toBe("26.7.0");
-    expect(nodeSeaSyntaxTarget).toBe("node26.7");
     expect(nodeSeaTarget).toBe("linux-x64-gnu");
-    expect(nodeSeaMetadataProbeSource).toContain("node:module");
-    expect(nodeSeaMetadataProbeSource).toContain("builtinModules");
     expect(nodeSeaMetadataProbeSource).toContain("isBuiltin");
-    expect(nodeSeaMetadataProbeSource).toContain("process.execPath");
-  });
-
-  it("selects explicit and PATH tools with one metadata and one canonical help probe", async () => {
-    for (const discovery of ["explicit", "path"] as const) {
-      const root = makeRoot();
-      const context = await Effect.runPromise(harness(root, {}, undefined, discovery));
-      const canonicalNodePath = realpathSync(context.nodePath);
-      expect(context.runtime.events).toHaveLength(2);
-      expect(context.runtime.events[0]).toEqual({
-        executable: discovery === "explicit" ? canonicalNodePath : "node",
+    expect(harness.runtime.events).toEqual([
+      {
+        executable: realpathSync(harness.nodePath),
         argv: ["--input-type=module", "--eval", nodeSeaMetadataProbeSource],
-      });
-      expect(context.runtime.events[1]).toEqual({ executable: canonicalNodePath, argv: ["--help"] });
-      expect(context.service.selectedTool).toMatchObject({
-        path: canonicalNodePath,
-        version: "26.7.0",
-        target: "linux-x64-gnu",
-      });
-      expect(Object.isFrozen(context.service.selectedTool)).toBe(true);
-      expect([...context.service.selectedTool.builtinSpecifiers].sort()).toEqual([
-        "fs",
-        "node:fs",
-        "node:path",
-        "path",
-      ]);
-      expect(HashSet.has(context.service.selectedTool.builtinSpecifiers, "node:fs")).toBe(true);
-    }
+      },
+      { executable: realpathSync(harness.nodePath), argv: ["--help"] },
+    ]);
+    expect(HashSet.has(harness.service.selectedTool.builtinSpecifiers, "node:fs")).toBe(true);
   });
 
-  it("rejects relative, malformed, wrong-version, incapable, non-executable, and wrong-target tools", async () => {
-    const cases: readonly [string, (root: string) => Effect.Effect<unknown, unknown, never>][] = [
-      ["relative explicit", (root) =>
-        Effect.gen(function*() {
-          const fileSystem = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          return yield* makeNodeSeaService(
-            fileSystem,
-            path,
-            { executable: "node" },
-            controlledRuntime({
-              nodePath: join(root, "node"),
-            }),
-          );
-        }).pipe(Effect.provide(NodeServices.layer))],
-      ["malformed metadata", (root) => harness(root, { malformedMetadata: "{" })],
-      ["wrong version", (root) => harness(root, { version: "26.7.1" })],
-      ["missing capability", (root) => harness(root, { help: "ordinary help" })],
-      ["near-match capability", (root) => harness(root, { help: "Usage: node --build-seafood config" })],
-      ["truncated metadata", (root) => harness(root, { metadataTruncated: true })],
-      ["truncated help", (root) => harness(root, { helpTruncated: true })],
-      [
-        "wrong target",
-        (root) => harness(root, { glibc: undefined }),
-      ],
-      ["wrong architecture", (root) => harness(root, { architecture: "arm64" })],
-      ["Mach-O selected bytes", (root) => harness(root, { selectedBytes: machoX64() })],
-      ["musl selected bytes", (root) => harness(root, { selectedBytes: elfX64Musl() })],
-    ];
-    for (const [name, run] of cases) {
-      const exit = await Effect.runPromise(Effect.exit(run(makeRoot())));
-      expect(failureOf(exit), name).toMatchObject({ _tag: "NodeSeaProbeFailed" });
-    }
-
-    const root = makeRoot();
-    const nodePath = join(root, "node-26.7.0");
-    writeFileSync(nodePath, elfX64Gnu());
-    chmodSync(nodePath, 0o644);
-    const exit = await Effect.runPromise(Effect.exit(
-      Effect.gen(function*() {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        return yield* makeNodeSeaService(
-          fileSystem,
-          path,
-          { executable: nodePath },
-          controlledRuntime({ nodePath }),
-        );
-      }).pipe(Effect.provide(NodeServices.layer)),
-    ));
-    expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaProbeFailed" });
-  });
-
-  it("characterizes selected bytes before trusting executable-reported host metadata", async () => {
+  it("rejects malformed, wrong-version, and incapable selected tools", async () => {
     for (
-      const [selectedBytes, reason] of [
-        [machoX64(), "selected executable is not ELF"],
-        [elfX64Musl(), "selected executable does not use the GNU ELF interpreter"],
+      const options of [
+        { malformedMetadata: "not-json" },
+        { version: "26.6.0" },
+        { help: "Usage: node" },
       ] as const
     ) {
-      const root = makeRoot();
-      const nodePath = join(root, "node-26.7.0");
-      writeFileSync(nodePath, selectedBytes);
-      chmodSync(nodePath, 0o755);
-      const runtime = controlledRuntime({ nodePath });
-      const exit = await Effect.runPromise(Effect.exit(
-        Effect.gen(function*() {
-          const fileSystem = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          return yield* makeNodeSeaService(fileSystem, path, { executable: nodePath }, runtime);
-        }).pipe(Effect.provide(NodeServices.layer)),
-      ));
-      expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaProbeFailed", reason });
-      expect(runtime.events).toEqual([]);
+      const exit = await Effect.runPromise(Effect.exit(makeHarness(makeRoot(), options)));
+      expect(failureOf(exit)).toBeInstanceOf(NodeSeaProbeFailed);
     }
   });
 
-  it("maps PATH command absence to NodeSeaToolNotFound without fallback or installation", async () => {
-    const root = makeRoot();
-    const exit = await Effect.runPromise(Effect.exit(
-      Effect.gen(function*() {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const runtime: NodeSeaRuntime = {
-          run: () => Effect.fail(platformFailure("NotFound")),
-        };
-        return yield* makeNodeSeaService(fileSystem, path, {}, runtime);
-      }).pipe(Effect.provide(NodeServices.layer)),
-    ));
-    expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaToolNotFound", command: "node" });
-    expect(readdirSync(root)).toEqual([]);
-  });
-});
+  it.each(
+    [
+      ["esm", "module"],
+      ["cjs", "commonjs"],
+    ] as const,
+  )("authenticates, privately copies, checks, and publishes a %s main", async (format, mainFormat) => {
+    const harness = await Effect.runPromise(makeHarness(makeRoot()));
+    const outfile = join(harness.root, `${format}-app`);
+    const asset = join(harness.root, "message.txt");
+    writeFileSync(asset, "asset");
+    const producerStage = {
+      operation: "bundle",
+      tool: { name: "producer", version: "1.0.0" },
+    } as const;
+    const artifact = await Effect.runPromise(buildWithMain(harness, outfile, {
+      format,
+      stages: [producerStage],
+      assets: [{ key: "message", path: asset }],
+      digest: true,
+    }));
 
-describe("Node SEA public option and diagnostic mapping", () => {
-  it("validates the exact public option shape at the adapter boundary", () => {
-    const options: Options = { format: "esm", assets: [{ key: "message", path: "message.txt" }] };
-    expect(definition.validateOptions(options)).toEqual({
-      _tag: "Valid",
-      value: { format: "esm", assets: [{ key: "message", path: "message.txt" }] },
+    expect(artifact).toMatchObject({
+      path: outfile,
+      provider: "node-sea",
+      target: "linux-x64-gnu",
     });
-
-    const longKey = "😀".repeat(257);
-    const tooManyAssets = Array.from({ length: 257 }, (_, index) => ({ key: `key-${index}`, path: "x" }));
-    for (
-      const [input, reason] of [
-        [undefined, "options must be an object"],
-        [{}, "format must be esm or cjs"],
-        [{ format: "iife" }, "format must be esm or cjs"],
-        [{ format: "esm", unknown: true }, "unknown Node SEA option"],
-        [{ format: "esm", assets: {} }, "assets must be an array of at most 256 items"],
-        [{ format: "esm", assets: tooManyAssets }, "assets must be an array of at most 256 items"],
-        [{ format: "esm", assets: [{}] }, "each asset must contain exactly key and path"],
-        [{ format: "esm", assets: [{ key: "", path: "x" }] }, "asset key must be a non-empty string without NUL"],
-        [{ format: "esm", assets: [{ key: "a", path: "" }] }, "asset path must be a non-empty string without NUL"],
-        [{ format: "esm", assets: [{ key: "a", path: "x" }, { key: "a", path: "y" }] }, "asset keys must be unique"],
-        [{ format: "esm", assets: [{ key: longKey, path: "x" }] }, "asset key is too long"],
-      ] as const
-    ) {
-      expect(definition.validateOptions(input)).toEqual({ _tag: "Invalid", reason });
-    }
-  });
-
-  it("preserves Node stdout/stderr diagnostics, exit code, and independent truncation flags", () => {
-    const mapped = executionFailed(
-      new NodeSeaFailed({
-        exitCode: 17,
-        diagnostics: [
-          { channel: "stdout", text: "partial output", truncated: true },
-          { channel: "stderr", text: "node failure", truncated: false },
-        ],
-      }),
-    );
-    expect(mapped).toMatchObject({
-      _tag: "ToolFailed",
-      tool: "node-sea",
-      exitCode: 17,
-      diagnostics: [
-        { channel: "stdout", text: "partial output", truncated: true },
-        { channel: "stderr", text: "node failure", truncated: false },
-      ],
-    });
-  });
-
-  it("keeps esbuild truncation and preparation path/operation evidence truthful", () => {
-    const esbuild = executionFailed(
-      new EsbuildFailed({
-        diagnostics: [{ id: "build", text: "bounded diagnostic" }],
-        truncated: true,
-      }),
-    );
-    expect(esbuild.diagnostics).toEqual([{
-      channel: "stderr",
-      text: 'EsbuildFailed: [{"id":"build","text":"bounded diagnostic"}]',
-      truncated: true,
-    }]);
-
-    const preparation = executionFailed(
-      new NodeSeaPreparationFailed({
-        path: "/tmp/sea-config.json",
-        operation: "write-config",
-        reason: "controlled failure",
-      }),
-    );
-    expect(preparation.diagnostics).toEqual([{
-      channel: "stderr",
-      text: "NodeSeaPreparationFailed (write-config /tmp/sea-config.json): controlled failure",
-      truncated: false,
-    }]);
-  });
-});
-
-describe("internal Node SEA candidate producer", () => {
-  it("writes the core-owned candidate with exact ESM config, assets, and frozen stages", async () => {
-    const root = makeRoot();
-    const context = await Effect.runPromise(harness(root));
-    const canonicalNodePath = realpathSync(context.nodePath);
-    const asset = join(root, "asset.txt");
-    writeFileSync(asset, "asset-value");
-    const outfile = join(root, "dist", "app");
-    let bundlePath = "";
-    const stagedOutfile = `${outfile}.candidate`;
-    mkdirSync(dirname(stagedOutfile), { recursive: true });
-    const stages: NodeSeaStages = await Effect.runPromise(
-      withMain(context, {}, (main) => {
-        bundlePath = main.path;
-        return context.service.produceCandidate({
-          main,
-          stagedOutfile,
-          resolvedDestination: outfile,
-          cwd: root,
-          assets: [{ key: "message", path: "asset.txt" }],
-        });
-      }),
-    );
-    expect(context.runtime.buildCount()).toBe(1);
-    expect(context.runtime.events[2]).toMatchObject({
-      executable: canonicalNodePath,
-      argv: ["--build-sea", context.runtime.configPaths[0]],
-      cwd: root,
-    });
-    expect(context.runtime.configs[0]).toEqual({
-      main: bundlePath,
-      mainFormat: "module",
-      executable: canonicalNodePath,
-      output: stagedOutfile,
+    expect(artifact.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(artifact.stages).toEqual([
+      producerStage,
+      {
+        operation: "assemble-node-sea",
+        tool: { name: "node", version: "26.7.0", path: realpathSync(harness.nodePath) },
+      },
+    ]);
+    expect(harness.runtime.checkCount()).toBe(1);
+    expect(harness.runtime.buildCount()).toBe(1);
+    const config = harness.runtime.configs[0]!;
+    const privateMain = String(config.main);
+    expect(config).toMatchObject({
+      main: privateMain,
+      mainFormat,
+      executable: realpathSync(harness.nodePath),
       useSnapshot: false,
       useCodeCache: false,
       assets: { message: asset },
     });
-    expect(stages).toEqual([
-      { operation: "bundle", tool: { name: "esbuild", version: "0.28.2" } },
-      { operation: "assemble-node-sea", tool: { name: "node", version: "26.7.0", path: canonicalNodePath } },
-    ]);
-    expect(Object.isFrozen(stages)).toBe(true);
-    expect(existsSync(stagedOutfile)).toBe(true);
-    expect(existsSync(outfile)).toBe(false);
-    expect(existsSync(bundlePath)).toBe(false);
-    expect(existsSync(context.runtime.configPaths[0]!)).toBe(false);
+    expect(privateMain).not.toBe(join(harness.root, `main.${format === "esm" ? "mjs" : "cjs"}`));
+    expect(harness.runtime.events.find((event) => event.argv[0] === "--check")?.argv[1]).toBe(privateMain);
+    expect(harness.runtime.events.findIndex((event) => event.argv[0] === "--check"))
+      .toBeLessThan(harness.runtime.events.findIndex((event) => event.argv[0] === "--build-sea"));
+    expect(harness.runtime.privateMainPaths.every((path) => !existsSync(path))).toBe(true);
+    expect(harness.runtime.configPaths.every((path) => !existsSync(path))).toBe(true);
+    expect(existsSync(outfile)).toBe(true);
   });
 
-  it("derives CommonJS and omits empty assets", async () => {
-    const root = makeRoot();
-    const context = await Effect.runPromise(harness(root));
-    const stages: NodeSeaStages = await Effect.runPromise(
-      withMain(
-        context,
-        { format: "cjs", externalImports: ["fs", "path"] },
-        (main) => context.service.produceCandidate(candidateInput(main, join(root, "app"))),
-      ),
-    );
-    expect(context.runtime.configs[0]).toMatchObject({ mainFormat: "commonjs" });
-    expect(context.runtime.configs[0]).not.toHaveProperty("assets");
-    expect(stages.map((stage) => stage.operation)).toEqual(["bundle", "assemble-node-sea"]);
+  it("accepts a borrowed zero-stage bundle without Esbuild", async () => {
+    const harness = await Effect.runPromise(makeHarness(makeRoot()));
+    const artifact = await Effect.runPromise(buildWithMain(harness, join(harness.root, "borrowed")));
+    expect(artifact.stages).toEqual([{
+      operation: "assemble-node-sea",
+      tool: { name: "node", version: "26.7.0", path: realpathSync(harness.nodePath) },
+    }]);
   });
 
-  it("rejects malformed exact inputs and asset shapes before candidate/config/spawn", async () => {
-    const root = makeRoot();
-    const context = await Effect.runPromise(harness(root));
-    const longKey = "😀".repeat(257);
-    const tooManyAssets = Array.from({ length: 257 }, (_, index) => ({ key: `key-${index}`, path: "missing" }));
-    const validShape = (main: JavaScriptBundleArtifact) => ({
-      main,
-      stagedOutfile: join(root, "candidate"),
-      resolvedDestination: join(root, "app"),
-    });
-    const cases = [
-      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), unknown: true }),
-      (main: JavaScriptBundleArtifact) => ({ main }),
-      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), stagedOutfile: "" }),
-      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), resolvedDestination: "bad\0path" }),
-      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), cwd: "" }),
-      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), digest: "yes" }),
-      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), assets: {} }),
-      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), assets: tooManyAssets }),
-      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), assets: [{ key: "", path: "x" }] }),
-      (main: JavaScriptBundleArtifact) => ({
-        ...validShape(main),
-        assets: [{ key: "a", path: "x", extra: true }],
-      }),
-      (main: JavaScriptBundleArtifact) => ({
-        ...validShape(main),
-        assets: [{ key: "a", path: "x" }, { key: "a", path: "y" }],
-      }),
-      (main: JavaScriptBundleArtifact) => ({ ...validShape(main), assets: [{ key: longKey, path: "x" }] }),
+  it("maps total input fields to finite reasons before invoking Node", async () => {
+    const harness = await Effect.runPromise(makeHarness(makeRoot()));
+    const cases: readonly [unknown, string][] = [
+      [null, "expected-object"],
+      [{}, "missing-field"],
+      [{ main: {}, outfile: "app", extra: true }, "unknown-field"],
+      [{ main: {}, outfile: "" }, "invalid-outfile"],
+      [{ main: {}, outfile: "app", cwd: 1 }, "invalid-cwd"],
+      [{ main: {}, outfile: "app", digest: "yes" }, "invalid-digest"],
+      [{ main: {}, outfile: "app", assets: {} }, "invalid-assets"],
+      [{ main: {}, outfile: "app", assets: [{}] }, "invalid-asset"],
+      [{ main: {}, outfile: "app", assets: [{ key: "", path: "x" }] }, "invalid-asset-key"],
+      [{ main: {}, outfile: "app", assets: [{ key: "x", path: "" }] }, "invalid-asset-path"],
+      [{ main: {}, outfile: "app", assets: [{ key: "x", path: "a" }, { key: "x", path: "b" }] }, "duplicate-asset-key"],
     ];
-    for (const makeInput of cases) {
-      const exit = await Effect.runPromise(Effect.exit(
-        withMain(
-          context,
-          {},
-          (main) => context.service.produceCandidate(makeInput(main) as unknown as NodeSeaCandidateInput),
-        ),
-      ));
-      expect(failureOf(exit)).toMatchObject({ _tag: "InvalidNodeSeaInput" });
+    for (const [input, reason] of cases) {
+      const exit = await Effect.runPromise(Effect.exit(harness.service.createExecutable(input as never)));
+      expect(failureOf(exit)).toMatchObject({ _tag: "InvalidNodeSeaInput", reason });
     }
-    expect(context.runtime.buildCount()).toBe(0);
-    expect(readdirSync(root).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
+    expect(harness.runtime.checkCount()).toBe(0);
+    expect(harness.runtime.buildCount()).toBe(0);
   });
 
-  it("requires a live artifact and rejects non-builtin external imports before spawn", async () => {
-    const root = makeRoot();
-    const context = await Effect.runPromise(harness(root));
-    let stale: JavaScriptBundleArtifact | undefined;
-    await Effect.runPromise(withMain(context, {}, (main) => Effect.sync(() => void (stale = main))));
-    const staleExit = await Effect.runPromise(Effect.exit(
-      context.service.produceCandidate(candidateInput(stale!, join(root, "stale"))),
-    ));
-    expect(failureOf(staleExit)).toMatchObject({ _tag: "InvalidNodeSeaInput", reason: "main-artifact-not-live" });
-    const forgedExit = await Effect.runPromise(Effect.exit(
-      context.service.produceCandidate(candidateInput(
-        { ...stale!, path: join(root, "forged") },
-        join(root, "forged-out"),
-      )),
-    ));
-    expect(failureOf(forgedExit)).toMatchObject({ _tag: "InvalidNodeSeaInput", reason: "main-artifact-not-live" });
-    const externalExit = await Effect.runPromise(Effect.exit(
-      withMain(
-        context,
-        { externalImports: ["node:not-real"] },
-        (main) => context.service.produceCandidate(candidateInput(main, join(root, "external"))),
-      ),
-    ));
-    expect(failureOf(externalExit)).toMatchObject({
-      _tag: "InvalidNodeSeaInput",
-      reason: "external-import-not-builtin:node:not-real",
-    });
-    expect(context.runtime.buildCount()).toBe(0);
+  it("rejects arbitrary reason values while accepting the builtin template", () => {
+    expect(() => new InvalidNodeSeaInput({ reason: "arbitrary" as never })).toThrow();
+    expect(new InvalidNodeSeaInput({ reason: "external-import-not-builtin:pkg" }).reason)
+      .toBe("external-import-not-builtin:pkg");
+    expect(() =>
+      Schema.decodeUnknownSync(InvalidNodeSeaInput)({
+        _tag: "InvalidNodeSeaInput",
+        reason: "external-import-not-builtin:",
+      })
+    ).toThrow();
   });
 
-  it("rejects missing/non-file assets, invalid cwd, aliases, and bundle-scope destinations before spawn", async () => {
-    const root = makeRoot();
-    const context = await Effect.runPromise(harness(root));
-    const asset = join(root, "asset.txt");
-    writeFileSync(asset, "asset");
-    const assetDirectory = join(root, "asset-dir");
-    mkdirSync(assetDirectory);
-    const notDirectory = join(root, "not-directory");
-    writeFileSync(notDirectory, "x");
-    const cases: Array<(main: JavaScriptBundleArtifact) => NodeSeaCandidateInput> = [
-      (main) =>
-        candidateInput(main, join(root, "missing-asset"), { assets: [{ key: "x", path: join(root, "missing") }] }),
-      (main) => candidateInput(main, join(root, "directory-asset"), { assets: [{ key: "x", path: assetDirectory }] }),
-      (main) => candidateInput(main, join(root, "bad-cwd"), { cwd: notDirectory }),
-      (main) => candidateInput(main, main.path),
-      (main) => candidateInput(main, context.nodePath),
-      (main) => candidateInput(main, asset, { assets: [{ key: "x", path: asset }] }),
-      (main) => candidateInput(main, join(dirname(main.path), "published-inside-scope")),
-    ];
-    for (const makeInput of cases) {
-      const exit = await Effect.runPromise(Effect.exit(
-        withMain(context, {}, (main) => context.service.produceCandidate(makeInput(main))),
-      ));
-      expect(failureOf(exit)).toMatchObject({
-        _tag: expect.stringMatching(/InvalidNodeSeaInput|NodeSeaPreparationFailed/),
-      });
-    }
-    expect(context.runtime.buildCount()).toBe(0);
-  });
-
-  it("rejects a destination reached through a symlinked parent into the bundle scope", async () => {
-    const root = makeRoot();
-    const context = await Effect.runPromise(harness(root));
-    const exit = await Effect.runPromise(Effect.exit(
-      withMain(context, {}, (main) =>
-        Effect.gen(function*() {
-          const link = join(root, "bundle-link");
-          symlinkSync(dirname(main.path), link, "dir");
-          return yield* context.service.produceCandidate(candidateInput(main, join(link, "app")));
-        })),
-    ));
+  it("rejects non-builtin externals before syntax checking or candidate acquisition", async () => {
+    const harness = await Effect.runPromise(makeHarness(makeRoot()));
+    const exit = await Effect.runPromise(Effect.exit(buildWithMain(harness, join(harness.root, "app"), {
+      observedExternalImports: ["left-pad"],
+    })));
     expect(failureOf(exit)).toMatchObject({
       _tag: "InvalidNodeSeaInput",
-      reason: "destination-inside-bundle-scope",
+      reason: "external-import-not-builtin:left-pad",
     });
-    expect(context.runtime.buildCount()).toBe(0);
+    expect(harness.runtime.checkCount()).toBe(0);
+    expect(harness.runtime.buildCount()).toBe(0);
   });
 
-  it("maps spawn and nonzero process failures while leaving candidate validation to core", async () => {
+  it("detects a same-size main rewrite through the core live handle", async () => {
+    const harness = await Effect.runPromise(makeHarness(makeRoot()));
+    const mainPath = join(harness.root, "main.mjs");
+    writeFileSync(mainPath, "export const a = 1;\n");
+    const exit = await Effect.runPromise(Effect.exit(
+      Core.JavaScriptBundle.withFile(
+        {
+          path: mainPath,
+          format: "esm",
+          resolutionTarget: "node",
+          observedExternalImports: [],
+          stages: [],
+        },
+        (main) =>
+          Effect.sync(() => writeFileSync(mainPath, "export const b = 2;\n")).pipe(
+            Effect.andThen(harness.service.createExecutable({ main, outfile: join(harness.root, "app") })),
+          ),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    ));
+    expect(failureOf(exit)).toMatchObject({ _tag: "InvalidNodeSeaInput", reason: "main-artifact-changed" });
+    expect(harness.runtime.checkCount()).toBe(0);
+  });
+
+  it("preserves syntax, spawn, assembly, and output failures without replacing a destination", async () => {
     const cases = [
-      [{ spawnFailure: true }, "NodeSeaSpawnFailed"],
-      [{ buildCompletion: completion(17, "partial out", "node failure", true) }, "NodeSeaFailed"],
+      [{ syntaxCompletion: completion(1, "", "syntax bad") }, NodeSeaSyntaxCheckFailed],
+      [{ syntaxSpawnFailure: true }, NodeSeaSpawnFailed],
+      [{ buildCompletion: completion(2, "", "assembly bad") }, NodeSeaFailed],
+      [{ buildSpawnFailure: true }, NodeSeaSpawnFailed],
+      [{ output: "missing" as const }, Core.BuildError.OutputMissing],
+      [{ output: "invalid" as const }, Core.BuildError.OutputInvalid],
     ] as const;
-    for (const [runtimeOptions, tag] of cases) {
-      const root = makeRoot();
-      const destination = join(root, "app");
-      writeFileSync(destination, "old");
-      const context = await Effect.runPromise(harness(root, runtimeOptions));
-      const exit = await Effect.runPromise(Effect.exit(
-        withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, destination))),
-      ));
-      expect(failureOf(exit)).toMatchObject({ _tag: tag });
-      if (tag === "NodeSeaFailed") {
-        expect(failureOf(exit)).toMatchObject({
-          exitCode: 17,
-          diagnostics: [
-            { channel: "stdout", text: "partial out", truncated: true },
-            { channel: "stderr", text: "node failure", truncated: true },
-          ],
-        });
-      }
-      expect(readFileSync(destination, "utf8")).toBe("old");
+    for (const [options, ErrorClass] of cases) {
+      const harness = await Effect.runPromise(makeHarness(makeRoot(), options));
+      const outfile = join(harness.root, "app");
+      writeFileSync(outfile, "old");
+      const exit = await Effect.runPromise(Effect.exit(buildWithMain(harness, outfile)));
+      expect(failureOf(exit)).toBeInstanceOf(ErrorClass);
+      expect(readFileSync(outfile, "utf8")).toBe("old");
+      expect(harness.runtime.privateMainPaths.every((path) => !existsSync(path))).toBe(true);
+      expect(harness.runtime.configPaths.every((path) => !existsSync(path))).toBe(true);
     }
-
-    const root = makeRoot();
-    const context = await Effect.runPromise(harness(root, { output: "missing" }));
-    const stages = await Effect.runPromise(
-      withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, join(root, "app")))),
-    );
-    expect(stages.map((stage) => stage.operation)).toEqual(["bundle", "assemble-node-sea"]);
   });
 
-  it("maps config allocation/write failures and never invokes publication rename", async () => {
-    const configCases = ["make-config", "write-config"] as const;
-    for (const operation of configCases) {
-      const root = makeRoot();
-      const destination = join(root, "app");
-      writeFileSync(destination, "old");
-      const context = await Effect.runPromise(harness(root, {}, (fileSystem) => ({
-        ...fileSystem,
-        makeTempDirectoryScoped: (options) =>
-          operation === "make-config" && options?.prefix === "effect-build-node-sea-"
-            ? Effect.fail(platformFailure())
-            : fileSystem.makeTempDirectoryScoped(options),
-        writeFileString: (file, contents, options) =>
-          operation === "write-config" && file.endsWith("sea-config.json")
-            ? Effect.fail(platformFailure())
-            : fileSystem.writeFileString(file, contents, options),
-      })));
-      const exit = await Effect.runPromise(Effect.exit(
-        withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, destination))),
-      ));
-      expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaPreparationFailed", operation });
-      expect(readFileSync(destination, "utf8")).toBe("old");
-      expect(context.runtime.buildCount()).toBe(0);
-    }
-
-    const root = makeRoot();
-    const destination = join(root, "app");
-    writeFileSync(destination, "old");
-    let renames = 0;
-    const context = await Effect.runPromise(harness(root, {}, (fileSystem) => ({
-      ...fileSystem,
-      rename: () => {
-        renames += 1;
-        return Effect.fail(platformFailure());
-      },
-    })));
-    await Effect.runPromise(
-      withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, destination))),
-    );
-    expect(renames).toBe(0);
-    expect(readFileSync(destination, "utf8")).toBe("old");
-  });
-
-  it("keeps interruption as interruption and removes config/candidate/bundle state", async () => {
-    const root = makeRoot();
-    const destination = join(root, "app");
-    writeFileSync(destination, "old");
-    let started = false;
-    let retainedBundlePath = "";
-    const context = await Effect.runPromise(harness(root, {
-      buildEffect: Effect.sync(() => void (started = true)).pipe(Effect.andThen(Effect.never)),
-    }));
-    const program = withMain(context, {}, (main) => {
-      retainedBundlePath = main.path;
-      return context.service.produceCandidate(candidateInput(main, destination));
-    });
-    const fiber = Effect.runFork(program);
-    for (let index = 0; index < 200 && !started; index++) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-    expect(started).toBe(true);
+  it("keeps interruption as interruption and removes operation-private files", async () => {
+    const harness = await Effect.runPromise(makeHarness(makeRoot(), { hangBuild: true }));
+    const outfile = join(harness.root, "app");
+    const fiber = Effect.runFork(buildWithMain(harness, outfile));
+    while (harness.runtime.buildCount() === 0) await new Promise((resolve) => setTimeout(resolve, 1));
     await Effect.runPromise(Fiber.interrupt(fiber));
     const exit = await Effect.runPromise(Fiber.await(fiber));
-    expect(Exit.isFailure(exit) && Cause.interruptors(exit.cause).size > 0).toBe(true);
-    expect(readFileSync(destination, "utf8")).toBe("old");
-    expect(existsSync(retainedBundlePath)).toBe(false);
-    expect(readdirSync(root).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
+    expect(Exit.hasInterrupts(exit)).toBe(true);
+    expect(harness.runtime.interrupted()).toBe(true);
+    expect(harness.runtime.privateMainPaths.every((path) => !existsSync(path))).toBe(true);
+    expect(harness.runtime.configPaths.every((path) => !existsSync(path))).toBe(true);
+    expect(existsSync(outfile)).toBe(false);
   });
 
-  it("exposes only the package-private candidate accessor", async () => {
-    const typeOnly = (
-      _stages: NodeSeaStages,
-      _effect: Effect.Effect<NodeSeaStages, unknown>,
-    ): void => undefined;
-    void typeOnly;
+  it("maps copy failures to the named preparation operation", async () => {
     const root = makeRoot();
-    const context = await Effect.runPromise(harness(root));
-    const result = await Effect.runPromise(
-      withMain(context, {}, (main) => context.service.produceCandidate(candidateInput(main, join(root, "app")))),
-    );
-    expect(result.map((stage) => stage.operation)).toEqual(["bundle", "assemble-node-sea"]);
+    const exit = await Effect.runPromise(Effect.exit(
+      Effect.gen(function*() {
+        const platformFileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const crypto = yield* Crypto.Crypto;
+        const nodePath = join(root, "node-26.7.0");
+        writeFileSync(nodePath, elfX64Gnu());
+        chmodSync(nodePath, 0o755);
+        const runtime = controlledRuntime({ nodePath });
+        const service = yield* makeNodeSeaService(
+          { ...platformFileSystem, copyFile: () => Effect.fail(platformFailure()) },
+          path,
+          crypto,
+          { executable: nodePath },
+          runtime,
+        );
+        const mainPath = join(root, "main.mjs");
+        writeFileSync(mainPath, "export {};\n");
+        return yield* Core.JavaScriptBundle.withFile(
+          { path: mainPath, format: "esm", resolutionTarget: "node", observedExternalImports: [], stages: [] },
+          (main) => service.createExecutable({ main, outfile: join(root, "app") }),
+        );
+      }).pipe(Effect.provide(NodeServices.layer)),
+    ));
+    expect(failureOf(exit)).toMatchObject({ _tag: "NodeSeaPreparationFailed", operation: "copy-main" });
+    expect(failureOf(exit)).toBeInstanceOf(NodeSeaPreparationFailed);
   });
 });

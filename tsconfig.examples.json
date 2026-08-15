@@ -10,6 +10,7 @@
   "include": [
     "examples/bun/src/**/*.ts",
     "examples/deno/src/**/*.ts",
+    "examples/esbuild/src/**/*.ts",
     "examples/node-sea/src/**/*.ts"
   ],
   "exclude": [

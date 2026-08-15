@@ -1,7 +1,8 @@
 import type { Effect } from "effect";
-import type { ProviderArtifact, ProviderName } from "../Provider.js";
+import type { ProviderArtifact, ProviderMatrixError, ProviderStages } from "../Provider.js";
 import type { BuildError } from "./BuildError.js";
-import type { CompileExecutableMatrixInput, MatrixErrorFor } from "./CompileExecutableMatrix.js";
+import type { CompileExecutableMatrixInput } from "./CompileExecutableMatrix.js";
+import type { SystemTarget } from "./Target.js";
 
 export interface CompileExecutableInput<
   Options,
@@ -16,22 +17,23 @@ export interface CompileExecutableInput<
 }
 
 export interface CompilerService<
-  Name extends ProviderName,
-  SupportedTarget extends import("./Target.js").Target,
+  Name extends string,
+  SupportedTarget extends SystemTarget,
+  Stages extends ProviderStages<Name>,
   Options,
 > {
   readonly compileExecutable: (
     input: CompileExecutableInput<Options, SupportedTarget>,
   ) => Effect.Effect<
-    ProviderArtifact<Name, SupportedTarget>,
+    ProviderArtifact<Name, SupportedTarget, Stages>,
     BuildError,
     never
   >;
   readonly compileExecutableMatrix: (
     input: CompileExecutableMatrixInput<SupportedTarget, Options>,
   ) => Effect.Effect<
-    readonly ProviderArtifact<Name, SupportedTarget>[],
-    MatrixErrorFor<Name, SupportedTarget>,
+    readonly ProviderArtifact<Name, SupportedTarget, Stages>[],
+    ProviderMatrixError<Name, SupportedTarget, Stages>,
     never
   >;
 }

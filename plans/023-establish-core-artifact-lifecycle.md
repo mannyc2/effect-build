@@ -1486,11 +1486,23 @@ changes for Plan 024. Do not make a later plan-only commit: Plan 024 requires
 its `PLAN023_SHA` to equal handoff `HEAD`. Never claim a receipt edit as part of
 the implementation commit.
 
-- **Implementation status**: `PENDING`
-- **Implementation source SHA**: `PENDING`
-- **Verification summary**: `PENDING`
-- **Pinned real-tool evidence (local versions or exact-SHA CI run/job)**: `PENDING`
-- **Exact-SHA Node SEA CI evidence (run URL and `node-sea` job)**: `PENDING`
+- **Implementation status**: `DONE`
+- **Implementation source SHA**: `f528e6c80b1b2923e561ade37d7f6bf1ead2f1dc`
+- **Verification summary**: exact Bun `1.3.14`; `bun install --frozen-lockfile`,
+  `bun run verify`, `bun run verify:effect`, `git diff --check`, and both
+  lockfile identity checks passed; local pinned real tools were `UNAVAILABLE`
+  on `Darwin-arm64`; exact-SHA push CI run `31848302894` completed successfully
+  with all ten jobs green.
+- **Pinned real-tool evidence (local versions or exact-SHA CI run/job)**:
+  exact-SHA push run
+  [31848302894](https://github.com/mannyc2/effect-build/actions/runs/31848302894),
+  [`real-tools` job `94919078165`](https://github.com/mannyc2/effect-build/actions/runs/31848302894/job/94919078165):
+  `success`.
+- **Exact-SHA Node SEA CI evidence (run URL and `node-sea` job)**: exact-SHA
+  push run
+  [31848302894](https://github.com/mannyc2/effect-build/actions/runs/31848302894),
+  [`node-sea` job `94919078178`](https://github.com/mannyc2/effect-build/actions/runs/31848302894/job/94919078178):
+  `success`.
 - **Allowed plan-only handoff changes**:
   `plans/023-establish-core-artifact-lifecycle.md`, `plans/README.md`
 

@@ -100,7 +100,7 @@ export interface NativeExecutableObservation {
   readonly abi?: "gnu" | "musl";
 }
 
-export type PublishedExecutable<Stages extends readonly [StageObservation, ...StageObservation[]]> = Readonly<
+export type PublishedExecutable<Stages extends readonly [...StageObservation[], StageObservation]> = Readonly<
   Omit<ExecutableArtifact, "stages"> & { readonly stages: Stages }
 >;
 
@@ -417,7 +417,7 @@ const unregisterDestination = (destination: string): Effect.Effect<void> =>
 
 export const produceExecutable: <
   Prepared,
-  Stages extends readonly [StageObservation, ...StageObservation[]],
+  Stages extends readonly [...StageObservation[], StageObservation],
   PrepareError,
   ProduceError,
   InvalidStagesError,
@@ -451,7 +451,7 @@ export const produceExecutable: <
   FileSystem.FileSystem | Path.Path | Crypto.Crypto | Exclude<R1 | R2, Scope.Scope>
 > = Effect.fn("effect-build/Integration.produceExecutable")(<
   Prepared,
-  Stages extends readonly [StageObservation, ...StageObservation[]],
+  Stages extends readonly [...StageObservation[], StageObservation],
   PrepareError,
   ProduceError,
   InvalidStagesError,

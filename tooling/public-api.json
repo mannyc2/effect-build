@@ -54,16 +54,41 @@
         ]
       }
     },
+    "effect-build-esbuild": {
+      "subpaths": [
+        "."
+      ],
+      "runtimeKeys": {
+        ".": [
+          "BundleMaterializationFailed",
+          "BundleMaterializationOperation",
+          "Esbuild",
+          "EsbuildDiagnostic",
+          "EsbuildFailed",
+          "EsbuildVersionMismatch",
+          "InvalidBundleInput",
+          "JavaScriptBundleInvalid",
+          "layer",
+          "withJavaScriptBundle"
+        ]
+      }
+    },
     "effect-build-node-sea": {
       "subpaths": [
         "."
       ],
       "runtimeKeys": {
         ".": [
-          "Compiler",
-          "Target",
-          "compileExecutable",
-          "compileExecutableMatrix",
+          "InvalidNodeSeaInput",
+          "NodeSea",
+          "NodeSeaFailed",
+          "NodeSeaPreparationFailed",
+          "NodeSeaPreparationOperation",
+          "NodeSeaProbeFailed",
+          "NodeSeaSpawnFailed",
+          "NodeSeaSyntaxCheckFailed",
+          "NodeSeaToolNotFound",
+          "createExecutable",
           "layer"
         ]
       }

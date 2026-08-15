@@ -34,11 +34,6 @@ const literals = Object.freeze(Object.keys(catalog)) as readonly [SystemTarget, 
 
 export const SystemTarget = Schema.Literals(literals);
 
-// Temporary compatibility alias for the pre-granular compile internals. The
-// value is the same Schema authority, not a second target catalog.
-export const Target = SystemTarget;
-export type Target = SystemTarget;
-
 export const descriptorOf = (target: SystemTarget): TargetDescriptor => catalog[target];
 
 export interface NativeTargetObservation {

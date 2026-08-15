@@ -8,6 +8,7 @@ const targets = [
   "packages/effect-build/dist",
   "packages/effect-build-bun/dist",
   "packages/effect-build-deno/dist",
+  "packages/effect-build-esbuild/dist",
   "packages/effect-build-node-sea/dist",
 ];
 

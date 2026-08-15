@@ -1,12 +1,11 @@
-import { Context, Effect, Exit, Schema } from "effect";
+import { Context, Effect, Exit, Result, Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { targetTokens as bunTargetTokens } from "../../packages/effect-build-bun/src/Adapter.js";
+import { targetEntries as bunTargetEntries } from "../../packages/effect-build-bun/src/Adapter.js";
 import {
   definition as denoDefinition,
-  targetTokens as denoTargetTokens,
+  targetEntries as denoTargetEntries,
 } from "../../packages/effect-build-deno/src/Adapter.js";
-import type { TargetFor } from "../../packages/effect-build/src/Provider.js";
-import { Artifact } from "../../packages/effect-build/src/standalone/Artifact.js";
+import { ExecutableArtifact } from "../../packages/effect-build/src/standalone/Artifact.js";
 import {
   BuildError,
   InvalidDriverOptions,
@@ -31,11 +30,8 @@ import {
   NativeExecutableRangeRequired,
 } from "../../packages/effect-build/src/standalone/internal/NativeExecutable.js";
 import { descriptorOf } from "../../packages/effect-build/src/standalone/internal/TargetCatalog.js";
-import {
-  makeProviderTargetTable,
-  makeTargetTable,
-} from "../../packages/effect-build/src/standalone/internal/TargetTable.js";
-import { Target } from "../../packages/effect-build/src/standalone/Target.js";
+import { makeTargetTable } from "../../packages/effect-build/src/standalone/internal/TargetTable.js";
+import { SystemTarget } from "../../packages/effect-build/src/standalone/Target.js";
 
 const _bunMuslTarget: BunTarget = "linux-x64-musl";
 void _bunMuslTarget;
@@ -50,13 +46,13 @@ const _denoMuslTarget: DenoTarget = "linux-x64-musl";
 void _denoMuslTarget;
 const _rejectDenoMuslAtAdapterBoundary = () => {
   const options = denoDefinition.validateOptions(undefined);
-  if (options._tag !== "Valid") throw new Error(options.reason);
+  if (Result.isFailure(options)) throw new Error(options.failure);
   return denoDefinition.renderArgv({
     input: {
       entrypoint: "main.ts",
       // @ts-expect-error The private Deno adapter boundary must reject root-only musl targets.
       target: "linux-x64-musl",
-      options: options.value,
+      options: options.success,
     },
     nativeTarget: "x86_64-unknown-linux-gnu",
     stagedOutfile: "/tmp/app",
@@ -80,9 +76,9 @@ const assertPreparedExecutableRequestNarrowing = (
 };
 void assertPreparedExecutableRequestNarrowing;
 
-const decodeTarget = Schema.decodeUnknownSync(Target);
-const decodeArtifact = Schema.decodeUnknownSync(Artifact);
-const encodeArtifact = Schema.encodeSync(Artifact);
+const decodeTarget = Schema.decodeUnknownSync(SystemTarget);
+const decodeArtifact = Schema.decodeUnknownSync(ExecutableArtifact);
+const encodeArtifact = Schema.encodeSync(ExecutableArtifact);
 const decodeError = Schema.decodeUnknownSync(BuildError);
 const encodeError = Schema.encodeSync(BuildError);
 
@@ -102,7 +98,6 @@ const validArtifact = {
   bytes: 12_345,
   digest: `sha256:${"a".repeat(64)}`,
   target: "macos-aarch64",
-  provider: "bun",
   stages: [{
     operation: "compile-executable",
     tool: { name: "bun", version: "1.3.9", path: "/usr/local/bin/bun" },
@@ -171,10 +166,12 @@ describe("standalone contract: target and artifact", () => {
   });
 
   it("rejects malformed target tables at their construction boundary", () => {
-    const unsafeMake = makeTargetTable as (entries: Readonly<Record<string, string>>) => unknown;
-    expect(() => unsafeMake({})).toThrow("target table must not be empty");
-    expect(() => unsafeMake({ "not-a-target": "native" })).toThrow("unknown canonical target");
-    expect(() => unsafeMake({ "macos-x64": "" })).toThrow("native target token must be non-empty");
+    const unsafeMake = makeTargetTable as (entries: readonly unknown[]) => unknown;
+    expect(() => unsafeMake([])).toThrow("provider targetEntries must be non-empty");
+    expect(() => unsafeMake([["not-a-target", "native"]])).toThrow("provider target must be a known SystemTarget");
+    expect(() => unsafeMake([["macos-x64", ""]])).toThrow("provider native target token must be non-empty");
+    expect(() => unsafeMake([["macos-x64", "one"], ["macos-x64", "two"]]))
+      .toThrow("provider targetEntries must not contain duplicate targets");
   });
 
   it("inspects a valid ELF whose program headers are stored in a distant range", () => {
@@ -276,41 +273,12 @@ describe("standalone contract: target and artifact", () => {
     expect(JSON.parse(JSON.stringify(encodeArtifact(decoded)))).toEqual(validArtifact);
   });
 
-  it("accepts all 12 provider-correlated target pairs and rejects every narrowed impossible pair", () => {
-    const providerTargets = [
-      ["bun", bunTargetTable.Target.literals],
-      ["deno", denoTargetTable.Target.literals],
-    ] as const;
-
-    for (const [name, targets] of providerTargets) {
-      for (const target of targets) {
-        expect(decodeArtifact({
-          path: `/work/dist/${name}-${target}`,
-          bytes: 64,
-          provider: name,
-          target,
-          stages: [{ operation: "compile-executable", tool: { name, version: "1.0.0", path: `/tools/${name}` } }],
-        })).toMatchObject({ provider: name, target, stages: [{ tool: { name } }] });
-      }
-    }
-
-    for (
-      const [name, target] of [
-        ["deno", "linux-x64-musl"],
-        ["deno", "linux-aarch64-musl"],
-        ["bun", "linux-aarch64-musl"],
-        ["bun", "windows-aarch64"],
-      ] as const
-    ) {
-      expect(() =>
-        decodeArtifact({
-          path: `/work/dist/${name}-${target}`,
-          bytes: 64,
-          target,
-          tool: { name, version: "1.0.0", path: `/tools/${name}` },
-        })
-      ).toThrow();
-    }
+  it("keeps executable observations provider-neutral", () => {
+    expect(decodeArtifact(validArtifact)).not.toHaveProperty("provider");
+    expect(decodeArtifact({
+      ...validArtifact,
+      stages: [{ operation: "assemble", tool: { name: "future-tool", version: "1.0.0" } }],
+    })).toMatchObject({ stages: [{ tool: { name: "future-tool" } }] });
   });
 
   it("accepts an artifact without a digest", () => {
@@ -350,7 +318,7 @@ describe("standalone contract: target and artifact", () => {
     }
   });
 
-  it("rejects empty tool versions and unknown tool names", () => {
+  it("rejects empty tool names and versions without closing the integration vocabulary", () => {
     expect(() =>
       decodeArtifact({
         ...validArtifact,
@@ -360,7 +328,7 @@ describe("standalone contract: target and artifact", () => {
     expect(() =>
       decodeArtifact({
         ...validArtifact,
-        stages: [{ ...validArtifact.stages[0], tool: { ...validArtifact.stages[0]!.tool, name: "node" } }],
+        stages: [{ ...validArtifact.stages[0], tool: { ...validArtifact.stages[0]!.tool, name: "" } }],
       })
     ).toThrow();
   });
@@ -443,25 +411,33 @@ interface DenoLikeOptions {
 
 class BunLikeCompiler extends Context.Service<
   BunLikeCompiler,
-  CompilerService<"bun", BunTarget, BunLikeOptions>
+  CompilerService<"bun", BunTarget, BunStages, BunLikeOptions>
 >()(
   "test/standalone/BunLikeCompiler",
 ) {}
 
 class DenoLikeCompiler extends Context.Service<
   DenoLikeCompiler,
-  CompilerService<"deno", DenoTarget, DenoLikeOptions>
+  CompilerService<"deno", DenoTarget, DenoStages, DenoLikeOptions>
 >()(
   "test/standalone/DenoLikeCompiler",
 ) {}
 
-const fakeService = <const Name extends "bun" | "deno", SupportedTarget extends Target, Options>(
+const fakeService = <
+  const Name extends "bun" | "deno",
+  SupportedTarget extends typeof SystemTarget.Type,
+  Stages extends readonly [{
+    readonly operation: "compile-executable";
+    readonly tool: { readonly name: Name; readonly version: string; readonly path: string };
+  }],
+  Options,
+>(
   name: Name,
   defaultTarget: SupportedTarget,
-): CompilerService<Name, SupportedTarget, Options> => ({
+): CompilerService<Name, SupportedTarget, Stages, Options> => ({
   compileExecutable: (input: CompileExecutableInput<Options, SupportedTarget>) =>
     Effect.sync(() =>
-      decodeArtifact({
+      ({
         path: `/work/${input.outfile}`,
         bytes: 64,
         ...(input.digest === true ? { digest: `sha256:${"b".repeat(64)}` } : {}),
@@ -471,7 +447,7 @@ const fakeService = <const Name extends "bun" | "deno", SupportedTarget extends 
           operation: "compile-executable",
           tool: { name, version: "0.0.1", path: `/usr/local/bin/${name}` },
         }],
-      }) as ProviderArtifact<Name, SupportedTarget>
+      }) as unknown as ProviderArtifact<Name, SupportedTarget, Stages>
     ),
   compileExecutableMatrix: () => Effect.die("unused matrix operation"),
 });
@@ -483,7 +459,10 @@ describe("standalone contract: driver correlation", () => {
   it("delegates each per-tool operation to exactly its own provided service", () => {
     const artifact = Effect.runSync(
       bunLikeCompile({ entrypoint: "src/main.ts", outfile: "dist/app", options: { minify: true } }).pipe(
-        Effect.provideService(BunLikeCompiler, fakeService<"bun", BunTarget, BunLikeOptions>("bun", "macos-aarch64")),
+        Effect.provideService(
+          BunLikeCompiler,
+          fakeService<"bun", BunTarget, BunStages, BunLikeOptions>("bun", "macos-aarch64"),
+        ),
       ),
     );
     expect(artifact.path).toBe("/work/dist/app");
@@ -500,7 +479,7 @@ describe("standalone contract: driver correlation", () => {
       }).pipe(
         Effect.provideService(
           DenoLikeCompiler,
-          fakeService<"deno", DenoTarget, DenoLikeOptions>("deno", "macos-aarch64"),
+          fakeService<"deno", DenoTarget, DenoStages, DenoLikeOptions>("deno", "macos-aarch64"),
         ),
       ),
     );
@@ -509,7 +488,7 @@ describe("standalone contract: driver correlation", () => {
   });
 
   it("propagates typed failures unchanged", () => {
-    const failing: CompilerService<"bun", BunTarget, BunLikeOptions> = {
+    const failing: CompilerService<"bun", BunTarget, BunStages, BunLikeOptions> = {
       compileExecutable: () =>
         Effect.fail(
           new ToolFailed({
@@ -540,7 +519,15 @@ describe("standalone contract: driver correlation", () => {
     expect(observed?._tag).toBe("ToolFailed");
   });
 });
-type BunTarget = TargetFor<"bun">;
-type DenoTarget = TargetFor<"deno">;
-const bunTargetTable = makeProviderTargetTable("bun", bunTargetTokens);
-const denoTargetTable = makeProviderTargetTable("deno", denoTargetTokens);
+type BunTarget = (typeof bunTargetEntries)[number][0];
+type DenoTarget = (typeof denoTargetEntries)[number][0];
+type BunStages = readonly [{
+  readonly operation: "compile-executable";
+  readonly tool: { readonly name: "bun"; readonly version: string; readonly path: string };
+}];
+type DenoStages = readonly [{
+  readonly operation: "compile-executable";
+  readonly tool: { readonly name: "deno"; readonly version: string; readonly path: string };
+}];
+const bunTargetTable = makeTargetTable(bunTargetEntries);
+const denoTargetTable = makeTargetTable(denoTargetEntries);

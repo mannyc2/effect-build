@@ -1,23 +1,19 @@
 # effect-build
 
-Portable Effect-native executable schemas, errors, operation contracts, and
-shared lifecycle. Install it with exactly one provider:
-`effect-build-bun` or `effect-build-deno`.
+Provider-neutral Effect-native file, executable, target, error, scoped bundle,
+and publication semantics.
 
-The root export contains `Artifact`, `BuildError`, `JavaScriptBundle`,
-`MatrixError`, and `Target`. `JavaScriptBundle.Artifact` is a nominal capability
-that is live only inside its continuation; it is not a serializable durable
-file record.
+The root runtime namespaces are `Artifact`, `BuildError`, `JavaScriptBundle`,
+`MatrixError`, and `Target`. `JavaScriptBundle.Artifact` is a nominal live
+capability usable only inside its continuation, not a durable serializable
+record.
 
-The `effect-build/Integration` author subpath exposes exactly
-`executeCommand`, `inspectLiveJavaScriptBundle`, `produceExecutable`, and
-`withOwnedJavaScriptBundle`. These are narrow integration-author foundations;
-they expose no generic builder, bundler, executor, registry, candidate, or
-rename authority. The `effect-build/Provider` authoring path exposes only the
-closed `define` runtime factory. Applications normally import their unchanged
-scalar and matrix operations from a provider package. Plan 024 owns the atomic
-five-package Esbuild/Node SEA split.
+`effect-build/Integration` exposes only bounded command execution, live bundle
+inspection, owned bundle production, and executable production for integration
+authors. `effect-build/Provider` exposes only the command-provider `define`
+factory used by Bun and Deno. Neither is a registry, generic builder, bundler,
+packager, executor, candidate, cache, or publication API.
 
-Stage observations record tools seen doing work. They are not receipts,
-provenance, or reproducibility claims. Exactly one core operation validates,
-optionally hashes, and atomically renames executable candidates.
+Applications import operations from `effect-build-bun`, `effect-build-deno`,
+`effect-build-esbuild`, or `effect-build-node-sea`. Stage observations are not
+receipts, provenance, or reproducibility claims.

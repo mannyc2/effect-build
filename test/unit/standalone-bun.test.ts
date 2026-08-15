@@ -1,11 +1,11 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { definition, targetTokens } from "../../packages/effect-build-bun/src/Adapter.js";
+import { definition, targetEntries } from "../../packages/effect-build-bun/src/Adapter.js";
 import * as Bun from "../../packages/effect-build-bun/src/index.js";
 import { describeStandaloneDriverContract } from "../testkit/standaloneDriverContract.js";
 
@@ -36,7 +36,9 @@ const bunAdapter = {
         ...(input.target === undefined ? {} : { target: input.target }),
         options: input.options,
       },
-      ...(input.target === undefined ? {} : { nativeTarget: targetTokens[input.target] }),
+      ...(input.target === undefined
+        ? {}
+        : { nativeTarget: targetEntries.find(([target]) => target === input.target)![1] }),
       stagedOutfile: input.stagedOutfile,
     }),
 };
@@ -84,12 +86,12 @@ describe("standalone Bun driver", () => {
 
   it("renders only requested native flags and exact target mapping", () => {
     const options = bunAdapter.validateOptions({ minify: true, sourcemap: "inline", bytecode: true });
-    expect(options._tag).toBe("Valid");
-    if (options._tag !== "Valid") throw new Error(options.reason);
+    expect(Result.isSuccess(options)).toBe(true);
+    if (Result.isFailure(options)) throw new Error(options.failure);
     expect(bunAdapter.renderArgv({
       entrypoint: "src/main.ts",
       target: "linux-aarch64-gnu",
-      options: options.value,
+      options: options.success,
       stagedOutfile: "/tmp/.effect-build/app",
     })).toEqual([
       "build",
@@ -105,8 +107,8 @@ describe("standalone Bun driver", () => {
 
   it("rejects unknown runtime options", () => {
     expect(bunAdapter.validateOptions({ rawArgs: ["--x"] })).toMatchObject({
-      _tag: "Invalid",
-      reason: "unknown Bun option",
+      _tag: "Failure",
+      failure: "unknown Bun option",
     });
   });
 
@@ -124,12 +126,12 @@ describe("standalone Bun driver", () => {
       },
     };
     const validated = bunAdapter.validateOptions(source);
-    expect(validated._tag).toBe("Valid");
-    if (validated._tag !== "Valid") throw new Error(validated.reason);
+    expect(Result.isSuccess(validated)).toBe(true);
+    if (Result.isFailure(validated)) throw new Error(validated.failure);
     expect(bunAdapter.renderArgv({
       entrypoint: "a.ts",
       target: "macos-x64",
-      options: validated.value,
+      options: validated.success,
       stagedOutfile: "/tmp/app",
     })).toEqual([
       "build",

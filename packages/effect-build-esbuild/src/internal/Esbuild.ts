@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema, type Scope } from "effect";
+import { Context, Crypto, Effect, FileSystem, Layer, Path, Result, Schema, type Scope } from "effect";
 import { JavaScriptBundle } from "effect-build";
 import * as Integration from "effect-build/Integration";
 import * as esbuild from "esbuild";
@@ -32,7 +32,7 @@ export interface JavaScriptBundleInput {
   readonly cwd?: string;
 }
 
-export interface EsbuildStage {
+interface EsbuildStage {
   readonly operation: "bundle";
   readonly tool: {
     readonly name: "esbuild";
@@ -40,7 +40,7 @@ export interface EsbuildStage {
   };
 }
 
-export type JavaScriptBundleArtifact = JavaScriptBundle.Artifact<readonly [EsbuildStage]>;
+type JavaScriptBundleArtifact = JavaScriptBundle.Artifact<readonly [EsbuildStage]>;
 
 const EsbuildDiagnosticLocation = Schema.Struct({
   file: Schema.String,
@@ -55,19 +55,40 @@ export const EsbuildDiagnostic = Schema.Struct({
 });
 export type EsbuildDiagnostic = typeof EsbuildDiagnostic.Type;
 
-export class EsbuildVersionMismatch extends Schema.TaggedError<EsbuildVersionMismatch>()(
+export class EsbuildVersionMismatch extends Schema.TaggedError<EsbuildVersionMismatch>(
+  "effect-build-esbuild/EsbuildVersionMismatch",
+)(
   "EsbuildVersionMismatch",
   { expected: Schema.Literal(expectedVersion), observed: Schema.String },
 ) {}
 
-export class InvalidBundleInput extends Schema.TaggedError<InvalidBundleInput>()("InvalidBundleInput", {
-  reason: Schema.String,
+const InvalidBundleInputReason = Schema.Literals(
+  [
+    "expected-object",
+    "unknown-field",
+    "missing-field",
+    "invalid-entrypoint",
+    "invalid-format",
+    "invalid-cwd",
+    "unsupported-entrypoint-extension",
+    "entrypoint-not-regular",
+  ] as const,
+);
+type InvalidBundleInputReason = typeof InvalidBundleInputReason.Type;
+
+export class InvalidBundleInput extends Schema.TaggedError<InvalidBundleInput>(
+  "effect-build-esbuild/InvalidBundleInput",
+)("InvalidBundleInput", {
+  reason: InvalidBundleInputReason,
 }) {}
 
-export class EsbuildFailed extends Schema.TaggedError<EsbuildFailed>()("EsbuildFailed", {
-  diagnostics: Schema.Array(EsbuildDiagnostic),
-  truncated: Schema.Boolean,
-}) {}
+export class EsbuildFailed extends Schema.TaggedError<EsbuildFailed>("effect-build-esbuild/EsbuildFailed")(
+  "EsbuildFailed",
+  {
+    diagnostics: Schema.Array(EsbuildDiagnostic),
+    truncated: Schema.Boolean,
+  },
+) {}
 
 const EsbuildBundleInvalidReason = Schema.Union([
   JavaScriptBundle.InvalidReason,
@@ -92,7 +113,9 @@ const EsbuildBundleInvalidReason = Schema.Union([
   ),
 ]);
 
-export class JavaScriptBundleInvalid extends Schema.TaggedError<JavaScriptBundleInvalid>()(
+export class JavaScriptBundleInvalid extends Schema.TaggedError<JavaScriptBundleInvalid>(
+  "effect-build-esbuild/JavaScriptBundleInvalid",
+)(
   "JavaScriptBundleInvalid",
   { reason: EsbuildBundleInvalidReason },
 ) {}
@@ -109,7 +132,9 @@ export const BundleMaterializationOperation = Schema.Literals(
 );
 export type BundleMaterializationOperation = typeof BundleMaterializationOperation.Type;
 
-export class BundleMaterializationFailed extends Schema.TaggedError<BundleMaterializationFailed>()(
+export class BundleMaterializationFailed extends Schema.TaggedError<BundleMaterializationFailed>(
+  "effect-build-esbuild/BundleMaterializationFailed",
+)(
   "BundleMaterializationFailed",
   {
     path: Schema.String,
@@ -125,14 +150,16 @@ export type EsbuildBundleError =
   | JavaScriptBundleInvalid
   | BundleMaterializationFailed;
 
-export interface EsbuildService {
+export interface Service {
   readonly withJavaScriptBundle: <A, E, R>(
     input: JavaScriptBundleInput,
     use: (bundle: JavaScriptBundleArtifact) => Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, EsbuildBundleError | E, Exclude<R, Scope.Scope>>;
 }
 
-export class Esbuild extends Context.Service<Esbuild, EsbuildService>()("effect-build/internal/Esbuild") {}
+export type EsbuildService = Service;
+
+export class Esbuild extends Context.Service<Esbuild, Service>()("effect-build-esbuild/Esbuild") {}
 
 interface BoundedString {
   readonly value: string;
@@ -209,33 +236,48 @@ const esbuildFailure = (error: unknown): EsbuildFailed => {
   );
 };
 
-const invalidInput = (reason: string): InvalidBundleInput => new InvalidBundleInput({ reason });
+const invalidInput = (reason: InvalidBundleInputReason): InvalidBundleInput => new InvalidBundleInput({ reason });
+
+const InputPath = Schema.String.pipe(
+  Schema.check(
+    Schema.makeFilter((value: string) => value.length > 0 && !value.includes("\0") ? true : "invalid path"),
+  ),
+);
+const InputFormat = Schema.Literals(["esm", "cjs"] as const);
+
+const decodeField = <A>(
+  schema: Schema.ConstraintDecoder<A>,
+  value: unknown,
+  reason: InvalidBundleInputReason,
+): Result.Result<A, InvalidBundleInput> =>
+  Result.mapError(Schema.decodeUnknownResult(schema)(value), () => invalidInput(reason));
+
+const decodeInputResult = (value: unknown): Result.Result<JavaScriptBundleInput, InvalidBundleInput> => {
+  if (!isRecord(value)) return Result.fail(invalidInput("expected-object"));
+  const keys = Reflect.ownKeys(value);
+  if (keys.some((key) => typeof key !== "string" || !["entrypoint", "format", "cwd"].includes(key))) {
+    return Result.fail(invalidInput("unknown-field"));
+  }
+  if (!Object.hasOwn(value, "entrypoint") || !Object.hasOwn(value, "format")) {
+    return Result.fail(invalidInput("missing-field"));
+  }
+  const entrypoint = decodeField(InputPath, value.entrypoint, "invalid-entrypoint");
+  if (Result.isFailure(entrypoint)) return Result.fail(entrypoint.failure);
+  const format = decodeField(InputFormat, value.format, "invalid-format");
+  if (Result.isFailure(format)) return Result.fail(format.failure);
+  const cwd = Object.hasOwn(value, "cwd")
+    ? decodeField(InputPath, value.cwd, "invalid-cwd")
+    : Result.succeed(undefined);
+  if (Result.isFailure(cwd)) return Result.fail(cwd.failure);
+  return Result.succeed({
+    entrypoint: entrypoint.success,
+    format: format.success,
+    ...(cwd.success === undefined ? {} : { cwd: cwd.success }),
+  });
+};
 
 const decodeInput = (value: unknown): Effect.Effect<JavaScriptBundleInput, InvalidBundleInput> =>
-  Effect.gen(function*() {
-    if (!isRecord(value)) return yield* invalidInput("expected-object");
-    const keys = Reflect.ownKeys(value);
-    if (keys.some((key) => typeof key !== "string" || !["entrypoint", "format", "cwd"].includes(key))) {
-      return yield* invalidInput("unknown-field");
-    }
-    if (!Object.hasOwn(value, "entrypoint") || !Object.hasOwn(value, "format")) {
-      return yield* invalidInput("missing-field");
-    }
-    if (typeof value.entrypoint !== "string" || value.entrypoint.length === 0 || value.entrypoint.includes("\0")) {
-      return yield* invalidInput("invalid-entrypoint");
-    }
-    if (value.format !== "esm" && value.format !== "cjs") return yield* invalidInput("invalid-format");
-    const cwd = Object.hasOwn(value, "cwd") ? value.cwd : undefined;
-    if (
-      cwd !== undefined
-      && (typeof cwd !== "string" || cwd.length === 0 || cwd.includes("\0"))
-    ) return yield* invalidInput("invalid-cwd");
-    return {
-      entrypoint: value.entrypoint,
-      format: value.format,
-      ...(cwd === undefined ? {} : { cwd }),
-    };
-  });
+  Effect.fromResult(decodeInputResult(value));
 
 const materializationFailed = (
   path: string,
@@ -416,8 +458,8 @@ export const makeEsbuildService = (
       return yield* new EsbuildVersionMismatch({ expected: expectedVersion, observed: api.version });
     }
     const crypto = yield* Crypto.Crypto;
-    const withJavaScriptBundle: EsbuildService["withJavaScriptBundle"] = Effect.fn(
-      "Esbuild.withJavaScriptBundle",
+    const withJavaScriptBundle: Service["withJavaScriptBundle"] = Effect.fn(
+      "effect-build-esbuild/Esbuild.withJavaScriptBundle",
     )(<A, E, R>(input: JavaScriptBundleInput, use: (bundle: JavaScriptBundleArtifact) => Effect.Effect<A, E, R>) =>
       Effect.gen(function*() {
         const decoded = yield* decodeInput(input);
@@ -427,7 +469,11 @@ export const makeEsbuildService = (
           return yield* invalidInput("unsupported-entrypoint-extension");
         }
         const inputInformation = yield* fileSystem.stat(resolvedEntrypoint).pipe(
-          Effect.mapError((error) => invalidInput(error.message)),
+          Effect.mapError((error) =>
+            error.reason._tag === "NotFound"
+              ? invalidInput("entrypoint-not-regular")
+              : materializationFailed(resolvedEntrypoint, "stat", error)
+          ),
         );
         if (inputInformation.type !== "File") return yield* invalidInput("entrypoint-not-regular");
         return yield* Integration.withOwnedJavaScriptBundle(

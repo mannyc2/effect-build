@@ -1,183 +1,145 @@
-import { Context, Effect, Layer, Schema } from "effect";
-import type { Crypto, FileSystem, Path, PlatformError } from "effect";
+import { Context, Effect, Layer, Result, Schema } from "effect";
+import type { Crypto, FileSystem, Path } from "effect";
 import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
-import * as Integration from "./Integration.js";
-import type {
-  ProviderName as ClosedProviderName,
-  ProviderTargets as ClosedProviderTargets,
-  TargetFor as ClosedTargetFor,
-} from "./internal/ProviderContracts.js";
-import type { Artifact as RootArtifact, StagesFor } from "./standalone/Artifact.js";
-import type { BuildError, ToolNotFound, ToolProbeFailed } from "./standalone/BuildError.js";
-import { InvalidDriverOptions, ToolFailed } from "./standalone/BuildError.js";
-import { makeCompileExecutable, makeCompileExecutableMatrix } from "./standalone/CompileExecutable.js";
-import type {
-  CompileExecutableMatrixInput as CommonMatrixInput,
-  MatrixErrorFor as CommonMatrixErrorFor,
-} from "./standalone/CompileExecutableMatrix.js";
+import type { CommandCompletion } from "./Integration.js";
+import type { ExecutableArtifact, StageObservation, ToolObservation } from "./standalone/Artifact.js";
+import { ExecutableArtifact as ExecutableArtifactSchema } from "./standalone/Artifact.js";
+import type { BuildError as CoreBuildError, Diagnostic } from "./standalone/BuildError.js";
+import { InvalidDriverOptions, ToolFailed, type ToolNotFound, type ToolProbeFailed } from "./standalone/BuildError.js";
+import type { CompileExecutableMatrixInput as CommonMatrixInput } from "./standalone/CompileExecutableMatrix.js";
 import type { CompileExecutableInput as CommonInput } from "./standalone/Driver.js";
-import type { CandidateProducer } from "./standalone/internal/CompilerAdapter.js";
+import type { CommandCompilerAdapter } from "./standalone/internal/CompilerAdapter.js";
 import { makeCompilerService } from "./standalone/internal/CompilerEngine.js";
-import { makeProviderTargetTable } from "./standalone/internal/TargetTable.js";
+import { makeTargetTable, type TargetEntries } from "./standalone/internal/TargetTable.js";
 import { discoverTool } from "./standalone/internal/ToolDiscovery.js";
+import { InvalidMatrixInput, MatrixFailed } from "./standalone/MatrixError.js";
+import type { SystemTarget } from "./standalone/Target.js";
 
-export type ProviderName = ClosedProviderName;
-export type ProviderTargets = ClosedProviderTargets;
-export type TargetFor<Name extends ProviderName> = ClosedTargetFor<Name>;
-export type CommandProviderName = Exclude<ProviderName, "node-sea">;
+type NonEmptyProviderName<Name extends string> = Name extends "" ? never : Name;
 
 export interface LayerOptions {
   readonly executable?: string;
 }
 
-export type Validation<A> =
-  | { readonly _tag: "Valid"; readonly value: A }
-  | { readonly _tag: "Invalid"; readonly reason: string };
-
-export interface CommandOutput {
-  readonly text: string;
-  readonly truncated: boolean;
-}
-
-export interface CommandCompletion {
-  readonly exitCode: number;
-  readonly stdout: CommandOutput;
-  readonly stderr: CommandOutput;
-}
-
-export type ExecuteCommand = (
-  executable: string,
-  argv: readonly string[],
-  cwd?: string,
-) => Effect.Effect<CommandCompletion, PlatformError.PlatformError>;
-
-export interface Diagnostic {
-  readonly channel: "stdout" | "stderr";
-  readonly text: string;
-  readonly truncated: boolean;
-}
-
-export interface PreparedCommandInput<Validated, Target extends string> {
+export interface PreparedCommandInput<Validated, Target extends SystemTarget> {
   readonly entrypoint: string;
   readonly target?: Target;
   readonly options: Validated;
 }
 
-export interface ComposedCandidateInput<Validated, Target extends string> {
-  readonly entrypoint: string;
-  readonly target?: Target;
-  readonly options: Validated;
-  readonly stagedOutfile: string;
-  readonly resolvedDestination: string;
-  readonly cwd?: string;
-}
+export type CompileExecutableInput<Options, Target extends SystemTarget> = CommonInput<Options, Target>;
 
-export type CompileExecutableInput<
-  Options,
-  Target extends import("./standalone/Target.js").Target,
-> = CommonInput<Options, Target>;
+export type CompileExecutableMatrixInput<Target extends SystemTarget, Options> = CommonMatrixInput<Target, Options>;
 
-export type CompileExecutableMatrixInput<
-  Target extends import("./standalone/Target.js").Target,
-  Options,
-> = CommonMatrixInput<Target, Options>;
+export type ProviderStage<Name extends string> = StageObservation & {
+  readonly tool: ToolObservation & { readonly name: Name };
+};
+
+export type ProviderStages<Name extends string> = readonly [ProviderStage<Name>];
 
 export type ProviderArtifact<
-  Name extends ProviderName,
-  Target extends import("./standalone/Target.js").Target = TargetFor<Name>,
-> = [Target] extends [TargetFor<Name>]
-  ? Omit<Extract<RootArtifact, { readonly provider: Name }>, "target"> & { readonly target: Target }
-  : never;
+  Name extends string,
+  Target extends SystemTarget,
+  Stages extends ProviderStages<Name>,
+> = Readonly<
+  ExecutableArtifact & {
+    readonly provider: Name;
+    readonly target: Target;
+    readonly stages: Stages;
+  }
+>;
 
-export type MatrixErrorFor<
-  Name extends ProviderName,
-  Target extends import("./standalone/Target.js").Target = TargetFor<Name>,
-> = [Target] extends [TargetFor<Name>] ? CommonMatrixErrorFor<Name, Target> : never;
+type NarrowToolError<Error, Name extends string> = Error extends { readonly tool: string }
+  ? Error & { readonly tool: Name }
+  : Error;
 
-export type { BuildError, ToolNotFound, ToolProbeFailed } from "./standalone/BuildError.js";
+type BuildErrorFor<Name extends string> = NarrowToolError<CoreBuildError, Name>;
 
-export type ProviderLayerRequirements =
-  | EffectChildProcessSpawner.ChildProcessSpawner
-  | FileSystem.FileSystem
-  | Path.Path
-  | Crypto.Crypto;
-
-export type ComposedProviderRequirements = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+export type ProviderMatrixError<
+  Name extends string,
+  Target extends SystemTarget,
+  Stages extends ProviderStages<Name>,
+> =
+  | InvalidMatrixInput
+  | (MatrixFailed & {
+    readonly artifacts: readonly ProviderArtifact<Name, Target, Stages>[];
+    readonly failures: readonly [
+      {
+        readonly provider: Name;
+        readonly target: Target;
+        readonly path: string;
+        readonly error: BuildErrorFor<Name>;
+      },
+      ...Array<{
+        readonly provider: Name;
+        readonly target: Target;
+        readonly path: string;
+        readonly error: BuildErrorFor<Name>;
+      }>,
+    ];
+  });
 
 export interface CompilerService<
-  Name extends ProviderName,
+  Name extends string,
   Options,
+  Target extends SystemTarget,
+  Stages extends ProviderStages<Name>,
 > {
   readonly compileExecutable: (
-    input: CompileExecutableInput<Options, TargetFor<Name>>,
-  ) => Effect.Effect<ProviderArtifact<Name, TargetFor<Name>>, BuildError, never>;
+    input: CompileExecutableInput<Options, Target>,
+  ) => Effect.Effect<ProviderArtifact<Name, Target, Stages>, CoreBuildError>;
   readonly compileExecutableMatrix: (
-    input: CompileExecutableMatrixInput<TargetFor<Name>, Options>,
-  ) => Effect.Effect<
-    readonly ProviderArtifact<Name, TargetFor<Name>>[],
-    MatrixErrorFor<Name, TargetFor<Name>>,
-    never
-  >;
-}
-
-interface CommonDefinition<Self, Name extends ProviderName, Options, Validated> {
-  readonly name: Name;
-  readonly service: Context.Service<Self, CompilerService<Name, Options>>;
-  readonly defaultTarget?: TargetFor<Name>;
-  readonly targetTokens: Readonly<Record<TargetFor<Name>, string>>;
-  readonly validateOptions: (input: unknown) => Validation<Validated>;
+    input: CompileExecutableMatrixInput<Target, Options>,
+  ) => Effect.Effect<readonly ProviderArtifact<Name, Target, Stages>[], ProviderMatrixError<Name, Target, Stages>>;
 }
 
 export interface CommandDefinition<
   Self,
-  Name extends CommandProviderName,
+  Name extends string,
+  Entries extends TargetEntries,
+  Stages extends ProviderStages<Name>,
   Options,
   Validated,
-> extends CommonDefinition<Self, Name, Options, Validated> {
-  readonly kind: "command";
+> {
+  readonly name: NonEmptyProviderName<Name>;
+  readonly service: Context.Service<Self, CompilerService<Name, Options, Entries[number][0], Stages>>;
+  readonly targetEntries: Entries;
+  readonly Stages: Schema.ConstraintDecoder<Stages, never>;
+  readonly defaultTarget?: Entries[number][0];
+  readonly validateOptions: (input: unknown) => Result.Result<Validated, string>;
   readonly probeArgv: readonly string[];
   readonly renderArgv: (context: {
-    readonly input: PreparedCommandInput<Validated, TargetFor<Name>>;
+    readonly input: PreparedCommandInput<Validated, Entries[number][0]>;
     readonly nativeTarget?: string;
     readonly stagedOutfile: string;
   }) => readonly string[];
   readonly interpretFailure: (completion: CommandCompletion) => readonly Diagnostic[];
 }
 
-export interface ComposedProducer<Name extends ProviderName, Validated> {
-  readonly produceCandidate: (
-    input: ComposedCandidateInput<Validated, TargetFor<Name>>,
-  ) => Effect.Effect<StagesFor<Name>, ToolFailed>;
-}
+type TargetsOf<Entries extends TargetEntries> = {
+  readonly [Index in keyof Entries]: Entries[Index] extends readonly [infer Target extends SystemTarget, string]
+    ? Target
+    : never;
+};
 
-export interface ComposedDefinition<Self, Options, Validated>
-  extends CommonDefinition<Self, "node-sea", Options, Validated>
-{
-  readonly kind: "composed";
-  readonly makeProducer: (
-    options: LayerOptions,
-    execute: ExecuteCommand,
-  ) => Effect.Effect<
-    ComposedProducer<"node-sea", Validated>,
-    ToolNotFound | ToolProbeFailed,
-    ComposedProviderRequirements
-  >;
-}
-
-export type Definition<Self, Name extends ProviderName, Options, Validated> = Name extends "node-sea"
-  ? ComposedDefinition<Self, Options, Validated>
-  : CommandDefinition<Self, Extract<Name, CommandProviderName>, Options, Validated>;
-
-export interface Defined<Self, Name extends ProviderName, Options> {
-  readonly Target: Schema.Literals<readonly [TargetFor<Name>, ...TargetFor<Name>[]]>;
+export interface Defined<
+  Self,
+  Name extends string,
+  Entries extends TargetEntries,
+  Stages extends ProviderStages<Name>,
+  Options,
+> {
+  readonly Target: Schema.Literals<TargetsOf<Entries>>;
+  readonly Artifact: Schema.Schema<ProviderArtifact<Name, Entries[number][0], Stages>>;
+  readonly MatrixError: Schema.Schema<ProviderMatrixError<Name, Entries[number][0], Stages>>;
   readonly compileExecutable: (
-    input: CompileExecutableInput<Options, TargetFor<Name>>,
-  ) => Effect.Effect<ProviderArtifact<Name, TargetFor<Name>>, BuildError, Self>;
+    input: CompileExecutableInput<Options, Entries[number][0]>,
+  ) => Effect.Effect<ProviderArtifact<Name, Entries[number][0], Stages>, CoreBuildError, Self>;
   readonly compileExecutableMatrix: (
-    input: CompileExecutableMatrixInput<TargetFor<Name>, Options>,
+    input: CompileExecutableMatrixInput<Entries[number][0], Options>,
   ) => Effect.Effect<
-    readonly ProviderArtifact<Name, TargetFor<Name>>[],
-    MatrixErrorFor<Name, TargetFor<Name>>,
+    readonly ProviderArtifact<Name, Entries[number][0], Stages>[],
+    ProviderMatrixError<Name, Entries[number][0], Stages>,
     Self
   >;
   readonly layer: (
@@ -185,97 +147,164 @@ export interface Defined<Self, Name extends ProviderName, Options> {
   ) => Layer.Layer<Self, ToolNotFound | ToolProbeFailed, ProviderLayerRequirements>;
 }
 
-export function define<Self, const Name extends CommandProviderName, Options, Validated>(
-  definition: CommandDefinition<Self, Name, Options, Validated>,
-): Defined<Self, Name, Options>;
-export function define<Self, Options, Validated>(
-  definition: ComposedDefinition<Self, Options, Validated>,
-): Defined<Self, "node-sea", Options>;
-export function define<Self, const Name extends ProviderName, Options, Validated>(
-  definition: Definition<Self, Name, Options, Validated>,
-): Defined<Self, Name, Options> {
-  const common = definition as unknown as CommonDefinition<Self, Name, Options, Validated>;
-  const service = common.service as Context.Service<Self, CompilerService<Name, Options>>;
-  const targetTable = makeProviderTargetTable<Name>(
-    common.name,
-    common.targetTokens as Readonly<Record<TargetFor<Name>, string>>,
+export type BuildError = CoreBuildError;
+export type { ToolNotFound, ToolProbeFailed } from "./standalone/BuildError.js";
+
+export type ProviderLayerRequirements =
+  | EffectChildProcessSpawner.ChildProcessSpawner
+  | FileSystem.FileSystem
+  | Path.Path
+  | Crypto.Crypto;
+
+const authorError = (message: string): never => {
+  throw new Error(message);
+};
+
+const freezeStages = <Stages extends readonly StageObservation[]>(stages: readonly StageObservation[]): Stages =>
+  Object.freeze(stages.map((stage) => Object.freeze({ ...stage, tool: Object.freeze({ ...stage.tool }) }))) as Stages;
+
+export const define = <
+  Self,
+  const Name extends string,
+  const Entries extends TargetEntries,
+  Stages extends ProviderStages<Name>,
+  Options,
+  Validated,
+>(
+  definition: CommandDefinition<Self, Name, Entries, Stages, Options, Validated>,
+): Defined<Self, Name, Entries, Stages, Options> => {
+  if (!Schema.is(Schema.NonEmptyString)(definition.name)) {
+    return authorError("provider name must be non-empty");
+  }
+  const targetTable = makeTargetTable(definition.targetEntries);
+  if (definition.defaultTarget !== undefined && !targetTable.isTarget(definition.defaultTarget)) {
+    return authorError("provider default target must appear in targetEntries");
+  }
+  const name = definition.name as Name;
+  const Artifact = Schema.Struct({
+    ...ExecutableArtifactSchema.fields,
+    provider: Schema.Literal(name),
+    target: targetTable.Target,
+    stages: definition.Stages,
+  }) as unknown as Schema.Schema<ProviderArtifact<Name, Entries[number][0], Stages>>;
+  const isArtifact = Schema.is(Artifact);
+  type SpecificMatrixFailed = MatrixFailed & {
+    readonly artifacts: readonly ProviderArtifact<Name, Entries[number][0], Stages>[];
+    readonly failures: readonly [
+      {
+        readonly provider: Name;
+        readonly target: Entries[number][0];
+        readonly path: string;
+        readonly error: BuildErrorFor<Name>;
+      },
+      ...Array<{
+        readonly provider: Name;
+        readonly target: Entries[number][0];
+        readonly path: string;
+        readonly error: BuildErrorFor<Name>;
+      }>,
+    ];
+  };
+  const SpecificMatrixFailed = MatrixFailed.pipe(
+    Schema.refine(
+      (value): value is SpecificMatrixFailed =>
+        value.artifacts.every(isArtifact)
+        && value.failures.every((failure) =>
+          failure.provider === name
+          && targetTable.isTarget(failure.target)
+          && (!("tool" in failure.error) || failure.error.tool === name)
+        ),
+      { message: `matrix values must belong to ${name}` },
+    ),
   );
-  const adapter = {
-    toolName: common.name,
+  const MatrixError = Schema.Union([InvalidMatrixInput, SpecificMatrixFailed]) as unknown as Schema.Schema<
+    ProviderMatrixError<Name, Entries[number][0], Stages>
+  >;
+
+  const decodeStages = (input: unknown): Result.Result<Stages, ToolFailed> =>
+    Result.flatMap(
+      Result.mapError(
+        Schema.decodeUnknownResult(definition.Stages, { onExcessProperty: "error" })(input),
+        () =>
+          new ToolFailed({
+            tool: name,
+            exitCode: 1,
+            diagnostics: [{ channel: "stderr", text: `invalid ${name} stage tuple`, truncated: false }],
+          }),
+      ),
+      (stages) =>
+        stages.length === 1 && stages[0].tool.name === name
+          ? Result.succeed(freezeStages<Stages>(stages))
+          : Result.fail(
+            new ToolFailed({
+              tool: name,
+              exitCode: 1,
+              diagnostics: [{ channel: "stderr", text: `invalid ${name} stage tuple`, truncated: false }],
+            }),
+          ),
+    );
+
+  const adapter: CommandCompilerAdapter<Name, Entries[number][0], Stages, Validated> = {
+    toolName: name,
     targetTable,
-    ...(common.defaultTarget === undefined ? {} : { defaultTarget: common.defaultTarget }),
-    validateOptions: (input: unknown) => {
-      const validation = common.validateOptions(input);
-      return validation._tag === "Valid"
-        ? validation
-        : {
+    ...(definition.defaultTarget === undefined ? {} : { defaultTarget: definition.defaultTarget }),
+    validateOptions: (input: unknown) =>
+      Result.match(definition.validateOptions(input), {
+        onFailure: (reason) => ({
           _tag: "Invalid" as const,
-          error: new InvalidDriverOptions({ tool: common.name, reason: validation.reason }),
-        };
-    },
+          error: new InvalidDriverOptions({ tool: name, reason }),
+        }),
+        onSuccess: (value) => ({ _tag: "Valid" as const, value }),
+      }),
+    renderArgv: (
+      request: import("./standalone/internal/CompilerAdapter.js").PreparedExecutableRequest<
+        Validated,
+        Entries[number][0]
+      >,
+    ) =>
+      definition.renderArgv({
+        input: {
+          entrypoint: request.entrypoint,
+          ...(request.target === undefined ? {} : { target: request.target }),
+          options: request.options,
+        },
+        ...(request.target === undefined ? {} : { nativeTarget: targetTable.nativeToken(request.target) }),
+        stagedOutfile: request.stagedOutfile,
+      }),
+    interpretFailure: (completion: CommandCompletion) =>
+      new ToolFailed({
+        tool: name,
+        exitCode: completion.exitCode,
+        diagnostics: [...definition.interpretFailure(completion)],
+      }),
+    decodeStages,
   };
 
-  const compileExecutable = makeCompileExecutable(service);
-  const compileExecutableMatrix = makeCompileExecutableMatrix(service);
+  const service = definition.service;
+  const compileExecutable: Defined<Self, Name, Entries, Stages, Options>["compileExecutable"] = (input) =>
+    service.use((implementation) => implementation.compileExecutable(input));
+  const compileExecutableMatrix: Defined<Self, Name, Entries, Stages, Options>["compileExecutableMatrix"] = (input) =>
+    service.use((implementation) => implementation.compileExecutableMatrix(input));
   const layer = (
     options: LayerOptions = {},
   ): Layer.Layer<Self, ToolNotFound | ToolProbeFailed, ProviderLayerRequirements> =>
     Layer.effect(
       service,
       Effect.gen(function*() {
-        if (definition.kind === "command") {
-          const command = definition as unknown as CommandDefinition<
-            Self,
-            Extract<Name, CommandProviderName>,
-            Options,
-            Validated
-          >;
-          const tool = yield* discoverTool(
-            { toolName: command.name, probeArgv: command.probeArgv },
-            options.executable,
-          );
-          const commandAdapter = {
-            ...adapter,
-            renderArgv: (
-              request: import("./standalone/internal/CompilerAdapter.js").PreparedExecutableRequest<
-                Validated,
-                TargetFor<Name>
-              >,
-            ) =>
-              command.renderArgv({
-                input: {
-                  entrypoint: request.entrypoint,
-                  ...(request.target === undefined ? {} : { target: request.target }),
-                  options: request.options,
-                } as PreparedCommandInput<Validated, TargetFor<Extract<Name, CommandProviderName>>>,
-                ...(request.target === undefined ? {} : { nativeTarget: targetTable.nativeToken(request.target) }),
-                stagedOutfile: request.stagedOutfile,
-              }),
-            interpretFailure: (completion: CommandCompletion) =>
-              new ToolFailed({
-                tool: common.name,
-                exitCode: completion.exitCode,
-                diagnostics: [...command.interpretFailure(completion)],
-              }),
-          };
-          return yield* makeCompilerService(commandAdapter, tool);
-        }
-        const composedDefinition = definition as ComposedDefinition<Self, Options, Validated>;
-        const spawner = yield* EffectChildProcessSpawner.ChildProcessSpawner;
-        const execute: ExecuteCommand = (executable, argv, cwd) =>
-          Integration.executeCommand(executable, argv, cwd).pipe(
-            Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, spawner),
-          );
-        const composed = yield* composedDefinition.makeProducer(options, execute);
-        const producer: CandidateProducer<Name, TargetFor<Name>, Validated> = {
-          produceCandidate: (request) =>
-            composed.produceCandidate(
-              request as unknown as ComposedCandidateInput<Validated, "linux-x64-gnu">,
-            ) as unknown as ReturnType<CandidateProducer<Name, TargetFor<Name>, Validated>["produceCandidate"]>,
-        };
-        return yield* makeCompilerService(adapter, producer);
+        const tool = yield* discoverTool(
+          { toolName: name, probeArgv: definition.probeArgv },
+          options.executable,
+        );
+        return yield* makeCompilerService<Options, Name, Entries[number][0], Stages, Validated>(adapter, tool);
       }),
     );
 
-  return Object.freeze({ Target: targetTable.Target, compileExecutable, compileExecutableMatrix, layer });
-}
+  return Object.freeze({
+    Target: targetTable.Target as Schema.Literals<TargetsOf<Entries>>,
+    Artifact,
+    MatrixError,
+    compileExecutable,
+    compileExecutableMatrix,
+    layer,
+  });
+};

@@ -7,6 +7,7 @@ const publicPackages = [
   "effect-build",
   "effect-build-bun",
   "effect-build-deno",
+  "effect-build-esbuild",
   "effect-build-node-sea",
 ] as const;
 const peerRange = ">=4.0.0-beta.104 <4.1.0-0";
@@ -25,7 +26,13 @@ describe("Bun workspace package graph", () => {
     expect(manifest.private).toBe(true);
     expect(manifest.type).toBe("module");
     expect(manifest.packageManager).toBe("bun@1.3.14");
-    expect(manifest.workspaces).toEqual(["packages/*", "examples/bun", "examples/deno", "examples/node-sea"]);
+    expect(manifest.workspaces).toEqual([
+      "packages/*",
+      "examples/bun",
+      "examples/deno",
+      "examples/esbuild",
+      "examples/node-sea",
+    ]);
     expect(await readFile(resolve(root, ".npmrc"), "utf8")).toBe("@jsr:registry=https://npm.jsr.io\n");
     await expect(access(resolve(root, "bun.lock"))).resolves.toBeUndefined();
     for (const alternate of ["pnpm-lock.yaml", "package-lock.json", "yarn.lock"]) {
@@ -33,7 +40,7 @@ describe("Bun workspace package graph", () => {
     }
   });
 
-  it("contains exactly the four lockstep public packages", async () => {
+  it("contains exactly the five lockstep public packages", async () => {
     const directories = (await readdir(resolve(root, "packages"), { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
@@ -51,17 +58,21 @@ describe("Bun workspace package graph", () => {
     const core = await manifestFor("effect-build");
     const bun = await manifestFor("effect-build-bun");
     const deno = await manifestFor("effect-build-deno");
+    const esbuild = await manifestFor("effect-build-esbuild");
     const nodeSea = await manifestFor("effect-build-node-sea");
     expect(core.dependencies).toBeUndefined();
     expect(core.peerDependencies).toEqual({ effect: peerRange });
     expect(bun.dependencies).toEqual({ "effect-build": "workspace:^" });
     expect(deno.dependencies).toEqual({ "effect-build": "workspace:^" });
-    expect(nodeSea.dependencies).toEqual({ "effect-build": "workspace:^", esbuild: "0.28.2" });
+    expect(esbuild.dependencies).toEqual({ "effect-build": "workspace:^", esbuild: "0.28.2" });
+    expect(nodeSea.dependencies).toEqual({ "effect-build": "workspace:^" });
     for (
-      const [provider, name] of [[bun, "effect-build-bun"], [deno, "effect-build-deno"], [
-        nodeSea,
-        "effect-build-node-sea",
-      ]] as const
+      const [provider, name] of [
+        [bun, "effect-build-bun"],
+        [deno, "effect-build-deno"],
+        [esbuild, "effect-build-esbuild"],
+        [nodeSea, "effect-build-node-sea"],
+      ] as const
     ) {
       expect((provider.peerDependencies as Record<string, string>)["effect-build"]).toBeUndefined();
       for (const sibling of publicPackages) {

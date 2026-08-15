@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Fiber, FileSystem, Path, PlatformError, type Scope } from "effect";
+import type { JavaScriptBundle } from "effect-build";
 import * as Integration from "effect-build/Integration";
 import * as esbuild from "esbuild";
 import { existsSync, realpathSync } from "node:fs";
@@ -12,12 +13,18 @@ import {
   type EsbuildApi,
   type EsbuildService,
   InvalidBundleInput,
-  type JavaScriptBundleArtifact,
   JavaScriptBundleInvalid,
   layer,
   makeEsbuildService,
   withJavaScriptBundle,
-} from "../../packages/effect-build-node-sea/src/internal/Esbuild.js";
+} from "../../packages/effect-build-esbuild/src/internal/Esbuild.js";
+
+type JavaScriptBundleArtifact = JavaScriptBundle.Artifact<
+  readonly [{
+    readonly operation: "bundle";
+    readonly tool: { readonly name: "esbuild"; readonly version: "0.28.2" };
+  }]
+>;
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const fixtureRoot = resolve(root, "test/fixtures/esbuild");
@@ -845,8 +852,9 @@ describe("internal esbuild bundle operation", () => {
   });
 
   it("keeps exact package-private tags", () => {
-    expect(new InvalidBundleInput({ reason: "fixture" })._tag).toBe("InvalidBundleInput");
+    expect(new InvalidBundleInput({ reason: "invalid-entrypoint" })._tag).toBe("InvalidBundleInput");
+    expect(() => new InvalidBundleInput({ reason: "fixture" as never })).toThrow();
     expect(new JavaScriptBundleInvalid({ reason: "expected-one-output-file" })._tag).toBe("JavaScriptBundleInvalid");
-    expect(EsbuildServiceTag.key).toBe("effect-build/internal/Esbuild");
+    expect(EsbuildServiceTag.key).toBe("effect-build-esbuild/Esbuild");
   });
 });

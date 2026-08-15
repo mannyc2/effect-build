@@ -90,7 +90,9 @@ export const inspectSelectedNodeExecutable = (
 ): Effect.Effect<SelectedNodeExecutableObservation, SelectedNodeExecutableInvalid> =>
   Effect.scoped(
     Effect.gen(function*() {
-      if (byteSize > BigInt(Number.MAX_SAFE_INTEGER)) return yield* invalid("selected executable is too large");
+      if (byteSize < 0n || byteSize > BigInt(Number.MAX_SAFE_INTEGER)) {
+        return yield* invalid("selected executable is too large");
+      }
       const size = Number(byteSize);
       const file = yield* fileSystem.open(path, { flag: "r" }).pipe(
         Effect.mapError((error) => invalid(`open-failed:${error.message}`)),

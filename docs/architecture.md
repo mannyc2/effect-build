@@ -1,174 +1,100 @@
 # Architecture
 
-The package has one executable-publication lifecycle at exactly two end-user
-cardinalities: scalar `compileExecutable` and homogeneous-provider
-`compileExecutableMatrix`. A caller selects one compiler module explicitly.
-Core also exposes narrow `JavaScriptBundle` and `Integration` foundations for
-integration authors. They do not add another end-user build operation.
+The package graph is a five-package star:
 
-## Four independent axes
+```text
+effect-build-bun --------> effect-build
+effect-build-deno -------> effect-build
+effect-build-esbuild ----> effect-build
+effect-build-node-sea ---> effect-build
+```
 
-The Bun package manager owns workspace installation. The orchestrator runtime
-supplies Effect services. The selected provider maps typed options and target
-to its producer. The Artifact target describes the native executable being
-produced. These are four separate choices.
+Only Esbuild has another runtime edge, to exact raw `esbuild@0.28.2`. No
+integration imports or declares an integration sibling.
+
+## Four independent choices
+
+Package manager, Effect orchestrator runtime, build tool, and Artifact target
+are four separate choices. Applications provide one official platform Layer
+at composition time. Importing Bun, Deno, Esbuild, or Node SEA selects an
+integration, not the runtime hosting the Effect program.
 
 ## Ownership
 
-| Core lifecycle owns                       | Provider packages own                      |
-| ----------------------------------------- | ------------------------------------------ |
-| total matrix request preflight            | executable discovery and probe inputs      |
-| canonical matrix names and collision test | provider target-table authority            |
-| bounded, stable collect-all traversal     | typed options and command rendering        |
-| candidate identity and sibling staging    | target-to-producer mapping                 |
-| native executable validation              | provider diagnostics                       |
-| optional SHA-256 digest                   | selected compiler byte characterization    |
-| scoped bundle identity and temporary root | Node SEA bundle production and input rules |
-| atomic destination replacement            |                                            |
+| Core lifecycle owns                         | Integrations own                                      |
+| ------------------------------------------- | ----------------------------------------------------- |
+| scoped child processes and bounded output   | tool discovery, probing, and native invocation policy |
+| sibling staging and candidate identity      | semantic input validation and diagnostics             |
+| native executable validation                | Bun/Deno target tables and typed options              |
+| optional hashing and atomic replacement     | Esbuild bundle policy and Node SEA assembly policy    |
+| scoped bundle liveness and content identity | exact tool-specific stage observations                |
+| cleanup-root and destination claims         | application-selected composition                      |
 
-Core additionally owns every scoped command child and bounded output. The
-`effect-build/Integration` author subpath exposes only the bounded command
-function, scoped bundle construction/inspection, and the executable producer
-wrapper. It exposes no process handle, candidate, rename authority, or generic
-executor. Node SEA retains its private esbuild continuation plus Node-specific
-discovery, arguments, and diagnostics.
+Core contains no Bun, Deno, Esbuild, or Node SEA catalog. The Provider author
+SPI is command-only and is earned by Bun and Deno. Esbuild and Node SEA use the
+narrow Integration functions directly; there is no guessed common bundler or
+packager service.
 
-The public calls cannot provide raw argv, a process handle, a provider value,
-or a generic registry. Root provider-correlated schemas may import only the
-pure provider target-contract projections. They never import provider public
-modules, adapters, discovery, or execution code.
+## Compiler lifecycle
 
-## Scalar cell lifecycle
+For Bun and Deno scalar compilation, core validates typed provider options and
+target selection, resolves and claims the destination, creates sibling
+staging, runs the selected command in Scope, validates the native output,
+optionally hashes it, and atomically renames it. The compiler never writes
+directly to the requested destination.
 
-1. Validate the runtime target and provider options. Entrypoint, outfile, cwd,
-   and digest remain typed-only fields trusted from the scalar TypeScript call.
-2. Resolve and claim the destination, then complete provider preparation.
-3. Create a sibling staging directory and render the selected compiler's argument vector.
-4. Spawn one compiler inside an Effect Scope while stdout, stderr, and exit are
-   consumed concurrently.
-5. Require a regular native executable matching the requested target.
-6. Compute a digest only when requested.
-7. Atomically rename the staged executable to the destination.
-8. Close the Scope and remove unused staging on every exit.
+Matrix total preflight validates the entire request before any filesystem or
+child-process activity. Bounded collect-all traversal preserves target input
+order. Successful cells commit independently; `MatrixFailed` returns their
+already committed Artifacts plus every ordered failure and does not roll them
+back. Interruption terminates active children and queued cells do not start.
 
-The compiler never writes directly to the requested destination.
+## Scoped bundle lifecycle
 
-## Scoped JavaScript bundles
+A `JavaScriptBundle.Artifact` is a nominal live capability. Core observes an
+absolute `.mjs` or `.cjs` file, safe byte count, digest, format, resolution
+target, external imports, and stages. Borrowed bytes are never deleted. Owned
+production receives one core-allocated cleanup root whose claim remains held
+through producer teardown and awaited deletion.
 
-`JavaScriptBundle.Artifact` is a dynamically live, nominal capability. Core
-observes an absolute `.mjs` or `.cjs` file, its safe byte count, and its SHA-256
-identity, then keeps the handle valid only while its continuation runs. A
-borrowed file is never deleted. An integration-owned bundle instead receives
-one core-allocated cleanup root; core keeps its claim through producer Scope
-teardown and awaited recursive deletion.
+The symmetric cleanup-root/destination claims prevent an executable from being
+published beneath a live producer root and prevent a new producer root from
+capturing an already claimed destination. Copying handle fields does not copy
+authority.
 
-Bundle handles are not serializable durable file records. Copying their fields
-does not copy authority, and inspection re-stats and rehashes the live file.
-The private root/destination claims prevent executable publication beneath a
-live cleanup root. Exactly one core operation owns executable candidate
-validation, optional hashing, and atomic rename.
+## Esbuild to Node SEA
 
-## Matrix lifecycle
+`effect-build-esbuild` produces one scoped bundle. Application code passes that
+handle to `effect-build-node-sea`; neither package knows the other exists.
+Node SEA also accepts a valid borrowed or future producer handle.
 
-The matrix adds one deterministic boundary around the scalar cell lifecycle:
+Before candidate acquisition, Node SEA authenticates the live handle, requires
+Node resolution, validates externals against the selected exact Node builtin
+authority, copies the main into its private operation directory, and verifies
+the copy's digest. Both selected Node reads use only that private copy: first
+`node --check`, then the SEA configuration consumed by direct `--build-sea`.
+The final stage tuple is the authenticated main prefix followed by one Node
+26.7.0 stage.
 
-1. Validate every request field, the non-empty provider target tuple, shared
-   options, positive-safe-integer concurrency, and all canonical final paths in
-   one total preflight pass.
-2. If any issue exists, return every ordered issue as `InvalidMatrixInput`
-   before filesystem work, argv rendering, or child spawn.
-3. Otherwise traverse cells with bounded concurrency. Each active cell owns the
-   complete scalar staging, process, validation, digest, and commit lifecycle.
-4. Preserve target input order regardless of completion order. On complete
-   traversal, return ordered Artifacts or one `MatrixFailed` containing ordered
-   committed Artifacts and ordered cell failures.
+Node SEA supports exact `linux-x64-gnu`, never uses postject, and never
+downloads or installs Node. Esbuild retains its fixed `node26.7` producer
+target, but exact syntax acceptance is owned by selected Node.
 
-Cells commit independently. A later or concurrent failure does not roll back a
-successful cell. Interruption closes active Scopes and terminates their children,
-skips queued cells, removes unused staging, and preserves earlier commits. The
-exact interruption Cause is propagated rather than translated into a matrix
-error.
+## Atomic publication
 
-## Atomic publication states
-
-| Event                                  | Existing destination      | Staging                                  |
-| -------------------------------------- | ------------------------- | ---------------------------------------- |
-| compile succeeds and output validates  | replaced atomically       | removed                                  |
-| compiler rejects input                 | unchanged                 | removed                                  |
-| output is missing or invalid           | unchanged                 | removed                                  |
-| destination is locked                  | unchanged; `OutputLocked` | removed                                  |
-| interruption before publication begins | unchanged                 | child terminated if active, then removed |
-| interruption after rename starts       | may already be replaced   | removed                                  |
-
-For a matrix, this table applies independently to every cell. The matrix itself
-does not add a transaction or rollback layer. Atomic rename is the publication
-linearization point and point of no return. Failure or interruption before
-publication begins leaves the existing destination unchanged. Once rename
-starts, publication may linearize even when the waiting caller observes
-interruption; the destination can therefore contain the new executable without
-an Artifact having been returned. There is no rollback after that point.
-
-## Divergence register
-
-- Compilation writes to a sibling staged path before atomic rename. A compiler
-  that embeds the requested output path may therefore record the staged path.
-- Interruption closes Scope and kills the compiler instead of leaving it
-  running.
-- Compiler project files and environment retain the CLI defaults. The public
-  API does not snapshot or sanitize them.
-- Foreign target output is validated but not executed on the Linux support
-  runner. Execution remains a separate current-host check.
-
-## Composed Node SEA provider
-
-The released surface includes Bun, Deno, and Node SEA scalar and homogeneous
-matrix operations. The Node SEA package owns a continuation-scoped bundle ->
-exact selected Node SEA topology and reuses core's native validation and
-publication boundary. Its bundle,
-configuration, candidate, and child are temporary Scope-owned state; only the
-validated final executable remains after both nested Scopes close.
-
-Node SEA characterizes the selected Node tool independently from output
-publication: it requires exact ELF64 little-endian x86-64 bytes with a GNU
-interpreter before trusting the tool's metadata and `--build-sea` probes.
-
-The internal ordered stages report that esbuild and the selected Node producer
-were observed doing work. Stage observations are not build receipts or
-reproducibility evidence. They do not establish closed inputs, identical
-invocations, or byte equality. Direct and composed operations are not
-replaceable executors: both still use the same local filesystem and process
-backend.
-
-The maintainer selected Node SEA as a product after the historical promotion
-decision. That adds a fourth provider package, not a third operation or a
-public stage protocol. The rejected inspection, receipt, semantic-plan,
-replaceable-executor, cache, remote, signing, and download products remain absent.
-
-This is the temporary four-package compatibility topology. Plan 024 owns the
-atomic cut to separate Esbuild and Node SEA integration packages; the current
-Bun, Deno, and combined Node SEA compile operations remain unchanged until
-that cut.
+Atomic rename is the publication linearization point and point of no return.
+Before rename begins, failure or interruption leaves the destination unchanged
+and removes unused staging. Once rename begins, publication may complete even
+if the waiting caller is interrupted; no rollback follows that point.
 
 ## Product boundary
 
-The package does not provide standalone bundling or transforms, type checking,
-declaration emission, code generation, watch mode, dev servers, task graphs,
-workspaces, caching, remote execution, container construction, signing,
-release-manifest checksums, publication, package release, or streaming events.
-Cross-provider work and heterogeneous entry points/options remain scalar Effect
-composition.
+The design rejects inspection products, public receipts, semantic plans,
+replaceable executors, registries, fallbacks, caches, automatic downloads,
+watch/plugins, signing, and sibling integration dependencies. Stage values are
+observations, not manifests, closed-input claims, hermeticity, provenance, or
+reproducibility evidence.
 
-## Boundaries checked in tests
-
-- `effect/unstable/process` is confined to core implementation and Layer
-  requirement declarations; no provider package imports it.
-- Library source has no `node:*` imports and no `Effect.runPromise` calls.
-- Package exports and runtime keys match `tooling/public-api.json`.
-- Internal esbuild, direct Node SEA assembly, lifecycle, and stage
-  implementation representations are not package entrypoints.
-- All examples compile against a packed installation.
-- Provider target-table literals exactly equal the authored required cells in
-  `tooling/support-matrix.json`.
-- Every Bun and Deno target is compiled with its pinned real compiler on Linux
-  x64 and independently inspected with `/usr/bin/file`; ELF outputs also use
-  `/usr/bin/readelf`. Foreign native outputs are never executed on that runner.
+The v0.2 Bun/Deno import identities move directly to their package roots with
+no fallback. The earlier combined Node SEA candidate was unreleased and is
+superseded by granular application composition.

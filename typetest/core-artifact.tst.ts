@@ -21,7 +21,6 @@ export type _SystemTargets = Assert<
   >
 >;
 export type _ResolutionTarget = Assert<Same<Target.ResolutionTarget, "node">>;
-export type _TemporaryTargetAlias = Assert<Same<Target.Target, Target.SystemTarget>>;
 export type _FilePath = Assert<Same<Artifact.FileArtifact["path"], Artifact.AbsolutePath>>;
 export type _FileBytes = Assert<Same<Artifact.FileArtifact["bytes"], Artifact.ByteCount>>;
 export type _FileDigest = Assert<Same<Artifact.FileArtifact["digest"], Artifact.Digest | undefined>>;
@@ -30,6 +29,9 @@ export type _ExecutableStages = Assert<
   Artifact.ExecutableArtifact["stages"] extends readonly [Artifact.StageObservation, ...Artifact.StageObservation[]]
     ? true
     : false
+>;
+export type _NeutralExecutableHasNoProvider = Assert<
+  Same<Extract<keyof Artifact.ExecutableArtifact, "provider">, never>
 >;
 
 type ContextOf<T> = T extends Effect.Effect<unknown, unknown, infer R> ? R : never;
