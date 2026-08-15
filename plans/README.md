@@ -302,7 +302,7 @@ direction. Plans 016-020 remain factual implementation history.
 | 026 | Certify the five-package granular public cut without publishing it | P1 | M | 023-025 | DONE |
 | 027 | Import and authorize the completion/release program | P0 | S | 026 | DONE |
 | 028 | Canonicalize tool identity and host publication semantics | P0 | M | 027 | DONE |
-| 029 | Preserve interruption through the Bun bundle continuation | P0 | S | 027 | TODO |
+| 029 | Preserve interruption through the Bun bundle continuation | P0 | S | 027 | DONE |
 | 030 | Make scalar executable input preflight total | P0 | M | 027 | TODO |
 | 031 | Make native executable inspection total and canonical | P0 | M | 027 | TODO |
 | 032 | Harden workflow data flow and packed-consumer installs | P0 | L | 028-031 | TODO |
@@ -443,6 +443,10 @@ behavior, or the standalone operation invalidated that earlier work.
   absolute executable candidates, and derives host publication policy solely
   from the official Effect `Path` service. It changes no public declaration or
   package edge.
+- Plan 029 removes the lossy Result representation around Bun's arbitrary
+  bundle callback. It isolates caller completion as a full Exit, maps only
+  producer-owned core failures with full-Cause semantics, and proves cleanup
+  plus Fail+Interrupt preservation without changing the public operation.
 - Plan 035 is deliberately external to effect-build. It extends ts-release's
   existing prepared-subject/coordinator architecture rather than creating an
   effect-build release engine. It requires parent approval before changing the

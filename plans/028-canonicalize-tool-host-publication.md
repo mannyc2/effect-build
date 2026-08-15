@@ -155,6 +155,16 @@ Adds no new public state; `Path` remains the sole host-filesystem authority.
   `bun run verify:effect` passed both `4.0.0-beta.104` and
   `4.0.0-rc.108`, each with 182 unit tests, one intentional skip, and 14/14
   packed consumers.
+- **Exact-SHA CI**: run
+  [`31860069613`](https://github.com/mannyc2/effect-build/actions/runs/31860069613)
+  completed `success` at receipt head
+  `36dfce39abd96bafaaee59b0646ccdb0ba0af418`. All twelve jobs succeeded:
+  `bun-bundle` (`94951763631`), `esbuild` (`94951763651`), `real-tools`
+  (`94951763661`), `target-support (deno)` (`94951763664`), Effect beta
+  (`94951763680`), `node-sea` (`94951763682`), `target-support (bun)`
+  (`94951763696`), macOS publication (`94951763697`), Ubuntu publication
+  (`94951763711`), `quality` (`94951763713`), Effect RC (`94951763723`),
+  and Windows publication (`94951763733`).
 - `git diff --check` passed, `rg -n 'hostOs' packages test typetest` returned
   no result, and the implementation worktree was clean immediately after the
   source commit. This receipt and README status are plan-only evidence.
