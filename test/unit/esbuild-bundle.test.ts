@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Fiber, FileSystem, Path, PlatformError, type Scope } from "effect";
-import type { JavaScriptBundle } from "effect-build";
+import { JavaScriptBundle } from "effect-build";
 import * as Integration from "effect-build/Integration";
 import * as esbuild from "esbuild";
 import { existsSync, realpathSync } from "node:fs";
@@ -509,6 +509,89 @@ describe("internal esbuild bundle operation", () => {
     );
 
     expect(observed).toBe(callerError);
+    expect(controlled.events.slice(-4)).toEqual(cleanupEvents);
+  });
+
+  it("passes through a caller-created core bundle error by identity", async () => {
+    const controlled = controlledApi();
+    const callerError = new JavaScriptBundle.InvalidJavaScriptBundle({ reason: "artifact-not-live" });
+    let staged = "";
+    const exit = await Effect.runPromise(
+      Effect.exit(
+        withService(
+          controlled.api,
+          (service) =>
+            service.withJavaScriptBundle(bundleInput, (artifact) => {
+              staged = artifact.path;
+              return Effect.fail(callerError);
+            }),
+        ),
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) expect(firstFailure(exit.cause)).toBe(callerError);
+    expect(existsSync(staged)).toBe(false);
+    expect(controlled.events.slice(-4)).toEqual(cleanupEvents);
+  });
+
+  it("preserves an exact mixed caller Cause and cleans up after the captured Exit", async () => {
+    const controlled = controlledApi();
+    const callerError = new JavaScriptBundle.InvalidJavaScriptBundle({ reason: "artifact-not-live" });
+    const interruptor = 38_038;
+    const callerCause = Cause.combine(Cause.fail(callerError), Cause.interrupt(interruptor));
+    let staged = "";
+    const exit = await Effect.runPromise(
+      Effect.exit(
+        withService(
+          controlled.api,
+          (service) =>
+            service.withJavaScriptBundle(bundleInput, (artifact) => {
+              staged = artifact.path;
+              return Effect.failCause(callerCause);
+            }),
+        ),
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(firstFailure(exit.cause)).toBe(callerError);
+      expect(exit.cause.reasons.map((reason) => reason._tag)).toEqual(["Fail", "Interrupt"]);
+      expect([...Cause.interruptors(exit.cause)]).toEqual([interruptor]);
+      expect(Exit.hasDies(exit)).toBe(false);
+    }
+    expect(existsSync(staged)).toBe(false);
+    expect(controlled.events.slice(-4)).toEqual(cleanupEvents);
+  });
+
+  it("preserves a sibling caller defect while restoring the captured Exit", async () => {
+    const controlled = controlledApi();
+    const callerError = new JavaScriptBundle.InvalidJavaScriptBundle({ reason: "artifact-not-live" });
+    const callerDefect = new Error("caller-defect");
+    const callerCause = Cause.combine(Cause.fail(callerError), Cause.die(callerDefect));
+    let staged = "";
+    const exit = await Effect.runPromise(
+      Effect.exit(
+        withService(
+          controlled.api,
+          (service) =>
+            service.withJavaScriptBundle(bundleInput, (artifact) => {
+              staged = artifact.path;
+              return Effect.failCause(callerCause);
+            }),
+        ),
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(firstFailure(exit.cause)).toBe(callerError);
+      expect(exit.cause.reasons.map((reason) => reason._tag)).toEqual(["Fail", "Die"]);
+      expect(exit.cause.reasons.find(Cause.isDieReason)?.defect).toBe(callerDefect);
+      expect(Exit.hasInterrupts(exit)).toBe(false);
+    }
+    expect(existsSync(staged)).toBe(false);
     expect(controlled.events.slice(-4)).toEqual(cleanupEvents);
   });
 

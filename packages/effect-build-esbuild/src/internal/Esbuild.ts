@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Result, Schema, type Scope } from "effect";
+import { Cause, Context, Crypto, Effect, FileSystem, Layer, Path, Result, Schema, type Scope } from "effect";
 import { JavaScriptBundle } from "effect-build";
 import * as Integration from "effect-build/Integration";
 import * as esbuild from "esbuild";
@@ -448,6 +448,16 @@ const mapCoreBundleError = (
   });
 };
 
+const mapOwnedCoreBundleError = <E>(
+  error: E,
+  resolvedCwd: string,
+): E | JavaScriptBundleInvalid | BundleMaterializationFailed =>
+  JavaScriptBundle.InvalidJavaScriptBundle.is(error)
+    || JavaScriptBundle.JavaScriptBundleAccessFailed.is(error)
+    || JavaScriptBundle.JavaScriptBundleTemporaryDirectoryFailed.is(error)
+    ? mapCoreBundleError(error, resolvedCwd)
+    : error;
+
 export const makeEsbuildService = (
   fileSystem: FileSystem.FileSystem,
   path: Path.Path,
@@ -476,7 +486,7 @@ export const makeEsbuildService = (
           ),
         );
         if (inputInformation.type !== "File") return yield* invalidInput("entrypoint-not-regular");
-        return yield* Integration.withOwnedJavaScriptBundle(
+        const exit = yield* Integration.withOwnedJavaScriptBundle(
           {
             temporaryPrefix: "effect-build-esbuild-",
             produce: (temporaryDirectory) =>
@@ -504,19 +514,17 @@ export const makeEsbuildService = (
                 return makeDescriptor(stagedPath, decoded.format, validated.externalImports);
               }),
           },
-          use,
+          (bundle) => Effect.exit(use(bundle)),
         ).pipe(
           Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(Path.Path, path),
           Effect.provideService(Crypto.Crypto, crypto),
-          Effect.catchIf(JavaScriptBundle.InvalidJavaScriptBundle.is, (error) =>
-            Effect.fail(mapCoreBundleError(error, resolvedCwd))),
-          Effect.catchIf(JavaScriptBundle.JavaScriptBundleAccessFailed.is, (error) =>
-            Effect.fail(mapCoreBundleError(error, resolvedCwd))),
-          Effect.catchIf(JavaScriptBundle.JavaScriptBundleTemporaryDirectoryFailed.is, (error) =>
-            Effect.fail(mapCoreBundleError(error, resolvedCwd))),
+          Effect.catchCause((cause) =>
+            Effect.failCause(Cause.map(cause, (error) => mapOwnedCoreBundleError(error, resolvedCwd)))
+          ),
         );
-      })
+        return yield* exit;
+      }) as Effect.Effect<A, EsbuildBundleError | E, Exclude<R, Scope.Scope>>
     );
     return { withJavaScriptBundle };
   });
