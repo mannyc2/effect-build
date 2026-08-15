@@ -7,6 +7,7 @@
 - Risk: HIGH supply chain
 - Depends on: 028-031
 - Planned at: `e8c1557509a9236df8e5eb236293527c3f4fd21d`
+- Completion: `DONE`
 
 ## Outcome
 
@@ -173,7 +174,30 @@ hash evidence only.
 - Independent final review found no remaining P0/P1 correctness blocker. Its
   own exact-diff focused run passed 40/40 tests, the architecture suite passed
   64/64, and `git diff --check` was clean.
-- The coherent implementation commit, exact-SHA twelve-job push CI, and one
-  non-mutating candidate workflow receipt remain to be recorded before this
-  plan can be marked `DONE`. No publish, OIDC, registry, tag, or release
-  mutation is authorized by this preliminary receipt.
+- The coherent twelve-file implementation source commit is
+  `b21eafe99b585f01234f769aac322645e9cc1ecd`. Its worktree was clean after
+  commit and push. Exact-SHA CI run `31865690917` completed successfully with
+  all twelve jobs: node-sea `94966278700`, bun-bundle `94966278712`, esbuild
+  `94966278720`, quality `94966278722`, Effect beta.104 `94966278723`,
+  real-tools `94966278733`, Effect rc.108 `94966278740`, Windows publication
+  `94966278744`, macOS publication `94966278756`, Bun target support
+  `94966278757`, Deno target support `94966278814`, and Ubuntu publication
+  `94966278822`.
+- Non-mutating candidate run `31865700901` also completed successfully at the
+  exact source SHA. Its bun-bundle `94966304460`, node-sea `94966304477`,
+  esbuild `94966304482`, and candidate `94966380813` jobs all passed. Artifact
+  `9242018446` (`effect-build-0.3.0-candidate`, 101,455-byte archive, server
+  digest `sha256:33d6cc5b05775106f93e7bf9f5ee1b32c10cbfb8bbcb74b02df6c788ef4f0d53`)
+  contained exactly the five tarballs plus `manifest.json`.
+- The downloaded artifact independently passed `verify-candidate.mjs` for
+  five packages and fourteen ordered consumer observations. Manifest v2 named
+  source `b21eafe99b585f01234f769aac322645e9cc1ecd`; local tarball SHA-256 values
+  matched its records exactly: core
+  `9c251f90bff8213230be7b1591509301b5dbd1469ff96c00265fda1af6e5062b`, Bun
+  `dbc9e1734e170abf2da88b9a0b03463af0f94f7b490501b57f65263fbec3c76b`, Deno
+  `539e9077bee012a6e020a6f9fbc22644ebe2afa1f26344a4fc016945d97577c6`,
+  Esbuild `3731347d4c509858cf747ca928641a902f6d71b3699dbda344683a0eef0b7994`,
+  and Node SEA
+  `4c20c46c2c4195353c2d4e757feff90ad1905a701e23fcac8acf747449c36939`.
+  This was read-only certification; no publish, OIDC, registry, tag, or GitHub
+  Release mutation occurred or is authorized by this receipt.

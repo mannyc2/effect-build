@@ -305,7 +305,7 @@ direction. Plans 016-020 remain factual implementation history.
 | 029 | Preserve interruption through the Bun bundle continuation | P0 | S | 027 | DONE |
 | 030 | Make scalar executable input preflight total | P0 | M | 027 | DONE |
 | 031 | Make native executable inspection total and canonical | P0 | M | 027 | DONE |
-| 032 | Harden workflow data flow and packed-consumer installs | P0 | L | 028-031 | TODO |
+| 032 | Harden workflow data flow and packed-consumer installs | P0 | L | 028-031 | DONE |
 | 033 | Add dependency automation and reduce non-release CI duplication | P1 | M | 032 | TODO |
 | 034 | Bound native-inspection allocation and document digest cost | P1 | M | 031 | TODO |
 | 035 | Qualify ts-release for ordered prepacked multi-package releases | P0 | XL | 032, external approval | TODO |
@@ -460,6 +460,15 @@ behavior, or the standalone operation invalidated that earlier work.
   inspection, and preserves mixed-cause topology at publication and Node SEA
   call sites. Exact-SHA run `31863227257` passed all twelve jobs at
   implementation SHA `dc155461612026ff1dcb82e4695b99ddb943b4fd`.
+- Plan 032 makes workflow source authority immediate and explicit, treats
+  context values only as data, and replaces floating consumer installs with
+  lock-only validation followed by frozen npm/Bun installs. Implementation
+  `b21eafe99b585f01234f769aac322645e9cc1ecd` passed all twelve exact-SHA CI
+  jobs in run `31865690917`; non-mutating candidate run `31865700901` produced
+  exactly five once-packed tarballs plus manifest v2 and fourteen ordered
+  consumer observations. Downloaded artifact `9242018446` independently
+  matched every manifest tarball hash. Locks and trees remain producer
+  observations rather than artifact inputs or reproducibility claims.
 - Plan 035 is deliberately external to effect-build. It extends ts-release's
   existing prepared-subject/coordinator architecture rather than creating an
   effect-build release engine. It requires parent approval before changing the
