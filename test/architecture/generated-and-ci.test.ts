@@ -81,7 +81,7 @@ const expectPinnedActionsWithoutEscapes = (workflow: Workflow): void => {
     for (const step of job.steps ?? []) {
       if (step.uses !== undefined) {
         expect(step.uses).toMatch(
-          /^(?:actions\/(?:checkout|setup-node|upload-artifact)|oven-sh\/setup-bun)@[0-9a-f]{40}$/,
+          /^(?:actions\/(?:cache|checkout|setup-node|upload-artifact)|oven-sh\/setup-bun)@[0-9a-f]{40}$/,
         );
       }
       expect(step["continue-on-error"]).toBeUndefined();
@@ -162,6 +162,106 @@ const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "dispatch"): s
 };
 
 describe("tooling pins and workflow contracts", () => {
+  it("keeps dependency automation bounded to the Bun workspace and compatible groups", async () => {
+    const dependabot = parse(await readFile(resolve(root, ".github/dependabot.yml"), "utf8")) as {
+      version: number;
+      updates: Array<{
+        "package-ecosystem": string;
+        directory: string;
+        schedule: { interval: string };
+        "open-pull-requests-limit": number;
+        groups: Record<string, { patterns: string[]; "update-types": string[] }>;
+      }>;
+    };
+    expect(dependabot).toEqual({
+      version: 2,
+      updates: [{
+        "package-ecosystem": "bun",
+        directory: "/",
+        schedule: { interval: "weekly" },
+        "open-pull-requests-limit": 3,
+        groups: {
+          "effect-v4": {
+            patterns: ["effect", "@effect/platform-*"],
+            "update-types": ["minor", "patch"],
+          },
+          "compatible-dev-tooling": {
+            patterns: ["@types/node", "dprint", "oxlint", "tstyche", "typescript", "vitest", "yaml"],
+            "update-types": ["minor", "patch"],
+          },
+        },
+      }],
+    });
+  });
+
+  it("audits ordinary CI before quality, caches only Bun downloads, and keeps release cold", async () => {
+    const manifest = await readJson("package.json") as { scripts: Record<string, string> };
+    expect(manifest.scripts["audit:dependencies"]).toBe("bun audit --audit-level=high");
+    expect(manifest.scripts["test:host:extra"]).toBeUndefined();
+
+    const ci = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as Workflow;
+    const cacheAction = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
+    const installJobs = [
+      "quality",
+      "esbuild",
+      "node-sea",
+      "bun-bundle",
+      "real-tools",
+      "target-support",
+      "publication-hosts",
+    ];
+    expect(
+      Object.entries(ci.jobs)
+        .filter(([, job]) => job.steps?.some((step) => step.uses === cacheAction))
+        .map(([name]) => name),
+    )
+      .toEqual(installJobs);
+    for (const name of installJobs) {
+      const job = ci.jobs[name]!;
+      expect(job.needs).toBe(name === "node-sea" ? "quality" : undefined);
+      const installIndex = job.steps!.findIndex((step) => step.run === "bun install --frozen-lockfile");
+      expect(installIndex).toBeGreaterThan(0);
+      const cache = job.steps!.find((step) => step.uses === cacheAction);
+      expect(cache?.with).toEqual({
+        path: "${{ runner.temp }}/bun-install-cache",
+        key:
+          "bun-downloads-v1-${{ runner.os }}-${{ runner.arch }}-bun-1.3.14-node-24.14.1-${{ hashFiles('bun.lock') }}",
+      });
+      expect(cache?.with?.["restore-keys"]).toBeUndefined();
+      expect(cache?.with?.path).not.toMatch(/node_modules|dist|artifact|tool/i);
+      expect(job.steps![installIndex]!.env).toEqual({
+        BUN_INSTALL_CACHE_DIR: "${{ runner.temp }}/bun-install-cache",
+      });
+      expect(job.steps!.filter((step) => step.env?.BUN_INSTALL_CACHE_DIR)).toHaveLength(1);
+    }
+    expect(ci.jobs["quality"]!.steps!.map((step) => step.run).indexOf("bun run audit:dependencies"))
+      .toBeLessThan(ci.jobs["quality"]!.steps!.map((step) => step.run).indexOf("bun run verify"));
+    const releaseSecurity = await readFile(resolve(root, "docs/release-security.md"), "utf8");
+    expect(releaseSecurity).toMatch(/Dependabot.*Bun|Bun.*Dependabot/is);
+    expect(releaseSecurity).toContain("bun audit --audit-level=high");
+    expect(releaseSecurity).toMatch(/ordinary CI.*cache|cache.*ordinary CI/is);
+    expect(releaseSecurity).toMatch(/release[\s\S]*(?:cold|uncached)|(?:cold|uncached)[\s\S]*release/i);
+    expect(releaseSecurity).toMatch(/esbuild.*(?:exact|excluded from compatible)/i);
+    expect(releaseSecurity).toMatch(/registry intelligence.*not.*proof|audit.*not.*proof/i);
+
+    const release = parse(await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")) as Workflow;
+    for (const job of Object.values(release.jobs)) {
+      expect(job.steps?.some((step) => step.uses === cacheAction)).toBe(false);
+      expect(job.steps?.some((step) => step.env?.BUN_INSTALL_CACHE_DIR)).toBe(false);
+      for (const setup of job.steps?.filter((step) => step.uses?.startsWith("actions/setup-node@")) ?? []) {
+        expect(setup.with?.["package-manager-cache"]).toBe(false);
+      }
+    }
+  });
+
+  it("makes specialized node-sea CI depend on quality without retaining full verification", async () => {
+    const ci = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as Workflow;
+    expect(ci.jobs["node-sea"]?.needs).toBe("quality");
+    expect(jobRuns(ci, "node-sea")).not.toContain("bun run verify");
+    expect(jobRuns(ci, "node-sea")).toContain("bun run build");
+    expect(jobRuns(ci, "node-sea")).toContain("bun run test:integration:node-sea");
+  });
+
   it("validates the authored 12-cell Bun/Deno support matrix against integration-local authority", async () => {
     const support = await readJson("tooling/support-matrix.json") as unknown as SupportMatrix;
     const { validateSupportMatrix } = await loadScript<{ validateSupportMatrix: (value: unknown) => unknown }>(
@@ -311,6 +411,7 @@ describe("tooling pins and workflow contracts", () => {
     );
     expect(rootManifest.scripts["test:unit"]).toContain("test/unit/bun-bundle.test.ts");
     expect(rootManifest.scripts["test:unit"]).toContain("test/unit/bun-node-sea-pipeline.test.ts");
+    expect(rootManifest.devDependencies.vitest).toBe("3.2.6");
 
     for (const name of publicPackages) {
       const manifest = await readJson(`packages/${name}/package.json`) as {

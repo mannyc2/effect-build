@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      effect-v4:
+        patterns:
+          - effect
+          - "@effect/platform-*"
+        update-types:
+          - minor
+          - patch
+      compatible-dev-tooling:
+        patterns:
+          - "@types/node"
+          - dprint
+          - oxlint
+          - tstyche
+          - typescript
+          - vitest
+          - yaml
+        update-types:
+          - minor
+          - patch

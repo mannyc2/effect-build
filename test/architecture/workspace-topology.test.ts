@@ -20,6 +20,21 @@ const manifestFor = (name: typeof publicPackages[number]): Promise<Record<string
   readJson(`packages/${name}/package.json`);
 
 describe("Bun workspace package graph", () => {
+  it("registers every unit and architecture test in its explicit package script", async () => {
+    const manifest = await readJson("package.json") as { scripts: Record<string, string> };
+    const files = (await readdir(resolve(root, "test"), { recursive: true }))
+      .filter((path) => path.startsWith("unit/") || path.startsWith("architecture/"))
+      .filter((path) => path.endsWith(".test.ts"))
+      .map((path) => `test/${path}`)
+      .sort();
+    for (const [scriptName, directory] of [["test:unit", "unit"], ["test:architecture", "architecture"]] as const) {
+      const registered = manifest.scripts[scriptName]!.split(/\s+/)
+        .filter((token) => token.startsWith(`test/${directory}/`) && token.endsWith(".test.ts"))
+        .sort();
+      expect(registered).toEqual(files.filter((path) => path.startsWith(`test/${directory}/`)));
+    }
+  });
+
   it("has one private, exactly pinned workspace root", async () => {
     const manifest = await readJson("package.json");
     expect(manifest.name).toBe("effect-build-workspace");

@@ -9,6 +9,17 @@ HEAD to be identical. Every checkout retains `persist-credentials: false`.
 Workflow and tool outputs enter commands through step-local environment values;
 they are never interpolated into executable shell text.
 
+Dependency automation is bounded to the Bun workspace at the repository root:
+Dependabot runs weekly with at most three open pull requests, groups the Effect
+4 endpoint family and compatible development tooling only for minor/patch
+updates, and leaves raw `esbuild` as its own exact pin. Ordinary CI jobs may
+cache only Bun downloads under the runner temporary directory; their keys bind
+the runner, Bun 1.3.14, Node 24.14.1, and `bun.lock`. Release and candidate
+jobs stay cold: setup-node package-manager caching is disabled and no cache
+action or cache environment is present. Quality runs `bun audit --audit-level=high`
+before the full verification gate. Audit output is
+registry intelligence, not proof that the dependency graph is safe.
+
 Candidate consumers use a two-phase install:
 
 1. create a lock with a lock-only, script-disabled operation;
