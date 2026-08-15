@@ -289,8 +289,8 @@ direction. Plans 016-020 remain factual implementation history.
 | 021 | Adopt the certified ts-release 0.2 line for the four-package release | P1 | L | 020 | BLOCKED/SUPERSEDED: historical four-package qualifier; restamp after Plan 026 |
 | 023 | Establish the core artifact and lifecycle primitives behind current operations | P1 | L | 015-020 | DONE |
 | 024 | Split Esbuild and Node SEA into independent granular integrations | P1 | XL | 023 | DONE |
-| 025 | Add Bun as a second scoped JavaScript bundle producer | P1 | L | 023-024 | TODO |
-| 026 | Certify the five-package granular public cut without publishing it | P1 | M | 023-025 | TODO |
+| 025 | Add Bun as a second scoped JavaScript bundle producer | P1 | L | 023-024 | DONE |
+| 026 | Certify the five-package granular public cut without publishing it | P1 | M | 023-025 | DONE |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
@@ -406,11 +406,13 @@ behavior, or the standalone operation invalidated that earlier work.
   selected Node 26.7.0 private-copy authentication/parser acceptance part of
   Node SEA preflight. It adds no generic bundler
   service and does not change Bun/Deno compile behavior.
-- Plan 026 changes no source. It requires local and exact-SHA remote evidence,
-  five once-packed tarballs, ten isolated plus four composed consumers, and all
-  existing Bun/Deno/Effect/target/publication axes. It records earned/rejected
-  promotions but never publishes. Plan 021 remains the release-activation gate
-  and expands to five npm subjects plus GitHub if this program completes.
+- Plan 026 changed no source and certified implementation
+  `2dda53151e877ab89708d0b0fbafa5f00d06ad58`: all twelve exact-SHA CI jobs
+  passed in run `31855513747`, and read-only candidate run `31855652066`
+  produced exactly five once-packed tarballs plus one manifest with matching
+  local/downloaded hashes and 14/14 consumers. It records earned/rejected
+  promotions but did not publish. Plan 021 remains the blocked release-
+  activation gate and must be restamped for five npm subjects plus GitHub.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 

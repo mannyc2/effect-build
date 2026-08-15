@@ -887,33 +887,33 @@ plan edits remain the handoff to Plan 026.
 
 ## Done criteria
 
-- [ ] Bun source/API evidence is recorded exactly and no Bun Node-version or
+- [x] Bun source/API evidence is recorded exactly and no Bun Node-version or
       syntax-target input exists.
-- [ ] The existing `Compiler` service/layer exposes the new continuation and
+- [x] The existing `Compiler` service/layer exposes the new continuation and
       shares one canonical selected Bun with existing compile methods.
-- [ ] Pinned 1.3.9 version enforcement applies only to bundling; existing
+- [x] Pinned 1.3.9 version enforcement applies only to bundling; existing
       compile behavior is unchanged.
-- [ ] Bundle outputs have one ESM/CJS file, Node resolution, sorted observed
+- [x] Bundle outputs have one ESM/CJS file, Node resolution, sorted observed
       metafile externals, one Bun stage, core liveness/digest, and
       cleanup on every exit.
-- [ ] Node SEA accepts any valid core Node-resolution bundle, privately copies
+- [x] Node SEA accepts any valid core Node-resolution bundle, privately copies
       and authenticates it, runs exact selected Node `--check`, and
       produces/runs both Bun-origin formats on the required real lane.
-- [ ] The Bun/Esbuild differential suite and idiom-heavy real SEA smoke record
+- [x] The Bun/Esbuild differential suite and idiom-heavy real SEA smoke record
       `import.meta.main`, bundled CommonJS dependency, and classic main-detection
       behavior; docs do not claim producer equivalence.
-- [ ] Provider runtime exports do not grow; its type-only bound-command context
+- [x] Provider runtime exports do not grow; its type-only bound-command context
       is not an end-user service or raw process handle.
-- [ ] Bun's exact runtime/declaration export allowlists and all named tagged
+- [x] Bun's exact runtime/declaration export allowlists and all named tagged
       error fields/reasons are frozen at both Effect endpoints.
-- [ ] There is no direct `Bun.build`, `node:*`, `Effect.runPromise`, integration
+- [x] There is no direct `Bun.build`, `node:*`, `Effect.runPromise`, integration
       sibling dependency, second discovery/Layer, helper RPC, generic bundler,
       combined facade, fallback, or automatic download.
-- [ ] All deterministic/full/Effect gates pass; real local gates pass where the
+- [x] All deterministic/full/Effect gates pass; real local gates pass where the
       exact host/tools are available and otherwise are assigned to exact-SHA CI.
-- [ ] Five tarballs and fourteen consumer cases pass locally without
+- [x] Five tarballs and fourteen consumer cases pass locally without
       publication; final `AGENTS.md` carries `granular-integration-v2`.
-- [ ] One clean implementation SHA and this plan-only receipt are recorded for
+- [x] One clean implementation SHA and this plan-only receipt are recorded for
       Plan 026.
 
 ## STOP conditions
@@ -977,12 +977,36 @@ Stop and report without improvising if:
 Fill only after every non-receipt done criterion passes. This is a plan handoff,
 not a public build receipt, provenance record, or reproducibility claim.
 
-- **Implementation status**: `PENDING`
-- **Implementation source SHA**: `PENDING`
-- **Bun source/API characterization**: `PENDING`
-- **Deterministic and Effect gates**: `PENDING`
-- **Real Bun bundle evidence**: `PENDING`
-- **Real Bun -> Node SEA evidence / Plan 026 CI assignment**: `PENDING`
-- **Packed consumer result**: `PENDING` (expected: five tarballs, fourteen cases)
+- **Implementation status**: `DONE`
+- **Implementation source SHA**: `2dda53151e877ab89708d0b0fbafa5f00d06ad58`
+- **Bun source/API characterization**: Bun 1.3.9 source commit
+  `cf6cdbbbadd50604bc17f21ed5d0612c920a5d9a` was read at the frozen declaration,
+  API, bundler, linker, and CLI sites. `Build.Target` remains the finite
+  `bun | node | browser` resolution axis, separate from executable
+  `CompileTarget`; the Node target externalizes builtins, the CLI exposes
+  `target`, `packages`, and `metafile`, and the linker does not promise a
+  selectable Node release or general arrow-syntax lowering. The public input
+  therefore has no Node-version or syntax-target field.
+- **Deterministic and Effect gates**: exact package-manager Bun 1.3.14
+  (`0d9b296af`) passed `bun install --frozen-lockfile` with no lock change,
+  `bun run verify` from clean HEAD (5 type-test files; 175 unit tests passed and
+  1 intentional skip; 14/14 packed consumers; 41 architecture tests; zero
+  lint/format findings), `bun run verify:effect` at both
+  `4.0.0-beta.104` and `4.0.0-rc.108` with the same unit and packed-consumer
+  counts, and `git diff --check` with no output.
+- **Real Bun bundle evidence**: `UNAVAILABLE` locally because this executor is
+  Darwin arm64 and the required real lane is Linux x64 GNU with exact compiler
+  Bun 1.3.9. The exact-source Plan 026 `bun-bundle` CI job is mandatory; no PATH
+  fallback was used.
+- **Real Bun -> Node SEA evidence / Plan 026 CI assignment**: `UNAVAILABLE`
+  locally for the same host/tool reason; ambient Node 24.14.1 was not
+  substituted for exact Node 26.7.0. Assigned to Plan 026 exact-SHA
+  `bun-bundle`, which runs both ESM and CJS through the real producer and SEA
+  consumer suites.
+- **Packed consumer result**: `PASS` — the clean exact-SHA verifier packed five
+  ephemeral local tarballs and passed all fourteen npm/Bun isolated and
+  Esbuild/Bun-to-Node-SEA consumer cases. It deleted its owned temporary pack
+  root afterward; no intermediate candidate was uploaded, dispatched, or
+  retained for certification, which remains Plan 026's responsibility.
 - **Allowed plan-only handoff changes**:
   `plans/025-add-bun-javascript-bundling.md`, `plans/README.md`

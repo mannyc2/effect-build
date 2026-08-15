@@ -526,31 +526,31 @@ Any missing cell prevents `DONE`; evidence is conjunctive, not averaged.
 
 ## Done criteria
 
-- [ ] The implementation source/config tree is clean at one recorded SHA
+- [x] The implementation source/config tree is clean at one recorded SHA
       descended from `60259f9`.
-- [ ] All mandatory local deterministic and Effect gates pass; pinned real-tool
+- [x] All mandatory local deterministic and Effect gates pass; pinned real-tool
       evidence passes locally on Linux x64 or in the named mandatory exact-SHA
       CI job.
-- [ ] The optional Bun/Deno orchestrator-host lane passes where Deno is
+- [x] The optional Bun/Deno orchestrator-host lane passes where Deno is
       installed or is truthfully recorded unavailable; it is non-gating.
-- [ ] Host-specific 12-target and exact Node gates pass locally or are
+- [x] Host-specific 12-target and exact Node gates pass locally or are
       truthfully assigned to their named mandatory CI cells.
-- [ ] Exact-source CI has all twelve required jobs successful.
-- [ ] The non-mutating candidate run uses the same SHA and uploads exactly five
+- [x] Exact-source CI has all twelve required jobs successful.
+- [x] The non-mutating candidate run uses the same SHA and uploads exactly five
       tarballs plus one manifest.
-- [ ] Independent hashes/manifests match; ten isolated and four composed
+- [x] Independent hashes/manifests match; ten isolated and four composed
       consumers pass from those exact bytes.
-- [ ] Node SEA installs without Esbuild/Bun/raw esbuild; Esbuild and Bun each
+- [x] Node SEA installs without Esbuild/Bun/raw esbuild; Esbuild and Bun each
       install without Node SEA or one another; each application composition
       declares its producer and Node SEA directly.
-- [ ] The promotion decision records earned/rejected concepts without receipt,
+- [x] The promotion decision records earned/rejected concepts without receipt,
       hermeticity, reproducibility, or byte-equivalence overclaim.
-- [ ] Plan 021 remains a clearly superseded historical four-package record;
+- [x] Plan 021 remains a clearly superseded historical four-package record;
       the new promotion decision says a future restamped release plan needs
       five npm subjects plus GitHub and remains blocked on public evidence.
-- [ ] No npm package, tag, release, trusted-publisher configuration, or source
+- [x] No npm package, tag, release, trusted-publisher configuration, or source
       file is mutated under this plan.
-- [ ] Final status differs from the implementation source SHA only in Plan
+- [x] Final status differs from the implementation source SHA only in Plan
       025's frozen receipt plus Plan 026, README, and the new promotion decision.
 
 ## STOP conditions
@@ -624,15 +624,58 @@ Fill this plan-only evidence section only after Steps 1-7 and every non-receipt
 done criterion pass. This is an implementation-program handoff record, not a
 public `BuildReceipt`, provenance object, hermeticity claim, or release.
 
-- **Certification status**: `PENDING`
-- **Implementation source SHA**: `PENDING`
-- **Local gates**: `PENDING`
-- **Optional host evidence**: `PENDING`
-- **Exact-source CI run / twelve job conclusions**: `PENDING`
-- **Candidate workflow run / artifact identity**: `PENDING`
-- **Five tarball hashes and manifest hash**: `PENDING`
-- **Independent verifier result**: `PENDING`
-- **Consumer result**: `PENDING` (expected: ten isolated, four composed)
-- **Promotion decision path**: `PENDING`
+- **Certification status**: `DONE`
+- **Implementation source SHA**:
+  `2dda53151e877ab89708d0b0fbafa5f00d06ad58`
+- **Local gates**: exact Bun `1.3.14+0d9b296af`; frozen install made no
+  lockfile change; graph/export audit, build, tooling reader, five type-test
+  files, and 41 architecture tests passed; `bun run verify` passed 175 unit
+  tests with one intentional skip and 14/14 packed consumers; and
+  `bun run verify:effect` passed both `4.0.0-beta.104` and `4.0.0-rc.108` with
+  the same unit and consumer results. Darwin arm64 could not run the pinned
+  Linux x64 GNU producer/target assets, so their mandatory evidence came from
+  exact-SHA CI without local substitution.
+- **Optional host evidence**: `bun run test:host:extra` passed with Bun 1.3.14
+  and installed Deno 2.9.5 on Darwin arm64.
+- **Exact-source CI run / twelve job conclusions**:
+  [`31855513747`](https://github.com/mannyc2/effect-build/actions/runs/31855513747),
+  exact `head_sha` above, completed `success`: `quality` (`94939416625`),
+  `real-tools` (`94939416635`), `esbuild` (`94939416639`),
+  `target-support (deno)` (`94939416650`, 6/6), `node-sea`
+  (`94939416653`), `bun-bundle` (`94939416660`),
+  `effect-compatibility (4.0.0-rc.108)` (`94939416678`),
+  `target-support (bun)` (`94939416688`, 6/6),
+  `publication-hosts (windows-2025)` (`94939416690`),
+  `publication-hosts (ubuntu-24.04)` (`94939416691`),
+  `effect-compatibility (4.0.0-beta.104)` (`94939416700`), and
+  `publication-hosts (macos-15)` (`94939416723`).
+- **Candidate workflow run / artifact identity**:
+  [`31855652066`](https://github.com/mannyc2/effect-build/actions/runs/31855652066),
+  exact `head_sha` above, completed `success`; its `esbuild` (`94939804965`),
+  `node-sea` (`94939805023`), `bun-bundle` (`94939804941`), and `candidate`
+  (`94939901204`) jobs succeeded. Its sole artifact was
+  `effect-build-0.3.0-candidate`, ID `9239034521`, API digest
+  `sha256:698a21b099f86623a110ae31e38752e4141bae6e76987ad0dd6a35a7028139f4`,
+  unexpired and attached to the exact implementation source.
+- **Five tarball hashes and manifest hash**:
+  `effect-build-0.3.0.tgz`
+  `f76e4e60b7c4e14837e811bb820929c0aa4d3dc328fe0b55eb2d793aff39f325`;
+  `effect-build-bun-0.3.0.tgz`
+  `108ebe327a8067adaefbd46b2628737a1a364d437c5d93a2dddd4cd8cfa641f6`;
+  `effect-build-deno-0.3.0.tgz`
+  `1bcb609545ab5d31cb90475a3e608a9764109e217847e0c5eea4361b73bbf915`;
+  `effect-build-esbuild-0.3.0.tgz`
+  `3731347d4c509858cf747ca928641a902f6d71b3699dbda344683a0eef0b7994`;
+  `effect-build-node-sea-0.3.0.tgz`
+  `f3b03725691c4647d8c1ba09d05f11b8e49e19d28aea0a4eec709cc56bc56b36`;
+  `manifest.json`
+  `8b20e1198f6235fd00d1d7791fd31536c1ff11b878107c773ad7a11f654bada8`.
+- **Independent verifier result**: `scripts/verify-candidate.mjs` passed for
+  both the preserved local once-pack and the freshly downloaded workflow
+  artifact; their six-file inventories, manifest fields, sizes, and hashes
+  matched exactly.
+- **Consumer result**: `14/14` passed from the once-packed bytes: ten isolated
+  npm/Bun consumers and four directly declared composed consumers.
+- **Promotion decision path**: `plans/GRANULAR-API-PROMOTION-DECISION.md`
 - **Release activation**: `BLOCKED` (until five npm subjects plus GitHub have
   owned names, trusted publishing, and one qualified coordinator)
