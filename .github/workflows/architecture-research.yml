@@ -53,7 +53,7 @@ jobs:
         run: node --test research/post-0.3/architecture-laws.test.mjs
       - name: Type-check competing contracts and consumers
         run: >-
-          bun x tsc --noEmit --strict --skipLibCheck
+          bun x tsc --ignoreConfig --noEmit --strict --skipLibCheck
           --module NodeNext --moduleResolution NodeNext --target ES2022
           research/post-0.3/contracts.ts
           research/post-0.3/contracts.typecheck.ts
