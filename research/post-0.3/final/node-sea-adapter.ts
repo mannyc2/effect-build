@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   chmod,
@@ -57,14 +57,14 @@ interface CommandResult {
 }
 
 interface RunningCommand {
-  readonly child: ChildProcessWithoutNullStreams;
+  readonly child: ChildProcess;
   readonly completion: Promise<CommandResult>;
 }
 
 const commandFailure = (message: string, providerError?: unknown): NodeMainAssemblyFailed =>
   new NodeMainAssemblyFailed("effect-build-node-sea", message, providerError);
 
-const terminateChild = (child: ChildProcessWithoutNullStreams): Promise<void> =>
+const terminateChild = (child: ChildProcess): Promise<void> =>
   new Promise((resolvePromise) => {
     if (child.exitCode !== null || child.signalCode !== null) {
       resolvePromise();
