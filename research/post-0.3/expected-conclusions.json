@@ -108,6 +108,18 @@
       "id": "provider-core-skew",
       "classification": "established",
       "conclusion": "bounded-peer-range-allows-compatible-core-and-rejects-incompatible-core"
+    },
+    {
+      "receipt": "compatibility-model",
+      "id": "operation-specific-compatibility",
+      "classification": "established",
+      "conclusion": "one-pure-evaluator-distinguishes-tested-policy-supported-override-and-non-overridable-failures"
+    },
+    {
+      "receipt": "effect-contract-endpoints",
+      "id": "effect-contract-endpoints",
+      "classification": "established",
+      "conclusion": "exact-profile-contracts-compile-at-both-supported-effect-endpoints"
     }
   ]
 }
