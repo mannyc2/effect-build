@@ -1,0 +1,113 @@
+{
+  "schema": "effect-build/expected-architecture-conclusions@2",
+  "claims": [
+    {
+      "receipt": "existing-provider-research",
+      "id": "node-main-role",
+      "classification": "established",
+      "conclusion": "node-main-entry-is-portable-importable-module-is-not"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "runtime-neutral-executable",
+      "classification": "falsified",
+      "conclusion": "bun-and-deno-embed-distinct-runtimes"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "broad-static-web",
+      "classification": "falsified",
+      "conclusion": "top-level-linked-resource-is-not-preserved-natively"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "declaration-output-set",
+      "classification": "falsified",
+      "conclusion": "deno-and-tsc-output-topologies-differ"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "portable-command-watch-events",
+      "classification": "falsified",
+      "conclusion": "bun-and-deno-expose-no-machine-readable-watch-protocol"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "compiled-deno-bundle-api",
+      "classification": "falsified",
+      "conclusion": "compiled-deno-does-not-expose-deno-bundle"
+    },
+    {
+      "receipt": "host-api-boundaries",
+      "id": "bun-host-boundaries",
+      "classification": "established",
+      "conclusion": "bun-host-api-shape-reproduced-at-1.3.9-and-1.3.14"
+    },
+    {
+      "receipt": "host-api-boundaries",
+      "id": "deno-host-boundaries",
+      "classification": "established",
+      "conclusion": "deno-host-api-shape-reproduced-at-2.9.3-and-2.9.5"
+    },
+    {
+      "receipt": "host-api-boundaries",
+      "id": "deno-permission-comments",
+      "classification": "falsified",
+      "conclusion": "local-read-and-write-succeeded-without-explicit-grants"
+    },
+    {
+      "receipt": "external-provider-research",
+      "id": "node-main-executable",
+      "classification": "established",
+      "conclusion": "node-sea-and-pkg-produced-equivalent-node-main-executables"
+    },
+    {
+      "receipt": "external-provider-research",
+      "id": "incremental-node-main",
+      "classification": "sequenced",
+      "conclusion": "esbuild-and-rolldown-conform-but-rolldown-is-not-a-0.4-product-package"
+    },
+    {
+      "receipt": "profile-refinement",
+      "id": "browser-module-output-set",
+      "classification": "established",
+      "conclusion": "bun-and-deno-preserve-module-reachable-javascript-and-css"
+    },
+    {
+      "receipt": "profile-refinement",
+      "id": "html-module-graph-application",
+      "classification": "established",
+      "conclusion": "bun-and-deno-preserve-html-module-graph-applications"
+    },
+    {
+      "receipt": "profile-refinement",
+      "id": "rolled-up-declaration-file",
+      "classification": "falsified",
+      "conclusion": "deno-output-has-unresolved-local-type-import-while-rolldown-is-self-contained"
+    },
+    {
+      "receipt": "version-boundaries",
+      "id": "provider-version-boundaries",
+      "classification": "established",
+      "conclusion": "advertised-command-and-api-capabilities-exist-at-each-exercised-boundary"
+    },
+    {
+      "receipt": "node-sea-relations",
+      "id": "same-version-node-sea",
+      "classification": "established",
+      "conclusion": "node-25.5.0-and-26.7.0-build-and-run-with-matching-base"
+    },
+    {
+      "receipt": "node-sea-relations",
+      "id": "mismatched-node-sea",
+      "classification": "falsified",
+      "conclusion": "node-26-builder-accepts-node-25-base-but-produced-executable-does-not-run"
+    },
+    {
+      "receipt": "independent-versioning",
+      "id": "provider-core-skew",
+      "classification": "established",
+      "conclusion": "bounded-peer-range-allows-compatible-core-and-rejects-incompatible-core"
+    }
+  ]
+}

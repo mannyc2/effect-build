@@ -7,27 +7,40 @@ on:
 permissions:
   contents: read
 
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-receipts
+
 jobs:
   executable-research:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
       - name: Validate checked-out source
         shell: bash
-        env:
-          SOURCE_SHA: ${{ github.sha }}
         run: |
           test "$SOURCE_SHA" = "$(git rev-parse HEAD)"
-          test -f research/post-0.3/architecture-laws.test.mjs
+          test -f research/post-0.3/expected-conclusions.json
+          test -f research/post-0.3/validate-receipts.mjs
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 25.5.0
+          package-manager-cache: false
+      - id: node25
+        name: Capture Node 25 assembler
+        shell: bash
+        run: |
+          test "$(node --version)" = "v25.5.0"
+          echo "path=$(node -p 'process.execPath')" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 26.7.0
           package-manager-cache: false
       - id: node26
-        name: Capture exact Node SEA builder
+        name: Capture Node 26 assembler
         shell: bash
         run: |
           test "$(node --version)" = "v26.7.0"
@@ -53,47 +66,6 @@ jobs:
       - run: bun run build
       - id: tools
         run: node scripts/provision-tool-assets.mjs >> "$GITHUB_OUTPUT"
-      - name: Run architecture laws
-        run: node --test research/post-0.3/*.test.mjs
-      - name: Type-check competing contracts and consumers
-        run: >-
-          bun x tsc --ignoreConfig --noEmit --strict --skipLibCheck
-          --module NodeNext --moduleResolution NodeNext --target ES2022
-          research/post-0.3/contracts.ts
-          research/post-0.3/contracts.typecheck.ts
-      - name: Prove independent provider package versioning
-        run: node research/post-0.3/independent-versioning.mjs
-      - name: Exercise current providers and candidate profiles
-        shell: bash
-        run: |
-          sed -i 's/runtime-executable\.ts/runtime-executable.js/' \
-            research/post-0.3/provider-conformance.mjs
-          node research/post-0.3/provider-conformance.mjs
-        env:
-          EFFECT_BUILD_BUN_BIN: ${{ steps.tools.outputs.bun }}
-          EFFECT_BUILD_DENO_BIN: ${{ steps.tools.outputs.deno }}
-          EFFECT_BUILD_DENORT_BIN: ${{ steps.tools.outputs.denort }}
-          EFFECT_BUILD_NODE_SEA_BIN: ${{ steps.node26.outputs.path }}
-          DENORT_BIN: ${{ steps.tools.outputs.denort }}
-      - name: Exercise Bun host API at oldest and current boundaries
-        shell: bash
-        run: |
-          "${{ steps.tools.outputs.bun }}" research/post-0.3/bun-host-probe.mjs
-          "${{ steps.bun-current.outputs.path }}" research/post-0.3/bun-host-probe.mjs
-      - name: Exercise Deno 2.9.3 host API success and permissions
-        shell: bash
-        env:
-          DENO_BIN: ${{ steps.tools.outputs.deno }}
-        run: |
-          root="$RUNNER_TEMP/deno-host-research-2.9.3"
-          mkdir -p "$root/out"
-          printf '%s\n' 'export const value: string = "deno-host";' > "$root/main.ts"
-          "$DENO_BIN" run --unstable-bundle --allow-read="$root" --allow-write="$root/out" \
-            research/post-0.3/deno-host-probe.ts success "$root/main.ts" "$root/out"
-          "$DENO_BIN" run --unstable-bundle \
-            research/post-0.3/deno-host-probe.ts permission "$root/main.ts"
-          "$DENO_BIN" run --unstable-bundle \
-            research/post-0.3/deno-write-permission-probe.ts "$root/main.ts" "$root/denied.js"
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed
         with:
           deno-version: v2.9.5
@@ -101,20 +73,6 @@ jobs:
         name: Capture current Deno command
         shell: bash
         run: echo "path=$(command -v deno)" >> "$GITHUB_OUTPUT"
-      - name: Exercise Deno 2.9.5 host API success and permissions
-        shell: bash
-        env:
-          DENO_BIN: ${{ steps.deno-current.outputs.path }}
-        run: |
-          root="$RUNNER_TEMP/deno-host-research-2.9.5"
-          mkdir -p "$root/out"
-          printf '%s\n' 'export const value: string = "deno-host";' > "$root/main.ts"
-          "$DENO_BIN" run --unstable-bundle --allow-read="$root" --allow-write="$root/out" \
-            research/post-0.3/deno-host-probe.ts success "$root/main.ts" "$root/out"
-          "$DENO_BIN" run --unstable-bundle \
-            research/post-0.3/deno-host-probe.ts permission "$root/main.ts"
-          "$DENO_BIN" run --unstable-bundle \
-            research/post-0.3/deno-write-permission-probe.ts "$root/main.ts" "$root/denied.js"
       - name: Install comparison providers outside the workspace
         shell: bash
         run: |
@@ -124,51 +82,40 @@ jobs:
             rolldown@1.2.4 rolldown-plugin-dts@0.28.2 @yao-pkg/pkg@6.22.0 \
             esbuild-0281@npm:esbuild@0.28.1 esbuild-0282@npm:esbuild@0.28.2 typescript@6.0.3
           echo "RESEARCH_EXTERNAL_NODE_MODULES=$external/node_modules" >> "$GITHUB_ENV"
-      - name: Exercise Rolldown and pkg comparison adapters
+      - name: Run architecture law tests
+        run: node --test research/post-0.3/*.test.mjs
+      - name: Type-check current contract prototypes
+        run: >-
+          bun x tsc --ignoreConfig --noEmit --strict --skipLibCheck
+          --module NodeNext --moduleResolution NodeNext --target ES2022
+          research/post-0.3/contracts.ts
+          research/post-0.3/contracts.typecheck.ts
+      - name: Reproduce all existing architectural conclusions
         shell: bash
-        env:
-          EFFECT_BUILD_NODE_SEA_BIN: ${{ steps.node26.outputs.path }}
-        run: |
-          "${{ steps.node26.outputs.path }}" research/post-0.3/external-provider-probe.mjs
-      - name: Refine browser and declaration profiles
-        run: node research/post-0.3/profile-refinement-probe.mjs
-        env:
-          EFFECT_BUILD_BUN_BIN: ${{ steps.tools.outputs.bun }}
-          EFFECT_BUILD_DENO_BIN: ${{ steps.tools.outputs.deno }}
-          EFFECT_BUILD_DENO_CURRENT_BIN: ${{ steps.deno-current.outputs.path }}
-          RESEARCH_EXTERNAL_NODE_MODULES: ${{ env.RESEARCH_EXTERNAL_NODE_MODULES }}
-      - name: Exercise provider version boundaries
-        run: node research/post-0.3/version-boundary-probe.mjs
         env:
           EFFECT_BUILD_BUN_BIN: ${{ steps.tools.outputs.bun }}
           EFFECT_BUILD_BUN_CURRENT_BIN: ${{ steps.bun-current.outputs.path }}
           EFFECT_BUILD_DENO_BIN: ${{ steps.tools.outputs.deno }}
           EFFECT_BUILD_DENO_CURRENT_BIN: ${{ steps.deno-current.outputs.path }}
+          EFFECT_BUILD_DENORT_BIN: ${{ steps.tools.outputs.denort }}
+          EFFECT_BUILD_NODE_25_BIN: ${{ steps.node25.outputs.path }}
+          EFFECT_BUILD_NODE_26_BIN: ${{ steps.node26.outputs.path }}
           RESEARCH_EXTERNAL_NODE_MODULES: ${{ env.RESEARCH_EXTERNAL_NODE_MODULES }}
-
-  node-sea-version-contract:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        run: |
+          node research/post-0.3/certify-provider-conformance.mjs
+          node research/post-0.3/certify-host-boundaries.mjs
+          node research/post-0.3/certify-external-providers.mjs
+          node research/post-0.3/certify-profile-refinement.mjs
+          node research/post-0.3/certify-version-boundaries.mjs
+          node research/post-0.3/certify-node-sea-relations.mjs
+          node research/post-0.3/certify-independent-versioning.mjs
+      - name: Validate the complete conclusion set
+        run: node research/post-0.3/validate-receipts.mjs
+      - name: Upload structured architecture receipts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 25.5.0
-          package-manager-cache: false
-      - id: node-old
-        shell: bash
-        run: echo "path=$(node -p 'process.execPath')" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 26.7.0
-          package-manager-cache: false
-      - id: node-current
-        shell: bash
-        run: echo "path=$(node -p 'process.execPath')" >> "$GITHUB_OUTPUT"
-      - name: Exercise Node SEA oldest, current, and version mismatch
-        run: node research/post-0.3/node-sea-version-probe.mjs
-        env:
-          EFFECT_BUILD_NODE_OLD_BIN: ${{ steps.node-old.outputs.path }}
-          EFFECT_BUILD_NODE_CURRENT_BIN: ${{ steps.node-current.outputs.path }}
+          name: post-0.3-architecture-receipts-${{ env.SOURCE_SHA }}
+          path: ${{ env.RESEARCH_RECEIPTS_DIR }}
+          if-no-files-found: warn
+          retention-days: 30
