@@ -19,9 +19,9 @@ jobs:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
       - name: Format research candidates in the isolated checkout
-        run: bun x dprint fmt research/post-0.3/final
+        run: bun x dprint fmt "research/post-0.3/final/*.ts"
       - name: Verify formatter convergence
-        run: bun x dprint check research/post-0.3/final
+        run: bun x dprint check "research/post-0.3/final/*.ts"
       - name: Upload canonical formatted sources
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
