@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { builtinModules, isBuiltin } from "node:module";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { builtinModules, isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -10,8 +10,8 @@ import {
   NodeMainAcquisitionFailed,
   NodeMainChanged,
   NodeMainExpired,
-  NodeMainProtocol,
   NodeMainProductionFailed,
+  NodeMainProtocol,
   type BuildStepObservation,
   type ContentIdentity,
   type Digest,
@@ -40,10 +40,13 @@ export const identityOf = (bytes: Uint8Array): ContentIdentity => ({
   bytes: bytes.byteLength,
 });
 
-export const observeFileIdentity = (path: string): Effect.Effect<ContentIdentity, NodeMainAcquisitionFailed> =>
+export const observeFileIdentity = (
+  path: string,
+): Effect.Effect<ContentIdentity, NodeMainAcquisitionFailed> =>
   Effect.tryPromise({
     try: async () => identityOf(await readFile(path)),
-    catch: (error) => new NodeMainAcquisitionFailed("read-identity", error instanceof Error ? error.message : String(error)),
+    catch: (error) =>
+      new NodeMainAcquisitionFailed("read-identity", error instanceof Error ? error.message : String(error)),
   });
 
 const classifySpecifier = (specifier: string): NodeRuntimeImport["classification"] => {
@@ -101,20 +104,23 @@ const readAuthenticated = (
   producerPackage: string,
   active: () => boolean,
 ): Effect.Effect<Uint8Array, NodeMainExpired | NodeMainChanged | NodeMainAcquisitionFailed> =>
-  Effect.suspend(() => {
-    if (!active()) return Effect.fail(new NodeMainExpired(producerPackage));
-    return Effect.tryPromise({
-      try: async () => Uint8Array.from(await readFile(path)),
-      catch: (error) => new NodeMainAcquisitionFailed("read-main", error instanceof Error ? error.message : String(error)),
-    }).pipe(
-      Effect.flatMap((bytes) => {
-        const observed = identityOf(bytes);
-        return observed.digest === expected.digest && observed.bytes === expected.bytes
-          ? Effect.succeed(bytes)
-          : Effect.fail(new NodeMainChanged(expected, observed));
-      }),
-    );
-  });
+  Effect.suspend(
+    (): Effect.Effect<Uint8Array, NodeMainExpired | NodeMainChanged | NodeMainAcquisitionFailed> => {
+      if (!active()) return Effect.fail(new NodeMainExpired(producerPackage));
+      return Effect.tryPromise({
+        try: async () => Uint8Array.from(await readFile(path)),
+        catch: (error) =>
+          new NodeMainAcquisitionFailed("read-main", error instanceof Error ? error.message : String(error)),
+      }).pipe(
+        Effect.flatMap((bytes) => {
+          const observed = identityOf(bytes);
+          return observed.digest === expected.digest && observed.bytes === expected.bytes
+            ? Effect.succeed(bytes)
+            : Effect.fail(new NodeMainChanged(expected, observed));
+        }),
+      );
+    },
+  );
 
 const acquireLease = (
   path: string,
@@ -146,9 +152,10 @@ const acquireLease = (
           }
           return { root, lease: { _tag: "File", identity: expected, path: privatePath } as const };
         },
-        catch: (error) => error instanceof NodeMainChanged
-          ? error
-          : new NodeMainAcquisitionFailed("copy-main", error instanceof Error ? error.message : String(error)),
+        catch: (error) =>
+          error instanceof NodeMainChanged
+            ? error
+            : new NodeMainAcquisitionFailed("copy-main", error instanceof Error ? error.message : String(error)),
       })
     ),
     ({ root }) => Effect.promise(() => rm(root, { recursive: true, force: true })),
@@ -227,9 +234,10 @@ export const checkNodeSyntax = (
         await rm(root, { recursive: true, force: true });
       }
     },
-    catch: (error) => new NodeMainProductionFailed(
-      "effect-build",
-      `Node ${target.version} syntax check failed`,
-      error,
-    ),
+    catch: (error) =>
+      new NodeMainProductionFailed(
+        "effect-build",
+        `Node ${target.version} syntax check failed`,
+        error,
+      ),
   });
