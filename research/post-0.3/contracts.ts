@@ -1,220 +1,326 @@
-import type { Effect, Layer, Scope, Stream } from "effect";
+import { Effect } from "effect";
+import type { Layer, Scope } from "effect";
+import type { CompatibilitySuccess } from "./compatibility.js";
 
-export type Compatibility = "tested" | "untested-override";
+export * from "./compatibility.js";
 
-export interface TestedRange {
-  readonly minimum: string;
-  readonly maximum: string;
-}
+export const NodeMainProgramProtocol: "effect-build/profile/node-main-program@1" =
+  "effect-build/profile/node-main-program@1";
+export const NodeMainExecutableProtocol: "effect-build/profile/node-main-executable@1" =
+  "effect-build/profile/node-main-executable@1";
+export const BrowserModuleApplicationProtocol: "effect-build/profile/browser-module-application@1" =
+  "effect-build/profile/browser-module-application@1";
 
-export interface ToolObservation<Name extends string = string> {
-  readonly name: Name;
+export type ProfileProtocol =
+  | typeof NodeMainProgramProtocol
+  | typeof NodeMainExecutableProtocol
+  | typeof BrowserModuleApplicationProtocol;
+
+export interface ProviderPackageObservation {
+  readonly name: string;
   readonly version: string;
-  readonly path?: string;
-  readonly compatibility: Compatibility;
-  readonly testedRange: TestedRange;
 }
 
-export interface ProviderLayerOptions {
-  readonly executable?: string;
-  readonly allowUntestedVersion?: boolean;
-}
-
-export interface ToolVersionUnsupported {
-  readonly _tag: "ToolVersionUnsupported";
-  readonly provider: string;
-  readonly lane: "api" | "command";
-  readonly observed: string;
-  readonly testedRange: TestedRange;
-  readonly knownIncompatible: boolean;
-  readonly missingCapabilities: readonly string[];
-  readonly remediation:
-    | "select-supported-version"
-    | "enable-untested-version-override";
-}
-
-export interface ToolVersionUntestedOverride {
-  readonly _tag: "ToolVersionUntestedOverride";
-  readonly provider: string;
-  readonly lane: "api" | "command";
-  readonly observed: string;
-  readonly testedRange: TestedRange;
-}
-
-export interface CommandLogChunk {
-  readonly channel: "stdout" | "stderr";
-  readonly bytes: Uint8Array;
-}
-
-export interface CommandExit {
-  readonly exitCode: number;
-  readonly signal?: string;
-}
-
-/** Integration-author process ownership. This is not an application event protocol. */
-export interface AuthorCommandSession {
-  readonly logs: Stream.Stream<CommandLogChunk, never>;
-  readonly exit: Effect.Effect<CommandExit>;
-}
-
-/** App-facing command watch when no truthful typed rebuild parser exists. */
-export interface OpaqueWatchSession {
-  readonly tool: ToolObservation;
-  readonly logs: Stream.Stream<CommandLogChunk, never>;
-  readonly exit: Effect.Effect<CommandExit>;
-}
-
-/** Only publish this shape when provider output proves stable event boundaries. */
-export interface TypedWatchSession<Event, Error> extends OpaqueWatchSession {
-  readonly ready: Effect.Effect<void, Error>;
-  readonly events: Stream.Stream<Event, Error>;
-}
-
-export interface BorrowedFile {
-  readonly path: string;
-  readonly bytes: number;
-  readonly digest: `sha256:${string}`;
+export interface ToolObservation {
+  readonly name: string;
+  readonly version: string;
+  readonly canonicalPath?: string;
+  readonly compatibility: CompatibilitySuccess;
 }
 
 export interface BuildStepObservation {
   readonly operation: string;
-  readonly tool: ToolObservation;
+  readonly providerPackage: ProviderPackageObservation;
+  readonly profileProtocol: ProfileProtocol;
+  readonly tool?: ToolObservation;
+}
+
+export interface ProfileProtocolUnsupported {
+  readonly _tag: "ProfileProtocolUnsupported";
+  readonly profile: "NodeMainProgram" | "NodeMainExecutable" | "BrowserModuleApplication";
+  readonly expected: ProfileProtocol;
+  readonly observed: string;
+  readonly providerPackage: ProviderPackageObservation;
+}
+
+export const validateProfileProtocol = (
+  profile: ProfileProtocolUnsupported["profile"],
+  expected: ProfileProtocol,
+  observed: string,
+  providerPackage: ProviderPackageObservation,
+): Effect.Effect<void, ProfileProtocolUnsupported> =>
+  observed === expected
+    ? Effect.succeed(undefined)
+    : Effect.fail({
+      _tag: "ProfileProtocolUnsupported",
+      profile,
+      expected,
+      observed,
+      providerPackage,
+    });
+
+export interface NodeRuntimeTarget {
+  readonly runtime: "node";
+  readonly version: string;
+  readonly moduleResolution: "node";
+}
+
+export interface NodeSyntaxCompatibility {
+  readonly minimumNodeVersion: string;
+  readonly testedNodeVersions: readonly [string, ...string[]];
+  readonly topLevelAwait: "supported" | "not-applicable";
+  readonly dynamicImport: "supported";
+  readonly jsonModules: "bundled" | "commonjs-require" | "import-attributes";
+}
+
+export interface NodeImportObservation {
+  readonly kind: "static-import" | "dynamic-import" | "require" | "json";
+  readonly specifier: string | null;
+  readonly disposition:
+    | "bundled"
+    | "builtin"
+    | "package-external"
+    | "unresolved-external"
+    | "json-bundled"
+    | "json-external";
+}
+
+export interface NodeMainIdentity {
+  readonly algorithm: "sha256";
+  readonly digest: `sha256:${string}`;
+  readonly bytes: number;
+}
+
+export interface NodeMainSnapshot extends NodeMainIdentity {
+  readonly contents: Uint8Array;
+}
+
+export interface NodeMainAcquisitionFailed {
+  readonly _tag: "NodeMainAcquisitionFailed";
+  readonly operation: "acquire" | "read" | "authenticate";
+  readonly reason: string;
+}
+
+export interface NodeMainContentAuthority {
+  readonly lifetime: "borrowed";
+  readonly identity: NodeMainIdentity;
+  readonly acquire: Effect.Effect<NodeMainSnapshot, NodeMainAcquisitionFailed>;
+}
+
+export interface NodeMain {
+  readonly _tag: "NodeMain";
+  readonly profileProtocol: typeof NodeMainProgramProtocol;
+  readonly providerPackage: ProviderPackageObservation;
+  readonly content: NodeMainContentAuthority;
+  readonly moduleFormat: "esm" | "commonjs";
+  readonly runtimeTarget: NodeRuntimeTarget;
+  readonly syntaxCompatibility: NodeSyntaxCompatibility;
+  readonly imports: readonly NodeImportObservation[];
+  readonly observations: readonly BuildStepObservation[];
 }
 
 export interface NodeMainProgramRequest {
   readonly entrypoint: string;
   readonly cwd?: string;
-  readonly format: "esm" | "cjs";
+  readonly moduleFormat: "esm" | "commonjs";
+  readonly runtimeTarget: NodeRuntimeTarget;
+  readonly minify: boolean;
+  readonly sourceMap: "none" | "linked" | "inline";
 }
 
-/**
- * Narrowed role: a Node main entry, not an arbitrary importable module.
- * One continuation owns cleanup. The closure-owned file Effect preserves typed
- * expiry and mutation checks without a second callback.
- */
-export interface BorrowedNodeMainProgram {
-  readonly protocol: "effect-build/NodeMainProgram@1";
-  readonly format: "esm" | "cjs";
-  readonly resolutionTarget: "node";
-  readonly executionRole: "main";
-  readonly externalImportObservations: readonly string[];
-  readonly steps: readonly BuildStepObservation[];
-  readonly file: Effect.Effect<BorrowedFile, NodeMainProgramExpired | NodeMainProgramChanged>;
-}
-
-export interface NodeMainProgramExpired {
-  readonly _tag: "NodeMainProgramExpired";
-}
-
-export interface NodeMainProgramChanged {
-  readonly _tag: "NodeMainProgramChanged";
-  readonly reason: "missing" | "not-file" | "byte-count-changed" | "digest-changed";
-}
-
-export interface NodeMainProgramService<Failure> {
-  readonly withProgram: <A, E, R>(
+export interface NodeMainProgramService<Failure, Requirements = never> {
+  readonly profile: "NodeMainProgram";
+  readonly protocol: string;
+  readonly providerPackage: ProviderPackageObservation;
+  readonly withMain: <A, E, R>(
     request: NodeMainProgramRequest,
-    use: (program: BorrowedNodeMainProgram) => Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, Failure | E, Exclude<R, Scope.Scope>>;
+    use: (main: NodeMain) => Effect.Effect<A, E, R>,
+  ) => Effect.Effect<
+    A,
+    Failure | ProfileProtocolUnsupported | E,
+    Requirements | Exclude<R, Scope.Scope>
+  >;
 }
 
-export interface ArtifactFile {
+export interface NodeTargetMismatch {
+  readonly _tag: "NodeTargetMismatch";
+  readonly produced: NodeRuntimeTarget;
+  readonly requested: NodeRuntimeTarget;
+}
+
+export interface NodeMainIdentityMismatch {
+  readonly _tag: "NodeMainIdentityMismatch";
+  readonly expected: NodeMainIdentity;
+  readonly observed: NodeMainIdentity;
+}
+
+export interface NodeExternalImportUnsupported {
+  readonly _tag: "NodeExternalImportUnsupported";
+  readonly imports: readonly [NodeImportObservation, ...NodeImportObservation[]];
+}
+
+export interface PublicationInterruptedBeforeCommit {
+  readonly _tag: "PublicationInterruptedBeforeCommit";
+  readonly destination: string;
+}
+
+export interface ExecutableArtifact {
+  readonly _tag: "ExecutableArtifact";
   readonly path: string;
   readonly bytes: number;
   readonly digest?: `sha256:${string}`;
+  readonly runtime: NodeRuntimeTarget;
+  readonly observations: readonly BuildStepObservation[];
+  readonly publication: {
+    readonly commitPoint: "atomic-file-replacement";
+    readonly committed: true;
+  };
 }
 
-export interface ArtifactExecutable extends ArtifactFile {
-  readonly runtime: "node" | "bun" | "deno";
-  readonly systemTarget: string;
-  readonly steps: readonly BuildStepObservation[];
+export interface PublicationInterruptedAfterCommit {
+  readonly _tag: "PublicationInterruptedAfterCommit";
+  readonly artifact: ExecutableArtifact;
 }
 
-/** A candidate future role validated only for Node runtimes. */
+export type NodeMainExecutableContractFailure =
+  | ProfileProtocolUnsupported
+  | NodeMainAcquisitionFailed
+  | NodeTargetMismatch
+  | NodeMainIdentityMismatch
+  | NodeExternalImportUnsupported
+  | PublicationInterruptedBeforeCommit
+  | PublicationInterruptedAfterCommit;
+
 export interface NodeMainExecutableRequest {
-  readonly main: BorrowedFile;
-  readonly format: "commonjs" | "module";
-  readonly outfile: string;
-  readonly systemTarget?: string;
-  readonly assets?: Readonly<Record<string, string>>;
+  readonly main: NodeMain;
+  readonly destination: string;
+  readonly runtimeTarget: NodeRuntimeTarget;
+  readonly acquisition: "bytes" | "private-file";
+  readonly digest: boolean;
 }
 
-export interface NodeMainExecutableService<Failure> {
-  readonly createExecutable: (
+export interface NodeMainExecutableService<Failure, Requirements = never> {
+  readonly profile: "NodeMainExecutable";
+  readonly protocol: string;
+  readonly providerPackage: ProviderPackageObservation;
+  readonly assemble: (
     request: NodeMainExecutableRequest,
-  ) => Effect.Effect<ArtifactExecutable & { readonly runtime: "node" }, Failure>;
+  ) => Effect.Effect<
+    ExecutableArtifact,
+    Failure | NodeMainExecutableContractFailure,
+    Requirements
+  >;
 }
 
-/**
- * Deliberately rejected broad role. Runtime identity is output semantics, not
- * merely an implementation detail. A caller that accepts this union has not
- * gained provider substitution.
- */
-export interface UniversalRuntimeExecutableRequest {
-  readonly entrypoint: string;
-  readonly outfile: string;
-  readonly runtime: "node" | "bun" | "deno";
-  readonly permissions?: unknown;
-  readonly systemTarget?: string;
-}
-
-export interface StaticWebApplicationRequest {
+export interface BrowserModuleApplicationRequest {
   readonly entryHtml: readonly [string, ...string[]];
   readonly cwd?: string;
-  readonly minify?: boolean;
+  readonly minify: boolean;
+  readonly sourceMap: "none" | "linked";
 }
 
-export interface BorrowedStaticWebApplication {
-  readonly protocol: "effect-build/StaticWebApplication@1";
-  readonly target: "browser";
-  readonly entryHtml: readonly string[];
-  readonly files: Effect.Effect<
-    readonly ArtifactFile[],
-    StaticWebApplicationExpired | StaticWebApplicationChanged
-  >;
-  readonly steps: readonly BuildStepObservation[];
-}
-
-export interface StaticWebApplicationExpired {
-  readonly _tag: "StaticWebApplicationExpired";
-}
-
-export interface StaticWebApplicationChanged {
-  readonly _tag: "StaticWebApplicationChanged";
+export interface BrowserResourceObservation {
   readonly path: string;
+  readonly kind: "html" | "javascript" | "css" | "image" | "font" | "source-map" | "other";
+  readonly bytes: number;
+  readonly digest: `sha256:${string}`;
+  readonly references: readonly string[];
 }
 
-export interface StaticWebApplicationService<Failure> {
+export interface BrowserModuleApplicationSnapshot {
+  readonly entryHtml: readonly [string, ...string[]];
+  readonly resources: readonly BrowserResourceObservation[];
+}
+
+export interface BrowserModuleApplicationAcquisitionFailed {
+  readonly _tag: "BrowserModuleApplicationAcquisitionFailed";
+  readonly operation: "walk" | "read" | "authenticate";
+  readonly reason: string;
+}
+
+export interface BrowserModuleApplication {
+  readonly _tag: "BrowserModuleApplication";
+  readonly profileProtocol: typeof BrowserModuleApplicationProtocol;
+  readonly providerPackage: ProviderPackageObservation;
+  readonly lifetime: "borrowed";
+  readonly acquire: Effect.Effect<
+    BrowserModuleApplicationSnapshot,
+    BrowserModuleApplicationAcquisitionFailed
+  >;
+  readonly observations: readonly BuildStepObservation[];
+}
+
+export interface BrowserModuleApplicationService<Failure, Requirements = never> {
+  readonly profile: "BrowserModuleApplication";
+  readonly protocol: string;
+  readonly providerPackage: ProviderPackageObservation;
   readonly withApplication: <A, E, R>(
-    request: StaticWebApplicationRequest,
-    use: (application: BorrowedStaticWebApplication) => Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, Failure | E, Exclude<R, Scope.Scope>>;
+    request: BrowserModuleApplicationRequest,
+    use: (application: BrowserModuleApplication) => Effect.Effect<A, E, R>,
+  ) => Effect.Effect<
+    A,
+    Failure | ProfileProtocolUnsupported | E,
+    Requirements | Exclude<R, Scope.Scope>
+  >;
 }
 
-export interface RebuildEvent<Output> {
-  readonly _tag: "Rebuilt";
-  readonly sequence: number;
-  readonly output: Output;
-}
-
-/** Future API-context role; not a command-stdout normalization. */
-export interface IncrementalNodeMainSession<Failure> {
-  readonly rebuild: Effect.Effect<BorrowedNodeMainProgram, Failure>;
-  readonly changes?: Stream.Stream<RebuildEvent<BorrowedNodeMainProgram>, Failure>;
-}
-
-export interface IncrementalNodeMainService<Failure> {
-  readonly context: (
-    request: NodeMainProgramRequest,
-  ) => Effect.Effect<IncrementalNodeMainSession<Failure>, Failure, Scope.Scope>;
-}
-
-export interface PermanentProviderApi<Service, LayerError, Requirements = never> {
+export interface PermanentProviderApi<Service, Failure, Requirements = never> {
   readonly status: "permanent-canonical-provider-surface";
-  readonly layer: Layer.Layer<Service, LayerError, Requirements>;
+  readonly providerPackage: ProviderPackageObservation;
+  readonly layer: Layer.Layer<Service, Failure, Requirements>;
 }
 
-export interface ProfileAdapter<Service, LayerError, Requirements = never> {
+export interface ProfileAdapter<Service, Failure, Requirements = never> {
   readonly status: "additive-portable-role";
-  readonly layer: Layer.Layer<Service, LayerError, Requirements>;
+  readonly profile: "NodeMainProgram" | "NodeMainExecutable" | "BrowserModuleApplication";
+  readonly protocol: string;
+  readonly providerPackage: ProviderPackageObservation;
+  readonly layer: Layer.Layer<Service, Failure, Requirements>;
 }
+
+export interface NodeSourceExecutableRequest {
+  readonly program: NodeMainProgramRequest;
+  readonly destination: string;
+  readonly acquisition: "bytes" | "private-file";
+  readonly digest: boolean;
+}
+
+export const nodeSourceExecutable = <ProducerFailure, ProducerRequirements, AssemblerFailure, AssemblerRequirements>(
+  producer: NodeMainProgramService<ProducerFailure, ProducerRequirements>,
+  assembler: NodeMainExecutableService<AssemblerFailure, AssemblerRequirements>,
+  request: NodeSourceExecutableRequest,
+): Effect.Effect<
+  ExecutableArtifact,
+  | ProducerFailure
+  | AssemblerFailure
+  | NodeMainExecutableContractFailure
+  | ProfileProtocolUnsupported,
+  ProducerRequirements | Exclude<AssemblerRequirements, Scope.Scope>
+> =>
+  Effect.flatMap(
+    validateProfileProtocol(
+      "NodeMainProgram",
+      NodeMainProgramProtocol,
+      producer.protocol,
+      producer.providerPackage,
+    ),
+    () =>
+      Effect.flatMap(
+        validateProfileProtocol(
+          "NodeMainExecutable",
+          NodeMainExecutableProtocol,
+          assembler.protocol,
+          assembler.providerPackage,
+        ),
+        () =>
+          producer.withMain(request.program, (main) =>
+            assembler.assemble({
+              main,
+              destination: request.destination,
+              runtimeTarget: request.program.runtimeTarget,
+              acquisition: request.acquisition,
+              digest: request.digest,
+            })
+          ),
+      ),
+  );
