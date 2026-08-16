@@ -1,41 +1,62 @@
-# Plan 044: Hard-cut and certify the 0.4 public architecture
+# Plan 044: Hard cut and certify the unpublished 0.4 surface
 
 ## Status
 
-- Priority: P0 public cut
+- Priority: P0 public API cut and certification
 - Effort: XL
-- Risk: CRITICAL breaking package/API migration
-- Depends on: Plans 039-043 and explicit maintainer approval for the public cut
-- Planned at: `3c318072cec6debd7c5eae6de14b20c8df4b1842`
+- Risk: CRITICAL breaking declarations, consumers, and package bytes
+- Depends on: Plans 039, 040, 041, 042, and 043
+- Architecture commit: `e23722e81fa651c1540c8aa72e2703ff62ac609b`
 - Status: TODO
+- Publication authority: NONE
 
 ## Objective
 
-Perform one coordinated pre-1.0 hard cut from the released 0.3 provider-first
-surface to the selected native-capability architecture, then certify one exact
-five-package 0.4 candidate without publishing it.
+Perform one pre-1.0 hard cut from the released 0.3 surface to the selected
+0.4 architecture, then certify one unpublished five-package candidate.
 
-Plan 044 is the only plan that may delete the temporary 0.3 delegates, rename
-public artifact fields, replace package export maps, rewrite canonical docs and
-examples, and update repository governance.
+This plan may:
 
-It does not publish packages, create a tag or GitHub Release, or modify trusted
-publishing. Release activation requires a separately approved release plan.
+- change production exports;
+- delete 0.3 aliases;
+- update docs/examples/tests;
+- pack and verify local candidate tarballs.
 
-## Target public surface
+It may not:
+
+- publish npm packages;
+- create tags or releases;
+- modify trusted publishing;
+- change branch protections;
+- merge itself.
+
+## Preconditions
+
+Before implementation:
+
+1. every dependency plan has a completion receipt and passing exact-SHA CI;
+2. the implementation lineage descends from `v0.3.0`;
+3. the Deno API hard gate passed, or the maintainer explicitly amended the
+   architecture before this plan;
+4. no provider lane silently falls back to another lane;
+5. the SingleNodeProgram profile passed Bun/Esbuild substitution and
+   duplicate-core tests;
+6. the exact Effect version range and provider versions are recorded.
+
+## Exact 0.4 export maps
 
 ### `effect-build`
 
 ```text
 .
-./Command
-./TemporaryOutput
-./Executable
-./CommandCompiler
+./Author/Command
+./Author/TemporaryOutput
+./Author/Executable
+./Author/CommandCompiler
 ./Profile/SingleNodeProgram
 ```
 
-Root application vocabulary:
+Root runtime namespaces/types:
 
 ```text
 Artifact
@@ -55,12 +76,27 @@ SystemTarget
 ./Profile/SingleNodeProgram
 ```
 
+Root namespaces only:
+
+```text
+Api
+Command
+SingleNodeProgram
+```
+
 ### `effect-build-deno`
 
 ```text
 .
-./Api              # only if Plan 042's upstream gate passed
+./Api
 ./Command
+```
+
+Root namespaces only:
+
+```text
+Api
+Command
 ```
 
 ### `effect-build-esbuild`
@@ -71,6 +107,13 @@ SystemTarget
 ./Profile/SingleNodeProgram
 ```
 
+Root namespaces only:
+
+```text
+Api
+SingleNodeProgram
+```
+
 ### `effect-build-node-sea`
 
 ```text
@@ -79,20 +122,25 @@ SystemTarget
 ./Recipe/SingleNodeProgram
 ```
 
-Package roots may re-export lane namespaces for discovery, but documentation
-uses the canonical explicit subpaths.
+Root namespaces only:
 
-## Required removals and renames
+```text
+Command
+SingleNodeProgramRecipe
+```
 
-Delete without compatibility aliases:
+Explicit subpaths are canonical. Roots do not add flat callable aliases.
+
+## Required deletions and renames
+
+Delete without aliases:
 
 ```text
 effect-build/Integration
 effect-build/Provider
 JavaScriptBundle.Artifact
 withJavaScriptBundle
-root-generic NodeProgramBundler proposal
-ambiguous provider Compiler service names
+ambiguous Bun/Deno Compiler service names
 ```
 
 Rename:
@@ -100,255 +148,270 @@ Rename:
 ```text
 StageObservation -> BuildStepObservation
 stages           -> steps
-artifact target  -> systemTarget
-AbsolutePath     -> Artifact.LocalPath for observed durable outputs
+target           -> systemTarget
+AbsolutePath     -> Artifact.LocalPath
 ```
 
 Move:
 
 ```text
-compileExecutable       -> provider Command module
-compileExecutableMatrix -> provider Command module
+Bun.compileExecutable       -> effect-build-bun/Command
+Bun.compileExecutableMatrix -> effect-build-bun/Command
+Deno.compileExecutable      -> effect-build-deno/Command
+Deno.compileExecutableMatrix-> effect-build-deno/Command
 ```
 
-Broaden:
+Do not ship compatibility wrappers, deprecated aliases, legacy subpaths, or a
+parallel "advanced" API.
 
-```text
-Node SEA direct input -> existing bundled main file plus supported SEA config
-Esbuild -> build + transform + scoped context
-Bun -> host API build/compile + command build/compile
-Deno -> host API bundle where gated + command bundle/compile
-```
+## Migration examples
 
-Add:
-
-```text
-SingleNodeProgram portable profile
-Bun and Esbuild profile Layers
-Node SEA provider-neutral recipe
-native Effect tracing/logging annotations
-```
-
-## Documentation cut
-
-Rewrite the product documentation around this order:
-
-1. provider-native APIs;
-2. command versus host API lane selection;
-3. durable artifacts and shared lifecycle guarantees;
-4. optional portable profiles;
-5. recipes and application composition;
-6. integration authoring;
-7. observability;
-8. exact support and provider-version evidence.
-
-The README must not lead with the Node SEA pipeline as the definition of the
-library. It should present it as one recipe after provider-native examples.
-
-Preserve historical Plans 001-043 and audits. Update `AGENTS.md`, the public API
-lock, architecture tests, docs contracts, changelog, and examples in one cut.
-
-## Migration guide
-
-Document exact 0.3 to 0.4 replacements:
+### 0.3 Bun compile
 
 ```ts
-// 0.3
-Bun.compileExecutable(input)
+import * as Bun from "effect-build-bun"
 
-// 0.4
-BunCommand.compileExecutable(input)
+Bun.compileExecutable({
+  entrypoint: "src/main.ts",
+  outfile: "dist/app"
+}).pipe(Effect.provide(Bun.layer()))
 ```
 
+### 0.4 Bun command compile
+
 ```ts
-// 0.3
-Esbuild.withJavaScriptBundle(request, use)
+import * as BunCommand from "effect-build-bun/Command"
 
-// 0.4 direct profile
-EsbuildApi.withSingleNodeProgram(request, use)
-
-// 0.4 portable profile
-SingleNodeProgram.withProgram(request, use)
+BunCommand.compileExecutable({
+  entrypoint: "src/main.ts",
+  outfile: "dist/app"
+}).pipe(Effect.provide(BunCommand.layer()))
 ```
 
-```ts
-// 0.3
-NodeSea.createExecutable({ main: liveArtifact, outfile })
+### 0.3 Esbuild -> Node SEA
 
-// 0.4 direct provider
+```ts
+Esbuild.withJavaScriptBundle(
+  { entrypoint: "src/main.ts", format: "esm" },
+  (main) =>
+    NodeSea.createExecutable({
+      main,
+      outfile: "dist/app"
+    })
+)
+```
+
+### 0.4 portable recipe
+
+```ts
+import * as EsbuildProfile from
+  "effect-build-esbuild/Profile/SingleNodeProgram"
+import * as NodeSeaCommand from
+  "effect-build-node-sea/Command"
+import * as NodeSeaRecipe from
+  "effect-build-node-sea/Recipe/SingleNodeProgram"
+
+NodeSeaRecipe.createExecutable({
+  program: {
+    entrypoint: "src/main.ts",
+    format: "esm"
+  },
+  outfile: "dist/app"
+}).pipe(
+  Effect.provide(EsbuildProfile.layer),
+  Effect.provide(NodeSeaCommand.layer())
+)
+```
+
+### 0.4 direct Esbuild build
+
+```ts
+import * as EsbuildApi from "effect-build-esbuild/Api"
+
+EsbuildApi.build({
+  entryPoints: ["src/client.tsx", "src/worker.ts"],
+  outdir: "dist",
+  splitting: true,
+  format: "esm",
+  platform: "browser",
+  plugins: [plugin],
+  metafile: true
+})
+```
+
+### 0.4 direct Node SEA bytes
+
+```ts
+import * as NodeSeaCommand from "effect-build-node-sea/Command"
+
 NodeSeaCommand.createExecutable({
-  main: { path, format: "module" },
-  outfile
-})
-
-// 0.4 recipe
-NodeSeaSingleProgram.createExecutable({
-  program: request,
-  outfile
+  main: {
+    _tag: "Bytes",
+    contents,
+    format: "module",
+    sourceName: "main.mjs"
+  },
+  outfile: "dist/app"
 })
 ```
 
-Explain why no automatic compatibility layer exists: preserving old roots would
-create duplicate canonical representations and obscure the new lane/profile
-boundaries.
+## Documentation requirements
+
+Rewrite:
+
+- root README product thesis;
+- install guidance by lane;
+- API reference;
+- architecture;
+- integration author guide;
+- errors;
+- examples;
+- changelog;
+- migration guide.
+
+Docs must explicitly state:
+
+- host API versus command requirements;
+- no fallback;
+- interruption guarantee per operation;
+- provider direct-write versus atomic executable publication;
+- profile exclusions;
+- source graph versus trace versus step observation;
+- exporter-neutral observability;
+- Deno unstable flag/permissions;
+- Node SEA builder/base Node restrictions;
+- no SourceLocator;
+- no universal ExecutableBuilder.
 
 ## Certification matrix
 
-### Deterministic source and type gates
+### Static and architecture
 
-- build all five packages;
-- noEmit checks;
-- exact runtime/declaration export lock;
-- source ownership and one-way dependency tests;
-- lint, format, and diff checks;
-- exact Effect peer endpoint consumers.
+- exact runtime export allowlist;
+- exact declaration export allowlist;
+- one-way dependencies;
+- no sibling imports;
+- no raw runtime process/filesystem imports;
+- no old subpaths/names;
+- no `unstable/*` author namespace;
+- no provider registry/fallback;
+- no transformation algebra;
+- no generic executable builder.
 
-### Host API lanes
+### Host matrix
 
-- Bun host API build and compile;
-- Deno host bundle if Plan 042 passed;
-- Esbuild build, transform, and scoped context;
-- provider API unavailable behavior under unsupported hosts.
+- Node-host command consumers;
+- Bun-host API consumers;
+- Deno-host API consumers with required flags/permissions;
+- supported Effect compatibility endpoints.
 
-### Command lanes
+### Provider breadth
 
-- Bun build, scalar compile, and matrix;
-- Deno bundle, scalar compile, and matrix;
-- Node SEA direct main-file assembly;
-- active-child interruption and watch-resource cleanup;
-- exact tool selection and no fallback.
+Bun:
 
-### Provider capabilities
+- API build: virtual files, plugins, multi-entry, HTML/CSS/assets, targets,
+  splitting, logs, compile mode;
+- Command build and every advertised executable target;
+- scalar/matrix behavior.
 
-- multiple entries and outputs where supported;
-- browser/Node/Bun/Deno targets where supported;
-- HTML/CSS/assets;
-- plugins/loaders;
-- splitting;
-- in-memory and written outputs;
-- structured diagnostics and provider metadata;
-- cross-target executables;
-- current supported system-target matrix.
+Deno:
 
-### Portable profile
+- API bundle memory/written output and failures;
+- Command bundle including declarations;
+- project compile, permissions/includes/workers/engine/targets;
+- scalar/matrix behavior.
 
-- unchanged application under Bun and Esbuild Layers;
-- ESM/CJS;
-- direct provider escape hatches;
-- borrowed expiry and duplicate-core tests;
-- exact Cause preservation;
-- real Bun/Esbuild -> Node SEA recipes.
+Esbuild:
 
-### Publication lifecycle
+- build, transform, context, rebuild, watch, serve, cancel/dispose;
+- plugins, multi-output, CSS/assets, metafile, diagnostics.
 
-- Linux, macOS, and Windows staging/atomic replacement;
-- native ELF/Mach-O/PE inspection;
-- target mismatch;
-- locked destination;
-- pre-rename interruption leaves destination unchanged;
-- post-rename point-of-no-return behavior;
-- optional digest cost remains explicit.
+Node SEA:
+
+- file/bytes, ESM/CJS, assets, args, cache/snapshot, target/base Node,
+  current/cross targets advertised.
+
+Profile/recipe:
+
+- unchanged program under Bun and Esbuild Layers;
+- exact callback Cause;
+- expiry, mutation, cleanup, duplicate core;
+- real Bun/Esbuild -> Node SEA.
+
+### Publication/platform
+
+- executable staging/publication on Linux, macOS, Windows;
+- destination unchanged before rename;
+- point-of-no-return semantics after rename;
+- provider multi-file output documented without atomicity claim.
+
+### Observability
+
+- exact stable span names;
+- stable low-cardinality attributes;
+- no path/argv/env/plugin/diagnostic payload by default;
+- warning/error summary logs;
+- no direct OpenTelemetry dependency;
+- application-supplied exporter fixture.
 
 ### Packed consumers
 
-At minimum:
-
-```text
-core root
-each core author subpath
-Bun Api
-Bun Command
-Bun profile
-Deno Api when present
-Deno Command
-Esbuild Api
-Esbuild profile
-Node SEA Command
-Node SEA recipe
-generic Bun recipe
-generic Esbuild recipe
-all direct compiler matrices
-```
-
-Exercise both npm and Bun installers from once-packed exact tarballs.
+Pack all five packages once from one exact SHA. Install those exact tarballs in
+isolated consumers covering every public subpath and the composed recipes.
 
 ## Steps
 
-1. Require explicit maintainer approval for the hard public cut.
-2. Freeze one exact descendant source SHA with Plans 039-043 complete and green.
-3. Replace package export maps and root namespaces atomically.
-4. Delete 0.3 delegates, aliases, old declaration names, and stale examples.
-5. Rename artifact fields/types and migrate every provider/test/example.
-6. Update `AGENTS.md`, architecture docs, API docs, error docs, driver docs,
-   README, package READMEs, and changelog.
-7. Update exact public API and import-boundary fixtures.
-8. Add the complete certification matrix above.
-9. Pack all five packages once from the exact source SHA.
-10. Install and run every isolated/composed consumer from those tarballs.
-11. Observe all required GitHub Actions on that exact SHA.
-12. Record a candidate manifest and hashes without publishing, tagging, or
-    creating a release.
-13. Present the certified candidate and any Deno API gate result for separate
-    release approval.
+1. Verify preconditions and exact parent SHA.
+2. Apply final export maps.
+3. Delete 0.3 paths and names.
+4. Apply durable observation renames.
+5. Update all provider roots to namespace-only discovery facades.
+6. Update docs/examples/changelog/migration.
+7. Update exact public API locks.
+8. Run full static/host/provider/platform/profile/telemetry matrix.
+9. Pack five packages once.
+10. Run isolated/composed consumers from exact tarballs.
+11. Produce an unpublished candidate manifest with package hashes.
+12. Record CI workflow/run/job conclusions.
+13. Leave the PR unmerged and candidate unpublished.
 
 ## Invariants
 
-- Exactly five lockstep public packages remain.
+- Exactly five public packages remain.
 - No integration imports a sibling.
-- Provider-native APIs remain direct and rich.
-- Portable profile remains optional and narrow.
-- No generic provider registry, fallback, executor, plan, cache, or CAS appears.
-- No old and new canonical import paths coexist after the cut.
-- Every advertised capability has a required non-skipping test at the stated
-  host/tool boundary.
-- The candidate tarballs tested are the exact bytes later eligible for release.
-- This plan itself performs no external publication mutation.
-
-## Verification
-
-```sh
-bun run build
-bun run check
-bun run test:types
-bun run test:unit
-bun run test:architecture
-bun run verify
-bun run verify:effect
-bun run verify:real
-git diff --check
-```
-
-Also require the repository's exact-candidate and packed-consumer workflows on
-one source SHA. Record workflow IDs, job conclusions, candidate artifact hash,
-and tarball hashes in the completion receipt.
+- No 0.3 compatibility alias remains.
+- No lane silently falls back.
+- Provider-native types/results remain available.
+- SingleNodeProgram remains narrow and borrowed.
+- Bun compile remains Bun-runtime specific.
+- Deno compile remains Deno-runtime specific.
+- Node SEA remains an assembler.
+- All advertised cells have non-skipping evidence.
+- Candidate bytes are not published, tagged, or released.
 
 ## STOP conditions
 
-Stop before the cut if:
+Stop and report if:
 
-- any Plan 039-043 implementation is incomplete or its required checks are not
-  green;
-- maintainer approval for the breaking public cut is absent;
-- a provider-native operation is omitted merely to reduce export count;
-- old aliases are proposed as a shipped compatibility tier;
-- Deno `Api` is exported despite failing Plan 042's gate;
-- the generic profile becomes a dependency of a provider's direct API;
-- exact packed consumers do not use the once-packed candidate bytes;
-- a release/tag/publish/trust mutation would be required to complete
-  certification.
+- any dependency plan lacks exact-SHA passing evidence;
+- Deno `/Api` gate is unresolved without maintainer amendment;
+- a final declaration requires incompatible ambient host globals;
+- an old alias is needed to make consumers pass;
+- a provider capability is flattened to satisfy the profile;
+- API/Command fallback appears;
+- any advertised host/tool/target cell is skipped;
+- packed bytes differ between certification stages;
+- a workflow attempts publication, tag, release, or trusted-publisher mutation;
+- branch ancestry no longer includes the released source.
 
 ## Completion receipt
 
-Record:
+Completion means:
 
-- exact source SHA;
-- exact public runtime/declaration keys;
-- removed and added import paths;
-- Effect and provider versions;
-- all required workflow runs/jobs;
-- candidate archive and tarball hashes;
-- packed consumer count and results;
-- unresolved release-only decisions.
+- one exact unpublished candidate SHA;
+- five once-packed tarballs and hashes;
+- full observed GitHub Actions matrix;
+- updated plan receipt;
+- no publication or release side effect.
 
-`DONE` means a certified unpublished 0.4 candidate, not a registry or GitHub
-release.
+Publication requires a separate explicitly authorized task.

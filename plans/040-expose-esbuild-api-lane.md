@@ -1,58 +1,64 @@
-# Plan 040: Expose the full Esbuild API lane
+# Plan 040: Expose the Esbuild host API lane
 
 ## Status
 
 - Priority: P1 provider-native API
 - Effort: L
-- Risk: HIGH public provider surface and scoped native context
+- Risk: HIGH scoped native context and public provider types
 - Depends on: Plan 039
-- Planned at: `3c318072cec6debd7c5eae6de14b20c8df4b1842`
+- Architecture commit: `e23722e81fa651c1540c8aa72e2703ff62ac609b`
 - Status: TODO
 
 ## Objective
 
-Make `effect-build-esbuild` an Effect-native integration for Esbuild's actual
-programmatic API rather than only a fixed one-file Node bundle profile.
-
-Expose:
+Make `effect-build-esbuild/Api` an Effect-native integration for Esbuild's
+actual programmatic API:
 
 ```text
 build
 transform
 scoped context
-rebuild
-watch
-serve
+  rebuild
+  watch
+  serve
+  cancel
 ```
 
-Retain exact provider result and diagnostic information. Keep the existing
-single-Node-program behavior as a private/direct adapter for Plan 043; do not
-publish the portable profile in this plan.
+Preserve Esbuild options, result values, plugins, diagnostics, output files, and
+metafiles. Keep the existing fixed one-main Node behavior as a private/direct
+adapter for Plan 043. Do not publish the portable profile here.
 
 ## Upstream contract
 
-The pinned Esbuild API distinguishes:
+At Esbuild ref
+[`f6058f8`](https://github.com/evanw/esbuild/blob/f6058f8364fe7ab91ca57a83e02577ed74c9cae4/lib/shared/types.ts):
 
-- `build()` over filesystem or stdin inputs, one or many entrypoints, in-memory
-  or written outputs, plugins, loaders, splitting, and metafiles;
-- `transform()` over one in-memory source value;
-- `context()` as a long-lived resource supporting rebuild, watch, serve,
-  cancel, and dispose.
+- `build()` returns a Promise of `BuildResult` and rejects with provider build
+  failure;
+- `transform()` is a separate one-input operation;
+- `context()` is the advanced Node-only API;
+- `BuildContext` exposes `rebuild()`, `watch()`, `serve()`, `cancel()`, and
+  `dispose()`;
+- `watch()` starts watch state and returns `Promise<void>`;
+- `serve()` starts a server and returns `ServeResult`;
+- one-shot build/transform expose no per-call cancellation handle.
 
-Plan 040 must preserve those distinctions. It must not define one broad
-`bundle()` method that loses transform or context semantics.
+The wrapper must preserve these distinctions.
 
-## Public surface
-
-Add canonical subpath:
+## Canonical public module
 
 ```text
 effect-build-esbuild/Api
 ```
 
-Sketch:
+Root `effect-build-esbuild` re-exports the `Api` namespace only; direct subpath
+imports remain canonical.
+
+## Target declarations
 
 ```ts
+import type * as esbuild from "esbuild"
+
 export interface ContextHandle<
   Options extends esbuild.BuildOptions
 > {
@@ -60,12 +66,19 @@ export interface ContextHandle<
     esbuild.BuildResult<Options>,
     EsbuildBuildError
   >
+
   readonly watch: (
     options?: esbuild.WatchOptions
-  ) => Effect.Effect<void, EsbuildBuildError>
+  ) => Effect.Effect<void, EsbuildContextError>
+
   readonly serve: (
-    options: esbuild.ServeOptions
-  ) => Effect.Effect<esbuild.ServeResult, EsbuildBuildError>
+    options?: esbuild.ServeOptions
+  ) => Effect.Effect<
+    esbuild.ServeResult,
+    EsbuildContextError
+  >
+
+  readonly cancel: Effect.Effect<void, EsbuildContextError>
 }
 
 export interface Service {
@@ -88,85 +101,109 @@ export interface Service {
     options: Options
   ) => Effect.Effect<
     ContextHandle<Options>,
-    EsbuildBuildError,
+    EsbuildContextError,
     Scope.Scope
   >
 }
+
+export class EsbuildApi extends Context.Service<
+  EsbuildApi,
+  Service
+>()("effect-build-esbuild/Api") {}
+
+export const layer: Layer.Layer<
+  EsbuildApi,
+  EsbuildVersionMismatch,
+  FileSystem.FileSystem | Path.Path
+>
 ```
 
-The scoped handle does not expose `dispose()`. Its finalizer calls provider
-`cancel()` then `dispose()` exactly once. Release is uninterruptible after it
-begins, while the use region remains interruptible.
+`dispose()` is not public. Scope owns release. `cancel()` remains public because
+it is an operational provider capability and does not release the context.
 
-## Error model
+## Error contract
 
-Direct API failures retain:
+Direct provider errors retain:
 
 - Esbuild message IDs;
 - plugin names;
 - text;
-- locations;
+- source locations;
 - notes;
-- provider detail values where safe to retain;
 - warnings separately from errors;
-- version mismatch and API initialization failures.
+- provider detail values where safe;
+- version mismatch and initialization failure;
+- the exact provider failure object where identity is useful.
 
-Do not normalize direct API errors into the core command `ToolFailed` family.
-The later portable profile may project them into profile diagnostics while
-retaining the provider error.
+Do not convert direct Esbuild failures into command `ToolFailed`.
+
+One-shot Promise interruption semantics are explicit:
+
+> Fiber interruption stops awaiting and prevents downstream Effect use. It does
+> not claim to cancel the underlying Esbuild build/transform or provider direct
+> writes.
+
+Context semantics are stronger:
+
+- `rebuild` may be canceled through `cancel`;
+- Scope finalization invokes `cancel()` then `dispose()` exactly once;
+- finalization is uninterruptible after it begins;
+- callback failures/defects/interruption are not converted to Esbuild errors.
 
 ## Scope
 
-- Add `Api` module and Layer.
-- Preserve exact Esbuild dependency/version policy unless a dedicated dependency
-  change is required and explicitly reviewed.
-- Add build, transform, and scoped-context unit and integration tests.
-- Add in-memory and written output characterization.
-- Add multi-entry, multi-output, splitting, asset, CSS, plugin, and metafile
-  cases.
-- Add rebuild, watch setup, serve setup, cancellation, and disposal tests.
-- Instrument operations with Plan 039 telemetry attributes.
-- Keep 0.3 root `withJavaScriptBundle` as a temporary delegate during the
-  no-publish migration.
+In scope:
+
+- exact `Api` module and Layer;
+- build and transform;
+- scoped context;
+- rebuild, watch setup, serve setup, cancel;
+- provider result/diagnostic preservation;
+- in-memory and written outputs;
+- multiple entries and side outputs;
+- plugins/loaders;
+- telemetry from Plan 039;
+- internal adaptation of the current fixed profile.
 
 Out of scope:
 
 - Esbuild CLI lane;
-- portable profile publication;
+- SingleNodeProgram public exports;
 - generic output-set schema;
 - shared plugin API;
-- remote execution or caching;
-- TypeScript declaration generation.
+- declaration generation;
+- remote execution/caching.
 
 ## Steps
 
-1. Pin and characterize the exact Esbuild API declarations used by the package.
-2. Define direct provider error classes without flattening message structure.
-3. Implement one-shot `build` with full option/result typing.
-4. Implement one-shot `transform` as a separate operation.
-5. Implement scoped `context`; capture `cancel`/`dispose` and hide manual release
-   from callers.
-6. Prove concurrent contexts do not call global `esbuild.stop()` and do not
-   interfere with each other.
-7. Adapt the current fixed bundle implementation to the new service internally
-   without widening its profile contract.
-8. Add telemetry spans and provider fields.
-9. Add examples for in-memory build, written build, transform, and watch.
-10. Run deterministic, real Esbuild, Effect endpoint, architecture, and packed
-    consumer verification.
+1. Pin the exact Esbuild package and declarations.
+2. Define provider error wrappers and identity guards.
+3. Implement one-shot `build`.
+4. Implement one-shot `transform`.
+5. Implement scoped `context`.
+6. Expose rebuild/watch/serve/cancel on the handle.
+7. Finalize with cancel then dispose exactly once.
+8. Prove two concurrent contexts do not call global `esbuild.stop()` and do not
+   interfere.
+9. Adapt the existing one-main implementation internally.
+10. Add root and child telemetry spans without logging paths/options/plugins.
+11. Add provider-native examples.
+12. Run full verification and record actual jobs.
 
 ## Invariants
 
-- Provider-native API types remain recognizable to Esbuild users.
-- `build`, `transform`, and `context` are distinct operations.
-- Context resources are released exactly once on success, failure, defect, and
-  interruption.
-- A context callback Cause is never converted to `EsbuildBuildError`.
-- Plugins remain Esbuild plugins, not a core abstraction.
-- Provider-native multi-output results are not forced into one core artifact.
-- The fixed one-file profile remains available internally for Plan 043.
+- Provider types remain recognizable to Esbuild users.
+- Build, transform, and context remain distinct.
+- `watch()` is a start operation, not represented as a never-ending Effect.
+- The context Scope, not the watch call, owns watch/server lifetime.
+- `cancel` is public; `dispose` is Scope-owned.
+- Context release happens exactly once after every Exit.
+- One-shot operations make no false cancellation claim.
+- Plugins and output files are never flattened or discarded.
+- The fixed profile remains narrower than the direct API.
+- No sibling integration dependency is introduced.
 
-## Verification
+## Required verification
 
 ```sh
 bun run build
@@ -179,30 +216,41 @@ bun run verify:effect
 git diff --check
 ```
 
-Required focused evidence:
+Focused real/provider tests:
 
-- `write: false` output files and `write: true` disk output;
-- one and multiple entrypoints;
-- ESM/CJS and browser/node/neutral platforms;
-- CSS and file-loader side outputs;
+- `write: false` output files;
+- `write: true` disk output;
+- one and multiple entries;
+- ESM/CJS/IIFE where provider supports them;
+- browser/node/neutral platform;
+- CSS and file-loader outputs;
+- splitting;
 - plugin resolve/load/dispose;
-- structured errors, warnings, notes, locations, and IDs;
+- structured errors, warnings, notes, locations, IDs, and details;
 - transform success/failure;
 - context rebuild;
-- watch start and scoped release;
+- watch start and scope close;
+- serve start and scope close;
+- manual cancel followed by later use characterization;
 - cancel/dispose ordering under interruption;
 - two concurrent contexts;
-- current single-Node-program tests unchanged.
+- one-shot interruption without cancellation claims;
+- current fixed-profile tests unchanged.
 
 ## STOP conditions
 
 Stop and report if:
 
-- full API typing requires replacing provider types with `unknown` or a guessed
-  generic option model;
-- context release cannot call cancel/dispose safely exactly once;
-- the implementation needs global `esbuild.stop()` for per-context cleanup;
-- provider plugins or output files are silently discarded;
-- a one-shot API is represented as cancellable when Esbuild provides no such
-  operation;
+- public typing requires replacing provider options/results with `unknown`;
+- context release cannot safely call cancel/dispose once;
+- per-context cleanup requires global `esbuild.stop()`;
+- watch or serve cannot be tied to context Scope;
+- one-shot build/transform is represented as cancellable;
+- provider plugins, diagnostics, output files, or metafiles are dropped;
 - the existing profile's lifetime or Cause behavior regresses.
+
+## Completion receipt
+
+Completion requires one Esbuild-focused implementation PR with exact source SHA,
+provider version, and observed CI. Do not combine it with Bun, Deno, the public
+profile, or the final 0.4 export cut.

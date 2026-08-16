@@ -1,60 +1,77 @@
-# Plan 042: Add Deno bundle and complete command lanes
+# Plan 042: Add Deno host API and selected-command lanes
 
 ## Status
 
 - Priority: P1 provider-native API
 - Effort: XL
-- Risk: HIGH unstable upstream API, permissions, project semantics, and runtime acquisition
-- Depends on: Plans 039-041
-- Planned at: `3c318072cec6debd7c5eae6de14b20c8df4b1842`
+- Risk: HIGH unstable host API, permissions, declarations, and project compile
+- Depends on: Plan 039
+- May run in parallel with: Plans 040 and 041
+- Architecture commit: `e23722e81fa651c1540c8aa72e2703ff62ac609b`
 - Status: TODO
 
 ## Objective
 
-Expand `effect-build-deno` from a narrow command compile adapter into explicit
-Deno host-API and command lanes.
-
-Expose:
+Expand `effect-build-deno` into:
 
 ```text
 effect-build-deno/Api
 effect-build-deno/Command
 ```
 
-The API lane wraps `Deno.bundle()` under a Deno host and preserves its
-provider-native result. The command lane exposes `deno bundle` and the current
-`deno compile` product, including provider-specific permissions, includes,
-project/framework behavior, runtime/engine selection, and cross targets.
+The API lane wraps experimental `Deno.bundle()` under a Deno host. The command
+lane wraps `deno bundle` and `deno compile` through a selected Deno executable.
 
-Deno does not implement the `SingleNodeProgram` profile in this program.
+The intended 0.4 surface includes both lanes. A hard type-isolation/runtime gate
+protects the rest of the package ecosystem from Deno's unstable globals and
+permissions.
 
-## Upstream stability gate
+## Upstream contract
 
-`Deno.bundle()` is an unstable runtime API and is unavailable inside executables
-created by `deno compile`. Plan 042 begins with an explicit source/type/runtime
-characterization at the selected Deno version.
+Official Deno evidence:
 
-Proceed with the public `Api` subpath only if all of these are true:
+- [`Deno.bundle` declarations](https://github.com/denoland/deno/blob/89f33cbef296a2b287f323d42de54c871fa69c77/cli/tsc/dts/lib.deno.unstable.d.ts)
+- [`BundleProvider`](https://github.com/denoland/deno/blob/89f33cbef296a2b287f323d42de54c871fa69c77/ext/bundle/src/lib.rs)
+- [`deno bundle` documentation](https://github.com/denoland/docs/blob/aa772cfbe4455e2a3ef86e9f4df584d41523c0f9/runtime/reference/bundling.md)
+- [`deno compile` documentation](https://github.com/denoland/docs/blob/aa772cfbe4455e2a3ef86e9f4df584d41523c0f9/runtime/reference/cli/compile.md)
 
-- the API is present in the selected supported Deno release;
-- its TypeScript declarations can be consumed without polluting non-Deno users;
-- permission requirements and output ownership can be documented precisely;
-- its failure and result shapes are stable enough for a pre-1.0 provider module;
-- packed consumers can import other packages without requiring a Deno host.
+Facts:
 
-If a condition fails, stop only the API-lane portion, record the exact upstream
-fact, and complete the command lane. Do not invent a compatibility wrapper or
-silently implement `Api.bundle` with a child process.
+- `Deno.bundle()` is experimental and requires `--unstable-bundle`;
+- it requires Deno read/import/write permission authority;
+- it supports multiple entries, browser/Deno platforms, ESM/CJS/IIFE,
+  splitting, package handling, externals, source maps, and memory/written
+  outputs;
+- it is unavailable in `deno compile` binaries because `denort` installs the
+  no-op provider;
+- `deno bundle` also supports HTML roots, watch, and `--declaration`;
+- `deno compile` owns permissions, includes, workers, dynamic imports,
+  framework/project detection, target runtime acquisition, engine selection,
+  runtime arguments, and cross-target output.
 
-## Public surface
+## Canonical public modules
 
-### API lane
+```text
+effect-build-deno/Api
+effect-build-deno/Command
+```
+
+Root exports only `Api` and `Command` namespaces.
+
+## API lane
+
+The package defines an isolated structural declaration matching the exact
+supported upstream types instead of requiring unrelated consumers to load
+global Deno libs.
 
 ```ts
 export interface Service {
   readonly bundle: (
-    options: Deno.bundle.Options
-  ) => Effect.Effect<Deno.bundle.Result, DenoBundleApiError>
+    options: DenoBundleOptions
+  ) => Effect.Effect<
+    DenoBundleResult,
+    DenoBundleApiError
+  >
 }
 
 export class DenoApi extends Context.Service<
@@ -68,21 +85,57 @@ export const layerCurrent: Layer.Layer<
 >
 ```
 
-The operation uses the current Deno runtime permission context. It returns
-provider-native in-memory or written output values. It is not a generic
-filesystem bundler.
+`DenoBundleOptions`, `DenoBundleResult`, output files, diagnostics, notes, and
+locations must match the pinned declaration structurally. Add a type fixture
+that checks both directions under Deno.
 
-### Command lane
+Layer/runtime behavior:
+
+- requires a Deno host;
+- verifies `Deno.bundle` exists;
+- does not enable unstable flags or grant permissions;
+- maps missing flag, permission denial, provider failure, and compiled-binary
+  unavailability into distinct exact provider errors;
+- preserves provider result values;
+- makes no cancellation claim for the one-shot Promise.
+
+## Hard API gate
+
+Before the API subpath may remain in the 0.4 target:
+
+1. a Deno-host consumer imports and runs it with `--unstable-bundle`;
+2. a Node-host consumer installs `effect-build-deno` without global Deno type
+   pollution;
+3. official Deno option/result types are structurally compatible in both
+   directions;
+4. missing unstable flag is distinguishable;
+5. read/import/write permission denial is distinguishable;
+6. compiled-binary unavailability is characterized;
+7. one-shot interruption is documented without false cancellation.
+
+If any gate fails, stop Plan 042 and request the maintainer choice recorded in
+the architecture: amend 0.4 to omit `/Api`, or delay the hard cut. Do not
+substitute the command lane behind `DenoApi`.
+
+## Command lane
+
+Target operations:
 
 ```ts
 export interface Service {
   readonly bundle: (
     input: DenoBundleCommandInput
-  ) => Effect.Effect<DenoWrittenOutput, DenoBundleCommandError>
+  ) => Effect.Effect<
+    DenoWrittenOutput,
+    DenoBundleCommandError
+  >
 
   readonly compileExecutable: (
     input: DenoCompileExecutableInput
-  ) => Effect.Effect<Artifact.Executable, DenoCompileError>
+  ) => Effect.Effect<
+    Artifact.Executable,
+    DenoCompileError
+  >
 
   readonly compileExecutableMatrix: (
     input: DenoCompileExecutableMatrixInput
@@ -91,112 +144,103 @@ export interface Service {
     DenoMatrixError
   >
 }
-
-export class DenoCommand extends Context.Service<
-  DenoCommand,
-  Service
->()("effect-build-deno/Command") {}
 ```
 
-Provider-native command input must be able to represent, where supported by the
-selected Deno release:
+### `bundle`
 
-- file, URL, package, or project-directory entry;
-- permission policy;
-- one or many bundle entries;
-- HTML bundle roots and output directories;
-- browser or Deno bundle platform;
-- ESM/CJS/IIFE format;
-- code splitting, externals, package handling, minification, sourcemaps, and
-  type-check mode;
-- compile includes/excludes, workers, dynamic imports, framework detection,
-  virtual/self-extracting filesystem, icon, runtime engine, embedded arguments,
-  and system target;
-- explicit custom `denort`/runtime behavior where the CLI exposes it.
+Typed 0.4 command surface:
 
-## Interruption and acquisition
+- one or multiple entries;
+- file, URL, package, and HTML roots where supported;
+- output file or directory;
+- browser/Deno platform;
+- ESM/CJS/IIFE;
+- splitting;
+- minification;
+- source maps;
+- externals/packages;
+- inline imports;
+- keep names;
+- **declaration generation**;
+- workspace/config/certificate/import-map options that materially affect
+  resolution and can be modeled without raw argv.
 
-### API lane
+Return a provider-specific written output set including declaration files.
+Do not claim atomic multi-file publication.
 
-`Deno.bundle()` is a one-shot Promise without a public cancellation handle.
-Effect interruption stops awaiting and suppresses downstream use but cannot
-claim that Deno stopped underlying bundling.
+### `compileExecutable`
 
-Deno permissions are not core Effect filesystem permissions. They are part of
-the provider runtime and must remain visible in documentation and tests.
+Broaden the released subset with typed provider authority for:
 
-### Command lane
+- module specifier or project directory;
+- permissions;
+- includes and include-as-is;
+- workers and dynamic import inclusion;
+- embedded arguments;
+- icon where supported;
+- Deno compile bundling/minification;
+- V8/QuickJS engine;
+- runtime target;
+- custom runtime authority such as `DENORT_BIN` through explicit environment
+  policy;
+- config/certificate/import-map and workspace behavior.
 
-The Deno child is scoped and terminated/reaped on interruption. Watch modes are
-long-lived process resources. If `deno compile` downloads a target runtime,
-that acquisition is provider behavior and may produce network/cache failures;
-it is not hidden inside core publication errors.
+Do not force Bun terminology or a universal executable request.
 
-## Error model
+### Matrix
 
-Separate:
+Keep the matrix homogeneous and defined over scalar compile input. The matrix
+does not generalize bundle outputs or mix engines/providers.
 
-- API unavailable and Deno permission failures;
-- API bundle errors/warnings/output records;
-- command tool discovery/probe/spawn/completion;
-- Deno bundle graph/type-check/config failures;
-- Deno compile target/runtime acquisition and provider diagnostics;
-- core durable-output validation/publication failures.
+## Watch probe
 
-Do not flatten Deno module specifiers, permissions, or project errors into Bun's
-`InvalidDriverOptions` vocabulary.
+`deno bundle --watch` exists. A public Effect wrapper requires a stable event
+and lifetime model.
 
-## Scope
+Probe:
 
-- Add `Api` after passing the upstream stability gate.
-- Add command `bundle` with one-shot and scoped watch variants if watch can be
-  typed without exposing a raw process handle.
-- Expand command compile input to the selected 0.4 provider-native subset.
-- Move current scalar/matrix behavior behind `DenoCommand` through Plan 039's
-  `CommandCompiler`.
-- Preserve current target evidence and publication validation.
-- Add Plan 039 telemetry.
-- Keep 0.3 root exports as no-publish delegates until Plan 044.
+- readiness;
+- rebuild start/success/failure output;
+- diagnostics;
+- output write timing;
+- termination;
+- config reload behavior.
 
-Out of scope:
-
-- `SingleNodeProgram` profile;
-- universal module graph;
-- automatic `denort` installation policy beyond Deno's own documented behavior;
-- shared Bun/Deno compile request;
-- generic watch service;
-- declaration generation.
+Publish a scoped `watchBundle` only if a typed contract can be stated. Otherwise
+document the 0.4 exclusion and retain no raw process escape.
 
 ## Steps
 
-1. Pin and characterize exact Deno runtime/API/CLI source and declarations.
-2. Execute the API stability gate and record its result before authoring public
-   declarations.
-3. Define Deno API and command errors with provider-native diagnostics.
-4. Implement `DenoApi.layerCurrent` and `bundle` if the gate passes.
-5. Implement command `bundle` over Plan 039 command/temporary-output mechanics.
-6. Model watch as a scoped Deno-specific resource if included.
-7. Expand compile request validation and argv rendering for provider-native
-   permissions/includes/runtime/engine/project options selected for 0.4.
-8. Preserve scalar/matrix lifecycle and output ordering.
-9. Add examples for runtime API bundle, command bundle, project compile, and
-   cross-target compile.
-10. Run Deno-host API, Node-host command, real compile targets, Effect endpoint,
-    architecture, and packed consumer verification.
+1. Pin exact Deno runtime/command versions and official declarations.
+2. Implement isolated Deno bundle types and bidirectional type tests.
+3. Implement `Api.bundle`.
+4. Run the hard API gate.
+5. Add Command service and typed `bundle`.
+6. Add declaration output support and verification.
+7. Broaden scalar compile request and CLI rendering.
+8. Reuse scalar compile for the matrix.
+9. Characterize provider-written multi-output failure/interruption.
+10. Probe watch and decide by the stated gate.
+11. Add lane telemetry and redaction.
+12. Add Deno-host, Node-host, and packed consumer matrices.
+13. Run full verification and record actual jobs.
 
 ## Invariants
 
-- `DenoApi` requires Deno and never spawns the CLI.
-- `DenoCommand` never reads the global Deno API.
-- Deno permission and project behavior stay provider-specific.
-- Runtime acquisition/cache behavior is observed, not reimplemented in core.
-- Command interruption terminates active work; API interruption does not make a
-  false cancellation claim.
-- Deno executables remain Deno-runtime artifacts.
-- Matrix remains homogeneous and scalar compilation remains the primitive.
-- Importing non-Deno packages does not require a Deno host or Deno global types.
+- API and Command never fall back to each other.
+- API requires Deno host and unstable/permission policy remains application
+  authority.
+- Unrelated consumers need no global Deno types.
+- Command remains usable from another process-capable Effect host.
+- Deno declarations are preserved as provider output, not erased.
+- Compile permissions/includes/engine/runtime remain provider-specific.
+- `DENORT_BIN` is modeled as environment authority, not invented as a CLI flag.
+- Command interruption terminates and reaps the selected process.
+- Multi-file bundle output is not called atomic.
+- Deno does not implement SingleNodeProgram for symmetry.
+- No sibling integration dependency is added.
 
-## Verification
+## Required verification
 
 ```sh
 bun run build
@@ -206,36 +250,48 @@ bun run test:unit
 bun run test:architecture
 bun run verify
 bun run verify:effect
-EFFECT_BUILD_DENO_VERSION=<pinned> bun run verify:real
+bun run verify:real
 git diff --check
 ```
 
-Required focused evidence:
+Focused evidence:
 
-- Deno API presence/absence receipt at exact version;
-- API bundle with multiple entries, in-memory and written outputs, formats,
-  platforms, splitting, external imports, and permissions;
-- API unavailable under Node and unavailable behavior in a compiled Deno
-  executable if upstream documents/enforces it;
-- command bundle with file and HTML entries;
-- command type-check and watch lifecycle where exposed;
-- compile permissions, include/include-as-is, dynamic import/worker behavior,
-  project/framework directory, engine selection, current host, and foreign
-  targets;
-- runtime acquisition failure separated from publication failure;
-- scalar/matrix 0.3 behavior remains green through delegates.
+- Deno-host API import and execution;
+- Node-host installation/typecheck without global Deno libs;
+- unstable flag absent/present;
+- read/import/write permission denial;
+- compiled-binary API unavailability;
+- one and multiple entries;
+- ESM/CJS/IIFE;
+- browser/Deno platform;
+- memory and written output;
+- HTML/CSS/assets;
+- splitting/source maps/externals/packages;
+- declaration generation;
+- command project/framework compile;
+- includes/workers/dynamic imports;
+- V8 and QuickJS policy where supported;
+- every advertised system target;
+- scalar/matrix interruption and partial success;
+- watch probe receipt;
+- isolated packed Api and Command consumers.
 
 ## STOP conditions
 
 Stop and report if:
 
-- `Deno.bundle()` cannot be typed or isolated without forcing Deno globals on
-  every package consumer;
-- the API is absent or materially changed at the selected release;
-- command bundle output cannot be identified without guessing files outside a
-  provider-owned output directory;
-- provider network/runtime acquisition is mistaken for core automatic
-  installation;
-- Deno permissions are normalized into an incomplete generic permission model;
-- a Node-profile adapter is added merely for symmetry;
-- current compile target evidence regresses.
+- Deno types leak into unrelated consumers;
+- exact provider option/result compatibility cannot be maintained;
+- API operation silently invokes a command;
+- missing unstable flag, permission failure, and compiled-binary unavailability
+  cannot be distinguished sufficiently for a stable wrapper;
+- declaration output is omitted from command bundle;
+- `DENORT_BIN` or another environment behavior is misrepresented as a CLI flag;
+- command compile is flattened into Bun's option vocabulary;
+- watch has no stable contract but is still proposed publicly.
+
+## Completion receipt
+
+Completion requires one Deno-focused implementation PR. Record exact Deno
+versions, host/permission matrices, API gate outcome, watch decision, and actual
+CI jobs.

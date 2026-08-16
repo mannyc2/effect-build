@@ -1,36 +1,94 @@
-# Plan 043: Publish the single-Node-program profile and Node SEA recipe
+# Plan 043: Broaden Node SEA and publish SingleNodeProgram
 
 ## Status
 
-- Priority: P1 portable composition
+- Priority: P1 portable profile and recipe
 - Effort: XL
-- Risk: HIGH public lifetime, error, and substitution contract
-- Depends on: Plans 039-042
-- Planned at: `3c318072cec6debd7c5eae6de14b20c8df4b1842`
+- Risk: HIGH borrowed lifetime, generic failure, and assembler compatibility
+- Depends on: Plans 039, 040, and 041
+- Does not depend on: Plan 042
+- Architecture commit: `e23722e81fa651c1540c8aa72e2703ff62ac609b`
 - Status: TODO
 
 ## Objective
 
-Publish one deliberately narrow portable profile for the provider behavior that
-Bun and Esbuild have already demonstrated in common:
+Deliver three related but distinct products:
 
-> Produce one borrowed ESM or CommonJS main file with Node module-resolution
-> semantics, no provider-owned side-output graph, and continuation-owned
-> lifetime.
+1. broaden `effect-build-node-sea/Command` into a direct provider-native
+   assembler over a file or bytes;
+2. publish the narrow portable
+   `effect-build/Profile/SingleNodeProgram` service;
+3. publish the provider-neutral
+   `effect-build-node-sea/Recipe/SingleNodeProgram` composition.
 
-Name the profile `SingleNodeProgram`. Provide it from Bun's command lane and
-Esbuild's API lane. Broaden the direct Node SEA command to accept an existing
-bundled main file, then add a provider-neutral recipe that consumes the profile.
+Bun and Esbuild direct APIs must already exist so the profile is visibly an
+adapter rather than the provider's ontology.
 
-Do not make this profile the root ontology for provider-native build APIs.
+## Part 1: Node SEA direct command
 
-## Public surface
+Canonical module:
 
-### Core profile
+```text
+effect-build-node-sea/Command
+```
+
+Direct main input:
+
+```ts
+export type Main =
+  | {
+      readonly _tag: "File"
+      readonly path: string
+      readonly format: "commonjs" | "module"
+    }
+  | {
+      readonly _tag: "Bytes"
+      readonly contents: Uint8Array
+      readonly format: "commonjs" | "module"
+      readonly sourceName?: string
+    }
+```
+
+Direct request includes:
+
+- outfile/cwd/digest;
+- builder Node selected by Layer;
+- optional target/base Node executable;
+- assets;
+- experimental warning policy;
+- snapshot;
+- code cache;
+- `execArgv`;
+- `execArgvExtension`.
+
+Implementation:
+
+- canonicalize file input;
+- privately copy and rehash it;
+- privately materialize byte input;
+- syntax-check the private copy;
+- validate builder/base Node version agreement;
+- validate cross-platform cache/snapshot restrictions;
+- use `Author/Executable` for candidate validation and atomic publication;
+- inspect and report `systemTarget`;
+- preserve direct provider diagnostics.
+
+Signing is out of scope and remains a later platform/provider operation.
+
+## Part 2: SingleNodeProgram profile
+
+Canonical core module:
 
 ```text
 effect-build/Profile/SingleNodeProgram
 ```
+
+Contract:
+
+> one borrowed JavaScript main, ESM or CommonJS, Node module resolution, no
+> provider-owned side-output graph, continuation-owned lifetime.
+
+Request:
 
 ```ts
 export interface Request {
@@ -38,8 +96,13 @@ export interface Request {
   readonly cwd?: string
   readonly format: "esm" | "cjs"
 }
+```
 
+Borrowed result:
+
+```ts
 export interface Borrowed {
+  readonly protocol: "effect-build/SingleNodeProgram@1"
   readonly format: "esm" | "cjs"
   readonly resolutionTarget: "node"
   readonly digest: Artifact.Digest
@@ -48,108 +111,31 @@ export interface Borrowed {
 
   readonly withFile: <A, E, R>(
     use: (
-      file: TemporaryOutput.BorrowedFile
+      file: {
+        readonly path: Artifact.LocalPath
+        readonly bytes: number
+        readonly digest: Artifact.Digest
+      }
     ) => Effect.Effect<A, E, R>
   ) => Effect.Effect<A, BorrowedProgramExpired | E, R>
 }
+```
 
-export interface Service {
-  readonly withProgram: <A, E, R>(
-    request: Request,
-    use: (
-      program: Borrowed
-    ) => Effect.Effect<A, E, R>
-  ) => Effect.Effect<
-    A,
-    Failure | E,
-    Exclude<R, Scope.Scope>
-  >
-}
+The temporary path is visible only inside `withFile`. Returning `Borrowed` or
+the path cannot extend producer ownership. Later use fails or the physical file
+is gone.
 
+The capability has closure-owned authority and protocol version. It must not
+depend on the consuming core module's WeakSet.
+
+### Service and failure
+
+```ts
 export class Bundler extends Context.Service<
   Bundler,
   Service
 >()("effect-build/Profile/SingleNodeProgram/Bundler") {}
-```
 
-The temporary path is not a property on `Borrowed`. It exists only inside
-`withFile`. A retained borrowed handle fails deterministically after expiry.
-
-### Provider adapters
-
-```text
-effect-build-bun/Profile/SingleNodeProgram
-effect-build-esbuild/Profile/SingleNodeProgram
-```
-
-Bun's adapter uses the command lane so the profile retains strong interruption
-and child-termination semantics. Esbuild's adapter uses a scoped context and
-calls cancel/dispose on release.
-
-Both direct provider services also retain provider-specific
-`withSingleNodeProgram` operations and exact provider errors.
-
-### Node SEA direct command
-
-```text
-effect-build-node-sea/Command
-```
-
-The direct request accepts an existing bundled file:
-
-```ts
-export interface MainFile {
-  readonly path: string
-  readonly format: "commonjs" | "module"
-}
-
-export interface CreateExecutableInput {
-  readonly main: MainFile
-  readonly outfile: string
-  readonly cwd?: string
-  readonly digest?: boolean
-  readonly assets?: Readonly<Record<string, string>>
-  readonly executable?: string
-  readonly useSnapshot?: boolean
-  readonly useCodeCache?: boolean
-  readonly execArgv?: readonly string[]
-  readonly execArgvExtension?: "none" | "env" | "cli"
-}
-```
-
-The implementation canonicalizes, validates, privately copies, and rehashes the
-main before selected Node reads it. Direct Node SEA use does not require Bun or
-Esbuild.
-
-### Recipe
-
-```text
-effect-build-node-sea/Recipe/SingleNodeProgram
-```
-
-The recipe composes the core profile with the Node SEA command. It selects no
-producer. The application provides Bun or Esbuild's profile Layer.
-
-## Profile limits
-
-The portable request intentionally excludes:
-
-- multiple entrypoints;
-- code splitting;
-- CSS and asset side outputs;
-- browser, Bun, and Deno targets;
-- plugins/loaders;
-- declaration generation;
-- watch/incremental context;
-- durable bundle ownership;
-- raw provider options.
-
-Provider-specific defaults may be configured on each profile Layer. Per-call
-provider controls remain on direct provider operations.
-
-## Error model
-
-```ts
 export class Failure extends Data.TaggedError(
   "SingleNodeProgramFailure"
 )<{
@@ -165,83 +151,115 @@ export class Failure extends Data.TaggedError(
 }> {}
 ```
 
-Normalized fields must be useful without provider imports. Provider packages
-export identity-safe narrowing guards for `providerError`.
+Provider adapters map only identity-proven provider failures. Caller failures,
+defects, interruptions, and mixed Causes pass through unchanged.
 
-Adapters map only their own identity-proven errors. The callback's typed
-failure, defect, interruption, or mixed Cause remains untouched. No `_tag`
-string collision is sufficient for mapping.
+Provider packages export exact narrowing guards.
 
-## Lifetime and duplicate-core design
+### Exclusions
 
-Use closure-owned borrowed authority rather than requiring the consumer module
-to find the value in its own module-global WeakSet.
+The profile rejects or omits:
 
-A compatible duplicate core package instance may call the borrowed object's
-public `withFile` method because the producing closure owns liveness and
-validation. The profile includes a protocol/version identity so incompatible
-copies fail deterministically rather than reading temporary paths directly.
+- multiple entries;
+- splitting;
+- CSS/assets/HTML;
+- browser/Bun/Deno targets;
+- declarations;
+- plugins/loaders in the portable request;
+- provider-native output sets;
+- watch/incremental contexts;
+- durable program ownership.
 
-This is an interoperability and lifecycle property, not a sandbox boundary
-against malicious provider code.
+Direct provider APIs remain the escape hatch.
 
-## Scope
+## Part 3: provider adapters
 
-- Add core profile request/service/error/borrowed capability.
-- Add Bun and Esbuild profile Layers plus direct provider profile methods.
-- Change Node SEA direct input from a core live artifact to an existing bundled
-  main file and full supported provider options.
-- Add Node SEA recipe over the core profile.
-- Preserve current exact selected-Node syntax and external-builtin validation
-  as the initial implementation support boundary unless a separate target
-  expansion is approved.
-- Add provider-free generic application examples and packed consumers.
-- Add Plan 039 telemetry.
+### Bun
 
-Out of scope:
+Canonical module:
 
-- Deno profile adapter;
-- multiple-file portable output graph;
-- generic assembler service;
-- durable bundle artifact;
-- automatic bundler selection;
-- fallback from Bun to Esbuild;
-- combined package;
-- remote execution, cache, or receipt.
+```text
+effect-build-bun/Profile/SingleNodeProgram
+```
+
+The first implementation uses Bun's selected-command lane.
+
+Reasons:
+
+- it already proves the fixed output profile;
+- child interruption/reaping is part of the profile contract;
+- it avoids pretending `Bun.build()` Promise cancellation exists.
+
+Layer construction may accept provider defaults. Per-call provider-specific
+options use direct Bun APIs.
+
+### Esbuild
+
+Canonical module:
+
+```text
+effect-build-esbuild/Profile/SingleNodeProgram
+```
+
+Use scoped Esbuild context from Plan 040. Preserve cancel/dispose and exact
+callback Cause behavior.
+
+## Part 4: Node SEA recipe
+
+Canonical module:
+
+```text
+effect-build-node-sea/Recipe/SingleNodeProgram
+```
+
+The recipe:
+
+1. requests `SingleNodeProgram.Bundler`;
+2. obtains the borrowed program;
+3. borrows its file;
+4. calls Node SEA direct command;
+5. selects no producer.
+
+One unchanged program must run under Bun or Esbuild by changing only the profile
+Layer.
 
 ## Steps
 
-1. Freeze direct Bun/Esbuild profile behavior and Plan 038's historical
-   substitution requirements as executable tests.
-2. Implement `SingleNodeProgram.Borrowed` over Plan 039 temporary-output
-   capability without exposing a top-level path.
-3. Implement typed expiry and protocol-version checks.
-4. Implement normalized failure mapping with exact provider error retention.
-5. Add Esbuild profile Layer over Plan 040's scoped API.
-6. Add Bun profile Layer over Plan 041's command service.
-7. Broaden Node SEA direct input and prove standalone use from a pre-existing
-   main file.
-8. Add the Node SEA recipe and one provider-free application fixture.
-9. Run that fixture unchanged with the Bun and Esbuild Layers for ESM and CJS.
-10. Add interruption, failure, defect, mutation, duplicate-core, and packed
-    consumer tests.
-11. Update docs to make the profile optional and provider-native APIs primary.
+1. Broaden Node SEA direct main/config types.
+2. Separate builder Node and target/base Node authority.
+3. Implement byte materialization and file copy/rehash.
+4. Add version, syntax, external, target, snapshot, and code-cache validation.
+5. Replace current root live-bundle dependency with direct file/bytes input.
+6. Implement closure-owned borrowed program protocol.
+7. Add expiry and duplicate-core tests.
+8. Add portable failure and provider guards.
+9. Implement Bun profile adapter.
+10. Implement Esbuild profile adapter.
+11. Implement Node SEA recipe.
+12. Add unchanged Bun/Esbuild substitution application.
+13. Preserve exact failures, defects, interruption, and cleanup.
+14. Add profile/recipe telemetry and redaction.
+15. Run full provider and packed-consumer verification.
 
 ## Invariants
 
-- The application program contains no Bun or Esbuild import.
-- Changing only the provided profile Layer changes the producer.
-- Direct provider APIs retain exact provider options and errors.
-- The borrowed path is available only in `withFile`.
-- Returning the borrowed handle cannot retain access after callback exit.
-- Producer and consumer interruption preserve exact Cause and cleanup.
-- Bun and Esbuild satisfy the same profile request/result contract.
-- Node SEA imports only core and consumes any validated existing main file.
-- External imports are explicitly provider-reported observations, not a closed
-  graph claim.
-- Node SEA validates external builtins against the selected Node authority.
+- Node SEA direct operation requires no Bun or Esbuild package.
+- Profile core imports no provider package.
+- Recipe selects no producer.
+- Bun and Esbuild direct APIs remain richer and canonical.
+- Borrowed output is never called an Artifact.
+- Borrowed path cannot extend producer root ownership.
+- Compatible duplicate core instances use closure authority, not a shared
+  module-global WeakSet.
+- Provider error identity is retained in memory.
+- Caller error/defect/interruption Cause is unchanged.
+- Temporary roots close after every Exit.
+- Node SEA reads only its private authenticated copy.
+- Builder/base Node version and system restrictions are validated.
+- Single-file executable publication remains atomic.
+- Deno is not required and does not implement the profile by symmetry.
 
-## Verification
+## Required verification
 
 ```sh
 bun run build
@@ -255,38 +273,50 @@ bun run verify:real
 git diff --check
 ```
 
-Required focused evidence:
+Focused evidence:
 
-- ESM and CJS under both producers;
-- one unchanged generic program with only Layer changes;
-- direct Bun and Esbuild provider calls remain usable;
-- profile invalid request and provider build failures;
-- provider error narrowing guards;
-- callback failure identity;
-- callback defect;
-- callback interruption;
-- Fail+Interrupt and Fail+Die Causes;
-- production interruption and cleanup;
-- consumer interruption and cleanup;
-- same-length file mutation and digest mismatch;
-- escaped borrowed handle;
-- compatible duplicate-core consumer;
+- Node SEA file main;
+- Node SEA byte main;
+- CommonJS and ESM;
+- assets;
+- exec args/extension;
+- snapshot/code-cache valid and invalid combinations;
+- builder/base Node version mismatch;
+- every advertised current/cross system target;
+- syntax rejection;
+- non-builtin external rejection for recipe input;
+- Bun profile ESM/CJS;
+- Esbuild profile ESM/CJS;
+- unchanged generic program under both Layers;
+- caller typed failure identity;
+- Fail+Interrupt and Fail+Die;
+- producer and consumer interruption;
+- escaped borrowed value;
+- file mutation/digest mismatch;
+- same-version duplicate core;
 - incompatible protocol version;
-- standalone Node SEA from a pre-existing bundled file;
-- Node SEA assets and supported configuration;
-- real Bun -> Node SEA and Esbuild -> Node SEA lanes;
-- isolated and composed packed consumers.
+- cleanup/publication overlap;
+- real Bun -> Node SEA and Esbuild -> Node SEA;
+- packed direct and recipe consumers.
 
 ## STOP conditions
 
 Stop and report if:
 
-- a portable field is required only by one provider;
-- Bun or Esbuild must silently ignore a profile field;
-- provider plugins or multi-output behavior leak into the portable request;
-- error mapping catches caller failures or loses sibling interrupt/die Causes;
-- the borrowed program can be used successfully after expiry;
-- duplicate-core compatibility requires exposing the raw temporary path outside
-  the nested callback;
-- Node SEA direct use still requires a producer package;
-- the profile becomes the only documented provider API.
+- Node SEA still requires a producer package;
+- the portable profile must accept provider options or multiple output
+  topologies;
+- a provider silently ignores a profile field;
+- provider error mapping catches callback errors by tag collision;
+- Cause topology changes;
+- borrowed ownership requires one shared module instance;
+- cross-platform Node SEA cannot validate builder/base version and
+  cache/snapshot restrictions;
+- Bun compile is presented as replaceable by Node SEA;
+- the recipe chooses Bun or Esbuild implicitly.
+
+## Completion receipt
+
+Completion requires one focused implementation PR or a clearly ordered pair if
+Node SEA broadening must land before profile publication. Record exact provider
+versions, target matrix, duplicate-core result, and observed CI.
