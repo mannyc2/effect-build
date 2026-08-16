@@ -1,5 +1,6 @@
+import { Buffer } from "node:buffer";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
 import {
   chmod,
   copyFile,
@@ -25,11 +26,9 @@ import {
   ProfileProtocolUnsupported,
   type BuildStepObservation,
   type ContentIdentity,
-  type Digest,
   type ModuleFormat,
   type NodeExecutableArtifact,
   type NodeMain,
-  type NodeMainExecutableRequest,
   type NodeMainExecutableService,
   type NodeMainLease,
   type NodeTarget,
@@ -57,52 +56,87 @@ interface CommandResult {
   readonly stderr: string;
 }
 
+interface RunningCommand {
+  readonly child: ChildProcessWithoutNullStreams;
+  readonly completion: Promise<CommandResult>;
+}
+
+const commandFailure = (message: string, providerError?: unknown): NodeMainAssemblyFailed =>
+  new NodeMainAssemblyFailed("effect-build-node-sea", message, providerError);
+
+const terminateChild = (child: ChildProcessWithoutNullStreams): Promise<void> =>
+  new Promise((resolvePromise) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolvePromise();
+      return;
+    }
+    let finished = false;
+    const finish = (): void => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      resolvePromise();
+    };
+    child.once("close", finish);
+    child.kill("SIGTERM");
+    const timer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }, 2_000);
+    timer.unref();
+  });
+
 const runInterruptible = (
   executable: string,
   argv: readonly string[],
   cwd?: string,
 ): Effect.Effect<CommandResult, NodeMainAssemblyFailed> =>
-  Effect.async<CommandResult, NodeMainAssemblyFailed>((resume) => {
-    const child = spawn(executable, [...argv], {
-      ...(cwd === undefined ? {} : { cwd }),
-      env: { ...process.env, LC_ALL: "C" },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => { stdout += chunk.toString("utf8"); });
-    child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
-    child.once("error", (error) => {
-      resume(Effect.fail(new NodeMainAssemblyFailed("effect-build-node-sea", "failed to spawn Node", error)));
-    });
-    child.once("exit", (code, signal) => {
-      if (code === 0) resume(Effect.succeed({ stdout, stderr }));
-      else resume(Effect.fail(new NodeMainAssemblyFailed(
-        "effect-build-node-sea",
-        `Node exited with code ${String(code)} signal ${String(signal)}: ${stderr || stdout}`,
-      )));
-    });
-    return Effect.sync(() => {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill("SIGTERM");
-        const timer = setTimeout(() => {
-          if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-        }, 2_000);
-        timer.unref();
-      }
-    });
-  });
+  Effect.acquireUseRelease(
+    Effect.sync((): RunningCommand => {
+      const child = spawn(executable, [...argv], {
+        ...(cwd === undefined ? {} : { cwd }),
+        env: { ...process.env, LC_ALL: "C" },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      const completion = new Promise<CommandResult>((resolvePromise, reject) => {
+        child.stdout.on("data", (chunk: Buffer) => {
+          stdout += chunk.toString("utf8");
+        });
+        child.stderr.on("data", (chunk: Buffer) => {
+          stderr += chunk.toString("utf8");
+        });
+        child.once("error", (error) => {
+          reject(commandFailure("failed to spawn Node", error));
+        });
+        child.once("exit", (code, signal) => {
+          if (code === 0) {
+            resolvePromise({ stdout, stderr });
+            return;
+          }
+          reject(commandFailure(
+            `Node exited with code ${String(code)} signal ${String(signal)}: ${stderr || stdout}`,
+          ));
+        });
+      });
+      return { child, completion };
+    }),
+    ({ completion }) =>
+      Effect.tryPromise({
+        try: () => completion,
+        catch: (error) => error instanceof NodeMainAssemblyFailed
+          ? error
+          : commandFailure("Node command failed", error),
+      }),
+    ({ child }) => Effect.promise(() => terminateChild(child)),
+  );
 
 const tryPromise = <A>(
   operation: string,
   run: () => Promise<A>,
 ): Effect.Effect<A, NodeMainAssemblyFailed> => Effect.tryPromise({
   try: run,
-  catch: (error) => new NodeMainAssemblyFailed(
-    "effect-build-node-sea",
-    operation,
-    error,
-  ),
+  catch: (error) => commandFailure(operation, error),
 });
 
 const executableIdentity = (path: string): Effect.Effect<ContentIdentity, NodeMainAssemblyFailed> =>
@@ -121,11 +155,17 @@ const systemTargetOf = (path: string): Effect.Effect<string, NodeMainAssemblyFai
   );
 
 const hasBuildSea = (path: string): Effect.Effect<boolean, NodeMainAssemblyFailed> =>
-  Effect.map(runInterruptible(path, ["--help"]), ({ stdout, stderr }) => /--build-sea/.test(`${stdout}\n${stderr}`));
+  Effect.map(
+    runInterruptible(path, ["--help"]),
+    ({ stdout, stderr }) => /--build-sea/.test(`${stdout}\n${stderr}`),
+  );
 
-const observation = (version: string): ProfileAdapterObservation => ({
+const observation = (
+  version: string,
+  providerPackageVersion = "0.3.0",
+): ProfileAdapterObservation => ({
   providerPackage: "effect-build-node-sea",
-  providerPackageVersion: "0.3.0",
+  providerPackageVersion,
   profile: "NodeMainExecutable",
   profileProtocol: NodeMainExecutableProtocol,
   adapterProtocol: `effect-build-node-sea/NodeMainExecutableAdapter@2+node-${version}`,
@@ -156,9 +196,9 @@ const materializeLease = (
       }
       return mainPath;
     }).pipe(
-      Effect.mapError((error) => error.providerError instanceof NodeMainAuthenticationFailed
-        ? error.providerError
-        : error),
+      Effect.mapError((error) =>
+        error.providerError instanceof NodeMainAuthenticationFailed ? error.providerError : error
+      ),
     );
   }
   return tryPromise("failed to materialize NodeMain file", async () => {
@@ -169,9 +209,9 @@ const materializeLease = (
     }
     return mainPath;
   }).pipe(
-    Effect.mapError((error) => error.providerError instanceof NodeMainAuthenticationFailed
-      ? error.providerError
-      : error),
+    Effect.mapError((error) =>
+      error.providerError instanceof NodeMainAuthenticationFailed ? error.providerError : error
+    ),
   );
 };
 
@@ -188,7 +228,9 @@ interface AssemblyInput {
   readonly afterCommit?: (artifact: NodeExecutableArtifact) => Effect.Effect<void>;
 }
 
-const assemblePrivateMain = (input: AssemblyInput): Effect.Effect<NodeExecutableArtifact, NodeMainAssemblyFailed> =>
+const assemblePrivateMain = (
+  input: AssemblyInput,
+): Effect.Effect<NodeExecutableArtifact, NodeMainAssemblyFailed> =>
   Effect.acquireUseRelease(
     tryPromise("failed to allocate Node SEA staging", async () => {
       const destination = resolve(input.outfile);
@@ -216,9 +258,14 @@ const assemblePrivateMain = (input: AssemblyInput): Effect.Effect<NodeExecutable
       yield* runInterruptible(input.builderExecutable, ["--build-sea", config], root);
       const candidate = yield* tryPromise("failed to validate Node SEA candidate", async () => {
         const info = await stat(staging);
-        if (!info.isFile() || info.size === 0) throw new Error("Node SEA candidate is not a non-empty regular file");
+        if (!info.isFile() || info.size === 0) {
+          throw new Error("Node SEA candidate is not a non-empty regular file");
+        }
         await chmod(staging, 0o755);
-        return { bytes: info.size, digest: input.digest === true ? digestBytes(await readFile(staging)) : undefined };
+        return {
+          bytes: info.size,
+          digest: input.digest === true ? digestBytes(await readFile(staging)) : undefined,
+        };
       });
       const tool: ToolObservation = {
         name: "node",
@@ -266,31 +313,37 @@ const makeService = (
   provider,
   plan: (consumerProtocol, request) => {
     if (consumerProtocol !== NodeMainExecutableProtocol) {
-      return Effect.fail(new ProfileProtocolUnsupported(
-        provider.providerPackage,
-        "NodeMainExecutable",
-        consumerProtocol,
-        [NodeMainExecutableProtocol],
-      ));
+      return Effect.fail(
+        new ProfileProtocolUnsupported(
+          provider.providerPackage,
+          "NodeMainExecutable",
+          consumerProtocol,
+          [NodeMainExecutableProtocol],
+        ),
+      );
     }
     return Effect.succeed({
       target,
       provider,
       assemble: (main) => {
         if (main.protocol !== "effect-build/NodeMain@2") {
-          return Effect.fail(new ProfileProtocolUnsupported(
-            provider.providerPackage,
-            "NodeMain",
-            main.protocol,
-            ["effect-build/NodeMain@2"],
-          ));
+          return Effect.fail(
+            new ProfileProtocolUnsupported(
+              provider.providerPackage,
+              "NodeMain",
+              main.protocol,
+              ["effect-build/NodeMain@2"],
+            ),
+          );
         }
         if (main.node.syntaxVersion !== target.version) {
-          return Effect.fail(new NodeTargetUnsupported(
-            provider.providerPackage,
-            main.node.syntaxVersion,
-            [target.version],
-          ));
+          return Effect.fail(
+            new NodeTargetUnsupported(
+              provider.providerPackage,
+              main.node.syntaxVersion,
+              [target.version],
+            ),
+          );
         }
         const inadmissible = main.imports.filter((item) => item.classification !== "builtin");
         if (inadmissible.length > 0) {
@@ -300,8 +353,9 @@ const makeService = (
           const lease = yield* main.acquire;
           yield* authenticateLease(main, lease);
           if (options.afterAcquire !== undefined) yield* options.afterAcquire(main, lease);
-          const root = yield* tryPromise("failed to allocate assembler main directory", () =>
-            mkdtemp(join(tmpdir(), "effect-build-node-sea-main-"))
+          const root = yield* tryPromise(
+            "failed to allocate assembler main directory",
+            () => mkdtemp(join(tmpdir(), "effect-build-node-sea-main-")),
           );
           try {
             const mainPath = yield* materializeLease(lease, main.format, root);
@@ -371,14 +425,16 @@ export const nodeSeaExecutableLayer = (
       executableDigest: baseIdentity.digest,
       systemTarget,
     };
-    const provider = observation(builderVersion);
+    const provider = observation(builderVersion, options.providerPackageVersion);
     void compatibility;
     return makeService(options, target, provider);
   }),
 );
 
 export interface RawNodeSeaRequest {
-  readonly main: { readonly _tag: "File"; readonly path: string } | { readonly _tag: "Bytes"; readonly bytes: Uint8Array };
+  readonly main:
+    | { readonly _tag: "File"; readonly path: string }
+    | { readonly _tag: "Bytes"; readonly bytes: Uint8Array };
   readonly format: ModuleFormat;
   readonly outfile: string;
   readonly digest?: boolean;
@@ -389,11 +445,19 @@ export const assembleRawNodeSea = (
   request: RawNodeSeaRequest,
 ): Effect.Effect<NodeExecutableArtifact, NodeMainAssemblyFailed> =>
   Effect.acquireUseRelease(
-    tryPromise("failed to allocate raw Node SEA input", () => mkdtemp(join(tmpdir(), "effect-build-raw-node-sea-"))),
+    tryPromise(
+      "failed to allocate raw Node SEA input",
+      () => mkdtemp(join(tmpdir(), "effect-build-raw-node-sea-")),
+    ),
     (root) => Effect.gen(function*() {
       const mainPath = join(root, request.format === "esm" ? "main.mjs" : "main.cjs");
-      if (request.main._tag === "File") yield* tryPromise("failed to copy raw Node SEA file", () => copyFile(request.main.path, mainPath));
-      else yield* tryPromise("failed to write raw Node SEA bytes", () => writeFile(mainPath, request.main.bytes));
+      if (request.main._tag === "File") {
+        const sourcePath = request.main.path;
+        yield* tryPromise("failed to copy raw Node SEA file", () => copyFile(sourcePath, mainPath));
+      } else {
+        const sourceBytes = request.main.bytes;
+        yield* tryPromise("failed to write raw Node SEA bytes", () => writeFile(mainPath, sourceBytes));
+      }
       const [builderVersion, baseVersion, identity, systemTarget] = yield* Effect.all([
         versionOf(options.builderExecutable),
         versionOf(options.baseExecutable),
@@ -401,9 +465,11 @@ export const assembleRawNodeSea = (
         systemTargetOf(options.baseExecutable),
       ] as const);
       if (builderVersion !== baseVersion) {
-        return yield* Effect.fail(new NodeMainAssemblyFailed("effect-build-node-sea", "builder and base Node versions differ"));
+        return yield* Effect.fail(
+          commandFailure("builder and base Node versions differ"),
+        );
       }
-      const provider = observation(builderVersion);
+      const provider = observation(builderVersion, options.providerPackageVersion);
       return yield* assemblePrivateMain({
         mainPath,
         format: request.format,
