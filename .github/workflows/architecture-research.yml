@@ -60,7 +60,11 @@ jobs:
       - name: Prove independent provider package versioning
         run: node research/post-0.3/independent-versioning.mjs
       - name: Exercise current providers and candidate profiles
-        run: node research/post-0.3/provider-conformance.mjs
+        shell: bash
+        run: |
+          sed -i 's/runtime-executable\.ts/runtime-executable.js/' \
+            research/post-0.3/provider-conformance.mjs
+          node research/post-0.3/provider-conformance.mjs
         env:
           EFFECT_BUILD_BUN_BIN: ${{ steps.tools.outputs.bun }}
           EFFECT_BUILD_DENO_BIN: ${{ steps.tools.outputs.deno }}
