@@ -1,0 +1,38 @@
+name: research-source-export
+
+on:
+  push: {}
+
+permissions:
+  contents: read
+
+jobs:
+  source-export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify exact source
+        run: test "${{ github.sha }}" = "$(git rev-parse HEAD)"
+      - name: Upload isolated source snapshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: architecture-source-${{ github.sha }}
+          path: |
+            .github
+            plans
+            research
+            scripts
+            packages
+            test
+            examples
+            package.json
+            bun.lock
+            tsconfig*.json
+            dprint.json
+            AGENTS.md
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
