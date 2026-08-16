@@ -90,6 +90,10 @@ jobs:
           --module NodeNext --moduleResolution NodeNext --target ES2022
           research/post-0.3/contracts.ts
           research/post-0.3/contracts.typecheck.ts
+      - name: Compile exact final research contracts
+        run: bun x tsc -p research/post-0.3/final/tsconfig.json
+      - name: Execute exact compatibility laws
+        run: node research/post-0.3/final/dist/compatibility.test.js
       - name: Reproduce all existing architectural conclusions
         shell: bash
         env:
