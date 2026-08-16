@@ -1,46 +1,35 @@
+import { Effect, Layer } from "effect";
 import { Buffer } from "node:buffer";
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import {
-  chmod,
-  copyFile,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { Effect, Layer } from "effect";
 import {
+  CompatibilityEvaluator,
+  type CompatibilityFailure,
+  CompatibilityReporter,
+  requireCompatibility,
+} from "./compatibility.js";
+import {
+  type BuildStepObservation,
+  type ContentIdentity,
   ExternalImportUnsupported,
+  type ModuleFormat,
+  type NodeExecutableArtifact,
+  type NodeMain,
   NodeMainAssemblyFailed,
   NodeMainAuthenticationFailed,
   NodeMainExecutable,
   NodeMainExecutableProtocol,
-  NodeTargetUnsupported,
-  ProfileProtocolUnsupported,
-  type BuildStepObservation,
-  type ContentIdentity,
-  type ModuleFormat,
-  type NodeExecutableArtifact,
-  type NodeMain,
   type NodeMainExecutableService,
   type NodeMainLease,
   type NodeTarget,
+  NodeTargetUnsupported,
   type ProfileAdapterObservation,
+  ProfileProtocolUnsupported,
   type ToolObservation,
 } from "./contracts.js";
-import {
-  CompatibilityEvaluator,
-  CompatibilityReporter,
-  requireCompatibility,
-  type CompatibilityFailure,
-} from "./compatibility.js";
 import { digestBytes, identityOf } from "./node-main.js";
 
 export interface NodeSeaAdapterOptions {
@@ -124,9 +113,10 @@ const runInterruptible = (
     ({ completion }) =>
       Effect.tryPromise({
         try: () => completion,
-        catch: (error) => error instanceof NodeMainAssemblyFailed
-          ? error
-          : commandFailure("Node command failed", error),
+        catch: (error) =>
+          error instanceof NodeMainAssemblyFailed
+            ? error
+            : commandFailure("Node command failed", error),
       }),
     ({ child }) => Effect.promise(() => terminateChild(child)),
   );
@@ -134,10 +124,11 @@ const runInterruptible = (
 const tryPromise = <A>(
   operation: string,
   run: () => Promise<A>,
-): Effect.Effect<A, NodeMainAssemblyFailed> => Effect.tryPromise({
-  try: run,
-  catch: (error) => commandFailure(operation, error),
-});
+): Effect.Effect<A, NodeMainAssemblyFailed> =>
+  Effect.tryPromise({
+    try: run,
+    catch: (error) => commandFailure(operation, error),
+  });
 
 const executableIdentity = (path: string): Effect.Effect<ContentIdentity, NodeMainAssemblyFailed> =>
   tryPromise("failed to authenticate Node executable", async () => identityOf(await readFile(path)));
@@ -243,63 +234,67 @@ const assemblePrivateMain = (
         config: join(root, "sea-config.json"),
       };
     }),
-    ({ root, destination, staging, config }) => Effect.gen(function*() {
-      yield* tryPromise("failed to write Node SEA configuration", async () => {
-        await writeFile(config, JSON.stringify({
-          main: input.mainPath,
-          mainFormat: input.format === "esm" ? "module" : "commonjs",
-          executable: input.target.executable,
-          output: staging,
-          disableExperimentalSEAWarning: true,
-          useSnapshot: false,
-          useCodeCache: false,
-        }));
-      });
-      yield* runInterruptible(input.builderExecutable, ["--build-sea", config], root);
-      const candidate = yield* tryPromise("failed to validate Node SEA candidate", async () => {
-        const info = await stat(staging);
-        if (!info.isFile() || info.size === 0) {
-          throw new Error("Node SEA candidate is not a non-empty regular file");
-        }
-        await chmod(staging, 0o755);
-        return {
-          bytes: info.size,
-          digest: input.digest === true ? digestBytes(await readFile(staging)) : undefined,
-        };
-      });
-      const tool: ToolObservation = {
-        name: "node",
-        version: input.target.version,
-        path: input.builderExecutable,
-        compatibility: "matrix-tested",
-      };
-      const assemblerStep: BuildStepObservation = { operation: "assemble-node-sea", tool };
-      const provider = input.provider;
-      const profiles: readonly [ProfileAdapterObservation, ProfileAdapterObservation] = [
-        input.producer ?? provider,
-        provider,
-      ];
-      const artifact = yield* Effect.uninterruptible(
-        tryPromise("failed to commit Node SEA executable", async () => {
-          await rename(staging, destination);
-          const committedInfo = await lstat(destination);
-          if (!committedInfo.isFile()) throw new Error("committed output is not a regular file");
-          const value: NodeExecutableArtifact = {
-            path: destination,
-            bytes: committedInfo.size,
-            ...(candidate.digest === undefined ? {} : { digest: candidate.digest }),
-            runtime: { name: "node", version: input.target.version },
-            systemTarget: input.target.systemTarget,
-            profiles,
-            steps: [...(input.producerSteps ?? []), assemblerStep],
-            committed: true,
+    ({ root, destination, staging, config }) =>
+      Effect.gen(function*() {
+        yield* tryPromise("failed to write Node SEA configuration", async () => {
+          await writeFile(
+            config,
+            JSON.stringify({
+              main: input.mainPath,
+              mainFormat: input.format === "esm" ? "module" : "commonjs",
+              executable: input.target.executable,
+              output: staging,
+              disableExperimentalSEAWarning: true,
+              useSnapshot: false,
+              useCodeCache: false,
+            }),
+          );
+        });
+        yield* runInterruptible(input.builderExecutable, ["--build-sea", config], root);
+        const candidate = yield* tryPromise("failed to validate Node SEA candidate", async () => {
+          const info = await stat(staging);
+          if (!info.isFile() || info.size === 0) {
+            throw new Error("Node SEA candidate is not a non-empty regular file");
+          }
+          await chmod(staging, 0o755);
+          return {
+            bytes: info.size,
+            digest: input.digest === true ? digestBytes(await readFile(staging)) : undefined,
           };
-          return value;
-        }),
-      );
-      if (input.afterCommit !== undefined) yield* input.afterCommit(artifact);
-      return artifact;
-    }),
+        });
+        const tool: ToolObservation = {
+          name: "node",
+          version: input.target.version,
+          path: input.builderExecutable,
+          compatibility: "matrix-tested",
+        };
+        const assemblerStep: BuildStepObservation = { operation: "assemble-node-sea", tool };
+        const provider = input.provider;
+        const profiles: readonly [ProfileAdapterObservation, ProfileAdapterObservation] = [
+          input.producer ?? provider,
+          provider,
+        ];
+        const artifact = yield* Effect.uninterruptible(
+          tryPromise("failed to commit Node SEA executable", async () => {
+            await rename(staging, destination);
+            const committedInfo = await lstat(destination);
+            if (!committedInfo.isFile()) throw new Error("committed output is not a regular file");
+            const value: NodeExecutableArtifact = {
+              path: destination,
+              bytes: committedInfo.size,
+              ...(candidate.digest === undefined ? {} : { digest: candidate.digest }),
+              runtime: { name: "node", version: input.target.version },
+              systemTarget: input.target.systemTarget,
+              profiles,
+              steps: [...(input.producerSteps ?? []), assemblerStep],
+              committed: true,
+            };
+            return value;
+          }),
+        );
+        if (input.afterCommit !== undefined) yield* input.afterCommit(artifact);
+        return artifact;
+      }),
     ({ root }) => Effect.promise(() => rm(root, { recursive: true, force: true })),
   );
 
@@ -386,50 +381,53 @@ export const nodeSeaExecutableLayer = (
   NodeMainExecutable,
   NodeMainAssemblyFailed | CompatibilityFailure,
   CompatibilityEvaluator | CompatibilityReporter
-> => Layer.effect(
-  NodeMainExecutable,
-  Effect.gen(function*() {
-    const [builderVersion, baseVersion, builderIdentity, baseIdentity, systemTarget, capability] = yield* Effect.all([
-      versionOf(options.builderExecutable),
-      versionOf(options.baseExecutable),
-      executableIdentity(options.builderExecutable),
-      executableIdentity(options.baseExecutable),
-      systemTargetOf(options.baseExecutable),
-      hasBuildSea(options.builderExecutable),
-    ] as const);
-    const compatibility = yield* requireCompatibility({
-      providerPackage: "effect-build-node-sea",
-      lane: "selected-command",
-      operation: "assemble-node-main",
-      selected: {
-        name: "node",
-        version: builderVersion,
-        path: options.builderExecutable,
-        digest: builderIdentity.digest,
-      },
-      matrixTestedVersions: ["25.5.0", "26.7.0"],
-      supported: { _tag: "ExactVersions", versions: ["25.5.0", "26.7.0"] },
-      observedCapabilities: new Set(capability ? ["build-sea"] : []),
-      requiredCapabilities: ["build-sea"],
-      relations: [{
-        _tag: "EqualVersion",
-        name: "builder-base-node-version",
-        left: { label: "builder", version: builderVersion },
-        right: { label: "base", version: baseVersion },
-      }],
-    });
-    const target: NodeTarget = {
-      runtime: "node",
-      version: baseVersion,
-      executable: options.baseExecutable,
-      executableDigest: baseIdentity.digest,
-      systemTarget,
-    };
-    const provider = observation(builderVersion, options.providerPackageVersion);
-    void compatibility;
-    return makeService(options, target, provider);
-  }),
-);
+> =>
+  Layer.effect(
+    NodeMainExecutable,
+    Effect.gen(function*() {
+      const [builderVersion, baseVersion, builderIdentity, baseIdentity, systemTarget, capability] = yield* Effect.all(
+        [
+          versionOf(options.builderExecutable),
+          versionOf(options.baseExecutable),
+          executableIdentity(options.builderExecutable),
+          executableIdentity(options.baseExecutable),
+          systemTargetOf(options.baseExecutable),
+          hasBuildSea(options.builderExecutable),
+        ] as const,
+      );
+      const compatibility = yield* requireCompatibility({
+        providerPackage: "effect-build-node-sea",
+        lane: "selected-command",
+        operation: "assemble-node-main",
+        selected: {
+          name: "node",
+          version: builderVersion,
+          path: options.builderExecutable,
+          digest: builderIdentity.digest,
+        },
+        matrixTestedVersions: ["25.5.0", "26.7.0"],
+        supported: { _tag: "ExactVersions", versions: ["25.5.0", "26.7.0"] },
+        observedCapabilities: new Set(capability ? ["build-sea"] : []),
+        requiredCapabilities: ["build-sea"],
+        relations: [{
+          _tag: "EqualVersion",
+          name: "builder-base-node-version",
+          left: { label: "builder", version: builderVersion },
+          right: { label: "base", version: baseVersion },
+        }],
+      });
+      const target: NodeTarget = {
+        runtime: "node",
+        version: baseVersion,
+        executable: options.baseExecutable,
+        executableDigest: baseIdentity.digest,
+        systemTarget,
+      };
+      const provider = observation(builderVersion, options.providerPackageVersion);
+      void compatibility;
+      return makeService(options, target, provider);
+    }),
+  );
 
 export interface RawNodeSeaRequest {
   readonly main:
@@ -449,42 +447,45 @@ export const assembleRawNodeSea = (
       "failed to allocate raw Node SEA input",
       () => mkdtemp(join(tmpdir(), "effect-build-raw-node-sea-")),
     ),
-    (root) => Effect.gen(function*() {
-      const mainPath = join(root, request.format === "esm" ? "main.mjs" : "main.cjs");
-      if (request.main._tag === "File") {
-        const sourcePath = request.main.path;
-        yield* tryPromise("failed to copy raw Node SEA file", () => copyFile(sourcePath, mainPath));
-      } else {
-        const sourceBytes = request.main.bytes;
-        yield* tryPromise("failed to write raw Node SEA bytes", () => writeFile(mainPath, sourceBytes));
-      }
-      const [builderVersion, baseVersion, identity, systemTarget] = yield* Effect.all([
-        versionOf(options.builderExecutable),
-        versionOf(options.baseExecutable),
-        executableIdentity(options.baseExecutable),
-        systemTargetOf(options.baseExecutable),
-      ] as const);
-      if (builderVersion !== baseVersion) {
-        return yield* Effect.fail(
-          commandFailure("builder and base Node versions differ"),
+    (root) =>
+      Effect.gen(function*() {
+        const mainPath = join(root, request.format === "esm" ? "main.mjs" : "main.cjs");
+        if (request.main._tag === "File") {
+          const sourcePath = request.main.path;
+          yield* tryPromise("failed to copy raw Node SEA file", () => copyFile(sourcePath, mainPath));
+        } else {
+          const sourceBytes = request.main.bytes;
+          yield* tryPromise("failed to write raw Node SEA bytes", () => writeFile(mainPath, sourceBytes));
+        }
+        const [builderVersion, baseVersion, identity, systemTarget] = yield* Effect.all(
+          [
+            versionOf(options.builderExecutable),
+            versionOf(options.baseExecutable),
+            executableIdentity(options.baseExecutable),
+            systemTargetOf(options.baseExecutable),
+          ] as const,
         );
-      }
-      const provider = observation(builderVersion, options.providerPackageVersion);
-      return yield* assemblePrivateMain({
-        mainPath,
-        format: request.format,
-        outfile: request.outfile,
-        ...(request.digest === undefined ? {} : { digest: request.digest }),
-        target: {
-          runtime: "node",
-          version: baseVersion,
-          executable: options.baseExecutable,
-          executableDigest: identity.digest,
-          systemTarget,
-        },
-        builderExecutable: options.builderExecutable,
-        provider,
-      });
-    }),
+        if (builderVersion !== baseVersion) {
+          return yield* Effect.fail(
+            commandFailure("builder and base Node versions differ"),
+          );
+        }
+        const provider = observation(builderVersion, options.providerPackageVersion);
+        return yield* assemblePrivateMain({
+          mainPath,
+          format: request.format,
+          outfile: request.outfile,
+          ...(request.digest === undefined ? {} : { digest: request.digest }),
+          target: {
+            runtime: "node",
+            version: baseVersion,
+            executable: options.baseExecutable,
+            executableDigest: identity.digest,
+            systemTarget,
+          },
+          builderExecutable: options.builderExecutable,
+          provider,
+        });
+      }),
     (root) => Effect.promise(() => rm(root, { recursive: true, force: true })),
   );

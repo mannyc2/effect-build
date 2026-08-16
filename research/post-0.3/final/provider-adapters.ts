@@ -1,21 +1,21 @@
-import { readFile } from "node:fs/promises";
 import { Effect, Layer } from "effect";
 import * as BunProvider from "effect-build-bun";
 import * as EsbuildProvider from "effect-build-esbuild";
+import { readFile } from "node:fs/promises";
 import {
+  type BuildStepObservation,
+  type ContentIdentity,
+  type NodeMain,
   NodeMainChanged,
   NodeMainProductionFailed,
   NodeMainProgram,
   NodeMainProgramProtocol,
-  NodeTargetUnsupported,
-  ProfileProtocolUnsupported,
-  type BuildStepObservation,
-  type ContentIdentity,
-  type NodeMain,
   type NodeMainProgramRequest,
   type NodeMainProgramService,
   type NodeTarget,
+  NodeTargetUnsupported,
   type ProfileAdapterObservation,
+  ProfileProtocolUnsupported,
 } from "./contracts.js";
 import { checkNodeSyntax, identityOf, makeBorrowedNodeMain } from "./node-main.js";
 
@@ -44,21 +44,24 @@ const readBundle = (
 ): Effect.Effect<Uint8Array, NodeMainProductionFailed> =>
   Effect.tryPromise({
     try: async () => Uint8Array.from(await readFile(path)),
-    catch: (error) => new NodeMainProductionFailed(
-      providerPackage,
-      "failed to read the produced Node main",
-      error,
-    ),
+    catch: (error) =>
+      new NodeMainProductionFailed(
+        providerPackage,
+        "failed to read the produced Node main",
+        error,
+      ),
   }).pipe(
     Effect.flatMap((bytes) => {
       const observed = identityOf(bytes);
       return observed.digest === expected.digest && observed.bytes === expected.bytes
         ? Effect.succeed(bytes)
-        : Effect.fail(new NodeMainProductionFailed(
-          providerPackage,
-          "produced Node main changed before canonicalization",
-          new NodeMainChanged(expected, observed),
-        ));
+        : Effect.fail(
+          new NodeMainProductionFailed(
+            providerPackage,
+            "produced Node main changed before canonicalization",
+            new NodeMainChanged(expected, observed),
+          ),
+        );
     }),
   );
 
@@ -67,15 +70,16 @@ const normalizeSteps = (
     readonly operation: string;
     readonly tool: { readonly name: string; readonly version: string; readonly path?: string };
   }[],
-): readonly BuildStepObservation[] => stages.map((stage) => ({
-  operation: stage.operation,
-  tool: {
-    name: stage.tool.name,
-    version: stage.tool.version,
-    ...(stage.tool.path === undefined ? {} : { path: stage.tool.path }),
-    compatibility: "matrix-tested",
-  },
-}));
+): readonly BuildStepObservation[] =>
+  stages.map((stage) => ({
+    operation: stage.operation,
+    tool: {
+      name: stage.tool.name,
+      version: stage.tool.version,
+      ...(stage.tool.path === undefined ? {} : { path: stage.tool.path }),
+      compatibility: "matrix-tested",
+    },
+  }));
 
 const validatePlan = (
   observation: ProfileAdapterObservation,
@@ -83,19 +87,23 @@ const validatePlan = (
   target: NodeTarget,
 ): Effect.Effect<void, ProfileProtocolUnsupported | NodeTargetUnsupported> => {
   if (consumerProtocol !== NodeMainProgramProtocol) {
-    return Effect.fail(new ProfileProtocolUnsupported(
-      observation.providerPackage,
-      "NodeMainProgram",
-      consumerProtocol,
-      [NodeMainProgramProtocol],
-    ));
+    return Effect.fail(
+      new ProfileProtocolUnsupported(
+        observation.providerPackage,
+        "NodeMainProgram",
+        consumerProtocol,
+        [NodeMainProgramProtocol],
+      ),
+    );
   }
   if (!supportedNodeVersions.includes(target.version)) {
-    return Effect.fail(new NodeTargetUnsupported(
-      observation.providerPackage,
-      target.version,
-      supportedNodeVersions,
-    ));
+    return Effect.fail(
+      new NodeTargetUnsupported(
+        observation.providerPackage,
+        target.version,
+        supportedNodeVersions,
+      ),
+    );
   }
   return Effect.void;
 };
@@ -117,34 +125,37 @@ const bunPlan = (
           format: request.format,
           ...(request.cwd === undefined ? {} : { cwd: request.cwd }),
         },
-        (artifact) => Effect.gen(function*() {
-          const expected: ContentIdentity = {
-            algorithm: "sha256",
-            digest: artifact.digest,
-            bytes: artifact.bytes,
-          };
-          const bytes = yield* readBundle(artifact.path, expected, bunObservation.providerPackage);
-          yield* checkNodeSyntax(target, request.format, bytes);
-          const capability = makeBorrowedNodeMain({
-            path: artifact.path,
-            format: request.format,
-            transport: request.transport,
-            target,
-            providerObservedImports: artifact.observedExternalImports,
-            producer: bunObservation,
-            steps: normalizeSteps(artifact.stages),
-            expectedIdentity: expected,
-          }, bytes);
-          return yield* Effect.exit(
-            use(capability.main).pipe(
-              Effect.ensuring(Effect.sync(capability.expire)),
-            ),
-          );
-        }),
+        (artifact) =>
+          Effect.gen(function*() {
+            const expected: ContentIdentity = {
+              algorithm: "sha256",
+              digest: artifact.digest,
+              bytes: artifact.bytes,
+            };
+            const bytes = yield* readBundle(artifact.path, expected, bunObservation.providerPackage);
+            yield* checkNodeSyntax(target, request.format, bytes);
+            const capability = makeBorrowedNodeMain({
+              path: artifact.path,
+              format: request.format,
+              transport: request.transport,
+              target,
+              providerObservedImports: artifact.observedExternalImports,
+              producer: bunObservation,
+              steps: normalizeSteps(artifact.stages),
+              expectedIdentity: expected,
+            }, bytes);
+            return yield* Effect.exit(
+              use(capability.main).pipe(
+                Effect.ensuring(Effect.sync(capability.expire)),
+              ),
+            );
+          }),
       ).pipe(
-        Effect.mapError((error) => error instanceof NodeMainProductionFailed
-          ? error
-          : new NodeMainProductionFailed(bunObservation.providerPackage, "Bun Node main production failed", error)),
+        Effect.mapError((error) =>
+          error instanceof NodeMainProductionFailed
+            ? error
+            : new NodeMainProductionFailed(bunObservation.providerPackage, "Bun Node main production failed", error)
+        ),
       );
       return yield* exit;
     }),
@@ -177,38 +188,41 @@ const esbuildPlan = (
           format: request.format,
           ...(request.cwd === undefined ? {} : { cwd: request.cwd }),
         },
-        (artifact) => Effect.gen(function*() {
-          const expected: ContentIdentity = {
-            algorithm: "sha256",
-            digest: artifact.digest,
-            bytes: artifact.bytes,
-          };
-          const bytes = yield* readBundle(artifact.path, expected, esbuildObservation.providerPackage);
-          yield* checkNodeSyntax(target, request.format, bytes);
-          const capability = makeBorrowedNodeMain({
-            path: artifact.path,
-            format: request.format,
-            transport: request.transport,
-            target,
-            providerObservedImports: artifact.observedExternalImports,
-            producer: esbuildObservation,
-            steps: normalizeSteps(artifact.stages),
-            expectedIdentity: expected,
-          }, bytes);
-          return yield* Effect.exit(
-            use(capability.main).pipe(
-              Effect.ensuring(Effect.sync(capability.expire)),
-            ),
-          );
-        }),
+        (artifact) =>
+          Effect.gen(function*() {
+            const expected: ContentIdentity = {
+              algorithm: "sha256",
+              digest: artifact.digest,
+              bytes: artifact.bytes,
+            };
+            const bytes = yield* readBundle(artifact.path, expected, esbuildObservation.providerPackage);
+            yield* checkNodeSyntax(target, request.format, bytes);
+            const capability = makeBorrowedNodeMain({
+              path: artifact.path,
+              format: request.format,
+              transport: request.transport,
+              target,
+              providerObservedImports: artifact.observedExternalImports,
+              producer: esbuildObservation,
+              steps: normalizeSteps(artifact.stages),
+              expectedIdentity: expected,
+            }, bytes);
+            return yield* Effect.exit(
+              use(capability.main).pipe(
+                Effect.ensuring(Effect.sync(capability.expire)),
+              ),
+            );
+          }),
       ).pipe(
-        Effect.mapError((error) => error instanceof NodeMainProductionFailed
-          ? error
-          : new NodeMainProductionFailed(
-            esbuildObservation.providerPackage,
-            "Esbuild Node main production failed",
-            error,
-          )),
+        Effect.mapError((error) =>
+          error instanceof NodeMainProductionFailed
+            ? error
+            : new NodeMainProductionFailed(
+              esbuildObservation.providerPackage,
+              "Esbuild Node main production failed",
+              error,
+            )
+        ),
       );
       return yield* exit;
     }),
@@ -224,14 +238,12 @@ const makeEsbuildService = (
     Effect.as(validatePlan(esbuildObservation, consumerProtocol, target), esbuildPlan(service, request, target)),
 });
 
-export const bunNodeMainProgramLayer: Layer.Layer<NodeMainProgram, never, BunProvider.Compiler> =
-  Layer.effect(
-    NodeMainProgram,
-    BunProvider.Compiler.use((compiler) => Effect.succeed(makeBunServiceFinal(compiler))),
-  );
+export const bunNodeMainProgramLayer: Layer.Layer<NodeMainProgram, never, BunProvider.Compiler> = Layer.effect(
+  NodeMainProgram,
+  BunProvider.Compiler.use((compiler) => Effect.succeed(makeBunServiceFinal(compiler))),
+);
 
-export const esbuildNodeMainProgramLayer: Layer.Layer<NodeMainProgram, never, EsbuildProvider.Esbuild> =
-  Layer.effect(
-    NodeMainProgram,
-    EsbuildProvider.Esbuild.use((service) => Effect.succeed(makeEsbuildService(service))),
-  );
+export const esbuildNodeMainProgramLayer: Layer.Layer<NodeMainProgram, never, EsbuildProvider.Esbuild> = Layer.effect(
+  NodeMainProgram,
+  EsbuildProvider.Esbuild.use((service) => Effect.succeed(makeEsbuildService(service))),
+);

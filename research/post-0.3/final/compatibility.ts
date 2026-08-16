@@ -269,7 +269,8 @@ export const evaluateCompatibility = (request: CompatibilityRequest): Compatibil
       supportedPolicy: serializePolicy(request.supported),
       matrixTestedVersions: [...request.matrixTestedVersions],
       overrideAvailable: true,
-      remediation: `Select a supported ${request.selected.name} version or set allowUntestedVersion: true for this Layer`,
+      remediation:
+        `Select a supported ${request.selected.name} version or set allowUntestedVersion: true for this Layer`,
     };
   }
   const status: CompatibilityStatus = tested
@@ -300,7 +301,8 @@ export const evaluateCompatibility = (request: CompatibilityRequest): Compatibil
       tool: request.selected,
       supportedPolicy: serializePolicy(request.supported),
       matrixTestedVersions: [...request.matrixTestedVersions],
-      message: `${request.providerPackage} is running untested ${request.selected.name} ${request.selected.version} for ${request.operation}`,
+      message:
+        `${request.providerPackage} is running untested ${request.selected.name} ${request.selected.version} for ${request.operation}`,
     },
   };
 };
@@ -330,10 +332,11 @@ export const evaluatorLayer: Layer.Layer<CompatibilityEvaluator> = Layer.succeed
 
 export const reporterLayer = (
   report: (warning: ToolVersionUntestedOverride) => void,
-): Layer.Layer<CompatibilityReporter> => Layer.succeed(
-  CompatibilityReporter,
-  { warning: (warning) => Effect.sync(() => report(warning)) },
-);
+): Layer.Layer<CompatibilityReporter> =>
+  Layer.succeed(
+    CompatibilityReporter,
+    { warning: (warning) => Effect.sync(() => report(warning)) },
+  );
 
 export const requireCompatibility = (
   request: CompatibilityRequest,
@@ -341,10 +344,11 @@ export const requireCompatibility = (
   ToolCompatibilityObservation,
   CompatibilityFailure,
   CompatibilityEvaluator | CompatibilityReporter
-> => CompatibilityEvaluator.use((evaluator) => {
-  const decision = evaluator.evaluate(request);
-  if (decision._tag !== "Compatible") return Effect.fail(decision);
-  if (decision.warning === undefined) return Effect.succeed(decision.observation);
-  const warning = decision.warning;
-  return CompatibilityReporter.use((reporter) => Effect.as(reporter.warning(warning), decision.observation));
-});
+> =>
+  CompatibilityEvaluator.use((evaluator) => {
+    const decision = evaluator.evaluate(request);
+    if (decision._tag !== "Compatible") return Effect.fail(decision);
+    if (decision.warning === undefined) return Effect.succeed(decision.observation);
+    const warning = decision.warning;
+    return CompatibilityReporter.use((reporter) => Effect.as(reporter.warning(warning), decision.observation));
+  });

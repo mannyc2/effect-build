@@ -1,14 +1,14 @@
-import assert from "node:assert/strict";
 import { Effect, Layer } from "effect";
+import assert from "node:assert/strict";
 import {
   CompatibilityEvaluator,
   CompatibilityReporter,
+  type CompatibilityRequest,
   evaluateCompatibility,
   evaluatorLayer,
   reporterLayer,
   requireCompatibility,
   satisfiesSemverRange,
-  type CompatibilityRequest,
   type ToolVersionUntestedOverride,
 } from "./compatibility.js";
 

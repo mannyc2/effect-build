@@ -1,12 +1,12 @@
 import { Effect } from "effect";
 import {
-  NodeMainExecutable,
-  NodeMainExecutableProtocol,
-  NodeMainProgram,
-  NodeMainProgramProtocol,
   type NodeExecutableArtifact,
   type NodeMain,
+  NodeMainExecutable,
+  NodeMainExecutableProtocol,
   type NodeMainExecutableRequest,
+  NodeMainProgram,
+  NodeMainProgramProtocol,
   type NodeMainProgramRequest,
   type NodeSourceExecutableRequest,
   type NodeTarget,
@@ -26,20 +26,22 @@ export const consumeNodeMainProgram = (
   },
   unknown,
   NodeMainProgram
-> => NodeMainProgram.use((service) =>
-  Effect.flatMap(
-    service.plan(NodeMainProgramProtocol, request, target),
-    (plan) => plan.withMain((main) =>
-      Effect.scoped(Effect.map(main.acquire, (lease) => ({
-        format: main.format,
-        imports: main.imports,
-        identity: main.identity,
-        provider: main.producer,
-        leaseTag: lease._tag,
-      })))
-    ),
-  )
-);
+> =>
+  NodeMainProgram.use((service) =>
+    Effect.flatMap(
+      service.plan(NodeMainProgramProtocol, request, target),
+      (plan) =>
+        plan.withMain((main) =>
+          Effect.scoped(Effect.map(main.acquire, (lease) => ({
+            format: main.format,
+            imports: main.imports,
+            identity: main.identity,
+            provider: main.producer,
+            leaseTag: lease._tag,
+          })))
+        ),
+    )
+  );
 
 export const consumeNodeMainExecutable = (
   main: NodeMain,

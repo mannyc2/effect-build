@@ -1,23 +1,23 @@
-import { createHash } from "node:crypto";
+import { Effect } from "effect";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { builtinModules, isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
 import {
-  NodeMainAcquisitionFailed,
-  NodeMainChanged,
-  NodeMainExpired,
-  NodeMainProductionFailed,
-  NodeMainProtocol,
   type BuildStepObservation,
   type ContentIdentity,
   type Digest,
   type ModuleFormat,
   type NodeMain,
+  NodeMainAcquisitionFailed,
+  NodeMainChanged,
+  NodeMainExpired,
   type NodeMainLease,
+  NodeMainProductionFailed,
+  NodeMainProtocol,
   type NodeMainTransport,
   type NodeRuntimeImport,
   type NodeTarget,
@@ -31,8 +31,7 @@ const builtinSet = new Set(builtinModules.flatMap((name) => {
   return [bare, `node:${bare}`];
 }));
 
-export const digestBytes = (bytes: Uint8Array): Digest =>
-  `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+export const digestBytes = (bytes: Uint8Array): Digest => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
 export const identityOf = (bytes: Uint8Array): ContentIdentity => ({
   algorithm: "sha256",
@@ -156,8 +155,7 @@ const acquireLease = (
           error instanceof NodeMainChanged
             ? error
             : new NodeMainAcquisitionFailed("copy-main", error instanceof Error ? error.message : String(error)),
-      })
-    ),
+      })),
     ({ root }) => Effect.promise(() => rm(root, { recursive: true, force: true })),
   ).pipe(Effect.map(({ lease }) => lease));
 };
@@ -212,7 +210,12 @@ export const makeBorrowedNodeMain = (
       () => active,
     ),
   };
-  return { main, expire: () => { active = false; } };
+  return {
+    main,
+    expire: () => {
+      active = false;
+    },
+  };
 };
 
 export const checkNodeSyntax = (
