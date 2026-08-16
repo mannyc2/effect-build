@@ -177,14 +177,22 @@ const comparatorMatches = (version: Semver, comparator: string): boolean => {
   if (target === undefined) return false;
   const comparison = compareSemver(version, target);
   switch (match[1] ?? "=") {
-    case "<": return comparison < 0;
-    case "<=": return comparison <= 0;
-    case ">": return comparison > 0;
-    case ">=": return comparison >= 0;
-    case "^": return version.major === target.major && comparison >= 0;
-    case "~": return version.major === target.major && version.minor === target.minor && comparison >= 0;
-    case "=": return comparison === 0;
+    case "<":
+      return comparison < 0;
+    case "<=":
+      return comparison <= 0;
+    case ">":
+      return comparison > 0;
+    case ">=":
+      return comparison >= 0;
+    case "^":
+      return version.major === target.major && comparison >= 0;
+    case "~":
+      return version.major === target.major && version.minor === target.minor && comparison >= 0;
+    case "=":
+      return comparison === 0;
   }
+  return false;
 };
 
 export const satisfiesSemverRange = (versionInput: string, expression: string): boolean => {
@@ -198,21 +206,29 @@ export const satisfiesSemverRange = (versionInput: string, expression: string): 
 
 export const policyMatches = (policy: VersionPolicy, version: string): boolean => {
   switch (policy._tag) {
-    case "ExactVersions": return policy.versions.includes(version);
-    case "SemverRange": return satisfiesSemverRange(version, policy.expression);
-    case "Predicate": return policy.test(version);
+    case "ExactVersions":
+      return policy.versions.includes(version);
+    case "SemverRange":
+      return satisfiesSemverRange(version, policy.expression);
+    case "Predicate":
+      return policy.test(version);
   }
 };
 
 export const serializePolicy = (policy: VersionPolicy): SerializableVersionPolicy => {
   switch (policy._tag) {
-    case "ExactVersions": return { _tag: "ExactVersions", versions: [...policy.versions] };
-    case "SemverRange": return { _tag: "SemverRange", expression: policy.expression };
-    case "Predicate": return { _tag: "Predicate", name: policy.name };
+    case "ExactVersions":
+      return { _tag: "ExactVersions", versions: [...policy.versions] };
+    case "SemverRange":
+      return { _tag: "SemverRange", expression: policy.expression };
+    case "Predicate":
+      return { _tag: "Predicate", name: policy.name };
   }
 };
 
-const relationFailure = (relation: CompatibilityRelation): { readonly relation: string; readonly detail: string } | undefined => {
+const relationFailure = (
+  relation: CompatibilityRelation,
+): { readonly relation: string; readonly detail: string } | undefined => {
   switch (relation._tag) {
     case "EqualVersion":
       return relation.left.version === relation.right.version
@@ -330,7 +346,5 @@ export const requireCompatibility = (
   if (decision._tag !== "Compatible") return Effect.fail(decision);
   if (decision.warning === undefined) return Effect.succeed(decision.observation);
   const warning = decision.warning;
-  return CompatibilityReporter.use((reporter) =>
-    Effect.as(reporter.warning(warning), decision.observation)
-  );
+  return CompatibilityReporter.use((reporter) => Effect.as(reporter.warning(warning), decision.observation));
 });
