@@ -2,6 +2,8 @@ import { conclusion, writeReceipt } from "./receipt.mjs";
 import { isSelfContainedDeclarationOutput } from "./declaration-classifier.mjs";
 import { assertion, markerValue, requiredPath, runRequired, sourceSha } from "./probe-runtime.mjs";
 
+await import("./check-contract-markdown.mjs");
+
 const bun = await requiredPath("EFFECT_BUILD_BUN_BIN");
 const deno = await requiredPath("EFFECT_BUILD_DENO_BIN");
 const denoCurrent = await requiredPath("EFFECT_BUILD_DENO_CURRENT_BIN");
