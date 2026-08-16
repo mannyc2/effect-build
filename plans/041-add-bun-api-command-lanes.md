@@ -1,60 +1,62 @@
-# Plan 041: Add Bun host API and selected-command lanes
+# Plan 041: Publish permanent Bun API and command lanes
 
 ## Status
 
-- Priority: P1 provider-native API
+- Priority: P1 permanent provider API
 - Effort: XL
-- Risk: HIGH dual-lane semantics and Bun-host verification
+- Risk: HIGH dual-lane semantics, host typing, and executable compatibility
 - Depends on: Plan 039
-- May run in parallel with: Plans 040 and 042
-- Architecture commit: `e23722e81fa651c1540c8aa72e2703ff62ac609b`
+- Research evidence: Bun command 1.3.9/1.3.14 and Bun host 1.3.14
 - Status: TODO
+- Publication authority: NONE
 
 ## Objective
 
-Expand `effect-build-bun` into:
+Expand `effect-build-bun` into two permanent, canonical provider surfaces:
 
 ```text
 effect-build-bun/Api
 effect-build-bun/Command
 ```
 
-`Api` wraps real `Bun.build()` and requires a Bun orchestrator host. `Command`
-invokes one selected Bun executable through Effect process services and remains
-usable under another supported host.
+`Api` wraps `Bun.build()` in a Bun host and preserves `BuildConfig` and
+`BuildOutput`. `Command` invokes one selected Bun executable under any supported
+process-capable Effect host.
 
-Source -> Bun executable stays first-class. It is not replaced by
-SingleNodeProgram -> Node SEA because the runtime contract differs.
+Retain Bun source-to-Bun-executable as an independent product. It is not
+replaced by the Node recipe because the output embeds the Bun runtime.
 
-## Upstream contract
+Do not publish the `NodeMainProgram` or `BrowserModuleApplication` adapters in
+this plan; Plan 043 adds them after both direct lanes are green.
 
-At
-[`oven-sh/bun@1726b14`](https://github.com/oven-sh/bun/tree/1726b144a06de8f4eeacbc9ebcb3448cc1b51b87),
-`Bun.build()` supports virtual/multiple entries, browser/Bun/Node targets,
-ESM/CJS/IIFE, HTML/CSS/assets, plugins/loaders, splitting, output artifacts and
-logs, and executable compile mode. Cross-target compile tokens encode system,
-architecture, libc, Bun compatibility, and CPU baseline/modern policy. No
-per-build cancellation handle analogous to Esbuild context is documented.
+Do not publish, tag, release, merge, or perform the final 0.4 export cut.
 
-## Canonical modules
+## Baseline and drift check
+
+Before editing:
+
+1. verify ancestry from Plan 039 completion and released 0.3;
+2. record exact parent SHA, Bun host version, selected command path/version, and
+   packaged Bun type version;
+3. freeze 0.3 scalar, matrix, and `withJavaScriptBundle` behavior;
+4. reproduce research command evidence at Bun 1.3.9 and 1.3.14;
+5. add Bun host evidence at both selected range boundaries;
+6. stop if provider types or compile/write behavior materially differ from the
+   research sketches.
+
+## Permanent `Api` lane
+
+Canonical path:
 
 ```text
 effect-build-bun/Api
-effect-build-bun/Command
 ```
-
-The root re-exports `Api`, `Command`, and later `SingleNodeProgram` namespaces,
-not flat callable aliases.
-
-## API lane
 
 ```ts
-import type { BuildConfig, BuildOutput } from "bun"
-
 export interface Service {
   readonly build: (
-    options: BuildConfig
-  ) => Effect.Effect<BuildOutput, BunBuildError>
+    options: Bun.BuildConfig
+  ) => Effect.Effect<Bun.BuildOutput, BunBuildError>
 }
 
 export class BunApi extends Context.Service<
@@ -62,107 +64,240 @@ export class BunApi extends Context.Service<
   Service
 >()("effect-build-bun/Api") {}
 
-export const layerCurrent: Layer.Layer<
+export interface LayerOptions {
+  readonly allowUntestedVersion?: boolean
+}
+
+export const layerCurrent: (
+  options?: LayerOptions
+) => Layer.Layer<
   BunApi,
-  BunApiUnavailable
+  BunApiUnavailable | ToolVersionUnsupported
 >
 ```
 
-Public declarations import official `bun-types` module types instead of
-requiring an ambient global Bun namespace. The declaration version is pinned and
-tested against the supported Bun runtime.
+`Bun.build({ compile })` remains a provider-native mode. The API lane does not
+add a second `compileExecutable` method unless implementation evidence proves a
+truthful stronger durable-publication wrapper. Native compile output, logs, and
+write timing remain `BuildOutput` semantics.
 
-Compile remains a mode of `BuildConfig`. Do not add a second API-lane
-`compileExecutable` in 0.4: it would duplicate the provider request and would
-need separate proof of output path, validation, write timing, cancellation, and
-publication semantics.
+The operation requires a Bun host. It never spawns or installs Bun and never
+falls back to the command lane.
 
-The API preserves `BuildOutput` and provider plugin/output/log values.
-Interruption stops awaiting/downstream Effect use but does not claim to cancel
-underlying Bun work or roll back direct writes.
+## Permanent `Command` lane
 
-## Command lane
+Canonical path:
+
+```text
+effect-build-bun/Command
+```
 
 ```ts
 export interface Service {
   readonly build: (
-    input: BunCommandBuildInput
-  ) => Effect.Effect<BunWrittenOutput, BunCommandBuildError>
+    input: BuildInput
+  ) => Effect.Effect<WrittenOutput, BunCommandBuildError>
+
   readonly compileExecutable: (
-    input: BunCompileExecutableInput
-  ) => Effect.Effect<Artifact.Executable, BunCompileError>
+    input: CompileExecutableInput
+  ) => Effect.Effect<
+    Artifact.Executable<{
+      readonly name: "bun"
+      readonly version?: string
+    }>,
+    BunCompileError
+  >
+
   readonly compileExecutableMatrix: (
-    input: BunCompileExecutableMatrixInput
-  ) => Effect.Effect<readonly Artifact.Executable[], BunMatrixError>
+    input: CompileExecutableMatrixInput
+  ) => Effect.Effect<
+    readonly Artifact.Executable<{
+      readonly name: "bun"
+      readonly version?: string
+    }>[],
+    BunMatrixError
+  >
 }
 ```
 
+Command build exposes the broad stable CLI-representable subset. Plugin
+callbacks and virtual input maps remain API-only capabilities.
+
+Command compile retains provider-specific Bun runtime target/version/CPU/libc
+semantics and uses Plan 039 `Author/Executable` for the single-file durable
+lifecycle.
+
+No public command-watch method ships in 0.4. Research proved rebuild and process
+termination but not a stable machine-readable readiness/rebuild protocol.
+
+## Provider capability coverage
+
+The direct lanes must cover provider-native breadth rather than the current
+narrow pipeline.
+
+### API lane
+
+- one/multiple entrypoints;
+- filesystem and virtual files;
+- browser, Bun, and Node targets;
+- ESM/CJS and supported IIFE behavior;
+- JavaScript, TypeScript, JSX/TSX, HTML, CSS, and assets;
+- plugins/loaders;
+- splitting;
+- in-memory output objects and provider writes;
+- structured logs;
+- compile mode and cross targets.
+
+### Command lane
+
+- CLI-representable multiple entries/outputs;
+- browser/Bun/Node targets;
+- formats, splitting, minification, source maps, externals;
+- output tree and optional metafile observation;
+- scalar and matrix Bun executable compilation;
+- current supported target table and native validation.
+
+## Compatibility policy
+
+Initial evidence:
+
+```text
+Command minimum: 1.3.9
+Command maximum/current: 1.3.14
+Host evidence: 1.3.14; both-boundary host execution required before release
+```
+
+Layer options:
+
+```ts
+export interface LayerOptions {
+  readonly executable?: string
+  readonly allowUntestedVersion?: boolean
+}
+```
+
+Host and command compatibility are independent facts:
+
+- `Api` observes `Bun.version` and verifies required `Bun.build` capabilities;
+- `Command` observes the selected executable path/version and probes required
+  flags/modes;
+- packaged Bun declarations must type-check consumers across the supported host
+  range;
+- known-incompatible or missing-capability versions cannot be overridden;
+- untested capable versions require explicit Layer override;
+- override emits a structured warning and marks tool/build steps
+  `untested-override`;
+- no installation, fallback, or binary substitution occurs;
+- future range widening releases only `effect-build-bun` unless a core contract
+  changes.
+
+## Lifecycle and interruption
+
+### API build
+
+Shape:
+
+```ts
+Effect.Effect<Bun.BuildOutput, BunBuildError>
+```
+
+`Bun.build()` exposes no per-build cancellation handle. Fiber interruption stops
+waiting/downstream use. Underlying work or provider direct writes may continue.
+The wrapper makes no child-termination or rollback claim.
+
 ### Command build
 
-Expose a typed CLI-representable subset: multiple entries; browser/Bun/Node
-target; output file/directory; supported formats; splitting; minification;
-source maps; externals/packages; defines/naming/public path; metafile; and
-HTML/CSS/assets where the CLI supports them.
+One selected child is scoped. Interruption terminates/reaps the child. For
+direct multi-output writes, partial provider output may remain and must be
+documented. Do not route arbitrary output sets through the single-file
+executable publisher.
 
-Return provider-specific written output. Do not claim atomic set publication.
-Interruption may leave partial provider output unless a later probe proves an
-owned staging strategy. Do not reconstruct JavaScript plugins through argv.
+### Command executable
 
-### Command compile
-
-Preserve and broaden released compile: source entry, Bun target tokens,
-minification, bytecode/source maps/defines where supported, selected tool
-identity, native target inspection, optional digest, and core-owned single-file
-staging/atomic publication.
-
-The output is a Bun-runtime executable with Bun and Node built-ins, not a Node
-SEA executable.
+Provider validation and tool selection precede staging. Interruption before
+atomic rename removes staging and leaves destination unchanged. After rename,
+the durable output is not rolled back.
 
 ### Matrix
 
-Remain homogeneous/provider-specific. Scalar compile is primitive. Validate the
-whole request before output work, preserve ordered partial results, perform no
-matrix-wide rollback, and stop active/queued work on interruption.
+Whole-request collision/target preflight occurs before cells start. Scalar
+compile remains the primitive. Each successful cell commits independently;
+failure reports committed artifacts. Matrix is not a transaction.
 
-## Watch probe
+## Error model
 
-Bun CLI watch exists, but a typed 0.4 operation requires evidence for readiness,
-rebuild notification, diagnostics, termination, and a stable event model. Add a
-scoped provider-specific watch only if the probe succeeds. Otherwise document
-watch as excluded; do not expose a raw process escape.
+API errors retain Bun logs and provider values.
 
-## Profile preparation
+Command build errors distinguish:
 
-Keep a package-private one-main Node adapter using the command lane. It becomes
-public only in Plan 043 and never becomes the canonical Bun API.
+- tool discovery/probe/version/capability;
+- spawn/completion;
+- bounded stdout/stderr;
+- provider invalid request/diagnostics;
+- output manifest/metafile validation;
+- host I/O.
+
+Compile errors additionally distinguish target mapping, native output
+inspection, and publication.
+
+Do not merge API and command errors merely because both use Bun.
+
+## Scope
+
+- Add permanent `Api` and `Command` subpaths/services/Layers.
+- Move existing scalar/matrix behavior behind `Command` without semantic change.
+- Add command build over the selected CLI subset.
+- Add host API build over native Bun types/results.
+- Add provider-owned compatibility ranges/probes/warnings.
+- Add Plan 039 telemetry.
+- Keep 0.3 root exports and narrow bundle path as no-publish migration
+  delegates until Plan 044.
+- Preserve internal fixed Node-main and browser-profile building blocks for Plan
+  043.
+
+Out of scope:
+
+- public profile adapters;
+- command watch;
+- automatic API/command fallback;
+- universal output schema/plugin API;
+- durable directory transaction;
+- Deno, Esbuild, or Node SEA behavior;
+- release mutation.
 
 ## Steps
 
-1. Pin Bun runtime/tool and official `bun-types` versions separately from
-   package-manager use.
-2. Add Bun-host and non-Bun-host type fixtures.
-3. Implement `Api.build` with exact provider types/errors/results.
-4. Add Command service and migrate scalar/matrix compile.
-5. Add typed command build.
-6. Characterize provider-written output on failure/interruption.
-7. Probe command watch without publishing it prematurely.
-8. Preserve a private profile adapter.
-9. Add lane telemetry/redaction and packed consumers.
-10. Run the full gate and record actual jobs.
+1. Pin/characterize Bun host types and API/CLI at both range boundaries.
+2. Define separate API and command errors.
+3. Implement `BunApi.layerCurrent` and native `build`.
+4. Prove API compile mode result/write timing without adding a false durable
+   wrapper.
+5. Move scalar/matrix compilation to `BunCommand` using `Author/Tool` and
+   `Author/Executable`.
+6. Implement command build and provider output observation.
+7. Add strict/override compatibility behavior for host and command lanes.
+8. Add provider spans, runtime/tool compatibility observations, and safe logs.
+9. Keep narrow 0.3 delegates thin and unchanged.
+10. Add direct API/command examples.
+11. Run boundary/current hosts/tools, platform publication, Effect endpoints,
+    architecture, and packed consumers.
+12. Record exact completion receipt.
 
 ## Invariants
 
-- Api and Command never fall back to each other.
-- Api requires Bun host; Command does not.
-- Api preserves `BuildOutput` and makes no false cancellation/rollback claim.
-- Command interruption terminates/reaps the child.
-- Command compile retains native inspection and atomic single-file publication.
-- Bun compile remains distinct from Node SEA.
-- Multi-file command build is not called atomic.
-- Plugins remain provider-native; no core plugin interface appears.
-- Package manager, Effect host, selected tool, and output runtime remain
-  independent.
-- No sibling integration dependency is introduced.
+- `Api` and `Command` are permanent canonical product surfaces.
+- `Api` runs only under Bun and never spawns/falls back.
+- `Command` uses the selected executable and never reads global Bun API.
+- Host runtime version and selected command version are separate observations.
+- Bun executable artifacts record runtime `bun`.
+- Browser/Bun/Node targets remain provider-native distinctions.
+- API output sets are not flattened into core artifacts.
+- Command multi-output direct writes are not described as atomic.
+- API interruption makes no false cancellation claim.
+- Command interruption terminates/reaps active children.
+- Scalar remains matrix primitive; committed cells remain committed.
+- No public command watch exists without a stable event protocol.
+- No profile is treated as Bun's canonical API.
 
 ## Required verification
 
@@ -178,22 +313,44 @@ bun run verify:real
 git diff --check
 ```
 
-Required evidence: packaged `bun-types` fixtures; virtual files; multiple
-entries; browser/Bun/Node; formats; HTML/CSS/assets; plugins/loaders;
-splitting/metafile; API compile mode; one-shot interruption without cancel
-claim; Node-host command build; every advertised executable target; compile
-flags; scalar/matrix interruption/partial success; partial output
-characterization; watch receipt; isolated packed Api/Command consumers.
+Required evidence at Bun 1.3.9, 1.3.14, and current upstream:
+
+- host `Bun.build` at both boundaries;
+- command build at both boundaries;
+- API multiple entries, virtual files, plugins, HTML/CSS/assets, splitting,
+  browser/Bun/Node targets, outputs/logs;
+- API compile mode current-host and foreign target result/write timing;
+- command build under Node Effect services;
+- command scalar/matrix behavior and every advertised target;
+- explicit API unavailable under Node;
+- no cross-lane fallback;
+- strict unsupported error and explicit untested override warning/observation;
+- API interruption downstream suppression without false underlying cancellation;
+- command interruption/reaping;
+- provider direct-write partial-outcome characterization;
+- 0.3 delegates and Bun-to-Node-SEA pipeline unchanged;
+- packed Api and Command consumers.
 
 ## STOP conditions
 
-Stop if Api requires Node platform mechanics; provider values are flattened;
-command claims plugin parity; API compile is called atomic/cancellable without
-evidence; Bun-runtime output is replaced by Node SEA; output-set publication is
-called atomic without proof; packaged types fail under target hosts; or watch is
-published without a stable event/lifetime contract.
+Stop and report if:
+
+- packaged Bun types cannot cover the supported host range without polluting all
+  package consumers;
+- native output/log/plugin values must be flattened;
+- API compile is wrapped as atomic/cancellable without evidence;
+- command build output cannot be observed without guessing outside a
+  provider-owned root;
+- a host/command version reaches mutation without strict acceptance or explicit
+  override;
+- the implementation tries automatic lane fallback;
+- command watch is exposed by parsing human terminal strings;
+- scalar/matrix lifecycle or target evidence regresses;
+- profile work begins before both direct lanes are independently green.
 
 ## Completion receipt
 
-Completion requires one Bun-focused implementation PR recording exact Bun
-runtime/command/declaration versions, host matrices, and observed CI.
+Record exact source SHA, Bun host/type/command versions, compatibility ranges and
+probes, runtime/declaration keys, API/command lifecycle observations, all
+workflow/job conclusions, packed consumers, and confirmation that no profile,
+publish, tag, release, or merge occurred.

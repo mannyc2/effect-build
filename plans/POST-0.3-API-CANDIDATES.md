@@ -1,10 +1,13 @@
-# Post-0.3 public API candidates
+# Post-0.3 public API candidates after executable research
 
-Status: final architecture type study. These declarations are not production
-source, but they are concrete enough to guide implementation and expose each
-candidate's package, host, lifetime, error, and extension cost.
+Status: final type study for Candidate C2. These declarations are not production
+source, but they are concrete enough to expose package ownership, host and tool
+compatibility, lifecycle, failure, and migration consequences.
 
-## Shared vocabulary used by the sketches
+The research prototypes that informed these declarations live under
+`research/post-0.3/`.
+
+## Shared vocabulary
 
 ```ts
 import {
@@ -15,27 +18,23 @@ import {
   FileSystem,
   Layer,
   Path,
-  Result,
-  Schema,
   Scope,
   Stream
 } from "effect"
-import { ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess } from "effect/unstable/process"
 
-export const SystemTarget = Schema.Literals([
-  "linux-x64-gnu",
-  "linux-x64-musl",
-  "linux-aarch64-gnu",
-  "macos-x64",
-  "macos-aarch64",
-  "windows-x64",
-  "windows-aarch64"
-] as const)
-export type SystemTarget = typeof SystemTarget.Type
+export type SystemTarget =
+  | "linux-x64-gnu"
+  | "linux-x64-musl"
+  | "linux-aarch64-gnu"
+  | "macos-x64"
+  | "macos-aarch64"
+  | "windows-x64"
+  | "windows-aarch64"
 
 export namespace HostPath {
-  export type Absolute = string & {
-    readonly "~effect-build/HostPath/Absolute": unique symbol
+  export type Observed = string & {
+    readonly "~effect-build/HostPath/Observed": unique symbol
   }
 
   export class ObservationFailed extends Data.TaggedError(
@@ -46,46 +45,33 @@ export namespace HostPath {
     readonly reason: string
   }> {}
 
-  export const existing: (
+  export const observe: (
     input: string
   ) => Effect.Effect<
-    Absolute,
+    Observed,
     ObservationFailed,
     FileSystem.FileSystem | Path.Path
   >
 }
 
-export interface BuildStepObservation {
-  readonly operation: string
-  readonly tool: {
-    readonly name: string
-    readonly version: string
-    readonly path?: HostPath.Absolute
-  }
+export type ToolCompatibility = "tested" | "untested-override"
+
+export interface TestedRange {
+  readonly minimum: string
+  readonly maximum: string
 }
 
-export namespace Artifact {
-  export const Digest: Schema.Schema<`sha256:${string}`>
-  export type Digest = typeof Digest.Type
+export interface ToolObservation<Name extends string = string> {
+  readonly name: Name
+  readonly version: string
+  readonly path?: HostPath.Observed
+  readonly compatibility: ToolCompatibility
+  readonly testedRange: TestedRange
+}
 
-  export interface File {
-    readonly path: HostPath.Absolute
-    readonly bytes: number
-    readonly digest?: Digest
-  }
-
-  export interface Executable<
-    Steps extends readonly [
-      BuildStepObservation,
-      ...BuildStepObservation[]
-    ] = readonly [
-      BuildStepObservation,
-      ...BuildStepObservation[]
-    ]
-  > extends File {
-    readonly systemTarget: SystemTarget
-    readonly steps: Steps
-  }
+export interface BuildStepObservation {
+  readonly operation: string
+  readonly tool: ToolObservation
 }
 
 export interface Diagnostic {
@@ -98,22 +84,286 @@ export interface Diagnostic {
     readonly column: number
   }
 }
+
+export namespace Artifact {
+  export type Digest = `sha256:${string}`
+
+  export interface File {
+    readonly path: HostPath.Observed
+    readonly bytes: number
+    readonly digest?: Digest
+  }
+
+  export interface RuntimeObservation {
+    readonly name: "node" | "bun" | "deno" | string
+    readonly version?: string
+  }
+
+  export interface Executable<
+    Runtime extends RuntimeObservation = RuntimeObservation,
+    Steps extends readonly [
+      BuildStepObservation,
+      ...BuildStepObservation[]
+    ] = readonly [
+      BuildStepObservation,
+      ...BuildStepObservation[]
+    ]
+  > extends File {
+    readonly runtime: Runtime
+    readonly systemTarget: SystemTarget
+    readonly steps: Steps
+  }
+}
 ```
 
+## Tool compatibility and selection
+
+### Core errors and warnings
+
+```ts
+export class ToolVersionUnsupported extends Data.TaggedError(
+  "ToolVersionUnsupported"
+)<{
+  readonly provider: string
+  readonly lane: "api" | "command"
+  readonly observed: string
+  readonly testedRange: TestedRange
+  readonly knownIncompatible: boolean
+  readonly missingCapabilities: readonly string[]
+  readonly remediation:
+    | "select-supported-version"
+    | "enable-untested-version-override"
+}> {}
+
+export interface ToolVersionUntestedOverride {
+  readonly _tag: "ToolVersionUntestedOverride"
+  readonly provider: string
+  readonly lane: "api" | "command"
+  readonly observed: string
+  readonly testedRange: TestedRange
+}
+```
+
+### `effect-build/Author/Tool`
+
+```ts
+export interface CapabilityProbe {
+  readonly name: string
+  readonly probe: (
+    executable: HostPath.Observed
+  ) => Effect.Effect<boolean, ToolProbeFailed>
+}
+
+export interface Specification<Name extends string> {
+  readonly name: Name
+  readonly executable?: string
+  readonly versionArgv: readonly string[]
+  readonly parseVersion: (
+    stdout: string,
+    stderr: string
+  ) => Effect.Effect<string, ToolProbeFailed>
+  readonly testedRange: TestedRange
+  readonly knownIncompatible: readonly string[]
+  readonly capabilities: readonly CapabilityProbe[]
+}
+
+export interface SelectOptions {
+  readonly allowUntestedVersion?: boolean
+  readonly requiredCapabilities?: readonly string[]
+}
+
+export interface Selected<Name extends string> {
+  readonly observation: ToolObservation<Name>
+  readonly command: (
+    argv: readonly string[],
+    options?: ChildProcess.CommandOptions
+  ) => ChildProcess.Command
+}
+
+export const select: <const Name extends string>(
+  specification: Specification<Name>,
+  options?: SelectOptions
+) => Effect.Effect<
+  Selected<Name>,
+  ToolNotFound | ToolProbeFailed | ToolVersionUnsupported,
+  | FileSystem.FileSystem
+  | Path.Path
+  | ChildProcess.ChildProcessSpawner
+>
+```
+
+`Selected.command` delegates to official Effect `ChildProcess.make` using the
+captured canonical executable. It does not wrap process handles, streams, Scope,
+kill, or force-kill.
+
+Known-incompatible versions and missing capabilities always fail. An untested
+but capable version is permitted only through `allowUntestedVersion`; selection
+emits a structured warning and records `untested-override`.
+
+## Borrowed output author contract
+
+### `effect-build/Author/BorrowedOutput`
+
+```ts
+export interface File {
+  readonly path: HostPath.Observed
+  readonly bytes: number
+  readonly digest: Artifact.Digest
+}
+
+export interface TreeEntry extends File {
+  readonly relativePath: string
+  readonly kind:
+    | "html"
+    | "javascript"
+    | "css"
+    | "asset"
+    | "source-map"
+    | "other"
+}
+
+export interface TreeManifest {
+  readonly entries: readonly TreeEntry[]
+}
+
+export interface Directory {
+  readonly path: HostPath.Observed
+}
+
+export const withDirectory: <A, E, R>(
+  options: {
+    readonly prefix: string
+    readonly protectedDestinations?: readonly string[]
+  },
+  use: (directory: Directory) => Effect.Effect<A, E, R>
+) => Effect.Effect<
+  A,
+  BorrowedOutputError | E,
+  | FileSystem.FileSystem
+  | Path.Path
+  | Exclude<R, Scope.Scope>
+>
+
+export const observeFile: (
+  owner: Directory,
+  relativePath: string
+) => Effect.Effect<
+  File,
+  BorrowedOutputError,
+  FileSystem.FileSystem | Path.Path | Crypto.Crypto
+>
+
+export const observeTree: (
+  owner: Directory
+) => Effect.Effect<
+  TreeManifest,
+  BorrowedOutputError,
+  FileSystem.FileSystem | Path.Path | Crypto.Crypto
+>
+```
+
+Raw liveness tokens, cleanup-root claims, and mutable registries remain private.
+Profile adapters construct closure-owned Effects over these functions.
+
+## Durable executable author contract
+
+### `effect-build/Author/Executable`
+
+```ts
+export interface NativeObservation {
+  readonly format: "elf" | "macho" | "pe"
+  readonly os: "linux" | "macos" | "windows"
+  readonly architecture: "x64" | "aarch64"
+  readonly abi?: "gnu" | "musl"
+}
+
+export interface Candidate {
+  readonly path: HostPath.Observed
+}
+
+export interface ProduceInput<
+  Prepared,
+  Runtime extends Artifact.RuntimeObservation,
+  Steps extends readonly [
+    BuildStepObservation,
+    ...BuildStepObservation[]
+  ],
+  PrepareError,
+  ProduceError,
+  ResolveError,
+  PrepareRequirements,
+  ProduceRequirements
+> {
+  readonly outfile: string
+  readonly cwd?: string
+  readonly digest?: boolean
+  readonly prepare: () => Effect.Effect<
+    Prepared,
+    PrepareError,
+    PrepareRequirements
+  >
+  readonly produce: (
+    prepared: Prepared,
+    candidate: Candidate
+  ) => Effect.Effect<Steps, ProduceError, ProduceRequirements>
+  readonly resolve: (
+    observation: NativeObservation
+  ) => Effect.Effect<
+    {
+      readonly runtime: Runtime
+      readonly systemTarget: SystemTarget
+    },
+    ResolveError
+  >
+}
+
+export const produce: <
+  Prepared,
+  Runtime extends Artifact.RuntimeObservation,
+  Steps extends readonly [
+    BuildStepObservation,
+    ...BuildStepObservation[]
+  ],
+  PrepareError,
+  ProduceError,
+  ResolveError,
+  PrepareRequirements,
+  ProduceRequirements
+>(
+  input: ProduceInput<
+    Prepared,
+    Runtime,
+    Steps,
+    PrepareError,
+    ProduceError,
+    ResolveError,
+    PrepareRequirements,
+    ProduceRequirements
+  >
+) => Effect.Effect<
+  Artifact.Executable<Runtime, Steps>,
+  | PrepareError
+  | ProduceError
+  | ResolveError
+  | OutputMissing
+  | OutputInvalid
+  | OutputLocked
+  | PublicationFailed,
+  | FileSystem.FileSystem
+  | Path.Path
+  | Crypto.Crypto
+  | PrepareRequirements
+  | ProduceRequirements
+>
+```
+
+Preparation happens before staging allocation. Atomic rename is the only durable
+commit. The API makes no multi-file transaction claim.
+
+## Permanent provider-native services
+
 Repeated names such as `Service` and `layer` below belong to separate package
-subpath modules. Every candidate preserves one-way provider dependencies,
-provider direct errors/options unless explicitly excluded, interruption as
-interruption, and no universal source-or-bundle executable union.
-
----
-
-# Candidate A: provider-native Effect APIs only
-
-## Model and ownership
-
-Core publishes durable observations and author mechanics. Provider packages
-publish direct `Api` and/or `Command` services. Applications choose providers
-explicitly. No portable application service exists.
+subpath modules.
 
 ### `effect-build-bun/Api`
 
@@ -131,31 +381,67 @@ export class BunApi extends Context.Service<
   Service
 >()("effect-build-bun/Api") {}
 
-export const layerCurrent: Layer.Layer<
+export interface LayerOptions {
+  readonly allowUntestedVersion?: boolean
+}
+
+export const layerCurrent: (
+  options?: LayerOptions
+) => Layer.Layer<
   BunApi,
-  BunApiUnavailable
+  BunApiUnavailable | ToolVersionUnsupported
 >
 ```
 
-Host: Bun. The operation preserves provider output/log/plugin values and makes
-no one-shot cancellation or rollback claim.
+The service preserves `Bun.build()` compile mode. It does not add an API-only
+`compileExecutable` wrapper until an implementation proves stronger durable
+publication semantics without misrepresenting cancellation.
 
 ### `effect-build-bun/Command`
 
 ```ts
+export interface BuildInput {
+  readonly entrypoints: readonly [string, ...string[]]
+  readonly cwd?: string
+  readonly outdir?: string
+  readonly outfile?: string
+  readonly target?: "browser" | "bun" | "node"
+  readonly format?: "esm" | "cjs" | "iife"
+  readonly splitting?: boolean
+  readonly minify?: boolean
+  readonly sourcemap?: boolean | "linked" | "inline" | "external"
+  readonly external?: readonly string[]
+  readonly metafile?: boolean
+}
+
+export interface WrittenOutput {
+  readonly files: readonly Artifact.File[]
+  readonly providerMetafile?: unknown
+  readonly tool: ToolObservation<"bun">
+}
+
 export interface Service {
   readonly build: (
-    input: BunCommandBuildInput
-  ) => Effect.Effect<BunWrittenOutput, BunCommandBuildError>
+    input: BuildInput
+  ) => Effect.Effect<WrittenOutput, BunCommandBuildError>
 
   readonly compileExecutable: (
     input: BunCompileExecutableInput
-  ) => Effect.Effect<Artifact.Executable, BunCompileError>
+  ) => Effect.Effect<
+    Artifact.Executable<{
+      readonly name: "bun"
+      readonly version?: string
+    }>,
+    BunCompileError
+  >
 
   readonly compileExecutableMatrix: (
     input: BunCompileExecutableMatrixInput
   ) => Effect.Effect<
-    readonly Artifact.Executable[],
+    readonly Artifact.Executable<{
+      readonly name: "bun"
+      readonly version?: string
+    }>[],
     BunMatrixError
   >
 }
@@ -165,77 +451,81 @@ export class BunCommand extends Context.Service<
   Service
 >()("effect-build-bun/Command") {}
 
+export interface LayerOptions {
+  readonly executable?: string
+  readonly allowUntestedVersion?: boolean
+}
+
 export const layer: (
-  options?: BunCommandLayerOptions
+  options?: LayerOptions
 ) => Layer.Layer<
   BunCommand,
-  BunToolNotFound | BunProbeFailed,
+  BunToolNotFound | BunProbeFailed | ToolVersionUnsupported,
   BunCommandRequirements
 >
 ```
 
-Host: any supported process-capable Effect platform plus selected Bun.
-Command build has provider-written output-set semantics. Command compile uses
-core single-file staging, native validation, and atomic publication.
+No command-watch method is exported in 0.4.
 
 ### `effect-build-deno/Api`
 
-The package owns an isolated structural declaration matching the pinned official
-unstable API:
+The provider package owns an isolated structural declaration matching the
+supported official unstable surface. Unrelated consumers do not load ambient
+Deno globals.
 
 ```ts
-export interface DenoBundleOptions {
-  entrypoints: string[]
-  outputPath?: string
-  outputDir?: string
-  external?: string[]
-  format?: "esm" | "cjs" | "iife"
-  minify?: boolean
-  keepNames?: boolean
-  codeSplitting?: boolean
-  inlineImports?: boolean
-  packages?: "bundle" | "external"
-  sourcemap?: "linked" | "inline" | "external"
-  platform?: "browser" | "deno"
-  write?: boolean
+export interface BundleOptions {
+  readonly entrypoints: string[]
+  readonly outputPath?: string
+  readonly outputDir?: string
+  readonly external?: string[]
+  readonly format?: "esm" | "cjs" | "iife"
+  readonly minify?: boolean
+  readonly keepNames?: boolean
+  readonly codeSplitting?: boolean
+  readonly inlineImports?: boolean
+  readonly packages?: "bundle" | "external"
+  readonly sourcemap?: "linked" | "inline" | "external"
+  readonly platform?: "browser" | "deno"
+  readonly write?: boolean
 }
 
-export interface DenoBundleMessageLocation {
-  file: string
-  namespace?: string
-  line: number
-  column: number
-  length: number
-  suggestion?: string
+export interface BundleMessageLocation {
+  readonly file: string
+  readonly namespace?: string
+  readonly line: number
+  readonly column: number
+  readonly length: number
+  readonly suggestion?: string
 }
 
-export interface DenoBundleMessage {
-  text: string
-  location?: DenoBundleMessageLocation
-  notes?: Array<{
-    text: string
-    location?: DenoBundleMessageLocation
-  }>
+export interface BundleMessage {
+  readonly text: string
+  readonly location?: BundleMessageLocation
+  readonly notes?: readonly {
+    readonly text: string
+    readonly location?: BundleMessageLocation
+  }[]
 }
 
-export interface DenoBundleOutputFile {
-  path: string
-  contents?: Uint8Array<ArrayBuffer>
-  hash: string
-  text(): string
+export interface BundleOutputFile {
+  readonly path: string
+  readonly contents?: Uint8Array
+  readonly hash: string
+  readonly text: () => string
 }
 
-export interface DenoBundleResult {
-  errors: DenoBundleMessage[]
-  warnings: DenoBundleMessage[]
-  success: boolean
-  outputFiles?: DenoBundleOutputFile[]
+export interface BundleResult {
+  readonly errors: readonly BundleMessage[]
+  readonly warnings: readonly BundleMessage[]
+  readonly success: boolean
+  readonly outputFiles?: readonly BundleOutputFile[]
 }
 
 export interface Service {
   readonly bundle: (
-    options: DenoBundleOptions
-  ) => Effect.Effect<DenoBundleResult, DenoBundleApiError>
+    options: BundleOptions
+  ) => Effect.Effect<BundleResult, DenoBundleApiError>
 }
 
 export class DenoApi extends Context.Service<
@@ -243,14 +533,21 @@ export class DenoApi extends Context.Service<
   Service
 >()("effect-build-deno/Api") {}
 
-export const layerCurrent: Layer.Layer<
+export interface LayerOptions {
+  readonly allowUntestedVersion?: boolean
+}
+
+export const layerCurrent: (
+  options?: LayerOptions
+) => Layer.Layer<
   DenoApi,
-  DenoApiUnavailable
+  DenoApiUnavailable | ToolVersionUnsupported
 >
 ```
 
-Host: Deno with required unstable flag and permissions. The Layer checks
-availability but grants no authority.
+The Layer checks host/API compatibility. It does not grant permissions, enable
+unstable flags, or promise that the runtime enforces the permission behavior in
+declaration comments.
 
 ### `effect-build-deno/Command`
 
@@ -262,12 +559,21 @@ export interface Service {
 
   readonly compileExecutable: (
     input: DenoCompileExecutableInput
-  ) => Effect.Effect<Artifact.Executable, DenoCompileError>
+  ) => Effect.Effect<
+    Artifact.Executable<{
+      readonly name: "deno"
+      readonly version?: string
+    }>,
+    DenoCompileError
+  >
 
   readonly compileExecutableMatrix: (
     input: DenoCompileExecutableMatrixInput
   ) => Effect.Effect<
-    readonly Artifact.Executable[],
+    readonly Artifact.Executable<{
+      readonly name: "deno"
+      readonly version?: string
+    }>[],
     DenoMatrixError
   >
 }
@@ -276,11 +582,24 @@ export class DenoCommand extends Context.Service<
   DenoCommand,
   Service
 >()("effect-build-deno/Command") {}
+
+export interface LayerOptions {
+  readonly executable?: string
+  readonly allowUntestedVersion?: boolean
+}
+
+export const layer: (
+  options?: LayerOptions
+) => Layer.Layer<
+  DenoCommand,
+  DenoToolNotFound | DenoProbeFailed | ToolVersionUnsupported,
+  DenoCommandRequirements
+>
 ```
 
-The bundle request includes declaration output. Compile remains provider-specific
-for permissions, includes, workers, project/framework behavior, engine/runtime,
-arguments, and target.
+The command bundle request owns Deno declaration, HTML, package, platform,
+watch-free one-shot, config, and type-check options. No command-watch method is
+exported in 0.4.
 
 ### `effect-build-esbuild/Api`
 
@@ -294,15 +613,12 @@ export interface ContextHandle<
     esbuild.BuildResult<Options>,
     EsbuildBuildError
   >
-
   readonly watch: (
     options?: esbuild.WatchOptions
   ) => Effect.Effect<void, EsbuildContextError>
-
   readonly serve: (
     options?: esbuild.ServeOptions
   ) => Effect.Effect<esbuild.ServeResult, EsbuildContextError>
-
   readonly cancel: Effect.Effect<void, EsbuildContextError>
 }
 
@@ -336,14 +652,20 @@ export class EsbuildApi extends Context.Service<
   Service
 >()("effect-build-esbuild/Api") {}
 
-export const layer: Layer.Layer<
+export interface LayerOptions {
+  readonly allowUntestedVersion?: boolean
+}
+
+export const layer: (
+  options?: LayerOptions
+) => Layer.Layer<
   EsbuildApi,
-  EsbuildVersionMismatch
+  EsbuildVersionMismatch | ToolVersionUnsupported
 >
 ```
 
-`watch()`/`serve()` start provider state and return. Scope owns the context and
-hidden `dispose()`; the finalizer calls cancel then dispose.
+`watch` and `serve` start provider state and return. The scoped context remains
+the resource. Hidden release calls cancel then dispose exactly once.
 
 ### `effect-build-node-sea/Command`
 
@@ -378,553 +700,88 @@ export interface CreateExecutableInput {
 export interface Service {
   readonly createExecutable: (
     input: CreateExecutableInput
-  ) => Effect.Effect<Artifact.Executable, NodeSeaCreateError>
+  ) => Effect.Effect<
+    Artifact.Executable<{
+      readonly name: "node"
+      readonly version?: string
+    }>,
+    NodeSeaCreateError
+  >
 }
 
 export class NodeSeaCommand extends Context.Service<
   NodeSeaCommand,
   Service
 >()("effect-build-node-sea/Command") {}
-```
 
-## Complete usage
-
-```ts
-const client = BunApi.use((bun) =>
-  bun.build({
-    entrypoints: ["src/client.tsx"],
-    outdir: "dist/client",
-    target: "browser",
-    splitting: true,
-    plugins: [frameworkPlugin]
-  })
-)
-
-const esbuildWatch = Effect.scoped(
-  EsbuildApi.use((esbuild) =>
-    Effect.gen(function* () {
-      const context = yield* esbuild.context({
-        entryPoints: ["src/server.ts"],
-        platform: "node",
-        bundle: true,
-        outdir: "dist/server"
-      })
-      yield* context.watch()
-      return yield* Effect.never
-    })
-  )
-)
-
-const denoExecutable = DenoCommand.use((deno) =>
-  deno.compileExecutable({
-    entrypoint: ".",
-    outfile: "dist/deno-app",
-    target: "linux-x64-gnu",
-    permissions: { read: true },
-    include: ["public"]
-  })
-)
-```
-
-## Extension and migration
-
-A new provider adds its direct Api/Command package modules and uses core author
-mechanics only where those guarantees fit. Migration moves 0.3 Bun/Deno compile
-under Command, replaces the fixed Esbuild profile with full Api, broadens Node
-SEA input, and removes the live artifact. No portable service is added.
-
-## Falsifier and verdict
-
-Falsifier: two materially different providers satisfy one useful request,
-borrowed result, lifetime, interruption, and application Layer contract. Bun
-and Esbuild satisfy it for the released one-main Node profile.
-
-**Verdict: coherent but incomplete. Strongest rejected alternative.**
-
----
-
-# Candidate B: root `NodeProgramBundler` ontology
-
-## Model and declaration
-
-```ts
-export namespace NodeProgram {
-  export interface Borrowed {
-    readonly format: "esm" | "cjs"
-    readonly resolutionTarget: "node"
-    readonly digest: Artifact.Digest
-    readonly externalImportObservations: readonly string[]
-    readonly steps: readonly BuildStepObservation[]
-
-    readonly withFile: <A, E, R>(
-      use: (file: {
-        readonly path: HostPath.Absolute
-        readonly bytes: number
-        readonly digest: Artifact.Digest
-      }) => Effect.Effect<A, E, R>
-    ) => Effect.Effect<
-      A,
-      NodeProgramExpired | E,
-      Exclude<R, Scope.Scope>
-    >
-  }
+export interface LayerOptions {
+  readonly builderExecutable?: string
+  readonly targetExecutable?: string
+  readonly allowUntestedVersion?: boolean
 }
 
-export namespace NodeProgramBundler {
-  export interface Request {
-    readonly entrypoint: string
-    readonly cwd?: string
-    readonly format: "esm" | "cjs"
-  }
-
-  export class Failure extends Data.TaggedError(
-    "NodeProgramBundlingFailure"
-  )<{
-    readonly provider: string
-    readonly kind:
-      | "invalid-request"
-      | "tool-unavailable"
-      | "build-failed"
-      | "invalid-output"
-      | "host-io"
-    readonly diagnostics: readonly Diagnostic[]
-    readonly providerError: unknown
-  }> {}
-
-  export interface Service {
-    readonly withProgram: <A, E, R>(
-      request: Request,
-      use: (
-        program: NodeProgram.Borrowed
-      ) => Effect.Effect<A, E, R>
-    ) => Effect.Effect<
-      A,
-      Failure | E,
-      Exclude<R, Scope.Scope>
-    >
-  }
-
-  export class Bundler extends Context.Service<
-    Bundler,
-    Service
-  >()("effect-build/NodeProgramBundler") {}
-}
-```
-
-Bun and Esbuild provide Layers. Node SEA consumes the borrowed value.
-
-## Usage
-
-```ts
-const build = NodeProgramBundler.Bundler.use((bundler) =>
-  bundler.withProgram(
-    { entrypoint: "src/main.ts", format: "esm" },
-    (main) =>
-      main.withFile((file) =>
-        NodeSeaCommand.use((nodeSea) =>
-          nodeSea.createExecutable({
-            main: {
-              _tag: "File",
-              path: file.path,
-              format: "module"
-            },
-            outfile: "dist/app"
-          })
-        )
-      )
-  )
-)
-```
-
-## Ownership, extension, migration, and exclusions
-
-Core owns the root service and borrowed value; providers supply Layers. A new
-provider must implement exactly the one-main Node profile. Migration makes the
-profile the main public path.
-
-It excludes multi-entry/output, browser/Bun/Deno targets, HTML/CSS/assets,
-declarations, plugins/loaders, Esbuild transform/context/watch, Bun-runtime and
-Deno-runtime executable breadth, and Rolldown output configurations.
-
-**Verdict: the profile is semantically valid; the product-wide ontology is
-rejected because it omits substantial provider capability.**
-
----
-
-# Candidate C: provider-native APIs plus profiles and recipes
-
-This is the selected architecture. It retains Candidate A's direct provider
-services and adds precise core author modules plus one narrow portable profile.
-
-## Core author APIs
-
-### `effect-build/Author/Command`
-
-```ts
-export interface RunOptions {
-  readonly cwd?: string
-  readonly env?: Readonly<Record<string, string>>
-  readonly extendEnv?: boolean
-}
-
-export interface Completion {
-  readonly exitCode: number
-  readonly stdout: { readonly text: string; readonly truncated: boolean }
-  readonly stderr: { readonly text: string; readonly truncated: boolean }
-}
-
-export interface ToolSpecification<Name extends string> {
-  readonly name: Name
-  readonly executable?: string
-  readonly probeArgv: readonly string[]
-  readonly decodeProbe: (
-    completion: Completion
-  ) => Effect.Effect<
-    { readonly version: string; readonly path: string },
-    ToolProbeFailed
-  >
-}
-
-export interface Running {
-  readonly stdout: Stream.Stream<Uint8Array, CommandExecutionError>
-  readonly stderr: Stream.Stream<Uint8Array, CommandExecutionError>
-  readonly exitCode: Effect.Effect<number, CommandExecutionError>
-}
-
-export interface Selected<Name extends string> {
-  readonly tool: {
-    readonly name: Name
-    readonly version: string
-    readonly path: HostPath.Absolute
-  }
-
-  readonly run: (
-    argv: readonly string[],
-    options?: RunOptions
-  ) => Effect.Effect<Completion, CommandExecutionError>
-
-  readonly start: (
-    argv: readonly string[],
-    options?: RunOptions
-  ) => Effect.Effect<
-    Running,
-    CommandExecutionError,
-    Scope.Scope
-  >
-}
-
-export const discover: <const Name extends string>(
-  specification: ToolSpecification<Name>
-) => Effect.Effect<
-  Selected<Name>,
-  ToolNotFound | ToolProbeFailed,
-  | ChildProcessSpawner.ChildProcessSpawner
-  | FileSystem.FileSystem
-  | Path.Path
+export const layer: (
+  options?: LayerOptions
+) => Layer.Layer<
+  NodeSeaCommand,
+  | NodeSeaToolNotFound
+  | NodeSeaProbeFailed
+  | NodeSeaVersionMismatch
+  | ToolVersionUnsupported,
+  NodeSeaRequirements
 >
 ```
 
-`discover` canonicalizes/verifies the returned probe path through
-`HostPath.existing`; provider authors do not cast it.
+Builder and target/base Node are separately observed. Normal support requires
+equal versions until the mismatched-output gate closes.
 
-### `effect-build/Author/TemporaryOutput`
+## Profile: `NodeMainProgram`
 
-```ts
-export interface Directory {
-  readonly path: HostPath.Absolute
-}
-
-export interface File {
-  readonly path: HostPath.Absolute
-  readonly bytes: number
-  readonly digest: Artifact.Digest
-}
-
-export const withDirectory: <A, E, R>(
-  options: {
-    readonly prefix: string
-    readonly protectedDestinations?: readonly string[]
-  },
-  use: (directory: Directory) => Effect.Effect<A, E, R>
-) => Effect.Effect<
-  A,
-  TemporaryOutputError | E,
-  | FileSystem.FileSystem
-  | Path.Path
-  | Exclude<R, Scope.Scope>
->
-
-export const inspectFile: (
-  owner: Directory,
-  relativePath: string
-) => Effect.Effect<
-  File,
-  TemporaryOutputError,
-  | FileSystem.FileSystem
-  | Path.Path
-  | Crypto.Crypto
->
-```
-
-### `effect-build/Author/Executable`
+### Core module
 
 ```ts
-export interface NativeObservation {
-  readonly format: "elf" | "macho" | "pe"
-  readonly os: "linux" | "macos" | "windows"
-  readonly architecture: "x64" | "aarch64"
-  readonly abi?: "gnu" | "musl"
-}
-
-export interface Candidate {
-  readonly path: HostPath.Absolute
-}
-
-export interface ProduceInput<
-  Prepared,
-  Steps extends readonly [
-    BuildStepObservation,
-    ...BuildStepObservation[]
-  ],
-  PrepareError,
-  ProduceError,
-  TargetError,
-  PrepareRequirements,
-  ProduceRequirements
-> {
-  readonly outfile: string
-  readonly cwd?: string
-  readonly digest?: boolean
-  readonly executableSuffix?: "" | ".exe"
-
-  readonly prepare: () => Effect.Effect<
-    Prepared,
-    PrepareError,
-    PrepareRequirements
-  >
-
-  readonly produce: (
-    prepared: Prepared,
-    candidate: Candidate
-  ) => Effect.Effect<Steps, ProduceError, ProduceRequirements>
-
-  readonly resolveSystemTarget: (
-    observation: NativeObservation
-  ) => Effect.Effect<SystemTarget, TargetError>
-}
-
-export const produce: <
-  Prepared,
-  Steps extends readonly [
-    BuildStepObservation,
-    ...BuildStepObservation[]
-  ],
-  PrepareError,
-  ProduceError,
-  TargetError,
-  PrepareRequirements,
-  ProduceRequirements
->(
-  input: ProduceInput<
-    Prepared,
-    Steps,
-    PrepareError,
-    ProduceError,
-    TargetError,
-    PrepareRequirements,
-    ProduceRequirements
-  >
-) => Effect.Effect<
-  Artifact.Executable<Steps>,
-  | PrepareError
-  | ProduceError
-  | TargetError
-  | OutputMissing
-  | OutputInvalid
-  | OutputLocked
-  | PublicationFailed,
-  | FileSystem.FileSystem
-  | Path.Path
-  | Crypto.Crypto
-  | PrepareRequirements
-  | ProduceRequirements
->
-```
-
-### `effect-build/Author/CommandCompiler`
-
-```ts
-export interface CompileExecutableInput<
-  Options,
-  Target extends SystemTarget
-> {
-  readonly entrypoint: string
-  readonly outfile: string
-  readonly cwd?: string
-  readonly target?: Target
-  readonly digest?: boolean
-  readonly options?: Options
-}
-
-export interface CompileExecutableMatrixInput<
-  Options,
-  Target extends SystemTarget
-> {
-  readonly entrypoint: string
-  readonly outdir: string
-  readonly name: string
-  readonly targets: readonly [Target, ...Target[]]
-  readonly cwd?: string
-  readonly digest?: boolean
-  readonly concurrency?: number
-  readonly options?: Options
-}
-
-export interface ServiceContext<
-  Name extends string,
-  Options,
-  Target extends SystemTarget,
-  Steps extends readonly [
-    BuildStepObservation,
-    ...BuildStepObservation[]
-  ]
-> {
-  readonly command: Command.Selected<Name>
-  readonly compileExecutable: (
-    input: CompileExecutableInput<Options, Target>
-  ) => Effect.Effect<Artifact.Executable<Steps>, CommandCompilerBuildError>
-  readonly compileExecutableMatrix: (
-    input: CompileExecutableMatrixInput<Options, Target>
-  ) => Effect.Effect<
-    readonly Artifact.Executable<Steps>[],
-    CommandCompilerMatrixError
-  >
-}
-
-export interface Definition<
-  Self,
-  Name extends string,
-  Options,
-  Validated,
-  Target extends SystemTarget,
-  Steps extends readonly [
-    BuildStepObservation,
-    ...BuildStepObservation[]
-  ],
-  Service,
-  MakeError,
-  MakeRequirements
-> {
-  readonly name: Name
-  readonly tag: Context.Service<Self, Service>
-  readonly tool: Command.ToolSpecification<Name>
-  readonly targets: readonly [Target, ...Target[]]
-  readonly defaultTarget?: Target
-  readonly validateOptions: (
-    input: unknown
-  ) => Result.Result<Validated, InvalidCompilerOptions>
-  readonly renderArgv: (
-    input: {
-      readonly entrypoint: string
-      readonly target?: Target
-      readonly options: Validated
-    },
-    stagedOutfile: HostPath.Absolute
-  ) => readonly string[]
-  readonly interpretFailure: (
-    completion: Command.Completion
-  ) => CommandCompilerToolFailed
-  readonly steps: (
-    tool: Command.Selected<Name>["tool"]
-  ) => Steps
-  readonly makeService: (
-    context: ServiceContext<Name, Options, Target, Steps>
-  ) => Effect.Effect<Service, MakeError, MakeRequirements>
-}
-
-export const define: <
-  Self,
-  const Name extends string,
-  Options,
-  Validated,
-  Target extends SystemTarget,
-  Steps extends readonly [
-    BuildStepObservation,
-    ...BuildStepObservation[]
-  ],
-  Service,
-  MakeError,
-  MakeRequirements
->(
-  definition: Definition<
-    Self,
-    Name,
-    Options,
-    Validated,
-    Target,
-    Steps,
-    Service,
-    MakeError,
-    MakeRequirements
-  >
-) => Defined<
-  Self,
-  Options,
-  Target,
-  Steps,
-  ToolNotFound | ToolProbeFailed | MakeError,
-  | ChildProcessSpawner.ChildProcessSpawner
-  | FileSystem.FileSystem
-  | Path.Path
-  | Crypto.Crypto
-  | MakeRequirements
->
-```
-
-There is no reflection over service methods. Pure option validation preserves
-deterministic preflight before staging or child work.
-
-## Portable profile
-
-```ts
-// effect-build/Profile/SingleNodeProgram
+// effect-build/Profile/NodeMainProgram
 export interface Request {
   readonly entrypoint: string
   readonly cwd?: string
   readonly format: "esm" | "cjs"
 }
 
-export interface Borrowed<
-  Steps extends readonly BuildStepObservation[] =
-    readonly BuildStepObservation[]
-> {
-  readonly protocol: "effect-build/SingleNodeProgram@1"
+export interface Borrowed {
+  readonly protocol: "effect-build/NodeMainProgram@1"
+  readonly executionRole: "main"
   readonly format: "esm" | "cjs"
   readonly resolutionTarget: "node"
-  readonly digest: Artifact.Digest
   readonly externalImportObservations: readonly string[]
-  readonly steps: Steps
-
-  readonly withFile: <A, E, R>(
-    use: (file: {
-      readonly path: HostPath.Absolute
-      readonly bytes: number
-      readonly digest: Artifact.Digest
-    }) => Effect.Effect<A, E, R>
-  ) => Effect.Effect<
-    A,
-    BorrowedProgramExpired | E,
-    Exclude<R, Scope.Scope>
+  readonly steps: readonly BuildStepObservation[]
+  readonly file: Effect.Effect<
+    BorrowedOutput.File,
+    Expired | Changed
   >
 }
 
+export class Expired extends Data.TaggedError(
+  "NodeMainProgramExpired"
+)<{}> {}
+
+export class Changed extends Data.TaggedError(
+  "NodeMainProgramChanged"
+)<{
+  readonly reason:
+    | "missing"
+    | "not-file"
+    | "byte-count-changed"
+    | "digest-changed"
+}> {}
+
 export class Failure extends Data.TaggedError(
-  "SingleNodeProgramFailure"
+  "NodeMainProgramFailure"
 )<{
   readonly provider: string
   readonly kind:
     | "invalid-request"
     | "tool-unavailable"
+    | "tool-unsupported"
     | "build-failed"
     | "invalid-output"
     | "host-io"
@@ -935,9 +792,7 @@ export class Failure extends Data.TaggedError(
 export interface Service {
   readonly withProgram: <A, E, R>(
     request: Request,
-    use: (
-      program: Borrowed
-    ) => Effect.Effect<A, E, R>
+    use: (program: Borrowed) => Effect.Effect<A, E, R>
   ) => Effect.Effect<
     A,
     Failure | E,
@@ -948,55 +803,49 @@ export interface Service {
 export class Bundler extends Context.Service<
   Bundler,
   Service
->()("effect-build/Profile/SingleNodeProgram/Bundler") {}
+>()("effect-build/Profile/NodeMainProgram/Bundler") {}
 
 export const withProgram: Service["withProgram"] = (
   request,
   use
-) => Bundler.use((bundler) => bundler.withProgram(request, use))
+) => Bundler.use((service) => service.withProgram(request, use))
 ```
 
-## Provider profile modules
+There is one continuation. The closure-owned `file` Effect replaces the earlier
+nested `withFile` callback.
+
+### Bun adapter
 
 ```ts
-// effect-build-bun/Profile/SingleNodeProgram
+// effect-build-bun/Profile/NodeMainProgram
 export const withProgram: <A, E, R>(
-  input: SingleNodeProgram.Request,
-  use: (
-    program: SingleNodeProgram.Borrowed
-  ) => Effect.Effect<A, E, R>
+  request: NodeMainProgram.Request,
+  use: (program: NodeMainProgram.Borrowed) => Effect.Effect<A, E, R>
 ) => Effect.Effect<
   A,
-  BunSingleNodeProgramError | E,
+  BunNodeMainError | E,
   BunCommand | Exclude<R, Scope.Scope>
 >
 
 export const layer: (
-  options?: BunCommandLayerOptions
+  options?: BunCommand.LayerOptions
 ) => Layer.Layer<
-  SingleNodeProgram.Bundler,
-  SingleNodeProgram.Failure,
-  BunCommandLayerRequirements
+  NodeMainProgram.Bundler,
+  NodeMainProgram.Failure,
+  BunCommandRequirements
 >
-
-export const isBunFailure: (
-  error: SingleNodeProgram.Failure
-) => error is SingleNodeProgram.Failure & {
-  readonly provider: "bun"
-  readonly providerError: BunSingleNodeProgramError
-}
 ```
 
+### Esbuild adapter
+
 ```ts
-// effect-build-esbuild/Profile/SingleNodeProgram
+// effect-build-esbuild/Profile/NodeMainProgram
 export const withProgram: <A, E, R>(
-  input: SingleNodeProgram.Request,
-  use: (
-    program: SingleNodeProgram.Borrowed
-  ) => Effect.Effect<A, E, R>
+  request: NodeMainProgram.Request,
+  use: (program: NodeMainProgram.Borrowed) => Effect.Effect<A, E, R>
 ) => Effect.Effect<
   A,
-  EsbuildSingleNodeProgramError | E,
+  EsbuildNodeMainError | E,
   | EsbuildApi
   | FileSystem.FileSystem
   | Path.Path
@@ -1005,94 +854,274 @@ export const withProgram: <A, E, R>(
 >
 
 export const layer: Layer.Layer<
-  SingleNodeProgram.Bundler,
-  SingleNodeProgram.Failure,
+  NodeMainProgram.Bundler,
+  NodeMainProgram.Failure,
   FileSystem.FileSystem | Path.Path | Crypto.Crypto
 >
+```
 
-export const isEsbuildFailure: (
-  error: SingleNodeProgram.Failure
-) => error is SingleNodeProgram.Failure & {
-  readonly provider: "esbuild"
-  readonly providerError: EsbuildSingleNodeProgramError
+Direct adapter functions retain exact provider errors. Profile Layers normalize
+only provider-owned failures and retain exact provider error identity.
+
+## Profile: `NodeMainExecutable`
+
+### Core module
+
+```ts
+// effect-build/Profile/NodeMainExecutable
+export type Main =
+  | {
+      readonly _tag: "File"
+      readonly path: string
+      readonly format: "commonjs" | "module"
+    }
+  | {
+      readonly _tag: "Bytes"
+      readonly contents: Uint8Array
+      readonly format: "commonjs" | "module"
+      readonly sourceName?: string
+    }
+
+export interface Request {
+  readonly main: Main
+  readonly outfile: string
+  readonly cwd?: string
+  readonly systemTarget?: SystemTarget
+  readonly digest?: boolean
+}
+
+export class Failure extends Data.TaggedError(
+  "NodeMainExecutableFailure"
+)<{
+  readonly provider: string
+  readonly kind:
+    | "invalid-main"
+    | "tool-unavailable"
+    | "tool-unsupported"
+    | "assembly-failed"
+    | "invalid-output"
+    | "target-mismatch"
+    | "publication-failed"
+  readonly diagnostics: readonly Diagnostic[]
+  readonly providerError: unknown
+}> {}
+
+export interface Service {
+  readonly createExecutable: (
+    request: Request
+  ) => Effect.Effect<
+    Artifact.Executable<{
+      readonly name: "node"
+      readonly version?: string
+    }>,
+    Failure
+  >
+}
+
+export class Assembler extends Context.Service<
+  Assembler,
+  Service
+>()("effect-build/Profile/NodeMainExecutable/Assembler") {}
+
+export const createExecutable: Service["createExecutable"] = (
+  request
+) => Assembler.use((service) => service.createExecutable(request))
+```
+
+### Node SEA adapter
+
+```ts
+// effect-build-node-sea/Profile/NodeMainExecutable
+export const layer: (
+  options?: NodeSeaCommand.LayerOptions
+) => Layer.Layer<
+  NodeMainExecutable.Assembler,
+  NodeMainExecutable.Failure,
+  NodeSeaRequirements
+>
+
+export const isNodeSeaFailure: (
+  error: NodeMainExecutable.Failure
+) => error is NodeMainExecutable.Failure & {
+  readonly provider: "node-sea"
+  readonly providerError: NodeSeaCreateError
 }
 ```
 
-Direct `withProgram` functions preserve exact provider errors. Generic Layers
-normalize construction/probe and operation errors while retaining the exact
-provider object.
+A research-only `pkg` adapter is retained as a conformance fixture and is not a
+0.4 product export.
 
-## Node SEA recipe
+## Profile: `BrowserModuleApplication`
+
+### Core module
 
 ```ts
-// effect-build-node-sea/Recipe/SingleNodeProgram
-export interface Input {
-  readonly program: SingleNodeProgram.Request
-  readonly outfile: string
+// effect-build/Profile/BrowserModuleApplication
+export interface Request {
+  readonly entryHtml: string
   readonly cwd?: string
-  readonly digest?: boolean
-  readonly targetNodeExecutable?: string
-  readonly assets?: Readonly<Record<string, string>>
-  readonly disableExperimentalSEAWarning?: boolean
-  readonly useSnapshot?: boolean
-  readonly useCodeCache?: boolean
-  readonly execArgv?: readonly string[]
-  readonly execArgvExtension?: "none" | "env" | "cli"
+  readonly minify?: boolean
 }
 
-export const createExecutable = (
-  input: Input
-): Effect.Effect<
-  Artifact.Executable,
-  SingleNodeProgram.Failure | NodeSeaCreateError,
-  SingleNodeProgram.Bundler | NodeSeaCommand
-> =>
-  SingleNodeProgram.withProgram(
-    input.program,
+export interface ManifestEntry {
+  readonly relativePath: string
+  readonly kind: "html" | "javascript" | "css" | "asset" | "source-map" | "other"
+  readonly bytes: number
+  readonly digest: Artifact.Digest
+}
+
+export interface Borrowed {
+  readonly protocol: "effect-build/BrowserModuleApplication@1"
+  readonly target: "browser"
+  readonly entryHtml: string
+  readonly manifest: readonly ManifestEntry[]
+  readonly steps: readonly BuildStepObservation[]
+  readonly files: Effect.Effect<
+    readonly BorrowedOutput.TreeEntry[],
+    Expired | Changed
+  >
+}
+
+export class Expired extends Data.TaggedError(
+  "BrowserModuleApplicationExpired"
+)<{}> {}
+
+export class Changed extends Data.TaggedError(
+  "BrowserModuleApplicationChanged"
+)<{
+  readonly relativePath: string
+  readonly reason: "missing" | "outside-root" | "digest-changed"
+}> {}
+
+export class Failure extends Data.TaggedError(
+  "BrowserModuleApplicationFailure"
+)<{
+  readonly provider: string
+  readonly kind:
+    | "invalid-request"
+    | "tool-unavailable"
+    | "tool-unsupported"
+    | "build-failed"
+    | "invalid-manifest"
+    | "missing-reference"
+    | "host-io"
+  readonly diagnostics: readonly Diagnostic[]
+  readonly providerError: unknown
+}> {}
+
+export interface Service {
+  readonly withApplication: <A, E, R>(
+    request: Request,
+    use: (application: Borrowed) => Effect.Effect<A, E, R>
+  ) => Effect.Effect<
+    A,
+    Failure | E,
+    Exclude<R, Scope.Scope>
+  >
+}
+
+export class Builder extends Context.Service<
+  Builder,
+  Service
+>()("effect-build/Profile/BrowserModuleApplication/Builder") {}
+```
+
+The profile requires every emitted local HTML reference to resolve inside the
+manifest. It covers CSS/assets reachable through the script module graph, not
+arbitrary top-level linked resources.
+
+### Bun adapter
+
+```ts
+// effect-build-bun/Profile/BrowserModuleApplication
+export const layer: (
+  options?: BunCommand.LayerOptions
+) => Layer.Layer<
+  BrowserModuleApplication.Builder,
+  BrowserModuleApplication.Failure,
+  BunCommandRequirements
+>
+```
+
+### Deno adapter
+
+```ts
+// effect-build-deno/Profile/BrowserModuleApplication
+export const layer: (
+  options?: DenoCommand.LayerOptions
+) => Layer.Layer<
+  BrowserModuleApplication.Builder,
+  BrowserModuleApplication.Failure,
+  DenoCommandRequirements
+>
+```
+
+Both adapters use command lanes to preserve child termination.
+
+## Core recipe: `NodeSourceExecutable`
+
+```ts
+// effect-build/Recipe/NodeSourceExecutable
+export interface Request {
+  readonly program: NodeMainProgram.Request
+  readonly outfile: string
+  readonly cwd?: string
+  readonly systemTarget?: SystemTarget
+  readonly digest?: boolean
+}
+
+export const createExecutable: (
+  request: Request
+) => Effect.Effect<
+  Artifact.Executable<{
+    readonly name: "node"
+    readonly version?: string
+  }>,
+  NodeMainProgram.Failure | NodeMainExecutable.Failure,
+  NodeMainProgram.Bundler | NodeMainExecutable.Assembler
+> = (request) =>
+  NodeMainProgram.withProgram(
+    request.program,
     (program) =>
-      program.withFile((file) =>
-        NodeSeaCommand.use((nodeSea) =>
-          nodeSea.createExecutable({
-            main: {
-              _tag: "File",
-              path: file.path,
-              format: program.format === "esm" ? "module" : "commonjs"
-            },
-            outfile: input.outfile,
-            ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-            ...(input.digest === undefined ? {} : { digest: input.digest }),
-            ...(input.targetNodeExecutable === undefined
-              ? {}
-              : { targetNodeExecutable: input.targetNodeExecutable }),
-            ...(input.assets === undefined ? {} : { assets: input.assets }),
-            ...(input.disableExperimentalSEAWarning === undefined
-              ? {}
-              : {
-                  disableExperimentalSEAWarning:
-                    input.disableExperimentalSEAWarning
-                }),
-            ...(input.useSnapshot === undefined
-              ? {}
-              : { useSnapshot: input.useSnapshot }),
-            ...(input.useCodeCache === undefined
-              ? {}
-              : { useCodeCache: input.useCodeCache }),
-            ...(input.execArgv === undefined
-              ? {}
-              : { execArgv: input.execArgv }),
-            ...(input.execArgvExtension === undefined
-              ? {}
-              : { execArgvExtension: input.execArgvExtension })
-          })
-        )
+      Effect.flatMap(program.file, (file) =>
+        NodeMainExecutable.createExecutable({
+          main: {
+            _tag: "File",
+            path: file.path,
+            format: program.format === "esm" ? "module" : "commonjs"
+          },
+          outfile: request.outfile,
+          ...(request.cwd === undefined ? {} : { cwd: request.cwd }),
+          ...(request.systemTarget === undefined
+            ? {}
+            : { systemTarget: request.systemTarget }),
+          ...(request.digest === undefined
+            ? {}
+            : { digest: request.digest })
+        })
       )
   )
 ```
 
-## Complete substitution example
+The recipe selects no producer and no assembler.
+
+## Complete provider-neutral usage
+
+### Node executable
 
 ```ts
-const build = NodeSeaRecipe.createExecutable({
+import { Effect } from "effect"
+import { NodeServices } from "@effect/platform-node"
+import * as BunNodeMain from
+  "effect-build-bun/Profile/NodeMainProgram"
+import * as EsbuildNodeMain from
+  "effect-build-esbuild/Profile/NodeMainProgram"
+import * as NodeSeaAssembler from
+  "effect-build-node-sea/Profile/NodeMainExecutable"
+import * as NodeSourceExecutable from
+  "effect-build/Recipe/NodeSourceExecutable"
+
+const program = NodeSourceExecutable.createExecutable({
   program: {
     entrypoint: "src/main.ts",
     format: "esm"
@@ -1101,201 +1130,314 @@ const build = NodeSeaRecipe.createExecutable({
   digest: true
 })
 
-const withBun = build.pipe(
-  Effect.provide(BunSingleNodeProgram.layer()),
-  Effect.provide(NodeSeaCommand.layer()),
+const withBun = program.pipe(
+  Effect.provide(BunNodeMain.layer()),
+  Effect.provide(NodeSeaAssembler.layer()),
   Effect.provide(NodeServices.layer)
 )
 
-const withEsbuild = build.pipe(
-  Effect.provide(EsbuildSingleNodeProgram.layer),
-  Effect.provide(NodeSeaCommand.layer()),
+const withEsbuild = program.pipe(
+  Effect.provide(EsbuildNodeMain.layer),
+  Effect.provide(NodeSeaAssembler.layer()),
   Effect.provide(NodeServices.layer)
 )
 ```
 
-The build program is unchanged; only the profile Layer changes.
-
-## Direct provider escape hatches
+### Browser application
 
 ```ts
-const bunBrowser = BunApi.use((bun) =>
-  bun.build({
-    entrypoints: ["src/client.tsx"],
-    outdir: "dist/client",
-    target: "browser",
-    splitting: true,
-    plugins: [frameworkPlugin]
-  })
-)
+import * as BrowserApplication from
+  "effect-build/Profile/BrowserModuleApplication"
+import * as BunBrowser from
+  "effect-build-bun/Profile/BrowserModuleApplication"
+import * as DenoBrowser from
+  "effect-build-deno/Profile/BrowserModuleApplication"
 
-const esbuildWatch = Effect.scoped(
-  EsbuildApi.use((esbuild) =>
-    Effect.gen(function* () {
-      const context = yield* esbuild.context({
-        entryPoints: ["src/server.ts"],
-        platform: "node",
-        bundle: true,
-        outdir: "dist/server"
-      })
-      yield* context.watch()
-      return yield* Effect.never
-    })
+const deploy = BrowserApplication.Builder.use((builder) =>
+  builder.withApplication(
+    {
+      entryHtml: "src/index.html",
+      minify: true
+    },
+    (application) =>
+      Effect.flatMap(application.files, uploadTree)
   )
 )
 
-const denoProject = DenoCommand.use((deno) =>
-  deno.compileExecutable({
-    entrypoint: ".",
-    outfile: "dist/deno-app",
-    target: "linux-x64-gnu",
-    permissions: { read: true },
-    include: ["public"],
-    engine: "v8"
-  })
-)
+const withBun = deploy.pipe(Effect.provide(BunBrowser.layer()))
+const withDeno = deploy.pipe(Effect.provide(DenoBrowser.layer()))
 ```
 
-## Package ownership, extension, migration, and exclusions
+The application logic is unchanged. Only the profile Layer changes.
 
-Core owns `Author/*`, durable observations, and the profile contract. Provider
-packages own direct Api/Command services and profile adapters. Node SEA owns the
-recipe. A new bundler exposes its direct API first and implements the profile
-only if it can satisfy the exact one-main contract.
+## Strict and override developer experience
 
-Migration:
-
-```text
-Integration               -> Author/Command + Author/TemporaryOutput
-                             + Author/Executable
-Provider                  -> Author/CommandCompiler
-withJavaScriptBundle      -> provider profile withProgram
-JavaScriptBundle.Artifact -> SingleNodeProgram.Borrowed
-Compiler services         -> explicit Api / Command services
-compileExecutable         -> provider Command module
-Node SEA live input       -> direct file/bytes + optional recipe
-```
-
-Excluded: automatic provider fallback, universal plugin API, universal output
-set, source locator, executable builder union, plans/CAS/cache/remote execution.
-
-**Verdict: selected.**
-
----
-
-# Candidate D: structural operations without application Context services
+### Strict default
 
 ```ts
-export interface Operation<in I, out O, out E, out R> {
-  readonly run: (
-    input: I
-  ) => Effect.Effect<O, E, R>
-}
-
-export interface ScopedOperation<in I, out O, out E, out R> {
-  readonly use: <A, E2, R2>(
-    input: I,
-    consume: (output: O) => Effect.Effect<A, E2, R2>
-  ) => Effect.Effect<
-    A,
-    E | E2,
-    R | Exclude<R2, Scope.Scope>
-  >
-}
-
-export type SingleNodeProgramOperation<E, R> = ScopedOperation<
-  SingleNodeProgram.Request,
-  SingleNodeProgram.Borrowed,
-  E,
-  R
->
-
-export const bunSingleNodeProgram:
-  SingleNodeProgramOperation<BunSingleNodeProgramError, BunCommand>
-
-export const esbuildSingleNodeProgram:
-  SingleNodeProgramOperation<EsbuildSingleNodeProgramError, EsbuildApi>
-```
-
-Usage passes the operation value explicitly to a higher-order helper. Core owns
-only the structural types; each provider exports a value. Migration adds a
-second representation next to direct services. Extension is easy, but provider
-errors/requirements become generic parameters throughout application helpers.
-
-Falsifier: Layer selection is part of the intended reusable application model.
-Plan 038 demonstrated unchanged application code under Bun/Esbuild Layers.
-
-**Verdict: coherent but incomplete.** Structural forms may be private helpers,
-but they do not replace the public service.
-
----
-
-# Candidate E: generalized transformation algebra
-
-```ts
-export interface Transformation<in I, out O, out E, out R> {
-  readonly name: string
-  readonly execute: (
-    input: I
-  ) => Effect.Effect<O, E, R>
-}
-
-export interface BorrowingTransformation<in I, out O, out E, out R> {
-  readonly name: string
-  readonly use: <A, E2, R2>(
-    input: I,
-    consume: (output: O) => Effect.Effect<A, E2, R2>
-  ) => Effect.Effect<
-    A,
-    E | E2,
-    R | Exclude<R2, Scope.Scope>
-  >
-}
-
-export const composeBorrowing = <
-  I,
-  Middle,
-  Output,
-  E1,
-  E2,
-  R1,
-  R2
->(
-  first: BorrowingTransformation<I, Middle, E1, R1>,
-  second: Transformation<Middle, Output, E2, R2>
-): Transformation<I, Output, E1 | E2, R1 | R2> => ({
-  name: `${first.name} -> ${second.name}`,
-  execute: (input) =>
-    first.use(input, (middle) => second.execute(middle))
+const layer = BunCommand.layer({
+  executable: "/opt/bun-1.4.0/bin/bun"
 })
 ```
 
-Every direct provider method gains a parallel transformation object. Core owns
-the algebra and composition helpers. A new provider wraps each operation again.
-Migration therefore creates a second representation for every current verb.
+If 1.4.0 is outside the package's tested range, Layer construction fails before
+build output is touched:
 
-Falsifier: the algebra must remove semantic branches or invalid states that
-Effect functions, services, Layers, Scope, Stream, and `Effect.gen` cannot
-already express. It does not.
+```ts
+new ToolVersionUnsupported({
+  provider: "bun",
+  lane: "command",
+  observed: "1.4.0",
+  testedRange: {
+    minimum: "1.3.9",
+    maximum: "1.3.14"
+  },
+  knownIncompatible: false,
+  missingCapabilities: [],
+  remediation: "enable-untested-version-override"
+})
+```
 
-**Verdict: rejected because maintenance and conceptual cost exceed the
-complexity removed.**
+The user sees the observed version, supported range, required capability, and
+exact remediation. No older Bun is installed or selected automatically.
 
----
+### Explicit untested override
 
-# Comparison and recommendation
+```ts
+const layer = BunCommand.layer({
+  executable: "/opt/bun-1.4.0/bin/bun",
+  allowUntestedVersion: true
+})
+```
 
-| Candidate | Provider breadth | Layer substitution | Error/option fidelity | Scoped resources | Principal cost |
-|---|---|---|---|---|---|
-| A. Provider-native only | Full | No | Full | Full | Omits valid generic role |
-| B. Root Node profile | Narrow | Yes | Direct escape only | Profile-focused | Excludes major capabilities |
-| C. Native + profiles/recipes | Full | Yes where truthful | Full direct, normalized profile | Full | More modules/work |
-| D. Structural operations | Full | Explicit values | Full | Possible | Weak discovery/pervasive generics |
-| E. Transform algebra | Syntactically full | Via wrappers | Duplicated | Possible | Second build language/role erasure |
+The Layer:
 
-Implement Candidate C.
+- runs all required capability probes;
+- rejects known-incompatible or missing-capability versions anyway;
+- emits a structured `ToolVersionUntestedOverride` warning;
+- records:
 
-Plan 039 establishes `Author/*` and telemetry without changing 0.3 behavior.
-Provider-native lanes then proceed independently. SingleNodeProgram and the Node
-SEA recipe land only after Bun and Esbuild direct APIs exist, making the profile
-visibly an adapter rather than either provider's canonical API.
+```ts
+{
+  name: "bun",
+  version: "1.4.0",
+  path: observedPath,
+  compatibility: "untested-override",
+  testedRange: {
+    minimum: "1.3.9",
+    maximum: "1.3.14"
+  }
+}
+```
+
+- retains ordinary command, cleanup, target, and publication validation.
+
+## Lifecycle API prototypes and decisions
+
+### Prototype 1: one `Effect`
+
+Use for one-shot host APIs, one-shot commands, direct provider writes, durable
+single-file publication, executable assembly, and matrix operations.
+
+```ts
+Effect.Effect<Result, Error>
+```
+
+This shape is rejected for long-lived contexts because it cannot represent
+ready/rebuild/release ownership without returning a handle.
+
+### Prototype 2: scoped handle
+
+Use for provider contexts and future incremental roles.
+
+```ts
+Effect.Effect<Handle, Error, Scope.Scope>
+```
+
+The handle exposes only provider-stable operations. Scope owns release. Raw
+manual `dispose` remains hidden when release must be exactly once.
+
+### Prototype 3: `Stream<Event, E, Scope>`
+
+Use only when the provider supplies stable event boundaries. It is rejected for
+Bun/Deno command watch in 0.4 because the tested CLI surfaces exposed human
+terminal output, not a machine event protocol.
+
+### Prototype 4: continuation ownership
+
+Use for borrowed files and trees.
+
+```ts
+withRole(request, (borrowed) => Effect<A, E, R>)
+```
+
+This is the only shape that makes producer-owned cleanup explicit without
+pretending TypeScript values are linear.
+
+### Prototype 5: opaque scoped process capability
+
+```ts
+interface OpaqueWatchSession {
+  readonly logs: Stream.Stream<{
+    readonly channel: "stdout" | "stderr"
+    readonly bytes: Uint8Array
+  }>
+  readonly exit: Effect.Effect<{
+    readonly exitCode: number
+    readonly signal?: string
+  }>
+}
+```
+
+This is coherent but rejected as a 0.4 provider API because it adds no invariant
+over official Effect process handles. A future provider-specific session must
+add truthful readiness/rebuild/diagnostic semantics.
+
+## Command-watch contract decision
+
+The following cross-provider event union is rejected:
+
+```ts
+// Rejected
+export type WatchEvent<Output> =
+  | { readonly _tag: "Ready" }
+  | { readonly _tag: "Rebuilt"; readonly output: Output }
+  | { readonly _tag: "Diagnostics"; readonly diagnostics: readonly Diagnostic[] }
+  | { readonly _tag: "Exited"; readonly exitCode: number }
+```
+
+Bun and Deno did not expose stable parseable boundaries for these events.
+Telemetry does not supply missing application semantics.
+
+0.4 therefore specifies:
+
+- no public Bun/Deno command watch method;
+- direct one-shot command build/bundle only;
+- integration authors may use `Author/Tool` plus official Effect
+  `ChildProcess`;
+- future watch support requires provider-specific real-tool conformance for
+  readiness, rebuild sequence, diagnostics, unexpected exit, cancellation, and
+  force-kill.
+
+## Valid but deferred `IncrementalNodeMain`
+
+The exact future profile can use:
+
+```ts
+export interface Session {
+  readonly rebuild: Effect.Effect<
+    NodeMainProgram.Borrowed,
+    IncrementalNodeMainFailure
+  >
+}
+
+export interface Service {
+  readonly context: (
+    request: NodeMainProgram.Request
+  ) => Effect.Effect<
+    Session,
+    IncrementalNodeMainFailure,
+    Scope.Scope
+  >
+}
+```
+
+Esbuild and Rolldown research adapters conformed. It is not exported in 0.4
+because no Rolldown integration package ships in the cut. This is release
+sequencing, not architectural invalidity.
+
+## Public primitive falsification summary
+
+### Rejected public `Author/Command`
+
+Official Effect already defines:
+
+- command/argv/cwd/env/shell policy;
+- stdout/stderr as streams or sinks;
+- scoped child handles;
+- exit status;
+- signals;
+- force-kill timeout;
+- platform-specific spawner Layers.
+
+The only additional cross-provider invariant is selected-tool compatibility,
+which is isolated in `Author/Tool`. Provider-specific bounded capture can remain
+private.
+
+### Rejected public `Author/CommandCompiler`
+
+A prototype definition necessarily carried:
+
+- provider option decoder;
+- provider target table;
+- provider argv renderer;
+- provider failure interpreter;
+- provider service tag and constructor;
+- scalar/matrix policy.
+
+It did not eliminate any state beyond Tool selection, provider validation, and
+Executable publication. It also failed to describe provider build output sets,
+watch, Esbuild contexts, or Node assembly. It is a package-private convenience,
+not a public author law.
+
+## Rejected API alternatives
+
+### Earlier double continuation
+
+```ts
+// Rejected
+withProgram(request, (program) =>
+  program.withFile((file) => use(file))
+)
+```
+
+Law tests showed that a raw path can still escape the inner callback and becomes
+unusable only because the outer producer later deletes it. The inner callback
+did not add lifetime ownership. A closure-owned file Effect preserves the
+important re-observation and expiry laws with one callback.
+
+### Universal executable producer
+
+```ts
+// Rejected
+interface ExecutableProducer {
+  readonly produce: (
+    request: {
+      readonly entrypoint: string
+      readonly runtime: "node" | "bun" | "deno"
+      readonly permissions?: unknown
+    }
+  ) => Effect.Effect<Artifact.Executable, Error>
+}
+```
+
+The union hides incompatible authority and runtime products. Real Bun and Deno
+executables ran different embedded runtimes. Node SEA consumes a bundled main,
+not source/project authority.
+
+### Generic declaration output set
+
+Rejected because one rolled-up declaration and a module declaration tree are
+not the same output topology. Deno's tested rollup also retained an unresolved
+local import.
+
+### Generic command-watch stream
+
+Rejected because provider terminal prose did not provide stable events.
+
+## 0.3 to C2 migration summary
+
+```text
+Integration               -> Author/Tool + Author/BorrowedOutput
+                             + Author/Executable + official Effect process APIs
+Provider                  -> no public replacement; provider-private helpers
+withJavaScriptBundle      -> provider NodeMainProgram adapter
+JavaScriptBundle.Artifact -> NodeMainProgram.Borrowed
+SingleNodeProgram         -> NodeMainProgram
+Compiler services         -> permanent explicit Api / Command services
+compileExecutable         -> provider Command module
+Node SEA live input       -> direct file/bytes + NodeMainExecutable profile
+Node SEA recipe           -> core Recipe/NodeSourceExecutable
+```
+
+No compatibility aliases are proposed for the pre-1.0 hard cut.

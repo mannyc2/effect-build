@@ -1,96 +1,124 @@
-# Plan 039: Establish core author capabilities and observability
+# Plan 039: Establish core tool, borrowed-output, and executable laws
 
 ## Status
 
 - Priority: P0 architecture foundation
 - Effort: XL
-- Risk: HIGH shared lifecycle and integration-author API
-- Depends on: approval of the post-0.3 architecture decision
-- Architecture commit: `e23722e81fa651c1540c8aa72e2703ff62ac609b`
+- Risk: HIGH lifecycle, compatibility, and integration-author API
+- Depends on: approval of the revised C2 architecture decision
+- Research evidence: `research/post-0.3/`
 - Status: TODO
+- Publication authority: NONE
 
 ## Objective
 
-Refactor the released core mechanisms into precise integration-author
-capabilities without changing 0.3 behavior:
+Refactor released 0.3 internals into three precise public integration-author
+capabilities without changing released behavior:
 
 ```text
-effect-build/Author/Command
-effect-build/Author/TemporaryOutput
+effect-build/Author/Tool
+effect-build/Author/BorrowedOutput
 effect-build/Author/Executable
-effect-build/Author/CommandCompiler
 ```
 
-Add native Effect tracing and logging contracts. Do not add provider-native
-features, SingleNodeProgram, the final 0.4 export map, publication, tags, or a
-release.
+Also establish shared durable/runtime observations, provider-owned tool-version
+compatibility vocabulary, and exporter-neutral Effect telemetry.
 
-This is the first implementation PR. Plans 040, 041, and 042 may proceed
-independently after it.
+Do not add provider-native build features, profiles, recipes, final 0.4 exports,
+package publication, tags, releases, or merges.
+
+This plan deliberately does **not** publish the earlier proposed
+`Author/Command` or `Author/CommandCompiler` modules.
 
 ## Baseline and drift check
 
 Before editing:
 
-1. verify the implementation branch descends from `v0.3.0` source
+1. verify ancestry from released source
    `f06f96ca88b6278e5f23a898d758b99fa9322108`;
-2. verify the release-line base is not stale `main`;
+2. verify the implementation branch descends from the release-line base rather
+   than stale `main`;
 3. record the exact parent SHA;
-4. freeze current 0.3 runtime keys, declarations, errors, and lifecycle tests as
-   characterization evidence;
-5. stop if unrelated production changes overlap the same internals.
+4. freeze 0.3 runtime keys, declaration keys, errors, target tables, lifecycle
+   tests, and packed consumers;
+5. read the executable research receipts and reproduce the law tests;
+6. stop if unrelated production changes overlap process, temporary-root,
+   publication, or provider-definition internals.
 
-## Current problem
+## Architectural correction
 
-`effect-build/Integration` currently combines bounded command execution,
-temporary-root ownership, live-bundle inspection, cleanup/publication overlap
-claims, executable staging, native inspection, hashing, and atomic rename.
+### Use official Effect process APIs directly
 
-`effect-build/Provider` is specifically a selected-command source-to-executable
-compiler factory, but its name suggests every provider and it reflectively
-assumes every additional service function returns an Effect.
+Official Effect `ChildProcess` already owns:
 
-The selected architecture needs independently named authorities. It does not
-need a general executor or provider registry.
+- command and argv construction;
+- cwd/environment/shell policy;
+- stdout/stderr streams and sinks;
+- scoped child handles;
+- exit status;
+- signals and force-kill timeout;
+- host-specific spawner Layers.
 
-## Target modules
+Core must not create a second public process API. Existing bounded command
+capture may remain package-private while 0.3 delegates exist.
 
-### `Author/Command`
+### No public command-compiler factory
 
-Provide selected tool discovery plus two author-level operations:
+`Provider.define` combines Bun/Deno convenience policy rather than a stable
+cross-provider law. Its reusable parts are selected-tool compatibility,
+provider validation, and executable publication. Replace reflective wrapping
+internally, but do not publish a successor factory.
+
+## Target public modules
+
+### `Author/Tool`
+
+Own:
+
+- explicit executable or PATH selection;
+- canonical selected-path observation;
+- exact version probing;
+- provider-owned tested ranges and known-incompatible versions;
+- operation capability probes;
+- strict default and explicit untested override;
+- stable tool/build-step observations;
+- no auto-installation, fallback, or hidden substitution.
+
+Sketch:
 
 ```ts
 export interface Selected<Name extends string> {
-  readonly tool: ToolObservation<Name>
-  readonly run: (
+  readonly observation: ToolObservation<Name>
+  readonly command: (
     argv: readonly string[],
-    options?: RunOptions
-  ) => Effect.Effect<Completion, CommandExecutionError>
-  readonly start: (
-    argv: readonly string[],
-    options?: RunOptions
-  ) => Effect.Effect<Running, CommandExecutionError, Scope.Scope>
+    options?: ChildProcess.CommandOptions
+  ) => ChildProcess.Command
 }
 ```
 
-`run` preserves bounded stdout/stderr and simultaneous drain/exit observation.
-`start` supports provider-specific watch lanes with scoped streams and exit
-status. Preserve `shell: false`, explicit argv, selected path/version,
-interruption, child termination/reaping, and platform-neutral requirements.
-Expose no shell strings, automatic installation, global executor registry, or
-runtime-specific process handles.
+`command` delegates to official Effect `ChildProcess.make` with the captured
+canonical executable. It exposes no custom handle.
 
-### `Author/TemporaryOutput`
+### `Author/BorrowedOutput`
 
-Own temporary acquisition, cleanup-root registration, overlap checks,
-liveness, file mutation/digest checks, and cleanup after success, typed failure,
-defect, and interruption. The 0.3 live artifact remains only as a temporary
-migration projection until Plan 044. Temporary values are not durable or
-serializable.
+Own:
+
+- temporary files and trees;
+- cleanup-root claims;
+- destination/cleanup overlap checks;
+- root containment;
+- observed file/tree manifests;
+- liveness, byte-count, and digest checks;
+- closure-owned authority used by profiles;
+- cleanup after every callback Exit;
+- deterministic expiry after release.
+
+The implementation must support both one-file Node-main and multi-file browser
+application profiles without exposing mutable liveness tokens or root claims.
 
 ### `Author/Executable`
 
-Own:
+Own one durable single-file state machine:
 
 ```text
 prepare
@@ -99,59 +127,66 @@ prepare
 -> producer writes candidate
 -> regular/executable validation
 -> ELF/Mach-O/PE inspection
--> SystemTarget resolution
+-> runtime and SystemTarget resolution
 -> optional digest
 -> atomic rename
 ```
 
-Candidate type IDs, claim maps, parser range requests, rename implementation,
-and mutable state remain package-private. This module does not promise
-transactional publication for arbitrary multi-file output sets.
+The result includes runtime observation in addition to system target and ordered
+steps. Candidate IDs, claim maps, parser internals, and rename operations remain
+private.
 
-### `Author/CommandCompiler`
+## Shared root vocabulary
 
-Replace `Provider.define` with an explicitly command-scoped author contract.
-Requirements:
-
-- explicit Effectful `makeService`;
-- all requirements visible in the returned Layer type;
-- no reflection over service keys or function return values;
-- provider option validation remains a pure `Result` before staging/child work;
-- provider-owned targets/options;
-- scalar compilation as primitive;
-- matrices as orchestration over validated scalar cells.
-
-Bun and Deno are the repository implementations. Esbuild, Node SEA, and host API
-lanes do not implement this SPI.
-
-### Durable vocabulary
-
-Introduce internally:
+Introduce internally while retaining 0.3 projections until Plan 044:
 
 ```text
-HostPath.Absolute
-HostPath.existing
+HostPath.Observed
+HostPath.observe
+ToolCompatibility
+ToolObservation
+ToolVersionUnsupported
+ToolVersionUntestedOverride
 BuildStepObservation
 steps
 systemTarget
+Artifact.Executable.runtime
 ```
 
-Do not remove 0.3 names before Plan 044. `HostPath.existing` uses active
-Path/FileSystem services to canonicalize and verify an existing path. Do not
-add a syntax-only Schema that implies a deserialized path exists or is portable.
+`HostPath.Observed` is a point-in-time canonical host observation. There is no
+Schema decoder that pretends an arbitrary string still exists.
+
+## Compatibility contract
+
+Core supplies generic vocabulary/evaluation. Provider packages own ranges and
+capability specifications.
+
+Rules:
+
+1. selection observes exact host/package/command version;
+2. known-incompatible versions fail before output mutation;
+3. missing required capabilities fail before output mutation;
+4. untested versions fail by default;
+5. Layer-configured override emits a structured warning and records
+   `untested-override`;
+6. override never bypasses lifecycle or output validation;
+7. no operation-level fallback/install option exists.
+
+Add type and unit tests for strict, override, known-incompatible, missing
+capability, and exact observation behavior.
 
 ## Observability
 
-Use Effect tracing, annotations, and logging only. Add no direct OpenTelemetry
-dependency; exporter Layers remain application policy.
+Use Effect tracing/annotations/logging only. Add no direct OpenTelemetry
+package or exporter requirement.
 
-Author child spans:
+Stable author spans:
 
 ```text
-effect-build.command.discover
-effect-build.command.run
-effect-build.command.start
-effect-build.temporary-output.acquire
+effect-build.tool.select
+effect-build.tool.probe
+effect-build.borrowed-output.acquire
+effect-build.borrowed-output.observe
 effect-build.executable.inspect
 effect-build.executable.publish
 ```
@@ -163,49 +198,60 @@ effect_build.provider
 effect_build.lane
 effect_build.operation
 effect_build.artifact.kind
+effect_build.runtime.name
+effect_build.runtime.version
 effect_build.tool.name
 effect_build.tool.version
+effect_build.tool.compatibility
 effect_build.target.system
 effect_build.output.count
 effect_build.output.bytes
 effect_build.interruption.contract
 ```
 
-Categorical values remain bounded; count/bytes are numeric. Omit unknowns. Do
-not attach paths, argv, environment values, URLs, asset keys, plugin values,
-source snippets, or full diagnostics by default. Safe summary logs are allowed.
-Instrumentation must not alter values or Cause topology. Test with an in-memory
-Effect tracer/logger, not an OTLP collector.
+Do not attach paths, argv, environment values, URLs, asset keys, source snippets,
+plugins, or full diagnostics by default. Test with in-memory Effect tracer/logger.
 
 ## Steps
 
 1. Record parent SHA and release ancestry.
-2. Freeze 0.3 API/lifecycle behavior.
-3. Extract command discovery/run and scoped start.
-4. Extract temporary ownership/claims.
-5. Extract executable staging/inspection/publication.
-6. Introduce future durable vocabulary internally.
-7. Implement explicit `CommandCompiler.define`.
-8. Migrate Bun/Deno internals and delete reflective wrapping.
-9. Add author spans/attributes/safe logs.
-10. Keep 0.3 paths as thin unreleased migration delegates.
-11. Run the complete gate and record actual jobs.
+2. Freeze 0.3 behavior/declarations as characterization evidence.
+3. Introduce `HostPath.Observed`, runtime observations, and future names
+   internally.
+4. Extract tool selection/version/capability logic into `Author/Tool`.
+5. Refactor process callers to use official Effect `ChildProcess` through the
+   selected tool; keep bounded-capture helpers private.
+6. Extract temporary files/trees, claims, containment, manifests, and mutation
+   checks into `Author/BorrowedOutput`.
+7. Extract single-file staging/inspection/publication into
+   `Author/Executable`.
+8. Replace reflective provider-service wrapping with explicit provider-local
+   construction; do not export a generic factory.
+9. Add compatibility warnings/observations and native telemetry.
+10. Keep 0.3 `Integration`, `Provider`, artifact, and provider-root exports as
+    thin unreleased migration projections.
+11. Run full deterministic, real-tool, platform-publication, Effect endpoint,
+    law, and packed-consumer verification.
+12. Record exact source SHA, jobs, and behavior deltas (expected: none for 0.3
+    calls).
 
 ## Invariants
 
 - Core author implementations contain no provider names.
 - No integration imports a sibling.
-- Library source imports no `node:*` and calls no `Effect.runPromise`.
-- Requirements are explicit in types/Layers.
-- Scalar/matrix preflight is deterministic and performs no output or child work
-  on rejection.
-- Temporary outputs close after every callback Exit.
-- Failures, defects, interruptions, and mixed Causes remain exact.
-- Command interruption terminates/reaps active children.
-- Atomic rename remains executable publication.
-- Active temporary roots cannot capture durable destinations.
+- No library source imports `node:*` or calls `Effect.runPromise`.
+- Official Effect process handles remain the only public raw process model.
+- Tool selection captures one exact executable/version for Layer lifetime.
+- No auto-installation, fallback, or post-selection PATH substitution occurs.
+- Known-incompatible or incapable tools never reach output mutation.
+- Pure provider preflight performs no staging or child work.
+- Borrowed roots close after every callback Exit.
+- Borrowed files/trees reject expiry, escape, mutation, and digest mismatch.
+- Compatible duplicate core copies can use closure-owned borrowed authority.
+- Atomic rename remains the only executable commit.
+- Active cleanup roots cannot contain durable destinations.
 - Multi-file atomicity is not implied.
-- Telemetry is exporter-neutral and redacted.
+- Telemetry does not change typed values or Cause topology.
 - 0.3 public behavior remains unchanged until Plan 044.
 
 ## Required verification
@@ -219,25 +265,52 @@ bun run test:architecture
 bun run verify
 bun run verify:effect
 bun run verify:real
+node --test research/post-0.3/*.test.mjs
 git diff --check
 ```
 
-Focused evidence includes mixed Cause tests, command start/run, child reaping,
-claim concurrency, mutation/digest mismatch, native inspection, platform
-publication, no reflection, in-memory telemetry assertions, and unchanged packed
-consumers.
+Focused evidence:
+
+- exact process interruption/reaping and force-kill;
+- bounded simultaneous stdout/stderr/exit capture remains unchanged;
+- strict/override/known-incompatible/capability compatibility tests;
+- cleanup-root/destination concurrency;
+- borrowed file and tree containment/mutation/expiry;
+- duplicate-core closure authority;
+- ELF/Mach-O/PE inspection and runtime/system target observations;
+- Linux/macOS/Windows publication;
+- no public `Author/Command` or `Author/CommandCompiler`;
+- no reflection over arbitrary service methods;
+- telemetry names, bounded attributes, redaction, and warning behavior;
+- all current packed consumers unchanged.
 
 ## STOP conditions
 
-Stop if extraction changes any 0.3 error/Cause/cleanup/target/digest/publication
-behavior; scoped command start requires a runtime-specific process; explicit
-construction leaves hidden requirements; HostPath cannot be established from
-active services; telemetry requires OpenTelemetry or leaks sensitive values; a
-migration delegate becomes a second implementation; or branch ancestry no
-longer includes the release.
+Stop and report if:
+
+- any 0.3 error class, Cause, target, digest, cleanup, staging, or publication
+  behavior changes;
+- tool selection requires automatic installation or hidden fallback;
+- provider compatibility cannot fail before mutation;
+- official Effect process APIs cannot preserve the current interruption/reaping
+  contract without a second public handle;
+- borrowed tree containment cannot be implemented through platform-neutral
+  Effect services;
+- `HostPath.Observed` must claim continuing existence or decoding authority;
+- runtime observation cannot be stated honestly for a provider output;
+- telemetry requires OpenTelemetry or leaks sensitive values;
+- a migration projection becomes a second implementation;
+- branch ancestry no longer contains the release.
 
 ## Completion receipt
 
-Completion requires one focused implementation PR, exact source SHA, observed
-GitHub Actions jobs, and an updated receipt. Architecture review alone does not
-complete the plan.
+Record:
+
+- exact parent and implementation SHAs;
+- exact new author declarations;
+- exact private helper deletions/retentions;
+- every compatibility test/range fixture;
+- every deterministic/real/platform/Effect job and conclusion;
+- all packed consumer results;
+- confirmation that no profile, provider-native feature, release, tag, or
+  publication occurred.
