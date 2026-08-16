@@ -1,0 +1,17 @@
+{
+  "schema": "effect-build/expected-architecture-conclusions@2",
+  "claims": [
+    {
+      "receipt": "dependency-and-offline",
+      "id": "esbuild-dependency-ownership",
+      "classification": "established",
+      "conclusion": "effect-build-esbuild-owns-an-exact-esbuild-dependency-rather-than-a-peer-or-injected-api"
+    },
+    {
+      "receipt": "dependency-and-offline",
+      "id": "deno-managed-esbuild-offline",
+      "classification": "established",
+      "conclusion": "deno-bundle-manages-esbuild-acquisition-fails-empty-cached-only-before-output-and-runs-cached-only-after-acquisition"
+    }
+  ]
+}
