@@ -9,11 +9,12 @@ permissions:
 
 env:
   SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-  RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-receipts
 
 jobs:
   executable-research:
     runs-on: ubuntu-24.04
+    env:
+      RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-receipts
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
