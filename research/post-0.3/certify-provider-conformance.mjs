@@ -20,7 +20,7 @@ let result;
 try {
   await writeFile(
     denoWrapper,
-    `#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"\${1:-}\" == \"compile\" ]]; then\n  shift\n  exec \"${deno}\" compile --no-check \"$@\"\nfi\nexec \"${deno}\" \"$@\"\n`,
+    `#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"\${1:-}\" == \"eval\" ]]; then\n  version=\"$(\"${deno}\" eval 'console.log(Deno.version.deno)')\"\n  printf '{\"path\":\"%s\",\"version\":\"%s\"}\\n' \"$0\" \"$version\"\n  exit 0\nfi\nif [[ \"\${1:-}\" == \"compile\" ]]; then\n  shift\n  exec \"${deno}\" compile --no-check \"$@\"\nfi\nexec \"${deno}\" \"$@\"\n`,
   );
   await chmod(denoWrapper, 0o755);
   result = markerValue(
