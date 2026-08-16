@@ -42,19 +42,13 @@ Before editing:
 
 ## Current problem
 
-`effect-build/Integration` currently combines:
+`effect-build/Integration` currently combines bounded command execution,
+temporary-root ownership, live-bundle inspection, cleanup/publication overlap
+claims, executable staging, native inspection, hashing, and atomic rename.
 
-- bounded command execution;
-- temporary-root ownership;
-- live-bundle inspection;
-- cleanup and publication overlap claims;
-- executable staging;
-- native inspection;
-- hashing and atomic rename.
-
-`effect-build/Provider` is specifically a selected-command
-source-to-executable compiler factory, but its name suggests every provider and
-it reflectively assumes every additional service function returns an Effect.
+`effect-build/Provider` is specifically a selected-command source-to-executable
+compiler factory, but its name suggests every provider and it reflectively
+assumes every additional service function returns an Effect.
 
 The selected architecture needs independently named authorities. It does not
 need a general executor or provider registry.
@@ -63,142 +57,95 @@ need a general executor or provider registry.
 
 ### `Author/Command`
 
-Provide two author-level operations.
+Provide selected tool discovery plus two author-level operations:
 
 ```ts
 export interface Selected<Name extends string> {
   readonly tool: ToolObservation<Name>
-
   readonly run: (
     argv: readonly string[],
     options?: RunOptions
   ) => Effect.Effect<Completion, CommandExecutionError>
-
   readonly start: (
     argv: readonly string[],
     options?: RunOptions
-  ) => Effect.Effect<
-    Running,
-    CommandExecutionError,
-    Scope.Scope
-  >
+  ) => Effect.Effect<Running, CommandExecutionError, Scope.Scope>
 }
 ```
 
 `run` preserves bounded stdout/stderr and simultaneous drain/exit observation.
-`start` supports provider-specific watch lanes with scoped stdout/stderr streams
-and exit status.
-
-Preserve:
-
-- `shell: false`;
-- explicit argv;
-- selected executable path and version;
-- bounded completion output;
-- active-child signal, force-kill, and reaping behavior;
-- caller interruption as interruption;
-- platform-neutral Effect process requirements.
-
-Do not expose:
-
-- shell strings;
-- raw runtime-specific process handles;
-- automatic installation;
-- a global executor registry;
-- fallback to another command or API lane.
+`start` supports provider-specific watch lanes with scoped streams and exit
+status. Preserve `shell: false`, explicit argv, selected path/version,
+interruption, child termination/reaping, and platform-neutral requirements.
+Expose no shell strings, automatic installation, global executor registry, or
+runtime-specific process handles.
 
 ### `Author/TemporaryOutput`
 
-Own:
-
-- temporary file/directory acquisition;
-- cleanup-root registration;
-- overlap checks against protected publication destinations;
-- liveness;
-- file mutation and digest checks;
-- cleanup after success, typed failure, defect, and interruption.
-
-The 0.3 `JavaScriptBundle.Artifact` remains temporarily available through a
-migration adapter until Plan 044. New production code must use the extracted
-authority.
-
-Do not claim that a temporary value is durable or serializable.
+Own temporary acquisition, cleanup-root registration, overlap checks,
+liveness, file mutation/digest checks, and cleanup after success, typed failure,
+defect, and interruption. The 0.3 live artifact remains only as a temporary
+migration projection until Plan 044. Temporary values are not durable or
+serializable.
 
 ### `Author/Executable`
 
-Own the single-file executable lifecycle:
+Own:
 
 ```text
 prepare
 -> resolve and claim destination
--> allocate same-parent staging
+-> same-parent staging
 -> producer writes candidate
--> verify regular/executable file
--> inspect ELF/Mach-O/PE
--> resolve SystemTarget
+-> regular/executable validation
+-> ELF/Mach-O/PE inspection
+-> SystemTarget resolution
 -> optional digest
 -> atomic rename
 ```
 
-Keep package-private:
-
-- candidate type IDs;
-- claim maps and counters;
-- native parser range requests;
-- rename implementation;
-- mutable state.
-
-This module does not promise transactional publication for arbitrary
-multi-file provider outputs.
+Candidate type IDs, claim maps, parser range requests, rename implementation,
+and mutable state remain package-private. This module does not promise
+transactional publication for arbitrary multi-file output sets.
 
 ### `Author/CommandCompiler`
 
 Replace `Provider.define` with an explicitly command-scoped author contract.
-
 Requirements:
 
 - explicit Effectful `makeService`;
-- all construction requirements visible in the returned Layer type;
+- all requirements visible in the returned Layer type;
 - no reflection over service keys or function return values;
-- target authority remains provider-owned;
-- scalar compilation is the primitive;
-- matrices orchestrate validated scalar cells;
-- provider-specific options remain provider-specific.
+- provider option validation remains a pure `Result` before staging/child work;
+- provider-owned targets/options;
+- scalar compilation as primitive;
+- matrices as orchestration over validated scalar cells.
 
-Bun and Deno are the only repository implementations. Esbuild, Node SEA, and
-host API lanes do not implement this SPI.
+Bun and Deno are the repository implementations. Esbuild, Node SEA, and host API
+lanes do not implement this SPI.
 
-### Durable output vocabulary
+### Durable vocabulary
 
-Internally introduce the future 0.4 names:
+Introduce internally:
 
 ```text
-Artifact.LocalPath
+HostPath.Absolute
+HostPath.existing
 BuildStepObservation
 steps
 systemTarget
 ```
 
-Do not remove the 0.3 names before Plan 044. Migration projections must be thin
-and tested; they are not a second implementation.
+Do not remove 0.3 names before Plan 044. `HostPath.existing` uses active
+Path/FileSystem services to canonicalize and verify an existing path. Do not
+add a syntax-only Schema that implies a deserialized path exists or is portable.
 
-`Artifact.LocalPath` is constructed from canonical host observation. Do not add
-a general decoding Schema that implies a path exists or is portable.
-
-## Observability contract
+## Observability
 
 Use Effect tracing, annotations, and logging only. Add no direct OpenTelemetry
-dependency. Exporter Layers remain application policy.
+dependency; exporter Layers remain application policy.
 
-### Root spans
-
-Every public provider operation eventually uses:
-
-```text
-effect-build.<provider>.<lane>.<operation>
-```
-
-Plan 039 establishes author child spans:
+Author child spans:
 
 ```text
 effect-build.command.discover
@@ -209,9 +156,7 @@ effect-build.executable.inspect
 effect-build.executable.publish
 ```
 
-### Stable attributes
-
-Only these core low-cardinality keys are frozen in Plan 039:
+Stable keys:
 
 ```text
 effect_build.provider
@@ -226,51 +171,41 @@ effect_build.output.bytes
 effect_build.interruption.contract
 ```
 
-Rules:
-
-- omit unknown fields;
-- provider packages may add namespaced low-cardinality fields;
-- do not attach source/output paths, argv, environment values, URLs, asset keys,
-  plugin values, source snippets, or full diagnostics by default;
-- warnings/errors may add summary log events;
-- typed errors remain authoritative;
-- instrumentation must not alter results, failures, defects, or Cause topology;
-- a long-lived context is observed through setup/release and operation child
-  spans, not one unbounded span.
-
-### Verification instrumentation
-
-Use an in-memory Effect tracer/logger in tests. Verify exact span names,
-attributes, event counts, and redaction. Do not require an OTLP collector.
+Categorical values remain bounded; count/bytes are numeric. Omit unknowns. Do
+not attach paths, argv, environment values, URLs, asset keys, plugin values,
+source snippets, or full diagnostics by default. Safe summary logs are allowed.
+Instrumentation must not alter values or Cause topology. Test with an in-memory
+Effect tracer/logger, not an OTLP collector.
 
 ## Steps
 
-1. Record the exact parent SHA and release ancestry.
-2. Freeze 0.3 runtime/declaration API and lifecycle behavior.
-3. Extract selected command discovery and `run`.
-4. Add scoped command `start` without exposing raw platform handles.
-5. Extract temporary ownership and claims.
-6. Extract executable staging, inspection, and publication.
-7. Introduce internal future-name durable output vocabulary.
-8. Implement explicit `CommandCompiler.define`.
-9. Migrate Bun/Deno internals and delete reflective service wrapping.
-10. Add author-operation spans, attributes, and safe summary logs.
-11. Keep 0.3 public paths as thin unreleased migration delegates.
-12. Run the full gate and record observed workflow jobs.
+1. Record parent SHA and release ancestry.
+2. Freeze 0.3 API/lifecycle behavior.
+3. Extract command discovery/run and scoped start.
+4. Extract temporary ownership/claims.
+5. Extract executable staging/inspection/publication.
+6. Introduce future durable vocabulary internally.
+7. Implement explicit `CommandCompiler.define`.
+8. Migrate Bun/Deno internals and delete reflective wrapping.
+9. Add author spans/attributes/safe logs.
+10. Keep 0.3 paths as thin unreleased migration delegates.
+11. Run the complete gate and record actual jobs.
 
 ## Invariants
 
-- No provider name appears in core author implementations.
-- No integration imports a sibling integration.
-- No library source imports `node:*` or calls `Effect.runPromise`.
-- Provider requirements are explicit in types and Layers.
+- Core author implementations contain no provider names.
+- No integration imports a sibling.
+- Library source imports no `node:*` and calls no `Effect.runPromise`.
+- Requirements are explicit in types/Layers.
+- Scalar/matrix preflight is deterministic and performs no output or child work
+  on rejection.
 - Temporary outputs close after every callback Exit.
-- Caller failures, defects, interruption, and mixed Causes remain exact.
-- Command interruption terminates and reaps active children.
-- Atomic rename remains the durable executable publication point.
-- A destination beneath an active temporary root is rejected.
-- Multi-file output atomicity is not implied.
-- Telemetry is exporter-neutral and redacts high-cardinality/sensitive values.
+- Failures, defects, interruptions, and mixed Causes remain exact.
+- Command interruption terminates/reaps active children.
+- Atomic rename remains executable publication.
+- Active temporary roots cannot capture durable destinations.
+- Multi-file atomicity is not implied.
+- Telemetry is exporter-neutral and redacted.
 - 0.3 public behavior remains unchanged until Plan 044.
 
 ## Required verification
@@ -287,37 +222,22 @@ bun run verify:real
 git diff --check
 ```
 
-Focused evidence:
-
-- mixed Fail/Interrupt and Fail/Die Cause tests;
-- command start/run success and failure;
-- active child interruption/reaping;
-- cleanup-root/destination claim concurrency;
-- temporary file mutation and digest mismatch;
-- native ELF/Mach-O/PE inspection;
-- platform publication and rename point-of-no-return;
-- provider definition with additional Effect methods and requirements;
-- no reflective wrapping;
-- in-memory tracer/logger assertions;
-- all current packed consumers unchanged.
+Focused evidence includes mixed Cause tests, command start/run, child reaping,
+claim concurrency, mutation/digest mismatch, native inspection, platform
+publication, no reflection, in-memory telemetry assertions, and unchanged packed
+consumers.
 
 ## STOP conditions
 
-Stop and report if:
-
-- extracting a module changes any 0.3 error class, Cause, cleanup, target,
-  digest, staging, or publication behavior;
-- `Command.start` requires exposing a runtime-specific process value;
-- explicit service construction cannot replace reflection without a hidden
-  requirement;
-- `Artifact.LocalPath` cannot be constructed from the active Path/FileSystem
-  authority;
-- telemetry requires OpenTelemetry or logs sensitive/high-cardinality values;
-- a migration delegate becomes a second implementation;
-- the branch is not a descendant of the released source.
+Stop if extraction changes any 0.3 error/Cause/cleanup/target/digest/publication
+behavior; scoped command start requires a runtime-specific process; explicit
+construction leaves hidden requirements; HostPath cannot be established from
+active services; telemetry requires OpenTelemetry or leaks sensitive values; a
+migration delegate becomes a second implementation; or branch ancestry no
+longer includes the release.
 
 ## Completion receipt
 
 Completion requires one focused implementation PR, exact source SHA, observed
-GitHub Actions jobs, and an updated plan receipt. Architecture review alone does
-not mark this plan complete.
+GitHub Actions jobs, and an updated receipt. Architecture review alone does not
+complete the plan.

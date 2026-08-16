@@ -1,16 +1,16 @@
 # Post-0.3 native-capability architecture
 
-Status: selected architecture for review. This document is prescriptive. It
-does not authorize production implementation, publication, or a 0.4 release.
+Status: final selected architecture for review. This document is prescriptive.
+It does not authorize production implementation, publication, tagging, release,
+or merge.
 
 Baseline:
 
 - released source: `v0.3.0` at
   `f06f96ca88b6278e5f23a898d758b99fa9322108`;
-- release-line base:
-  `codex/granular-integration-program` at
+- release-line base: `codex/granular-integration-program` at
   `15c811bb9904142a33d119766b62082f3c689f13`;
-- implementation work must descend from that release line, not stale `main`.
+- implementation must descend from that release line, not stale `main`.
 
 Companion evidence:
 
@@ -31,111 +31,107 @@ provider-native Effect APIs
 ```
 
 Provider-native capability is primary. Portable profiles are first-class but
-narrow. They are not the ontology of every build tool.
+narrow. The selected model is Candidate C in the API comparison.
 
-The selected model is Candidate C in the companion API comparison.
-
-## Governing product thesis
+## Product thesis
 
 > `effect-build` provides rich, Effect-native access to the real build
 > capabilities of Bun, Deno, Esbuild, Node SEA, and future integrations, while
 > adding portable composition only where it preserves provider semantics.
 
-This implies all of the following:
+Consequences:
 
-- Bun browser builds, Bun-runtime executables, plugins, virtual files, HTML,
-  CSS, assets, and output sets remain Bun capabilities.
-- Deno bundle, declarations, permissions, project compilation, runtime
+- Bun browser/Bun/Node builds, plugins, virtual files, HTML, CSS, assets,
+  output sets, and Bun-runtime executables remain Bun capabilities.
+- Deno bundles, declarations, permissions, project compilation, runtime
   acquisition, engine choice, and Deno-runtime executables remain Deno
   capabilities.
-- Esbuild build, transform, plugins, metafiles, rebuild, watch, and serve remain
-  Esbuild capabilities.
-- Node SEA remains an assembler for one already-bundled main.
-- One valid portable profile does not erase these richer roles.
+- Esbuild build, transform, plugins, loaders, metafiles, rebuild, watch, and
+  serve remain Esbuild capabilities.
+- Node SEA remains an assembler over one already-bundled main.
+- A valid portable profile does not replace richer direct operations.
 - Similar output kinds do not justify a universal `ExecutableBuilder`.
 
-## Product boundary
-
-0.4 is an integration and composition library. It is not:
-
-- a build graph engine;
-- a provider registry;
-- a fallback selector;
-- a universal plugin API;
-- a remote executor;
-- a content-addressed store;
-- a cache coordinator;
-- a serializable plan language;
-- a reproducibility or provenance system;
-- a release coordinator.
-
-No CAS, remote execution, cache, plan, or durable receipt is required to expose
-provider capabilities truthfully.
+0.4 is not a build graph engine, provider registry, fallback selector, plugin
+standard, remote executor, CAS, cache coordinator, serializable plan language,
+provenance system, or release coordinator.
 
 ## Diagnosis of 0.3
 
-0.3 proved important mechanics:
+0.3 proved valuable mechanics:
 
 - five one-way packages;
-- Effect host, selected tool, and output target are independent;
-- selected command discovery and probing;
-- exact typed failures;
-- child interruption and reaping;
-- continuation-owned temporary JavaScript output;
-- native ELF/Mach-O/PE inspection;
-- staged single-file publication and atomic rename;
-- Bun and Esbuild composition with Node SEA;
-- caller failure, defect, and mixed Cause preservation.
+- Effect host, selected tool, and target are independent;
+- tool discovery/probing;
+- typed failure channels;
+- child interruption/reaping;
+- continuation-owned temporary output;
+- ELF/Mach-O/PE inspection;
+- same-parent executable staging and atomic rename;
+- Bun/Esbuild -> Node SEA composition;
+- exact callback Fail/Interrupt/Die Cause preservation.
 
-Its public model is narrower than the intended product:
+Its public ontology is narrower than the intended product:
 
 - Bun is mainly a command compiler plus one fixed Node profile;
-- Deno is only a compile-command subset;
-- Esbuild is only a fixed Node profile;
-- Node SEA directly requires the current core live-bundle representation;
+- Deno exposes only a compile subset;
+- Esbuild exposes only a fixed Node profile;
+- Node SEA directly requires the current live-bundle representation;
 - `Integration` mixes command, temporary ownership, validation, and
   publication;
-- `Provider` means a command source-compiler factory, not every provider;
-- `JavaScriptBundle.Artifact` uses durable language for a borrowed resource.
+- `Provider` names a command source-compiler factory as though it described all
+  integrations;
+- `JavaScriptBundle.Artifact` gives durable language to a borrowed resource.
 
-0.4 preserves the mechanics and replaces the accidental boundaries.
+0.4 preserves the mechanics and corrects those boundaries.
 
 ## Domain model
 
 ### Provider-native operations
 
-A provider-native operation preserves the provider's actual input authority,
+A provider-native operation preserves the provider's real input authority,
 output topology, options, diagnostics, and resource semantics.
 
 Examples:
 
 ```text
-Bun.BuildConfig -> Bun.BuildOutput
-Deno.bundle.Options -> Deno.bundle.Result
-esbuild.BuildOptions -> esbuild.BuildResult
-esbuild.TransformOptions -> esbuild.TransformResult
-esbuild.BuildOptions -> scoped Esbuild context
-Deno command compile request -> Deno executable
-Node SEA main/config -> Node executable
+Bun BuildConfig          -> Bun BuildOutput
+Deno bundle options      -> Deno bundle result
+Esbuild BuildOptions     -> BuildResult
+Esbuild TransformOptions -> TransformResult
+Esbuild BuildOptions     -> scoped BuildContext
+Deno command compile     -> Deno executable
+Node SEA main/config     -> Node executable
 ```
 
-Core does not force these values into one generic request or output-set type.
+Core does not force these into one request or generic output-set type.
 
 ### Durable output observations
 
-A durable observation describes bytes that remain after the producing Effect
+A durable `Artifact` describes bytes that remain after the producing Effect
 completes.
 
 ```ts
-export namespace Artifact {
-  export type Digest = `sha256:${string}`
-
-  export type LocalPath = string & {
-    readonly "~effect-build/Artifact/LocalPath": unique symbol
+export namespace HostPath {
+  export type Absolute = string & {
+    readonly "~effect-build/HostPath/Absolute": unique symbol
   }
 
+  export const existing: (
+    input: string
+  ) => Effect.Effect<
+    Absolute,
+    ObservationFailed,
+    FileSystem.FileSystem | Path.Path
+  >
+}
+
+export namespace Artifact {
+  export const Digest: Schema.Schema<`sha256:${string}`>
+  export type Digest = typeof Digest.Type
+
   export interface File {
-    readonly path: LocalPath
+    readonly path: HostPath.Absolute
     readonly bytes: number
     readonly digest?: Digest
   }
@@ -155,28 +151,21 @@ export namespace Artifact {
 }
 ```
 
-`Artifact.LocalPath` means only:
+`HostPath.Absolute` means a canonical existing path observed by the active host
+Path/FileSystem implementation. It is not a remote identity, plan coordinate,
+or proof that a later deserialized string still exists. `HostPath.existing`
+performs the observation. No syntax-only Schema is named as though it established
+host existence.
 
-> a canonical absolute path observed by the active Effect Path/FileSystem
-> implementation on the current host.
-
-It does not mean portable path, remote identity, input coordinate, or proof that
-a deserialized path still exists. 0.4 exposes constructors from observed host
-state and does not expose a general decoding Schema whose name would imply
-stronger authority.
-
-Provider-native written output sets may contain `Artifact.File` observations,
-but the provider result remains provider-specific. A multi-file command build
-does not inherit the executable operation's all-or-nothing atomic publication
-guarantee. Provider-written partial-output semantics must be documented.
+Provider-written output sets may contain `Artifact.File` observations, but the
+provider result remains provider-specific. Multi-file command builds do not
+inherit the executable operation's atomic publication guarantee.
 
 ### Borrowed resources
 
-A borrowed output is valid only while its producer-owned continuation is open.
-It is not an `Artifact`.
-
-Core integration-author machinery may expose borrowed files and directories.
-Portable profiles wrap that authority in profile-specific values.
+A borrowed output is valid only while its producer continuation is open. It is
+not an `Artifact`. Integration-author machinery may expose borrowed files or
+directories; portable profiles wrap that authority in role-specific values.
 
 ### Build step observations
 
@@ -186,56 +175,27 @@ export interface BuildStepObservation {
   readonly tool: {
     readonly name: string
     readonly version: string
-    readonly path?: Artifact.LocalPath
+    readonly path?: HostPath.Absolute
   }
 }
 ```
 
-A build-step observation is intentionally not:
-
-- a dependency graph;
-- a runtime span;
-- a cache key;
-- a complete input manifest;
-- a provenance receipt;
-- a reproducibility claim.
+A step observation is not a dependency graph, runtime span, cache key, complete
+input manifest, provenance receipt, or reproducibility claim.
 
 ## Effect architecture principles
 
-The model follows current Effect patterns at
-[`Effect-TS/effect@ee06c9c`](https://github.com/Effect-TS/effect/tree/ee06c9c1eed73ebcf282541ceb1615ff1ba1730d).
+The design follows official Effect patterns:
 
-### Portable services only for stable roles
+- portable services are introduced only for stable application-visible roles;
+- provider packages may extend portable contracts with richer direct services;
+- Layers select implementations and retain provider construction requirements;
+- Scope owns processes, temporary roots, Esbuild contexts, and other handles;
+- typed provider failures remain recoverable;
+- native Effect spans/logging are exporter-neutral.
 
-Effect puts `FileSystem` in portable core and supplies runtime-specific Layers.
-That pattern applies when application-visible semantics survive implementation
-substitution.
-
-It applies to the deliberately restricted SingleNodeProgram role. It does not
-apply to the full Bun, Deno, Esbuild, and Node SEA APIs.
-
-### Portable role plus provider extension
-
-Effect SQL and AI expose portable services while provider packages retain
-provider-specific clients, options, metadata, tools, and operations.
-
-`effect-build` therefore exposes:
-
-- direct provider services with exact capabilities;
-- optional provider Layers for a portable profile;
-- provider-specific failure narrowing and direct escape hatches.
-
-### Scope owns resources
-
-Effect Scope owns child processes, temporary outputs, Esbuild contexts, and
-other provider handles. An operation that has no provider cancellation handle
-must not claim cancellation merely because the Effect fiber stopped awaiting.
-
-### Native observability, exporter at the edge
-
-The library emits Effect spans, annotations, and logs. The application may
-provide Effect's OTLP/OpenTelemetry integration or another tracer/logger Layer.
-Core has no direct OpenTelemetry SDK dependency.
+The pattern applies to the restricted SingleNodeProgram role. It does not apply
+to the complete Bun, Deno, Esbuild, and Node SEA APIs.
 
 ## Package topology
 
@@ -250,224 +210,100 @@ effect-build-node-sea
 ```
 
 Every integration depends one way on core. No integration imports a sibling.
+Future integrations follow the same rule.
 
-A future provider follows the same rule:
-
-```text
-effect-build-rolldown -> effect-build
-effect-build-pkg      -> effect-build
-```
-
-## Exact 0.4 export surface
-
-Package roots are discovery facades. They re-export lane/profile namespaces
-only; they do not duplicate callable operations as flat aliases. Explicit
-subpaths are canonical in documentation.
+## Exact intended 0.4 subpaths
 
 ### `effect-build`
 
-```json
-{
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./Author/Command": {
-      "types": "./dist/Author/Command.d.ts",
-      "import": "./dist/Author/Command.js"
-    },
-    "./Author/TemporaryOutput": {
-      "types": "./dist/Author/TemporaryOutput.d.ts",
-      "import": "./dist/Author/TemporaryOutput.js"
-    },
-    "./Author/Executable": {
-      "types": "./dist/Author/Executable.d.ts",
-      "import": "./dist/Author/Executable.js"
-    },
-    "./Author/CommandCompiler": {
-      "types": "./dist/Author/CommandCompiler.d.ts",
-      "import": "./dist/Author/CommandCompiler.js"
-    },
-    "./Profile/SingleNodeProgram": {
-      "types": "./dist/Profile/SingleNodeProgram.d.ts",
-      "import": "./dist/Profile/SingleNodeProgram.js"
-    }
-  }
-}
+```text
+.
+./Author/Command
+./Author/TemporaryOutput
+./Author/Executable
+./Author/CommandCompiler
+./Profile/SingleNodeProgram
 ```
 
-Root exports:
+Root runtime namespaces/values:
 
 ```text
 Artifact
 BuildError
-BuildStepObservation
-Diagnostic
+HostPath
 MatrixError
 SystemTarget
 ```
 
-The `Author/*` namespace makes the audience explicit without using
-`unstable/*` as a substitute for authority. These are supported third-party
-integration contracts under pre-1.0 semver. Raw native parsers, claim maps,
-candidate tokens, and process handles remain package-private.
+Root type-only exports:
+
+```text
+BuildStepObservation
+Diagnostic
+```
 
 ### `effect-build-bun`
 
-```json
-{
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./Api": {
-      "types": "./dist/Api.d.ts",
-      "import": "./dist/Api.js"
-    },
-    "./Command": {
-      "types": "./dist/Command.d.ts",
-      "import": "./dist/Command.js"
-    },
-    "./Profile/SingleNodeProgram": {
-      "types": "./dist/Profile/SingleNodeProgram.d.ts",
-      "import": "./dist/Profile/SingleNodeProgram.js"
-    }
-  }
-}
-```
-
-Root namespaces:
-
 ```text
-Api
-Command
-SingleNodeProgram
+.
+./Api
+./Command
+./Profile/SingleNodeProgram
 ```
 
 ### `effect-build-deno`
 
-```json
-{
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./Api": {
-      "types": "./dist/Api.d.ts",
-      "import": "./dist/Api.js"
-    },
-    "./Command": {
-      "types": "./dist/Command.d.ts",
-      "import": "./dist/Command.js"
-    }
-  }
-}
-```
-
-Root namespaces:
-
 ```text
-Api
-Command
+.
+./Api
+./Command
 ```
-
-`Api` is part of the intended 0.4 surface. Plan 042 has a hard implementation
-gate for Deno global-type isolation and unstable runtime behavior. If that gate
-fails, Plan 044 stops for an explicit architecture amendment; it does not ship
-a command-backed fake API.
 
 ### `effect-build-esbuild`
 
-```json
-{
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./Api": {
-      "types": "./dist/Api.d.ts",
-      "import": "./dist/Api.js"
-    },
-    "./Profile/SingleNodeProgram": {
-      "types": "./dist/Profile/SingleNodeProgram.d.ts",
-      "import": "./dist/Profile/SingleNodeProgram.js"
-    }
-  }
-}
-```
-
-Root namespaces:
-
 ```text
-Api
-SingleNodeProgram
+.
+./Api
+./Profile/SingleNodeProgram
 ```
 
 ### `effect-build-node-sea`
 
-```json
-{
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./Command": {
-      "types": "./dist/Command.d.ts",
-      "import": "./dist/Command.js"
-    },
-    "./Recipe/SingleNodeProgram": {
-      "types": "./dist/Recipe/SingleNodeProgram.d.ts",
-      "import": "./dist/Recipe/SingleNodeProgram.js"
-    }
-  }
-}
-```
-
-Root namespaces:
-
 ```text
-Command
-SingleNodeProgramRecipe
+.
+./Command
+./Recipe/SingleNodeProgram
 ```
 
-## Integration-author capabilities
+Package roots are namespace-only discovery facades. Explicit subpaths are
+canonical in documentation. Root facades do not duplicate callable aliases.
+
+## Public integration-author capabilities
+
+The audience is named as `Author/*`; `unstable/*` is not used as a substitute
+for authority. These are supported pre-1.0 contracts, subject to semver.
 
 ### `Author/Command`
 
-Owns:
+Owns selected executable observation, discovery/probing, bounded one-shot
+execution, scoped long-lived execution, stdout/stderr and exit observation,
+explicit cwd/environment policy, interruption, termination, reaping, and
+force-kill policy.
 
-- selected executable observation;
-- discovery and exact probing;
-- one-shot bounded command execution;
-- scoped long-lived command execution for provider watch lanes;
-- stdout/stderr streams and exit observation;
-- environment and working-directory policy;
-- interruption, termination, reaping, and force-kill policy.
-
-It does not expose shell strings, automatic installation, a global executor
-registry, or runtime-specific process objects.
+It exposes no shell strings, automatic installation, global executor registry,
+or runtime-specific process object.
 
 ### `Author/TemporaryOutput`
 
-Owns:
+Owns temporary acquisition, cleanup-root claims, borrowed capability
+construction, liveness/mutation/digest checks, cleanup for every Exit, and
+protection against durable publication beneath an active cleanup root.
 
-- temporary directory/file acquisition;
-- cleanup-root claims;
-- borrowed file and directory capability construction;
-- liveness and mutation checks;
-- cleanup on success, typed failure, defect, and interruption;
-- protection against durable publication beneath an active cleanup root.
-
-It does not make a temporary value durable.
+It never makes a temporary value durable.
 
 ### `Author/Executable`
 
-Owns the validated single-executable lifecycle:
+Owns the validated single-file lifecycle:
 
 ```text
 resolve destination
@@ -481,354 +317,199 @@ resolve destination
 -> atomic rename
 ```
 
-The rename remains the publication point of no return.
-
-It does not generalize transactional publication for arbitrary multi-file output
-sets. Provider command builds must document their own partial-output behavior.
+The rename remains the durable point of no return. Candidate IDs, claim maps,
+native parser internals, and rename machinery remain package-private. This
+module does not promise transactionality for arbitrary multi-file output sets.
 
 ### `Author/CommandCompiler`
 
 Owns only the selected-command source-to-executable pattern shared by Bun and
-Deno.
-
-It replaces `Provider.define` and uses an explicit Effectful service
-constructor whose requirements appear in the Layer type. It never reflectively
-wraps arbitrary service methods.
+Deno. It replaces `Provider.define` with an explicit Effectful service
+constructor. Requirements appear in Layer types; option validation remains a
+pure `Result` run before staging or child work; no method reflection remains.
 
 Esbuild, Node SEA, and host API lanes do not implement this contract.
 
 ## Provider contract
 
-Every provider package may expose four kinds of module.
+Every provider may expose:
 
 ### `Api`
 
 Effect wrappers over an official in-process API.
 
-Rules:
-
-- preserve provider request and result types where practical;
-- preserve provider errors and diagnostics;
+- preserve provider requests/results and exact diagnostics;
 - state required host runtime;
 - Scope owns provider handles;
-- do not claim cancellation without a provider cancellation mechanism;
-- no automatic fallback to `Command`.
+- do not claim cancellation without a provider handle;
+- never fall back to `Command`.
 
 ### `Command`
 
 Effect wrappers over one selected executable.
 
-Rules:
-
-- preserve provider CLI configuration and project behavior;
+- preserve provider CLI/config/project behavior;
 - use core author capabilities where their guarantees apply;
-- expose provider-specific request and diagnostic types;
+- expose provider-specific requests and diagnostics;
 - interruption terminates active child work;
-- no automatic fallback to `Api` or another provider.
+- never fall back to `Api` or another provider.
 
 ### `Profile/*`
 
-A provider adapter for one portable role.
-
-Rules:
-
-- the profile name describes its exact semantic result;
-- excluded provider capabilities are explicit;
-- direct provider APIs remain canonical for provider-specific behavior;
-- a provider may not silently ignore profile fields or weaken its lifetime and
-  interruption contract.
+An adapter for one portable role. The name describes exact semantics and
+exclusions. Direct provider APIs remain canonical for richer behavior.
 
 ### `Recipe/*`
 
-Plain Effect composition over services and profiles.
-
-Rules:
-
-- a recipe selects no producer implicitly;
-- it imports no sibling producer package;
-- application Layers choose the provider;
-- it does not create a second execution algebra.
+Plain Effect composition over services/profiles. A recipe selects no producer,
+imports no sibling producer, and creates no second execution algebra.
 
 ## Provider surfaces
 
 ### Bun
 
-#### `effect-build-bun/Api`
+`effect-build-bun/Api` exposes one direct `build(BuildConfig)` operation and
+preserves `BuildOutput`. Bun executable compile remains provider compile mode
+inside `BuildConfig`; 0.4 does not add a second API-lane compile wrapper without
+an output/write/cancellation probe.
 
-```ts
-export interface Service {
-  readonly build: (
-    options: Bun.BuildConfig
-  ) => Effect.Effect<Bun.BuildOutput, BunBuildError>
-}
-```
+`effect-build-bun/Command` exposes typed command `build`,
+`compileExecutable`, and homogeneous `compileExecutableMatrix`.
 
-`Bun.BuildConfig.compile` already exposes Bun executable compilation. 0.4 does
-not add a second API-lane `compileExecutable` wrapper until an implementation
-probe can state output, cancellation, validation, and publication semantics
-without contradicting `Bun.build()`.
-
-The API service requires a Bun host. Its one-shot Promise has no documented
-per-build cancel handle. Fiber interruption stops downstream Effect use but may
-not stop underlying Bun work or provider direct writes.
-
-#### `effect-build-bun/Command`
-
-```text
-build
-compileExecutable
-compileExecutableMatrix
-```
-
-The command lane remains usable under any supported process-capable Effect host.
-
-`compileExecutable` and `compileExecutableMatrix` remain first-class because
-they produce Bun-runtime executables. They are not replaced by Node SEA.
-
-A command `build` returns a provider-specific written output set. Unless a
-specific operation stages an owned root, it does not claim atomic multi-file
-publication.
+Bun source -> Bun executable remains independently valuable. It produces a
+Bun-runtime executable with Bun and Node built-ins. Source -> SingleNodeProgram
+-> Node SEA produces a Node-runtime executable and complements rather than
+replaces it.
 
 ### Deno
 
-#### `effect-build-deno/Api`
+`effect-build-deno/Api` wraps unstable `Deno.bundle()` under a Deno host. The
+package owns an isolated structural declaration matching the pinned official
+surface if ambient Deno globals would pollute unrelated consumers. The Layer
+checks presence but does not grant permissions or enable unstable flags.
 
-Wraps unstable `Deno.bundle()` under a Deno host. The Layer verifies the API is
-present. The operation documents required `--unstable-bundle` and Deno
-permissions and preserves the provider result.
+`effect-build-deno/Command` exposes typed bundle, compile, and compile matrix.
+Bundle includes declaration generation. Compile retains permissions, includes,
+workers, project/framework behavior, engine/runtime selection, target runtime,
+and explicit environment authority such as `DENORT_BIN`.
 
-The package owns an isolated structural declaration of the exact supported
-Deno bundle API if directly referring to global Deno declarations would pollute
-other consumers. It must be checked against the pinned official declaration.
-
-#### `effect-build-deno/Command`
-
-```text
-bundle
-compileExecutable
-compileExecutableMatrix
-```
-
-The command bundle request includes the selected 0.4 CLI surface, including
-declaration output. The compile request remains provider-specific for
-permissions, includes, workers, framework/project behavior, runtime acquisition,
-engine, arguments, and system target.
-
-A public typed watch operation is added only if Plan 042 establishes a stable
-provider event and lifetime contract. Otherwise watch remains an explicitly
-documented excluded 0.4 capability, not a raw process escape hatch.
+The API lane is part of the intended 0.4 surface but has a hard type-isolation
+and runtime gate. Failure stops for maintainer decision; it never permits a
+command-backed fake API.
 
 ### Esbuild
 
-#### `effect-build-esbuild/Api`
+`effect-build-esbuild/Api` exposes build, transform, and scoped context.
+The context exposes rebuild, watch start, serve start, and cancel. `dispose` is
+hidden because Scope owns release and calls cancel then dispose exactly once.
+One-shot build/transform make no cancellation claim. Plugins, output files,
+metafiles, and provider diagnostics remain native.
 
-```text
-build
-transform
-scoped context
-  rebuild
-  watch
-  serve
-  cancel
-```
-
-`build` and `transform` are one-shot. They do not claim cancellation.
-
-`context` returns a scoped Effect wrapper around `esbuild.BuildContext`.
-`watch()` starts provider watch state and returns. `serve()` starts the server
-and returns `ServeResult`. The context's Scope owns their lifetime. `cancel()`
-remains visible because it is an operational provider capability. `dispose()`
-is hidden because release belongs to Scope. The finalizer calls `cancel()` and
-then `dispose()` exactly once.
-
-No Esbuild command lane is part of 0.4. It would lose plugins and in-process
-context capabilities without satisfying a current product requirement.
+No Esbuild CLI lane is part of 0.4.
 
 ### Node SEA
 
-#### `effect-build-node-sea/Command`
-
-Node SEA remains a command assembler. Its direct operation accepts:
-
-- a bundled main file or bytes;
-- CommonJS or ESM format;
-- assets;
-- builder Node selection through the Layer;
-- optional target/base Node executable;
-- snapshots and code cache;
-- execution arguments and extension policy;
-- output path and optional digest.
-
-Bytes are privately materialized before Node reads them. File input is
-canonicalized, privately copied, and rehashed before syntax check and assembly.
-
-The operation validates version and target restrictions. It does not sign the
-binary. Signing is a separate platform/provider step.
+`effect-build-node-sea/Command` remains an assembler. It accepts a bundled file
+or bytes plus CJS/ESM format, assets, builder Node selected by Layer, optional
+base/target Node, snapshot/code cache, runtime arguments, output, and digest.
+It privately copies/materializes and authenticates the main before Node reads
+it, validates version/target restrictions, and publishes through
+`Author/Executable`. Signing remains separate.
 
 ## Portable profile: `SingleNodeProgram`
 
-The earlier root `NodeProgramBundler` proposal survives as one optional profile:
+The earlier root `NodeProgramBundler` survives only as this exact profile:
 
-> Produce one borrowed JavaScript main file, ESM or CommonJS, with Node module
-> resolution, no provider-owned side-output graph, and continuation-owned
-> lifetime.
+> produce one borrowed JavaScript main, ESM or CJS, with Node module resolution,
+> no provider-owned side-output graph, and continuation-owned lifetime.
 
-Canonical subpath:
+Canonical core path:
 
 ```text
 effect-build/Profile/SingleNodeProgram
 ```
 
-Implementations:
+Provider implementations:
 
 ```text
 effect-build-bun/Profile/SingleNodeProgram
 effect-build-esbuild/Profile/SingleNodeProgram
 ```
 
-The Bun adapter uses the selected-command lane initially, preserving child
-termination. The Esbuild adapter uses a scoped context with cancel/dispose.
+The Bun adapter initially uses the selected-command lane to preserve child
+termination. The Esbuild adapter uses a scoped context.
 
-The profile excludes:
-
-- multiple entrypoints;
-- splitting;
-- CSS or asset side outputs;
-- browser/Bun/Deno targets;
-- declarations;
-- provider plugins/loaders in the portable request;
-- incremental/watch context;
-- durable program ownership;
-- raw provider options.
-
-Provider defaults may be configured on the provider Layer. Per-call
-provider-specific control uses the direct provider API.
+The profile excludes multiple entries, splitting, CSS/assets/HTML, browser/Bun/
+Deno targets, declarations, provider plugins/loaders in the portable request,
+watch/incremental contexts, raw provider options, and durable ownership.
 
 ### Borrowed authority
 
-The profile returns `SingleNodeProgram.Borrowed`, not an `Artifact`.
-
-It contains metadata and a closure-owned `withFile` capability. The temporary
-path is visible only inside the nested callback. Returning the borrowed value
-does not extend the producer root; later use fails with a typed expiry error.
-
-The capability carries a protocol version and its own closure-owned authority,
-so a compatible duplicate core instance does not depend on finding the value in
-its own module-global WeakSet.
-
-This is lifecycle interoperability, not a sandbox against malicious provider
-code.
+`SingleNodeProgram.Borrowed` contains metadata and a closure-owned `withFile`
+capability. The temporary path exists only inside the nested callback. Returning
+the borrowed value does not extend ownership; later use fails with a typed expiry
+error. The closure carries a protocol version and does not rely on the consuming
+core module's WeakSet. This is lifecycle interoperability, not a sandbox against
+malicious provider code.
 
 ### Failure contract
 
-The portable failure provides:
-
-```text
-provider
-normalized kind
-portable diagnostics
-exact in-memory provider error
-```
-
-Provider adapters map only identity-proven provider failures. Callback typed
-failures, defects, interruptions, and mixed Causes pass through unchanged.
-Provider packages export narrowing guards for the exact provider error.
-
-The failure is intentionally an in-memory runtime value, not a serializable
-receipt.
+Portable failures contain provider name, normalized kind, portable diagnostics,
+and the exact in-memory provider error. Provider adapters map only
+identity-proven provider failures. Callback typed failures, defects,
+interruptions, and mixed Causes pass through unchanged. Direct provider profile
+functions keep exact provider error unions; generic provider Layers normalize
+construction and operation failures to the profile family.
 
 ## Node SEA recipe
 
-Canonical subpath:
-
-```text
-effect-build-node-sea/Recipe/SingleNodeProgram
-```
-
-The recipe:
-
-1. asks the core profile service for a borrowed main;
-2. passes it to Node SEA direct command assembly;
-3. selects no producer;
-4. requires the application to provide Bun or Esbuild's profile Layer.
-
-The recipe is convenience composition, not a combined package or hidden
-provider selection.
+`effect-build-node-sea/Recipe/SingleNodeProgram` requests the core profile,
+borrows the file, and invokes Node SEA direct assembly. It selects no producer;
+the application provides Bun or Esbuild's profile Layer.
 
 ## Names and boundaries
 
-| 0.3 or proposed name | 0.4 decision |
+| Name | 0.4 decision |
 |---|---|
-| `compileExecutable` | Keep under Bun/Deno `Command`; provider-specific source-to-runtime-executable verb |
-| `compileExecutableMatrix` | Keep under Bun/Deno `Command`; homogeneous orchestration over scalar compilation |
-| `withJavaScriptBundle` | Delete; misleading for both full provider output sets and the narrow profile |
-| `withSingleNodeProgram` | Keep on direct Bun/Esbuild profile adapters |
-| root `NodeProgramBundler` | Do not add; publish `Profile/SingleNodeProgram.Bundler` |
+| `compileExecutable` | Keep under Bun/Deno `Command` |
+| `compileExecutableMatrix` | Keep under Bun/Deno `Command`; scalar is primitive |
+| `withJavaScriptBundle` | Delete; misleading for full provider outputs and narrow profile |
+| `withSingleNodeProgram` | Direct provider profile operation |
+| root `NodeProgramBundler` | Do not add; use `Profile/SingleNodeProgram.Bundler` |
 | `NodeProgram.Lease` | Do not add at root; use `SingleNodeProgram.Borrowed` |
-| `JavaScriptBundle.Artifact` | Delete; borrowed output is not a durable artifact |
-| `Artifact` | Keep for durable observed output only |
+| `JavaScriptBundle.Artifact` | Delete; borrowed output is not durable |
+| `Artifact` | Keep for durable observations only |
 | `Integration` | Delete; replace with precise `Author/*` modules |
 | `Provider` | Delete; replace with `Author/CommandCompiler` |
-| Bun/Deno `Compiler` service | Replace with explicit `Api` and `Command` services |
+| provider `Compiler` service | Replace with explicit Api/Command services |
 | `StageObservation` / `stages` | Rename to `BuildStepObservation` / `steps` |
 | executable `target` | Rename to `systemTarget` |
+| `AbsolutePath` | Replace with `HostPath.Absolute` |
 
 ## Source and platform abstractions
 
-### No universal `SourceLocator`
+Do not add a universal `SourceLocator`. `entrypoint` plus `cwd` adds no
+invariant and excludes URLs, packages, project directories, stdin/bytes,
+virtual files, HTML roots, and plugin modules. Provider requests own source
+inputs; profiles own their narrow requests.
 
-Do not add a two-field wrapper around `entrypoint` and `cwd`.
-
-Provider inputs include:
-
-- paths;
-- URLs and module specifiers;
-- package references;
-- project directories;
-- stdin or bytes;
-- virtual files;
-- HTML roots;
-- provider plugin values.
-
-A universal wrapper would exclude valid provider authority while adding no
-invariant. Provider modules own their requests. Portable profiles own their
-narrow requests.
-
-### Effect services own platform mechanics
-
-Use Effect `Path`, `FileSystem`, process, Scope, Layer, Tracer, and logging.
-
-Add a domain type only for a real ownership or authority distinction, such as:
-
-- durable local output path;
-- borrowed temporary output;
-- in-memory source;
-- provider module specifier.
+Use Effect Path, FileSystem, process, Scope, Layer, tracing, and logging for
+platform mechanics. Add a domain type only for real ownership/authority, such as
+an observed host path, in-memory source, or borrowed versus durable output.
 
 ## Observability
 
-Observability has three separate models.
+Three concerns stay separate.
 
-### Runtime execution tracing
+### Runtime tracing
 
-Every public operation has one stable root span:
+Each public operation has one stable root span:
 
 ```text
 effect-build.<provider>.<lane>.<operation>
 ```
 
-Examples:
-
-```text
-effect-build.bun.api.build
-effect-build.bun.command.compile-executable
-effect-build.esbuild.api.context.rebuild
-effect-build.node-sea.command.create-executable
-effect-build.single-node-program.with-program
-```
-
-Core author operations create child spans when they represent meaningful
-latency or failure boundaries:
+Core author boundaries use child spans such as:
 
 ```text
 effect-build.command.discover
@@ -838,7 +519,7 @@ effect-build.executable.inspect
 effect-build.executable.publish
 ```
 
-Stable low-cardinality attributes:
+Stable keys:
 
 ```text
 effect_build.provider
@@ -853,60 +534,43 @@ effect_build.output.bytes
 effect_build.interruption.contract
 ```
 
-Rules:
+Categorical values must be bounded; count/bytes are numeric measurements.
+Unknown fields are omitted. Paths, argv, environment values, URLs, asset keys,
+plugins, source snippets, and full diagnostics are not attached by default.
+Warnings/errors may emit safe summary logs. Instrumentation never changes typed
+values or Cause topology. The library depends only on Effect observability;
+applications provide OTLP/OpenTelemetry or another exporter Layer.
 
-- omit an attribute when unknown;
-- do not attach source path, output path, argv, environment values, URLs, asset
-  keys, plugin objects, or full diagnostics by default;
-- provider packages may add namespaced low-cardinality attributes;
-- typed failures remain authoritative;
-- warnings and errors may emit summary log events without logging source or
-  secret-bearing provider payloads;
-- a context lifetime is represented by setup/release and operation child spans,
-  not one unbounded watch span;
-- span/log instrumentation must not alter typed values or Cause topology.
+### Source/dependency graph
 
-The library depends only on Effect observability. Exporters are application
-Layers. No direct OpenTelemetry dependency is added.
-
-### Source/dependency graph information
-
-Bun metafiles, Deno bundle output information, Esbuild metafiles, and
-Rolldown/Rollup graphs remain provider-native. Their edges, completeness,
-generated-runtime records, plugins, assets, and path semantics differ.
-
-0.4 defines no universal graph.
-
-SingleNodeProgram may expose sorted provider-reported external import
-observations. The name must state that they are observations, not a complete
-dependency graph.
+Bun/Deno/Esbuild/Rolldown graph and metafile values remain provider-native.
+0.4 defines no universal graph. The portable profile may expose sorted
+provider-reported external import observations, explicitly not a complete graph.
 
 ### Durable lineage
 
-`BuildStepObservation`, bytes, digest, provider, and `systemTarget` are
-lightweight observations. They are not spans and not provenance.
+Steps, bytes, digest, provider, and system target are lightweight observations,
+not runtime spans or provenance receipts. A durable receipt would require closed
+input/config/environment/toolchain identity and is outside 0.4.
 
-A durable receipt would require closed input identity, configuration,
-environment policy, and toolchain identity. It is outside 0.4.
+## Interruption and ownership
 
-## Interruption and output ownership
-
-| Operation kind | 0.4 guarantee |
+| Operation | Guarantee |
 |---|---|
-| One-shot host API without provider cancel | Fiber interruption stops awaiting and suppresses downstream Effect use. Underlying provider work or direct writes may continue. |
-| Scoped provider context | Scope release invokes provider cancellation/release exactly once. |
-| One-shot selected command | Interruption terminates/reaps the child and cleans core-owned staging. |
-| Command watch | If exposed, Scope owns the child and release terminates/reaps it. |
-| Single-file executable publication | Atomic rename is the durable point of no return. |
-| Provider-native multi-output direct write | Provider semantics; no false all-or-nothing claim. |
-| Borrowed profile callback | Output root closes after success, failure, defect, or interruption; callback Cause remains exact. |
+| One-shot host API without cancel | Fiber stops awaiting; provider work/direct writes may continue |
+| Scoped provider context | Scope invokes provider cancel/release exactly once |
+| One-shot selected command | Interruption terminates/reaps child and cleans core-owned staging |
+| Command watch if exposed | Scope owns child and release terminates/reaps it |
+| Single-file executable | Atomic rename is publication point of no return |
+| Provider multi-output direct write | Provider semantics; no false transactionality claim |
+| Borrowed profile callback | Root closes after every Exit; callback Cause remains exact |
 
 ## Goal-weighted comparison
 
-Scores are 1 (poor) through 5 (strong). A higher complexity score means lower
-cost. Excluded provider capabilities count as costs.
+Scores: 1 poor, 5 strong. Higher complexity scores mean lower cost. Excluded
+provider capability counts as a cost.
 
-| Criterion | Weight | Provider-native only | Narrow Node-program ontology | Native + profiles/recipes | Structural operations | Transformation algebra |
+| Criterion | Weight | Native only | Narrow profile ontology | Native + profiles/recipes | Structural operations | Transform algebra |
 |---|---:|---:|---:|---:|---:|---:|
 | Provider capability coverage | 5 | 5 | 1 | 5 | 4 | 4 |
 | Provider fidelity | 5 | 5 | 2 | 5 | 4 | 3 |
@@ -921,54 +585,44 @@ cost. Excluded provider capabilities count as costs.
 | Public stability | 3 | 4 | 2 | 4 | 4 | 2 |
 | Low conceptual cost | 3 | 4 | 4 | 3 | 3 | 1 |
 | Low implementation cost | 2 | 4 | 3 | 2 | 3 | 1 |
-| **Weighted total / 235** |  | **186** | **150** | **209** | **170** | **152** |
-
-The selected model has more modules than provider-native-only, but those modules
-name real lanes, author authorities, and one validated portable role. The
-narrow-profile model appears smaller only because it omits most provider
-capability.
+| **Weighted total / 235** | | **186** | **150** | **209** | **170** | **152** |
 
 ## Rejected alternatives
 
 ### Provider-native APIs only
 
-This is the strongest rejected alternative.
-
-It has excellent fidelity and lower initial implementation cost. It loses
-because Bun and Esbuild have already demonstrated one truthful application-level
-substitution contract. Omitting that profile would force reusable application
-code to choose a provider even when the program does not depend on
-provider-specific behavior.
+Strongest rejected alternative. It has excellent fidelity and lower initial
+cost. It loses because Bun and Esbuild already demonstrate a truthful
+application-level substitution contract; omitting it would force reusable code
+to choose a provider even when it depends only on the shared role.
 
 ### Narrow Node-program architecture as the whole product
 
-The profile is valid. The ontology is not. It excludes browser output, Bun
-runtime output, Deno bundling and declarations, Esbuild transform and context,
-plugins, assets, HTML, CSS, and multi-output builds.
+The profile is valid; the ontology is not. It excludes browser output, Bun
+runtime output, Deno bundle/declarations, Esbuild transform/context, plugins,
+HTML/CSS/assets, and multi-output builds.
 
 ### Universal `ExecutableBuilder`
 
-Semantically invalid. Bun/Deno compile source or projects into runtime-specific
-executables. Node SEA consumes one bundled main. `pkg` consumes a project graph.
-A union or generic type parameter hides rather than removes the topology.
+Semantically invalid. Bun/Deno compile source/projects into runtime-specific
+executables; Node SEA consumes a bundled main; `pkg` consumes a project graph.
+A type parameter or union hides rather than removes the topology.
 
-### Structural protocol as the only generic API
+### Structural-only protocol
 
-Useful internally but incomplete for Effect application Layer substitution and
-weak in discoverability. It also spreads provider errors and requirements
-through generic helper signatures.
+Useful internally but incomplete for the intended Layer-substitution
+application model and weak in discovery.
 
 ### General transformation algebra
 
 Rejected because Effect already supplies functions, services, Layers, Scope,
-Stream, and `Effect.gen`. A `Transformation<I, O, E, R>` layer duplicates that
-algebra and erases domain role names.
+Stream, and `Effect.gen`. A second algebra duplicates every provider operation
+and erases role names.
 
 ### `unstable/*` author namespace
 
-Rejected. The problem is authority naming, not a stability adjective.
-`Author/*` states the audience and capability. Pre-1.0 semver governs breaking
-changes.
+Rejected. The issue is authority naming, not a stability adjective. `Author/*`
+states audience/capability; pre-1.0 semver governs breaking changes.
 
 ## Hard breaking changes from 0.3
 
@@ -979,7 +633,7 @@ effect-build/Integration
 effect-build/Provider
 JavaScriptBundle.Artifact
 withJavaScriptBundle
-ambiguous provider Compiler service names
+ambiguous Bun/Deno Compiler service names
 ```
 
 Rename:
@@ -987,117 +641,75 @@ Rename:
 ```text
 StageObservation -> BuildStepObservation
 stages           -> steps
-target           -> systemTarget (for native system target)
-AbsolutePath     -> Artifact.LocalPath (observed durable outputs only)
+target           -> systemTarget
+AbsolutePath     -> HostPath.Absolute
 ```
 
-Move:
-
-```text
-Bun.compileExecutable       -> effect-build-bun/Command
-Bun.compileExecutableMatrix -> effect-build-bun/Command
-Deno.compileExecutable      -> effect-build-deno/Command
-Deno.compileExecutableMatrix-> effect-build-deno/Command
-```
-
-Broaden:
-
-```text
-Esbuild -> full Api build/transform/scoped context
-Bun     -> Api build plus Command build/compile
-Deno    -> Api bundle plus Command bundle/compile
-Node SEA-> direct file/bytes main plus full supported SEA config
-```
-
-Add:
-
-```text
-effect-build/Author/*
-Profile/SingleNodeProgram
-Bun and Esbuild profile Layers
-Node SEA SingleNodeProgram recipe
-native Effect observability
-```
-
-No 0.3 compatibility aliases ship in 0.4.
+Move Bun/Deno compile operations under provider `Command` subpaths. Broaden
+Esbuild, Bun, Deno, and Node SEA direct surfaces. Add `Author/*`,
+SingleNodeProgram provider Layers, and a Node SEA recipe. Ship no compatibility
+aliases or parallel advanced tier.
 
 ## Implementation dependency graph
 
 ```text
-Plan 039: core Author/* capabilities and observability
+039 core Author/* capabilities and observability
   |\
-  | +--> Plan 040: Esbuild Api
-  | +--> Plan 041: Bun Api + Command
-  | +--> Plan 042: Deno Api + Command
+  | +--> 040 Esbuild Api
+  | +--> 041 Bun Api + Command
+  | +--> 042 Deno Api + Command
   |
-  +----> Plan 043: Node SEA Command + SingleNodeProgram profile/recipe
+  +----> 043 Node SEA Command + SingleNodeProgram profile/recipe
            depends on 040 and 041, not 042
 
-Plans 039-043
-  -> Plan 044: hard cut and certify unpublished 0.4 candidate
+039-043 -> 044 hard cut and certify unpublished 0.4 candidate
 ```
 
-Plans 040, 041, and 042 may proceed in parallel after Plan 039. Plan 043 does
-not depend on Deno because Deno does not implement the profile.
+Plans 040, 041, and 042 may proceed independently after 039. Plan 043 does not
+depend on Deno because Deno does not implement the profile.
 
 ## Verification policy
 
-Every advertised capability receives a non-skipping test at its real host/tool
-boundary.
+Every advertised capability receives non-skipping evidence at its real host/tool
+boundary:
 
-Required classes:
-
-- exact declaration/runtime export locks;
+- exact runtime/declaration export locks;
 - Node-host command consumers;
-- Bun-host API consumers;
+- Bun-host API consumers using packaged `bun-types` declarations;
 - Deno-host API consumers with unstable flag and permissions;
 - real Esbuild build/transform/context;
-- provider plugins, multi-entry, multi-output, CSS/assets, and declarations
+- provider plugins, multiple entries/outputs, CSS/assets, and Deno declarations
   where advertised;
-- context and watch Scope release;
-- API interruption tests that do not claim provider cancellation;
+- context/watch Scope release;
+- host API interruption tests that make no cancellation claim;
 - command interruption/reaping;
-- executable target inspection and publication on supported platforms;
-- unchanged portable profile program under Bun and Esbuild Layers;
+- native target inspection/publication;
+- unchanged profile program under Bun and Esbuild Layers;
 - exact callback failure/defect/interruption Cause;
-- packed isolated and composed consumers from once-packed bytes.
-
-No check may claim local execution unless it actually ran.
+- packed isolated/composed consumers from once-packed bytes.
 
 ## Empirical gates
 
-Architecture conclusions are not deferred, but implementation must stop on
-these named facts:
+Architecture is selected; these facts still gate implementation:
 
-1. **Bun API compile observation.** Determine whether a high-level
-   `Artifact.Executable` API wrapper can add truthful validation/publication.
-   It is not required for 0.4.
-2. **Deno API isolation.** Prove types and runtime behavior without polluting
-   unrelated consumers. Failure requires explicit maintainer choice to amend
-   the 0.4 surface or defer the entire cut.
-3. **Command watch contracts.** Publish Bun/Deno watch only if a stable event and
-   Scope contract is demonstrated.
-4. **Multi-output interruption.** Document provider partial-write behavior; do
-   not infer transactionality.
-5. **Duplicate core.** Prove closure-owned borrowed authority across compatible
-   duplicate core copies.
-6. **Node SEA cross-platform.** Prove builder/base Node version and cache/snapshot
-   constraints for every advertised cross target.
-7. **Telemetry.** Assert stable spans/attributes/log summaries using the
-   supported Effect version range.
+1. Bun API compile result/write timing.
+2. Deno API type isolation and unstable/permission/compiled-binary errors.
+3. Bun/Deno command-watch event contracts.
+4. Provider multi-output behavior under interruption.
+5. Closure-owned borrowed authority across compatible duplicate core copies.
+6. Node SEA builder/base Node and cross-platform cache/snapshot restrictions.
+7. Effect span/log assertions over the supported Effect range.
+
+A failed probe narrows or stops the affected lane; it never permits silent
+fallback.
 
 ## Maintainer authority required
 
-Only these decisions remain outside the research conclusion:
+1. Approve the pre-1.0 0.4 hard cut with no compatibility aliases.
+2. If the Deno API gate fails, choose between amending 0.4 to omit `/Api` or
+   delaying the full cut.
+3. Approve provider dependency/version expansion discovered by probes.
+4. Separately authorize publication, tag, or release after Plan 044 certifies an
+   unpublished candidate.
 
-1. Approval to make the pre-1.0 0.4 hard cut with no compatibility aliases.
-2. If Plan 042's Deno API gate fails, choice between:
-   - amend 0.4 to omit `effect-build-deno/Api`; or
-   - delay the complete 0.4 cut until it can be supported.
-3. Approval of any provider dependency/version expansion discovered by the
-   implementation probes.
-4. Separate authorization to publish, tag, or release after Plan 044 certifies
-   an unpublished candidate.
-
-No publication, tag, release, trusted-publisher, or branch-protection mutation
-is authorized by this architecture PR.
+This architecture PR authorizes none of those release mutations.

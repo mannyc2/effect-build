@@ -4,7 +4,7 @@
 
 - Priority: P0 public API cut and certification
 - Effort: XL
-- Risk: CRITICAL breaking declarations, consumers, and package bytes
+- Risk: CRITICAL breaking declarations, consumers, package bytes
 - Depends on: Plans 039, 040, 041, 042, and 043
 - Architecture commit: `e23722e81fa651c1540c8aa72e2703ff62ac609b`
 - Status: TODO
@@ -12,36 +12,22 @@
 
 ## Objective
 
-Perform one pre-1.0 hard cut from the released 0.3 surface to the selected
-0.4 architecture, then certify one unpublished five-package candidate.
+Perform one pre-1.0 hard cut from 0.3 to the selected 0.4 architecture, then
+certify one unpublished five-package candidate.
 
-This plan may:
-
-- change production exports;
-- delete 0.3 aliases;
-- update docs/examples/tests;
-- pack and verify local candidate tarballs.
-
-It may not:
-
-- publish npm packages;
-- create tags or releases;
-- modify trusted publishing;
-- change branch protections;
-- merge itself.
+This plan may change exports, delete aliases, update docs/examples/tests, and
+pack local candidate tarballs. It may not publish, tag, release, modify trusted
+publishing, change branch protection, or merge itself.
 
 ## Preconditions
 
-Before implementation:
-
-1. every dependency plan has a completion receipt and passing exact-SHA CI;
-2. the implementation lineage descends from `v0.3.0`;
-3. the Deno API hard gate passed, or the maintainer explicitly amended the
-   architecture before this plan;
-4. no provider lane silently falls back to another lane;
-5. the SingleNodeProgram profile passed Bun/Esbuild substitution and
-   duplicate-core tests;
-6. the exact Effect version range and provider versions are recorded.
+1. Every dependency plan has an exact-SHA completion receipt and passing CI.
+2. The lineage descends from `v0.3.0`.
+3. The Deno API hard gate passed, or the maintainer explicitly amended the
+   architecture.
+4. No lane silently falls back.
+5. SingleNodeProgram passed Bun/Esbuild substitution and duplicate-core tests.
+6. Exact Effect/provider versions are recorded.
 
 ## Exact 0.4 export maps
 
@@ -56,15 +42,21 @@ Before implementation:
 ./Profile/SingleNodeProgram
 ```
 
-Root runtime namespaces/types:
+Root runtime namespaces/values:
 
 ```text
 Artifact
 BuildError
-BuildStepObservation
-Diagnostic
+HostPath
 MatrixError
 SystemTarget
+```
+
+Root type-only exports:
+
+```text
+BuildStepObservation
+Diagnostic
 ```
 
 ### `effect-build-bun`
@@ -76,13 +68,7 @@ SystemTarget
 ./Profile/SingleNodeProgram
 ```
 
-Root namespaces only:
-
-```text
-Api
-Command
-SingleNodeProgram
-```
+Root namespaces: `Api`, `Command`, `SingleNodeProgram`.
 
 ### `effect-build-deno`
 
@@ -92,12 +78,7 @@ SingleNodeProgram
 ./Command
 ```
 
-Root namespaces only:
-
-```text
-Api
-Command
-```
+Root namespaces: `Api`, `Command`.
 
 ### `effect-build-esbuild`
 
@@ -107,12 +88,7 @@ Command
 ./Profile/SingleNodeProgram
 ```
 
-Root namespaces only:
-
-```text
-Api
-SingleNodeProgram
-```
+Root namespaces: `Api`, `SingleNodeProgram`.
 
 ### `effect-build-node-sea`
 
@@ -122,16 +98,11 @@ SingleNodeProgram
 ./Recipe/SingleNodeProgram
 ```
 
-Root namespaces only:
+Root namespaces: `Command`, `SingleNodeProgramRecipe`.
 
-```text
-Command
-SingleNodeProgramRecipe
-```
+Explicit subpaths are canonical. Roots add no flat callable aliases.
 
-Explicit subpaths are canonical. Roots do not add flat callable aliases.
-
-## Required deletions and renames
+## Deletions and renames
 
 Delete without aliases:
 
@@ -149,59 +120,34 @@ Rename:
 StageObservation -> BuildStepObservation
 stages           -> steps
 target           -> systemTarget
-AbsolutePath     -> Artifact.LocalPath
+AbsolutePath     -> HostPath.Absolute
 ```
 
-Move:
-
-```text
-Bun.compileExecutable       -> effect-build-bun/Command
-Bun.compileExecutableMatrix -> effect-build-bun/Command
-Deno.compileExecutable      -> effect-build-deno/Command
-Deno.compileExecutableMatrix-> effect-build-deno/Command
-```
-
-Do not ship compatibility wrappers, deprecated aliases, legacy subpaths, or a
-parallel "advanced" API.
+Move Bun/Deno scalar and matrix compile under provider `Command`. Ship no
+compatibility wrappers, deprecated aliases, legacy subpaths, or parallel
+advanced tier.
 
 ## Migration examples
 
-### 0.3 Bun compile
+### Bun compile
 
 ```ts
+// 0.3
 import * as Bun from "effect-build-bun"
-
 Bun.compileExecutable({
   entrypoint: "src/main.ts",
   outfile: "dist/app"
 }).pipe(Effect.provide(Bun.layer()))
-```
 
-### 0.4 Bun command compile
-
-```ts
+// 0.4
 import * as BunCommand from "effect-build-bun/Command"
-
 BunCommand.compileExecutable({
   entrypoint: "src/main.ts",
   outfile: "dist/app"
 }).pipe(Effect.provide(BunCommand.layer()))
 ```
 
-### 0.3 Esbuild -> Node SEA
-
-```ts
-Esbuild.withJavaScriptBundle(
-  { entrypoint: "src/main.ts", format: "esm" },
-  (main) =>
-    NodeSea.createExecutable({
-      main,
-      outfile: "dist/app"
-    })
-)
-```
-
-### 0.4 portable recipe
+### Portable Esbuild -> Node SEA recipe
 
 ```ts
 import * as EsbuildProfile from
@@ -223,7 +169,7 @@ NodeSeaRecipe.createExecutable({
 )
 ```
 
-### 0.4 direct Esbuild build
+### Direct provider breadth
 
 ```ts
 import * as EsbuildApi from "effect-build-esbuild/Api"
@@ -238,8 +184,6 @@ EsbuildApi.build({
   metafile: true
 })
 ```
-
-### 0.4 direct Node SEA bytes
 
 ```ts
 import * as NodeSeaCommand from "effect-build-node-sea/Command"
@@ -257,98 +201,63 @@ NodeSeaCommand.createExecutable({
 
 ## Documentation requirements
 
-Rewrite:
-
-- root README product thesis;
-- install guidance by lane;
-- API reference;
-- architecture;
-- integration author guide;
-- errors;
-- examples;
-- changelog;
-- migration guide.
-
-Docs must explicitly state:
-
-- host API versus command requirements;
-- no fallback;
-- interruption guarantee per operation;
-- provider direct-write versus atomic executable publication;
-- profile exclusions;
-- source graph versus trace versus step observation;
-- exporter-neutral observability;
-- Deno unstable flag/permissions;
-- Node SEA builder/base Node restrictions;
-- no SourceLocator;
-- no universal ExecutableBuilder.
+Rewrite root product thesis, install guidance by lane, API reference,
+architecture, author guide, errors, examples, changelog, and migration guide.
+Docs explicitly state host requirements, no fallback, interruption per operation,
+provider direct-write versus atomic executable publication, profile exclusions,
+graph/trace/step distinction, exporter-neutral observability, Deno unstable and
+permission authority, Node SEA builder/base restrictions, no SourceLocator, and
+no universal ExecutableBuilder.
 
 ## Certification matrix
 
-### Static and architecture
+### Static/architecture
 
-- exact runtime export allowlist;
-- exact declaration export allowlist;
-- one-way dependencies;
-- no sibling imports;
-- no raw runtime process/filesystem imports;
-- no old subpaths/names;
+- exact runtime and declaration allowlists;
+- `HostPath.existing` behavior on supported hosts;
+- one-way dependencies and no sibling imports;
+- no raw runtime platform imports;
+- no old paths/names;
 - no `unstable/*` author namespace;
-- no provider registry/fallback;
-- no transformation algebra;
-- no generic executable builder.
+- no registry/fallback, transformation algebra, or generic executable builder.
 
 ### Host matrix
 
 - Node-host command consumers;
-- Bun-host API consumers;
-- Deno-host API consumers with required flags/permissions;
+- Bun-host API consumers using packaged `bun-types`;
+- Deno-host API consumers with required flag/permissions;
 - supported Effect compatibility endpoints.
 
 ### Provider breadth
 
-Bun:
+Bun: virtual files, plugins, multiple entries, HTML/CSS/assets, targets,
+splitting, logs, API compile mode, command build, every advertised executable
+target, scalar/matrix behavior.
 
-- API build: virtual files, plugins, multi-entry, HTML/CSS/assets, targets,
-  splitting, logs, compile mode;
-- Command build and every advertised executable target;
-- scalar/matrix behavior.
+Deno: API memory/written bundle and failures; command bundle including
+declarations; project compile, permissions/includes/workers/engine/targets;
+scalar/matrix behavior.
 
-Deno:
+Esbuild: build, transform, context, rebuild, watch, serve, cancel/dispose,
+plugins, multiple outputs, CSS/assets, metafile, diagnostics.
 
-- API bundle memory/written output and failures;
-- Command bundle including declarations;
-- project compile, permissions/includes/workers/engine/targets;
-- scalar/matrix behavior.
+Node SEA: file/bytes, ESM/CJS, assets, args, cache/snapshot, builder/base Node,
+and every advertised current/cross target.
 
-Esbuild:
-
-- build, transform, context, rebuild, watch, serve, cancel/dispose;
-- plugins, multi-output, CSS/assets, metafile, diagnostics.
-
-Node SEA:
-
-- file/bytes, ESM/CJS, assets, args, cache/snapshot, target/base Node,
-  current/cross targets advertised.
-
-Profile/recipe:
-
-- unchanged program under Bun and Esbuild Layers;
-- exact callback Cause;
-- expiry, mutation, cleanup, duplicate core;
-- real Bun/Esbuild -> Node SEA.
+Profile/recipe: unchanged program under Bun/Esbuild Layers; exact callback
+Cause; expiry, mutation, cleanup, duplicate core; real pipelines.
 
 ### Publication/platform
 
 - executable staging/publication on Linux, macOS, Windows;
 - destination unchanged before rename;
-- point-of-no-return semantics after rename;
+- point-of-no-return after rename;
 - provider multi-file output documented without atomicity claim.
 
 ### Observability
 
 - exact stable span names;
-- stable low-cardinality attributes;
+- stable bounded categorical attributes and numeric measurements;
 - no path/argv/env/plugin/diagnostic payload by default;
 - warning/error summary logs;
 - no direct OpenTelemetry dependency;
@@ -357,61 +266,46 @@ Profile/recipe:
 ### Packed consumers
 
 Pack all five packages once from one exact SHA. Install those exact tarballs in
-isolated consumers covering every public subpath and the composed recipes.
+isolated consumers covering every public subpath and composed recipe.
 
 ## Steps
 
-1. Verify preconditions and exact parent SHA.
+1. Verify preconditions and parent SHA.
 2. Apply final export maps.
-3. Delete 0.3 paths and names.
-4. Apply durable observation renames.
-5. Update all provider roots to namespace-only discovery facades.
-6. Update docs/examples/changelog/migration.
-7. Update exact public API locks.
-8. Run full static/host/provider/platform/profile/telemetry matrix.
-9. Pack five packages once.
-10. Run isolated/composed consumers from exact tarballs.
-11. Produce an unpublished candidate manifest with package hashes.
-12. Record CI workflow/run/job conclusions.
-13. Leave the PR unmerged and candidate unpublished.
+3. Delete 0.3 paths/names and apply durable vocabulary renames.
+4. Make provider roots namespace-only facades.
+5. Update docs/examples/changelog/migration.
+6. Update exact public API locks.
+7. Run static, host, provider, platform, profile, and telemetry matrices.
+8. Pack five packages once.
+9. Run isolated/composed consumers from exact tarballs.
+10. Produce an unpublished candidate manifest with hashes.
+11. Record CI workflow/run/job conclusions.
+12. Leave the PR unmerged and candidate unpublished.
 
 ## Invariants
 
 - Exactly five public packages remain.
 - No integration imports a sibling.
-- No 0.3 compatibility alias remains.
+- No 0.3 alias remains.
 - No lane silently falls back.
-- Provider-native types/results remain available.
+- Provider-native values remain available.
 - SingleNodeProgram remains narrow and borrowed.
-- Bun compile remains Bun-runtime specific.
-- Deno compile remains Deno-runtime specific.
+- Bun/Deno compile remain runtime-specific.
 - Node SEA remains an assembler.
-- All advertised cells have non-skipping evidence.
+- Every advertised cell has non-skipping evidence.
 - Candidate bytes are not published, tagged, or released.
 
 ## STOP conditions
 
-Stop and report if:
-
-- any dependency plan lacks exact-SHA passing evidence;
-- Deno `/Api` gate is unresolved without maintainer amendment;
-- a final declaration requires incompatible ambient host globals;
-- an old alias is needed to make consumers pass;
-- a provider capability is flattened to satisfy the profile;
-- API/Command fallback appears;
-- any advertised host/tool/target cell is skipped;
-- packed bytes differ between certification stages;
-- a workflow attempts publication, tag, release, or trusted-publisher mutation;
-- branch ancestry no longer includes the released source.
+Stop if any dependency plan lacks exact-SHA evidence; Deno `/Api` is unresolved
+without maintainer amendment; declarations require incompatible ambient globals;
+old aliases are needed; provider capability is flattened for the profile;
+fallback appears; an advertised cell is skipped; packed bytes differ; a workflow
+attempts release mutation; or ancestry loses the released source.
 
 ## Completion receipt
 
-Completion means:
-
-- one exact unpublished candidate SHA;
-- five once-packed tarballs and hashes;
-- full observed GitHub Actions matrix;
-- updated plan receipt;
-- no publication or release side effect.
-
-Publication requires a separate explicitly authorized task.
+Completion means one exact unpublished candidate SHA, five once-packed tarballs
+and hashes, full observed CI, updated receipt, and no publication/release side
+effect. Publication requires separate authorization.
