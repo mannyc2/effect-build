@@ -12,7 +12,10 @@ const requiredPath = (name) => {
 };
 const run = async (executable, argv) => {
   try {
-    const result = await execFileAsync(executable, [...argv], { maxBuffer: 16 * 1024 * 1024, timeout: 180_000 });
+    const result = await execFileAsync(executable, [...argv], {
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 180_000,
+    });
     return { ok: true, stdout: result.stdout, stderr: result.stderr };
   } catch (error) {
     return {
@@ -32,15 +35,18 @@ try {
   const build = async (builder, label, executable) => {
     const output = join(root, `output-${label}`);
     const config = join(root, `config-${label}.json`);
-    await writeFile(config, JSON.stringify({
-      main,
-      mainFormat: "commonjs",
-      executable,
-      output,
-      disableExperimentalSEAWarning: true,
-      useSnapshot: false,
-      useCodeCache: false,
-    }));
+    await writeFile(
+      config,
+      JSON.stringify({
+        main,
+        mainFormat: "commonjs",
+        executable,
+        output,
+        disableExperimentalSEAWarning: true,
+        useSnapshot: false,
+        useCodeCache: false,
+      }),
+    );
     const result = await run(builder, ["--build-sea", config]);
     const execution = result.ok ? await run(output, []) : undefined;
     return {
@@ -48,7 +54,15 @@ try {
       builderVersion: (await run(builder, ["--version"])).stdout.trim(),
       targetVersion: (await run(executable, ["--version"])).stdout.trim(),
       buildSucceeded: result.ok,
-      output: execution?.ok ? JSON.parse(execution.stdout.trim()) : undefined,
+      execution: execution === undefined
+        ? undefined
+        : {
+          succeeded: execution.ok,
+          output: execution.ok ? JSON.parse(execution.stdout.trim()) : undefined,
+          stdout: execution.stdout.slice(0, 4_096),
+          stderr: execution.stderr.slice(0, 4_096),
+          message: execution.ok ? undefined : execution.message,
+        },
       diagnostics: (result.stderr || result.stdout || result.message).slice(0, 4_096),
     };
   };

@@ -75,14 +75,17 @@ jobs:
           EFFECT_BUILD_DENORT_BIN: ${{ steps.tools.outputs.denort }}
           EFFECT_BUILD_NODE_SEA_BIN: ${{ steps.node26.outputs.path }}
           DENORT_BIN: ${{ steps.tools.outputs.denort }}
-      - name: Exercise Bun host API lifecycle
-        run: bun research/post-0.3/bun-host-probe.mjs
-      - name: Exercise Deno host API success and permissions
+      - name: Exercise Bun host API at oldest and current boundaries
+        shell: bash
+        run: |
+          "${{ steps.tools.outputs.bun }}" research/post-0.3/bun-host-probe.mjs
+          "${{ steps.bun-current.outputs.path }}" research/post-0.3/bun-host-probe.mjs
+      - name: Exercise Deno 2.9.3 host API success and permissions
         shell: bash
         env:
           DENO_BIN: ${{ steps.tools.outputs.deno }}
         run: |
-          root="$RUNNER_TEMP/deno-host-research"
+          root="$RUNNER_TEMP/deno-host-research-2.9.3"
           mkdir -p "$root/out"
           printf '%s\n' 'export const value: string = "deno-host";' > "$root/main.ts"
           "$DENO_BIN" run --unstable-bundle --allow-read="$root" --allow-write="$root/out" \
@@ -98,6 +101,20 @@ jobs:
         name: Capture current Deno command
         shell: bash
         run: echo "path=$(command -v deno)" >> "$GITHUB_OUTPUT"
+      - name: Exercise Deno 2.9.5 host API success and permissions
+        shell: bash
+        env:
+          DENO_BIN: ${{ steps.deno-current.outputs.path }}
+        run: |
+          root="$RUNNER_TEMP/deno-host-research-2.9.5"
+          mkdir -p "$root/out"
+          printf '%s\n' 'export const value: string = "deno-host";' > "$root/main.ts"
+          "$DENO_BIN" run --unstable-bundle --allow-read="$root" --allow-write="$root/out" \
+            research/post-0.3/deno-host-probe.ts success "$root/main.ts" "$root/out"
+          "$DENO_BIN" run --unstable-bundle \
+            research/post-0.3/deno-host-probe.ts permission "$root/main.ts"
+          "$DENO_BIN" run --unstable-bundle \
+            research/post-0.3/deno-write-permission-probe.ts "$root/main.ts" "$root/denied.js"
       - name: Install comparison providers outside the workspace
         shell: bash
         run: |

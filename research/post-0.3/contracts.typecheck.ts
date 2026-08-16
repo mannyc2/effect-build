@@ -33,9 +33,7 @@ declare const rolldownIncremental: IncrementalNodeMainService<Error>;
 declare const genericRequest: NodeMainProgramRequest;
 
 const consumeMain = <Failure>(service: NodeMainProgramService<Failure>) =>
-  service.withProgram(genericRequest, (program) =>
-    program.file as Effect.Effect<unknown, unknown>
-  );
+  service.withProgram(genericRequest, (program) => program.file as Effect.Effect<unknown, unknown>);
 
 consumeMain(bunNodeMain);
 consumeMain(esbuildNodeMain);
