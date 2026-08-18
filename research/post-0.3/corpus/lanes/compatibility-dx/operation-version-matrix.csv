@@ -1,0 +1,36 @@
+provider,operation,lane,host,version_identity,status,evidence_label,source_coordinate,limitation
+bun,bundle,selected-command,ubuntu-24.04/x86_64-gnu,1.3.9+cf6cdbbba,observed-CI-point,RECORDED-EXECUTION,live merge-test job + historical receipt,Exact selected executable; no adjacent versions implied
+bun,bundle,selected-command,ubuntu-24.04/x86_64-gnu,1.3.14 (revision not captured in receipt),observed-CI-point,RECORDED-EXECUTION,historical version-boundary receipt,Exact host/current command fixture only
+bun,Bun.build bundle,host-api,Bun host on ubuntu-24.04,1.3.9,observed-CI-point,RECORDED-EXECUTION,historical host-api-boundaries receipt,Exact host API shape and fixture
+bun,Bun.build bundle,host-api,Bun host on ubuntu-24.04,1.3.14,observed-CI-point,RECORDED-EXECUTION,historical host-api-boundaries receipt,Exact host API shape and fixture
+bun,compile executable,selected-command,ubuntu-24.04 -> linux-x64-gnu,1.3.9+cf6cdbbba,library-policy-supported,GITHUB-DIRECT,"tool pin, adapter, support matrix",Current implementation/pin acceptance; not a future range
+bun,compile executable,selected-command,arbitrary,future stable point included by reviewed policy P,library-policy-supported,PROPOSAL,not yet selected,"Hypothetical policy-supported, not an exact CI point; no current version commitment"
+bun,bundle/compile,selected-command,arbitrary,canary revision R with digest D,unknown,PROPOSAL,Bun canary policy,Exact canary begins unknown even if capabilities probe present
+bun,bundle/compile,selected-command,arbitrary,canary revision R with digest D,overridden-unknown,PROPOSAL,stable explicit override receipt,Only after all capabilities/relations/peers/protocols pass
+deno,compile executable,selected-command,ubuntu-24.04 -> linux-x64-gnu,2.9.3 stable,observed-CI-point,RECORDED-EXECUTION,live real-tools job,Exact selected Deno and denort fixture
+deno,bundle,selected-command,ubuntu-24.04/x86_64-gnu,2.9.3 stable,observed-CI-point,RECORDED-EXECUTION,historical version-boundary receipt,Experimental command; acquisition observed elsewhere
+deno,bundle,selected-command,ubuntu-24.04/x86_64-gnu,2.9.5 stable,observed-CI-point,RECORDED-EXECUTION,historical version-boundary receipt,Second exact point; no interpolation
+deno,Deno.bundle,host-api,Deno host on ubuntu-24.04,2.9.3 stable,observed-CI-point,RECORDED-EXECUTION,historical host-api-boundaries receipt,Requires unstable flag in upstream contract
+deno,Deno.bundle,host-api,Deno host on ubuntu-24.04,2.9.5 stable,observed-CI-point,RECORDED-EXECUTION,historical host-api-boundaries receipt,Exact point only
+deno,Deno.bundle,compiled-runtime-api,compiled Deno fixture,2.9.3 stable,known-incompatible,RECORDED-EXECUTION,historical existing-provider receipt,Function absent in compiled runtime; lane-specific
+deno,compile executable,selected-command,offline target,2.9.3 stable without cached/matching denort,known-incompatible,UPSTREAM-DIRECT,Deno compile denort contract,Operation cannot proceed offline without required asset; exact asset observation decides
+esbuild,one-shot bundle,in-process-js-api,Node/Bun host,0.28.2,library-policy-supported,GITHUB-DIRECT,exact dependency and API check,Current implementation accepts exactly 0.28.2
+esbuild,context/rebuild/cancel/dispose,in-process-js-api,ubuntu-24.04,0.28.1,observed-CI-point,RECORDED-EXECUTION,historical version-boundary receipt,Exact research point; current package remains pinned 0.28.2
+esbuild,context/rebuild/cancel/dispose,in-process-js-api,ubuntu-24.04,0.28.2,observed-CI-point,RECORDED-EXECUTION,historical receipt + live esbuild job,Exact point
+esbuild,serve,CLI/API,Windows,>=0.27.3 <0.28.1,known-bad-hole,UPSTREAM-DIRECT,GHSA-g7r4-m6w7-qqqr,Host/operation-specific; not currently exposed by inspected provider
+esbuild,context lifecycle,CLI,any,0.28.2,known-incompatible,UPSTREAM-DIRECT,esbuild API docs,"CLI has no rebuild API; lane mismatch, not version failure"
+node,assemble SEA,selected-command,ubuntu-24.04/linux-x64-gnu,builder=25.5.0;base=25.5.0,observed-CI-point,RECORDED-EXECUTION,historical node-sea-relations receipt,Exact equality cell
+node,assemble SEA,selected-command,ubuntu-24.04/linux-x64-gnu,builder=26.7.0;base=26.7.0,observed-CI-point,RECORDED-EXECUTION,historical receipt,Exact equality cell; current provider exact acceptance
+node,assemble SEA,selected-command,ubuntu-24.04/linux-x64-gnu,builder=26.7.0;base=25.5.0,known-incompatible,RECORDED-EXECUTION,historical relation falsifier,Build produced output but execution failed
+node,assemble SEA,selected-command,cross-platform,same version; useSnapshot=true or useCodeCache=true,known-incompatible,UPSTREAM-DIRECT,Node SEA docs,Documented cross-platform incompatibility predicate
+effect,declarations + runtime,npm graph / TypeScript / runtime,ubuntu-24.04,4.0.0-beta.104,observed-CI-point,RECORDED-EXECUTION,live exact Effect endpoint job,Exact declaration/runtime consumer endpoint
+effect,declarations + runtime,npm graph / TypeScript / runtime,ubuntu-24.04,4.0.0-rc.108,observed-CI-point,RECORDED-EXECUTION,live exact Effect endpoint job,Exact endpoint and workspace development version
+provider/core,npm peer,fresh packed consumer,ubuntu-24.04,provider 0.7.0; core 0.4.0; peer >=0.4 <0.5,observed-CI-point,RECORDED-EXECUTION,historical independent-versioning receipt,"Synthetic architecture fixture, not released package commitment"
+provider/core,npm peer,fresh packed consumer,ubuntu-24.04,provider 0.7.0; core 0.5.0; peer >=0.4 <0.5,known-incompatible,RECORDED-EXECUTION,historical ERESOLVE fixture,Peer graph failure independent from tool capabilities
+portable profile,protocol validation,provider/core adapter,any,provider protocol @1; core requires @2,known-incompatible,PROPOSAL,protocol state machine,Independent from npm version compatibility
+all providers,operation inventory reconciliation,all,all,requested breadth archive unavailable,unknown,UNKNOWN,missing required input,Future operation-specific policy remains provisional
+bun,bundle / standalone compile,selected-command and host-api,documented targets,current official documentation retrieved 2026-08-17; exact introduction boundary unspecified,upstream-declared-support,UPSTREAM-DIRECT,Bun bundler and executable documentation,Upstream surface only; not effect-build policy and not a version range
+deno,Deno.bundle,host-api,Deno runtime,">=2.5 per current docs, with --unstable-bundle",upstream-declared-support,UPSTREAM-DIRECT,Deno bundling documentation,Experimental API; upstream availability is not effect-build support
+deno,compile executable,selected-command,documented target matrix,current Deno 2.9 documentation,upstream-declared-support,UPSTREAM-DIRECT,Deno compile documentation,Requires matching denort/acquisition and operation probes
+esbuild,context/rebuild/watch/cancel/dispose,in-process-js-api,supported package platform,0.28.2 current release/docs,upstream-declared-support,UPSTREAM-DIRECT,esbuild API and v0.28.2 release,"Upstream API contract, not an inferred effect-build range"
+node,assemble SEA with --build-sea,selected-command,Node-supported SEA platforms,feature added 25.5.0; current docs 26.7.0,upstream-declared-support,UPSTREAM-DIRECT,Node SEA v26.7.0 docs,Active development; builder/base equality and target predicates still required

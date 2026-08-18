@@ -1,0 +1,656 @@
+{
+  "schema": "effect-build/evidence-ledger@1",
+  "generatedAt": "2026-08-17T21:34:58Z",
+  "repositoryHead": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+  "historicalReceiptSource": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+  "entries": [
+    {
+      "id": "E001",
+      "label": "GITHUB-DIRECT",
+      "claim": "Live branch head is 96e53a27... with tree 88bd4285...",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S01"
+      ],
+      "limitation": "Point-in-time branch observation; final recheck required.",
+      "confidence": "high",
+      "domains": [
+        "repository"
+      ]
+    },
+    {
+      "id": "E002",
+      "label": "GITHUB-DIRECT",
+      "claim": "PR #4 is open, draft, unmerged, based on 15c811..., and its body-reported final SHA is stale.",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S02"
+      ],
+      "limitation": "PR body is proposal text and may change.",
+      "confidence": "high",
+      "domains": [
+        "repository"
+      ]
+    },
+    {
+      "id": "E003",
+      "label": "GITHUB-DIRECT",
+      "claim": "All inspected packages are 0.3.0 and declare Effect peer >=4.0.0-beta.104 <4.1.0-0.",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S03",
+        "S04",
+        "S05",
+        "S06",
+        "S07",
+        "S08"
+      ],
+      "limitation": "Workspace manifests, not registry re-downloads.",
+      "confidence": "high",
+      "domains": [
+        "npm-peer",
+        "effect"
+      ]
+    },
+    {
+      "id": "E004",
+      "label": "GITHUB-DIRECT",
+      "claim": "Workspace dev endpoint is Effect/platform 4.0.0-rc.108 and esbuild 0.28.2.",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S03"
+      ],
+      "limitation": "Development dependency does not alone define support.",
+      "confidence": "high",
+      "domains": [
+        "effect",
+        "esbuild"
+      ]
+    },
+    {
+      "id": "E005",
+      "label": "GITHUB-DIRECT",
+      "claim": "esbuild provider depends on and checks exact API 0.28.2.",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S07",
+        "S20"
+      ],
+      "limitation": "Current implementation fact, not wider policy.",
+      "confidence": "high",
+      "domains": [
+        "tool"
+      ]
+    },
+    {
+      "id": "E006",
+      "label": "GITHUB-DIRECT",
+      "claim": "Node SEA provider checks exact Node 26.7.0 and linux-x64-gnu.",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S21"
+      ],
+      "limitation": "Current implementation is narrower than upstream.",
+      "confidence": "high",
+      "domains": [
+        "tool",
+        "relation"
+      ]
+    },
+    {
+      "id": "E007",
+      "label": "GITHUB-DIRECT",
+      "claim": "Current ToolDiscovery uses absolute explicit path or first PATH match and records name/version/path without digest or replacement recheck.",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S16",
+        "S17"
+      ],
+      "limitation": "Source-level inspection; runtime execution not required.",
+      "confidence": "high",
+      "domains": [
+        "selection"
+      ]
+    },
+    {
+      "id": "E008",
+      "label": "GITHUB-DIRECT",
+      "claim": "CI config separates orchestrator Node 24.14.1, host Bun 1.3.14, selected Bun 1.3.9, Deno/denort 2.9.3, Node SEA 25.5/26.7, and Effect endpoints.",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S09",
+        "S10",
+        "S11",
+        "S12",
+        "S13"
+      ],
+      "limitation": "Configured cells are not executions unless job/receipt exists.",
+      "confidence": "high",
+      "domains": [
+        "ci"
+      ]
+    },
+    {
+      "id": "E009",
+      "label": "RECORDED-EXECUTION",
+      "claim": "Historical architecture workflow at 9b0d2f5 completed and uploaded seven receipts with 18 reproduced claims.",
+      "versionOrSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22",
+        "S23"
+      ],
+      "limitation": "Exact SHA/runner/fixtures only.",
+      "confidence": "high",
+      "domains": [
+        "ci",
+        "evidence"
+      ]
+    },
+    {
+      "id": "E010",
+      "label": "RECORDED-EXECUTION",
+      "claim": "Historical artifact SHA-256 is d783cf... and local verification matched GitHub digest.",
+      "versionOrSha": "d783cfb14665c891f32e76aca095de08777c5b00e9fb517b26faa38eeb5582d9",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22"
+      ],
+      "limitation": "Artifact may expire on GitHub; local copy used only for this research.",
+      "confidence": "high",
+      "domains": [
+        "evidence"
+      ]
+    },
+    {
+      "id": "E011",
+      "label": "RECORDED-EXECUTION",
+      "claim": "Bun command capabilities/build passed at exact 1.3.9 and 1.3.14.",
+      "versionOrSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22",
+        "S23"
+      ],
+      "limitation": "No continuous range.",
+      "confidence": "high",
+      "domains": [
+        "bun"
+      ]
+    },
+    {
+      "id": "E012",
+      "label": "RECORDED-EXECUTION",
+      "claim": "Deno bundle command/API capabilities passed exact 2.9.3 and 2.9.5 fixtures.",
+      "versionOrSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22",
+        "S23"
+      ],
+      "limitation": "Experimental operation; no continuous range.",
+      "confidence": "high",
+      "domains": [
+        "deno"
+      ]
+    },
+    {
+      "id": "E013",
+      "label": "RECORDED-EXECUTION",
+      "claim": "esbuild build/context/cancel/dispose passed exact 0.28.1 and 0.28.2 fixtures.",
+      "versionOrSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22",
+        "S23"
+      ],
+      "limitation": "No range; host fixture limited.",
+      "confidence": "high",
+      "domains": [
+        "esbuild"
+      ]
+    },
+    {
+      "id": "E014",
+      "label": "RECORDED-EXECUTION",
+      "claim": "Node SEA same-version 25.5.0 and 26.7.0 passed; 26.7 builder with 25.5 base output failed execution.",
+      "versionOrSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22",
+        "S23"
+      ],
+      "limitation": "Linux research fixture; other relations remain unknown.",
+      "confidence": "high",
+      "domains": [
+        "node-sea",
+        "relation"
+      ]
+    },
+    {
+      "id": "E015",
+      "label": "RECORDED-EXECUTION",
+      "claim": "Synthetic provider/core peer >=0.4 <0.5 accepted core 0.4 and npm rejected 0.5.",
+      "versionOrSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22",
+        "S23"
+      ],
+      "limitation": "Synthetic architecture fixture, not released package support.",
+      "confidence": "high",
+      "domains": [
+        "npm-peer"
+      ]
+    },
+    {
+      "id": "E016",
+      "label": "RECORDED-EXECUTION",
+      "claim": "Deno bundle acquired esbuild platform package in a research fixture.",
+      "versionOrSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22",
+        "S23"
+      ],
+      "limitation": "Exact cache/network state; future implementation may change.",
+      "confidence": "high",
+      "domains": [
+        "deno",
+        "offline"
+      ]
+    },
+    {
+      "id": "E017",
+      "label": "RECORDED-EXECUTION",
+      "claim": "Compiled Deno fixture did not expose Deno.bundle.",
+      "versionOrSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22",
+        "S23"
+      ],
+      "limitation": "Exact 2.9.3 compiled fixture; lane-specific.",
+      "confidence": "high",
+      "domains": [
+        "deno"
+      ]
+    },
+    {
+      "id": "E018",
+      "label": "RECORDED-EXECUTION",
+      "claim": "Live-head merge-test individual production jobs succeeded but aggregate failed on formatting; architecture research run failed before receipts.",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S24",
+        "S25"
+      ],
+      "limitation": "Main run tested merge commit 665049..., not direct head alone.",
+      "confidence": "high",
+      "domains": [
+        "ci"
+      ]
+    },
+    {
+      "id": "E019",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "SemVer prerelease ordering is structured and build metadata is ignored for precedence; 0.x has no stability promise.",
+      "versionOrSha": "2.0.0",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S26"
+      ],
+      "limitation": "Provider may not follow SemVer.",
+      "confidence": "high",
+      "domains": [
+        "versioning"
+      ]
+    },
+    {
+      "id": "E020",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "npm ranges can be non-contiguous and prereleases require explicit opt-in semantics.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S27",
+        "S29"
+      ],
+      "limitation": "Package-manager semantics, not provider behavior.",
+      "confidence": "high",
+      "domains": [
+        "versioning",
+        "npm-peer"
+      ]
+    },
+    {
+      "id": "E021",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Bun documents version plus revision and untested per-main-commit canaries.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S30"
+      ],
+      "limitation": "Byte digest remains needed for custom/replaced binary.",
+      "confidence": "high",
+      "domains": [
+        "bun",
+        "versioning"
+      ]
+    },
+    {
+      "id": "E022",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Bun build CLI and JS API overlap but differ, including JS-only in-memory files.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S31",
+        "S32"
+      ],
+      "limitation": "Documentation can change; exact operation probes required.",
+      "confidence": "high",
+      "domains": [
+        "bun"
+      ]
+    },
+    {
+      "id": "E023",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Deno channel is baked into bytes and stable/LTS can share the same version string.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S33"
+      ],
+      "limitation": "Machine-readable channel probe still must be established.",
+      "confidence": "high",
+      "domains": [
+        "deno",
+        "versioning"
+      ]
+    },
+    {
+      "id": "E024",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Deno compile may download matching denort; cached/custom denort enables offline use; permissions are compile-time inputs.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S34"
+      ],
+      "limitation": "Exact cache layout across versions/targets requires probes.",
+      "confidence": "high",
+      "domains": [
+        "deno",
+        "offline",
+        "relation"
+      ]
+    },
+    {
+      "id": "E025",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Deno bundle and Deno.bundle are experimental; runtime API requires unstable-bundle.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S35",
+        "S36"
+      ],
+      "limitation": "Experimental contract may change.",
+      "confidence": "high",
+      "domains": [
+        "deno"
+      ]
+    },
+    {
+      "id": "E026",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "esbuild context exposes rebuild/cancel/dispose while CLI has no rebuild API.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S37"
+      ],
+      "limitation": "Exact implementation versions still need execution.",
+      "confidence": "high",
+      "domains": [
+        "esbuild"
+      ]
+    },
+    {
+      "id": "E027",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "esbuild recommends exact installation.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S38"
+      ],
+      "limitation": "Recommendation does not itself define effect-build support.",
+      "confidence": "high",
+      "domains": [
+        "esbuild",
+        "versioning"
+      ]
+    },
+    {
+      "id": "E028",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "GHSA-g7r4-m6w7-qqqr is a Windows serve hole for >=0.27.3 <0.28.1.",
+      "versionOrSha": "reviewed-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S39"
+      ],
+      "limitation": "Operation currently not exposed by inspected provider.",
+      "confidence": "high",
+      "domains": [
+        "esbuild",
+        "hole"
+      ]
+    },
+    {
+      "id": "E029",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Node SEA --build-sea added 25.5.0; builder/base versions must match; cross-platform snapshot/cache disabled.",
+      "versionOrSha": "v26.7.0 docs",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S41"
+      ],
+      "limitation": "SEA is active development; exact target execution required.",
+      "confidence": "high",
+      "domains": [
+        "node-sea",
+        "relation"
+      ]
+    },
+    {
+      "id": "E030",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Effect beta.104 and rc.108 are exact prerelease endpoints.",
+      "versionOrSha": "2026-08 releases",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S42",
+        "S43"
+      ],
+      "limitation": "Release existence does not prove effect-build compatibility; CI supplies that.",
+      "confidence": "high",
+      "domains": [
+        "effect"
+      ]
+    },
+    {
+      "id": "E031",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Playwright explicitly couples package versions to browser binaries and exposes explicit/hermetic install.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S44"
+      ],
+      "limitation": "Comparative UX only.",
+      "confidence": "high",
+      "domains": [
+        "comparative"
+      ]
+    },
+    {
+      "id": "E032",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Prisma exposes structured CLI/client/engine hash identity and custom native engine paths.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S45",
+        "S46"
+      ],
+      "limitation": "Legacy engine architecture differs from current v7 default.",
+      "confidence": "high",
+      "domains": [
+        "comparative"
+      ]
+    },
+    {
+      "id": "E033",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Volta pins/routs multiple tool versions and can reveal the actual binary with volta which.",
+      "versionOrSha": "retrieved-2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S47",
+        "S48"
+      ],
+      "limitation": "Comparative UX only.",
+      "confidence": "high",
+      "domains": [
+        "comparative",
+        "selection"
+      ]
+    },
+    {
+      "id": "E034",
+      "label": "UPSTREAM-DIRECT",
+      "claim": "Node-API versions and modules ABI are independent compatibility identities.",
+      "versionOrSha": "v26 docs",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S49",
+        "S50"
+      ],
+      "limitation": "Comparative protocol model, not provider policy.",
+      "confidence": "high",
+      "domains": [
+        "comparative",
+        "protocol"
+      ]
+    },
+    {
+      "id": "E035",
+      "label": "FALSIFIED",
+      "claim": "The current prototype SemVer parser is sufficient for prerelease/channel policy.",
+      "versionOrSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S14",
+        "S15"
+      ],
+      "limitation": "Prototype strips/ignores required prerelease/channel identity.",
+      "confidence": "high",
+      "domains": [
+        "versioning"
+      ]
+    },
+    {
+      "id": "E036",
+      "label": "FALSIFIED",
+      "claim": "One supported boolean can represent all compatibility domains.",
+      "versionOrSha": "multiple",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "S22",
+        "S23",
+        "S33",
+        "S41"
+      ],
+      "limitation": "Relations, peers, lane asymmetry, and channels are independent.",
+      "confidence": "high",
+      "domains": [
+        "model"
+      ]
+    },
+    {
+      "id": "E037",
+      "label": "PROPOSAL",
+      "claim": "Use the hybrid provider/operation policy with exact evidence, policy matchers, holes, capabilities, relations, and independent peer/Effect/protocol machines.",
+      "versionOrSha": "research-package",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "README.md",
+        "compatibility-policy-candidates.md"
+      ],
+      "limitation": "Requires maintainer adoption and execution before public commitments.",
+      "confidence": "medium",
+      "domains": [
+        "model"
+      ]
+    },
+    {
+      "id": "E038",
+      "label": "PROPOSAL",
+      "claim": "Override only immutable unknown-but-capable observations.",
+      "versionOrSha": "research-package",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "override-authority-matrix.md"
+      ],
+      "limitation": "No implementation exists at inspected head.",
+      "confidence": "medium",
+      "domains": [
+        "override"
+      ]
+    },
+    {
+      "id": "E039",
+      "label": "UNKNOWN",
+      "claim": "Future operation-specific policy cannot be finalized without the requested provider-breadth archive.",
+      "versionOrSha": "2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "missing-input"
+      ],
+      "limitation": "Archive unavailable in conversation/library.",
+      "confidence": "high",
+      "domains": [
+        "scope"
+      ]
+    },
+    {
+      "id": "E040",
+      "label": "UNKNOWN",
+      "claim": "Portable execute-by-already-hashed-handle semantics across supported operating systems.",
+      "versionOrSha": "2026-08-17",
+      "retrievedAt": "2026-08-17T21:34:58Z",
+      "sourceCoordinates": [
+        "open-question"
+      ],
+      "limitation": "Needs OS-specific design/execution.",
+      "confidence": "high",
+      "domains": [
+        "toctou"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "archive_sha256": "046fbd4889dd99fefeace276fa86c800a9a9056c9ef950441a80871295d67d08",
+  "archive_size": 8951,
+  "artifact_archive_name": "post-0.3-architecture-receipts-758ad2cda0b0998cf52dd00223dc00969d0803f0",
+  "artifact_id": 9266058248,
+  "certification_summary": {
+    "claims": 18,
+    "receipts": [
+      "existing-provider-research.json",
+      "external-provider-research.json",
+      "host-api-boundaries.json",
+      "independent-versioning.json",
+      "node-sea-relations.json",
+      "profile-refinement.json",
+      "version-boundaries.json"
+    ],
+    "result": "reproduced",
+    "schema": "effect-build/architecture-certification-summary@2",
+    "sourceSha": "758ad2cda0b0998cf52dd00223dc00969d0803f0"
+  },
+  "downloaded_as": "receipts-758a-run-31956375489.zip",
+  "head_sha": "758ad2cda0b0998cf52dd00223dc00969d0803f0",
+  "preserved_form": "extracted JSON; source ZIP excluded from final package",
+  "workflow_run_id": 31956375489
+}

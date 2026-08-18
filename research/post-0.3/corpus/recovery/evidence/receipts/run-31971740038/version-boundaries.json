@@ -1,0 +1,99 @@
+{
+  "schema": "effect-build/architecture-receipt@2",
+  "id": "version-boundaries",
+  "sourceSha": "6b56909018c42f90a67749662013ae0c360fc02f",
+  "status": "reproduced",
+  "claims": [
+    {
+      "id": "provider-version-boundaries",
+      "classification": "established",
+      "conclusion": "advertised-command-and-api-capabilities-exist-at-each-exercised-boundary",
+      "assertions": [
+        {
+          "name": "bun-1.3.9-and-1.3.14",
+          "passed": true
+        },
+        {
+          "name": "deno-2.9.3-and-2.9.5",
+          "passed": true
+        },
+        {
+          "name": "esbuild-0.28.1-and-0.28.2",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "bun": [
+      {
+        "label": "oldest",
+        "version": "1.3.9",
+        "capabilities": {
+          "build": true,
+          "compile": true,
+          "watch": true,
+          "metafile": true
+        },
+        "buildSucceeded": true,
+        "diagnostics": "Bundled 1 module in 3ms\n\n  entry.js  101 bytes  (entry point)\n\n"
+      },
+      {
+        "label": "newest-current",
+        "version": "1.3.14",
+        "capabilities": {
+          "build": true,
+          "compile": true,
+          "watch": true,
+          "metafile": true
+        },
+        "buildSucceeded": true,
+        "diagnostics": "Bundled 1 module in 3ms\n\n  entry.js  101 bytes  (entry point)\n\n"
+      }
+    ],
+    "deno": [
+      {
+        "label": "oldest",
+        "version": "2.9.3 (stable, release, x86_64-unknown-linux-gnu)",
+        "capabilities": {
+          "bundle": true,
+          "watch": true,
+          "declaration": true,
+          "platform": true
+        },
+        "buildSucceeded": true,
+        "diagnostics": "⚠️  \u001b[0m\u001b[36mdeno bundle\u001b[0m is experimental and subject to changes\n\u001b[0m\u001b[32mBundled\u001b[0m 1 module in 2ms\n  \u001b[0m\u001b[36m../../../../../tmp/effect-build-version-boundary-Eep9Zq/deno-oldest/entry.js\u001b[0m \u001b[0m\u001b[38;5;245m101B\u001b[0m\n\n"
+      },
+      {
+        "label": "newest-current",
+        "version": "2.9.5 (stable, release, x86_64-unknown-linux-gnu)",
+        "capabilities": {
+          "bundle": true,
+          "watch": true,
+          "declaration": true,
+          "platform": true
+        },
+        "buildSucceeded": true,
+        "diagnostics": "⚠️  \u001b[0m\u001b[36mdeno bundle\u001b[0m is experimental and subject to changes\n\u001b[0m\u001b[32mBundled\u001b[0m 1 module in 3ms\n  \u001b[0m\u001b[36m../../../../../tmp/effect-build-version-boundary-Eep9Zq/deno-newest-current/entry.js\u001b[0m \u001b[0m\u001b[38;5;245m101B\u001b[0m\n\n"
+      }
+    ],
+    "esbuild": [
+      {
+        "label": "oldest",
+        "version": "0.28.1",
+        "build": true,
+        "context": true,
+        "cancel": true,
+        "dispose": true
+      },
+      {
+        "label": "newest-current",
+        "version": "0.28.2",
+        "build": true,
+        "context": true,
+        "cancel": true,
+        "dispose": true
+      }
+    ]
+  }
+}

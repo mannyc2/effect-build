@@ -1,0 +1,83 @@
+{
+  "schema": "effect-build/browser-role-live-github-state@1",
+  "observedAt": "2026-08-17T15:53:21Z",
+  "repository": "mannyc2/effect-build",
+  "pullRequest": {
+    "number": 4,
+    "url": "https://github.com/mannyc2/effect-build/pull/4",
+    "state": "open",
+    "draft": true,
+    "title": "architecture: validate provider-native APIs and portable roles",
+    "baseRef": "codex/granular-integration-program",
+    "baseSha": "15c811bb9904142a33d119766b62082f3c689f13",
+    "headRef": "codex/post-0.3-native-capability-architecture",
+    "headSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "bodyDeclaredFinalResearchHead": "af4887c36753a82c3c97fafc54b3c368cd98b34d",
+    "bodyHeadMatchesLiveHead": false,
+    "changedFileCountObserved": 74
+  },
+  "headCommit": {
+    "sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "treeSha": "88bd428556172ca4b5ec0673b18f57d4839b9431",
+    "parentSha": "11617dd0008c919074388de807611644915ed8e0",
+    "message": "research: stage canonical closure payload 00",
+    "committedAt": "2026-08-17T03:17:17Z"
+  },
+  "latestArchitectureWorkflow": {
+    "runId": 31990684158,
+    "runNumber": 118,
+    "headSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "event": "pull_request",
+    "status": "completed",
+    "conclusion": "failure",
+    "startedAt": "2026-08-17T03:17:24Z",
+    "updatedAt": "2026-08-17T03:18:19Z",
+    "firstMaterialFailure": "Type-check current contract prototypes",
+    "laterCertificationSteps": "skipped"
+  },
+  "lastSuccessfulArchitectureWorkflowUsedForReceipts": {
+    "runId": 31971767617,
+    "runNumber": 48,
+    "headSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+    "status": "completed",
+    "conclusion": "success",
+    "artifact": {
+      "artifactId": 9269991589,
+      "name": "post-0.3-architecture-receipts-9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "sizeInBytes": 8951,
+      "githubDigest": "sha256:d783cfb14665c891f32e76aca095de08777c5b00e9fb517b26faa38eeb5582d9",
+      "downloadedDigestVerified": true
+    }
+  },
+  "browserResearch": {
+    "successfulReceiptSourceSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+    "browserBehaviorProbeV2FirstCommit": "5fdfd5bca49ca0b45578bec0fca63537800e90df",
+    "v2HasSuccessfulRecordedExecutionAtOrAfterIntroduction": false,
+    "v2IsDirectlyInvokedByReviewedCertificationWorkflow": false,
+    "productionBrowserAdapterFound": false,
+    "finalResearchBrowserAdapterFound": false,
+    "finalProviderAdaptersImplemented": [
+      "Bun NodeMainProgram",
+      "Esbuild NodeMainProgram"
+    ]
+  },
+  "auditedPaths": [
+    ".github/workflows/architecture-research.yml",
+    "plans/POST-0.3-NATIVE-CAPABILITY-ARCHITECTURE.md",
+    "plans/POST-0.3-PROVIDER-CAPABILITY-MATRIX.md",
+    "plans/POST-0.3-API-CANDIDATES.md",
+    "research/post-0.3/contracts.ts",
+    "research/post-0.3/final/contracts.ts",
+    "research/post-0.3/final/provider-adapters.ts",
+    "research/post-0.3/profile-refinement-probe.mjs",
+    "research/post-0.3/browser-behavior-probe.mjs",
+    "research/post-0.3/browser-behavior-probe-v2.mjs",
+    "research/post-0.3/provider-conformance.mjs",
+    "research/post-0.3/certify-profile-refinement.mjs",
+    "research/post-0.3/certify-provider-conformance.mjs",
+    "research/post-0.3/expected-conclusions.json"
+  ],
+  "claimClassification": "GITHUB-DIRECT",
+  "mutationsPerformed": false,
+  "conformanceClaimed": false
+}

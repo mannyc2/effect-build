@@ -1,0 +1,94 @@
+{
+  "schema": "effect-build/architecture-receipt@2",
+  "id": "external-provider-research",
+  "sourceSha": "758ad2cda0b0998cf52dd00223dc00969d0803f0",
+  "status": "reproduced",
+  "claims": [
+    {
+      "id": "node-main-executable",
+      "classification": "established",
+      "conclusion": "node-sea-and-pkg-produced-equivalent-node-main-executables",
+      "assertions": [
+        {
+          "name": "node-sea-ran",
+          "passed": true
+        },
+        {
+          "name": "pkg-ran",
+          "passed": true
+        },
+        {
+          "name": "application-result-equal",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "incremental-node-main",
+      "classification": "sequenced",
+      "conclusion": "esbuild-and-rolldown-conform-but-rolldown-is-not-a-0.4-product-package",
+      "assertions": [
+        {
+          "name": "esbuild-context-rebuilt",
+          "passed": true
+        },
+        {
+          "name": "rolldown-build-regenerated",
+          "passed": true
+        },
+        {
+          "name": "release-enforced",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "esbuildIncremental": {
+      "firstContainsV1": true,
+      "secondContainsV2": true,
+      "lifecycle": [
+        "context",
+        "rebuild",
+        "rebuild",
+        "cancel",
+        "dispose"
+      ]
+    },
+    "rolldownIncremental": {
+      "firstContainsV1": true,
+      "secondContainsV2": true,
+      "afterCloseRejected": true,
+      "lifecycle": [
+        "rolldown",
+        "generate",
+        "generate",
+        "close"
+      ]
+    },
+    "nodeSea": {
+      "output": {
+        "runtime": "node",
+        "value": "single-main"
+      },
+      "bytes": 147877060
+    },
+    "pkg": {
+      "output": {
+        "runtime": "node",
+        "value": "single-main"
+      },
+      "bytes": 147983616
+    },
+    "nodeMainExecutable": {
+      "nodeSeaConforms": true,
+      "pkgConforms": true,
+      "conclusion": "two-node-runtime-implementations-conform"
+    },
+    "incrementalNodeMain": {
+      "esbuildConforms": true,
+      "rolldownConforms": true,
+      "conclusion": "scoped-incremental-main-role-supported"
+    }
+  }
+}

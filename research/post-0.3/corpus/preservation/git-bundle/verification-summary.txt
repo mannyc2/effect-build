@@ -1,0 +1,5 @@
+remote_ref_comparison=match
+remote_ref_count=17
+anchor_commit_count=5
+bundle_self_contained=true
+restored_fsck_passed=true

@@ -1,0 +1,340 @@
+{
+  "schema": "effect-build/node-canon-evidence-ledger@1",
+  "observedAt": "2026-08-17T15:23:57Z",
+  "labels": {
+    "GITHUB-DIRECT": "Live repository/API/ref/source/check evidence read directly from GitHub.",
+    "UPSTREAM-DIRECT": "Official upstream contract, source, declaration, or documentation.",
+    "RECORDED-EXECUTION": "Preserved execution result scoped to exact commit/command/versions/fixture/host.",
+    "INFERENCE": "Reasoned conclusion from listed direct evidence; assumptions are material.",
+    "PROPOSAL": "Recommended architecture/domain/API decision; not current fact.",
+    "UNKNOWN": "Requires future source inspection or execution."
+  },
+  "sources": [
+    {
+      "id": "GH-PR-4",
+      "label": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/pulls/4",
+      "claims": [
+        "PR 4 is open and draft.",
+        "The direct REST title is architecture: validate provider-native APIs and portable roles.",
+        "The body names af4887c36753a82c3c97fafc54b3c368cd98b34d as a final head, which differs from the live ref."
+      ]
+    },
+    {
+      "id": "GH-LIVE-REFS",
+      "label": "GITHUB-DIRECT",
+      "locators": [
+        "https://api.github.com/repos/mannyc2/effect-build/git/ref/heads/codex/post-0.3-native-capability-architecture",
+        "https://api.github.com/repos/mannyc2/effect-build/git/ref/heads/codex/granular-integration-program"
+      ],
+      "claims": [
+        "Research branch live head is 96e53a27be4ef96fb47f1a745480e0c5382640f2.",
+        "Base branch live head is 15c811bb9904142a33d119766b62082f3c689f13."
+      ]
+    },
+    {
+      "id": "GH-HEAD-COMMIT",
+      "label": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/commits/96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "claims": [
+        "Head message is Document the canonical Node-main representation.",
+        "GitHub reports a valid verified signature.",
+        "Commit tree and parent are recorded in live-github-state.json."
+      ]
+    },
+    {
+      "id": "GH-PLAN-043",
+      "label": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/043-publish-single-node-program-profile.md",
+      "blobSha": "9e2fba144e19cae0773de9e4da27048961bc97b0",
+      "claims": [
+        "Current plan defines NodeMainProgram as a borrowed JavaScript main entry.",
+        "Current plan carries externalImportObservations and ordered steps.",
+        "Current plan defines NodeMainExecutable File|Bytes input and NodeSourceExecutable recipe."
+      ]
+    },
+    {
+      "id": "GH-NODE-CANON-PROBE",
+      "label": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/node-main-canon-probe.mjs",
+      "blobSha": "480026ae15648d9e482f963d41222cc531fa80ae",
+      "claims": [
+        "Probe compares importable, main-entry, and graph candidates.",
+        "Probe uses Bun/esbuild metafiles, package externalization, no splitting, and node --check on curated fixtures.",
+        "Source selects the main-entry candidate within its matrix."
+      ],
+      "limitations": [
+        "Source is not a current execution receipt.",
+        "Fixture matrix does not prove arbitrary dynamic loading or SEA default-loader closure."
+      ]
+    },
+    {
+      "id": "GH-ARCH-WORKFLOW",
+      "label": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/.github/workflows/architecture-research.yml",
+      "blobSha": "fa1017f5996bce1195be3bb129735c781f535b14",
+      "claims": [
+        "Workflow pins exact Node, Bun, Deno, Rolldown, pkg, esbuild, and TypeScript versions.",
+        "Contract type-check precedes certification and receipt validation/upload."
+      ]
+    },
+    {
+      "id": "GH-CHECKS-HEAD",
+      "label": "RECORDED-EXECUTION",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/commits/96e53a27be4ef96fb47f1a745480e0c5382640f2/check-runs?per_page=100",
+      "claims": [
+        "27 checks were reported.",
+        "Selected node-sea checks were skipped.",
+        "Selected executable-research and quality checks failed.",
+        "Selected Bun/esbuild/real-tools/source-export checks succeeded within their own job scopes."
+      ]
+    },
+    {
+      "id": "GH-EXEC-ANNOTATIONS",
+      "label": "RECORDED-EXECUTION",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/check-runs/95273543625/annotations",
+      "claims": [
+        "Current executable-research annotations include two contract type errors, exit code 2, and no receipt upload files."
+      ]
+    },
+    {
+      "id": "GH-EXPECTED-CONCLUSIONS",
+      "label": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/expected-conclusions.json",
+      "blobSha": "af106e79404cacbbb60c5311c97a57622560cfa6",
+      "claims": [
+        "File declares intended architecture conclusions and receipt names."
+      ],
+      "limitations": [
+        "Expected conclusions are assertions to validate, not execution receipts."
+      ]
+    },
+    {
+      "id": "NODE-SEA-26",
+      "label": "UPSTREAM-DIRECT",
+      "locators": [
+        "https://nodejs.org/api/single-executable-applications.html",
+        "https://github.com/nodejs/node/blob/v26.7.0/doc/api/single-executable-applications.md"
+      ],
+      "upstreamVersion": "v26.7.0",
+      "sourceBlobSha": "be5667cbd499e4e5dc9bfb321a3a4177c124f1e4",
+      "claims": [
+        "SEA supports one injected CJS or ESM main and optional assets/snapshot/code cache/exec args.",
+        "Default injected loading is built-ins-only and does not read ordinary modules from filesystem.",
+        "createRequire is the documented opt-in for filesystem module loading.",
+        "ESM and snapshot cannot be combined; import() does not work with code cache.",
+        "Preparation/injected Node binary versions must match.",
+        "Native addons require asset extraction and process.dlopen."
+      ]
+    },
+    {
+      "id": "NODE-ESM-26",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://github.com/nodejs/node/blob/v26.7.0/doc/api/esm.md",
+      "upstreamVersion": "v26.7.0",
+      "sourceBlobSha": "7bee6777458375012b132858a5022c4c0f68fa5f",
+      "claims": [
+        "Ordinary ESM specifier and mandatory-extension rules.",
+        "JSON import requires type json attribute.",
+        "Built-in and dynamic import semantics."
+      ]
+    },
+    {
+      "id": "NODE-CJS-26",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://github.com/nodejs/node/blob/v26.7.0/doc/api/modules.md",
+      "upstreamVersion": "v26.7.0",
+      "sourceBlobSha": "f055372739c24e5125a69b6f9ac491863e02806c",
+      "claims": [
+        "Ordinary CommonJS loading and require.main semantics.",
+        "CJS and ESM main/import behavior differ."
+      ]
+    },
+    {
+      "id": "NODE-PACKAGES-26",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://github.com/nodejs/node/blob/v26.7.0/doc/api/packages.md",
+      "upstreamVersion": "v26.7.0",
+      "claims": [
+        "Package type, exports, imports, conditions, and CJS/ESM resolution semantics."
+      ]
+    },
+    {
+      "id": "NODE-CLI-26",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://nodejs.org/api/cli.html#-c---check",
+      "claims": [
+        "--check syntax-checks without execution."
+      ]
+    },
+    {
+      "id": "BUN-BUNDLER",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://bun.sh/docs/bundler",
+      "claims": [
+        "Bun exposes target, format, splitting, external/package externalization, metafiles, plugins/loaders, and multiple output kinds.",
+        "Bun documents that it does not down-convert JavaScript syntax."
+      ]
+    },
+    {
+      "id": "BUN-EXECUTABLES",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://bun.sh/docs/bundler/executables",
+      "claims": [
+        "Bun compile embeds the Bun runtime and has provider-native executable/cross-target semantics."
+      ]
+    },
+    {
+      "id": "ESBUILD-API",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://esbuild.github.io/api/",
+      "claims": [
+        "Esbuild platform node and format affect output/resolution.",
+        "Target transforms syntax but does not polyfill APIs.",
+        "External packages, splitting, file loaders, and metafiles affect the output contract."
+      ]
+    },
+    {
+      "id": "ROLLDOWN-DOCS",
+      "label": "UPSTREAM-DIRECT",
+      "locators": [
+        "https://rolldown.rs/reference/InputOptions.platform",
+        "https://rolldown.rs/reference/OutputOptions.format",
+        "https://rolldown.rs/in-depth/external-modules",
+        "https://rolldown.rs/reference/OutputOptions.codeSplitting",
+        "https://rolldown.rs/reference/InputOptions.transform",
+        "https://rolldown.rs/reference/Interface.OutputChunk",
+        "https://rolldown.rs/in-depth/module-types"
+      ],
+      "claims": [
+        "Rolldown separately models platform, format, externals, code splitting, target transforms, module types, chunks, and plugins."
+      ]
+    },
+    {
+      "id": "ROLLUP-CONFIG",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://rollupjs.org/configuration-options/",
+      "claims": [
+        "Rollup supports externals, chunks/assets, output formats, and inlineDynamicImports with semantic tradeoffs."
+      ]
+    },
+    {
+      "id": "ROLLUP-PLUGINS",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://github.com/rollup/plugins",
+      "claims": [
+        "Official plugins supply Node resolution, CommonJS, JSON, dynamic-import-variable, and other semantics."
+      ]
+    },
+    {
+      "id": "DENO-COMPILE",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://docs.deno.com/runtime/reference/cli/compile/",
+      "claims": [
+        "Deno compile owns module graph analysis, include rules, npm/node_modules embedding, VFS/self-extraction, workers, and cross-target behavior."
+      ]
+    },
+    {
+      "id": "PKG-GUIDES",
+      "label": "UPSTREAM-DIRECT",
+      "locators": [
+        "https://yao-pkg.github.io/pkg/guide/sea-vs-standard",
+        "https://yao-pkg.github.io/pkg/guide/targets",
+        "https://yao-pkg.github.io/pkg/guide/esm",
+        "https://yao-pkg.github.io/pkg/guide/native-addons"
+      ],
+      "claims": [
+        "pkg distinguishes standard/enhanced SEA modes and documents target, ESM, project/package, and native-addon behavior."
+      ],
+      "limitations": [
+        "Docs observed may identify a different published docs version than the workflow-pinned pkg 6.22.0; do not infer unverified exact-version equivalence."
+      ]
+    },
+    {
+      "id": "NCC-REPO",
+      "label": "UPSTREAM-DIRECT",
+      "locator": "https://github.com/vercel/ncc",
+      "claims": [
+        "ncc produces a Node-oriented bundle and may emit/relocate assets."
+      ]
+    }
+  ],
+  "derivedClaims": [
+    {
+      "id": "INF-C2-TOO-WEAK",
+      "label": "INFERENCE",
+      "claim": "Candidate C2's external import observations are insufficient for SEA admissibility because a recorded non-builtin external remains unloadable by the default injected loader.",
+      "dependsOn": [
+        "GH-PLAN-043",
+        "GH-NODE-CANON-PROBE",
+        "NODE-SEA-26"
+      ]
+    },
+    {
+      "id": "INF-CURRENT-NOT-CERTIFIED",
+      "label": "INFERENCE",
+      "claim": "The live head has no complete green current receipt set because contract type-checking failed before certification and receipt validation/upload.",
+      "dependsOn": [
+        "GH-CHECKS-HEAD",
+        "GH-EXEC-ANNOTATIONS",
+        "GH-ARCH-WORKFLOW"
+      ]
+    },
+    {
+      "id": "INF-PRODUCER-METADATA-NOT-PROOF",
+      "label": "INFERENCE",
+      "claim": "Metafiles describe producer-known edges but cannot generally prove absence of computed/eval/createRequire/plugin-hidden loads or implicit assets.",
+      "dependsOn": [
+        "GH-NODE-CANON-PROBE",
+        "BUN-BUNDLER",
+        "ESBUILD-API",
+        "ROLLDOWN-DOCS",
+        "ROLLUP-CONFIG"
+      ]
+    },
+    {
+      "id": "PROP-SEA-CLOSED-NODE-MAIN",
+      "label": "PROPOSAL",
+      "claim": "Adopt an opaque negotiated sealed NodeMain capability for one authenticated main, exact target agreement, finite literal built-ins only, no dynamic import/assets/addons/snapshot/code cache.",
+      "dependsOn": [
+        "NODE-SEA-26",
+        "INF-C2-TOO-WEAK",
+        "BUN-BUNDLER",
+        "ESBUILD-API",
+        "ROLLDOWN-DOCS",
+        "ROLLUP-CONFIG"
+      ]
+    },
+    {
+      "id": "PROP-ORDINARY-COMPOSITION",
+      "label": "PROPOSAL",
+      "claim": "Treat NodeSourceExecutable as an ordinary scoped composition function, not a profile or recipe algebra.",
+      "dependsOn": [
+        "GH-PLAN-043",
+        "PROP-SEA-CLOSED-NODE-MAIN"
+      ]
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "UNK-EXACT-PRODUCER-LAWS",
+      "label": "UNKNOWN",
+      "question": "Can each restricted Bun/esbuild/Rolldown/Rollup adapter reject the full adversarial matrix at exact pinned versions without false acceptance or unacceptable false rejection?"
+    },
+    {
+      "id": "UNK-CROSS-TARGET-SEA",
+      "label": "UNKNOWN",
+      "question": "Which exact same-version Node binary identity checks are sufficient for every supported cross-target built-in --build-sea path?"
+    },
+    {
+      "id": "UNK-SIGNING-READINESS",
+      "label": "UNKNOWN",
+      "question": "What platform-specific signing/notarization policy is required before effect-build may label each target executable durable and distributable?"
+    },
+    {
+      "id": "UNK-PKG-STRICT-ADAPTER",
+      "label": "UNKNOWN",
+      "question": "Can pkg 6.22.0 consume an already sealed main under a no-hidden-acquisition mode with the same runtime semantics, or should it remain wholly provider-native?"
+    }
+  ]
+}

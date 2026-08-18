@@ -1,0 +1,11 @@
+{
+  "schema": "effect-build/expected-architecture-conclusions@2",
+  "claims": [
+    {
+      "receipt": "windows-lifecycle",
+      "id": "windows-lock-and-cleanup",
+      "classification": "established",
+      "conclusion": "windows-running-executable-locks-fail-before-cleanup-and-release-after-exit-while-same-parent-replacement-and-portable-normalization-remain-explicit"
+    }
+  ]
+}

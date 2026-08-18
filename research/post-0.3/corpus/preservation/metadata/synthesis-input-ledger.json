@@ -1,0 +1,39 @@
+{
+  "synthesis": {
+    "path": "inputs/effect-build-research-synthesis-2026-08-17.zip",
+    "size_in_bytes": 543447,
+    "sha256": "4a1ae74576921f2fa87af52e566f0ae53da5ec6aa241ea13ddc1f3cb35bddd4c",
+    "zip_integrity": true,
+    "manifest_verified": true
+  },
+  "embedded_inputs": [
+    {
+      "name": "effect-build-architecture-recovery.zip",
+      "size_in_bytes": 318009,
+      "sha256": "486182ba32a027a70197f2de77df813093e8d8c9f20f61f47cc366292c51479c",
+      "zip_integrity": true,
+      "manifest_match": true
+    },
+    {
+      "name": "effect-build-browser-role-research.zip",
+      "size_in_bytes": 68358,
+      "sha256": "4223e559d59364dabd982d2b659e4e780afeeafd4f197699b108c2607fc85092",
+      "zip_integrity": true,
+      "manifest_match": true
+    },
+    {
+      "name": "effect-build-lifecycle-observability-research.zip",
+      "size_in_bytes": 64845,
+      "sha256": "cb461ca4e598e76ebad09dc604ec29ff93ed166fdf7ba5bd8d12e4e5d13d358e",
+      "zip_integrity": true,
+      "manifest_match": true
+    },
+    {
+      "name": "effect-build-node-canon-research.zip",
+      "size_in_bytes": 50556,
+      "sha256": "a09c5b2132e0dacf1d4e18b6b96ae23a75cc4604c9e547f19fa36edadb34319f",
+      "zip_integrity": true,
+      "manifest_match": true
+    }
+  ]
+}

@@ -2,6 +2,10 @@
 
 These files are research-only. They do not define or change a production export.
 
+The durable source reports, recovery ledgers, and cross-lane limitations are indexed in
+[`corpus/README.md`](corpus/README.md). That corpus is reference evidence, not a canonical architecture or successful
+certification result.
+
 The harness separates:
 
 - law tests for compatibility, ownership, and lifecycle state machines;

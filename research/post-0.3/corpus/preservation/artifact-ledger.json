@@ -1,0 +1,1159 @@
+{
+  "schema": "effect-build-preserved-evidence/artifact-ledger@1",
+  "repository": "mannyc2/effect-build",
+  "target_count": 19,
+  "preserved_count": 19,
+  "unavailable_count": 0,
+  "digest_disagreements_with_attached_recovery_ledger": [
+    {
+      "artifact_id": 9275193303,
+      "attached_digest": "sha256:eddd5b92e076359d103abcf1640baf467449abfb624b2933c9fbf404863a22cb",
+      "live_digest": "sha256:edddbe810ad37d8f67e109c82ebf66b8ca75ae090727f15840862ee8ef997353",
+      "local_sha256": "edddbe810ad37d8f67e109c82ebf66b8ca75ae090727f15840862ee8ef997353"
+    }
+  ],
+  "records": [
+    {
+      "artifact_id": 9266057793,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-758ad2cda0b0998cf52dd00223dc00969d0803f0",
+      "source_sha": "758ad2cda0b0998cf52dd00223dc00969d0803f0",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9266057793",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9266057793/zip",
+        "created_at": "2026-08-16T15:41:57Z",
+        "updated_at": "2026-08-16T15:41:57Z",
+        "expires_at": "2026-09-15T15:41:56Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8946,
+        "reported_digest": "sha256:598fc9843d01bc209c94c37b1a0a5347f9dd7fcb20c5fee763be6a85f6803fc6"
+      },
+      "workflow_run": {
+        "id": 31956373310,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31956373310",
+        "created_at": "2026-08-16T15:40:45Z",
+        "updated_at": "2026-08-16T15:42:00Z",
+        "jobs": [
+          {
+            "id": 95187525949,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T15:40:48Z",
+            "completed_at": "2026-08-16T15:42:00Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9266057793--post-0.3-architecture-receipts-758ad2cda0b0998cf52dd00223dc00969d0803f0.zip",
+        "size_in_bytes": 8946,
+        "sha256": "598fc9843d01bc209c94c37b1a0a5347f9dd7fcb20c5fee763be6a85f6803fc6",
+        "downloaded_at": "2026-08-17T18:52:41Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:598fc9843d01bc209c94c37b1a0a5347f9dd7fcb20c5fee763be6a85f6803fc6",
+        "size_in_bytes": 8946,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9266058248,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-758ad2cda0b0998cf52dd00223dc00969d0803f0",
+      "source_sha": "758ad2cda0b0998cf52dd00223dc00969d0803f0",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9266058248",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9266058248/zip",
+        "created_at": "2026-08-16T15:41:59Z",
+        "updated_at": "2026-08-16T15:41:59Z",
+        "expires_at": "2026-09-15T15:41:58Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8951,
+        "reported_digest": "sha256:046fbd4889dd99fefeace276fa86c800a9a9056c9ef950441a80871295d67d08"
+      },
+      "workflow_run": {
+        "id": 31956375489,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31956375489",
+        "created_at": "2026-08-16T15:40:47Z",
+        "updated_at": "2026-08-16T15:42:02Z",
+        "jobs": [
+          {
+            "id": 95187531075,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T15:40:50Z",
+            "completed_at": "2026-08-16T15:42:02Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9266058248--post-0.3-architecture-receipts-758ad2cda0b0998cf52dd00223dc00969d0803f0.zip",
+        "size_in_bytes": 8951,
+        "sha256": "046fbd4889dd99fefeace276fa86c800a9a9056c9ef950441a80871295d67d08",
+        "downloaded_at": "2026-08-17T18:52:42Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:046fbd4889dd99fefeace276fa86c800a9a9056c9ef950441a80871295d67d08",
+        "size_in_bytes": 8951,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9266561046,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-96d5123f54ef1258a6de6e10d17f2c1dadb2ec14",
+      "source_sha": "96d5123f54ef1258a6de6e10d17f2c1dadb2ec14",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9266561046",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9266561046/zip",
+        "created_at": "2026-08-16T16:21:29Z",
+        "updated_at": "2026-08-16T16:21:29Z",
+        "expires_at": "2026-09-15T16:21:28Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8951,
+        "reported_digest": "sha256:eaf442b08afdef5f927799fb89154b39a825edb91b1a07db68e942ee61c266cb"
+      },
+      "workflow_run": {
+        "id": 31958300817,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31958300817",
+        "created_at": "2026-08-16T16:20:07Z",
+        "updated_at": "2026-08-16T16:21:35Z",
+        "jobs": [
+          {
+            "id": 95192277844,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T16:20:11Z",
+            "completed_at": "2026-08-16T16:21:34Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9266561046--post-0.3-architecture-receipts-96d5123f54ef1258a6de6e10d17f2c1dadb2ec14.zip",
+        "size_in_bytes": 8951,
+        "sha256": "eaf442b08afdef5f927799fb89154b39a825edb91b1a07db68e942ee61c266cb",
+        "downloaded_at": "2026-08-17T18:52:42Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:eaf442b08afdef5f927799fb89154b39a825edb91b1a07db68e942ee61c266cb",
+        "size_in_bytes": 8951,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9266567118,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-96d5123f54ef1258a6de6e10d17f2c1dadb2ec14",
+      "source_sha": "96d5123f54ef1258a6de6e10d17f2c1dadb2ec14",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9266567118",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9266567118/zip",
+        "created_at": "2026-08-16T16:22:00Z",
+        "updated_at": "2026-08-16T16:22:00Z",
+        "expires_at": "2026-09-15T16:22:00Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8949,
+        "reported_digest": "sha256:2b4f450392e4ab426d5664097666d81b0f7d9e80524d94bdb5ae444145a39ce9"
+      },
+      "workflow_run": {
+        "id": 31958303340,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31958303340",
+        "created_at": "2026-08-16T16:20:10Z",
+        "updated_at": "2026-08-16T16:22:06Z",
+        "jobs": [
+          {
+            "id": 95192284282,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T16:20:43Z",
+            "completed_at": "2026-08-16T16:22:05Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9266567118--post-0.3-architecture-receipts-96d5123f54ef1258a6de6e10d17f2c1dadb2ec14.zip",
+        "size_in_bytes": 8949,
+        "sha256": "2b4f450392e4ab426d5664097666d81b0f7d9e80524d94bdb5ae444145a39ce9",
+        "downloaded_at": "2026-08-17T18:52:43Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:2b4f450392e4ab426d5664097666d81b0f7d9e80524d94bdb5ae444145a39ce9",
+        "size_in_bytes": 8949,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269201472,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-822312b2f0581bec831a957115d21fbdcfb36180",
+      "source_sha": "822312b2f0581bec831a957115d21fbdcfb36180",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269201472",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269201472/zip",
+        "created_at": "2026-08-16T19:50:29Z",
+        "updated_at": "2026-08-16T19:50:29Z",
+        "expires_at": "2026-09-15T19:50:29Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8960,
+        "reported_digest": "sha256:becc7abd07666e80510cb6a954f6a262bbb55da52822f2f2a5a134c9ef11590e"
+      },
+      "workflow_run": {
+        "id": 31968706959,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31968706959",
+        "created_at": "2026-08-16T19:49:11Z",
+        "updated_at": "2026-08-16T19:50:34Z",
+        "jobs": [
+          {
+            "id": 95217691683,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T19:49:15Z",
+            "completed_at": "2026-08-16T19:50:33Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269201472--post-0.3-architecture-receipts-822312b2f0581bec831a957115d21fbdcfb36180.zip",
+        "size_in_bytes": 8960,
+        "sha256": "becc7abd07666e80510cb6a954f6a262bbb55da52822f2f2a5a134c9ef11590e",
+        "downloaded_at": "2026-08-17T18:52:43Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:becc7abd07666e80510cb6a954f6a262bbb55da52822f2f2a5a134c9ef11590e",
+        "size_in_bytes": 8960,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269202137,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-822312b2f0581bec831a957115d21fbdcfb36180",
+      "source_sha": "822312b2f0581bec831a957115d21fbdcfb36180",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269202137",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269202137/zip",
+        "created_at": "2026-08-16T19:50:33Z",
+        "updated_at": "2026-08-16T19:50:33Z",
+        "expires_at": "2026-09-15T19:50:32Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8956,
+        "reported_digest": "sha256:6cec545eb3cf1c31af7f1aeb6fdea21c6d55ba6dc6a826c2d3ce4e425a5f573d"
+      },
+      "workflow_run": {
+        "id": 31968709863,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31968709863",
+        "created_at": "2026-08-16T19:49:15Z",
+        "updated_at": "2026-08-16T19:50:38Z",
+        "jobs": [
+          {
+            "id": 95217698567,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T19:49:18Z",
+            "completed_at": "2026-08-16T19:50:37Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269202137--post-0.3-architecture-receipts-822312b2f0581bec831a957115d21fbdcfb36180.zip",
+        "size_in_bytes": 8956,
+        "sha256": "6cec545eb3cf1c31af7f1aeb6fdea21c6d55ba6dc6a826c2d3ce4e425a5f573d",
+        "downloaded_at": "2026-08-17T18:52:43Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:6cec545eb3cf1c31af7f1aeb6fdea21c6d55ba6dc6a826c2d3ce4e425a5f573d",
+        "size_in_bytes": 8956,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269246363,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-45a9e9185494e9d5944dcb0310c4a9e5caf6657a",
+      "source_sha": "45a9e9185494e9d5944dcb0310c4a9e5caf6657a",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269246363",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269246363/zip",
+        "created_at": "2026-08-16T19:54:13Z",
+        "updated_at": "2026-08-16T19:54:13Z",
+        "expires_at": "2026-09-15T19:54:13Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8947,
+        "reported_digest": "sha256:f268cff263486098d9858dcfa745f6a4cef6a7dec9fdf4921e6481833ab9f6cc"
+      },
+      "workflow_run": {
+        "id": 31968897548,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31968897548",
+        "created_at": "2026-08-16T19:52:59Z",
+        "updated_at": "2026-08-16T19:54:17Z",
+        "jobs": [
+          {
+            "id": 95218134097,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T19:53:03Z",
+            "completed_at": "2026-08-16T19:54:16Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269246363--post-0.3-architecture-receipts-45a9e9185494e9d5944dcb0310c4a9e5caf6657a.zip",
+        "size_in_bytes": 8947,
+        "sha256": "f268cff263486098d9858dcfa745f6a4cef6a7dec9fdf4921e6481833ab9f6cc",
+        "downloaded_at": "2026-08-17T18:52:44Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:f268cff263486098d9858dcfa745f6a4cef6a7dec9fdf4921e6481833ab9f6cc",
+        "size_in_bytes": 8947,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269248134,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-45a9e9185494e9d5944dcb0310c4a9e5caf6657a",
+      "source_sha": "45a9e9185494e9d5944dcb0310c4a9e5caf6657a",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269248134",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269248134/zip",
+        "created_at": "2026-08-16T19:54:22Z",
+        "updated_at": "2026-08-16T19:54:22Z",
+        "expires_at": "2026-09-15T19:54:21Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8948,
+        "reported_digest": "sha256:de74a65e66a8a02a209b99f66e7e99524f016cba2ed0afff783c8b01e293f3c0"
+      },
+      "workflow_run": {
+        "id": 31968895455,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31968895455",
+        "created_at": "2026-08-16T19:52:57Z",
+        "updated_at": "2026-08-16T19:54:28Z",
+        "jobs": [
+          {
+            "id": 95218129596,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T19:53:00Z",
+            "completed_at": "2026-08-16T19:54:27Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269248134--post-0.3-architecture-receipts-45a9e9185494e9d5944dcb0310c4a9e5caf6657a.zip",
+        "size_in_bytes": 8948,
+        "sha256": "de74a65e66a8a02a209b99f66e7e99524f016cba2ed0afff783c8b01e293f3c0",
+        "downloaded_at": "2026-08-17T18:52:44Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:de74a65e66a8a02a209b99f66e7e99524f016cba2ed0afff783c8b01e293f3c0",
+        "size_in_bytes": 8948,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269258581,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-4f718f37dc1182cd7aee8190ee647fba17dd2da4",
+      "source_sha": "4f718f37dc1182cd7aee8190ee647fba17dd2da4",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269258581",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269258581/zip",
+        "created_at": "2026-08-16T19:55:13Z",
+        "updated_at": "2026-08-16T19:55:13Z",
+        "expires_at": "2026-09-15T19:55:13Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8952,
+        "reported_digest": "sha256:6bd5751607f5c102a9acdc1ce6349639e05280c6f0137652765d1a114149c137"
+      },
+      "workflow_run": {
+        "id": 31968935922,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31968935922",
+        "created_at": "2026-08-16T19:53:49Z",
+        "updated_at": "2026-08-16T19:55:20Z",
+        "jobs": [
+          {
+            "id": 95218225160,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T19:53:53Z",
+            "completed_at": "2026-08-16T19:55:19Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269258581--post-0.3-architecture-receipts-4f718f37dc1182cd7aee8190ee647fba17dd2da4.zip",
+        "size_in_bytes": 8952,
+        "sha256": "6bd5751607f5c102a9acdc1ce6349639e05280c6f0137652765d1a114149c137",
+        "downloaded_at": "2026-08-17T18:52:45Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:6bd5751607f5c102a9acdc1ce6349639e05280c6f0137652765d1a114149c137",
+        "size_in_bytes": 8952,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269261852,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-4f718f37dc1182cd7aee8190ee647fba17dd2da4",
+      "source_sha": "4f718f37dc1182cd7aee8190ee647fba17dd2da4",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269261852",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269261852/zip",
+        "created_at": "2026-08-16T19:55:30Z",
+        "updated_at": "2026-08-16T19:55:30Z",
+        "expires_at": "2026-09-15T19:55:29Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8944,
+        "reported_digest": "sha256:fc6f48e894a5b79dc41059b4889d22f8e60167d5fd3550119082565a2cc0591d"
+      },
+      "workflow_run": {
+        "id": 31968938724,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31968938724",
+        "created_at": "2026-08-16T19:53:52Z",
+        "updated_at": "2026-08-16T19:55:37Z",
+        "jobs": [
+          {
+            "id": 95218231404,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T19:54:11Z",
+            "completed_at": "2026-08-16T19:55:35Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269261852--post-0.3-architecture-receipts-4f718f37dc1182cd7aee8190ee647fba17dd2da4.zip",
+        "size_in_bytes": 8944,
+        "sha256": "fc6f48e894a5b79dc41059b4889d22f8e60167d5fd3550119082565a2cc0591d",
+        "downloaded_at": "2026-08-17T18:52:45Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:fc6f48e894a5b79dc41059b4889d22f8e60167d5fd3550119082565a2cc0591d",
+        "size_in_bytes": 8944,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269389150,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-33e377816385f5c97bae79e1cd17d8892d836f52",
+      "source_sha": "33e377816385f5c97bae79e1cd17d8892d836f52",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269389150",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269389150/zip",
+        "created_at": "2026-08-16T20:05:44Z",
+        "updated_at": "2026-08-16T20:05:44Z",
+        "expires_at": "2026-09-15T20:05:44Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8956,
+        "reported_digest": "sha256:5b3ad4da985d18b42d8cf02120e54c8caa0967af74e6dff95be558082cec170c"
+      },
+      "workflow_run": {
+        "id": 31969475877,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31969475877",
+        "created_at": "2026-08-16T20:04:28Z",
+        "updated_at": "2026-08-16T20:05:47Z",
+        "jobs": [
+          {
+            "id": 95219526129,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T20:04:32Z",
+            "completed_at": "2026-08-16T20:05:47Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269389150--post-0.3-architecture-receipts-33e377816385f5c97bae79e1cd17d8892d836f52.zip",
+        "size_in_bytes": 8956,
+        "sha256": "5b3ad4da985d18b42d8cf02120e54c8caa0967af74e6dff95be558082cec170c",
+        "downloaded_at": "2026-08-17T18:52:45Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:5b3ad4da985d18b42d8cf02120e54c8caa0967af74e6dff95be558082cec170c",
+        "size_in_bytes": 8956,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269389446,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-33e377816385f5c97bae79e1cd17d8892d836f52",
+      "source_sha": "33e377816385f5c97bae79e1cd17d8892d836f52",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269389446",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269389446/zip",
+        "created_at": "2026-08-16T20:05:45Z",
+        "updated_at": "2026-08-16T20:05:45Z",
+        "expires_at": "2026-09-15T20:05:45Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8955,
+        "reported_digest": "sha256:85ea08ab2d8b485f05c4aeea5bf8bfdbf8e953f2abc88fca8e481e13f4587857"
+      },
+      "workflow_run": {
+        "id": 31969478689,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31969478689",
+        "created_at": "2026-08-16T20:04:32Z",
+        "updated_at": "2026-08-16T20:05:49Z",
+        "jobs": [
+          {
+            "id": 95219533506,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T20:04:35Z",
+            "completed_at": "2026-08-16T20:05:49Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269389446--post-0.3-architecture-receipts-33e377816385f5c97bae79e1cd17d8892d836f52.zip",
+        "size_in_bytes": 8955,
+        "sha256": "85ea08ab2d8b485f05c4aeea5bf8bfdbf8e953f2abc88fca8e481e13f4587857",
+        "downloaded_at": "2026-08-17T18:52:46Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:85ea08ab2d8b485f05c4aeea5bf8bfdbf8e953f2abc88fca8e481e13f4587857",
+        "size_in_bytes": 8955,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269406592,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-0828f3de9459c87301b0abe58e643c795c86eba4",
+      "source_sha": "0828f3de9459c87301b0abe58e643c795c86eba4",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269406592",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269406592/zip",
+        "created_at": "2026-08-16T20:06:59Z",
+        "updated_at": "2026-08-16T20:06:59Z",
+        "expires_at": "2026-09-15T20:06:58Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8953,
+        "reported_digest": "sha256:e0a0fc179d0fb037bcdc386daf4a8b761e717c36622fe479502b8007057959ff"
+      },
+      "workflow_run": {
+        "id": 31969538678,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31969538678",
+        "created_at": "2026-08-16T20:05:41Z",
+        "updated_at": "2026-08-16T20:07:04Z",
+        "jobs": [
+          {
+            "id": 95219689403,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T20:05:48Z",
+            "completed_at": "2026-08-16T20:07:03Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269406592--post-0.3-architecture-receipts-0828f3de9459c87301b0abe58e643c795c86eba4.zip",
+        "size_in_bytes": 8953,
+        "sha256": "e0a0fc179d0fb037bcdc386daf4a8b761e717c36622fe479502b8007057959ff",
+        "downloaded_at": "2026-08-17T18:52:46Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:e0a0fc179d0fb037bcdc386daf4a8b761e717c36622fe479502b8007057959ff",
+        "size_in_bytes": 8953,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269410754,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-0828f3de9459c87301b0abe58e643c795c86eba4",
+      "source_sha": "0828f3de9459c87301b0abe58e643c795c86eba4",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269410754",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269410754/zip",
+        "created_at": "2026-08-16T20:07:16Z",
+        "updated_at": "2026-08-16T20:07:16Z",
+        "expires_at": "2026-09-15T20:07:15Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8953,
+        "reported_digest": "sha256:60c74744c08ad5544f3ec464adc1feb8f52ebd42e83d739847768dd5b5c85136"
+      },
+      "workflow_run": {
+        "id": 31969536444,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31969536444",
+        "created_at": "2026-08-16T20:05:39Z",
+        "updated_at": "2026-08-16T20:07:22Z",
+        "jobs": [
+          {
+            "id": 95219684177,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T20:05:52Z",
+            "completed_at": "2026-08-16T20:07:21Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269410754--post-0.3-architecture-receipts-0828f3de9459c87301b0abe58e643c795c86eba4.zip",
+        "size_in_bytes": 8953,
+        "sha256": "60c74744c08ad5544f3ec464adc1feb8f52ebd42e83d739847768dd5b5c85136",
+        "downloaded_at": "2026-08-17T18:52:47Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:60c74744c08ad5544f3ec464adc1feb8f52ebd42e83d739847768dd5b5c85136",
+        "size_in_bytes": 8953,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269982912,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-6b56909018c42f90a67749662013ae0c360fc02f",
+      "source_sha": "6b56909018c42f90a67749662013ae0c360fc02f",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269982912",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269982912/zip",
+        "created_at": "2026-08-16T20:52:11Z",
+        "updated_at": "2026-08-16T20:52:11Z",
+        "expires_at": "2026-09-15T20:52:10Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8954,
+        "reported_digest": "sha256:2c14c07c2f1abbe04ac37096ec5ef68875db2e0e216ea39e55f0c7ebe89cb2af"
+      },
+      "workflow_run": {
+        "id": 31971737712,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31971737712",
+        "created_at": "2026-08-16T20:50:56Z",
+        "updated_at": "2026-08-16T20:52:15Z",
+        "jobs": [
+          {
+            "id": 95225133042,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T20:51:00Z",
+            "completed_at": "2026-08-16T20:52:14Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269982912--post-0.3-architecture-receipts-6b56909018c42f90a67749662013ae0c360fc02f.zip",
+        "size_in_bytes": 8954,
+        "sha256": "2c14c07c2f1abbe04ac37096ec5ef68875db2e0e216ea39e55f0c7ebe89cb2af",
+        "downloaded_at": "2026-08-17T18:52:47Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:2c14c07c2f1abbe04ac37096ec5ef68875db2e0e216ea39e55f0c7ebe89cb2af",
+        "size_in_bytes": 8954,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269985311,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-6b56909018c42f90a67749662013ae0c360fc02f",
+      "source_sha": "6b56909018c42f90a67749662013ae0c360fc02f",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269985311",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269985311/zip",
+        "created_at": "2026-08-16T20:52:22Z",
+        "updated_at": "2026-08-16T20:52:22Z",
+        "expires_at": "2026-09-15T20:52:21Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8965,
+        "reported_digest": "sha256:09d158a8318ff7c065daa611f3371976436dc0adc04d0e5bd0d79a506f4f988b"
+      },
+      "workflow_run": {
+        "id": 31971740038,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31971740038",
+        "created_at": "2026-08-16T20:50:59Z",
+        "updated_at": "2026-08-16T20:52:26Z",
+        "jobs": [
+          {
+            "id": 95225138493,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T20:51:10Z",
+            "completed_at": "2026-08-16T20:52:25Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269985311--post-0.3-architecture-receipts-6b56909018c42f90a67749662013ae0c360fc02f.zip",
+        "size_in_bytes": 8965,
+        "sha256": "09d158a8318ff7c065daa611f3371976436dc0adc04d0e5bd0d79a506f4f988b",
+        "downloaded_at": "2026-08-17T18:52:47Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:09d158a8318ff7c065daa611f3371976436dc0adc04d0e5bd0d79a506f4f988b",
+        "size_in_bytes": 8965,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269991589,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "source_sha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269991589",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269991589/zip",
+        "created_at": "2026-08-16T20:52:51Z",
+        "updated_at": "2026-08-16T20:52:51Z",
+        "expires_at": "2026-09-15T20:52:51Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8951,
+        "reported_digest": "sha256:d783cfb14665c891f32e76aca095de08777c5b00e9fb517b26faa38eeb5582d9"
+      },
+      "workflow_run": {
+        "id": 31971767617,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31971767617",
+        "created_at": "2026-08-16T20:51:29Z",
+        "updated_at": "2026-08-16T20:52:58Z",
+        "jobs": [
+          {
+            "id": 95225202761,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T20:51:42Z",
+            "completed_at": "2026-08-16T20:52:57Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269991589--post-0.3-architecture-receipts-9b0d2f59567a7684b62df932c67b7a96050b605f.zip",
+        "size_in_bytes": 8951,
+        "sha256": "d783cfb14665c891f32e76aca095de08777c5b00e9fb517b26faa38eeb5582d9",
+        "downloaded_at": "2026-08-17T18:52:48Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:d783cfb14665c891f32e76aca095de08777c5b00e9fb517b26faa38eeb5582d9",
+        "size_in_bytes": 8951,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9269992639,
+      "kind": "structured-receipts",
+      "status": "PRESERVED",
+      "name": "post-0.3-architecture-receipts-9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "source_sha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269992639",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269992639/zip",
+        "created_at": "2026-08-16T20:52:57Z",
+        "updated_at": "2026-08-16T20:52:57Z",
+        "expires_at": "2026-09-15T20:52:56Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 8958,
+        "reported_digest": "sha256:56e1acbdda8be39eb75b12db1be28956c7d22397bc95d491b67257934fca2f51"
+      },
+      "workflow_run": {
+        "id": 31971764975,
+        "attempt": 1,
+        "name": "post-0.3-architecture-research",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31971764975",
+        "created_at": "2026-08-16T20:51:26Z",
+        "updated_at": "2026-08-16T20:53:02Z",
+        "jobs": [
+          {
+            "id": 95225195775,
+            "name": "executable-research",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-16T20:51:38Z",
+            "completed_at": "2026-08-16T20:53:01Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9269992639--post-0.3-architecture-receipts-9b0d2f59567a7684b62df932c67b7a96050b605f.zip",
+        "size_in_bytes": 8958,
+        "sha256": "56e1acbdda8be39eb75b12db1be28956c7d22397bc95d491b67257934fca2f51",
+        "downloaded_at": "2026-08-17T18:52:48Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:56e1acbdda8be39eb75b12db1be28956c7d22397bc95d491b67257934fca2f51",
+        "size_in_bytes": 8958,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": true,
+        "note": "extracted JSON retained under evidence/receipts"
+      },
+      "claim_scope": "18 reproduced research claims at this exact source SHA; not certification of later SHAs"
+    },
+    {
+      "artifact_id": 9275193303,
+      "kind": "source-snapshot",
+      "status": "PRESERVED",
+      "name": "architecture-source-96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "source_sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "branch": "codex/post-0.3-native-capability-architecture",
+      "github": {
+        "api_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9275193303",
+        "archive_download_url": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9275193303/zip",
+        "created_at": "2026-08-17T03:17:28Z",
+        "updated_at": "2026-08-17T03:17:28Z",
+        "expires_at": "2026-08-18T03:17:27Z",
+        "expired_at_observation": false,
+        "reported_size_in_bytes": 942610,
+        "reported_digest": "sha256:edddbe810ad37d8f67e109c82ebf66b8ca75ae090727f15840862ee8ef997353"
+      },
+      "workflow_run": {
+        "id": 31990680610,
+        "attempt": 1,
+        "name": "research-source-export",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/mannyc2/effect-build/actions/runs/31990680610",
+        "created_at": "2026-08-17T03:17:20Z",
+        "updated_at": "2026-08-17T03:17:32Z",
+        "jobs": [
+          {
+            "id": 95273533768,
+            "name": "source-export",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-17T03:17:23Z",
+            "completed_at": "2026-08-17T03:17:31Z"
+          }
+        ]
+      },
+      "local_download": {
+        "path": "artifacts/original/9275193303--architecture-source-96e53a27be4ef96fb47f1a745480e0c5382640f2.zip",
+        "size_in_bytes": 942610,
+        "sha256": "edddbe810ad37d8f67e109c82ebf66b8ca75ae090727f15840862ee8ef997353",
+        "downloaded_at": "2026-08-17T18:52:49Z",
+        "transport": "GitHub REST artifact ZIP endpoint; one direct download; bytes not extracted or repacked"
+      },
+      "integrity": {
+        "digest_comparability": "same-container",
+        "digest_match": true,
+        "size_match": true
+      },
+      "attached_recovery_ledger_observation": {
+        "observed_at": "2026-08-17T15:40:18Z",
+        "digest": "sha256:eddd5b92e076359d103abcf1640baf467449abfb624b2933c9fbf404863a22cb",
+        "size_in_bytes": 942610,
+        "expired_at_observation": false,
+        "agrees_with_live_digest": false,
+        "note": "excluded: large source/toolchain snapshot"
+      },
+      "claim_scope": "source snapshot only; not architecture certification"
+    }
+  ],
+  "observation_started_at": "2026-08-17T18:52:24Z",
+  "final_live_refresh_at": "2026-08-17T19:00:16Z"
+}

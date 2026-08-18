@@ -1,0 +1,285 @@
+{
+  "schema": "effect-build/architecture-receipt@2",
+  "id": "existing-provider-research",
+  "sourceSha": "822312b2f0581bec831a957115d21fbdcfb36180",
+  "status": "reproduced",
+  "claims": [
+    {
+      "id": "node-main-role",
+      "classification": "established",
+      "conclusion": "node-main-entry-is-portable-importable-module-is-not",
+      "assertions": [
+        {
+          "name": "direct-main-substitution",
+          "passed": true
+        },
+        {
+          "name": "importable-module-falsifier",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "runtime-neutral-executable",
+      "classification": "falsified",
+      "conclusion": "bun-and-deno-embed-distinct-runtimes",
+      "assertions": [
+        {
+          "name": "common-file-observation",
+          "passed": true
+        },
+        {
+          "name": "distinct-runtime-execution",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "broad-static-web",
+      "classification": "falsified",
+      "conclusion": "top-level-linked-resource-is-not-preserved-natively",
+      "assertions": [
+        {
+          "name": "adversarial-top-level-css-dropped",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "declaration-output-set",
+      "classification": "falsified",
+      "conclusion": "deno-and-tsc-output-topologies-differ",
+      "assertions": [
+        {
+          "name": "declaration-topology-compared",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "portable-command-watch-events",
+      "classification": "falsified",
+      "conclusion": "bun-and-deno-expose-no-machine-readable-watch-protocol",
+      "assertions": [
+        {
+          "name": "initial-and-rebuild-observed",
+          "passed": true
+        },
+        {
+          "name": "machine-protocol-absent",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "compiled-deno-bundle-api",
+      "classification": "falsified",
+      "conclusion": "compiled-deno-does-not-expose-deno-bundle",
+      "assertions": [
+        {
+          "name": "compiled-runtime-invoked",
+          "passed": true
+        },
+        {
+          "name": "function-absent",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "versions": {
+      "bun": "1.3.9",
+      "deno": "deno 2.9.3 (stable, release, x86_64-unknown-linux-gnu)\nv8 14.9.207.2-rusty\ntypescript 6.0.3",
+      "node": "26.7.0",
+      "nodeBuildSeaCapability": true
+    },
+    "nodeMainProgram": {
+      "candidate": "NodeMainProgram",
+      "directMainConforms": true,
+      "importableModuleConforms": false,
+      "bun": {
+        "direct": {
+          "role": "main",
+          "value": "shared"
+        },
+        "imported": {
+          "role": "main",
+          "value": "shared"
+        },
+        "metadata": {
+          "format": "esm",
+          "resolutionTarget": "node",
+          "externalImports": []
+        },
+        "removedAfterCallback": true
+      },
+      "esbuild": {
+        "direct": {
+          "role": "main",
+          "value": "shared"
+        },
+        "imported": {
+          "role": "imported",
+          "value": "shared"
+        },
+        "metadata": {
+          "format": "esm",
+          "resolutionTarget": "node",
+          "externalImports": []
+        },
+        "removedAfterCallback": true
+      },
+      "conclusion": "narrow-main-role-valid-broad-importable-role-falsified"
+    },
+    "runtimeExecutables": {
+      "candidate": "RuntimeExecutable",
+      "commonDurableObservation": true,
+      "runtimeIdentitySubstitutable": false,
+      "bun": {
+        "artifact": {
+          "path": "/tmp/effect-build-post-0.3-research-yJwPSw/runtime-bun",
+          "bytes": 102368005,
+          "target": "linux-x64-gnu",
+          "stages": [
+            {
+              "operation": "compile-executable",
+              "tool": {
+                "name": "bun",
+                "version": "1.3.9",
+                "path": "/tmp/effect-build-tools-2667/bun-1.3.9/bun-linux-x64/bun"
+              }
+            }
+          ],
+          "provider": "bun"
+        },
+        "run": {
+          "runtime": "bun"
+        }
+      },
+      "deno": {
+        "artifact": {
+          "path": "/tmp/effect-build-post-0.3-research-yJwPSw/runtime-deno",
+          "bytes": 108287664,
+          "target": "linux-x64-gnu",
+          "stages": [
+            {
+              "operation": "compile-executable",
+              "tool": {
+                "name": "deno",
+                "version": "2.9.3",
+                "path": "/tmp/effect-build-deno-research-wrapper-utsjBN/deno"
+              }
+            }
+          ],
+          "provider": "deno"
+        },
+        "run": {
+          "runtime": "deno"
+        }
+      },
+      "conclusion": "universal-runtime-executable-profile-falsified-runtime-named-roles-required"
+    },
+    "staticWebApplication": {
+      "candidate": "StaticWebApplication",
+      "roleConforms": false,
+      "durableAtomicReplacementEstablished": false,
+      "bun": {
+        "manifest": [
+          {
+            "path": "index-m36fchkf.css",
+            "bytes": 29,
+            "sha256": "ba789a2cc83d9609ed2e428e4bbe36241f4e256750dd7cf4f29534744d9ebf78"
+          },
+          {
+            "path": "index-m38n4c2w.js",
+            "bytes": 53,
+            "sha256": "c6fc07c8ff3047fbee040f113ce43830f27135f77d1d77818ff5b280430258c3"
+          },
+          {
+            "path": "index.html",
+            "bytes": 187,
+            "sha256": "0b479b5cad8da65519b0bc94cd4952ae2056ecebbbf8f96fb8474a44dbdcd2c8"
+          }
+        ],
+        "stdout": "Bundled 3 modules in 3ms\n\n  index-m38n4c2w.js   53 bytes   (entry point)\n  index.html          187 bytes  (entry point)\n  index-m36fchkf.css  29 bytes   (asset)\n\n",
+        "stderr": ""
+      },
+      "deno": {
+        "manifest": [
+          {
+            "path": "index-KYZPBGOD.js",
+            "bytes": 53,
+            "sha256": "c6fc07c8ff3047fbee040f113ce43830f27135f77d1d77818ff5b280430258c3"
+          },
+          {
+            "path": "index.html",
+            "bytes": 166,
+            "sha256": "171bbd413e037d77a2932315de860d8e455bd8aaa65af99de4676430cc64f65e"
+          }
+        ],
+        "stdout": "",
+        "stderr": "⚠️  \u001b[0m\u001b[36mdeno bundle\u001b[0m is experimental and subject to changes\n\u001b[0m\u001b[32mDownload\u001b[0m https://registry.npmjs.org/@esbuild%2flinux-x64\n\u001b[0m\u001b[32mDownload\u001b[0m https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.25.5.tgz\n\u001b[0m\u001b[32mBundled\u001b[0m 2 modules in 3ms\n  \u001b[0m\u001b[36m../static-web-deno/index-KYZPBGOD.js\u001b[0m \u001b[0m\u001b[38;5;245m53B\u001b[0m\n  \u001b[0m\u001b[35m../static-web-deno/index.html       \u001b[0m \u001b[0m\u001b[38;5;245m166B\u001b[0m\n\n"
+      },
+      "conclusion": "static-web-role-falsified"
+    },
+    "declarationSets": {
+      "candidate": "DeclarationOutputSet",
+      "denoFiles": [
+        {
+          "path": "index.d.ts",
+          "bytes": 94,
+          "sha256": "eddc37da02b0e235609cf0aed90659216500f7706368e688349dd716f1ac2d94"
+        }
+      ],
+      "tscFiles": [
+        {
+          "path": "index.d.ts",
+          "bytes": 94,
+          "sha256": "eddc37da02b0e235609cf0aed90659216500f7706368e688349dd716f1ac2d94"
+        },
+        {
+          "path": "model.d.ts",
+          "bytes": 55,
+          "sha256": "3be79e06bf235dfeda5be439b023440ef7ffc20cba2b564c95698802b2f78dfb"
+        }
+      ],
+      "topologyEquivalent": false,
+      "conclusion": "broad-declaration-set-profile-falsified-rolled-up-vs-module-tree"
+    },
+    "commandWatch": {
+      "candidate": "TypedCommandWatchEvents",
+      "rawScopedProcessConforms": true,
+      "stableTypedEventsConform": false,
+      "bun": {
+        "provider": "bun",
+        "initialOutputObserved": true,
+        "rebuildObserved": true,
+        "exit": {
+          "code": null,
+          "signal": "SIGTERM"
+        },
+        "stdout": "Bundled 1 module in 2ms\n\n  watch-bun.js  41 bytes  (entry point)\n\nBundled 1 module in 2ms\n\n  watch-bun.js  41 bytes  (entry point)\n\n",
+        "stderr": "",
+        "machineReadableWatchEventFlag": false
+      },
+      "deno": {
+        "provider": "deno",
+        "initialOutputObserved": true,
+        "rebuildObserved": true,
+        "exit": {
+          "code": null,
+          "signal": "SIGTERM"
+        },
+        "stdout": "",
+        "stderr": "⚠️  \u001b[0m\u001b[36mdeno bundle\u001b[0m is experimental and subject to changes\n\u001b[0m\u001b[38;5;12mWatcher\u001b[0m Bundle started.\n\u001b[0m\u001b[32mBundled\u001b[0m 1 module in 11ms\n  \u001b[0m\u001b[36mwatch-deno/watch-deno.js\u001b[0m \u001b[0m\u001b[38;5;245m42B\u001b[0m\n\n\u001b[0m\u001b[38;5;12mWatcher\u001b[0m \u001b[0m\u001b[38;5;245mRestarting! File change detected: \"/tmp/effect-build-post-0.3-research-yJwPSw/watch-deno.ts\"\u001b[0m\n\u001b[0m\u001b[32mBundled\u001b[0m 1 module in 2ms\n  \u001b[0m\u001b[36mwatch-deno/watch-deno.js\u001b[0m \u001b[0m\u001b[38;5;245m42B\u001b[0m\n\n",
+        "machineReadableWatchEventFlag": false
+      },
+      "conclusion": "typed-cross-provider-watch-event-protocol-rejected-opaque-provider-session-only"
+    },
+    "denoCompiledBundleApi": {
+      "output": "TypeError: Deno.bundle is not a function",
+      "unavailable": false
+    }
+  }
+}

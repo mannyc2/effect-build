@@ -1,0 +1,159 @@
+{
+  "actions": {
+    "closure_apply_run_observed": false,
+    "current_head_runs": [
+      {
+        "conclusion": "failure",
+        "event": "pull_request",
+        "run_id": 31990684158,
+        "workflow": "architecture PR"
+      },
+      {
+        "conclusion": "failure",
+        "event": "pull_request",
+        "run_id": 31990684160,
+        "workflow": "effect-build PR"
+      },
+      {
+        "artifact_id": 9275193303,
+        "conclusion": "success",
+        "event": "push",
+        "run_id": 31990680610,
+        "workflow": "research-source-export"
+      },
+      {
+        "conclusion": "failure",
+        "event": "push",
+        "run_id": 31990680624,
+        "workflow": "architecture push"
+      },
+      {
+        "conclusion": "failure",
+        "event": "push",
+        "run_id": 31990680611,
+        "workflow": "effect-build push"
+      }
+    ],
+    "last_fully_reproduced_runs": [
+      {
+        "artifact_id": 9269992639,
+        "conclusion": "success",
+        "event": "push",
+        "head_sha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+        "run_id": 31971764975
+      },
+      {
+        "artifact_id": 9269991589,
+        "conclusion": "success",
+        "event": "pull_request",
+        "head_sha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+        "run_id": 31971767617
+      }
+    ],
+    "substantive_head_failed_run": {
+      "conclusion": "failure",
+      "head_sha": "49cd5e1be7917bf14e89068afb4fa47cf78488fb",
+      "job_id": 95229475373,
+      "later_steps_skipped": true,
+      "law_tests": {
+        "failed": 0,
+        "passed": 10
+      },
+      "receipt_artifact_created": false,
+      "run_id": 31973512087,
+      "tool_versions": {
+        "bun": "1.3.14",
+        "deno": "2.9.5",
+        "esbuild": "0.28.2",
+        "node": [
+          "25.5.0",
+          "26.7.0",
+          "24.14.1"
+        ]
+      },
+      "typecheck_errors": [
+        {
+          "approximate_line": 111,
+          "code": "TS2345",
+          "summary": "heterogeneous error union was not assignable to NodeTargetMismatch-only expectation"
+        },
+        {
+          "approximate_line": 348,
+          "code": "TS2344",
+          "summary": "BuildStepObservation.tool optionality violated a required generic constraint"
+        }
+      ]
+    }
+  },
+  "important_heads": {
+    "current_head": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "last_fully_reproduced_structured_receipt_head": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+    "last_substantive_research_head_before_transport": "49cd5e1be7917bf14e89068afb4fa47cf78488fb",
+    "pr_body_named_research_head": "af4887c36753a82c3c97fafc54b3c368cd98b34d",
+    "release_line_base": "15c811bb9904142a33d119766b62082f3c689f13",
+    "released_v0_3_0_source": "f06f96ca88b6278e5f23a898d758b99fa9322108"
+  },
+  "limitations": [
+    "Ordinary GitHub APIs do not prove the non-existence of unreachable/dangling Git objects.",
+    "COMMIT-LEDGER.csv contains the complete observed commit sequence, but exact per-commit file enumeration was retained only for anchor commits; other rows explicitly mark reconstructed path families."
+  ],
+  "observed_at": "2026-08-17T15:40:18Z",
+  "pull_request": {
+    "additions": 14506,
+    "base_branch": "codex/granular-integration-program",
+    "base_sha": "15c811bb9904142a33d119766b62082f3c689f13",
+    "body_claimed_final_research_head": "af4887c36753a82c3c97fafc54b3c368cd98b34d",
+    "body_head_conflict": "PR body is stale relative to live head and later substantive research.",
+    "changed_file_count": 73,
+    "commit_count": 66,
+    "created_at": "2026-08-16T00:20:57Z",
+    "deletions": 0,
+    "draft": true,
+    "head_branch": "codex/post-0.3-native-capability-architecture",
+    "head_sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "issue_comments": 0,
+    "number": 4,
+    "review_comments": 0,
+    "review_threads": 0,
+    "state": "open",
+    "title": "architecture: validate provider-native APIs and portable roles",
+    "updated_at": "2026-08-17T03:17:20Z",
+    "url": "https://github.com/mannyc2/effect-build/pull/4"
+  },
+  "refs": {
+    "branches": {
+      "codex/016-bun-workspaces": "f043...",
+      "codex/020-node-sea-bun-workspaces": "559...",
+      "codex/021-ts-release-0-2-2-qualification": "f4aa...",
+      "codex/022-matrix-fixture-ready-signal": "95f...",
+      "codex/effect-build-v0.2.0": "e4257...",
+      "codex/granular-integration-program": "15c811bb9904142a33d119766b62082f3c689f13",
+      "codex/lifecycle-sea": "4f26...",
+      "codex/post-0.3-native-capability-architecture": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "main": "60259..."
+    },
+    "canonical_closure_ref_found": false,
+    "github_releases": [],
+    "tags": {
+      "v0.1.0": "a485...",
+      "v0.2.0": "29f8...",
+      "v0.3.0": "f06f96ca88b6278e5f23a898d758b99fa9322108"
+    }
+  },
+  "repository": "mannyc2/effect-build",
+  "schema": "effect-build-architecture-recovery/current-github-state@1",
+  "tree_observations": {
+    "canonical_paths_checked": [
+      "research/post-0.3/canonical/**"
+    ],
+    "canonical_tree_present": false,
+    "closure_parts": [
+      ".github/research/closure-patch/part-00"
+    ],
+    "closure_trigger_present": false,
+    "package_tree_comparison_scope": "packages/**, package.json, bun.lock between 49cd5e1 and 96e53a; not a substitute for a full base-to-head certifier",
+    "package_trees_49cd_to_96e_identical": true,
+    "plans_039_to_044_present": true,
+    "plans_039_to_044_status": "TODO; publication authority NONE"
+  }
+}

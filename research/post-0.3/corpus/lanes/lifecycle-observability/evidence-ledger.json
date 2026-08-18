@@ -1,0 +1,820 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-08-17T15:43:36Z",
+  "repository_head": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+  "effect_upstream": {
+    "tag": "effect@4.0.0-rc.110",
+    "commit": "66114151c2b4640bf773f2b3456ce70d679422f6"
+  },
+  "classification_definitions": {
+    "GITHUB-DIRECT": "Directly observed in the live effect-build repository, PR, branch, or checked-in source.",
+    "UPSTREAM-DIRECT": "Directly observed in pinned official upstream source, documentation, or specification.",
+    "RECORDED-EXECUTION": "Reported repository execution or local artifact-integrity execution; not new effect-build runtime validation.",
+    "INFERENCE": "Conclusion derived from direct evidence.",
+    "PROPOSAL": "Recommended contract, law, or illustrative API.",
+    "UNKNOWN": "Not established by inspected evidence."
+  },
+  "entries": [
+    {
+      "id": "GH-001",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The live research branch head observed at package creation is 96e53a27be4ef96fb47f1a745480e0c5382640f2.",
+      "sources": [
+        {
+          "kind": "github-api",
+          "url": "https://api.github.com/repos/mannyc2/effect-build/git/ref/heads/codex/post-0.3-native-capability-architecture"
+        }
+      ]
+    },
+    {
+      "id": "GH-002",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The base branch head observed is 15c811bb9904142a33d119766b62082f3c689f13.",
+      "sources": [
+        {
+          "kind": "github-api",
+          "url": "https://api.github.com/repos/mannyc2/effect-build/git/ref/heads/codex/granular-integration-program"
+        }
+      ]
+    },
+    {
+      "id": "GH-003",
+      "classification": "GITHUB-DIRECT",
+      "claim": "PR 4 is open and draft at observation time.",
+      "sources": [
+        {
+          "kind": "github-pr",
+          "url": "https://github.com/mannyc2/effect-build/pull/4"
+        }
+      ]
+    },
+    {
+      "id": "GH-004",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The PR body names af4887c36753a82c3c97fafc54b3c368cd98b34d as a final research head, which differs from the live branch head.",
+      "sources": [
+        {
+          "kind": "github-pr",
+          "url": "https://github.com/mannyc2/effect-build/pull/4"
+        },
+        {
+          "kind": "github-api",
+          "url": "https://api.github.com/repos/mannyc2/effect-build/git/ref/heads/codex/post-0.3-native-capability-architecture"
+        }
+      ]
+    },
+    {
+      "id": "GH-005",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The repository API study distinguishes plain Effects, scoped handles, Streams only for stable provider event boundaries, continuations for borrowed output, and rejects an opaque process wrapper.",
+      "sources": [
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-API-CANDIDATES.md",
+          "blob_sha": "72a9bf011528d683a3e3445d00cb058d444a9e3b"
+        }
+      ]
+    },
+    {
+      "id": "GH-006",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The repository primitive audit retains Tool, BorrowedOutput, Executable, and HostPath.Observed, and removes public Command and CommandCompiler proposals.",
+      "sources": [
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-PROVIDER-CAPABILITY-MATRIX.md",
+          "blob_sha": "841817e9d311628cf8f3dea703f13ea58a634648"
+        },
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-API-CANDIDATES.md",
+          "blob_sha": "72a9bf011528d683a3e3445d00cb058d444a9e3b"
+        }
+      ]
+    },
+    {
+      "id": "GH-007",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The checked-in ownership-law source models liveness tokens, digest/size mutation checks, typed expiry, raw path escape, and exact caller-error object identity.",
+      "sources": [
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/architecture-laws.mjs",
+          "blob_sha": "b331b91f7c9cac846749ea4a234907ee4e9a1a3f"
+        },
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/architecture-laws.test.mjs",
+          "blob_sha": "d69999c240d80ac1bf091f6bbc7e2548372d05b7"
+        }
+      ]
+    },
+    {
+      "id": "GH-008",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The nested callback law fixture demonstrates that wrapping a raw path in an inner callback does not prevent it from escaping.",
+      "sources": [
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/architecture-laws.test.mjs",
+          "blob_sha": "d69999c240d80ac1bf091f6bbc7e2548372d05b7"
+        }
+      ]
+    },
+    {
+      "id": "GH-009",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The duplicate-core fixture checks that closure-owned authority remains usable across compatible duplicate module instances while expiry remains producer-controlled.",
+      "sources": [
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/duplicate-core.test.mjs",
+          "blob_sha": "9b52d6196b157b6e7d8896388a79ffa145c23dfd"
+        }
+      ]
+    },
+    {
+      "id": "GH-010",
+      "classification": "GITHUB-DIRECT",
+      "claim": "Plan 039 scopes production work around Tool, BorrowedOutput, Executable, compatibility, and observability, and treats Command/CommandCompiler as potentially redundant.",
+      "sources": [
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/039-establish-core-capability-boundaries.md",
+          "blob_sha": "c414714f92760a8e7414f91542787d8a624c4bfa"
+        }
+      ]
+    },
+    {
+      "id": "GH-011",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The repository selects BrowserModuleApplication as a borrowed HTML module application tree rather than a durable multi-file artifact.",
+      "sources": [
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-NATIVE-CAPABILITY-ARCHITECTURE.md",
+          "blob_sha": "4157893362568ea506030f234e778df9e772da63"
+        },
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/FINAL-CONTRACTS.md",
+          "blob_sha": "a0ae3bf3151ebea9c424d999ec71b9edb2a87d91"
+        }
+      ]
+    },
+    {
+      "id": "GH-012",
+      "classification": "GITHUB-DIRECT",
+      "claim": "The repository rejects generic Bun/Deno command-watch typed events because the observed command output was human-oriented rather than a stable machine protocol.",
+      "sources": [
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-PROVIDER-CAPABILITY-MATRIX.md",
+          "blob_sha": "841817e9d311628cf8f3dea703f13ea58a634648"
+        },
+        {
+          "kind": "repository-file",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-API-CANDIDATES.md",
+          "blob_sha": "72a9bf011528d683a3e3445d00cb058d444a9e3b"
+        }
+      ]
+    },
+    {
+      "id": "GH-013",
+      "classification": "RECORDED-EXECUTION",
+      "claim": "The PR body reports prior law tests, provider probes, and workflows; this session did not rerun them and the body ties exact verification to a different named head.",
+      "sources": [
+        {
+          "kind": "github-pr-body",
+          "url": "https://github.com/mannyc2/effect-build/pull/4"
+        }
+      ],
+      "limitations": "Historical repository report only; not live-tip runtime validation."
+    },
+    {
+      "id": "GH-014",
+      "classification": "RECORDED-EXECUTION",
+      "claim": "Checked-in repository research reports BrowserModuleApplication narrowing after an adversarial top-level stylesheet case.",
+      "sources": [
+        {
+          "kind": "repository-report",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-PROVIDER-CAPABILITY-MATRIX.md",
+          "blob_sha": "841817e9d311628cf8f3dea703f13ea58a634648"
+        },
+        {
+          "kind": "github-pr-body",
+          "url": "https://github.com/mannyc2/effect-build/pull/4"
+        }
+      ],
+      "limitations": "Reported execution, not rerun in this session."
+    },
+    {
+      "id": "GH-015",
+      "classification": "RECORDED-EXECUTION",
+      "claim": "Checked-in repository research reports Bun/Deno human watch output and Esbuild/Rolldown structured incremental sessions.",
+      "sources": [
+        {
+          "kind": "repository-report",
+          "url": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-PROVIDER-CAPABILITY-MATRIX.md",
+          "blob_sha": "841817e9d311628cf8f3dea703f13ea58a634648"
+        }
+      ],
+      "limitations": "Reported execution, not rerun in this session."
+    },
+    {
+      "id": "E-001",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "The newest official Effect tag observed is effect@4.0.0-rc.110 at 66114151c2b4640bf773f2b3456ce70d679422f6.",
+      "sources": [
+        {
+          "kind": "github-api",
+          "url": "https://api.github.com/repos/Effect-TS/effect/tags?per_page=10"
+        },
+        {
+          "kind": "official-docs",
+          "url": "https://www.effect.website/docs/v4/api/effect"
+        }
+      ]
+    },
+    {
+      "id": "E-002",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Scope is a lifetime boundary with sequential/parallel finalization and explicit open/closed state.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/Scope.ts",
+          "blob_sha": "a7268975cbf72ccfd8a9fb59922be29d0eac3d6e"
+        }
+      ]
+    },
+    {
+      "id": "E-003",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Scope.addFinalizerExit receives the close Exit; Scope.fork propagates the parent close Exit to the child; Scope.use closes with the workflow Exit.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/Scope.ts",
+          "blob_sha": "a7268975cbf72ccfd8a9fb59922be29d0eac3d6e"
+        }
+      ]
+    },
+    {
+      "id": "E-004",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Effect.acquireUseRelease masks interruption around acquire/release and restores interruption for use; Effect.failCause can re-emit a complete Cause.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/Effect.ts"
+        },
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/internal/effect.ts"
+        }
+      ]
+    },
+    {
+      "id": "E-005",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "FileSystem.FileSystem includes realPath, stat, scoped temp creation, open, read/write streams, rename, remove, copy, and watch.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/FileSystem.ts"
+        }
+      ]
+    },
+    {
+      "id": "E-006",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Path.Path provides platform path-string transformations including resolve, relative, normalize, join, file URL conversion, and namespaced paths.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/Path.ts"
+        }
+      ]
+    },
+    {
+      "id": "E-007",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "ChildProcess.Command is itself an Effect yielding a ChildProcessHandle and requiring ChildProcessSpawner plus Scope.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/unstable/process/ChildProcess.ts",
+          "blob_sha": "1c019b540f948848f5872ef6dc571d45d62e115d"
+        }
+      ]
+    },
+    {
+      "id": "E-008",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "ChildProcess supports command/pipeline construction, cwd/environment, shell/detached/Windows options, stdin/stdout/stderr streams/sinks, extra descriptors, signals, and forceKillAfter.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/unstable/process/ChildProcess.ts",
+          "blob_sha": "1c019b540f948848f5872ef6dc571d45d62e115d"
+        }
+      ]
+    },
+    {
+      "id": "E-009",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "ChildProcessHandle exposes pid, exitCode, isRunning, kill, stdin, stdout, stderr, all, extra descriptors, and unref.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/unstable/process/ChildProcessSpawner.ts",
+          "blob_sha": "5c8d0ac266ebe2a7063e6211526dc376b37b2fb4"
+        }
+      ]
+    },
+    {
+      "id": "E-010",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "ChildProcessSpawner derives scoped exitCode, string/line streams, and bounded collection helpers.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/unstable/process/ChildProcessSpawner.ts",
+          "blob_sha": "5c8d0ac266ebe2a7063e6211526dc376b37b2fb4"
+        }
+      ]
+    },
+    {
+      "id": "E-011",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "The Effect Node spawner attempts process-group/direct termination, awaits the direct child exit, and ignores finalizer cleanup errors.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/platform/node-shared/src/NodeChildProcessSpawner.ts",
+          "blob_sha": "38299e217c557dc5e1fe318814769b99507fb0ae"
+        }
+      ]
+    },
+    {
+      "id": "E-012",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "The current Effect Node handle reports a branded numeric exit code and converts signal termination into PlatformError.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/platform/node-shared/src/NodeChildProcessSpawner.ts",
+          "blob_sha": "38299e217c557dc5e1fe318814769b99507fb0ae"
+        }
+      ]
+    },
+    {
+      "id": "E-013",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Layer describes service output, construction errors, dependencies, scoped construction, and memoization by Layer identity.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/Layer.ts"
+        }
+      ]
+    },
+    {
+      "id": "E-014",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Context.Service defines typed service keys that can construct Layers and are themselves Effects.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/Context.ts"
+        }
+      ]
+    },
+    {
+      "id": "E-015",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Effect logging supports structured Logger events and scoped log annotations.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/Logger.ts",
+          "blob_sha": "168a53870d16b2a992de39715bae844b6f12bebc"
+        },
+        {
+          "kind": "official-docs",
+          "url": "https://www.effect.website/docs/observability/logging/"
+        }
+      ]
+    },
+    {
+      "id": "E-016",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Effect tracing supports spans with attributes, links, events, sampling, kinds, and completion Exit.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/Tracer.ts"
+        },
+        {
+          "kind": "official-docs",
+          "url": "https://www.effect.website/docs/observability/tracing/"
+        }
+      ]
+    },
+    {
+      "id": "E-017",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Effect metrics provide counters, gauges, frequencies, histograms/summaries, and effect tracking combinators.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/effect/src/Metric.ts"
+        },
+        {
+          "kind": "official-docs",
+          "url": "https://www.effect.website/docs/observability/metrics/"
+        }
+      ]
+    },
+    {
+      "id": "E-018",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "The official @effect/opentelemetry package at rc.110 includes NodeSdk, OtelTracer, OtelLogger, OtelMetrics, Resource, and WebSdk.",
+      "sources": [
+        {
+          "kind": "official-docs",
+          "url": "https://www.effect.website/docs/v4/api/opentelemetry"
+        },
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/opentelemetry/package.json"
+        }
+      ]
+    },
+    {
+      "id": "E-019",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "NodeSdk.layer conditionally installs configured tracing, logging, and metrics signals, and scoped providers use time-bounded ignored shutdown/flush effects.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/opentelemetry/src/NodeSdk.ts",
+          "blob_sha": "e3964b5f88e77c3ec1babe5644ecf6969f35ddec"
+        }
+      ]
+    },
+    {
+      "id": "E-020",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "OtelTracer bridges Effect spans to OpenTelemetry attributes/events/links/errors/status but exports only through configured provider infrastructure.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/opentelemetry/src/OtelTracer.ts"
+        }
+      ]
+    },
+    {
+      "id": "E-021",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "OtelLogger maps Effect logs and annotations to OTel log records, and OtelMetrics exposes Effect metrics to OTel readers.",
+      "sources": [
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/opentelemetry/src/OtelLogger.ts",
+          "blob_sha": "8ccd6ee82b843de4e98cc5f659c58e0b7caded91"
+        },
+        {
+          "kind": "upstream-source",
+          "url": "https://github.com/Effect-TS/effect/blob/66114151c2b4640bf773f2b3456ce70d679422f6/packages/opentelemetry/src/OtelMetrics.ts",
+          "blob_sha": "da76f6b7c615d22e42449607ffff203696b986be"
+        }
+      ]
+    },
+    {
+      "id": "NODE-001",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Node states that child-process pipes have limited platform-specific capacity and can block a child if output is not consumed.",
+      "sources": [
+        {
+          "kind": "official-node-docs",
+          "url": "https://nodejs.org/api/child_process.html"
+        }
+      ]
+    },
+    {
+      "id": "NODE-002",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Node states that kill sends a signal that may not terminate and killed indicates successful signal delivery, not process termination.",
+      "sources": [
+        {
+          "kind": "official-node-docs",
+          "url": "https://nodejs.org/api/child_process.html#subprocesskillsignal"
+        }
+      ]
+    },
+    {
+      "id": "NODE-003",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Node states that recognized Windows signals kill forcefully and that Linux child descendants may survive parent termination.",
+      "sources": [
+        {
+          "kind": "official-node-docs",
+          "url": "https://nodejs.org/api/child_process.html#subprocesskillsignal"
+        }
+      ]
+    },
+    {
+      "id": "WIN-001",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "Windows MoveFileEx replacement is subject to ACL/delete rights; cross-volume movement may be copy/delete and may leave the source; write-through has specific documented limits.",
+      "sources": [
+        {
+          "kind": "microsoft-docs",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexa"
+        }
+      ]
+    },
+    {
+      "id": "OTEL-001",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "OpenTelemetry sampling reduces traces collected and sent and may create non-recording spans.",
+      "sources": [
+        {
+          "kind": "opentelemetry-spec",
+          "url": "https://opentelemetry.io/docs/specs/otel/trace/sdk/#sampling"
+        }
+      ]
+    },
+    {
+      "id": "OTEL-002",
+      "classification": "UPSTREAM-DIRECT",
+      "claim": "OTLP permits partial acceptance, retry, concurrent in-flight requests, and possible duplicate telemetry after uncertain acknowledgment.",
+      "sources": [
+        {
+          "kind": "opentelemetry-spec",
+          "url": "https://opentelemetry.io/docs/specs/otlp/"
+        }
+      ]
+    },
+    {
+      "id": "I-001",
+      "classification": "INFERENCE",
+      "claim": "Effect Scope manages finalizer lifetime but does not create linear/non-escaping values or prove physical cleanup.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-002",
+            "E-003",
+            "GH-007",
+            "GH-008"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I-002",
+      "classification": "INFERENCE",
+      "claim": "BorrowedOutput requires revocable liveness, root claims, containment, coherent observation, mutation detection, and typed expiry beyond Effect Scope.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-002",
+            "E-005",
+            "E-006",
+            "GH-007"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I-003",
+      "classification": "INFERENCE",
+      "claim": "Callback nesting around the same raw path adds no ownership invariant.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "GH-008",
+            "I-001"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I-004",
+      "classification": "INFERENCE",
+      "claim": "A public Author/Command adds no rent when it duplicates Effect ChildProcess and process handle facilities.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-007",
+            "E-008",
+            "E-009",
+            "GH-006"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I-005",
+      "classification": "INFERENCE",
+      "claim": "Human command output supports a raw process/stream contract, not portable typed rebuild events.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-009",
+            "E-010",
+            "GH-012",
+            "GH-015"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I-006",
+      "classification": "INFERENCE",
+      "claim": "Process interruption, signal request, direct-child exit, stream closure, descendant exit, and lock release are separate states.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-011",
+            "E-012",
+            "NODE-001",
+            "NODE-002",
+            "NODE-003"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I-007",
+      "classification": "INFERENCE",
+      "claim": "Exact caller failure/interruption identity requires preserving the original Cause and reporting cleanup failure separately when both occur.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-003",
+            "E-004",
+            "GH-007"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I-008",
+      "classification": "INFERENCE",
+      "claim": "No atomic portable multi-file publication law follows from Effect FileSystem.rename or repeated one-file renames.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-005",
+            "WIN-001",
+            "GH-011"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I-009",
+      "classification": "INFERENCE",
+      "claim": "Telemetry cannot serve as an application rebuild/event protocol because it is optional, sampled, exporter-dependent, retryable, partially accepted, and duplicable.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-018",
+            "E-019",
+            "E-020",
+            "OTEL-001",
+            "OTEL-002"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I-010",
+      "classification": "INFERENCE",
+      "claim": "A universal SourceLocator branded string adds no common authority over heterogeneous source namespaces and duplicates Effect path/filesystem concepts for host paths.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-005",
+            "E-006",
+            "GH-006"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P-001",
+      "classification": "PROPOSAL",
+      "claim": "Use plain Effect, scoped handle, raw ChildProcess handle/Streams, continuation, or durable value according to lifecycle ownership and completion semantics.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "GH-005",
+            "E-002",
+            "E-007",
+            "E-009",
+            "I-001",
+            "I-005"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P-002",
+      "classification": "PROPOSAL",
+      "claim": "Borrowed byte count and digest should be computed from the same traversal and mutation checks should compare kind, bytes, and algorithm-qualified digest.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-005",
+            "GH-007",
+            "I-002"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P-003",
+      "classification": "PROPOSAL",
+      "claim": "Matrices should retain every cell Exit and every known committed artifact instead of failing as a transaction.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "GH-005",
+            "I-008"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P-004",
+      "classification": "PROPOSAL",
+      "claim": "Signing/mutation should produce a new artifact and durable provenance edge rather than mutate an observed input in place.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "GH-006",
+            "I-008"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "U-001",
+      "classification": "UNKNOWN",
+      "claim": "Crash durability after one-file rename across all supported platforms is not established by inspected APIs or recorded evidence.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-005",
+            "WIN-001"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "U-002",
+      "classification": "UNKNOWN",
+      "claim": "Windows lock-release timing and complete cleanup after child interruption are not established.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-011",
+            "NODE-002",
+            "NODE-003",
+            "WIN-001"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "U-003",
+      "classification": "UNKNOWN",
+      "claim": "A race-free universal borrowed-tree snapshot and symlink/hard-link containment proof are not established.",
+      "sources": [
+        {
+          "evidence_ids": [
+            "E-005",
+            "E-006",
+            "I-002"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LOCAL-001",
+      "classification": "RECORDED-EXECUTION",
+      "claim": "The delivered ZIP was locally checked for the exact required member set, ZIP CRC integrity, SHA-256 manifest replay, JSON parsing, and claim-classification linting; no effect-build or provider runtime validation was performed.",
+      "sources": [
+        {
+          "kind": "local-integrity-check",
+          "artifact": "manifest.sha256"
+        }
+      ],
+      "limitations": "Archive/content integrity only; not TypeScript compilation, provider execution, CI, or platform conformance."
+    }
+  ]
+}
