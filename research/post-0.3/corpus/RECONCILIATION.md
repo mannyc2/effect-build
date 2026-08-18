@@ -201,18 +201,25 @@ probed point. Full table is part of the D15 gate work — pending-research.
 | Portable-profile proof programs | Defined as work — D8 |
 | Evidence normalization | **Closed**: provenance/disposition labels retained; this table cites them |
 
-## 5. Maintainer question batch 1 (pending-maintainer)
+## 5. Maintainer question batch 1 — outcomes (2026-08-18)
 
-1. Public name of the native compile operations: keep `compileExecutable` or shorten to the
-   boundary doc's operation-module style (e.g. `Bun.compileExecutable` module function names).
-2. `compileExecutableMatrix`: remove to ordinary Effect composition (recommended by D2 and the
-   wrapper rule; a retraction per D1) or retain as convenience.
-3. `withJavaScriptBundle`: confirm removal at the hard cut, superseded by native bundle
-   operations (recommended; a retraction per D1).
-4. Existing `Compiler` services: convert stateless wrappers to functions per the service test
-   (recommended) or retain the service pattern.
-5. (Batch 2, lower stakes) esbuild CLI lane demand, B10 full-stack executable priority, exact
-   module naming per package, `HostPath.Observed` public or internal.
+1. Public name of the native compile operations: **deferred by the maintainer** ("not sure yet").
+   Stays pending-maintainer; does not block research or Plan 039 design. Revisit with the
+   surface-map naming batch.
+2. `compileExecutableMatrix`: **deferred by the maintainer** ("not sure"). Stays
+   pending-maintainer. Default on the table remains removal per D2 and the wrapper rule; a
+   retraction per D1 either way it resolves.
+3. `withJavaScriptBundle`: **resolved — remove at the hard cut** (decision D16 in
+   `DECISION-RECORD.md`). Superseded by native bundle operations plus borrowed-output laws.
+   A retraction of released behavior, acknowledged per D1.
+4. Existing `Compiler` services: **withdrawn from the maintainer list — misclassified.** The
+   service test itself is forced-by-evidence (a service must own canonical selected state; a
+   stateless forwarder becomes a function). Applying the test per service is code analysis
+   inside Plan 039's `Author/Tool` design, so per-service verdicts are pending-research, not
+   pending-maintainer. Note: the 0.3 `Compiler` service plausibly passes the test — its Layer
+   owns discovered-binary and probed-version state.
+5. (Batch 2, lower stakes, still pending) esbuild CLI lane demand, B10 full-stack executable
+   priority, exact module naming per package, `HostPath.Observed` public or internal.
 
 ## 6. What this unlocks
 

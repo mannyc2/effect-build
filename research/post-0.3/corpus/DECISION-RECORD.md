@@ -143,6 +143,16 @@ research-only until open question Q10 (a mode consuming one already-sealed main 
 acquisition, traversal, or semantic rewrite) is answered; its default mode conflicts with the
 standing no-hidden-acquisition law.
 
+### D16 — `withJavaScriptBundle` removed at the hard cut
+
+Decided 2026-08-18 in reconciliation question batch 1. The Bun bundle continuation is removed in
+0.4, superseded by the native bundle operations and the borrowed-output laws. This retracts
+released 0.3 behavior (per D1's flagging rule). Deferred by the maintainer in the same batch,
+still open: the public name of the native compile operations, and the fate of
+`compileExecutableMatrix`. Withdrawn from the maintainer list as misclassified: per-service
+service-vs-function verdicts are Plan 039 design analysis under the evidence-backed service test,
+not maintainer preference.
+
 ## Dissolved questions
 
 - Protocol-version/npm relationship: dissolved by D3 + D10 (ordinary semver, lockstep pins).
