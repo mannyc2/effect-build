@@ -76,313 +76,452 @@ operation | request mode | modifier | result field | sub-operation
 | external-platform-primitive | portable-role | architecture-law
 ```
 
-Only `operation` rows receive the complete semantic identity:
+Only `operation` rows receive:
 
 ```text
 provider / operation / lane / lifecycle
 / {resource-result, output-publication}
 ```
 
-Evidence coordinates remain separate. The tables do not infer public support from source existence
-or exact execution.
+This eliminates several category errors in the prior breadth dossier:
+
+- `assets`, `useSnapshot`, `useCodeCache`, `mainFormat`, `execArgv`, and
+  `execArgvExtension` are request modes or relations, not operations;
+- `sea.isSea()`, `getAsset*()`, and `getAssetKeys()` are runtime capabilities, not build
+  operations;
+- copying, injection, repair, validation, hashing, and rename are sub-operations or mutation laws;
+- `codesign` and format inspectors are external platform primitives;
+- candidate ad-hoc signing is a post-production correctness mutation, while Developer ID signing,
+  notarization, containers, stapling, and Gatekeeper belong to R9.
 
 ### 2.2 Independent judgments
 
-For each row, the dossier separates:
-
-- evidence provenance;
-- validity of the semantic interpretation;
-- public support/admission;
-- priority;
-- implementation status;
-- certification status;
-- recommendation (`ship | defer | reject`).
-
-This prevents “documented upstream” from becoming “supported by effect-build” and prevents one
-historical receipt from becoming a range.
-
-## 3. Direct `--build-sea`
-
-### 3.1 Availability boundary
-
-Built-in SEA generation via `--build-sea` was introduced in Node 25.5.0 by commit
-`b351910af1a783052d4578f13be1a1af713f6511`. It adds LIEF as the in-core binary mutation engine.
-A Node binary may still lack direct-build capability if it was built without LIEF or without SEA.
-Version alone is therefore insufficient; the exact selected binary must expose the required
-capability.
-
-Node v26.7.0 is the current reference tag for this dossier. Maintained Node v24.19.0 and v22.23.2
-document only the older preparation-blob/external-injector flow, not `--build-sea`.
-
-### 3.2 Default base versus explicit base
-
-The direct config's optional `executable` field creates two modes:
-
-- **default-base mode:** omit `executable`; builder and base collapse to the selected running Node
-  executable. A v25.7.0 fix changed default-base resolution to the actual executable path rather
-  than arbitrary `argv[0]`.
-- **explicit-base mode:** supply `executable`; builder and base are separate participants. The Node
-  same-version relation applies and must be evaluated before provider work.
-
-Builder/base equality is not a universal SEA relation. It applies when separate participants exist:
-legacy injection always, and direct explicit-base mode. The participant-collapsed direct default
-has no separate equality check to perform.
-
-### 3.3 Direct mutation behavior
-
-Node's v26.7.0 source reads the selected base into memory, generates the SEA blob, mutates PE,
-Mach-O, or ELF with LIEF, marks the sentinel, writes the config-selected output, and copies source
-mode bits. The Mach-O path removes an existing code signature before rebuilding the candidate.
-
-That native direct write must not be pointed at the caller's durable destination in the effect-build
-adapter. The adapter should supply a private same-parent candidate as Node's `output`, then perform
-all wrapper-owned repair/validation/digest steps and publish with one final atomic rename.
-
-## 4. Legacy blob generation and injection
-
-### 4.1 Modern blob route boundary
-
-The modern JSON-based SEA preparation blob / `NODE_SEA_BLOB` contract was introduced in Node 20.0.0
-by commit `491a5c968fd4e72e87f460cb583004dde10f4bbd`. This is the legacy route relevant to current SEA.
-
-The initial Node v19.7/v18.16 raw `NODE_JS_CODE` injection protocol is a different historical
-identity. It must not be silently treated as the current legacy route or used as fallback.
-
-### 4.2 Blob generation
-
-`node --experimental-sea-config <config>` remains documented in v26.7.0 for dumping the preparation
-blob, and it is the principal construction route on maintained v24/v22 lines. The output is an
-intermediate, not a final executable. In effect-build it should remain scope-borrowed/private and be
-cleaned after injection or failure.
-
-### 4.3 Injection
-
-The modern blob is injected into a copied base using format-specific semantics:
-
-- PE: resource `NODE_SEA_BLOB`;
-- Mach-O: section `NODE_SEA_BLOB` in segment `NODE_SEA`;
-- ELF: note `NODE_SEA_BLOB`;
-- the `NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2:0` sentinel becomes `:1`.
-
-Node documents postject as an example, but an effect-build operation may not depend on unpinned
-`npx postject`. The injector is a selected command with an exact observable identity and bounded
-capability/format support. Candidate injector products and exact support cells remain R3 work.
-
-The legacy path is therefore not one operation. Blob generation and injection have different
-results and ownership and remain separate identities.
-
-## 5. CommonJS and ESM main support
-
-### 5.1 CommonJS
-
-CommonJS is the historical and default injected main format. The injected `require()` is not
-ordinary file-backed CommonJS `require`; by default it loads built-ins only and exposes only
-`require.main` from the ordinary `require` property surface. `__filename` and `module.filename`
-resolve to `process.execPath`; `__dirname` resolves to its directory.
-
-### 5.2 ESM
-
-ESM SEA mains were introduced for Node 25.7.0 from commit
-`2d874dfb8e079e73fcc313b46b8dd5de37ad9b07` / PR 61813. The corresponding configuration uses
-`mainFormat: "module"`. Maintained v24.19.0 and v22.23.2 remain CommonJS-only in their versioned SEA
-docs.
-
-ESM supports built-in static imports, top-level await, built-in dynamic `import()`, and injected
-`import.meta` main/path facts. `import.meta.resolve` remains unsupported in the v26.7.0 reference.
-Filesystem/package module loading remains outside the default loader unless the application
-explicitly creates file-backed loading with `module.createRequire()`.
-
-ESM is therefore a version-gated request mode, not a separate provider operation.
-
-## 6. Module-loading restrictions
-
-The provider-native SEA domain is intentionally broader than the strict portable sealed-main role,
-but the loader restrictions are still real:
-
-- injected CJS and ESM default loading do not resolve ordinary filesystem/package modules;
-- built-ins are available;
-- filesystem/package loading can be reintroduced explicitly with `module.createRequire()`;
-- ESM dynamic import loads built-ins, not ordinary filesystem modules, in the current reference;
-- source-relative asset expectations do not magically become embedded files;
-- native addons require explicit asset extraction and `process.dlopen()`.
-
-The direct Node SEA operation should preserve these native capabilities and failures. R5 may select
-a narrower portable role; R2 must not erase the provider-native surface to make that role simpler.
-
-## 7. Assets and runtime lookup
-
-### 7.1 Build-time asset configuration
-
-The `assets` config map embeds logical key → source-path bytes during SEA construction. Assets are a
-request mode/modifier of the assembler operations, not their own build operation.
-
-### 7.2 Runtime capabilities
-
-Inside a SEA, `node:sea` exposes:
-
-- `isSea()`;
-- `getAsset(key, encoding?)` — copied `ArrayBuffer` or decoded string;
-- `getAssetAsBlob(key, options?)` — Blob;
-- `getRawAsset(key)` — no-copy `ArrayBuffer` view into embedded bytes;
-- `getAssetKeys()` — logical keys.
-
-These are runtime capabilities, not selected-command provider operations.
-
-### 7.3 Ownership
-
-`getRawAsset()` is distinct from the copied forms. Node warns callers not to write through the raw
-view because the mapped section may be unwritable or unaligned and writes can crash. The truthful
-R2 classification is therefore `runtime-borrowed-view`; effect-build must not elevate it to a
-caller-owned mutable buffer. Exact lifetime behavior remains empirical and belongs in R4.
-
-## 8. Code cache and startup snapshot
-
-### 8.1 Snapshot
-
-`useSnapshot` was added in Node 20.6.0. It materially changes lifecycle: the main is executed during
-preparation and must install a deserialize-main function for final launch. It is a request mode with
-its own legal-state matrix, not a generic optimization boolean.
-
-ESM + snapshot remains illegal in v26.7.0.
-
-### 8.2 Code cache
-
-CJS SEA code cache was added in Node 20.6.0. ESM SEA code cache support was added later in Node
-25.9.0 by commit `9ff27fdb014c21e869966ffcd053c8e2d872d8c3`.
-
-The code cache is V8/platform-sensitive. Cross-target construction must set both snapshot and code
-cache false. Node documentation still states that `import()` does not work with code cache; exact
-format/version behavior and cache rejection remain runtime-probe work.
-
-### 8.3 Snapshot plus code cache
-
-Current source warns that `useCodeCache` is redundant with `useSnapshot`. An adapter must not report
-both as independently active. R3 must select an explicit normalization/refusal rule for that
-ambiguous caller state rather than silently preserving an impossible semantic combination.
-
-## 9. Execution-argument policy
-
-`execArgv` embeds Node execution arguments. `execArgvExtension` controls later extension:
-
-- `none` — embedded arguments only; ignore `NODE_OPTIONS`;
-- `env` — allow `NODE_OPTIONS`; current Node default;
-- `cli` — parse `--node-options=<...>` at SEA launch.
-
-These are request/runtime policy modes. They are not separate operations. The provider wrapper
-should preserve them explicitly and not invent one normalized portable execution-arguments model.
-
-R3 must execute exact quoting/eligibility/precedence cases and decide whether effect-build's own
-public default should expose Node's `env` default or require callers to choose explicitly.
-
-## 10. Builder/base, injector, host/target, and architecture relations
-
-### 10.1 Builder/base
-
-Node's documented rule is same Node version between blob builder and injected base. Historical
-recorded execution also includes an unequal-version failure. R2 retains it as a non-overridable
-relation only where participants are actually separate.
-
-Equal version is necessary but documentation does not prove that every custom same-version build is
-interchangeable. Complete binary/build identity and capabilities remain R3 inputs.
-
-### 10.2 Base capability
-
-A base must contain the applicable SEA support/resource/fuse contract. A version string cannot make
-a custom SEA-disabled Node executable injectable. R3 therefore needs explicit base capability
-observation/refusal.
-
-### 10.3 Injector identity
-
-The legacy injector is independently selected. It is not “Node” and not a hidden package-manager
-sub-operation. Its identity, offline availability, supported formats/architectures, and known holes
-are compatibility facts. No install/download/fallback is permitted.
-
-### 10.4 Host and target
-
-Node documentation allows cross-platform SEA generation when snapshot and code cache are disabled,
-but this does not prove every build-host / target-format / architecture cell. Direct `--build-sea`
-can read an explicit base binary and uses LIEF to parse ELF, PE, and Mach-O; that source shape is not
-an execution certificate.
-
-The target is therefore derived from the actual selected base/native candidate, not a free generic
-triple. Every proposed cross-target cell remains deferred until R3/R4 execution proves construction,
-repair, structural validation, target launch, and publication.
-
-## 11. Target-specific candidate correctness repair
-
-This R2 dossier contains only **candidate correctness repair required before first publication**.
-It explicitly excludes distribution trust.
-
-### 11.1 macOS
-
-SEA construction mutates Mach-O bytes and invalidates/removes signatures. Node's documented flow
-applies an ad-hoc signature with `codesign --sign -` after final SEA construction. The direct
-v26.7.0 LIEF path itself removes an existing code signature while mutating Mach-O.
-
-The correct provider pipeline is:
+Each row keeps these independent:
+
+- **evidence** — what an official document/source/commit or repository record establishes;
+- **validity** — current, historical, derived, proposed, unknown, or falsified;
+- **public support** — rejected, shape-only, candidate, admitted, or excluded;
+- **priority** — required/high/medium/low;
+- **implementation** — implemented, partial, absent, or not applicable;
+- **certification** — documentation-only, runtime-proof-pending, certified, or excluded.
+
+An upstream feature being documented does not admit it. A version being observed does not create a
+range. An upstream CI platform does not become an effect-build support cell. A successful
+configuration parse or blob write does not prove a durable executable.
+
+## 3. Exact source basis
+
+### 3.1 Repository basis
+
+The immutable repository basis is `c4cefd0acc2b7854cc25513967af1a8d415ccab0`. The governing sources are listed in
+`EVIDENCE-COORDINATES.csv`, including:
+
+- corpus governance, decision record, reconciliation, reconciliation gates, and R1-R5/R9 program;
+- the prior provider-native Node SEA dossier;
+- the complete Node-canon lane;
+- lifecycle and ownership laws;
+- compatibility relation and preflight/mutation-order research;
+- `APPLE-DISTRIBUTION-BOUNDARY.md`.
+
+The key repository law is that operation identity is semantic, while evidence coordinates are
+separate and exact. Publication is not a filesystem side effect; it is the validated transition
+from a private candidate to an atomic durable result.
+
+### 3.2 Current upstream reference
+
+Current behavior in this report means exact Node tag `v26.7.0` at commit
+`b4f23d3619c98bed09af93a21192f6080197a8c6`, released August 5, 2026. The important source coordinates are:
+
+- `doc/api/single-executable-applications.md` lines 124-204 — introduction and direct workflow;
+- lines 205-229 — direct configuration and builder/base/cross-platform relations;
+- lines 230-261 — assets;
+- lines 262-273 — snapshot and code cache;
+- lines 274-331 — execution arguments and extension policies;
+- lines 336-375 — runtime asset APIs;
+- lines 377-450 — CJS/ESM loader behavior and native addons;
+- lines 451-562 — legacy blob generation and manual injection;
+- lines 563-572 — upstream CI platform coverage;
+- `src/node_sea_bin.cc` — `InjectIntoELF`, `InjectIntoMachO`, `InjectIntoPE`,
+  `MarkSentinel`, `InjectResource`, and `BuildSingleExecutable`;
+- `src/node_sea.cc` — serialization/deserialization, config parsing, snapshot/cache generation,
+  asset reads, and runtime resource views.
+
+The v26.7.0 source tree contains LIEF version `0.17.0-`, but that source fact does not prove every
+Node binary at the same semantic version was built with LIEF.
+
+### 3.3 Maintained-line check
+
+At the research date, the latest official release index listed v26.7.0 Current, v24.19.0 LTS, and
+v22.23.2 LTS. Their versioned SEA documents are not equivalent:
+
+| Exact line | Direct `--build-sea` | Legacy blob/injection | Main format documented |
+|---|---:|---:|---|
+| v26.7.0 | yes | yes | CommonJS and ESM |
+| v24.19.0 | no | yes | CommonJS only |
+| v22.23.2 | no | yes | CommonJS only |
+
+This is a central compatibility fact. It is illegal to infer v26's direct or ESM surface backward
+onto maintained v24 or v22.
+
+## 4. Availability ledger
+
+| Boundary | Exact version/commit | Meaning |
+|---|---|---|
+| Initial SEA | v19.7.0 / v18.16.0; `164bfe82cc7bf94e99649e3584e9c031a26dc93d` | Historical raw `NODE_JS_CODE` CJS injection. Different identity; not the modern preparation-blob route. |
+| Modern JSON/blob route | v20.0.0; `491a5c968fd4e72e87f460cb583004dde10f4bbd` | `--experimental-sea-config`, serialized preparation blob, modern `NODE_SEA_BLOB` contract. |
+| Startup snapshot | v20.6.0; `ac34e7561ab4771ed1a953efc92dc851ed468e3d` | `useSnapshot`. |
+| CJS code cache | v20.6.0; `6cd678965fed3f3e30efe267742c38f14c71151c` | `useCodeCache` for CommonJS; dynamic `import()` caveat. |
+| Assets and initial runtime APIs | v21.7.0 / v20.12.0; `ce8f085d2608cd54930efe0bcc42e5b2fa4614c3` | Asset map and `isSea`, `getAsset`, `getAssetAsBlob`, `getRawAsset`. |
+| Embedded execution arguments | v24.7.0, backported v22.20.0; `3fc70198e0ab7c34eee8887a7cc0d429a9fdebc7` | `execArgv`. |
+| Execution-argument extension | v24.7.0, backported v22.20.0; `6722642e3d009a4d57f00357978f7879af82d403` | `none`, `env`, `cli`. |
+| Asset-key enumeration | v24.8.0 / v22.20.0; `6428e2e4ca09539d696a8f43edaaf149b2751967` | `getAssetKeys()`. |
+| Direct build | v25.5.0; `b351910af1a783052d4578f13be1a1af713f6511` | In-core `--build-sea` using LIEF. |
+| Default executable correction | v25.7.0; `62b0758c4701183a9c4c76d3ccc498eae4188fba` | Uses actual process executable, not caller-controlled `argv0`. |
+| ESM main | v25.7.0; `2d874dfb8e079e73fcc313b46b8dd5de37ad9b07` | `mainFormat=module`; initial ESM omitted snapshot/cache support. |
+| ESM code cache | v25.9.0; `9ff27fdb014c21e869966ffcd053c8e2d872d8c3` | ESM `useCodeCache`; ESM snapshot remains unsupported. |
+| Current source reference | v26.7.0; `b4f23d3619c98bed09af93a21192f6080197a8c6` | Direct and legacy routes, CJS/ESM, current runtime capabilities. |
+
+The availability predicate is never just `version >= X`. Exact binary capabilities, release-line
+backports, build flags, selected participants, target, request modes, and repair/validation
+availability are all inputs.
+
+## 5. Provider operation inventory
+
+### 5.1 `assemble-direct`
+
+Semantic key:
 
 ```text
-construct/mutate staged candidate
--> remove stale signature before mutation when the selected route requires it
--> finish all SEA content mutation
--> apply only the ad-hoc correctness signature proven necessary for a runnable Mach-O
--> structurally/signature validate
--> digest/recheck
--> atomic publish
+node-sea / assemble-direct / selected-command / one-shot
+/ {caller-owned-value, atomic-published-durable}
 ```
 
-This signing step makes no Developer ID or distribution-trust claim. Where no target-specific
-correctness repair is required, the repair stage is a no-op.
+The selected Node process parses the config, chooses the current executable when `executable` is
+omitted or reads the explicitly selected base, generates the preparation blob, injects it through
+the LIEF-backed format path, flips the fuse, writes the configured output, and copies permissions.
 
-### 11.2 Windows
+The native command writes its configured path directly. That is not sufficient for effect-build's
+publication law. The adapter must substitute a private same-parent candidate path into the config.
+Only after target-specific repair, native structural validation, future target-runtime smoke,
+final hashing, and authenticated-input recheck may it atomically rename to the public destination.
 
-Node says Windows signing is optional for running the SEA. Certificate signing is therefore not a
-universal candidate-correctness step. It belongs to distribution/trust work, outside R2.
+Direct build can fail even at a nominally sufficient Node version when the exact binary lacks
+`HAVE_LIEF` or SEA support. This must be a bounded required-capability decision with
+present/absent/indeterminate outcomes, not a version guess.
 
-### 11.3 Cross-target macOS
+### 5.2 `generate-preparation-blob`
 
-A non-macOS build host cannot simply be assumed able to finalize a macOS candidate. If the target
-requires a correctness repair unavailable on the current host, the cell is unsupported unless the
-architecture explicitly models a later compatible-host correctness-finalization stage. R2 records
-the relation but does not claim a cross-host signing proof.
+Semantic key:
 
-## 12. Distribution/trust boundary
+```text
+node-sea / generate-preparation-blob / selected-command / one-shot
+/ {scope-borrowed-value, none}
+```
 
-The following are **not Node SEA R2 operations**:
+The output blob is a private intermediate. It is authorized only within the assembly scope and must
+not be exposed as the operation's durable public product. The generator's exact identity and the
+eventual base relation are preserved even if both pathnames initially refer to the same binary.
 
-1. Developer ID / distribution-trust signing;
-2. notarization;
-3. `.app`, ZIP, DMG, or installer-package construction;
-4. stapling;
-5. Gatekeeper assessment.
+The modern identity starts at Node 20.0.0. The initial Node 18.16/19.7 raw-JavaScript route is
+historical evidence and must not be silently accepted as a weaker implementation of this operation.
 
-Those are R9. R2 must not import them into `effect-build-node-sea`, and it must not create a
-universal signing abstraction. Candidate correctness and distribution trust have different
-credentials, lifecycle, mutation, result, and failure laws.
+### 5.3 `inject-preparation-blob`
 
-## 13. Legal and illegal states
+Semantic key:
 
-### 13.1 Legal source states, subject to exact version/capability gates
+```text
+node-sea / inject-preparation-blob / selected-command / one-shot
+/ {caller-owned-value, atomic-published-durable}
+```
 
-- modern legacy CJS blob generation/injection from Node 20.0.0 onward;
-- direct construction from Node 25.5.0 when the selected binary includes LIEF/SEA support;
-- direct default-base and explicit-base modes;
-- CJS mains;
-- ESM mains from Node 25.7.0;
-- assets from their documented introduction boundary;
-- snapshot on supported CJS lines;
-- CJS code cache from Node 20.6.0;
-- ESM code cache from Node 25.9.0;
-- execArgv/extension modes on lines containing those features;
-- filesystem loading deliberately created through `module.createRequire()`;
-- native-addon extraction only as an explicit provider-native application behavior.
+This operation owns the executable-producing half of the legacy route. It copies the authenticated
+base to private staging, prepares the candidate for mutation when required, invokes one exact
+injector with the target-derived resource/fuse arguments, performs final correctness repair,
+validates, hashes, rechecks, and atomically publishes.
 
-### 13.2 Illegal or unsupported-by-construction states
+The official docs demonstrate `npx postject`, but that spelling is not an injector identity. It can
+resolve different package bytes, depend on network/install state, and change without the request
+changing. R3 must select finite exact injector candidates and prove their executable/package
+identity, offline behavior, format support, failure behavior, and known holes.
 
-- direct `--build-sea` before v25.5.0;
-- direct build with a Node binary lacking LIEF/SEA capability;
-- modern blob route before v20.0.0;
-- `mainFormat=module` before v25.7.0;
+## 6. Builder/base relationships
+
+The relation is participant-dependent, not route-name-dependent.
+
+### 6.1 Direct default base
+
+When `executable` is omitted, the current source resolves the actual running Node executable. The
+builder and base participants collapse into one authenticated executable. No separate equality
+relation is needed.
+
+The v25.7.0 default-path correction matters: earlier direct v25.5/v25.6 cells require an adversarial
+custom-`argv0` probe before admission.
+
+### 6.2 Direct explicit base
+
+When `executable` is supplied, the builder and base are separate participants. Official v26.7
+documentation requires the Node version used to build to equal the version of the binary into which
+the blob is injected. This is a non-overridable relation.
+
+This corrects prior corpus wording that confined builder/base equality to the legacy route. The
+accurate law is: **equality applies wherever the participants are separate**.
+
+### 6.3 Legacy route
+
+The blob generator and candidate base are inherently separate participants, even when they resolve
+to identical bytes. Their versions must match. Historical recorded execution in the corpus is an
+exact observation, not a version range.
+
+### 6.4 Custom builds
+
+Equal semantic version is necessary under the official contract, but documentation does not prove
+that all custom builds with the same version share compatible SEA serialization/runtime behavior.
+Relevant build differences include SEA being disabled, LIEF being omitted, and source/build-option
+skew. Public support therefore needs exact-binary capability and relation proof.
+
+## 7. Configuration mode law
+
+### 7.1 Main format, snapshot, and code-cache matrix
+
+Current v26.7.0 state:
+
+| Main | Snapshot | Code cache | Current legality | Notes |
+|---|---:|---:|---|---|
+| CommonJS | false | false | legal shape | baseline |
+| CommonJS | true | false | legal shape | main runs during preparation; deserialize-main callback required |
+| CommonJS | false | true | legal shape | dynamic `import()` documented not to work |
+| CommonJS | true | true | ambiguous/redundant | current source warns cache is redundant; adapter must canonicalize or reject before launch |
+| ESM | false | false | legal shape from v25.7.0 | absent from v24.19/v22.23 |
+| ESM | false | true | legal shape from v25.9.0 | unavailable in v25.7-v25.8.x |
+| ESM | true | false | illegal | current docs/source reject ESM plus snapshot |
+| ESM | true | true | illegal | ESM plus snapshot is already illegal |
+
+“Legal shape” is not certification. Each admitted version/host/target route cell still needs exact
+execution.
+
+### 7.2 Cross-target modes
+
+Official docs state that cross-platform SEA generation must disable snapshot and code cache because
+those artifacts are platform-bound and may crash when loaded on another platform. This relation is
+non-overridable.
+
+Disabling both makes cross-target construction *advertised as possible*; it does not admit every
+host/target/architecture cell. The base must already be the requested target format/architecture,
+the route/injector must handle it, target-specific repair must be available, and the candidate must
+run on the target.
+
+### 7.3 Execution arguments
+
+`execArgv` embeds fixed Node flags. `execArgvExtension` then determines whether launch-time
+extension is possible:
+
+- `none` — only embedded arguments; ignore `NODE_OPTIONS`;
+- `env` — allow `NODE_OPTIONS`; upstream default for backward compatibility;
+- `cli` — parse `--node-options=...` as Node arguments rather than user-script arguments.
+
+These are policy-relevant request modes. Effect-build must not treat Node's `env` default as its own
+security decision by accident. Each mode needs exact argv partition, quoting, malformed-input, and
+flag-eligibility probes. The selected policy belongs in the receipt.
+
+## 8. Module-loading restrictions
+
+Node SEA is a single injected main, not a packaged filesystem.
+
+### 8.1 Common behavior
+
+By default, injected-main `require()` and ESM imports resolve built-in modules only. A module that
+exists only on the filesystem fails. Bundling into one authenticated script is therefore the
+default deterministic closure.
+
+`module.createRequire()` explicitly creates a normal filesystem-based loader. That is a truthful
+provider-native capability but is outside the strict sealed-main portable role because it
+reintroduces external runtime acquisition.
+
+### 8.2 CommonJS main
+
+The injected CommonJS `require` is not the normal file-loader `require`. Current documentation
+guarantees `require.main` but not the usual properties such as loader caches/resolution helpers.
+The effective `__filename`/`module.filename` is `process.execPath`; `__dirname` is its directory.
+
+### 8.3 ESM main
+
+On ESM-capable exact lines:
+
+- `import.meta.url`, `.filename`, and `.dirname` identify `process.execPath`;
+- `import.meta.main` is true;
+- `import.meta.resolve` is unsupported;
+- dynamic import can load built-ins by default but not filesystem modules.
+
+ESM is not available in the exact maintained v24.19.0 and v22.23.2 docs. ESM code cache is a second
+boundary at v25.9.0, not part of initial v25.7 ESM support. ESM snapshot remains illegal.
+
+### 8.4 Native addons
+
+Official docs show a provider-native path: embed a `.node` file as an asset, write it to a temporary
+file, and call `process.dlopen()`. This is not equivalent to ordinary sealed-main closure. It adds
+target ABI, temporary-file ownership, permissions, cleanup, and route-specific binary correctness.
+
+The documented Linux arm64 container/native-addon crash is tied to output produced with postject.
+It is a known legacy-route hole; it must not be projected onto direct LIEF output without execution,
+and it must not be ignored when selecting a legacy injector.
+
+## 9. Assets and runtime-capability mapping
+
+Assets are configured during construction and consumed at runtime. They are not additional provider
+operations.
+
+| Runtime capability | Ownership/result | Availability boundary | R2 disposition |
+|---|---|---|---|
+| `sea.isSea()` | boolean value | v21.7.0 / v20.12.0 | ship classification; certify later |
+| `sea.getAsset(key[, encoding])` | caller-owned copied ArrayBuffer or string | v21.7.0 / v20.12.0 | ship |
+| `sea.getAssetAsBlob(key[, options])` | Blob value | v21.7.0 / v20.12.0 | ship |
+| `sea.getRawAsset(key)` | **runtime-borrowed-view**, no copy | v21.7.0 / v20.12.0 | ship capability; reject mutation |
+| `sea.getAssetKeys()` | caller-owned string array | v24.8.0 / v22.20.0 | ship |
+
+The raw view is materially different from the copied APIs. Current docs warn that writing may crash
+if the embedded section is read-only or improperly aligned. The public contract must not imply
+ownership or mutability. Its authority ends with the SEA runtime; R4 must prove post-close/use-after-
+scope behavior for any wrapper that exposes it.
+
+Asset preparation reads source paths at build time. R3/R4 must cover missing paths, permissions,
+symlinks, duplicate effective keys, empty and large assets, source mutation between authentication
+and read, encoding, copied-value isolation, Blob behavior, raw-view lifetime, and arbitrary-size
+bounds.
+
+## 10. Host, target, architecture, and injector identity
+
+### 10.1 Construction format
+
+Current direct source recognizes ELF, Mach-O, and PE independently of the builder executable's own
+format. That supports a *construction hypothesis* for cross-target work; it is not a support claim.
+
+The requested target determines:
+
+- base executable format and machine architecture;
+- injected resource/note/segment contract;
+- final suffix/permissions where relevant;
+- required candidate repair and validation;
+- the target runtime oracle.
+
+A target label inferred from a filename is insufficient. The adapter must inspect the base and final
+candidate.
+
+### 10.2 Upstream CI context
+
+Current docs say Node regularly tests SEA on Windows, macOS arm64, and Linux except Alpine and
+s390x. macOS x64 is not currently in the documented SEA CI set. This is evidence context only. It
+does not admit those cells, does not prove all architectures, and does not prove a cross-target
+builder topology.
+
+### 10.3 External injector
+
+Legacy route selection must be finite and exact. At minimum, a candidate definition needs:
+
+- package and executable content identity;
+- version and provenance;
+- no-install/offline acquisition behavior;
+- command path reauthentication;
+- ELF/Mach-O/PE capability;
+- resource, segment, note, and fuse behavior;
+- duplicate-resource/already-injected handling;
+- target architecture behavior;
+- cancellation and process-tree behavior;
+- partial-write/remnant behavior;
+- known issue/deny-hole mapping.
+
+The official `npx postject` example satisfies none of the identity requirements by itself.
+Accordingly, this dossier ships the operation identity but defers every injector implementation
+candidate.
+
+## 11. Candidate correctness versus Apple distribution
+
+Only the first item below belongs to R2:
+
+1. **Candidate correctness repair** — transformations strictly required so the mutated executable is
+   structurally valid and runnable on the target, such as removing a stale signature before legacy
+   Mach-O mutation and applying ad-hoc signing after the final mutation when required.
+2. **Developer ID or distribution-trust signing** — excluded; R9.
+3. **Notarization** — excluded; R9.
+4. **App bundles, ZIPs, DMGs, and installer packages** — excluded containers; R9.
+5. **Stapling and Gatekeeper assessment** — excluded; R9.
+
+There is no universal signing abstraction. On current direct Mach-O source, LIEF removes an
+existing code signature internally. On the legacy path, official docs tell the user to remove the
+copied candidate's signature before injection. After final mutation, current docs show ad-hoc
+`codesign --sign -` for macOS. Windows trust signing is optional and an unsigned binary is still
+runnable; it is not a correctness prerequisite.
+
+Cross-target macOS construction is therefore more than “LIEF can edit Mach-O.” The selected
+execution topology must also be able to perform final candidate repair and target-native validation.
+If it cannot, the cell is ineligible rather than partially published.
+
+## 12. Lifecycle, staging, validation, and publication
+
+The native Node direct command and example legacy workflow do not provide effect-build's durable
+publication semantics. The adapter-level sequence is:
+
+1. resolve exact route, builder, optional base, injector, repair, and validator identities;
+2. evaluate version, capability, mode, host/target, architecture, and repair relations;
+3. authenticate all inputs;
+4. create private same-parent staging;
+5. rewrite Node/blob output to private staging;
+6. acquire scoped child-process ownership;
+7. generate the blob or run direct build;
+8. for legacy, copy the base and inject with the exact selected injector;
+9. apply target-specific candidate repair after the final content mutation;
+10. structurally inspect format, architecture, SEA resource/fuse, permissions, and signature state;
+11. run target-runtime probes when the cell is being certified;
+12. hash final bytes and recheck authenticated inputs/candidate identity;
+13. atomically rename the same-parent candidate to the destination;
+14. produce a receipt that keeps evidence, validity, support, priority, implementation, and
+    certification distinct.
+
+### 12.1 Interruption
+
+Documentation does not establish interruption behavior. The required law is:
+
+- before rename, interruption closes the scope, terminates/reaps owned children, and performs
+  best-effort private cleanup;
+- interruption remains interruption rather than being rewritten as a build error;
+- cleanup/termination failures are secondary causes and do not mask the primary cause;
+- no private remnant is represented as a durable result;
+- atomic rename is the commit point;
+- after successful rename, later interruption does not revoke the durable output.
+
+R4 must execute interruption at every stage, including ignored signals, descendant processes,
+partial writes, validator/repair hangs, cleanup failures, Windows locks, and the instant around
+rename.
+
+### 12.2 Validation order
+
+Validation must follow the last mutation. For macOS, validating before ad-hoc signing validates the
+wrong bytes. Digesting before signing records the wrong bytes. Publishing before either creates an
+unvalidated durable artifact.
+
+The candidate pathname must retain one authenticated object identity across mutation, repair,
+validation, digesting, and rename. Symlink swaps, rename swaps, same-length replacement, inode
+replacement, and Windows handle/lock behavior belong to R4.
+
+## 13. Legal and illegal state summary
+
+### 13.1 Legal shape, still uncertified
+
+- direct default-base CommonJS on exact Node binaries with built-in SEA/LIEF;
+- direct explicit-base CommonJS with same-version builder/base;
+- legacy CommonJS blob+injection with same-version generator/base and exact injector;
+- current v26 ESM plain mode;
+- current v26 ESM with code cache on exact versions beginning v25.9.0;
+- CJS snapshot or CJS code cache individually;
+- asset embedding and runtime lookup on exact supporting lines;
+- execArgv with explicitly selected extension policy;
+- cross-target construction only when snapshot/cache are false, with target base, repair, validation,
+  and runtime proof still required.
+
+### 13.2 Illegal or rejected
+
+- direct build before v25.5.0 or on a binary lacking LIEF/SEA support;
+- treating v24.19.0/v22.23.2 as direct-build or ESM lines;
+- ESM before v25.7.0;
 - ESM code cache before v25.9.0;
 - ESM plus snapshot;
 - cross-target plus snapshot or code cache;
