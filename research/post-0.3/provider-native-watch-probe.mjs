@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { Effect, Fiber, Stream } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 import { conclusion, infrastructure } from "./receipt.mjs";
@@ -19,8 +19,9 @@ const waitFor = async (predicate, label, timeout = 45_000) => {
   throw new Error(`timed out waiting for ${label}`);
 };
 
-const firstOutput = async (outdir) => {
-  for (const name of ["main.js", "main.mjs", "main.cjs", "entry.js", "entry.mjs"]) {
+const firstOutput = async (outdir, source) => {
+  const stem = basename(source, extname(source));
+  for (const name of [`${stem}.js`, `${stem}.mjs`, `${stem}.cjs`]) {
     const path = join(outdir, name);
     try {
       await access(path);
@@ -69,13 +70,13 @@ const watchOne = async ({ provider, executable, source, outdir }) => {
       const stdoutFiber = yield* Effect.forkScoped(collectText(handle.stdout));
       const stderrFiber = yield* Effect.forkScoped(collectText(handle.stderr));
       const firstPath = yield* Effect.promise(() =>
-        waitFor(async () => firstOutput(outdir), `${provider} initial watch output`)
+        waitFor(async () => firstOutput(outdir, source), `${provider} initial watch output`)
       );
       const firstContents = yield* Effect.promise(() => readFile(firstPath, "utf8"));
       yield* Effect.promise(() => writeFile(source, 'console.log("watch-v2")\n'));
       yield* Effect.promise(() =>
         waitFor(async () => {
-          const currentPath = await firstOutput(outdir);
+          const currentPath = await firstOutput(outdir, source);
           if (currentPath === undefined) return false;
           const contents = await readFile(currentPath, "utf8");
           return contents.includes("watch-v2");
