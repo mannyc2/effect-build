@@ -1,0 +1,918 @@
+{
+  "schema": "effect-build/public-surface@1",
+  "version": "0.4.0",
+  "date": "2026-08-21",
+  "status": "frozen",
+  "authority": {
+    "productDecisions": "research/post-0.3/freeze/PRODUCT-DECISIONS.md",
+    "adjudication": "research/post-0.3/freeze/SURFACE-ADJUDICATION.json"
+  },
+  "packageTrain": {
+    "releasePolicy": "all admitted first-party packages publish in exact lockstep with exact same-version peers",
+    "packages": [
+      {
+        "name": "effect-build",
+        "release": "exact-lockstep-0.4.x",
+        "root": {
+          "form": "namespace-only",
+          "namespaces": [
+            "Artifact",
+            "BorrowedOutput",
+            "Executable",
+            "Matrix",
+            "SystemTarget",
+            "Tool"
+          ]
+        },
+        "subpaths": [
+          {
+            "subpath": "./Artifact",
+            "rootNamespace": "Artifact",
+            "exports": [
+              "AbsolutePath",
+              "DecimalBytes",
+              "Digest",
+              "Executable",
+              "File",
+              "HashedExecutable",
+              "HashedFile",
+              "ObservationMode",
+              "Sha256Value",
+              "UnhashedExecutable",
+              "UnhashedFile"
+            ],
+            "runtimeExports": [
+              "AbsolutePath"
+            ],
+            "typeExports": [
+              "AbsolutePath",
+              "DecimalBytes",
+              "Digest",
+              "Executable",
+              "File",
+              "HashedExecutable",
+              "HashedFile",
+              "ObservationMode",
+              "Sha256Value",
+              "UnhashedExecutable",
+              "UnhashedFile"
+            ],
+            "operationIds": []
+          },
+          {
+            "subpath": "./SystemTarget",
+            "rootNamespace": "SystemTarget",
+            "exports": [
+              "Abi",
+              "Architecture",
+              "Descriptor",
+              "OperatingSystem",
+              "SystemTarget"
+            ],
+            "runtimeExports": [
+              "Abi",
+              "Architecture",
+              "OperatingSystem",
+              "SystemTarget"
+            ],
+            "typeExports": [
+              "Abi",
+              "Architecture",
+              "Descriptor",
+              "OperatingSystem",
+              "SystemTarget"
+            ],
+            "operationIds": []
+          },
+          {
+            "subpath": "./Matrix",
+            "rootNamespace": "Matrix",
+            "exports": [
+              "CellIdentity",
+              "CellResult",
+              "Failure",
+              "Input",
+              "InvalidInput",
+              "Report",
+              "Success"
+            ],
+            "runtimeExports": [
+              "InvalidInput"
+            ],
+            "typeExports": [
+              "CellIdentity",
+              "CellResult",
+              "Failure",
+              "Input",
+              "InvalidInput",
+              "Report",
+              "Success"
+            ],
+            "operationIds": []
+          },
+          {
+            "subpath": "./Author/Tool",
+            "rootNamespace": "Tool",
+            "exports": [
+              "Admission",
+              "CapabilityObservation",
+              "ContentIdentity",
+              "DecimalBytes",
+              "Definition",
+              "Digest",
+              "Observation",
+              "ParticipantIdentity",
+              "Sha256Value",
+              "decimalBytes",
+              "define",
+              "sha256Digest"
+            ],
+            "runtimeExports": [
+              "decimalBytes",
+              "define",
+              "sha256Digest"
+            ],
+            "typeExports": [
+              "Admission",
+              "CapabilityObservation",
+              "ContentIdentity",
+              "DecimalBytes",
+              "Definition",
+              "Digest",
+              "Observation",
+              "ParticipantIdentity",
+              "Sha256Value"
+            ],
+            "operationIds": []
+          },
+          {
+            "subpath": "./Author/BorrowedOutput",
+            "rootNamespace": "BorrowedOutput",
+            "exports": [
+              "Author",
+              "DecimalBytes",
+              "Digest",
+              "Failure",
+              "File",
+              "FileObservation",
+              "HashedFileObservation",
+              "HashedTreeEntry",
+              "HashedTreeFileEntry",
+              "HashedTreeObservation",
+              "ObservationMode",
+              "Tree",
+              "TreeDirectoryEntry",
+              "TreeObservation",
+              "UnhashedFileObservation",
+              "UnhashedTreeEntry",
+              "UnhashedTreeFileEntry",
+              "UnhashedTreeObservation"
+            ],
+            "runtimeExports": [],
+            "typeExports": [
+              "Author",
+              "DecimalBytes",
+              "Digest",
+              "Failure",
+              "File",
+              "FileObservation",
+              "HashedFileObservation",
+              "HashedTreeEntry",
+              "HashedTreeFileEntry",
+              "HashedTreeObservation",
+              "ObservationMode",
+              "Tree",
+              "TreeDirectoryEntry",
+              "TreeObservation",
+              "UnhashedFileObservation",
+              "UnhashedTreeEntry",
+              "UnhashedTreeFileEntry",
+              "UnhashedTreeObservation"
+            ],
+            "operationIds": []
+          },
+          {
+            "subpath": "./Author/Executable",
+            "rootNamespace": "Executable",
+            "exports": [
+              "Artifact",
+              "Author",
+              "Failure",
+              "HashedArtifact",
+              "Request",
+              "RuntimeObservation",
+              "SystemTargetObservation",
+              "UnhashedArtifact"
+            ],
+            "runtimeExports": [],
+            "typeExports": [
+              "Artifact",
+              "Author",
+              "Failure",
+              "HashedArtifact",
+              "Request",
+              "RuntimeObservation",
+              "SystemTargetObservation",
+              "UnhashedArtifact"
+            ],
+            "operationIds": []
+          }
+        ]
+      },
+      {
+        "name": "effect-build-bun",
+        "release": "exact-lockstep-0.4.x",
+        "root": {
+          "form": "namespace-only",
+          "namespaces": [
+            "CompileExecutable"
+          ]
+        },
+        "subpaths": [
+          {
+            "subpath": "./CompileExecutable",
+            "rootNamespace": "CompileExecutable",
+            "exports": [
+              "Artifact",
+              "CompileExecutableError",
+              "CompileExecutableInput",
+              "CompileExecutableMatrixInput",
+              "Compiler",
+              "LayerOptions",
+              "MatrixReport",
+              "Options",
+              "Target",
+              "compileExecutable",
+              "compileExecutableMatrix",
+              "layer"
+            ],
+            "runtimeExports": [
+              "Compiler",
+              "Target",
+              "compileExecutable",
+              "compileExecutableMatrix",
+              "layer"
+            ],
+            "typeExports": [
+              "Artifact",
+              "CompileExecutableError",
+              "CompileExecutableInput",
+              "CompileExecutableMatrixInput",
+              "Compiler",
+              "LayerOptions",
+              "MatrixReport",
+              "Options",
+              "Target"
+            ],
+            "operationIds": [
+              "CAN-BUN-012"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "effect-build-deno",
+        "release": "exact-lockstep-0.4.x",
+        "root": {
+          "form": "namespace-only",
+          "namespaces": [
+            "CompileExecutable"
+          ]
+        },
+        "subpaths": [
+          {
+            "subpath": "./CompileExecutable",
+            "rootNamespace": "CompileExecutable",
+            "exports": [
+              "Artifact",
+              "CompileExecutableError",
+              "CompileExecutableInput",
+              "CompileExecutableMatrixInput",
+              "Compiler",
+              "LayerOptions",
+              "MatrixReport",
+              "Options",
+              "PermissionValue",
+              "Permissions",
+              "Target",
+              "compileExecutable",
+              "compileExecutableMatrix",
+              "layer"
+            ],
+            "runtimeExports": [
+              "Compiler",
+              "Target",
+              "compileExecutable",
+              "compileExecutableMatrix",
+              "layer"
+            ],
+            "typeExports": [
+              "Artifact",
+              "CompileExecutableError",
+              "CompileExecutableInput",
+              "CompileExecutableMatrixInput",
+              "Compiler",
+              "LayerOptions",
+              "MatrixReport",
+              "Options",
+              "PermissionValue",
+              "Permissions",
+              "Target"
+            ],
+            "operationIds": [
+              "CAN-DENO-010"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "effect-build-esbuild",
+        "release": "exact-lockstep-0.4.x",
+        "root": {
+          "form": "namespace-only",
+          "namespaces": [
+            "Build",
+            "Context"
+          ]
+        },
+        "subpaths": [
+          {
+            "subpath": "./Build",
+            "rootNamespace": "Build",
+            "exports": [
+              "Artifact",
+              "BuildError",
+              "BuildInput",
+              "Esbuild",
+              "LayerOptions",
+              "Options",
+              "build",
+              "layer"
+            ],
+            "runtimeExports": [
+              "Esbuild",
+              "build",
+              "layer"
+            ],
+            "typeExports": [
+              "Artifact",
+              "BuildError",
+              "BuildInput",
+              "Esbuild",
+              "LayerOptions",
+              "Options"
+            ],
+            "operationIds": [
+              "CAN-ESB-001"
+            ]
+          },
+          {
+            "subpath": "./Context",
+            "rootNamespace": "Context",
+            "exports": [
+              "Context",
+              "ContextError",
+              "Esbuild",
+              "LayerOptions",
+              "MakeInput",
+              "Options",
+              "layer",
+              "make"
+            ],
+            "runtimeExports": [
+              "Esbuild",
+              "layer",
+              "make"
+            ],
+            "typeExports": [
+              "Context",
+              "ContextError",
+              "Esbuild",
+              "LayerOptions",
+              "MakeInput",
+              "Options"
+            ],
+            "operationIds": [
+              "CAN-ESB-011"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "effect-build-node-sea",
+        "release": "exact-lockstep-0.4.x",
+        "root": {
+          "form": "namespace-only",
+          "namespaces": [
+            "AssembleExecutable"
+          ]
+        },
+        "subpaths": [
+          {
+            "subpath": "./AssembleExecutable",
+            "rootNamespace": "AssembleExecutable",
+            "exports": [
+              "Artifact",
+              "AssembleExecutableError",
+              "AssembleExecutableInput",
+              "Assembler",
+              "LayerOptions",
+              "assembleExecutable",
+              "layer"
+            ],
+            "runtimeExports": [
+              "Assembler",
+              "assembleExecutable",
+              "layer"
+            ],
+            "typeExports": [
+              "Artifact",
+              "AssembleExecutableError",
+              "AssembleExecutableInput",
+              "Assembler",
+              "LayerOptions"
+            ],
+            "operationIds": [
+              "CAN-NODE-001"
+            ]
+          }
+        ]
+      }
+    ],
+    "excludedPackages": [
+      {
+        "name": "effect-build-rolldown",
+        "disposition": "defer",
+        "evidence": "research/post-0.3/freeze/R6-ROLLDOWN-VERDICTS.md"
+      }
+    ]
+  },
+  "operations": [
+    {
+      "operationId": "CAN-BUN-012",
+      "package": "effect-build-bun",
+      "subpath": "./CompileExecutable",
+      "export": "compileExecutable",
+      "rootNamespace": "CompileExecutable",
+      "semanticIdentity": "bun / compile-executable / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+      "support": {
+        "tool": "bun",
+        "exactVersion": "1.3.9",
+        "orchestrator": "node",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "targets": [
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-x64-musl",
+          "linux-aarch64-gnu",
+          "windows-x64"
+        ]
+      }
+    },
+    {
+      "operationId": "CAN-DENO-010",
+      "package": "effect-build-deno",
+      "subpath": "./CompileExecutable",
+      "export": "compileExecutable",
+      "rootNamespace": "CompileExecutable",
+      "semanticIdentity": "deno / compile-executable / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+      "support": {
+        "tool": "deno",
+        "exactVersion": "2.9.3",
+        "relatedRuntime": "denort@2.9.3",
+        "orchestrator": "node",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "targets": [
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-aarch64-gnu",
+          "windows-x64",
+          "windows-aarch64"
+        ]
+      }
+    },
+    {
+      "operationId": "CAN-ESB-001",
+      "package": "effect-build-esbuild",
+      "subpath": "./Build",
+      "export": "build",
+      "rootNamespace": "Build",
+      "semanticIdentity": "esbuild / build-memory / in-process-api / one-shot / {caller-owned-value, none}",
+      "support": {
+        "tool": "esbuild",
+        "exactVersion": "0.28.2",
+        "lane": "in-process-api",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "unadmittedByInference": [
+          "windows",
+          "linux-arm64",
+          "macos-arm64",
+          "macos-x64"
+        ]
+      }
+    },
+    {
+      "operationId": "CAN-ESB-011",
+      "package": "effect-build-esbuild",
+      "subpath": "./Context",
+      "export": "make",
+      "rootNamespace": "Context",
+      "semanticIdentity": "esbuild / context-memory / in-process-api / scoped-context / {long-lived-handle, none}",
+      "support": {
+        "tool": "esbuild",
+        "exactVersion": "0.28.2",
+        "lane": "in-process-api",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "unadmittedByInference": [
+          "windows",
+          "linux-arm64",
+          "macos-arm64",
+          "macos-x64"
+        ]
+      }
+    },
+    {
+      "operationId": "CAN-NODE-001",
+      "package": "effect-build-node-sea",
+      "subpath": "./AssembleExecutable",
+      "export": "assembleExecutable",
+      "rootNamespace": "AssembleExecutable",
+      "semanticIdentity": "node-sea / assemble-direct / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+      "support": {
+        "tool": "node",
+        "exactVersion": "26.7.0",
+        "hostTarget": "linux-x64-gnu",
+        "artifactTarget": "linux-x64-gnu",
+        "assembly": "node --build-sea",
+        "mainFormats": [
+          "cjs",
+          "esm"
+        ]
+      }
+    }
+  ],
+  "derivedOperations": [
+    {
+      "operationId": "BUN-COMPILE-EXECUTABLE-MATRIX",
+      "package": "effect-build-bun",
+      "subpath": "./CompileExecutable",
+      "export": "compileExecutableMatrix",
+      "rootNamespace": "CompileExecutable",
+      "scalarCandidate": "CAN-BUN-012",
+      "status": "selected"
+    },
+    {
+      "operationId": "DENO-COMPILE-EXECUTABLE-MATRIX",
+      "package": "effect-build-deno",
+      "subpath": "./CompileExecutable",
+      "export": "compileExecutableMatrix",
+      "rootNamespace": "CompileExecutable",
+      "scalarCandidate": "CAN-DENO-010",
+      "status": "selected"
+    }
+  ],
+  "internalStages": [],
+  "productDecisionsPendingAdmission": {
+    "bunSelectedCommand": {
+      "scalarName": "compileExecutable",
+      "matrixName": "compileExecutableMatrix",
+      "scalarCandidate": "CAN-BUN-012",
+      "status": "selected"
+    },
+    "denoSelectedCommand": {
+      "scalarName": "compileExecutable",
+      "matrixName": "compileExecutableMatrix",
+      "scalarCandidate": "CAN-DENO-010",
+      "status": "selected"
+    },
+    "bunHostApiExecutable": {
+      "operationName": "build",
+      "candidate": "CAN-BUN-011",
+      "status": "deferred-pending-full-r1-gate-closure",
+      "note": "If admitted later, M3 requires this to be a mode of Bun Build rather than CompileExecutableApi."
+    },
+    "nodeSeaDirect": {
+      "operationName": "assembleExecutable",
+      "candidate": "CAN-NODE-001",
+      "legacyPreparationBlobCandidate": {
+        "operationId": "CAN-NODE-002",
+        "status": "deferred-legacy-only"
+      },
+      "legacyInjectionCandidate": {
+        "operationId": "CAN-NODE-003",
+        "status": "deferred-legacy-only"
+      },
+      "status": "selected"
+    }
+  },
+  "supportSemantics": {
+    "selectedCommandAuthority": {
+      "explicit": "an explicit absolute executable path always wins",
+      "implicit": "otherwise perform one deterministic PATH search at Layer construction",
+      "identity": "bind the selected executable full-content identity for the Layer lifetime",
+      "reauthentication": "reauthenticate identity at each launch boundary",
+      "prohibited": [
+        "installation",
+        "candidate retry",
+        "fallback",
+        "operation-time substitution"
+      ]
+    },
+    "executableMatrix": {
+      "status": "selected",
+      "evidence": "research/post-0.3/freeze/R7-MATRIX-LAWS.md",
+      "homogeneousProviderAndOperation": true,
+      "deterministicInputIndexIdentity": true,
+      "boundedConcurrency": true,
+      "scalarInvocations": "exactly once per started cell",
+      "completionOrder": "input ordered Success or typed Failure cells on normal completion",
+      "publication": "independent single-file commits with no rollback",
+      "defectAndInterruption": "Effect Cause; never translated to cell failure",
+      "interruption": "do not start queued cells; preserve already committed artifacts"
+    },
+    "providerDirectDurability": "Provider-direct durable writes are not upgraded to atomic publication unless the exact operation says atomic-published-durable.",
+    "stability": "No experimental label weakens a missing executable proof or broadens an exact provider/version/host support cell."
+  },
+  "deferredCandidates": [
+    {
+      "id": "R5-node-sealed-main",
+      "kind": "portable-role",
+      "disposition": "defer",
+      "blockingFacts": [
+        "five-host role matrix incomplete",
+        "no recurring packed unchanged-consumer certification"
+      ]
+    },
+    {
+      "id": "R5-browser-module-payload",
+      "kind": "portable-role",
+      "disposition": "defer",
+      "blockingFacts": [
+        "Deno 2.9.3 and 2.9.5 reject module-CSS SVG assets without a loader",
+        "entry-edge query-fragment external and five-host matrices incomplete"
+      ]
+    },
+    {
+      "id": "R6-effect-build-rolldown",
+      "kind": "first-party-package",
+      "disposition": "defer",
+      "blockingFacts": [
+        "close does not join an already-started generate",
+        "package implementation five-host coherence packed consumer and publication gates absent"
+      ]
+    },
+    {
+      "id": "R6-incremental-node-main",
+      "kind": "portable-role",
+      "disposition": "defer",
+      "blockingFacts": [
+        "close and in-flight ownership law incomplete",
+        "five-host and independently packed adapter matrices incomplete"
+      ]
+    }
+  ],
+  "coreSurface": {
+    "status": "frozen-from-committed-r3-r4-author-contract",
+    "subpaths": [
+      {
+        "subpath": "./Artifact",
+        "rootNamespace": "Artifact",
+        "exports": [
+          "AbsolutePath",
+          "DecimalBytes",
+          "Digest",
+          "Executable",
+          "File",
+          "HashedExecutable",
+          "HashedFile",
+          "ObservationMode",
+          "Sha256Value",
+          "UnhashedExecutable",
+          "UnhashedFile"
+        ],
+        "runtimeExports": [
+          "AbsolutePath"
+        ],
+        "typeExports": [
+          "AbsolutePath",
+          "DecimalBytes",
+          "Digest",
+          "Executable",
+          "File",
+          "HashedExecutable",
+          "HashedFile",
+          "ObservationMode",
+          "Sha256Value",
+          "UnhashedExecutable",
+          "UnhashedFile"
+        ],
+        "operationIds": []
+      },
+      {
+        "subpath": "./SystemTarget",
+        "rootNamespace": "SystemTarget",
+        "exports": [
+          "Abi",
+          "Architecture",
+          "Descriptor",
+          "OperatingSystem",
+          "SystemTarget"
+        ],
+        "runtimeExports": [
+          "Abi",
+          "Architecture",
+          "OperatingSystem",
+          "SystemTarget"
+        ],
+        "typeExports": [
+          "Abi",
+          "Architecture",
+          "Descriptor",
+          "OperatingSystem",
+          "SystemTarget"
+        ],
+        "operationIds": []
+      },
+      {
+        "subpath": "./Matrix",
+        "rootNamespace": "Matrix",
+        "exports": [
+          "CellIdentity",
+          "CellResult",
+          "Failure",
+          "Input",
+          "InvalidInput",
+          "Report",
+          "Success"
+        ],
+        "runtimeExports": [
+          "InvalidInput"
+        ],
+        "typeExports": [
+          "CellIdentity",
+          "CellResult",
+          "Failure",
+          "Input",
+          "InvalidInput",
+          "Report",
+          "Success"
+        ],
+        "operationIds": []
+      },
+      {
+        "subpath": "./Author/Tool",
+        "rootNamespace": "Tool",
+        "exports": [
+          "Admission",
+          "CapabilityObservation",
+          "ContentIdentity",
+          "DecimalBytes",
+          "Definition",
+          "Digest",
+          "Observation",
+          "ParticipantIdentity",
+          "Sha256Value",
+          "decimalBytes",
+          "define",
+          "sha256Digest"
+        ],
+        "runtimeExports": [
+          "decimalBytes",
+          "define",
+          "sha256Digest"
+        ],
+        "typeExports": [
+          "Admission",
+          "CapabilityObservation",
+          "ContentIdentity",
+          "DecimalBytes",
+          "Definition",
+          "Digest",
+          "Observation",
+          "ParticipantIdentity",
+          "Sha256Value"
+        ],
+        "operationIds": []
+      },
+      {
+        "subpath": "./Author/BorrowedOutput",
+        "rootNamespace": "BorrowedOutput",
+        "exports": [
+          "Author",
+          "DecimalBytes",
+          "Digest",
+          "Failure",
+          "File",
+          "FileObservation",
+          "HashedFileObservation",
+          "HashedTreeEntry",
+          "HashedTreeFileEntry",
+          "HashedTreeObservation",
+          "ObservationMode",
+          "Tree",
+          "TreeDirectoryEntry",
+          "TreeObservation",
+          "UnhashedFileObservation",
+          "UnhashedTreeEntry",
+          "UnhashedTreeFileEntry",
+          "UnhashedTreeObservation"
+        ],
+        "runtimeExports": [],
+        "typeExports": [
+          "Author",
+          "DecimalBytes",
+          "Digest",
+          "Failure",
+          "File",
+          "FileObservation",
+          "HashedFileObservation",
+          "HashedTreeEntry",
+          "HashedTreeFileEntry",
+          "HashedTreeObservation",
+          "ObservationMode",
+          "Tree",
+          "TreeDirectoryEntry",
+          "TreeObservation",
+          "UnhashedFileObservation",
+          "UnhashedTreeEntry",
+          "UnhashedTreeFileEntry",
+          "UnhashedTreeObservation"
+        ],
+        "operationIds": []
+      },
+      {
+        "subpath": "./Author/Executable",
+        "rootNamespace": "Executable",
+        "exports": [
+          "Artifact",
+          "Author",
+          "Failure",
+          "HashedArtifact",
+          "Request",
+          "RuntimeObservation",
+          "SystemTargetObservation",
+          "UnhashedArtifact"
+        ],
+        "runtimeExports": [],
+        "typeExports": [
+          "Artifact",
+          "Author",
+          "Failure",
+          "HashedArtifact",
+          "Request",
+          "RuntimeObservation",
+          "SystemTargetObservation",
+          "UnhashedArtifact"
+        ],
+        "operationIds": []
+      }
+    ],
+    "contracts": {
+      "Artifact": {
+        "AbsolutePath": "absolute normalized file path",
+        "DecimalBytes": "type re-export of Author.Tool.DecimalBytes: canonical unbounded decimal string matching 0 or a nonzero digit followed by decimal digits",
+        "Digest": "type re-export of Author.Tool.Digest: algorithm literal sha256 plus exactly 64 lowercase hexadecimal digits",
+        "File": "mode-indexed HashedFile or UnhashedFile; only the hashed variant contains Digest",
+        "Executable": "mode-indexed HashedExecutable or UnhashedExecutable; each adds runtime, exact SystemTarget, native format, and committed same-parent publication observation, and only the hashed variant contains Digest"
+      },
+      "SystemTarget": {
+        "literals": [
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-x64-musl",
+          "linux-aarch64-gnu",
+          "linux-aarch64-musl",
+          "windows-x64",
+          "windows-aarch64"
+        ],
+        "Descriptor": "operating system, architecture, optional ABI, and executable suffix"
+      },
+      "Matrix": {
+        "CellIdentity": "provider, literal compileExecutable operation, and zero-based input index",
+        "Success": "tagged CellIdentity plus committed Artifact",
+        "Failure": "tagged CellIdentity plus typed scalar failure",
+        "CellResult": "Success or Failure",
+        "Input": "non-empty scalar inputs plus positive safe-integer concurrency",
+        "Report": "provider, literal compileExecutable operation, input-ordered cells, and literal rollback none",
+        "InvalidInput": "typed preflight failure; defects and interruption remain Effect Cause"
+      },
+      "Author": {
+        "canonicalRepresentations": {
+          "owner": "./Author/Tool owns DecimalBytes, Sha256Value, Digest, decimalBytes, and sha256Digest.",
+          "bytes": "Every bytes and totalBytes field uses the same Tool.DecimalBytes type identity; Artifact and BorrowedOutput re-export that identity. No JavaScript number byte counts are public.",
+          "digest": "Every digest field uses the same Tool.Digest type identity; Artifact and BorrowedOutput re-export that identity. No second structural digest shape exists.",
+          "contentIdentity": "Tool.ContentIdentity contains Tool.Digest plus Tool.DecimalBytes instead of restating algorithm/value fields."
+        },
+        "modules": [
+          "./Author/Tool",
+          "./Author/BorrowedOutput",
+          "./Author/Executable"
+        ]
+      }
+    },
+    "note": "The three Author module export lists come from committed R3/R4 research. Artifact and BorrowedOutput re-export Tool's one canonical scalar type identity; Artifact, SystemTarget, and Matrix are the exact shared vocabulary required by selected operations."
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "schema": "effect-build/surface-adjudication-policy@1",
+  "date": "2026-08-21",
+  "status": "frozen",
+  "r1Source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+  "r1StopCondition": "research/post-0.3/reconciliation/r1/STOP-CONDITION.json",
+  "unchangedProductionEvidence": {
+    "baseline": "v0.3.0",
+    "baselineSourceSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+    "packagesTree": "9ad55683899ec7447b608cff7997ac5a2572a996",
+    "publicApiBlob": "c8c2169b0db1c522ffa1fec6b93db093fc21f1c6",
+    "requiredEmptyDiffPaths": [
+      "packages",
+      "package.json",
+      "bun.lock",
+      "tooling/public-api.json"
+    ]
+  },
+  "defaultRules": {
+    "selectedCandidateNotFrozen": "defer",
+    "notSelectedDeferred": "defer",
+    "notSelectedRejected": "reject"
+  },
+  "selectedCandidateRule": "A selected R1 candidate enters the surface only when committed executable evidence closes every conjunct in its exact pre-freeze gate. Partial, source-only, narrow, or uncommitted evidence does not close a gate.",
+  "targetedProofAudit": [],
+  "adjudicationOverrides": [
+    {
+      "operationId": "CAN-BUN-012",
+      "disposition": "ship",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "git-tree:packages=9ad55683899ec7447b608cff7997ac5a2572a996",
+        "git-blob:tooling/public-api.json=c8c2169b0db1c522ffa1fec6b93db093fc21f1c6",
+        "git-diff:v0.3.0..adjudicated-head:packages,package.json,bun.lock,tooling/public-api.json=empty",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833693",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833767",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833745",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833768",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833773"
+      ],
+      "blocker": "The unchanged production operation is admitted from the exact green v0.3 source and target/publication jobs; the final freeze source must rerun the unchanged ordinary gates.",
+      "support": {
+        "tool": "bun",
+        "exactVersion": "1.3.9",
+        "orchestrator": "node",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "targets": [
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-x64-musl",
+          "linux-aarch64-gnu",
+          "windows-x64"
+        ]
+      }
+    },
+    {
+      "operationId": "CAN-DENO-010",
+      "disposition": "ship",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "git-tree:packages=9ad55683899ec7447b608cff7997ac5a2572a996",
+        "git-blob:tooling/public-api.json=c8c2169b0db1c522ffa1fec6b93db093fc21f1c6",
+        "git-diff:v0.3.0..adjudicated-head:packages,package.json,bun.lock,tooling/public-api.json=empty",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833693",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833671",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833745",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833768",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833773"
+      ],
+      "blocker": "The unchanged production operation is admitted from the exact green v0.3 source and target/publication jobs; the final freeze source must rerun the unchanged ordinary gates.",
+      "support": {
+        "tool": "deno",
+        "exactVersion": "2.9.3",
+        "relatedRuntime": "denort@2.9.3",
+        "orchestrator": "node",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "targets": [
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-aarch64-gnu",
+          "windows-x64",
+          "windows-aarch64"
+        ]
+      }
+    },
+    {
+      "operationId": "CAN-ESB-001",
+      "disposition": "ship",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:973136e9679e6f0737067c5ec88016e1243eeed7",
+        "git-integration:5ebdc5f",
+        "research/post-0.3/reconciliation/r4/R1-GATE-MATRIX.md#CAN-ESB-001",
+        "research/post-0.3/reconciliation/r4/CLOSURE.md",
+        "receipt:r4-author-laws:esbuild-one-shot-interruption-law"
+      ],
+      "blocker": "None. The exact R1 conjunction is closed at esbuild 0.28.2: Effect interruption stopped waiting while the blocked provider/plugin continued through onEnd and produced memory output. The ordinary exact-head Linux x64 gate must reproduce this frozen support cell.",
+      "support": {
+        "tool": "esbuild",
+        "exactVersion": "0.28.2",
+        "lane": "in-process-api",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "unadmittedByInference": ["windows", "linux-arm64", "macos-arm64", "macos-x64"]
+      }
+    },
+    {
+      "operationId": "CAN-ESB-011",
+      "disposition": "ship",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:973136e9679e6f0737067c5ec88016e1243eeed7",
+        "git-integration:5ebdc5f",
+        "research/post-0.3/reconciliation/r4/R1-GATE-MATRIX.md#CAN-ESB-011",
+        "research/post-0.3/reconciliation/r4/CLOSURE.md",
+        "receipt:r4-author-laws:esbuild-context-lifecycle-matrix"
+      ],
+      "blocker": "None. The exact R1 conjunction is closed at esbuild 0.28.2: rebuild coalescing, cancel/dispose races, every post-dispose method, idempotent dispose, and delayed onDispose cleanup were executed. The ordinary exact-head Linux x64 gate must reproduce this frozen support cell.",
+      "support": {
+        "tool": "esbuild",
+        "exactVersion": "0.28.2",
+        "lane": "in-process-api",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "unadmittedByInference": ["windows", "linux-arm64", "macos-arm64", "macos-x64"]
+      }
+    },
+    {
+      "operationId": "CAN-NODE-001",
+      "disposition": "ship",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "git-tree:packages=9ad55683899ec7447b608cff7997ac5a2572a996",
+        "git-blob:tooling/public-api.json=c8c2169b0db1c522ffa1fec6b93db093fc21f1c6",
+        "git-diff:v0.3.0..adjudicated-head:packages,package.json,bun.lock,tooling/public-api.json=empty",
+        "git-research-correction:ad4a097",
+        "git-integration:8a383db",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94996031180",
+        "research/post-0.3/node-main-canon-probe.mjs",
+        "research/post-0.3/freeze/R5-PORTABLE-ROLE-VERDICTS.md"
+      ],
+      "blocker": "Admission is deliberately narrower than the deferred portable role: direct Node 26.7.0 --build-sea on Linux x64 GNU only; the final freeze source must rerun the unchanged ordinary gate.",
+      "support": {
+        "tool": "node",
+        "exactVersion": "26.7.0",
+        "hostTarget": "linux-x64-gnu",
+        "artifactTarget": "linux-x64-gnu",
+        "assembly": "node --build-sea",
+        "mainFormats": ["cjs", "esm"]
+      },
+      "surface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-node-sea",
+        "subpath": "./AssembleExecutable",
+        "export": "assembleExecutable",
+        "rootNamespace": "AssembleExecutable"
+      }
+    },
+    {
+      "operationId": "CAN-NODE-002",
+      "disposition": "defer",
+      "gateClosure": "not-applicable-deferred-legacy-only",
+      "evidence": [
+        "research/post-0.3/freeze/PRODUCT-DECISIONS.md#M3",
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94996031180"
+      ],
+      "blocker": "Deferred-legacy-only: M3 selects the direct Node --build-sea assembler. That operation does not generate a preparation blob and does not rent this stage publicly or internally."
+    },
+    {
+      "operationId": "CAN-NODE-003",
+      "disposition": "defer",
+      "gateClosure": "not-applicable-deferred-legacy-only",
+      "evidence": [
+        "research/post-0.3/freeze/PRODUCT-DECISIONS.md#M3",
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94996031180"
+      ],
+      "blocker": "Deferred-legacy-only: M3 selects direct Node --build-sea assembly and excludes an injector/postject lane from the 0.4 surface."
+    }
+  ]
+}
