@@ -1,0 +1,51 @@
+{
+  "schema": "effect-build/expected-implementation-claims@1",
+  "profileId": "effect-build/plan039-implementation@1",
+  "receiptId": "plan039-phase-handoff",
+  "claims": [
+    {
+      "id": "historical-freeze-authenticated",
+      "classification": "established",
+      "conclusion": "exact-freeze-ancestor-run-artifact-certificate-and-all-20-constituent-receipts-are-content-authenticated",
+      "assertions": [
+        "freeze-is-current-head-ancestor",
+        "freeze-run-is-exact-successful-push-at-attempt-1",
+        "aggregate-artifact-id-name-size-and-digest-match",
+        "certification-bytes-schema-source-and-summary-match",
+        "all-20-explicit-receipt-bytes-and-digests-match"
+      ]
+    },
+    {
+      "id": "current-head-authenticated",
+      "classification": "established",
+      "conclusion": "checked-out-event-and-fresh-remote-head-all-equal-the-exact-plan039-certification-source",
+      "assertions": [
+        "checkout-equals-source-sha",
+        "workflow-event-equals-source-sha",
+        "fresh-remote-head-equals-source-sha"
+      ]
+    },
+    {
+      "id": "workflow-only-handoff",
+      "classification": "sequenced",
+      "conclusion": "plan039-is-in-progress-on-a-workflow-only-head-before-any-production-implementation-change",
+      "assertions": [
+        "plan039-status-is-in-progress",
+        "all-post-freeze-paths-are-explicitly-allowed-handoff-paths",
+        "production-paths-match-freeze-and-v0.3-release"
+      ]
+    },
+    {
+      "id": "certification-profiles-disjoint",
+      "classification": "established",
+      "conclusion": "freeze-and-plan039-profile-identities-producers-receipt-directories-current-receipts-and-certificates-do-not-mix",
+      "assertions": [
+        "profile-identities-are-distinct",
+        "expected-claim-and-producer-sets-are-explicit",
+        "current-receipts-exclude-freeze-only-receipts",
+        "current-workflow-does-not-invoke-freeze-producers-or-validators",
+        "historical-inputs-are-separated-from-current-receipts"
+      ]
+    }
+  ]
+}

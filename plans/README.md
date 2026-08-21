@@ -7,8 +7,9 @@ machine-readable authority is
 `research/post-0.3/freeze/SURFACE.json` together with
 `research/post-0.3/freeze/MIGRATION.json`; `AGENTS.md` is the matching active
 execution instruction. Plans 039-044 have been rewritten from that frozen
-scope. Plan 039 is ready to begin. No Plan 039 production implementation, merge,
-publication, tag, or release is implied by the freeze.
+scope. Plan 039 is in progress at its workflow-only phase handoff. No Plan 039
+production implementation, merge, publication, tag, or release is implied by
+the handoff.
 
 Plans 001-038 remain historical execution and decision records. Where their
 prose conflicts with the 0.4 freeze, the exact surface/migration artifacts and
@@ -326,7 +327,7 @@ direction. Plans 016-020 remain factual implementation history.
 | 036 | Bootstrap npm namespaces and one trusted publisher | P0 | M | 032, 035, approval | DONE |
 | 037 | Recertify and release the exact five-package bytes | P0 | L | 028-036, approval | DONE |
 | 038 | Evaluate JavaScriptBundler and ExecutableBuilder promotion | P1 | L | 037, approval for public cut | DONE (NOT EARNED) |
-| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | READY |
+| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | IN PROGRESS |
 | 040 | Implement the admitted Esbuild operations | P1 | L | 039 | TODO |
 | 041 | Implement the frozen Bun executable lane | P1 | L | 039 | TODO |
 | 042 | Implement the frozen Deno executable lane | P1 | L | 039 | TODO |

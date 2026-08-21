@@ -462,174 +462,148 @@ describe("tooling pins and workflow contracts", () => {
     }
   });
 
-  it("keeps architecture research receipts exact-head, complete, and fail-closed", async () => {
-    const workflow = parse(
-      await readFile(resolve(root, ".github/workflows/architecture-research.yml"), "utf8"),
-    ) as Workflow;
-    expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
-    expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(workflow.env).toEqual({
-      SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
-      RESEARCH_BASE_SHA: "15c811bb9904142a33d119766b62082f3c689f13",
-      RESEARCH_RELEASE_SHA: "f06f96ca88b6278e5f23a898d758b99fa9322108",
-    });
-    expect(Object.keys(workflow.jobs)).toEqual([
-      "linux-research",
-      "windows-research",
-      "aggregate-certification",
-    ]);
-    for (const job of Object.values(workflow.jobs)) {
-      expect(JSON.stringify(job.env ?? {})).not.toContain("runner.temp");
-    }
-
-    const receiptContract = await import(
-      pathToFileURL(resolve(root, "research/post-0.3/receipt-contract.mjs")).href
-    ) as {
-      loadExpectedConclusions: (directory: string) => Promise<{ receiptIds: string[] }>;
-      loadReceiptProducers: (directory: string) => Promise<{
-        producers: Array<{ lane: string; script: string; receipts: string[] }>;
-        receiptIds: string[];
-      }>;
-      validateProducerCoverage: (
-        expectations: { receiptIds: string[] },
-        manifest: { receiptIds: string[] },
-      ) => void;
-    };
-    const researchDirectory = resolve(root, "research/post-0.3");
-    const expectations = await receiptContract.loadExpectedConclusions(researchDirectory);
-    const manifest = await receiptContract.loadReceiptProducers(researchDirectory);
-    expect(() => receiptContract.validateProducerCoverage(expectations, manifest)).not.toThrow();
-    expect(manifest.receiptIds).toContain("repository-scope");
-    expect(manifest.receiptIds).toContain("remote-head");
-    expect(manifest.receiptIds).toContain("surface-freeze");
-    expect([...new Set(manifest.producers.map((producer) => producer.lane))].sort()).toEqual([
-      "aggregate",
-      "linux",
-      "windows",
-    ]);
-    const probeRuntime = await readFile(resolve(root, "research/post-0.3/probe-runtime.mjs"), "utf8");
-    expect(probeRuntime).toContain('["rev-parse", "HEAD"]');
-    expect(probeRuntime).toContain('["status", "--porcelain=v1", "--untracked-files=all"]');
-    expect(probeRuntime).toContain("RESEARCH_RECEIPTS_DIR must be outside the repository");
-    expect(probeRuntime).toContain("repository working tree is dirty");
-    const repositoryScope = await readFile(
-      resolve(root, "research/post-0.3/certify-repository-scope.mjs"),
+  it("keeps the Plan 039 implementation handoff exact-head, disjoint, and fail-closed", async () => {
+    const workflowSource = await readFile(
+      resolve(root, ".github/workflows/architecture-research.yml"),
       "utf8",
     );
-    expect(repositoryScope).not.toContain('path === ".github/workflows/research-toolchain-export.yml"');
-    expect(repositoryScope).not.toContain('path.startsWith(".github/research/")');
-    const linuxRuns = jobRuns(workflow, "linux-research");
-    expect(linuxRuns).not.toContain("node --test research/post-0.3/*.test.mjs");
-    for (
-      const nodeSuite of [
-        "architecture-laws.test.mjs",
-        "declaration-classifier.test.mjs",
-        "duplicate-core.test.mjs",
-        "r7-matrix-laws.test.mjs",
-        "receipt-contract.test.mjs",
-      ]
-    ) expect(linuxRuns).toContain(`research/post-0.3/${nodeSuite}`);
-    expect(linuxRuns).toContain("bun test");
-    expect(linuxRuns).toContain("research/post-0.3/r3-provider-compatibility.test.ts");
-    expect(linuxRuns).toContain("research/post-0.3/r4-author-laws.test.mjs");
-
-    for (
-      const [jobName, lane, fetchDepth] of [
-        ["linux-research", "linux", 0],
-        ["windows-research", "windows", 1],
-      ] as const
-    ) {
-      const job = workflow.jobs[jobName]!;
-      expect(job.outputs).toEqual({
-        "receipt-artifact-id": "${{ steps.receipt-artifact.outputs.artifact-id }}",
-        "receipt-artifact-digest": "${{ steps.receipt-artifact.outputs.artifact-digest }}",
-      });
-      const checkout = job.steps!.find((step) => step.uses === checkoutAction)!;
-      expect(checkout.with).toMatchObject({
-        ref: "${{ env.SOURCE_SHA }}",
-        "persist-credentials": false,
-        "fetch-depth": fetchDepth,
-      });
-      expect(jobRuns(workflow, jobName)).toContain(
-        `node research/post-0.3/run-receipt-producers.mjs --lane ${lane}`,
-      );
-      const producer = job.steps!.find((step) => step.run?.includes(`--lane ${lane}`))!;
-      expect(producer.env?.RESEARCH_RECEIPTS_DIR).toContain("${{ runner.temp }}");
-      const upload = job.steps!.find((step) => step.uses === uploadArtifactAction)!;
-      expect(upload.id).toBe("receipt-artifact");
-      expect(upload.if).toBe("${{ always() }}");
-      expect(upload.with?.path).toContain("${{ runner.temp }}");
-      expect(upload.with?.["if-no-files-found"]).toBe("error");
-    }
-
-    const aggregate = workflow.jobs["aggregate-certification"]!;
-    expect(aggregate.needs).toEqual(["linux-research", "windows-research"]);
-    expect(aggregate.if).toBe("${{ always() }}");
-    expect(aggregate.env).toMatchObject({
-      LINUX_RESEARCH_RESULT: "${{ needs.linux-research.result }}",
-      WINDOWS_RESEARCH_RESULT: "${{ needs.windows-research.result }}",
-      LINUX_RESEARCH_ARTIFACT_ID: "${{ needs.linux-research.outputs.receipt-artifact-id }}",
-      LINUX_RESEARCH_ARTIFACT_DIGEST: "${{ needs.linux-research.outputs.receipt-artifact-digest }}",
-      WINDOWS_RESEARCH_ARTIFACT_ID: "${{ needs.windows-research.outputs.receipt-artifact-id }}",
-      WINDOWS_RESEARCH_ARTIFACT_DIGEST: "${{ needs.windows-research.outputs.receipt-artifact-digest }}",
+    const workflow = parse(workflowSource) as Workflow;
+    expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
+    expect(workflow.permissions).toEqual({ actions: "read", contents: "read" });
+    expect(workflow.env).toEqual({
+      SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
+      CERTIFICATION_PROFILE: "effect-build/plan039-implementation@1",
     });
-    expect(aggregate.steps![0]!.run).toContain('test "$LINUX_RESEARCH_RESULT" = "success"');
-    expect(aggregate.steps![0]!.run).toContain('test "$WINDOWS_RESEARCH_RESULT" = "success"');
-    const aggregateCheckout = aggregate.steps!.find((step) => step.uses === checkoutAction)!;
-    expect(aggregateCheckout.with).toMatchObject({
+    expect(Object.keys(workflow.jobs)).toEqual(["plan039-implementation-handoff"]);
+
+    const job = workflow.jobs["plan039-implementation-handoff"]!;
+    expect(job["runs-on"]).toBe("ubuntu-24.04");
+    const checkout = job.steps!.find((step) => step.uses === checkoutAction)!;
+    expect(checkout.with).toEqual({
       ref: "${{ env.SOURCE_SHA }}",
       "persist-credentials": false,
-      "fetch-depth": 1,
+      "fetch-depth": 0,
     });
-    const download = aggregate.steps!.find((step) =>
-      step.uses === "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
-    )!;
-    expect(download.with).toMatchObject({
-      "artifact-ids":
-        "${{ needs.linux-research.outputs.receipt-artifact-id }},${{ needs.windows-research.outputs.receipt-artifact-id }}",
-      path: "${{ runner.temp }}/effect-build-architecture-aggregate",
-      "merge-multiple": true,
+    const runs = jobRuns(workflow, "plan039-implementation-handoff");
+    expect(runs).toContain("node --test research/post-0.3/implementation/certification-contract.test.mjs");
+    expect(runs).toContain("bun run verify");
+    expect(runs).toContain("node research/post-0.3/implementation/certify-current-head.mjs");
+    const certifier = job.steps!.find((step) => step.run?.includes("certify-current-head.mjs"))!;
+    expect(certifier.env).toEqual({
+      GITHUB_TOKEN: "${{ github.token }}",
+      PLAN039_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan039-implementation",
     });
-    const aggregateProducer = aggregate.steps!.find((step) => step.run?.includes("--lane aggregate"))!;
-    const aggregateValidator = aggregate.steps!.find((step) => step.run?.includes("validate-receipts.mjs"))!;
-    expect(aggregateProducer.env?.RESEARCH_RECEIPTS_DIR).toBe(
-      "${{ runner.temp }}/effect-build-architecture-aggregate",
+    const upload = job.steps!.find((step) => step.uses === uploadArtifactAction)!;
+    expect(upload.with).toEqual({
+      name: "plan039-implementation-certification-${{ env.SOURCE_SHA }}",
+      path: "${{ runner.temp }}/effect-build-plan039-implementation",
+      "if-no-files-found": "error",
+      "retention-days": 90,
+    });
+    for (
+      const forbidden of [
+        "surface-freeze",
+        "RESEARCH_RECEIPTS_DIR",
+        "run-receipt-producers.mjs",
+        "validate-receipts.mjs",
+      ]
+    ) expect(workflowSource).not.toContain(forbidden);
+
+    const profile = await readJson("research/post-0.3/implementation/profile.json") as {
+      profileId: string;
+      trustAnchor: string;
+      expectedClaims: string;
+      receiptDirectoryEnvironment: string;
+      certificateFile: string;
+      currentReceiptIds: string[];
+      historicalProfileIds: string[];
+      forbiddenCurrentReceiptIds: string[];
+      producers: Array<{ script: string; receipts: string[] }>;
+    };
+    const anchor = await readJson(profile.trustAnchor) as {
+      profileId: string;
+      sourceSha: string;
+      workflow: { runId: string; runAttempt: string };
+      aggregateArtifact: { id: string; digest: string };
+      certification: { digest: string };
+      receipts: Array<{ id: string; file: string; digest: string }>;
+    };
+    const expected = await readJson(profile.expectedClaims) as {
+      profileId: string;
+      receiptId: string;
+      claims: Array<{ id: string }>;
+    };
+    expect(profile).toMatchObject({
+      profileId: "effect-build/plan039-implementation@1",
+      receiptDirectoryEnvironment: "PLAN039_RECEIPTS_DIR",
+      certificateFile: "plan039-certification.json",
+      currentReceiptIds: ["plan039-phase-handoff"],
+      historicalProfileIds: ["post-0.3-surface-freeze-v1"],
+      forbiddenCurrentReceiptIds: ["surface-freeze"],
+    });
+    expect(profile.producers).toEqual([{
+      lane: "implementation",
+      script: "research/post-0.3/implementation/certify-current-head.mjs",
+      receipts: ["plan039-phase-handoff"],
+    }]);
+    expect(anchor.profileId).not.toBe(profile.profileId);
+    expect(anchor.sourceSha).toBe("a3017657e0851530892a9f3d2d55ac5736769881");
+    expect(anchor.workflow).toMatchObject({ runId: "32502909677", runAttempt: "1" });
+    expect(anchor.aggregateArtifact).toMatchObject({
+      id: "9454270941",
+      digest: "sha256:a502ab64e0cda8fb743f3f6175dfcde4c098eeb9546cc98173a7a6b339002233",
+    });
+    expect(anchor.certification.digest).toBe(
+      "sha256:363b4981470cc95eb6c43fc8e56623aaca1f5d2f89c2e9ca38bcc8e3b2e0fc5c",
     );
-    expect(aggregateValidator.env?.RESEARCH_RECEIPTS_DIR).toBe(
-      "${{ runner.temp }}/effect-build-architecture-aggregate",
-    );
-    expect(jobRuns(workflow, "aggregate-certification")).toContain(
-      "node research/post-0.3/run-receipt-producers.mjs --lane aggregate",
-    );
-    expect(jobRuns(workflow, "aggregate-certification")).toContain(
-      "node research/post-0.3/validate-receipts.mjs",
-    );
-    const certificationUpload = aggregate.steps!.find((step) => step.uses === uploadArtifactAction)!;
-    expect(certificationUpload.with?.["if-no-files-found"]).toBe("error");
-    expect(JSON.stringify(workflow)).not.toContain('"if-no-files-found":"warn"');
+    expect(anchor.receipts).toHaveLength(20);
+    expect(anchor.receipts.map((receipt) => receipt.id)).toContain("surface-freeze");
+    expect(anchor.receipts.every((receipt) => receipt.file === `${receipt.id}.json`)).toBe(true);
+    expect(anchor.receipts.every((receipt) => /^sha256:[0-9a-f]{64}$/.test(receipt.digest))).toBe(true);
+    expect(expected).toMatchObject({
+      profileId: profile.profileId,
+      receiptId: "plan039-phase-handoff",
+    });
+    expect(expected.claims).toHaveLength(4);
   });
 
-  it("keeps the surface, migration, active instruction, and implementation plans in one exact freeze", () => {
-    const report = JSON.parse(execFileSync(
-      process.execPath,
-      [resolve(root, "research/post-0.3/freeze/validate-freeze.mjs"), "--json"],
-      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-    )) as {
-      result: string;
-      migrationObservations: number;
-      migrationBlockers: number;
-      plan039: string;
-      productionImplementation: string;
-      publicationAuthority: string;
-    };
-    expect(report).toMatchObject({
-      result: "FREEZE_OK",
-      migrationObservations: 155,
-      migrationBlockers: 0,
-      plan039: "READY",
-      productionImplementation: "not-started",
-      publicationAuthority: "NONE",
-    });
+  it("keeps the freeze immutable while Plan 039 enters workflow handoff", async () => {
+    const releaseSha = "f06f96ca88b6278e5f23a898d758b99fa9322108";
+    const freezeSha = "a3017657e0851530892a9f3d2d55ac5736769881";
+    const productionPaths = [
+      "packages",
+      "package.json",
+      "bun.lock",
+      "tooling/public-api.json",
+      "scripts",
+      "examples",
+      "docs",
+      "README.md",
+    ];
+    expect(() =>
+      execFileSync("git", ["diff", "--exit-code", releaseSha, freezeSha, "--", ...productionPaths], {
+        cwd: root,
+        stdio: "pipe",
+      })
+    ).not.toThrow();
+    expect(() =>
+      execFileSync("git", ["diff", "--exit-code", freezeSha, "--", ...productionPaths], {
+        cwd: root,
+        stdio: "pipe",
+      })
+    ).not.toThrow();
+    const plan = await readFile(resolve(root, "plans/039-establish-core-capability-boundaries.md"), "utf8");
+    const index = await readFile(resolve(root, "plans/README.md"), "utf8");
+    expect(plan.match(/^- Status: IN PROGRESS$/gm)).toHaveLength(1);
+    expect(index).toContain(
+      "| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | IN PROGRESS |",
+    );
+    const historicalValidator = execFileSync(
+      "git",
+      ["show", `${freezeSha}:research/post-0.3/freeze/validate-freeze.mjs`],
+      { cwd: root, encoding: "utf8" },
+    );
+    expect(historicalValidator).toContain("FREEZE_OK");
     expect(existsSync(resolve(root, ".github/workflows/research-toolchain-export.yml"))).toBe(false);
     expect(existsSync(resolve(root, ".github/research/closure-patch/part-00"))).toBe(false);
   });

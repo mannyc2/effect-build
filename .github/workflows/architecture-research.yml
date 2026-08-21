@@ -1,23 +1,20 @@
-name: post-0.3-architecture-research
+name: plan-039-implementation-certification
 
 on:
   push: {}
   pull_request: {}
 
 permissions:
+  actions: read
   contents: read
 
 env:
   SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-  RESEARCH_BASE_SHA: 15c811bb9904142a33d119766b62082f3c689f13
-  RESEARCH_RELEASE_SHA: f06f96ca88b6278e5f23a898d758b99fa9322108
+  CERTIFICATION_PROFILE: effect-build/plan039-implementation@1
 
 jobs:
-  linux-research:
+  plan039-implementation-handoff:
     runs-on: ubuntu-24.04
-    outputs:
-      receipt-artifact-id: ${{ steps.receipt-artifact.outputs.artifact-id }}
-      receipt-artifact-digest: ${{ steps.receipt-artifact.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -31,185 +28,31 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 25.5.0
-          package-manager-cache: false
-      - id: node25
-        name: Capture Node 25 assembler
-        shell: bash
-        run: |
-          test "$(node --version)" = "v25.5.0"
-          echo "path=$(node -p 'process.execPath')" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 26.7.0
-          package-manager-cache: false
-      - id: node26
-        name: Capture Node 26 assembler
-        shell: bash
-        run: |
-          test "$(node --version)" = "v26.7.0"
-          echo "path=$(node -p 'process.execPath')" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
           node-version: 24.14.1
           package-manager-cache: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
-      - id: bun-current
-        name: Capture current Bun host and command
-        shell: bash
-        run: echo "path=$(command -v bun)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ runner.temp }}/bun-install-cache
-          key: architecture-research-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          key: plan039-handoff-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
         env:
           BUN_INSTALL_CACHE_DIR: ${{ runner.temp }}/bun-install-cache
-      - run: bun run build
-      - id: tools
-        run: node scripts/provision-tool-assets.mjs >> "$GITHUB_OUTPUT"
-      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed
-        with:
-          deno-version: v2.9.5
-      - id: deno-current
-        name: Capture current Deno command
-        shell: bash
-        run: echo "path=$(command -v deno)" >> "$GITHUB_OUTPUT"
-      - name: Install comparison providers outside the workspace
-        shell: bash
-        run: |
-          external="$RUNNER_TEMP/effect-build-research-external"
-          mkdir -p "$external"
-          npm install --prefix "$external" --no-save --omit=dev --no-audit --no-fund \
-            rolldown@1.2.4 rolldown-plugin-dts@0.28.2 @yao-pkg/pkg@6.22.0 \
-            esbuild-0281@npm:esbuild@0.28.1 esbuild-0282@npm:esbuild@0.28.2 typescript@6.0.3
-          echo "RESEARCH_EXTERNAL_NODE_MODULES=$external/node_modules" >> "$GITHUB_ENV"
-      - name: Run Node architecture law tests
-        run: >-
-          node --test
-          research/post-0.3/architecture-laws.test.mjs
-          research/post-0.3/declaration-classifier.test.mjs
-          research/post-0.3/duplicate-core.test.mjs
-          research/post-0.3/r7-matrix-laws.test.mjs
-          research/post-0.3/receipt-contract.test.mjs
-      - name: Run Bun R3 and R4 law tests
-        run: >-
-          bun test
-          research/post-0.3/r3-provider-compatibility.test.ts
-          research/post-0.3/r4-author-laws.test.mjs
-      - name: Type-check current contract prototypes
-        run: >-
-          bun x tsc --ignoreConfig --noEmit --strict --exactOptionalPropertyTypes --skipLibCheck
-          --module NodeNext --moduleResolution NodeNext --target ES2022
-          research/post-0.3/contracts.ts
-          research/post-0.3/contracts.typecheck.ts
-      - name: Compile exact final research contracts
-        run: bun x tsc -p research/post-0.3/final/tsconfig.json
-      - name: Execute exact compatibility laws
-        run: node research/post-0.3/final/dist/compatibility.test.js
-      - name: Reproduce every declared Linux receipt
-        env:
-          RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-linux
-          EFFECT_BUILD_BUN_BIN: ${{ steps.tools.outputs.bun }}
-          EFFECT_BUILD_BUN_CURRENT_BIN: ${{ steps.bun-current.outputs.path }}
-          EFFECT_BUILD_DENO_BIN: ${{ steps.tools.outputs.deno }}
-          EFFECT_BUILD_DENO_CURRENT_BIN: ${{ steps.deno-current.outputs.path }}
-          EFFECT_BUILD_DENORT_BIN: ${{ steps.tools.outputs.denort }}
-          EFFECT_BUILD_NODE_25_BIN: ${{ steps.node25.outputs.path }}
-          EFFECT_BUILD_NODE_26_BIN: ${{ steps.node26.outputs.path }}
-          RESEARCH_EXTERNAL_NODE_MODULES: ${{ env.RESEARCH_EXTERNAL_NODE_MODULES }}
-        run: node research/post-0.3/run-receipt-producers.mjs --lane linux
-      - name: Upload Linux diagnostic receipts
-        id: receipt-artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: post-0.3-architecture-diagnostics-linux-${{ env.SOURCE_SHA }}
-          path: ${{ runner.temp }}/effect-build-architecture-linux
-          if-no-files-found: error
-          retention-days: 30
-
-  windows-research:
-    runs-on: windows-2025
-    outputs:
-      receipt-artifact-id: ${{ steps.receipt-artifact.outputs.artifact-id }}
-      receipt-artifact-digest: ${{ steps.receipt-artifact.outputs.artifact-digest }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          ref: ${{ env.SOURCE_SHA }}
-          persist-credentials: false
-          fetch-depth: 1
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24.14.1
-          package-manager-cache: false
-      - name: Validate exact source
-        shell: pwsh
-        run: |
-          if ($env:SOURCE_SHA -notmatch '^[0-9a-f]{40}$') { throw "invalid source SHA" }
-          if ((git rev-parse HEAD) -ne $env:SOURCE_SHA) { throw "wrong checkout" }
-      - name: Reproduce every declared Windows receipt
-        env:
-          RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}\effect-build-architecture-windows
-        run: node research/post-0.3/run-receipt-producers.mjs --lane windows
-      - name: Upload Windows diagnostic receipts
-        id: receipt-artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: post-0.3-architecture-diagnostics-windows-${{ env.SOURCE_SHA }}
-          path: ${{ runner.temp }}\effect-build-architecture-windows
-          if-no-files-found: error
-          retention-days: 30
-
-  aggregate-certification:
-    needs: [linux-research, windows-research]
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    env:
-      LINUX_RESEARCH_RESULT: ${{ needs.linux-research.result }}
-      WINDOWS_RESEARCH_RESULT: ${{ needs.windows-research.result }}
-      LINUX_RESEARCH_ARTIFACT_ID: ${{ needs.linux-research.outputs.receipt-artifact-id }}
-      LINUX_RESEARCH_ARTIFACT_DIGEST: ${{ needs.linux-research.outputs.receipt-artifact-digest }}
-      WINDOWS_RESEARCH_ARTIFACT_ID: ${{ needs.windows-research.outputs.receipt-artifact-id }}
-      WINDOWS_RESEARCH_ARTIFACT_DIGEST: ${{ needs.windows-research.outputs.receipt-artifact-digest }}
-    steps:
-      - name: Require every research lane to succeed
-        shell: bash
-        run: |
-          test "$LINUX_RESEARCH_RESULT" = "success"
-          test "$WINDOWS_RESEARCH_RESULT" = "success"
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          ref: ${{ env.SOURCE_SHA }}
-          persist-credentials: false
-          fetch-depth: 1
-      - name: Validate exact source
-        shell: bash
-        run: |
-          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: ${{ needs.linux-research.outputs.receipt-artifact-id }},${{ needs.windows-research.outputs.receipt-artifact-id }}
-          path: ${{ runner.temp }}/effect-build-architecture-aggregate
-          merge-multiple: true
-      - name: Reproduce every declared aggregate receipt
+      - name: Test the disjoint implementation certification profile
+        run: node --test research/post-0.3/implementation/certification-contract.test.mjs
+      - name: Verify unchanged production baseline
+        run: bun run verify
+      - name: Certify the exact Plan 039 handoff head
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-aggregate
-        run: node research/post-0.3/run-receipt-producers.mjs --lane aggregate
-      - name: Validate complete exact-head certification
-        env:
-          RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-aggregate
-        run: node research/post-0.3/validate-receipts.mjs
-      - name: Upload successful aggregate certification receipt
+          PLAN039_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-plan039-implementation
+        run: node research/post-0.3/implementation/certify-current-head.mjs
+      - name: Upload successful Plan 039 implementation certificate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: post-0.3-architecture-certification-${{ env.SOURCE_SHA }}
-          path: ${{ runner.temp }}/effect-build-architecture-aggregate
+          name: plan039-implementation-certification-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/effect-build-plan039-implementation
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90

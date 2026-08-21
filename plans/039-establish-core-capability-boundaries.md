@@ -6,7 +6,7 @@
 - Effort: XL
 - Risk: HIGH lifecycle, interruption, and public author contracts
 - Depends on: exact 0.4 surface-freeze commit
-- Status: READY
+- Status: IN PROGRESS
 - Publication authority: NONE
 
 ## Authority and objective

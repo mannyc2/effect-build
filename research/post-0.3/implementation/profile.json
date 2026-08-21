@@ -1,0 +1,53 @@
+{
+  "schema": "effect-build/implementation-certification-profile@1",
+  "profileId": "effect-build/plan039-implementation@1",
+  "plan": "039",
+  "phase": "workflow-handoff",
+  "trustAnchor": "research/post-0.3/implementation/freeze-trust-anchor.json",
+  "expectedClaims": "research/post-0.3/implementation/expected-claims.json",
+  "receiptDirectoryEnvironment": "PLAN039_RECEIPTS_DIR",
+  "certificateFile": "plan039-certification.json",
+  "producers": [
+    {
+      "lane": "implementation",
+      "script": "research/post-0.3/implementation/certify-current-head.mjs",
+      "receipts": [
+        "plan039-phase-handoff"
+      ]
+    }
+  ],
+  "currentReceiptIds": [
+    "plan039-phase-handoff"
+  ],
+  "historicalProfileIds": [
+    "post-0.3-surface-freeze-v1"
+  ],
+  "forbiddenCurrentReceiptIds": [
+    "surface-freeze"
+  ],
+  "forbiddenInvocations": [
+    "research/post-0.3/certify-surface-freeze.mjs",
+    "research/post-0.3/freeze/validate-freeze.mjs"
+  ],
+  "handoffAllowedPaths": [
+    ".github/workflows/architecture-research.yml",
+    "plans/039-establish-core-capability-boundaries.md",
+    "plans/README.md",
+    "research/post-0.3/implementation/",
+    "test/architecture/generated-and-ci.test.ts"
+  ],
+  "productionBaseline": {
+    "releaseSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+    "freezeSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+    "paths": [
+      "packages",
+      "package.json",
+      "bun.lock",
+      "tooling/public-api.json",
+      "scripts",
+      "examples",
+      "docs",
+      "README.md"
+    ]
+  }
+}
