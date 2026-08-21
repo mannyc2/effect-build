@@ -1,7 +1,11 @@
 # Remaining maintainer product decisions
 
 Date: 2026-08-18.
-Status: **decision packet, not authorization**.
+Status: **historical decision packet; M1-M8 were resolved on 2026-08-21 in
+`../freeze/PRODUCT-DECISIONS.md`**.
+
+Do not use the defaults below as open questions. The freeze decision record is
+the current product authority, subject to its named executable falsifiers.
 
 The reconciliation deliberately does not ask the maintainer to decide facts that research can
 establish. This packet separates product choices among semantically defensible alternatives from
