@@ -1,0 +1,23 @@
+{
+  "schema": "effect-build/expected-architecture-conclusions@2",
+  "claims": [
+    {
+      "receipt": "node-sea-relations",
+      "id": "node-sealed-main-portable-role",
+      "classification": "unproven",
+      "conclusion": "three-producer-exact-host-proof-passes-but-five-host-role-proof-remains-incomplete"
+    },
+    {
+      "receipt": "version-boundaries",
+      "id": "browser-module-payload-portable-role",
+      "classification": "unproven",
+      "conclusion": "real-browser-seed-passes-but-entry-edge-query-fragment-external-and-host-matrix-remain-incomplete"
+    },
+    {
+      "receipt": "r7-matrix-laws",
+      "id": "independently-committing-executable-matrix",
+      "classification": "established",
+      "conclusion": "bun-and-deno-model-deterministic-bounded-complete-nontransactional-cell-reports"
+    }
+  ]
+}

@@ -62,6 +62,11 @@
       "receipts": ["provider-native-watch"]
     },
     {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-r7-matrix-laws.mjs",
+      "receipts": ["r7-matrix-laws"]
+    },
+    {
       "lane": "windows",
       "script": "research/post-0.3/windows-lifecycle-probe.mjs",
       "receipts": ["windows-lifecycle"]
