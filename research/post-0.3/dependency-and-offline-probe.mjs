@@ -66,17 +66,20 @@ const walk = async (root) => {
 const npm = await locate("npm");
 const root = await mkdtemp(join(tmpdir(), "effect-build-dependency-research-"));
 
-const packWorkspace = async (path, destination) => {
-  const result = await run(npm, ["pack", path, "--pack-destination", destination, "--json"], {
-    cwd: repository,
+const packWorkspace = async (bun, path, destination) => {
+  const directory = resolve(repository, path);
+  const manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
+  const result = await run(bun, ["pm", "pack", "--destination", destination, "--ignore-scripts", "--quiet"], {
+    cwd: directory,
   });
-  infrastructure(result.ok, `npm pack ${path} failed: ${result.stderr || result.message}`);
-  const parsed = JSON.parse(result.stdout);
-  infrastructure(Array.isArray(parsed) && parsed.length === 1, `npm pack ${path} returned unexpected JSON`);
-  return join(destination, parsed[0].filename);
+  infrastructure(result.ok, `bun pm pack ${path} failed: ${result.stderr || result.message}`);
+  const tarball = join(destination, `${manifest.name}-${manifest.version}.tgz`);
+  const metadata = await stat(tarball).catch(() => undefined);
+  infrastructure(metadata?.isFile() === true, `bun pm pack ${path} emitted no exact tarball`);
+  return tarball;
 };
 
-const esbuildOwnership = async () => {
+const esbuildOwnership = async (bun) => {
   const manifest = JSON.parse(await readFile(
     join(repository, "packages/effect-build-esbuild/package.json"),
     "utf8",
@@ -85,8 +88,8 @@ const esbuildOwnership = async () => {
   conclusion(manifest.peerDependencies?.esbuild === undefined, "Esbuild unexpectedly became a peer dependency");
   const tarballs = join(root, "tarballs");
   await mkdir(tarballs, { recursive: true });
-  const coreTarball = await packWorkspace("./packages/effect-build", tarballs);
-  const providerTarball = await packWorkspace("./packages/effect-build-esbuild", tarballs);
+  const coreTarball = await packWorkspace(bun, "./packages/effect-build", tarballs);
+  const providerTarball = await packWorkspace(bun, "./packages/effect-build-esbuild", tarballs);
   const consumer = join(root, "esbuild-consumer");
   await mkdir(consumer, { recursive: true });
   await writeFile(join(consumer, "package.json"), `${JSON.stringify({
@@ -198,10 +201,11 @@ const denoOfflineBoundary = async (deno, label) => {
 
 export let dependencyAndOfflineResult;
 try {
+  const currentBun = await requiredPath("EFFECT_BUILD_BUN_CURRENT_BIN");
   const selectedDeno = await requiredPath("EFFECT_BUILD_DENO_BIN");
   const currentDeno = await requiredPath("EFFECT_BUILD_DENO_CURRENT_BIN");
   dependencyAndOfflineResult = {
-    esbuild: await esbuildOwnership(),
+    esbuild: await esbuildOwnership(currentBun),
     deno: [
       await denoOfflineBoundary(selectedDeno, "2.9.3"),
       await denoOfflineBoundary(currentDeno, "2.9.5"),
