@@ -8,6 +8,13 @@ conclusion(providerNativeWatchResult.eventProtocol === "raw-stdio-and-exit-only"
 conclusion(providerNativeWatchResult.readinessProtocol === "not-advertised", "an unproved readiness protocol was advertised");
 conclusion(providerNativeWatchResult.bun.rebuildObserved === true, "Bun provider-native watch did not rebuild");
 conclusion(providerNativeWatchResult.deno.rebuildObserved === true, "Deno provider-native watch did not rebuild");
+for (const [label, exit] of [
+  ["Bun", providerNativeWatchResult.bun.exit],
+  ["Deno", providerNativeWatchResult.deno.exit],
+  ["force-kill", providerNativeWatchResult.forceKill.exit],
+]) {
+  conclusion(exit?._tag === "ExitCode" || exit?._tag === "PlatformFailure", `${label} exit observation did not complete`);
+}
 conclusion(providerNativeWatchResult.interruption.terminatedAfterFiberInterruption === true, "scope interruption did not terminate child");
 conclusion(providerNativeWatchResult.forceKill.forceKilledAfterIgnoredSignal === true, "force-kill timeout did not terminate child");
 

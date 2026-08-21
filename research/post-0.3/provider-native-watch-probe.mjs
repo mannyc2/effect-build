@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join } from "node:path";
-import { Effect, Fiber, Stream } from "effect";
+import { Effect, Exit, Fiber, Stream } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 import { conclusion, infrastructure } from "./receipt.mjs";
 import { requiredPath } from "./probe-runtime.mjs";
@@ -51,6 +51,11 @@ const signalEffect = (handle, signal) => {
   return Effect.fail(new Error("official ChildProcess handle exposes no signal operation"));
 };
 
+const summarizeExit = (exit) =>
+  Exit.isSuccess(exit)
+    ? { _tag: "ExitCode", exitCode: Number(exit.value) }
+    : { _tag: "PlatformFailure" };
+
 const watchOne = async ({ provider, executable, source, outdir }) => {
   await mkdir(outdir, { recursive: true });
   const argv = provider === "bun"
@@ -83,7 +88,7 @@ const watchOne = async ({ provider, executable, source, outdir }) => {
         }, `${provider} rebuilt watch output`)
       );
       yield* signalEffect(handle, "SIGTERM");
-      const exitCode = Number(yield* handle.exitCode);
+      const exit = summarizeExit(yield* Effect.exit(handle.exitCode));
       const stdout = yield* Fiber.join(stdoutFiber);
       const stderr = yield* Fiber.join(stderrFiber);
       return {
@@ -92,7 +97,7 @@ const watchOne = async ({ provider, executable, source, outdir }) => {
         initialOutputObserved: firstContents.length > 0,
         rebuildObserved: true,
         signal: "SIGTERM",
-        exitCode,
+        exit,
         stdout,
         stderr,
       };
@@ -151,8 +156,8 @@ const signalThenForceKill = async (executable) => {
       );
       const pid = handle.pid;
       yield* signalEffect(handle, "SIGTERM");
-      const exitCode = Number(yield* handle.exitCode);
-      return { pid, exitCode };
+      const exit = summarizeExit(yield* Effect.exit(handle.exitCode));
+      return { pid, exit };
     }),
   ).pipe(Effect.provide(NodeServices.layer));
   const observation = await Effect.runPromise(program);
