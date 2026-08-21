@@ -19,7 +19,7 @@ ordering.
 | Operation, lane, host, and target holes | test: “fails exact … deny holes…” | `r3-provider-compatibility:provider-owned-total-evaluator` |
 | Present, missing, and indeterminate capability | test: “separates present, missing, timeout…” | `r3-provider-compatibility:provider-owned-total-evaluator` |
 | Node/Deno/esbuild participant relations | test: “blocks Node builder/base, Deno/denort…” | `r3-provider-compatibility:provider-owned-total-evaluator` |
-| Peer and composed-profile checks | test: “checks provider/core peers…” | `r3-provider-compatibility:provider-owned-total-evaluator` |
+| Peer and explicitly composed-profile checks | test: “keeps direct Node independent…” | `r3-provider-compatibility:provider-owned-total-evaluator` |
 | Selected-command replacement | test: “reauthenticates selected command…” | `r3-provider-compatibility:launch-reauthentication-and-cache-authority` |
 | Cache authority | test: “cache key … sensitive to every authority component” | `r3-provider-compatibility:launch-reauthentication-and-cache-authority` |
 | Exact `allowUntestedVersion` eligibility | test: “only pure policy uncertainty…” | `r3-provider-compatibility:exact-untested-override-eligibility` |
@@ -29,6 +29,11 @@ and evaluation phase. `SupportUnknown` is the only refusal that advertises an
 override. Missing capabilities, indeterminate probes, relation failures,
 peer/profile failures, denied coordinate holes, incomplete identity, and launch
 replacement remain blocked.
+
+Direct Node `assemble-direct` requires the core peer plus the builder/base
+relation and provider capabilities. It does not require the deferred
+`node-main-executable` portable profile, so direct provider assembly remains
+independently usable.
 
 Observed CI evidence and reviewed admission are deliberately separate. A new
 observation can populate evidence, but cannot add itself to the provider's

@@ -233,7 +233,15 @@ describe("R3 provider-owned compatibility evaluator", () => {
     expectRefusal(missingResult, "RelationIndeterminate");
   });
 
-  test("checks provider/core peers and only the portable profile actually composed", () => {
+  test("keeps direct Node independent of deferred profiles and checks explicitly composed profiles", () => {
+    expect({
+      requirements: nodeSeaPolicy.requiredContracts,
+      observations: nodeSeaInput.contracts.map(({ id, kind }) => ({ id, kind })),
+    }).toEqual({
+      requirements: [{ id: "effect-build-core", kind: "provider-core-peer" }],
+      observations: [{ id: "effect-build-core", kind: "provider-core-peer" }],
+    });
+
     const peerFailure = evaluateCompatibility(
       nodeSeaPolicy,
       input(nodeSeaInput, {
@@ -247,24 +255,29 @@ describe("R3 provider-owned compatibility evaluator", () => {
     );
     expectRefusal(peerFailure, "ContractIncompatible");
 
+    const composedProfilePolicy: OperationCompatibilityPolicy = {
+      ...denoPolicy,
+      requiredContracts: [
+        ...denoPolicy.requiredContracts,
+        { id: "fixture-portable-profile", kind: "portable-profile" },
+      ],
+    };
     const profileFailure = evaluateCompatibility(
-      nodeSeaPolicy,
-      input(nodeSeaInput, {
-        contracts: nodeSeaInput.contracts.map((contract) =>
-          contract.kind === "portable-profile"
-            ? { ...contract, state: { _tag: "Incompatible" as const, reason: "profile protocol mismatch" } }
-            : contract
-        ),
+      composedProfilePolicy,
+      input(denoInput, {
+        contracts: [
+          ...denoInput.contracts,
+          {
+            id: "fixture-portable-profile",
+            kind: "portable-profile",
+            inputsKey: "fixture-portable-profile@1|provider-offer@1",
+            state: { _tag: "Incompatible", reason: "profile protocol mismatch" },
+          },
+        ],
         allowUntestedVersion: true,
       }),
     );
     expectRefusal(profileFailure, "ContractIncompatible");
-
-    const profileOmittedWhereNotComposed = evaluateCompatibility(
-      withReviewedAdmission(denoPolicy, denoInput),
-      denoInput,
-    );
-    expect(decisionTag(profileOmittedWhereNotComposed)).toBe("ReviewedAdmission");
   });
 
   test("reauthenticates selected command content at launch and catches same-length replacement", async () => {

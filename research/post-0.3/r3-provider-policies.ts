@@ -43,13 +43,6 @@ const peer = (id = "effect-build-core"): ContractObservation => ({
   state: { _tag: "Compatible", evidence: "packed strict-peer install" },
 });
 
-const profile = (id: string): ContractObservation => ({
-  id,
-  kind: "portable-profile",
-  inputsKey: `${id}@1|provider-offer@1`,
-  state: { _tag: "Compatible", evidence: "exact profile handshake" },
-});
-
 const relation = (id: string, inputsKey: string): RelationObservation => ({
   id,
   inputsKey,
@@ -108,10 +101,6 @@ export const nodeSeaPolicy = basePolicy(
   {
     requiredCapabilities: ["build-sea", "lief"],
     requiredRelations: ["node-builder-base"],
-    requiredContracts: [
-      { id: "effect-build-core", kind: "provider-core-peer" },
-      { id: "node-main-executable", kind: "portable-profile" },
-    ],
     selectedCommandRole: "builder",
     observedEvidenceCoordinates: ["node-26.7.0-linux-x64-direct-observed"],
   },
@@ -128,7 +117,7 @@ export const nodeSeaInput: CompatibilityInput = {
     { id: "lief", state: { _tag: "Present", evidence: "direct build completed without --without-lief" } },
   ],
   relations: [relation("node-builder-base", "builder:node@26.7.0|base:node@26.7.0")],
-  contracts: [peer(), profile("node-main-executable")],
+  contracts: [peer()],
   selectedAtLaunch: identity("effect-build-node-sea", "selected-command", [
     participant("builder", "selected-executable", "node", "26.7.0", "1"),
     participant("base", "target-runtime", "node", "26.7.0", "2"),
