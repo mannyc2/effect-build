@@ -11,7 +11,7 @@
       "receipt": "dependency-and-offline",
       "id": "deno-managed-esbuild-offline",
       "classification": "established",
-      "conclusion": "deno-bundle-manages-esbuild-acquisition-fails-empty-cached-only-before-output-and-runs-cached-only-after-acquisition"
+      "conclusion": "deno-bundle-manages-esbuild-acquisition-fails-with-network-blocked-empty-cache-before-output-and-runs-from-populated-cache-with-network-blocked"
     }
   ]
 }

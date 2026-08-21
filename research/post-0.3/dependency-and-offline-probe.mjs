@@ -134,12 +134,16 @@ console.log(JSON.stringify({ topLevel: topLevel.version, providerOwned: provider
   };
 };
 
-const cachedOnlyArgs = async (deno, outdir, entry) => {
-  const help = await run(deno, ["bundle", "--help"]);
-  infrastructure(help.ok, `Deno bundle help failed: ${help.stderr || help.message}`);
-  const text = `${help.stdout}\n${help.stderr}`;
-  infrastructure(/cached-only/.test(text), "Deno bundle no longer advertises --cached-only");
-  return ["bundle", "--cached-only", "--outdir", outdir, entry];
+const bundleArgs = (outdir, entry) => ["bundle", "--outdir", outdir, entry];
+const networkBlocked = {
+  ALL_PROXY: "http://127.0.0.1:1",
+  HTTP_PROXY: "http://127.0.0.1:1",
+  HTTPS_PROXY: "http://127.0.0.1:1",
+  NO_PROXY: "",
+  all_proxy: "http://127.0.0.1:1",
+  http_proxy: "http://127.0.0.1:1",
+  https_proxy: "http://127.0.0.1:1",
+  no_proxy: "",
 };
 
 const denoOfflineBoundary = async (deno, label) => {
@@ -150,13 +154,12 @@ const denoOfflineBoundary = async (deno, label) => {
   const emptyCache = join(fixture, "empty-cache");
   const emptyOut = join(fixture, "empty-out");
   await mkdir(emptyOut, { recursive: true });
-  const emptyArgs = await cachedOnlyArgs(deno, emptyOut, "main.ts");
-  const empty = await run(deno, emptyArgs, {
+  const empty = await run(deno, bundleArgs(emptyOut, "main.ts"), {
     cwd: source,
-    env: { DENO_DIR: emptyCache },
+    env: { DENO_DIR: emptyCache, ...networkBlocked },
   });
-  conclusion(empty.ok === false, `Deno ${label} unexpectedly bundled with an empty offline cache`);
-  conclusion((await walk(emptyOut)).length === 0, `Deno ${label} empty-cache failure mutated output`);
+  conclusion(empty.ok === false, `Deno ${label} unexpectedly bundled through a network-blocked empty cache`);
+  conclusion((await walk(emptyOut)).length === 0, `Deno ${label} network-blocked empty-cache failure mutated output`);
 
   const populatedCache = join(fixture, "populated-cache");
   const onlineOut = join(fixture, "online-out");
@@ -174,14 +177,15 @@ const denoOfflineBoundary = async (deno, label) => {
 
   const offlineOut = join(fixture, "offline-out");
   await mkdir(offlineOut, { recursive: true });
-  const offline = await run(deno, await cachedOnlyArgs(deno, offlineOut, "main.ts"), {
+  const offline = await run(deno, bundleArgs(offlineOut, "main.ts"), {
     cwd: source,
-    env: { DENO_DIR: populatedCache },
+    env: { DENO_DIR: populatedCache, ...networkBlocked },
   });
-  conclusion(offline.ok, `Deno ${label} cached-only bundle failed after managed acquisition: ${offline.stderr || offline.message}`);
-  conclusion((await walk(offlineOut)).some((path) => /\.(?:m?js|cjs)$/.test(path)), `Deno ${label} cached-only bundle emitted no JavaScript`);
+  conclusion(offline.ok, `Deno ${label} network-blocked bundle failed after managed acquisition: ${offline.stderr || offline.message}`);
+  conclusion((await walk(offlineOut)).some((path) => /\.(?:m?js|cjs)$/.test(path)), `Deno ${label} network-blocked bundle emitted no JavaScript`);
   return {
     version: label,
+    offlineControl: "unreachable-loopback-proxy",
     emptyCache: {
       failed: true,
       exitCode: empty.code,
