@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { builtinModules, isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { conclusion, infrastructure } from "./receipt.mjs";
@@ -73,6 +73,10 @@ const classifyMetafile = (metafile) => {
     const specifier = typeof imported.path === "string" ? imported.path : null;
     const builtin = specifier === null ? undefined : canonicalBuiltin(specifier);
     if (imported.external === true) {
+      if (specifier?.endsWith(".node") === true) {
+        add(kind, specifier, "native-addon");
+        return;
+      }
       if (builtin !== undefined || (specifier !== null && builtinSet.has(specifier))) {
         add(kind, builtin ?? specifier, "builtin");
       } else if (specifier !== null && (specifier.startsWith(".") || specifier.startsWith("/"))) {
@@ -106,13 +110,15 @@ const makeSource = async (root, format, inadmissible = false) => {
     const body = format === "esm"
       ? `import packageValue from "fixture-package";
 import missing from "./missing.js";
+import addon from "./fixture.node";
 const dynamicValue = await import("fixture-dynamic");
-console.log(packageValue, missing, dynamicValue);
+console.log(packageValue, missing, addon, dynamicValue);
 `
       : `import packageValue from "fixture-package";
 import missing from "./missing.js";
+import addon from "./fixture.node";
 void import("fixture-dynamic");
-console.log(packageValue, missing);
+console.log(packageValue, missing, addon);
 `;
     await writeFile(source, body);
     return source;
@@ -147,7 +153,12 @@ const buildBun = async ({ executable, source, output, format, inadmissible }) =>
     `--outfile=${output}`,
     `--metafile=${metafilePath}`,
     ...(inadmissible
-      ? ["--external=fixture-package", "--external=fixture-dynamic", "--external=./missing.js"]
+      ? [
+        "--external=fixture-package",
+        "--external=fixture-dynamic",
+        "--external=./missing.js",
+        "--external=./fixture.node",
+      ]
       : []),
   ], { cwd: dirname(source) });
   infrastructure(result.ok, `Bun Node-main build failed: ${result.stderr || result.message}`);
@@ -165,11 +176,102 @@ const buildEsbuild = async ({ source, output, format, nodeVersion, inadmissible 
     outfile: output,
     metafile: true,
     packages: "bundle",
-    external: inadmissible ? ["fixture-package", "fixture-dynamic", "./missing.js"] : [],
+    external: inadmissible ? ["fixture-package", "fixture-dynamic", "./missing.js", "./fixture.node"] : [],
     write: true,
     logLevel: "silent",
   });
   return result.metafile;
+};
+
+const buildRolldown = async ({ source, output, format, inadmissible }) => {
+  const externalRoot = await requiredPath("RESEARCH_EXTERNAL_NODE_MODULES");
+  const rolldownPath = resolve(externalRoot, "rolldown/dist/index.mjs");
+  const { rolldown } = await import(pathToFileURL(rolldownPath).href);
+  const external = (specifier) =>
+    builtinSet.has(specifier)
+    || specifier === "fixture-package"
+    || specifier === "fixture-dynamic"
+    || specifier === "./missing.js"
+    || specifier.endsWith("/missing.js")
+    || specifier === "./fixture.node"
+    || specifier.endsWith("/fixture.node");
+  const parsedModules = new Map();
+  const build = await rolldown({
+    input: source,
+    external,
+    plugins: [{
+      name: "effect-build-node-main-observer",
+      moduleParsed(information) {
+        parsedModules.set(information.id, {
+          importedIds: [...information.importedIds],
+          dynamicallyImportedIds: [...information.dynamicallyImportedIds],
+        });
+      },
+    }],
+  });
+  try {
+    const inputs = {};
+    const observeInputs = () => {
+      for (const [id, information] of parsedModules) {
+      inputs[id] = {
+        imports: [
+          ...information.importedIds.map((specifier) => ({
+            path: specifier,
+            kind: "import-statement",
+            external: external(specifier),
+          })),
+          ...information.dynamicallyImportedIds.map((specifier) => ({
+            path: specifier,
+            kind: "dynamic-import",
+            external: external(specifier),
+          })),
+        ],
+      };
+      }
+    };
+    const generated = await build.write({
+      file: output,
+      format: format === "esm" ? "es" : "cjs",
+      codeSplitting: false,
+    });
+    observeInputs();
+    return {
+      inputs,
+      outputs: Object.fromEntries(
+        generated.output
+          .filter((item) => item.type === "chunk")
+          .map((item) => [item.fileName, {
+            imports: [
+              ...item.imports.map((specifier) => ({
+                path: specifier,
+                kind: "import-statement",
+                external: external(specifier),
+              })),
+              ...item.dynamicImports.map((specifier) => ({
+                path: specifier,
+                kind: "dynamic-import",
+                external: external(specifier),
+              })),
+            ],
+          }]),
+      ),
+    };
+  } finally {
+    await build.close();
+  }
+};
+
+const buildProvider = (provider, input) => {
+  switch (provider) {
+    case "bun":
+      return buildBun({ executable: selectedBun, ...input });
+    case "esbuild":
+      return buildEsbuild(input);
+    case "rolldown":
+      return buildRolldown(input);
+    default:
+      throw new Error(`unknown Node-main provider: ${provider}`);
+  }
 };
 
 const observeFile = async (path) => {
@@ -202,7 +304,9 @@ const makeCanonicalMain = async ({ provider, output, format, nodeVersion, import
 };
 
 const inadmissibleImports = (main) => main.imports.filter((item) =>
-  item.disposition === "package-external" || item.disposition === "unresolved-external"
+  item.disposition === "package-external"
+  || item.disposition === "unresolved-external"
+  || item.disposition === "native-addon"
 );
 
 const assemble = async ({ nodeExecutable, main, destination, runtimeTarget, acquisition, interruptAt }) => {
@@ -255,6 +359,10 @@ const assemble = async ({ nodeExecutable, main, destination, runtimeTarget, acqu
     }, null, 2)}\n`);
     const built = await run(nodeExecutable, ["--build-sea", config], { cwd: work, timeout: 600_000 });
     infrastructure(built.ok, `Node SEA assembly failed: ${built.stderr || built.message}`);
+    if (process.platform === "darwin") {
+      const repaired = await run("/usr/bin/codesign", ["--sign", "-", "--force", staged], { cwd: work });
+      infrastructure(repaired.ok, `Node SEA ad-hoc correctness repair failed: ${repaired.stderr || repaired.message}`);
+    }
     await chmod(staged, 0o755);
     if (interruptAt === "before-commit") {
       return { ok: false, error: { _tag: "PublicationInterruptedBeforeCommit", destination } };
@@ -293,21 +401,26 @@ const selectedBun = await requiredPath("EFFECT_BUILD_BUN_BIN");
 const node25 = await requiredPath("EFFECT_BUILD_NODE_25_BIN");
 const node26 = await requiredPath("EFFECT_BUILD_NODE_26_BIN");
 const nodes = [
-  { version: "25.5.0", executable: node25 },
-  { version: "26.7.0", executable: node26 },
+  { version: "25.5.0", executable: node25, formats: ["commonjs"] },
+  { version: "26.7.0", executable: node26, formats: ["esm", "commonjs"] },
 ];
 const root = await mkdtemp(join(tmpdir(), "effect-build-node-main-canon-"));
 export let nodeMainCanonResult;
 try {
   const matrix = [];
-  for (const provider of ["bun", "esbuild"]) {
+  for (const provider of ["bun", "esbuild", "rolldown"]) {
     for (const format of ["esm", "commonjs"]) {
       const source = await makeSource(root, format, false);
       for (const node of nodes) {
+        if (!node.formats.includes(format)) continue;
         const output = join(root, `${provider}-${format}-${node.version}.${format === "esm" ? "mjs" : "cjs"}`);
-        const metafile = provider === "bun"
-          ? await buildBun({ executable: selectedBun, source, output, format, inadmissible: false })
-          : await buildEsbuild({ source, output, format, nodeVersion: node.version, inadmissible: false });
+        const metafile = await buildProvider(provider, {
+          source,
+          output,
+          format,
+          nodeVersion: node.version,
+          inadmissible: false,
+        });
         const imports = classifyMetafile(metafile);
         conclusion(imports.some((item) => item.disposition === "builtin"), `${provider} ${format} did not classify a builtin`);
         conclusion(imports.some((item) => item.kind === "dynamic-import" && item.disposition === "bundled"), `${provider} ${format} did not classify bundled dynamic import`);
@@ -329,7 +442,10 @@ try {
             runtimeTarget: main.runtimeTarget,
             acquisition,
           });
-          conclusion(assembled.ok === true, `${provider} ${format} ${node.version} ${acquisition} did not assemble`);
+          conclusion(
+            assembled.ok === true,
+            `${provider} ${format} ${node.version} ${acquisition} did not assemble: ${JSON.stringify(assembled.error)}`,
+          );
           const execution = await executeArtifact(node.version, destination);
           conclusion(assembled.artifact.observations.length === 2, "producer and assembler observations were not concatenated");
           matrix.push({ provider, format, nodeVersion: node.version, acquisition, imports, execution });
@@ -339,16 +455,21 @@ try {
   }
 
   const externalRejections = [];
-  for (const provider of ["bun", "esbuild"]) {
+  for (const provider of ["bun", "esbuild", "rolldown"]) {
     for (const format of ["esm", "commonjs"]) {
       const source = await makeSource(root, format, true);
       const output = join(root, `external-${provider}-${format}.${format === "esm" ? "mjs" : "cjs"}`);
-      const metafile = provider === "bun"
-        ? await buildBun({ executable: selectedBun, source, output, format, inadmissible: true })
-        : await buildEsbuild({ source, output, format, nodeVersion: "26.7.0", inadmissible: true });
+      const metafile = await buildProvider(provider, {
+        source,
+        output,
+        format,
+        nodeVersion: "26.7.0",
+        inadmissible: true,
+      });
       const imports = classifyMetafile(metafile);
       conclusion(imports.some((item) => item.disposition === "package-external"), `${provider} did not classify package external`);
       conclusion(imports.some((item) => item.disposition === "unresolved-external"), `${provider} did not classify unresolved external`);
+      conclusion(imports.some((item) => item.disposition === "native-addon"), `${provider} did not classify native addon`);
       conclusion(imports.some((item) => item.kind === "dynamic-import" && item.disposition === "package-external"), `${provider} did not classify dynamic package external`);
       const main = await makeCanonicalMain({
         provider: `effect-build-${provider}`,
@@ -467,6 +588,12 @@ try {
     protocol: "effect-build/profile/node-main-program@1",
     executableProtocol: "effect-build/profile/node-main-executable@1",
     matrix,
+    unsupportedCells: ["bun", "esbuild", "rolldown"].map((provider) => ({
+      provider,
+      format: "esm",
+      nodeVersion: "25.5.0",
+      reason: "Node 25.5 direct SEA predates module-format main support",
+    })),
     externalRejections,
     mutation: {
       borrowed: mutationRejected.error,

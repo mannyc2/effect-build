@@ -1,0 +1,58 @@
+{
+  "schema": "effect-build/freeze-candidate-verdicts@1",
+  "date": "2026-08-21",
+  "candidates": [
+    {
+      "id": "R5-node-sealed-main",
+      "kind": "portable-role",
+      "disposition": "defer",
+      "evidence": [
+        "research/post-0.3/node-main-canon-probe.mjs",
+        "research/post-0.3/certify-node-sea-relations.mjs"
+      ],
+      "blockingFacts": [
+        "five-host role matrix incomplete",
+        "no recurring packed unchanged-consumer certification"
+      ]
+    },
+    {
+      "id": "R5-browser-module-payload",
+      "kind": "portable-role",
+      "disposition": "defer",
+      "evidence": [
+        "research/post-0.3/browser-behavior-probe-v2.mjs",
+        "research/post-0.3/certify-version-boundaries.mjs"
+      ],
+      "blockingFacts": [
+        "Deno 2.9.3 and 2.9.5 reject module-CSS SVG assets without a loader",
+        "entry-edge query-fragment external and five-host matrices incomplete"
+      ]
+    },
+    {
+      "id": "R6-effect-build-rolldown",
+      "kind": "first-party-package",
+      "disposition": "defer",
+      "evidence": [
+        "research/post-0.3/reconciliation/r2/rolldown/REPORT.md",
+        "research/post-0.3/freeze/R6-ROLLDOWN-VERDICTS.md"
+      ],
+      "blockingFacts": [
+        "close does not join an already-started generate",
+        "package implementation five-host coherence packed consumer and publication gates absent"
+      ]
+    },
+    {
+      "id": "R6-incremental-node-main",
+      "kind": "portable-role",
+      "disposition": "defer",
+      "evidence": [
+        "research/post-0.3/external-provider-probe.mjs",
+        "research/post-0.3/node-main-canon-probe.mjs"
+      ],
+      "blockingFacts": [
+        "close and in-flight ownership law incomplete",
+        "five-host and independently packed adapter matrices incomplete"
+      ]
+    }
+  ]
+}

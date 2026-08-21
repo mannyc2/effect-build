@@ -1,4 +1,4 @@
-import { browserBehaviorResult } from "./browser-behavior-probe.mjs";
+import { browserBehaviorResult } from "./browser-behavior-probe-v2.mjs";
 import { conclusion, writeReceipt } from "./receipt.mjs";
 import { assertion, markerValue, requiredPath, runRequired, sourceSha } from "./probe-runtime.mjs";
 
@@ -18,22 +18,38 @@ for (const item of [...result.bun, ...result.deno]) conclusion(item.buildSucceed
 for (const item of result.esbuild) conclusion(item.build === true && item.context === true && item.cancel === true && item.dispose === true, `Esbuild ${item.version} capability probe failed`);
 conclusion(browserBehaviorResult.role === "BrowserModuleApplication", "browser behavior no longer supports the application role");
 conclusion(browserBehaviorResult.nativeTopLevelResourcePortability === "falsified", "native top-level resource falsifier changed");
-conclusion(browserBehaviorResult.adapterNormalizedApplicationSemantics === "established", "browser adapter normalization failed");
+conclusion(browserBehaviorResult.adapterNormalizedApplicationSemantics === "falsified", "incomplete browser adapter unexpectedly passed");
 await writeReceipt({
   id: "version-boundaries",
   sourceSha,
-  claims: [{
-    id: "provider-version-boundaries",
-    classification: "established",
-    conclusion: "advertised-command-and-api-capabilities-exist-at-each-exercised-boundary",
-    assertions: [
-      assertion("bun-1.3.9-and-1.3.14"),
-      assertion("deno-2.9.3-and-2.9.5"),
-      assertion("esbuild-0.28.1-and-0.28.2"),
-      assertion("headless-browser-all-provider-boundaries"),
-      assertion("native-top-level-resource-falsifier"),
-      assertion("adapter-normalized-application-semantics"),
-    ],
-  }],
+  claims: [
+    {
+      id: "provider-version-boundaries",
+      classification: "established",
+      conclusion: "advertised-command-and-api-capabilities-exist-at-each-exercised-boundary",
+      assertions: [
+        assertion("bun-1.3.9-and-1.3.14"),
+        assertion("deno-2.9.3-and-2.9.5"),
+        assertion("esbuild-0.28.1-and-0.28.2"),
+        assertion("headless-browser-bun-boundaries"),
+        assertion("deno-browser-asset-loader-hole"),
+        assertion("native-top-level-resource-falsifier"),
+        assertion("incomplete-adapter-normalization-falsified"),
+      ],
+    },
+    {
+      id: "browser-module-payload-portable-role",
+      classification: "unproven",
+      conclusion: "real-browser-seed-passes-but-entry-edge-query-fragment-external-and-host-matrix-remain-incomplete",
+      assertions: [
+        assertion("real-chromium-oracle"),
+        assertion("bun-module-css-assets-dynamic-import-font-mime-and-source-map-seed"),
+        assertion("deno-svg-loader-falsifier"),
+        assertion("native-top-level-resource-portability-falsified"),
+        assertion("fixture-normalization-is-not-provider-neutral-conformance"),
+        assertion("no-unexecuted-entry-edge-or-host-inference"),
+      ],
+    },
+  ],
   evidence: { versions: result, browser: browserBehaviorResult },
 });

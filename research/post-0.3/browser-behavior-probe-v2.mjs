@@ -70,11 +70,15 @@ const chrome = await firstExisting([
   "/usr/bin/google-chrome-stable",
   "/usr/bin/chromium",
   "/usr/bin/chromium-browser",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
 ]);
 infrastructure(chrome !== undefined, "a real Chromium/Chrome executable is required");
 const font = await firstExisting([
   "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
   "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+  "/System/Library/Fonts/Supplemental/Arial.ttf",
+  "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
 ]);
 infrastructure(font !== undefined, "a real browser-loadable font fixture is required");
 
@@ -166,7 +170,16 @@ const buildApplication = async ({ provider, executable, source, output, minify }
     }
   }
   if (completion === undefined) completion = await run(executable, base, { cwd: source });
-  infrastructure(completion.ok, `${provider} browser build failed: ${completion.stderr || completion.message}`);
+  if (!completion.ok) {
+    return {
+      conforms: false,
+      failure: {
+        phase: "provider-build",
+        stderr: completion.stderr,
+        message: completion.message,
+      },
+    };
+  }
   const files = await walk(output);
   const htmlPath = files.find((path) => path.endsWith(".html"));
   conclusion(htmlPath !== undefined, `${provider} emitted no HTML entry`);
@@ -404,6 +417,16 @@ try {
     for (const minify of [false, true]) {
       const output = join(root, `${item.provider}-${item.version}-${minify ? "min" : "pretty"}`);
       const build = await buildApplication({ ...item, source, output, minify });
+      if (build.conforms === false) {
+        observations.push({
+          provider: item.provider,
+          version: item.version,
+          minify,
+          conforms: false,
+          failure: build.failure,
+        });
+        continue;
+      }
       await normalizeTopLevelResources(source, output, build.htmlPath);
       const entry = relative(output, build.htmlPath).replaceAll("\\", "/");
       const browser = await withStaticServer(output, entry, (url) => evaluateInChrome(url));
@@ -421,6 +444,7 @@ try {
         provider: item.provider,
         version: item.version,
         minify,
+        conforms: true,
         nativeTopLevelPreserved: build.nativeTopLevelPreserved,
         sourceMapFlag: build.selectedSourceMapFlag,
         sourceMapFiles: build.mapFiles.map((path) => relative(output, path).replaceAll("\\", "/")),
@@ -429,17 +453,22 @@ try {
     }
   }
   conclusion(
-    observations.some((item) => item.provider === "deno" && item.nativeTopLevelPreserved === false),
+    observations.some((item) =>
+      item.provider === "deno"
+      && (item.conforms === false || item.nativeTopLevelPreserved === false)
+    ),
     "the native Deno top-level linked-resource falsifier unexpectedly disappeared",
   );
-  conclusion(
-    observations.every((item) => item.browser.ready === "yes" && item.browser.chunk === "loaded"),
-    "adapter normalization did not preserve application behavior",
-  );
+  const allNormalizedCellsPassed = observations.length === matrix.length * 2
+    && observations.every((item) =>
+      item.conforms === true
+      && item.browser.ready === "yes"
+      && item.browser.chunk === "loaded"
+    );
   browserBehaviorResult = {
     role: "BrowserModuleApplication",
     nativeTopLevelResourcePortability: "falsified",
-    adapterNormalizedApplicationSemantics: "established",
+    adapterNormalizedApplicationSemantics: allNormalizedCellsPassed ? "established" : "falsified",
     observations,
   };
 } finally {

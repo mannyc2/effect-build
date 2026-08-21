@@ -13,8 +13,9 @@ conclusion(result.oldest.buildSucceeded === true && result.oldest.execution.succ
 conclusion(result.current.buildSucceeded === true && result.current.execution.succeeded === true, "matching Node 26 SEA did not build and run");
 conclusion(result.mismatchedBuilderAndTarget.buildSucceeded === true, "Node mismatch was rejected before demonstrating the intended upstream falsifier");
 conclusion(result.mismatchedBuilderAndTarget.execution.succeeded === false, "mismatched Node SEA unexpectedly ran");
-conclusion(nodeMainCanonResult.matrix.length === 16, "canonical Node-main matrix did not cover every provider/format/Node/acquisition cell");
-conclusion(nodeMainCanonResult.externalRejections.length === 4, "canonical Node-main external-import matrix was incomplete");
+conclusion(nodeMainCanonResult.matrix.length === 18, "canonical Node-main matrix did not cover every supported provider/format/Node/acquisition cell");
+conclusion(nodeMainCanonResult.unsupportedCells.length === 3, "Node 25.5 ESM exclusions were not recorded per provider");
+conclusion(nodeMainCanonResult.externalRejections.length === 6, "canonical Node-main external-import matrix was incomplete");
 conclusion(nodeMainCanonResult.mutation.borrowed._tag === "NodeMainIdentityMismatch", "borrowed mutation was not rejected");
 conclusion(nodeMainCanonResult.mutation.capturedBytesAssembled === true, "captured bytes did not assemble after source mutation");
 conclusion(nodeMainCanonResult.targetMismatch._tag === "NodeTargetMismatch", "canonical target mismatch was not rejected");
@@ -31,7 +32,9 @@ await writeReceipt({
       assertions: [
         assertion("node-25-match"),
         assertion("node-26-match"),
-        assertion("bun-and-esbuild-esm-and-commonjs"),
+        assertion("bun-esbuild-and-rolldown-commonjs-on-node-25"),
+        assertion("bun-esbuild-and-rolldown-esm-and-commonjs-on-node-26"),
+        assertion("node-25-esm-recorded-unsupported"),
         assertion("file-and-bytes-acquisition-across-domain"),
         assertion("builtin-dynamic-json-and-top-level-await"),
         assertion("producer-and-assembler-observations-concatenated"),
@@ -48,6 +51,19 @@ await writeReceipt({
         assertion("portable-recipe-rejects-inadmissible-externals"),
         assertion("portable-recipe-authenticates-borrowed-main"),
         assertion("publication-interruption-classifies-commit-state"),
+      ],
+    },
+    {
+      id: "node-sealed-main-portable-role",
+      classification: "unproven",
+      conclusion: "three-producer-exact-host-proof-passes-but-five-host-role-proof-remains-incomplete",
+      assertions: [
+        assertion("unchanged-consumer-bun-esbuild-rolldown"),
+        assertion("exact-content-identity-and-atomic-acquisition"),
+        assertion("commonjs-and-version-gated-esm"),
+        assertion("builtin-dynamic-json-external-and-native-addon-classification"),
+        assertion("mutation-target-and-commit-state-falsifiers"),
+        assertion("no-range-or-unexecuted-host-inference"),
       ],
     },
   ],
