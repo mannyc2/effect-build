@@ -1,0 +1,104 @@
+{
+  "schema": "effect-build/interface-mechanism-expected-conclusions@1",
+  "taxonomy": {
+    "cliVersusHostApiIsValidTopLevelBinary": false,
+    "dimensionsKeptIndependent": [
+      "caller-surface",
+      "execution-location",
+      "transport",
+      "selection-authority",
+      "state-and-lifetime"
+    ]
+  },
+  "portfolio": {
+    "universalMechanismSelected": false,
+    "preferredArchitecture": "F",
+    "preferredArchitectureName": "operation-specific portfolio",
+    "publicOperationsRemainSemantic": true,
+    "mechanismsRemainPackagePrivate": true
+  },
+  "freeze": {
+    "disposition": "unchanged-confirmed",
+    "historicalReclassificationIntegratedAt": "e8641a6ef2c4b8f1d8b0bc511d3079b7b1f9f84c",
+    "admittedOperationSetChanged": false,
+    "proposedPublicExportsChanged": false,
+    "thisStudyAuthorizesPlan039": false,
+    "repositoryPlan039StatusAtFinalBaseline": "READY",
+    "plan039ProductionBegun": false,
+    "productionChangedByThisStudy": false,
+    "releaseStateChangedByThisStudy": false
+  },
+  "providerBoundaries": {
+    "bunExecutableCompile": "selected-command",
+    "denoExecutableCompile": "selected-command",
+    "esbuildBuildAndContextCallerSurface": "official-javascript-api",
+    "esbuildBuildAndContextExecution": "package-owned-native-service-child",
+    "esbuildFreezeLane": "installed-library-api",
+    "nodeDirectSea": "selected-command-and-official-config",
+    "rolldown": "freeze-deferred"
+  },
+  "boundedAlternatives": {
+    "bunSerializableSidecar": "viable-with-bounded-package-private-adapter",
+    "denoBundleMemorySidecar": "experimental-and-not-admitted",
+    "esbuildGoBridge": "research-only-unearned",
+    "esbuildBrowserWasm": "supported-reduced-browser-domain",
+    "nodePostjectLegacyInjection": "viable-only-if-legacy-injection-is-admitted"
+  },
+  "requiredProbeAssertions": {
+    "bun-sidecar": [
+      "exactVersionAndContentHandshake",
+      "mismatchFailsClosed",
+      "reusableHandleWorks",
+      "providerFailureStructured",
+      "sessionRecoversAfterFailure",
+      "largeFrameRoundTrip",
+      "pipelinedCorrelation",
+      "transportBackpressureObserved",
+      "callbackLostByJson",
+      "callbackBoundaryFailsClosed",
+      "directHostCallbackWorks",
+      "staleHandleRejected",
+      "gracefulShutdownNoRemnant",
+      "forcedStopNoRemnant"
+    ],
+    "esbuild-js-service": [
+      "noServiceBeforeFirstCall",
+      "firstCallStartsNativeService",
+      "transformWorks",
+      "callbacksRoundTripAcrossProtocol",
+      "providerFailureStructured",
+      "serviceRecoversAfterFailure",
+      "contextsShareOneProcess",
+      "contextDisposeDoesNotStopProcess",
+      "cancelWaitsForHostCallback",
+      "canceledRebuildFails",
+      "stopTerminatesProcess",
+      "laterCallRestartsProcess",
+      "exactPackageAndNativeBinary"
+    ],
+    "esbuild-wasm-browser": [
+      "exactPackage",
+      "exactBrowserHost",
+      "wasmWorkerInitializes",
+      "transformWorks",
+      "callbacksCrossWorkerBoundary",
+      "providerFailureStructured",
+      "workerRecoversAfterFailure",
+      "reusableContextWorks",
+      "watchFailsClosed",
+      "serveFailsClosed",
+      "filesystemWriteFailsClosed",
+      "concurrentRequestsWork",
+      "browserProcessGroupCleaned"
+    ],
+    "node-postject": [
+      "exactNodeVersionAndContent",
+      "exactPostjectVersionAndApiEntrypoint",
+      "directSeaRuns",
+      "legacyProgrammaticSeaRuns",
+      "reinjectionFailsClosed",
+      "directWriteFailureIsNonzero",
+      "preexistingDirectoryPreserved"
+    ]
+  }
+}

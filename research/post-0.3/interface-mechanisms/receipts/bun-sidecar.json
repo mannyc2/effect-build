@@ -1,0 +1,95 @@
+{
+  "schema": "effect-build/interface-mechanism-probe@1",
+  "probe": "bun-transpiler-sidecar",
+  "classification": "research-prototype-not-product-code",
+  "executable": "bun",
+  "bunVersion": "1.3.9",
+  "bunSha256": "cec3f87f0e17c12a294c75216bc7a08088e13b0be46623f65d5802ac56276bb1",
+  "serverSha256": "da0af45bf70a644e3f81fa5564869abe0aac519ee6a89fafa8a81fe09c0abe94",
+  "protocol": "effect-build-research/bun-transpiler-sidecar@1",
+  "assertions": {
+    "exactVersionAndContentHandshake": true,
+    "mismatchFailsClosed": true,
+    "reusableHandleWorks": true,
+    "providerFailureStructured": true,
+    "sessionRecoversAfterFailure": true,
+    "largeFrameRoundTrip": true,
+    "pipelinedCorrelation": true,
+    "transportBackpressureObserved": true,
+    "callbackLostByJson": true,
+    "callbackBoundaryFailsClosed": true,
+    "directHostCallbackWorks": true,
+    "staleHandleRejected": true,
+    "gracefulShutdownNoRemnant": true,
+    "forcedStopNoRemnant": true
+  },
+  "observations": {
+    "coldHandshakeMs": 13.015458,
+    "warmTransformMs": {
+      "minimum": 0.056625,
+      "median": 0.093416,
+      "maximum": 0.366167
+    },
+    "largeRoundTripMs": 7.442625,
+    "transportBackpressureEvents": 1,
+    "rssKiB": 62288,
+    "forcedStopMs": 0.663583,
+    "directPlugin": {
+      "runtime": "1.3.9",
+      "success": true,
+      "outputs": 1,
+      "resolveCalls": 1,
+      "loadCalls": 1
+    },
+    "callbackSerializedAs": "{\"op\":\"build-with-plugin\",\"plugin\":{}}"
+  },
+  "run": {
+    "schema": "effect-build/interface-mechanism-probe-run@1",
+    "cohort": "effect-build/interface-mechanism-probes@1",
+    "runId": "7dd22185-3ae5-43d4-8e7d-9ee183fa4bca",
+    "cohortSha256": "3fce577c926d0ed749a94cf8726971f109ee5f1dbea828f0a91bd213f00fd73b",
+    "startedAt": "2026-08-21T23:11:21.774Z",
+    "completedAt": "2026-08-21T23:11:21.935Z",
+    "durationMs": 160.3805,
+    "timeoutMs": 60000,
+    "runner": {
+      "path": "research/post-0.3/interface-mechanisms/run-probes.mjs",
+      "sha256": "39667e7e9f9c217f95ee83dfa842a992660eb4f08b5953c32e1e07644f5ee8d8"
+    },
+    "sourceSha256": "ae8483418a82e9d9a99f0e59b15fd488b8d28b0ffbc7b36f34024bc71fbeec1c",
+    "sources": [
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/bun-direct-plugin.ts",
+        "sha256": "cb6cefa3764dfef4d1d6b8bd8bd4267a4fbacaf879f0f1f63ad197ff20ad365a"
+      },
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-probe.mjs",
+        "sha256": "a2598d6705d50c81b6afe20bb35bca461a07a259e7e429991f8b0e103e551d96"
+      },
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-server.ts",
+        "sha256": "da0af45bf70a644e3f81fa5564869abe0aac519ee6a89fafa8a81fe09c0abe94"
+      }
+    ],
+    "environment": {
+      "required": [
+        "BUN_EXE",
+        "BUN_EXPECTED_VERSION",
+        "BUN_EXPECTED_SHA256"
+      ],
+      "optionalForwarded": [],
+      "forwarded": [
+        "BUN_EXE",
+        "BUN_EXPECTED_SHA256",
+        "BUN_EXPECTED_VERSION",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "PATH",
+        "TMPDIR"
+      ],
+      "selectionSha256": "f4879ef460bb6c7a2cfce910a2d0e8664b8fc96201d1ac97202838ba9be0d363"
+    }
+  }
+}

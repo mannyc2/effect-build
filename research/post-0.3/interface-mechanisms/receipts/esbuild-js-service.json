@@ -1,0 +1,76 @@
+{
+  "schema": "effect-build/interface-mechanism-probe@1",
+  "probe": "esbuild-js-native-service",
+  "classification": "current-provider-mechanism-trace",
+  "esbuildVersion": "0.28.2",
+  "nodeVersion": "v24.14.1",
+  "packageJsonSha256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490",
+  "jsEntrypointSha256": "61ec0ba144ff93f4bf0e96ad6fab6f430ede0aa13e27ace8063ed63ba416b3cd",
+  "nativeBinaryPackage": "@esbuild/darwin-arm64",
+  "nativeBinarySha256": "10b6243df618d374bb2d5c9cfbe7052e1405f6aa4e53a6164f11a91b9f2e1384",
+  "assertions": {
+    "noServiceBeforeFirstCall": true,
+    "firstCallStartsNativeService": true,
+    "transformWorks": true,
+    "callbacksRoundTripAcrossProtocol": true,
+    "providerFailureStructured": true,
+    "serviceRecoversAfterFailure": true,
+    "contextsShareOneProcess": true,
+    "contextDisposeDoesNotStopProcess": true,
+    "cancelWaitsForHostCallback": true,
+    "canceledRebuildFails": true,
+    "stopTerminatesProcess": true,
+    "laterCallRestartsProcess": true,
+    "exactPackageAndNativeBinary": true
+  },
+  "observations": {
+    "coldTransformMs": 20.634667,
+    "restartMs": 4.527833,
+    "service": {
+      "pid": 44791,
+      "ppid": 44732,
+      "rssKiB": 16608,
+      "command": "/private/tmp/effect-build-v04-freeze.ep1cIR/repo/node_modules/.bun/@esbuild+darwin-arm64@0.28.2/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.28.2 --ping"
+    },
+    "cancellationPendingWhileCallbackBlocked": true,
+    "cancellationRequestToSettlementMs": 27.292083,
+    "rebuildOutcome": {
+      "outcome": "failed",
+      "message": "Build failed with 1 error:\nerror: The build was canceled"
+    }
+  },
+  "run": {
+    "schema": "effect-build/interface-mechanism-probe-run@1",
+    "cohort": "effect-build/interface-mechanism-probes@1",
+    "runId": "7dd22185-3ae5-43d4-8e7d-9ee183fa4bca",
+    "cohortSha256": "3fce577c926d0ed749a94cf8726971f109ee5f1dbea828f0a91bd213f00fd73b",
+    "startedAt": "2026-08-21T23:11:21.935Z",
+    "completedAt": "2026-08-21T23:11:22.242Z",
+    "durationMs": 307.6565,
+    "timeoutMs": 45000,
+    "runner": {
+      "path": "research/post-0.3/interface-mechanisms/run-probes.mjs",
+      "sha256": "39667e7e9f9c217f95ee83dfa842a992660eb4f08b5953c32e1e07644f5ee8d8"
+    },
+    "sourceSha256": "7eb4d7ede24c857d0a5cdd31f5e940d05022758d939dde5cc1272f54e09ffa35",
+    "sources": [
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/esbuild-js-service-probe.mjs",
+        "sha256": "4ae30bd4b3aeee8d14d73c58b40b9b6970b8de10f5a0c0ad2a357c2e80f0628a"
+      }
+    ],
+    "environment": {
+      "required": [],
+      "optionalForwarded": [],
+      "forwarded": [
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "PATH",
+        "TMPDIR"
+      ],
+      "selectionSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    }
+  }
+}
