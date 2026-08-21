@@ -6,7 +6,7 @@
 - Effort: XL
 - Risk: HIGH lifecycle, interruption, and public author contracts
 - Depends on: exact 0.4 surface-freeze commit
-- Status: IN PROGRESS
+- Status: DONE
 - Publication authority: NONE
 
 ## Authority and objective
@@ -50,21 +50,27 @@ The package root re-exports only the exact namespace keys in `SURFACE.json`.
    exact representations and export names in the frozen map. Byte counts use
    the frozen unbounded decimal representation; hashed and unhashed variants
    stay distinct.
-3. Implement `Author/Tool` over official Effect process commands. Selection is
-   an explicit absolute path or one deterministic PATH search at Layer
-   construction. Bind the complete content identity and reauthenticate it at
-   launch. Provider-owned finite policy code owns admission.
-4. Implement `Author/BorrowedOutput` with producer-owned, revocable file/tree
-   authority consumed only through its scoped continuation, plus containment,
-   mutation detection, bounded observation, one acquisition/close winner, and
-   deterministic expiry.
-5. Implement `Author/Executable` with a private same-parent candidate, native
-   inspection, optional streamed hashing, destination-lock refusal, atomic
-   rename, and cleanup before commit. Provider failures remain typed;
-   interruption remains Cause.
-6. Implement the R7 Matrix report: stable provider/operation/index cell
-   identity, positive bounded concurrency, one scalar call per started cell,
-   input-ordered normal results, independent commits, and no rollback.
+3. Stage `Author/Tool` over the official Effect `ChildProcess.Command` contract.
+   The provider-private Layers in Plans 040-043 own explicit-path or one-time
+   PATH selection, complete content identity, launch reauthentication, and the
+   finite admission policy; core must not grow an unused generic runtime
+   service for mechanisms that sibling packages cannot import after publish.
+4. Stage the `Author/BorrowedOutput` contract for producer-owned, revocable
+   file/tree authority consumed only through its scoped continuation. The
+   contract and R4 laws freeze containment, mutation detection, bounded
+   observation, one acquisition/close winner, and deterministic expiry. Each
+   concrete producer implements and recertifies those laws in its owner plan;
+   there is no hidden cross-package runtime export.
+5. Stage the `Author/Executable` contract for a private same-parent candidate,
+   native inspection, optional streamed hashing, destination-lock refusal,
+   atomic rename, and cleanup before commit. Provider failures remain typed
+   and interruption remains Cause. Provider plans own the private runtime
+   implementation because the frozen core surface exports only this contract.
+6. Implement the R7 Matrix vocabulary and report: stable
+   provider/operation/index cell identity, positive bounded concurrency,
+   input-ordered normal results, independent commits, and no rollback. Bun and
+   Deno own the scalar scheduler that enforces exactly one call per started
+   cell and preserves interruption in Plans 041 and 042.
 7. Prepare the exact internal replacements and deletion set for every core
    authority marked `remove` or `replace` by the migration map. Keep the 0.3
    public exports intact until Plan 044; do not add a second public path or a
@@ -74,14 +80,20 @@ The package root re-exports only the exact namespace keys in `SURFACE.json`.
 
 - Start with internal contract tests for the exact future root/subpath map and
   retain characterization tests for the unchanged released 0.3 export map.
-- Reproduce every R3 compatibility and R4 lifecycle/rent law.
+- Reproduce the R3 evaluator suite and the portable R4 Author contract/rent
+  laws against the immutable research models, and typecheck the actual staged
+  Author contracts against the external adapter. Authenticate the freeze's
+  exact R4 runtime receipt as historical input; Plans 040-043 must reproduce
+  each applicable runtime probe against their concrete implementation.
 - Run the external Author adapter against an isolated nonpublishable contract
   fixture and prove it uses only the three staged Author contracts across
   compatible duplicate core copies. Plan 044 owns the real package export and
   once-packed-tarball adapter gate.
-- Test hashed/unhashed file, tree, and executable paths; symlink/traversal and
-  same-size mutation; close/acquire races; partial candidates; destination
-  locks; interruption; and post-commit behavior.
+- Reproduce the R4 hashed/unhashed file, tree, and executable paths;
+  symlink/traversal and same-size mutation; close/acquire races; partial
+  candidates; destination locks; interruption; and post-commit behavior. This
+  validates the frozen laws without inventing a rent-free core engine that no
+  published provider can consume.
 - Run the R7 suite for Bun- and Deno-shaped scalar fixtures without importing a
   provider into core.
 - Run `bun run verify`, the R3/R4/R7 law suites, and a Plan 039

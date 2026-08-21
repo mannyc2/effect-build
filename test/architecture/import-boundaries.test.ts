@@ -51,11 +51,15 @@ describe("source ownership boundaries", () => {
     }
     expect(processImporters.sort()).toEqual([
       "packages/effect-build-node-sea/src/internal/NodeSea.ts",
+      "packages/effect-build/src/Author/Tool.ts",
       "packages/effect-build/src/Integration.ts",
       "packages/effect-build/src/Provider.ts",
       "packages/effect-build/src/standalone/internal/CompilerEngine.ts",
       "packages/effect-build/src/standalone/internal/ToolDiscovery.ts",
     ]);
+    const toolContract = await readFile(resolve(root, "packages/effect-build/src/Author/Tool.ts"), "utf8");
+    expect(toolContract).toMatch(/^import type \{ ChildProcess \} from "effect\/unstable\/process";$/m);
+    expect(toolContract).not.toMatch(/ChildProcess\.(?:make|start|spawn)/);
     const integration = await readFile(resolve(root, "packages/effect-build/src/Integration.ts"), "utf8");
     expect(integration.match(/ChildProcess\.make\(/g)).toHaveLength(1);
     const nodeSea = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/NodeSea.ts"), "utf8");

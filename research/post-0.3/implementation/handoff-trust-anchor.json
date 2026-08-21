@@ -1,0 +1,43 @@
+{
+  "schema": "effect-build/plan039-handoff-trust-anchor@1",
+  "profileId": "effect-build/plan039-implementation@1",
+  "sourceSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+  "workflow": {
+    "repository": "mannyc2/effect-build",
+    "name": "plan-039-implementation-certification",
+    "path": ".github/workflows/architecture-research.yml",
+    "runId": "32505419081",
+    "runAttempt": "1",
+    "eventName": "push",
+    "conclusion": "success",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32505419081"
+  },
+  "aggregateArtifact": {
+    "id": "9455113555",
+    "name": "plan039-implementation-certification-7de4ffe68931f721317f6be92aac1e01dae6e21e",
+    "sizeInBytes": 3896,
+    "digest": "sha256:5234a76e040291df7d1dbdd2037f51319736cde5ababbeda66f7fd00ff110504",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32505419081/artifacts/9455113555"
+  },
+  "certification": {
+    "file": "plan039-certification.json",
+    "schema": "effect-build/implementation-certification@1",
+    "digest": "sha256:77eacc05831d0362b33def11c9ded232a2baa2c14056809b7b751afb343dff56",
+    "phase": "workflow-handoff",
+    "claims": 4,
+    "result": "certified"
+  },
+  "receipt": {
+    "id": "plan039-phase-handoff",
+    "file": "plan039-phase-handoff.json",
+    "digest": "sha256:7963f1bbd1a5d015fcb9b963936e7ae153c0d2c07d08a0551b2d2313989d7995"
+  },
+  "freezeInput": {
+    "profileId": "post-0.3-surface-freeze-v1",
+    "sourceSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+    "aggregateArtifactId": "9454270941",
+    "aggregateArtifactDigest": "sha256:a502ab64e0cda8fb743f3f6175dfcde4c098eeb9546cc98173a7a6b339002233",
+    "certificationDigest": "sha256:363b4981470cc95eb6c43fc8e56623aaca1f5d2f89c2e9ca38bcc8e3b2e0fc5c",
+    "receiptCount": 20
+  }
+}

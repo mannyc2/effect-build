@@ -1,18 +1,18 @@
 {
   "schema": "effect-build/expected-implementation-claims@1",
   "profileId": "effect-build/plan039-implementation@1",
-  "receiptId": "plan039-phase-handoff",
+  "receiptId": "plan039-implementation",
   "claims": [
     {
-      "id": "historical-freeze-authenticated",
+      "id": "historical-authority-authenticated",
       "classification": "established",
-      "conclusion": "exact-freeze-ancestor-run-artifact-certificate-and-all-20-constituent-receipts-are-content-authenticated",
+      "conclusion": "exact-freeze-anchor-and-green-plan039-handoff-run-artifact-certificate-and-receipt-are-content-authenticated",
       "assertions": [
-        "freeze-is-current-head-ancestor",
-        "freeze-run-is-exact-successful-push-at-attempt-1",
-        "aggregate-artifact-id-name-size-and-digest-match",
-        "certification-bytes-schema-source-and-summary-match",
-        "all-20-explicit-receipt-bytes-and-digests-match"
+        "freeze-anchor-is-bound-to-the-green-handoff",
+        "handoff-run-is-exact-successful-push-at-attempt-1",
+        "handoff-artifact-id-name-size-and-digest-match",
+        "handoff-certificate-and-receipt-bytes-match",
+        "release-freeze-handoff-current-ancestry-is-linear"
       ]
     },
     {
@@ -26,23 +26,29 @@
       ]
     },
     {
-      "id": "workflow-only-handoff",
-      "classification": "sequenced",
-      "conclusion": "plan039-is-in-progress-on-a-workflow-only-head-before-any-production-implementation-change",
+      "id": "implementation-scope-certified",
+      "classification": "established",
+      "conclusion": "plan039-is-done-with-exactly-the-six-authorized-core-files-staged-and-no-immutable-public-path-change",
       "assertions": [
-        "plan039-status-is-in-progress",
-        "all-post-freeze-paths-are-explicitly-allowed-handoff-paths",
-        "production-paths-match-freeze-and-v0.3-release"
+        "plan039-status-is-done",
+        "active-instructions-record-plan039-done-and-plan040-ready",
+        "all-post-handoff-paths-are-explicitly-allowed-implementation-paths",
+        "exactly-six-implementation-files-are-added-or-changed",
+        "workspace-manifest-matches-handoff-except-exact-v04-test-registration-appends",
+        "immutable-public-paths-match-the-handoff",
+        "core-migration-plan-resolves-exactly-71-frozen-identities",
+        "required-gates-precede-current-head-certification"
       ]
     },
     {
       "id": "certification-profiles-disjoint",
       "classification": "established",
-      "conclusion": "freeze-and-plan039-profile-identities-producers-receipt-directories-current-receipts-and-certificates-do-not-mix",
+      "conclusion": "freeze-handoff-and-current-implementation-evidence-remain-explicit-inputs-with-disjoint-current-receipts",
       "assertions": [
         "profile-identities-are-distinct",
-        "expected-claim-and-producer-sets-are-explicit",
-        "current-receipts-exclude-freeze-only-receipts",
+        "profile-documents-claims-and-producer-sets-are-explicit",
+        "current-receipt-is-plan039-implementation",
+        "current-receipts-exclude-handoff-and-freeze-receipts",
         "current-workflow-does-not-invoke-freeze-producers-or-validators",
         "historical-inputs-are-separated-from-current-receipts"
       ]

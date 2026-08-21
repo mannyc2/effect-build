@@ -79,7 +79,8 @@ describe("documentation contract", () => {
     expect(agents).toContain("Package roots are namespace-only discovery facades");
     expect(agents).toContain("exactly three integration-author modules");
     expect(agents).toContain("Node SEA exposes direct Node 26.7 `assembleExecutable`");
-    expect(agents).toContain("Plan 039 is ready to begin");
+    expect(agents).toContain("Plan 039 is complete at its export-inert core-contract stage");
+    expect(agents).toContain("Plan 040 is ready to begin");
     expect(agents).not.toContain("granular-integration-migration-v2");
     expect(api).toContain("five packages with seven public entry points");
     expect(api).toContain("There is no root compile");
