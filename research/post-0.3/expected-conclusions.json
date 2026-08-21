@@ -120,6 +120,72 @@
       "id": "effect-contract-endpoints",
       "classification": "established",
       "conclusion": "exact-profile-contracts-compile-at-both-supported-effect-endpoints"
+    },
+    {
+      "receipt": "r3-provider-compatibility",
+      "id": "provider-owned-total-evaluator",
+      "classification": "established",
+      "conclusion": "provider-owned-policies-evaluate-complete-identities-coordinate-holes-capabilities-relations-peers-and-profiles-with-one-refusal"
+    },
+    {
+      "receipt": "r3-provider-compatibility",
+      "id": "launch-reauthentication-and-cache-authority",
+      "classification": "established",
+      "conclusion": "selected-command-full-content-is-reauthenticated-at-launch-and-cache-keys-cover-every-authority-input"
+    },
+    {
+      "receipt": "r3-provider-compatibility",
+      "id": "exact-untested-override-eligibility",
+      "classification": "established",
+      "conclusion": "only-unknown-support-after-all-non-policy-gates-may-become-an-observable-untested-override"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "exact-author-rent",
+      "classification": "established",
+      "conclusion": "exactly-tool-borrowed-output-and-executable-reduce-author-state-space-without-a-generic-handle"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "borrowed-output-laws",
+      "classification": "established",
+      "conclusion": "close-drains-winning-acquisition-and-file-tree-observation-is-contained-mutation-sensitive-and-bounded"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "executable-publication-laws",
+      "classification": "established",
+      "conclusion": "private-partial-candidates-never-replace-the-old-destination-and-native-publication-is-streamed-then-same-parent-committed"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "scoped-process-and-remnant-laws",
+      "classification": "established",
+      "conclusion": "effect-scope-termination-reaps-the-direct-child-and-provider-direct-complete-and-partial-remnants-remain-observable"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "provider-handle-laws",
+      "classification": "established",
+      "conclusion": "esbuild-cancel-dispose-and-rolldown-concurrent-generate-close-semantics-remain-provider-specific"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "esbuild-one-shot-interruption-law",
+      "classification": "established",
+      "conclusion": "effect-interruption-stops-waiting-while-esbuild-one-shot-provider-and-delayed-plugin-complete"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "esbuild-context-lifecycle-matrix",
+      "classification": "established",
+      "conclusion": "esbuild-context-coalesces-rebuilds-drains-active-plugin-before-dispose-rejects-post-dispose-methods-and-does-not-await-delayed-plugin-cleanup"
+    },
+    {
+      "receipt": "r4-external-author-adapter",
+      "id": "packed-public-contract-only-adapter",
+      "classification": "established",
+      "conclusion": "an-independent-packed-adapter-typechecks-and-runs-across-compatible-core-copies-using-only-the-three-author-contracts"
     }
   ]
 }
