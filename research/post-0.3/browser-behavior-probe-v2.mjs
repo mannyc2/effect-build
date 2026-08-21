@@ -267,6 +267,7 @@ const evaluateInChrome = async (url) => {
   const userData = await mkdtemp(join(tmpdir(), "effect-build-browser-chrome-"));
   const chromeEnvironment = { ...process.env };
   delete chromeEnvironment.DBUS_SESSION_BUS_ADDRESS;
+  const detached = process.platform !== "win32";
   const child = spawn(chrome, [
     "--headless=new",
     "--no-sandbox",
@@ -284,11 +285,19 @@ const evaluateInChrome = async (url) => {
     "--remote-debugging-port=0",
     `--user-data-dir=${userData}`,
     "about:blank",
-  ], { env: chromeEnvironment, stdio: ["ignore", "ignore", "pipe"] });
+  ], { detached, env: chromeEnvironment, stdio: ["ignore", "ignore", "pipe"] });
   let browserStderr = "";
   let browserExit;
-  child.once("exit", (code, signal) => {
-    browserExit = { code, signal };
+  let browserSpawnError;
+  const browserDone = new Promise((resolveDone) => {
+    child.once("error", (error) => {
+      browserSpawnError = error;
+      resolveDone();
+    });
+    child.once("exit", (code, signal) => {
+      browserExit = { code, signal };
+      resolveDone();
+    });
   });
   child.stderr.on("data", (chunk) => {
     if (browserStderr.length < 64 * 1024) browserStderr += chunk.toString("utf8");
@@ -316,12 +325,12 @@ const evaluateInChrome = async (url) => {
       } catch {
         // Browser endpoint is not ready yet.
       }
-      if (browserExit !== undefined) break;
+      if (browserExit !== undefined || browserSpawnError !== undefined) break;
       await sleep(100);
     }
     infrastructure(
       version !== undefined,
-      `Chrome remote debugging failed (exit=${JSON.stringify(browserExit)}): ${browserStderr}`,
+      `Chrome remote debugging failed (exit=${JSON.stringify(browserExit)}, spawn=${browserSpawnError?.message}): ${browserStderr}`,
     );
     const targetResponse = await fetch(`http://127.0.0.1:${port}/json/new?${url}`, { method: "PUT" });
     infrastructure(targetResponse.ok, `Chrome target creation failed: ${targetResponse.status}`);
@@ -405,12 +414,24 @@ const evaluateInChrome = async (url) => {
     infrastructure(value !== undefined, "Chrome evaluation returned no value");
     return { value, failedRequests };
   } finally {
-    child.kill("SIGTERM");
-    await Promise.race([
-      new Promise((resolveExit) => child.once("exit", resolveExit)),
-      sleep(2_000).then(() => child.kill("SIGKILL")),
+    const terminate = (signal) => {
+      try {
+        if (detached && child.pid !== undefined) process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch (error) {
+        if (error?.code !== "ESRCH") throw error;
+      }
+    };
+    terminate("SIGTERM");
+    const terminated = await Promise.race([
+      browserDone.then(() => true),
+      sleep(2_000).then(() => false),
     ]);
-    await rm(userData, { recursive: true, force: true });
+    if (!terminated) {
+      terminate("SIGKILL");
+      await Promise.race([browserDone, sleep(2_000)]);
+    }
+    await rm(userData, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 };
 
