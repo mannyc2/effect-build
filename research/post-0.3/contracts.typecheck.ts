@@ -4,32 +4,35 @@ import type { Options as DenoOptions } from "effect-build-deno";
 import type { JavaScriptBundleInput as EsbuildJavaScriptBundleInput } from "effect-build-esbuild";
 import type { CreateExecutableInput as NodeSeaCreateExecutableInput } from "effect-build-node-sea";
 import {
-  BrowserModuleApplicationProtocol,
-  NodeMainExecutableProtocol,
-  NodeMainProgramProtocol,
-  nodeSourceExecutable,
-  validateProfileProtocol,
   type BrowserModuleApplication,
+  BrowserModuleApplicationProtocol,
   type BrowserModuleApplicationRequest,
   type BrowserModuleApplicationService,
   type BrowserResourceObservation,
   type BuildStepObservation,
   type ExecutableArtifact,
+  type NodeExternalImportUnsupported,
   type NodeImportObservation,
   type NodeMain,
+  type NodeMainAcquisitionFailed,
+  NodeMainExecutableProtocol,
   type NodeMainExecutableRequest,
   type NodeMainExecutableService,
   type NodeMainIdentity,
+  type NodeMainIdentityMismatch,
+  NodeMainProgramProtocol,
   type NodeMainProgramRequest,
   type NodeMainProgramService,
   type NodeMainSnapshot,
+  nodeSourceExecutable,
+  type NodeTargetMismatch,
   type PermanentProviderApi,
   type ProfileAdapter,
   type ProviderPackageObservation,
+  validateProfileProtocol,
 } from "./contracts.js";
 
-const digest: `sha256:${string}` =
-  "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+const digest: `sha256:${string}` = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
 const providerPackage = (name: string): ProviderPackageObservation => ({ name, version: "0.4.0-research" });
 
@@ -94,6 +97,12 @@ const sameTarget = (
   right: NodeMainExecutableRequest["runtimeTarget"],
 ): boolean => left.runtime === right.runtime && left.version === right.version;
 
+type NodeAssemblyFailure =
+  | NodeMainAcquisitionFailed
+  | NodeExternalImportUnsupported
+  | NodeMainIdentityMismatch
+  | NodeTargetMismatch;
+
 const makeNodeMainExecutableService = (
   provider: ProviderPackageObservation,
 ): NodeMainExecutableService<never> => ({
@@ -108,7 +117,7 @@ const makeNodeMainExecutableService = (
         NodeMainExecutableProtocol,
         provider,
       ),
-      () => {
+      (): Effect.Effect<ExecutableArtifact, NodeAssemblyFailure> => {
         if (!sameTarget(request.main.runtimeTarget, request.runtimeTarget)) {
           return Effect.fail({
             _tag: "NodeTargetMismatch",
@@ -344,7 +353,8 @@ const denoOptions: readonly DenoOptions[] = [
   { bundle: true, minify: false },
   { bundle: true, minify: true },
 ];
-const inspectNodeSeaNativeInput = <Stages extends readonly BuildStepObservation[]>(
+type NodeSeaNativeStages = NodeSeaCreateExecutableInput["main"]["stages"];
+const inspectNodeSeaNativeInput = <Stages extends NodeSeaNativeStages>(
   input: NodeSeaCreateExecutableInput<Stages>,
 ) => ({ outfile: input.outfile, assets: input.assets });
 

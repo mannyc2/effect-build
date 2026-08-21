@@ -320,7 +320,6 @@ export const nodeSourceExecutable = <ProducerFailure, ProducerRequirements, Asse
               runtimeTarget: request.program.runtimeTarget,
               acquisition: request.acquisition,
               digest: request.digest,
-            })
-          ),
+            })),
       ),
   );

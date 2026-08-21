@@ -26,8 +26,14 @@ export interface ProviderCommandWatchSurface<Request, Failure, Requirements = ne
   ) => Effect.Effect<ChildProcess.ChildProcess, Failure, Scope.Scope | Requirements>;
 }
 
-export type BunCommandWatchSurface<Failure, Requirements = never> =
-  ProviderCommandWatchSurface<BunCommandWatchRequest, Failure, Requirements>;
+export type BunCommandWatchSurface<Failure, Requirements = never> = ProviderCommandWatchSurface<
+  BunCommandWatchRequest,
+  Failure,
+  Requirements
+>;
 
-export type DenoCommandWatchSurface<Failure, Requirements = never> =
-  ProviderCommandWatchSurface<DenoCommandWatchRequest, Failure, Requirements>;
+export type DenoCommandWatchSurface<Failure, Requirements = never> = ProviderCommandWatchSurface<
+  DenoCommandWatchRequest,
+  Failure,
+  Requirements
+>;

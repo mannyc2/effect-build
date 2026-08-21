@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   evaluateCompatibility,
   exactVersions,
-  semVerRange,
-  versionPredicate,
   type OperationCompatibilityPolicy,
+  semVerRange,
   type ToolCompatibilityObservation,
+  versionPredicate,
 } from "./compatibility.js";
 
 const observation = (
@@ -99,16 +99,19 @@ describe("operation-specific compatibility", () => {
       expect("overrideAvailable" in unknown.error).toBe(true);
     }
 
-    const known = evaluateCompatibility(policy("api", {
-      knownIncompatibilities: [{
-        matcher: exactVersions("0.28.2"),
-        reason: "upstream regression",
-      }],
-    }), {
-      selected: observation("selected", "0.28.2"),
-      related: {},
-      allowUntestedVersion: true,
-    });
+    const known = evaluateCompatibility(
+      policy("api", {
+        knownIncompatibilities: [{
+          matcher: exactVersions("0.28.2"),
+          reason: "upstream regression",
+        }],
+      }),
+      {
+        selected: observation("selected", "0.28.2"),
+        related: {},
+        allowUntestedVersion: true,
+      },
+    );
     expect(known._tag).toBe("Incompatible");
     if (known._tag === "Incompatible") {
       expect(known.error._tag).toBe("KnownIncompatibility");

@@ -40,6 +40,7 @@ interface WorkflowJob {
   name?: string;
   if?: string;
   needs?: string | string[];
+  env?: Record<string, string>;
   environment?: string;
   outputs?: Record<string, string>;
   permissions?: Record<string, string>;
@@ -60,6 +61,7 @@ interface WorkflowJob {
 interface Workflow {
   on: Record<string, unknown>;
   permissions: Record<string, string>;
+  env?: Record<string, string>;
   jobs: Record<string, WorkflowJob>;
 }
 
@@ -450,6 +452,112 @@ describe("tooling pins and workflow contracts", () => {
         expect(setup.with?.["package-manager-cache"]).toBe(false);
       }
     }
+  });
+
+  it("keeps architecture research receipts exact-head, complete, and fail-closed", async () => {
+    const workflow = parse(
+      await readFile(resolve(root, ".github/workflows/architecture-research.yml"), "utf8"),
+    ) as Workflow;
+    expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(workflow.env).toEqual({
+      SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
+      RESEARCH_BASE_SHA: "15c811bb9904142a33d119766b62082f3c689f13",
+      RESEARCH_RELEASE_SHA: "f06f96ca88b6278e5f23a898d758b99fa9322108",
+    });
+    expect(Object.keys(workflow.jobs)).toEqual([
+      "linux-research",
+      "windows-research",
+      "aggregate-certification",
+    ]);
+
+    const receiptContract = await import(
+      pathToFileURL(resolve(root, "research/post-0.3/receipt-contract.mjs")).href
+    ) as {
+      loadExpectedConclusions: (directory: string) => Promise<{ receiptIds: string[] }>;
+      loadReceiptProducers: (directory: string) => Promise<{
+        producers: Array<{ lane: string; script: string; receipts: string[] }>;
+        receiptIds: string[];
+      }>;
+      validateProducerCoverage: (
+        expectations: { receiptIds: string[] },
+        manifest: { receiptIds: string[] },
+      ) => void;
+    };
+    const researchDirectory = resolve(root, "research/post-0.3");
+    const expectations = await receiptContract.loadExpectedConclusions(researchDirectory);
+    const manifest = await receiptContract.loadReceiptProducers(researchDirectory);
+    expect(() => receiptContract.validateProducerCoverage(expectations, manifest)).not.toThrow();
+    expect(manifest.receiptIds).toContain("repository-scope");
+    expect(manifest.receiptIds).toContain("remote-head");
+    expect([...new Set(manifest.producers.map((producer) => producer.lane))].sort()).toEqual([
+      "aggregate",
+      "linux",
+      "windows",
+    ]);
+
+    for (
+      const [jobName, lane, fetchDepth] of [
+        ["linux-research", "linux", 0],
+        ["windows-research", "windows", 1],
+      ] as const
+    ) {
+      const job = workflow.jobs[jobName]!;
+      expect(job.outputs).toEqual({
+        "receipt-artifact-id": "${{ steps.receipt-artifact.outputs.artifact-id }}",
+        "receipt-artifact-digest": "${{ steps.receipt-artifact.outputs.artifact-digest }}",
+      });
+      const checkout = job.steps!.find((step) => step.uses === checkoutAction)!;
+      expect(checkout.with).toMatchObject({
+        ref: "${{ env.SOURCE_SHA }}",
+        "persist-credentials": false,
+        "fetch-depth": fetchDepth,
+      });
+      expect(jobRuns(workflow, jobName)).toContain(
+        `node research/post-0.3/run-receipt-producers.mjs --lane ${lane}`,
+      );
+      const upload = job.steps!.find((step) => step.uses === uploadArtifactAction)!;
+      expect(upload.id).toBe("receipt-artifact");
+      expect(upload.if).toBe("${{ always() }}");
+      expect(upload.with?.["if-no-files-found"]).toBe("error");
+    }
+
+    const aggregate = workflow.jobs["aggregate-certification"]!;
+    expect(aggregate.needs).toEqual(["linux-research", "windows-research"]);
+    expect(aggregate.if).toBe("${{ always() }}");
+    expect(aggregate.env).toMatchObject({
+      LINUX_RESEARCH_RESULT: "${{ needs.linux-research.result }}",
+      WINDOWS_RESEARCH_RESULT: "${{ needs.windows-research.result }}",
+      LINUX_RESEARCH_ARTIFACT_ID: "${{ needs.linux-research.outputs.receipt-artifact-id }}",
+      LINUX_RESEARCH_ARTIFACT_DIGEST: "${{ needs.linux-research.outputs.receipt-artifact-digest }}",
+      WINDOWS_RESEARCH_ARTIFACT_ID: "${{ needs.windows-research.outputs.receipt-artifact-id }}",
+      WINDOWS_RESEARCH_ARTIFACT_DIGEST: "${{ needs.windows-research.outputs.receipt-artifact-digest }}",
+    });
+    expect(aggregate.steps![0]!.run).toContain('test "$LINUX_RESEARCH_RESULT" = "success"');
+    expect(aggregate.steps![0]!.run).toContain('test "$WINDOWS_RESEARCH_RESULT" = "success"');
+    const aggregateCheckout = aggregate.steps!.find((step) => step.uses === checkoutAction)!;
+    expect(aggregateCheckout.with).toMatchObject({
+      ref: "${{ env.SOURCE_SHA }}",
+      "persist-credentials": false,
+      "fetch-depth": 1,
+    });
+    const download = aggregate.steps!.find((step) =>
+      step.uses === "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
+    )!;
+    expect(download.with).toMatchObject({
+      "artifact-ids":
+        "${{ needs.linux-research.outputs.receipt-artifact-id }},${{ needs.windows-research.outputs.receipt-artifact-id }}",
+      "merge-multiple": true,
+    });
+    expect(jobRuns(workflow, "aggregate-certification")).toContain(
+      "node research/post-0.3/run-receipt-producers.mjs --lane aggregate",
+    );
+    expect(jobRuns(workflow, "aggregate-certification")).toContain(
+      "node research/post-0.3/validate-receipts.mjs",
+    );
+    const certificationUpload = aggregate.steps!.find((step) => step.uses === uploadArtifactAction)!;
+    expect(certificationUpload.with?.["if-no-files-found"]).toBe("error");
+    expect(JSON.stringify(workflow)).not.toContain('"if-no-files-found":"warn"');
   });
 
   it("makes specialized node-sea CI depend on quality without retaining full verification", async () => {

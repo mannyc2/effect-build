@@ -1,75 +1,102 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { receiptDirectory } from "./receipt.mjs";
+import {
+  loadExpectedConclusions,
+  loadReceiptProducers,
+  validateProducerCoverage,
+  validateReceiptSet,
+} from "./receipt-contract.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const expectedFiles = [
-  "expected-conclusions.json",
-  "expected-contract-conclusions.json",
-];
-const expectedDocuments = await Promise.all(expectedFiles.map(async (name) =>
-  JSON.parse(await readFile(resolve(here, name), "utf8"))
-));
-for (const document of expectedDocuments) {
-  assert.equal(document.schema, "effect-build/expected-architecture-conclusions@2");
-  assert.ok(Array.isArray(document.claims));
-}
-const expectedClaims = expectedDocuments.flatMap((document) => document.claims);
+const expectations = await loadExpectedConclusions(here);
+const manifest = await loadReceiptProducers(here);
+validateProducerCoverage(expectations, manifest);
+
+const sourceSha = process.env.SOURCE_SHA;
+const baseSha = process.env.RESEARCH_BASE_SHA;
+const releaseSha = process.env.RESEARCH_RELEASE_SHA;
+assert.match(sourceSha ?? "", /^[0-9a-f]{40}$/, "SOURCE_SHA is missing");
+assert.match(baseSha ?? "", /^[0-9a-f]{40}$/, "RESEARCH_BASE_SHA is missing");
+assert.match(releaseSha ?? "", /^[0-9a-f]{40}$/, "RESEARCH_RELEASE_SHA is missing");
+
+const requiredLanes = [...new Set(
+  manifest.producers.map((producer) => producer.lane).filter((lane) => lane !== "aggregate"),
+)].sort();
+const laneResults = Object.fromEntries(requiredLanes.map((lane) => [
+  lane,
+  process.env[`${lane.toUpperCase().replaceAll("-", "_")}_RESEARCH_RESULT`],
+]));
+const laneArtifacts = Object.fromEntries(requiredLanes.map((lane) => {
+  const prefix = `${lane.toUpperCase().replaceAll("-", "_")}_RESEARCH_ARTIFACT`;
+  return [lane, {
+    id: process.env[`${prefix}_ID`],
+    digest: process.env[`${prefix}_DIGEST`],
+  }];
+}));
 
 const directory = receiptDirectory();
 const entries = (await readdir(directory))
-  .filter((entry) => entry.endsWith(".json") && entry !== "certification-summary.json")
+  .filter((entry) => entry.endsWith(".json") && entry !== "certification.json")
   .sort();
 assert.ok(entries.length > 0, "no architecture receipts were produced");
+const receipts = await Promise.all(entries.map(async (entry) => {
+  const bytes = await readFile(join(directory, entry));
+  return {
+    entry,
+    receipt: JSON.parse(bytes.toString("utf8")),
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+}));
 
-const actual = new Map();
-const sourceShas = new Set();
-for (const entry of entries) {
-  const receipt = JSON.parse(await readFile(join(directory, entry), "utf8"));
-  assert.equal(receipt.schema, "effect-build/architecture-receipt@2", `${entry}: invalid receipt schema`);
-  assert.equal(receipt.status, "reproduced", `${entry}: conclusion set was not reproduced`);
-  assert.match(receipt.sourceSha, /^[0-9a-f]{40}$/, `${entry}: invalid source SHA`);
-  sourceShas.add(receipt.sourceSha);
-  assert.ok(Array.isArray(receipt.claims) && receipt.claims.length > 0, `${entry}: claims missing`);
-  for (const claim of receipt.claims) {
-    assert.ok(Array.isArray(claim.assertions), `${entry}:${claim.id}: assertions missing`);
-    assert.ok(claim.assertions.length > 0, `${entry}:${claim.id}: no executable assertion`);
-    assert.ok(
-      claim.assertions.every((item) => item.passed === true),
-      `${entry}:${claim.id}: failed assertion recorded`,
-    );
-    const key = `${receipt.id}:${claim.id}`;
-    assert.equal(actual.has(key), false, `duplicate architecture claim: ${key}`);
-    actual.set(key, claim);
-  }
-}
-assert.equal(sourceShas.size, 1, `receipts came from multiple source SHAs: ${[...sourceShas].join(", ")}`);
+const validated = validateReceiptSet({
+  baseSha,
+  expectations,
+  laneArtifacts,
+  laneResults,
+  manifest,
+  receipts,
+  releaseSha,
+  sourceSha,
+});
 
-const expectedKeys = new Set();
-for (const expected of expectedClaims) {
-  const key = `${expected.receipt}:${expected.id}`;
-  expectedKeys.add(key);
-  const claim = actual.get(key);
-  assert.ok(claim, `missing expected architecture claim: ${key}`);
-  assert.equal(claim.classification, expected.classification, `${key}: classification changed`);
-  assert.equal(claim.conclusion, expected.conclusion, `${key}: conclusion changed`);
-}
-for (const key of actual.keys()) {
-  assert.equal(expectedKeys.has(key), true, `unexpected architecture claim: ${key}`);
-}
-assert.equal(actual.size, expectedKeys.size, "architecture claim count changed");
-
-const summary = {
-  schema: "effect-build/architecture-certification-summary@2",
-  sourceSha: [...sourceShas][0],
-  receipts: entries,
-  claims: actual.size,
-  result: "reproduced",
+const certification = {
+  schema: "effect-build/architecture-certification@3",
+  sourceSha,
+  baseSha,
+  releaseSha,
+  workflow: {
+    repository: process.env.GITHUB_REPOSITORY ?? "local",
+    workflow: process.env.GITHUB_WORKFLOW ?? "local",
+    runId: process.env.GITHUB_RUN_ID ?? "local",
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? "local",
+    eventName: process.env.GITHUB_EVENT_NAME ?? "local",
+  },
+  requiredJobs: Object.fromEntries(requiredLanes.map((lane) => [`${lane}-research`, laneResults[lane]])),
+  artifacts: Object.fromEntries(requiredLanes.map((lane) => {
+    const artifact = validated.laneArtifacts[lane];
+    return [`${lane}-research`, {
+      id: artifact.id,
+      digest: artifact.digest.startsWith("sha256:") ? artifact.digest : `sha256:${artifact.digest}`,
+    }];
+  })),
+  expectedDocuments: expectations.files,
+  repositoryScope: validated.repositoryScope,
+  remoteHead: validated.remoteHead,
+  receipts: receipts.map(({ entry, receipt, sha256 }) => ({
+    id: receipt.id,
+    file: entry,
+    digest: `sha256:${sha256}`,
+  })),
+  claims: validated.actualClaims,
+  result: "certified",
 };
 await writeFile(
-  join(directory, "certification-summary.json"),
-  `${JSON.stringify(summary, null, 2)}\n`,
+  join(directory, "certification.json"),
+  `${JSON.stringify(certification, null, 2)}\n`,
+  { flag: "wx" },
 );
-console.log(`EFFECT_BUILD_ARCHITECTURE_CERTIFIED=${JSON.stringify(summary)}`);
+console.log(`EFFECT_BUILD_ARCHITECTURE_CERTIFIED=${JSON.stringify(certification)}`);

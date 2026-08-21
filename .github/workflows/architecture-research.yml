@@ -7,24 +7,30 @@ on:
 permissions:
   contents: read
 
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  RESEARCH_BASE_SHA: 15c811bb9904142a33d119766b62082f3c689f13
+  RESEARCH_RELEASE_SHA: f06f96ca88b6278e5f23a898d758b99fa9322108
+
 jobs:
-  executable-research:
+  linux-research:
     runs-on: ubuntu-24.04
+    outputs:
+      receipt-artifact-id: ${{ steps.receipt-artifact.outputs.artifact-id }}
+      receipt-artifact-digest: ${{ steps.receipt-artifact.outputs.artifact-digest }}
+    env:
+      RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-linux
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
-      - name: Validate checked-out source and initialize receipts
+          fetch-depth: 0
+      - name: Validate exact source
         shell: bash
-        env:
-          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          test "$EXPECTED_SOURCE_SHA" = "$(git rev-parse HEAD)"
-          test -f research/post-0.3/expected-conclusions.json
-          test -f research/post-0.3/validate-receipts.mjs
-          echo "SOURCE_SHA=$EXPECTED_SOURCE_SHA" >> "$GITHUB_ENV"
-          echo "RESEARCH_RECEIPTS_DIR=$RUNNER_TEMP/effect-build-architecture-receipts" >> "$GITHUB_ENV"
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 25.5.0
@@ -86,7 +92,7 @@ jobs:
         run: node --test research/post-0.3/*.test.mjs
       - name: Type-check current contract prototypes
         run: >-
-          bun x tsc --ignoreConfig --noEmit --strict --skipLibCheck
+          bun x tsc --ignoreConfig --noEmit --strict --exactOptionalPropertyTypes --skipLibCheck
           --module NodeNext --moduleResolution NodeNext --target ES2022
           research/post-0.3/contracts.ts
           research/post-0.3/contracts.typecheck.ts
@@ -94,8 +100,7 @@ jobs:
         run: bun x tsc -p research/post-0.3/final/tsconfig.json
       - name: Execute exact compatibility laws
         run: node research/post-0.3/final/dist/compatibility.test.js
-      - name: Reproduce all existing architectural conclusions
-        shell: bash
+      - name: Reproduce every declared Linux receipt
         env:
           EFFECT_BUILD_BUN_BIN: ${{ steps.tools.outputs.bun }}
           EFFECT_BUILD_BUN_CURRENT_BIN: ${{ steps.bun-current.outputs.path }}
@@ -105,21 +110,94 @@ jobs:
           EFFECT_BUILD_NODE_25_BIN: ${{ steps.node25.outputs.path }}
           EFFECT_BUILD_NODE_26_BIN: ${{ steps.node26.outputs.path }}
           RESEARCH_EXTERNAL_NODE_MODULES: ${{ env.RESEARCH_EXTERNAL_NODE_MODULES }}
-        run: |
-          node research/post-0.3/certify-provider-conformance.mjs
-          node research/post-0.3/certify-host-boundaries.mjs
-          node research/post-0.3/certify-external-providers.mjs
-          node research/post-0.3/certify-profile-refinement.mjs
-          node research/post-0.3/certify-version-boundaries.mjs
-          node research/post-0.3/certify-node-sea-relations.mjs
-          node research/post-0.3/certify-independent-versioning.mjs
-      - name: Validate the complete conclusion set
-        run: node research/post-0.3/validate-receipts.mjs
-      - name: Upload structured architecture receipts
+        run: node research/post-0.3/run-receipt-producers.mjs --lane linux
+      - name: Upload Linux diagnostic receipts
+        id: receipt-artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: post-0.3-architecture-receipts-${{ env.SOURCE_SHA }}
+          name: post-0.3-architecture-diagnostics-linux-${{ env.SOURCE_SHA }}
           path: ${{ env.RESEARCH_RECEIPTS_DIR }}
-          if-no-files-found: warn
+          if-no-files-found: error
+          retention-days: 30
+
+  windows-research:
+    runs-on: windows-2025
+    outputs:
+      receipt-artifact-id: ${{ steps.receipt-artifact.outputs.artifact-id }}
+      receipt-artifact-digest: ${{ steps.receipt-artifact.outputs.artifact-digest }}
+    env:
+      RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}\effect-build-architecture-windows
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Validate exact source
+        shell: pwsh
+        run: |
+          if ($env:SOURCE_SHA -notmatch '^[0-9a-f]{40}$') { throw "invalid source SHA" }
+          if ((git rev-parse HEAD) -ne $env:SOURCE_SHA) { throw "wrong checkout" }
+      - name: Reproduce every declared Windows receipt
+        run: node research/post-0.3/run-receipt-producers.mjs --lane windows
+      - name: Upload Windows diagnostic receipts
+        id: receipt-artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: post-0.3-architecture-diagnostics-windows-${{ env.SOURCE_SHA }}
+          path: ${{ env.RESEARCH_RECEIPTS_DIR }}
+          if-no-files-found: error
+          retention-days: 30
+
+  aggregate-certification:
+    needs: [linux-research, windows-research]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    env:
+      RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-aggregate
+      LINUX_RESEARCH_RESULT: ${{ needs.linux-research.result }}
+      WINDOWS_RESEARCH_RESULT: ${{ needs.windows-research.result }}
+      LINUX_RESEARCH_ARTIFACT_ID: ${{ needs.linux-research.outputs.receipt-artifact-id }}
+      LINUX_RESEARCH_ARTIFACT_DIGEST: ${{ needs.linux-research.outputs.receipt-artifact-digest }}
+      WINDOWS_RESEARCH_ARTIFACT_ID: ${{ needs.windows-research.outputs.receipt-artifact-id }}
+      WINDOWS_RESEARCH_ARTIFACT_DIGEST: ${{ needs.windows-research.outputs.receipt-artifact-digest }}
+    steps:
+      - name: Require every research lane to succeed
+        shell: bash
+        run: |
+          test "$LINUX_RESEARCH_RESULT" = "success"
+          test "$WINDOWS_RESEARCH_RESULT" = "success"
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Validate exact source
+        shell: bash
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.linux-research.outputs.receipt-artifact-id }},${{ needs.windows-research.outputs.receipt-artifact-id }}
+          path: ${{ env.RESEARCH_RECEIPTS_DIR }}
+          merge-multiple: true
+      - name: Reproduce every declared aggregate receipt
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node research/post-0.3/run-receipt-producers.mjs --lane aggregate
+      - name: Validate complete exact-head certification
+        run: node research/post-0.3/validate-receipts.mjs
+      - name: Upload successful aggregate certification receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: post-0.3-architecture-certification-${{ env.SOURCE_SHA }}
+          path: ${{ env.RESEARCH_RECEIPTS_DIR }}
+          if-no-files-found: error
           retention-days: 30

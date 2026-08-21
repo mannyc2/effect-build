@@ -1,0 +1,75 @@
+{
+  "schema": "effect-build/architecture-receipt-producers@1",
+  "producers": [
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-repository-scope.mjs",
+      "receipts": ["repository-scope"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/check-contract-markdown.mjs",
+      "receipts": ["contract-declarations"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-contract-and-compatibility.mjs",
+      "receipts": ["compatibility-model", "effect-contract-endpoints"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-provider-conformance.mjs",
+      "receipts": ["existing-provider-research"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-host-boundaries.mjs",
+      "receipts": ["host-api-boundaries"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-external-providers.mjs",
+      "receipts": ["external-provider-research"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-profile-refinement.mjs",
+      "receipts": ["profile-refinement"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-version-boundaries.mjs",
+      "receipts": ["version-boundaries"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-node-sea-relations.mjs",
+      "receipts": ["node-sea-relations"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-independent-versioning.mjs",
+      "receipts": ["independent-versioning"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-dependency-and-offline.mjs",
+      "receipts": ["dependency-and-offline"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-provider-native-watch.mjs",
+      "receipts": ["provider-native-watch"]
+    },
+    {
+      "lane": "windows",
+      "script": "research/post-0.3/windows-lifecycle-probe.mjs",
+      "receipts": ["windows-lifecycle"]
+    },
+    {
+      "lane": "aggregate",
+      "script": "research/post-0.3/certify-remote-head.mjs",
+      "receipts": ["remote-head"]
+    }
+  ]
+}
