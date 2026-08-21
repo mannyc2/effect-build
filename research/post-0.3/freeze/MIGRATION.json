@@ -1,0 +1,1065 @@
+{
+  "version": 1,
+  "title": "effect-build 0.3.0 to 0.4.0 public-surface migration ledger",
+  "status": "complete-v0.3-inventory-frozen-v0.4-targets",
+  "baseline": {
+    "release": "0.3.0",
+    "tag": "v0.3.0",
+    "commit": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+    "packageTree": "9ad55683899ec7447b608cff7997ac5a2572a996",
+    "publicApiBlob": "c8c2169b0db1c522ffa1fec6b93db093fc21f1c6",
+    "authorities": {
+      "packageExports": "packages/*/package.json",
+      "runtimeExports": "tooling/public-api.json",
+      "declarationExports": "test/architecture/public-api.test.ts",
+      "namespaceExports": [
+        "packages/effect-build/src/index.ts",
+        "packages/effect-build/src/JavaScriptBundle.ts",
+        "packages/effect-build/src/standalone/Artifact.ts",
+        "packages/effect-build/src/standalone/BuildError.ts",
+        "packages/effect-build/src/standalone/MatrixError.ts",
+        "packages/effect-build/src/standalone/Target.ts"
+      ],
+      "documentedOperations": {
+        "contract": "test/architecture/docs-contract.test.ts",
+        "sources": [
+          "README.md",
+          "docs/README.md",
+          "docs/api.md",
+          "docs/architecture.md",
+          "docs/drivers.md",
+          "docs/errors.md",
+          "packages/effect-build/README.md",
+          "packages/effect-build-bun/README.md",
+          "packages/effect-build-deno/README.md",
+          "packages/effect-build-esbuild/README.md",
+          "packages/effect-build-node-sea/README.md"
+        ]
+      }
+    },
+    "inventorySemantics": {
+      "package-root": "One identity for each published package name.",
+      "subpath": "One identity for each non-root package export key.",
+      "runtime-export": "One identity for each top-level ESM runtime export at a package entry point.",
+      "declaration-only-export": "One identity for each top-level declaration export name absent from that entry point at runtime.",
+      "namespace-runtime-export": "One identity for each runtime member of an explicitly exported core namespace object.",
+      "namespace-declaration-only-export": "One identity for each declaration namespace member absent from its namespace object at runtime.",
+      "documented-operation": "One module-qualified identity for each explicitly named public work operation or setup factory in canonical 0.3 README/docs: the seven end-user work operations, four provider Layer exports, and effect-build/Provider#define. Integration capabilities described only conceptually are already covered as exports and are not fabricated into exact documentation-name observations."
+    }
+  },
+  "target": {
+    "release": "0.4.0",
+    "surfaceStatus": "frozen",
+    "hardCut": {
+      "deprecatedAliases": false,
+      "compatibilityDelegates": false,
+      "fallbacks": false,
+      "automaticSubstitution": false
+    },
+    "admittedOperationIds": [
+      "CAN-BUN-012",
+      "CAN-DENO-010",
+      "CAN-ESB-001",
+      "CAN-ESB-011",
+      "CAN-NODE-001"
+    ],
+    "derivedOperationIds": [
+      "BUN-COMPILE-EXECUTABLE-MATRIX",
+      "DENO-COMPILE-EXECUTABLE-MATRIX"
+    ],
+    "allOtherR1Operations": "defer-or-reject",
+    "packages": [
+      {
+        "name": "effect-build",
+        "rootNamespaces": ["Artifact", "BorrowedOutput", "Executable", "Matrix", "SystemTarget", "Tool"],
+        "subpaths": [
+          {
+            "subpath": "./Artifact",
+            "rootNamespace": "Artifact",
+            "exports": [
+              "AbsolutePath",
+              "DecimalBytes",
+              "Digest",
+              "Executable",
+              "File",
+              "HashedExecutable",
+              "HashedFile",
+              "ObservationMode",
+              "Sha256Value",
+              "UnhashedExecutable",
+              "UnhashedFile"
+            ]
+          },
+          {
+            "subpath": "./SystemTarget",
+            "rootNamespace": "SystemTarget",
+            "exports": ["Abi", "Architecture", "Descriptor", "OperatingSystem", "SystemTarget"]
+          },
+          {
+            "subpath": "./Matrix",
+            "rootNamespace": "Matrix",
+            "exports": ["CellIdentity", "CellResult", "Failure", "Input", "InvalidInput", "Report", "Success"]
+          },
+          {
+            "subpath": "./Author/Tool",
+            "rootNamespace": "Tool",
+            "exports": [
+              "Admission",
+              "CapabilityObservation",
+              "ContentIdentity",
+              "DecimalBytes",
+              "Definition",
+              "Digest",
+              "Observation",
+              "ParticipantIdentity",
+              "Sha256Value",
+              "decimalBytes",
+              "define",
+              "sha256Digest"
+            ]
+          },
+          {
+            "subpath": "./Author/BorrowedOutput",
+            "rootNamespace": "BorrowedOutput",
+            "exports": [
+              "Author",
+              "DecimalBytes",
+              "Digest",
+              "Failure",
+              "File",
+              "FileObservation",
+              "HashedFileObservation",
+              "HashedTreeEntry",
+              "HashedTreeFileEntry",
+              "HashedTreeObservation",
+              "ObservationMode",
+              "Tree",
+              "TreeDirectoryEntry",
+              "TreeObservation",
+              "UnhashedFileObservation",
+              "UnhashedTreeEntry",
+              "UnhashedTreeFileEntry",
+              "UnhashedTreeObservation"
+            ]
+          },
+          {
+            "subpath": "./Author/Executable",
+            "rootNamespace": "Executable",
+            "exports": [
+              "Artifact",
+              "Author",
+              "Failure",
+              "HashedArtifact",
+              "Request",
+              "RuntimeObservation",
+              "SystemTargetObservation",
+              "UnhashedArtifact"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "effect-build-bun",
+        "rootNamespaces": ["CompileExecutable"],
+        "subpaths": [
+          {
+            "subpath": "./CompileExecutable",
+            "rootNamespace": "CompileExecutable",
+            "exports": [
+              "Artifact",
+              "CompileExecutableError",
+              "CompileExecutableInput",
+              "CompileExecutableMatrixInput",
+              "Compiler",
+              "LayerOptions",
+              "MatrixReport",
+              "Options",
+              "Target",
+              "compileExecutable",
+              "compileExecutableMatrix",
+              "layer"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "effect-build-deno",
+        "rootNamespaces": ["CompileExecutable"],
+        "subpaths": [
+          {
+            "subpath": "./CompileExecutable",
+            "rootNamespace": "CompileExecutable",
+            "exports": [
+              "Artifact",
+              "CompileExecutableError",
+              "CompileExecutableInput",
+              "CompileExecutableMatrixInput",
+              "Compiler",
+              "LayerOptions",
+              "MatrixReport",
+              "Options",
+              "PermissionValue",
+              "Permissions",
+              "Target",
+              "compileExecutable",
+              "compileExecutableMatrix",
+              "layer"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "effect-build-esbuild",
+        "rootNamespaces": ["Build", "Context"],
+        "subpaths": [
+          {
+            "subpath": "./Build",
+            "rootNamespace": "Build",
+            "exports": ["Artifact", "BuildError", "BuildInput", "Esbuild", "LayerOptions", "Options", "build", "layer"]
+          },
+          {
+            "subpath": "./Context",
+            "rootNamespace": "Context",
+            "exports": ["Context", "ContextError", "Esbuild", "LayerOptions", "MakeInput", "Options", "layer", "make"]
+          }
+        ]
+      },
+      {
+        "name": "effect-build-node-sea",
+        "rootNamespaces": ["AssembleExecutable"],
+        "subpaths": [
+          {
+            "subpath": "./AssembleExecutable",
+            "rootNamespace": "AssembleExecutable",
+            "exports": [
+              "Artifact",
+              "AssembleExecutableError",
+              "AssembleExecutableInput",
+              "Assembler",
+              "LayerOptions",
+              "assembleExecutable",
+              "layer"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "researchBasis": {
+    "commit": "9f29d02f50211f85852d593579a2c96a6dc5167c",
+    "blobs": {
+      "research/post-0.3/corpus/DECISION-RECORD.md": "f9de65f0fc75f480966967d3ebffacb2a066e931",
+      "research/post-0.3/freeze/CANDIDATE-VERDICTS.json": "7ff45886777ef055ff9a8ccfd96eb86cfccf2487",
+      "research/post-0.3/freeze/PRODUCT-DECISIONS.md": "1a72444cac2d23686d7970b887f3a69be9d00caa",
+      "research/post-0.3/freeze/R5-PORTABLE-ROLE-VERDICTS.md": "44dab39862df25b7715afa98e4db027201fbf79d",
+      "research/post-0.3/freeze/R6-ROLLDOWN-VERDICTS.md": "5862db3f04feda9c034907abd1c063384e7ee642",
+      "research/post-0.3/freeze/R7-MATRIX-LAWS.md": "af7408b708fb39f29832711d12e79eb7d266dae3",
+      "research/post-0.3/reconciliation/r1/CANONICAL-OPERATIONS.csv": "a0c5383ac97c8a2e88bd5a65fe58d15ef2aa0f67",
+      "research/post-0.3/reconciliation/r1/ROOT-NAMESPACE-MAP.csv": "884bdefcbf2ee9f70c118eb7282dd727c4f800bc",
+      "research/post-0.3/reconciliation/r1/STOP-CONDITION.json": "e49e6bced93c08505309ffd3dbe8c19d062f8752"
+    }
+  },
+  "identityGrammar": {
+    "package-root": "package-root:<package>",
+    "subpath": "subpath:<package>:<subpath>",
+    "runtime-export": "runtime-export:<package>:<subpath>:<name>",
+    "declaration-only-export": "declaration-only-export:<package>:<subpath>:<name>",
+    "namespace-runtime-export": "namespace-runtime-export:<package>:<subpath>:<namespace>.<member>",
+    "namespace-declaration-only-export": "namespace-declaration-only-export:<package>:<subpath>:<namespace>.<member>",
+    "documented-operation": "documented-operation:<package>:<subpath>:<name>"
+  },
+  "targetCoordinateGrammar": {
+    "package": "<package>",
+    "rootNamespace": "<package>#<namespace>",
+    "subpathExport": "<package>/<subpath-without-leading-dot-slash>#<export>",
+    "targetSet": "An array of exact coordinates means the 0.3 identity split into those explicit contracts; it never means fallback selection."
+  },
+  "dispositionDefinitions": {
+    "retain": "The 0.3 identity survives unchanged.",
+    "rename": "The semantic operation survives under a different public name; no old-name alias is permitted.",
+    "replace": "The 0.3 identity or contract is superseded by a different 0.4 identity or shape; no compatibility delegate is permitted.",
+    "remove": "The 0.3 identity has no one-for-one 0.4 replacement. Callers must delete or redesign that use."
+  },
+  "references": {
+    "D2": "research/post-0.3/corpus/DECISION-RECORD.md#d2--macro-architecture-c2-approved",
+    "D3": "research/post-0.3/corpus/DECISION-RECORD.md#d3--audience-public-author-with-a-major-only-breaking-change-promise",
+    "D4": "research/post-0.3/corpus/DECISION-RECORD.md#d4--migration-hard-cut",
+    "D16": "research/post-0.3/corpus/DECISION-RECORD.md#d16--withjavascriptbundle-removed-at-the-hard-cut",
+    "M1": "research/post-0.3/freeze/PRODUCT-DECISIONS.md#m1--instruction-cutover-authority-and-timing",
+    "M2": "research/post-0.3/freeze/PRODUCT-DECISIONS.md#m2--compileexecutablematrix-retention-and-contract",
+    "M3": "research/post-0.3/freeze/PRODUCT-DECISIONS.md#m3--public-naming-policy",
+    "M7": "research/post-0.3/freeze/PRODUCT-DECISIONS.md#m7--tool-discovery-and-compatibility-policy",
+    "M8": "research/post-0.3/freeze/PRODUCT-DECISIONS.md#m8--package-and-namespace-topology",
+    "R1": "research/post-0.3/reconciliation/r1/CANONICAL-OPERATIONS.csv",
+    "R1-ROOTS": "research/post-0.3/reconciliation/r1/ROOT-NAMESPACE-MAP.csv",
+    "R1-STOP": "research/post-0.3/reconciliation/r1/STOP-CONDITION.json",
+    "R7": "research/post-0.3/freeze/R7-MATRIX-LAWS.md"
+  },
+  "blockingReconciliations": [],
+  "rules": [
+    {
+      "id": "MAP-PACKAGE-ROOT-RETAIN",
+      "status": "resolved",
+      "disposition": "retain",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "package-root:effect-build": "effect-build",
+          "package-root:effect-build-bun": "effect-build-bun",
+          "package-root:effect-build-deno": "effect-build-deno",
+          "package-root:effect-build-esbuild": "effect-build-esbuild",
+          "package-root:effect-build-node-sea": "effect-build-node-sea"
+        }
+      },
+      "rationale": "M8 and the R6 deferral leave the existing five-package train intact. This retains package identities only; each root export surface is mapped independently below.",
+      "decisionRefs": ["M8"]
+    },
+    {
+      "id": "MAP-INTEGRATION-SUBPATH-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "D4 removes the generic Integration path. The frozen Author modules encode narrower tool, borrowed-output, and executable laws; none is a drop-in replacement for this entry point.",
+      "rationale": "Delete imports from effect-build/Integration and redesign against the exact frozen Author module or official Effect primitive that owns the needed invariant.",
+      "decisionRefs": ["D3", "D4"]
+    },
+    {
+      "id": "MAP-PROVIDER-SUBPATH-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "D4 removes the generic Provider path, and D2 rejects a generic command-compiler abstraction. Author/Tool#define is a narrower tool-author contract, not a compatible Provider.define replacement.",
+      "rationale": "Delete imports from effect-build/Provider; provider-specific operations own their policy and official Effect primitives own process mechanics.",
+      "decisionRefs": ["D2", "D3", "D4"]
+    },
+    {
+      "id": "MAP-CORE-ARTIFACT-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "namespace-runtime-export:effect-build:.:Artifact.AbsolutePath": "effect-build/Artifact#AbsolutePath",
+          "namespace-runtime-export:effect-build:.:Artifact.ByteCount": "effect-build/Artifact#DecimalBytes",
+          "namespace-runtime-export:effect-build:.:Artifact.Digest": "effect-build/Artifact#Digest",
+          "namespace-runtime-export:effect-build:.:Artifact.ExecutableArtifact": "effect-build/Artifact#Executable",
+          "namespace-runtime-export:effect-build:.:Artifact.FileArtifact": "effect-build/Artifact#File",
+          "namespace-runtime-export:effect-build:.:Artifact.ToolObservation": "effect-build/Author/Tool#Observation",
+          "runtime-export:effect-build:.:Artifact": "effect-build#Artifact"
+        }
+      },
+      "rationale": "The frozen Artifact and Author/Tool modules replace the 0.3 number-based byte count, flat artifact records, and stage/tool observations with exact mode-indexed artifacts and canonical tool observations.",
+      "decisionRefs": ["D2", "D3", "D4"],
+      "operationRefs": []
+    },
+    {
+      "id": "MAP-CORE-BUILD-ERROR-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "The frozen surface has no universal BuildError module or one-for-one replacement. Each admitted operation owns an exact error export, so callers must narrow at that operation boundary.",
+      "rationale": "Delete the core BuildError namespace and its members; use the selected operation module's exact error union instead of a compatibility alias.",
+      "decisionRefs": ["D2", "D4", "M7"]
+    },
+    {
+      "id": "MAP-CORE-BUNDLE-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "The frozen surface has no JavaScriptBundle module. Author/BorrowedOutput is a lower-level ownership law and Esbuild Build returns native memory output; neither is a drop-in replacement for the 0.3 live Node-resolution bundle capability.",
+      "rationale": "Delete JavaScriptBundle and redesign the call around the exact admitted provider operation and, only when authoring an adapter, Author/BorrowedOutput.",
+      "decisionRefs": ["D3", "D4", "D16"]
+    },
+    {
+      "id": "MAP-CORE-MATRIX-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "namespace-runtime-export:effect-build:.:MatrixError.CellFailure": "effect-build/Matrix#Failure",
+          "namespace-runtime-export:effect-build:.:MatrixError.InvalidMatrixInput": "effect-build/Matrix#InvalidInput",
+          "namespace-runtime-export:effect-build:.:MatrixError.MatrixError": [
+            "effect-build/Matrix#InvalidInput",
+            "effect-build/Matrix#Report"
+          ],
+          "namespace-runtime-export:effect-build:.:MatrixError.MatrixFailed": "effect-build/Matrix#Report",
+          "namespace-runtime-export:effect-build:.:MatrixError.MatrixIssue": "effect-build/Matrix#Failure",
+          "runtime-export:effect-build:.:MatrixError": "effect-build#Matrix"
+        }
+      },
+      "rationale": "The exact effect-build/Matrix module replaces the 0.3 aggregate error with InvalidInput plus an ordered Success/Failure Report; scalar operation modules expose their exact MatrixReport projection.",
+      "decisionRefs": ["D4", "M2", "M3", "R7"],
+      "operationRefs": ["BUN-COMPILE-EXECUTABLE-MATRIX", "DENO-COMPILE-EXECUTABLE-MATRIX"]
+    },
+    {
+      "id": "MAP-CORE-TARGET-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "namespace-runtime-export:effect-build:.:Target.SystemTarget": "effect-build/SystemTarget#SystemTarget",
+          "runtime-export:effect-build:.:Target": "effect-build#SystemTarget"
+        }
+      },
+      "rationale": "The exact effect-build/SystemTarget module replaces the 0.3 Target namespace. ResolutionTarget has no successor and is mapped separately as a removal.",
+      "decisionRefs": ["D2", "D4", "M8"],
+      "operationRefs": []
+    },
+    {
+      "id": "MAP-CORE-STAGE-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "The frozen Artifact and Author contracts contain no public linear stage tuple. Tool observations and final artifact observations are modeled separately.",
+      "rationale": "Delete Artifact.StageObservation; it is neither a receipt nor a provenance contract and receives no alias.",
+      "decisionRefs": ["D2", "D3", "D4"]
+    },
+    {
+      "id": "MAP-CORE-RESOLUTION-TARGET-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "The frozen SystemTarget module models executable system targets. The 0.3 JavaScript-bundle ResolutionTarget literal belonged to the removed bundle capability and has no successor.",
+      "rationale": "Delete Target.ResolutionTarget; do not conflate Node module resolution with executable system target selection.",
+      "decisionRefs": ["D2", "D4", "D16"]
+    },
+    {
+      "id": "MAP-INTEGRATION-EXPORTS-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "The entire generic Integration public path is a named D4 removal. Frozen Author modules and official Effect process APIs have narrower contracts and are not compatibility aliases.",
+      "rationale": "Every 0.3 Integration runtime and declaration export is removed with its containing subpath; no compatibility delegate survives.",
+      "decisionRefs": ["D2", "D3", "D4"]
+    },
+    {
+      "id": "MAP-PROVIDER-EXPORTS-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "The entire generic Provider public path and command-compiler factory are named hard-cut removals. Frozen Author/Tool#define does not recreate the Provider abstraction.",
+      "rationale": "Every 0.3 Provider runtime and declaration export is removed with its containing subpath; provider policy stays operation-specific.",
+      "decisionRefs": ["D2", "D3", "D4"]
+    },
+    {
+      "id": "MAP-BUN-COMPILE-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "documented-operation:effect-build-bun:.:compileExecutable": "effect-build-bun/CompileExecutable#compileExecutable",
+          "runtime-export:effect-build-bun:.:compileExecutable": "effect-build-bun/CompileExecutable#compileExecutable"
+        }
+      },
+      "rationale": "CAN-BUN-012 is frozen at effect-build-bun/CompileExecutable#compileExecutable. The root callable is removed; only the namespace re-export remains.",
+      "decisionRefs": ["D4", "M3", "M8", "R1", "R1-ROOTS", "R1-STOP"],
+      "operationRefs": ["CAN-BUN-012"]
+    },
+    {
+      "id": "MAP-BUN-COMPILE-CONTRACT-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-bun:.:Artifact": "effect-build-bun/CompileExecutable#Artifact",
+          "declaration-only-export:effect-build-bun:.:CompileExecutableInput": "effect-build-bun/CompileExecutable#CompileExecutableInput",
+          "declaration-only-export:effect-build-bun:.:Options": "effect-build-bun/CompileExecutable#Options",
+          "runtime-export:effect-build-bun:.:Target": "effect-build-bun/CompileExecutable#Target"
+        }
+      },
+      "rationale": "The exact CompileExecutable subpath owns Artifact, CompileExecutableInput, Options, and Target. No corresponding root type aliases survive.",
+      "decisionRefs": ["D2", "D4", "M3", "M8", "R1"],
+      "operationRefs": ["CAN-BUN-012"]
+    },
+    {
+      "id": "MAP-BUN-MATRIX-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-bun:.:CompileExecutableMatrixInput": "effect-build-bun/CompileExecutable#CompileExecutableMatrixInput",
+          "declaration-only-export:effect-build-bun:.:MatrixError": [
+            "effect-build-bun/CompileExecutable#MatrixReport",
+            "effect-build/Matrix#InvalidInput"
+          ],
+          "documented-operation:effect-build-bun:.:compileExecutableMatrix": "effect-build-bun/CompileExecutable#compileExecutableMatrix",
+          "runtime-export:effect-build-bun:.:compileExecutableMatrix": "effect-build-bun/CompileExecutable#compileExecutableMatrix"
+        }
+      },
+      "rationale": "The derived matrix operation is frozen at effect-build-bun/CompileExecutable#compileExecutableMatrix with CompileExecutableMatrixInput and MatrixReport; its cells invoke CAN-BUN-012 exactly once.",
+      "decisionRefs": ["D4", "M2", "M3", "M8", "R7"],
+      "operationRefs": ["CAN-BUN-012", "BUN-COMPILE-EXECUTABLE-MATRIX"]
+    },
+    {
+      "id": "MAP-BUN-BUNDLE-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "D16 removes the Bun continuation. Native Bun build candidates CAN-BUN-006 through CAN-BUN-010 are distinct operations, not a drop-in replacement for the old continuation and bundle/error types.",
+      "rationale": "Delete the old continuation and its bundle-specific contracts. All Bun native build candidates are deferred in the frozen 0.4 surface, so there is no replacement operation to import.",
+      "decisionRefs": ["D4", "D16", "R1"]
+    },
+    {
+      "id": "MAP-BUN-COMPILER-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-bun:.:Service": "effect-build-bun/CompileExecutable#Compiler",
+          "runtime-export:effect-build-bun:.:Compiler": "effect-build-bun/CompileExecutable#Compiler"
+        }
+      },
+      "rationale": "The ambiguous root Compiler/Service identity is replaced by the exact effect-build-bun/CompileExecutable#Compiler operation service. No root alias survives.",
+      "decisionRefs": ["D4", "M7", "M8", "R1"],
+      "operationRefs": ["CAN-BUN-012"]
+    },
+    {
+      "id": "MAP-BUN-LAYER-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-bun:.:LayerOptions": "effect-build-bun/CompileExecutable#LayerOptions",
+          "documented-operation:effect-build-bun:.:layer": "effect-build-bun/CompileExecutable#layer",
+          "runtime-export:effect-build-bun:.:layer": "effect-build-bun/CompileExecutable#layer"
+        }
+      },
+      "rationale": "Selected Bun acquisition is frozen as effect-build-bun/CompileExecutable#layer with LayerOptions. The root callable is removed and the root exposes only the CompileExecutable namespace.",
+      "decisionRefs": ["D4", "M7", "M8", "R1"],
+      "operationRefs": ["CAN-BUN-012"]
+    },
+    {
+      "id": "MAP-DENO-COMPILE-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "documented-operation:effect-build-deno:.:compileExecutable": "effect-build-deno/CompileExecutable#compileExecutable",
+          "runtime-export:effect-build-deno:.:compileExecutable": "effect-build-deno/CompileExecutable#compileExecutable"
+        }
+      },
+      "rationale": "CAN-DENO-010 is frozen at effect-build-deno/CompileExecutable#compileExecutable. The root callable is removed; only the namespace re-export remains.",
+      "decisionRefs": ["D4", "M3", "M8", "R1", "R1-ROOTS", "R1-STOP"],
+      "operationRefs": ["CAN-DENO-010"]
+    },
+    {
+      "id": "MAP-DENO-COMPILE-CONTRACT-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-deno:.:Artifact": "effect-build-deno/CompileExecutable#Artifact",
+          "declaration-only-export:effect-build-deno:.:CompileExecutableInput": "effect-build-deno/CompileExecutable#CompileExecutableInput",
+          "declaration-only-export:effect-build-deno:.:Options": "effect-build-deno/CompileExecutable#Options",
+          "declaration-only-export:effect-build-deno:.:PermissionValue": "effect-build-deno/CompileExecutable#PermissionValue",
+          "declaration-only-export:effect-build-deno:.:Permissions": "effect-build-deno/CompileExecutable#Permissions",
+          "runtime-export:effect-build-deno:.:Target": "effect-build-deno/CompileExecutable#Target"
+        }
+      },
+      "rationale": "The exact CompileExecutable subpath owns Artifact, CompileExecutableInput, Options, PermissionValue, Permissions, and Target. No corresponding root aliases survive.",
+      "decisionRefs": ["D2", "D4", "M3", "M8", "R1"],
+      "operationRefs": ["CAN-DENO-010"]
+    },
+    {
+      "id": "MAP-DENO-MATRIX-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-deno:.:CompileExecutableMatrixInput": "effect-build-deno/CompileExecutable#CompileExecutableMatrixInput",
+          "declaration-only-export:effect-build-deno:.:MatrixError": [
+            "effect-build-deno/CompileExecutable#MatrixReport",
+            "effect-build/Matrix#InvalidInput"
+          ],
+          "documented-operation:effect-build-deno:.:compileExecutableMatrix": "effect-build-deno/CompileExecutable#compileExecutableMatrix",
+          "runtime-export:effect-build-deno:.:compileExecutableMatrix": "effect-build-deno/CompileExecutable#compileExecutableMatrix"
+        }
+      },
+      "rationale": "The derived matrix operation is frozen at effect-build-deno/CompileExecutable#compileExecutableMatrix with CompileExecutableMatrixInput and MatrixReport; its cells invoke CAN-DENO-010 exactly once.",
+      "decisionRefs": ["D4", "M2", "M3", "M8", "R7"],
+      "operationRefs": ["CAN-DENO-010", "DENO-COMPILE-EXECUTABLE-MATRIX"]
+    },
+    {
+      "id": "MAP-DENO-COMPILER-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "runtime-export:effect-build-deno:.:Compiler": "effect-build-deno/CompileExecutable#Compiler"
+        }
+      },
+      "rationale": "The ambiguous root Compiler identity is replaced by the exact effect-build-deno/CompileExecutable#Compiler operation service. No root alias survives.",
+      "decisionRefs": ["D4", "M7", "M8", "R1"],
+      "operationRefs": ["CAN-DENO-010"]
+    },
+    {
+      "id": "MAP-DENO-LAYER-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-deno:.:LayerOptions": "effect-build-deno/CompileExecutable#LayerOptions",
+          "documented-operation:effect-build-deno:.:layer": "effect-build-deno/CompileExecutable#layer",
+          "runtime-export:effect-build-deno:.:layer": "effect-build-deno/CompileExecutable#layer"
+        }
+      },
+      "rationale": "Selected Deno acquisition is frozen as effect-build-deno/CompileExecutable#layer with LayerOptions. The root callable is removed and the root exposes only the CompileExecutable namespace.",
+      "decisionRefs": ["D4", "M7", "M8", "R1"],
+      "operationRefs": ["CAN-DENO-010"]
+    },
+    {
+      "id": "MAP-ESBUILD-BUNDLE-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "D4's withJavaScriptBundle removal applies to the old narrow Esbuild continuation. CAN-ESB-001/002 and context candidates are native operations with different request, result, ownership, and lifecycle contracts.",
+      "rationale": "Delete the narrow continuation and bundle-materialization contracts. The frozen Build and Context operations have different request, result, ownership, and lifecycle contracts.",
+      "decisionRefs": ["D2", "D4", "R1"],
+      "operationRefs": ["CAN-ESB-001", "CAN-ESB-011"]
+    },
+    {
+      "id": "MAP-ESBUILD-BUNDLE-CONTRACT-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-esbuild:.:EsbuildBundleError": "effect-build-esbuild/Build#BuildError",
+          "declaration-only-export:effect-build-esbuild:.:JavaScriptBundleInput": "effect-build-esbuild/Build#BuildInput"
+        }
+      },
+      "rationale": "The old narrow JavaScriptBundleInput and EsbuildBundleError declarations map exactly to the frozen one-shot BuildInput and BuildError contracts.",
+      "decisionRefs": ["D2", "D4", "M8", "R1"],
+      "operationRefs": ["CAN-ESB-001"]
+    },
+    {
+      "id": "MAP-ESBUILD-OPERATION-CONTRACT-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "runtime-export:effect-build-esbuild:.:EsbuildDiagnostic": "effect-build-esbuild/Build#BuildError",
+          "runtime-export:effect-build-esbuild:.:EsbuildFailed": "effect-build-esbuild/Build#BuildError",
+          "runtime-export:effect-build-esbuild:.:EsbuildVersionMismatch": "effect-build-esbuild/Build#BuildError",
+          "runtime-export:effect-build-esbuild:.:InvalidBundleInput": "effect-build-esbuild/Build#BuildError"
+        }
+      },
+      "rationale": "The old one-shot diagnostic and validation exports collapse into the exact effect-build-esbuild/Build#BuildError contract; their class-level root identities do not survive.",
+      "decisionRefs": ["D2", "D4", "M8", "R1"],
+      "operationRefs": ["CAN-ESB-001"]
+    },
+    {
+      "id": "MAP-ESBUILD-SERVICE-LAYER-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-esbuild:.:EsbuildLayerError": [
+            "effect-build-esbuild/Build#BuildError",
+            "effect-build-esbuild/Context#ContextError"
+          ],
+          "declaration-only-export:effect-build-esbuild:.:Service": [
+            "effect-build-esbuild/Build#Esbuild",
+            "effect-build-esbuild/Context#Esbuild"
+          ],
+          "documented-operation:effect-build-esbuild:.:layer": [
+            "effect-build-esbuild/Build#layer",
+            "effect-build-esbuild/Context#layer"
+          ],
+          "runtime-export:effect-build-esbuild:.:Esbuild": [
+            "effect-build-esbuild/Build#Esbuild",
+            "effect-build-esbuild/Context#Esbuild"
+          ],
+          "runtime-export:effect-build-esbuild:.:layer": [
+            "effect-build-esbuild/Build#layer",
+            "effect-build-esbuild/Context#layer"
+          ]
+        }
+      },
+      "rationale": "The old root service and Layer surface splits exactly across frozen Build and Context modules. Callers select the one-shot or scoped-context lane explicitly; no root callable survives.",
+      "decisionRefs": ["D2", "D4", "M8", "R1"],
+      "operationRefs": ["CAN-ESB-001", "CAN-ESB-011"]
+    },
+    {
+      "id": "MAP-NODE-CREATE-RENAME",
+      "status": "resolved",
+      "disposition": "rename",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "documented-operation:effect-build-node-sea:.:createExecutable": "effect-build-node-sea/AssembleExecutable#assembleExecutable",
+          "runtime-export:effect-build-node-sea:.:createExecutable": "effect-build-node-sea/AssembleExecutable#assembleExecutable"
+        }
+      },
+      "rationale": "The released direct Node SEA operation maps to frozen CAN-NODE-001 at effect-build-node-sea/AssembleExecutable#assembleExecutable. createExecutable is removed with no alias.",
+      "decisionRefs": ["D4", "M3", "M8", "R1", "R1-ROOTS"],
+      "operationRefs": ["CAN-NODE-001"]
+    },
+    {
+      "id": "MAP-NODE-ASSEMBLY-CONTRACT-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-node-sea:.:Artifact": "effect-build-node-sea/AssembleExecutable#Artifact",
+          "declaration-only-export:effect-build-node-sea:.:CreateExecutableInput": "effect-build-node-sea/AssembleExecutable#AssembleExecutableInput",
+          "declaration-only-export:effect-build-node-sea:.:NodeSeaCreateError": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError",
+          "runtime-export:effect-build-node-sea:.:InvalidNodeSeaInput": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError",
+          "runtime-export:effect-build-node-sea:.:NodeSeaFailed": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError",
+          "runtime-export:effect-build-node-sea:.:NodeSeaPreparationFailed": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError",
+          "runtime-export:effect-build-node-sea:.:NodeSeaPreparationOperation": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError",
+          "runtime-export:effect-build-node-sea:.:NodeSeaProbeFailed": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError",
+          "runtime-export:effect-build-node-sea:.:NodeSeaSpawnFailed": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError",
+          "runtime-export:effect-build-node-sea:.:NodeSeaSyntaxCheckFailed": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError",
+          "runtime-export:effect-build-node-sea:.:NodeSeaToolNotFound": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError"
+        }
+      },
+      "rationale": "The frozen AssembleExecutable module replaces the old direct operation's input, artifact, and error declarations. The 0.3 stage tuple has no successor and is removed separately.",
+      "decisionRefs": ["D2", "D4", "M3", "M8", "R1"],
+      "operationRefs": ["CAN-NODE-001"]
+    },
+    {
+      "id": "MAP-NODE-STAGE-REMOVE",
+      "status": "resolved",
+      "disposition": "remove",
+      "target": null,
+      "noReplacementReason": "The frozen AssembleExecutable module returns its exact Artifact and exposes no public NodeSeaStage tuple.",
+      "rationale": "Delete NodeSeaStage; the final artifact observation is the contract and no legacy stage alias survives.",
+      "decisionRefs": ["D2", "D4", "M3", "M8"]
+    },
+    {
+      "id": "MAP-NODE-SERVICE-LAYER-REPLACE",
+      "status": "resolved",
+      "disposition": "replace",
+      "target": {
+        "status": "exact",
+        "coordinatesByIdentity": {
+          "declaration-only-export:effect-build-node-sea:.:LayerOptions": "effect-build-node-sea/AssembleExecutable#LayerOptions",
+          "declaration-only-export:effect-build-node-sea:.:NodeSeaLayerError": "effect-build-node-sea/AssembleExecutable#AssembleExecutableError",
+          "declaration-only-export:effect-build-node-sea:.:Service": "effect-build-node-sea/AssembleExecutable#Assembler",
+          "documented-operation:effect-build-node-sea:.:layer": "effect-build-node-sea/AssembleExecutable#layer",
+          "runtime-export:effect-build-node-sea:.:NodeSea": "effect-build-node-sea/AssembleExecutable#Assembler",
+          "runtime-export:effect-build-node-sea:.:layer": "effect-build-node-sea/AssembleExecutable#layer"
+        }
+      },
+      "rationale": "Selected Node acquisition is frozen as AssembleExecutable#Assembler and #layer with LayerOptions. CAN-NODE-002/003 are deferred legacy-only and receive no mapping or alias.",
+      "decisionRefs": ["D2", "D4", "M7", "M8", "R1"],
+      "operationRefs": ["CAN-NODE-001"]
+    }
+  ],
+  "mappingGroups": [
+    {
+      "rule": "MAP-PACKAGE-ROOT-RETAIN",
+      "identities": [
+        "package-root:effect-build",
+        "package-root:effect-build-bun",
+        "package-root:effect-build-deno",
+        "package-root:effect-build-esbuild",
+        "package-root:effect-build-node-sea"
+      ]
+    },
+    {
+      "rule": "MAP-INTEGRATION-SUBPATH-REMOVE",
+      "identities": ["subpath:effect-build:./Integration"]
+    },
+    {
+      "rule": "MAP-PROVIDER-SUBPATH-REMOVE",
+      "identities": ["subpath:effect-build:./Provider"]
+    },
+    {
+      "rule": "MAP-CORE-ARTIFACT-REPLACE",
+      "identities": [
+        "namespace-runtime-export:effect-build:.:Artifact.AbsolutePath",
+        "namespace-runtime-export:effect-build:.:Artifact.ByteCount",
+        "namespace-runtime-export:effect-build:.:Artifact.Digest",
+        "namespace-runtime-export:effect-build:.:Artifact.ExecutableArtifact",
+        "namespace-runtime-export:effect-build:.:Artifact.FileArtifact",
+        "namespace-runtime-export:effect-build:.:Artifact.ToolObservation",
+        "runtime-export:effect-build:.:Artifact"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-STAGE-REMOVE",
+      "identities": ["namespace-runtime-export:effect-build:.:Artifact.StageObservation"]
+    },
+    {
+      "rule": "MAP-CORE-BUILD-ERROR-REMOVE",
+      "identities": [
+        "namespace-runtime-export:effect-build:.:BuildError.BuildError",
+        "namespace-runtime-export:effect-build:.:BuildError.Diagnostic",
+        "namespace-runtime-export:effect-build:.:BuildError.DiagnosticChannel",
+        "namespace-runtime-export:effect-build:.:BuildError.InvalidDriverOptions",
+        "namespace-runtime-export:effect-build:.:BuildError.OutputInvalid",
+        "namespace-runtime-export:effect-build:.:BuildError.OutputLocked",
+        "namespace-runtime-export:effect-build:.:BuildError.OutputMissing",
+        "namespace-runtime-export:effect-build:.:BuildError.PublicationFailed",
+        "namespace-runtime-export:effect-build:.:BuildError.TargetUnsupported",
+        "namespace-runtime-export:effect-build:.:BuildError.ToolFailed",
+        "namespace-runtime-export:effect-build:.:BuildError.ToolNotFound",
+        "namespace-runtime-export:effect-build:.:BuildError.ToolProbeFailed",
+        "runtime-export:effect-build:.:BuildError"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-BUNDLE-REMOVE",
+      "identities": [
+        "namespace-declaration-only-export:effect-build:.:JavaScriptBundle.Artifact",
+        "namespace-declaration-only-export:effect-build:.:JavaScriptBundle.Input",
+        "namespace-declaration-only-export:effect-build:.:JavaScriptBundle.JavaScriptBundleError",
+        "namespace-runtime-export:effect-build:.:JavaScriptBundle.Format",
+        "namespace-runtime-export:effect-build:.:JavaScriptBundle.InvalidJavaScriptBundle",
+        "namespace-runtime-export:effect-build:.:JavaScriptBundle.InvalidReason",
+        "namespace-runtime-export:effect-build:.:JavaScriptBundle.JavaScriptBundleAccessFailed",
+        "namespace-runtime-export:effect-build:.:JavaScriptBundle.JavaScriptBundleAccessOperation",
+        "namespace-runtime-export:effect-build:.:JavaScriptBundle.JavaScriptBundleTemporaryDirectoryFailed",
+        "namespace-runtime-export:effect-build:.:JavaScriptBundle.withFile",
+        "runtime-export:effect-build:.:JavaScriptBundle"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-MATRIX-REPLACE",
+      "identities": [
+        "namespace-runtime-export:effect-build:.:MatrixError.CellFailure",
+        "namespace-runtime-export:effect-build:.:MatrixError.InvalidMatrixInput",
+        "namespace-runtime-export:effect-build:.:MatrixError.MatrixError",
+        "namespace-runtime-export:effect-build:.:MatrixError.MatrixFailed",
+        "namespace-runtime-export:effect-build:.:MatrixError.MatrixIssue",
+        "runtime-export:effect-build:.:MatrixError"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-TARGET-REPLACE",
+      "identities": [
+        "namespace-runtime-export:effect-build:.:Target.SystemTarget",
+        "runtime-export:effect-build:.:Target"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-RESOLUTION-TARGET-REMOVE",
+      "identities": ["namespace-runtime-export:effect-build:.:Target.ResolutionTarget"]
+    },
+    {
+      "rule": "MAP-INTEGRATION-EXPORTS-REMOVE",
+      "identities": [
+        "declaration-only-export:effect-build:./Integration:CommandCompletion",
+        "declaration-only-export:effect-build:./Integration:CommandOutput",
+        "declaration-only-export:effect-build:./Integration:ExecuteCommand",
+        "declaration-only-export:effect-build:./Integration:NativeExecutableObservation",
+        "declaration-only-export:effect-build:./Integration:PublishedExecutable",
+        "runtime-export:effect-build:./Integration:executeCommand",
+        "runtime-export:effect-build:./Integration:inspectLiveJavaScriptBundle",
+        "runtime-export:effect-build:./Integration:produceExecutable",
+        "runtime-export:effect-build:./Integration:withOwnedJavaScriptBundle"
+      ]
+    },
+    {
+      "rule": "MAP-PROVIDER-EXPORTS-REMOVE",
+      "identities": [
+        "declaration-only-export:effect-build:./Provider:BoundCommand",
+        "declaration-only-export:effect-build:./Provider:BuildError",
+        "declaration-only-export:effect-build:./Provider:CommandDefinition",
+        "declaration-only-export:effect-build:./Provider:CommandServiceContext",
+        "declaration-only-export:effect-build:./Provider:CompileExecutableInput",
+        "declaration-only-export:effect-build:./Provider:CompileExecutableMatrixInput",
+        "declaration-only-export:effect-build:./Provider:CompilerService",
+        "declaration-only-export:effect-build:./Provider:Defined",
+        "declaration-only-export:effect-build:./Provider:LayerOptions",
+        "declaration-only-export:effect-build:./Provider:PreparedCommandInput",
+        "declaration-only-export:effect-build:./Provider:ProviderArtifact",
+        "declaration-only-export:effect-build:./Provider:ProviderLayerRequirements",
+        "declaration-only-export:effect-build:./Provider:ProviderMatrixError",
+        "declaration-only-export:effect-build:./Provider:ProviderStage",
+        "declaration-only-export:effect-build:./Provider:ProviderStages",
+        "declaration-only-export:effect-build:./Provider:ToolNotFound",
+        "declaration-only-export:effect-build:./Provider:ToolProbeFailed",
+        "documented-operation:effect-build:./Provider:define",
+        "runtime-export:effect-build:./Provider:define"
+      ]
+    },
+    {
+      "rule": "MAP-BUN-COMPILE-REPLACE",
+      "identities": [
+        "documented-operation:effect-build-bun:.:compileExecutable",
+        "runtime-export:effect-build-bun:.:compileExecutable"
+      ]
+    },
+    {
+      "rule": "MAP-BUN-COMPILE-CONTRACT-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-bun:.:Artifact",
+        "declaration-only-export:effect-build-bun:.:CompileExecutableInput",
+        "declaration-only-export:effect-build-bun:.:Options",
+        "runtime-export:effect-build-bun:.:Target"
+      ]
+    },
+    {
+      "rule": "MAP-BUN-MATRIX-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-bun:.:CompileExecutableMatrixInput",
+        "declaration-only-export:effect-build-bun:.:MatrixError",
+        "documented-operation:effect-build-bun:.:compileExecutableMatrix",
+        "runtime-export:effect-build-bun:.:compileExecutableMatrix"
+      ]
+    },
+    {
+      "rule": "MAP-BUN-BUNDLE-REMOVE",
+      "identities": [
+        "declaration-only-export:effect-build-bun:.:BunBundleError",
+        "declaration-only-export:effect-build-bun:.:BunBundleStage",
+        "declaration-only-export:effect-build-bun:.:JavaScriptBundleInput",
+        "documented-operation:effect-build-bun:.:withJavaScriptBundle",
+        "runtime-export:effect-build-bun:.:BunBundleFailed",
+        "runtime-export:effect-build-bun:.:BunBundleInvalid",
+        "runtime-export:effect-build-bun:.:BunBundleMaterializationFailed",
+        "runtime-export:effect-build-bun:.:BunBundleMaterializationOperation",
+        "runtime-export:effect-build-bun:.:BunBundleSpawnFailed",
+        "runtime-export:effect-build-bun:.:BunBundleVersionMismatch",
+        "runtime-export:effect-build-bun:.:InvalidBundleInput",
+        "runtime-export:effect-build-bun:.:withJavaScriptBundle"
+      ]
+    },
+    {
+      "rule": "MAP-BUN-COMPILER-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-bun:.:Service",
+        "runtime-export:effect-build-bun:.:Compiler"
+      ]
+    },
+    {
+      "rule": "MAP-BUN-LAYER-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-bun:.:LayerOptions",
+        "documented-operation:effect-build-bun:.:layer",
+        "runtime-export:effect-build-bun:.:layer"
+      ]
+    },
+    {
+      "rule": "MAP-DENO-COMPILE-REPLACE",
+      "identities": [
+        "documented-operation:effect-build-deno:.:compileExecutable",
+        "runtime-export:effect-build-deno:.:compileExecutable"
+      ]
+    },
+    {
+      "rule": "MAP-DENO-COMPILE-CONTRACT-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-deno:.:Artifact",
+        "declaration-only-export:effect-build-deno:.:CompileExecutableInput",
+        "declaration-only-export:effect-build-deno:.:Options",
+        "declaration-only-export:effect-build-deno:.:PermissionValue",
+        "declaration-only-export:effect-build-deno:.:Permissions",
+        "runtime-export:effect-build-deno:.:Target"
+      ]
+    },
+    {
+      "rule": "MAP-DENO-MATRIX-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-deno:.:CompileExecutableMatrixInput",
+        "declaration-only-export:effect-build-deno:.:MatrixError",
+        "documented-operation:effect-build-deno:.:compileExecutableMatrix",
+        "runtime-export:effect-build-deno:.:compileExecutableMatrix"
+      ]
+    },
+    {
+      "rule": "MAP-DENO-COMPILER-REPLACE",
+      "identities": ["runtime-export:effect-build-deno:.:Compiler"]
+    },
+    {
+      "rule": "MAP-DENO-LAYER-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-deno:.:LayerOptions",
+        "documented-operation:effect-build-deno:.:layer",
+        "runtime-export:effect-build-deno:.:layer"
+      ]
+    },
+    {
+      "rule": "MAP-ESBUILD-BUNDLE-REMOVE",
+      "identities": [
+        "documented-operation:effect-build-esbuild:.:withJavaScriptBundle",
+        "runtime-export:effect-build-esbuild:.:BundleMaterializationFailed",
+        "runtime-export:effect-build-esbuild:.:BundleMaterializationOperation",
+        "runtime-export:effect-build-esbuild:.:JavaScriptBundleInvalid",
+        "runtime-export:effect-build-esbuild:.:withJavaScriptBundle"
+      ]
+    },
+    {
+      "rule": "MAP-ESBUILD-BUNDLE-CONTRACT-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-esbuild:.:EsbuildBundleError",
+        "declaration-only-export:effect-build-esbuild:.:JavaScriptBundleInput"
+      ]
+    },
+    {
+      "rule": "MAP-ESBUILD-OPERATION-CONTRACT-REPLACE",
+      "identities": [
+        "runtime-export:effect-build-esbuild:.:EsbuildDiagnostic",
+        "runtime-export:effect-build-esbuild:.:EsbuildFailed",
+        "runtime-export:effect-build-esbuild:.:EsbuildVersionMismatch",
+        "runtime-export:effect-build-esbuild:.:InvalidBundleInput"
+      ]
+    },
+    {
+      "rule": "MAP-ESBUILD-SERVICE-LAYER-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-esbuild:.:EsbuildLayerError",
+        "declaration-only-export:effect-build-esbuild:.:Service",
+        "documented-operation:effect-build-esbuild:.:layer",
+        "runtime-export:effect-build-esbuild:.:Esbuild",
+        "runtime-export:effect-build-esbuild:.:layer"
+      ]
+    },
+    {
+      "rule": "MAP-NODE-CREATE-RENAME",
+      "identities": [
+        "documented-operation:effect-build-node-sea:.:createExecutable",
+        "runtime-export:effect-build-node-sea:.:createExecutable"
+      ]
+    },
+    {
+      "rule": "MAP-NODE-ASSEMBLY-CONTRACT-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-node-sea:.:Artifact",
+        "declaration-only-export:effect-build-node-sea:.:CreateExecutableInput",
+        "declaration-only-export:effect-build-node-sea:.:NodeSeaCreateError",
+        "runtime-export:effect-build-node-sea:.:InvalidNodeSeaInput",
+        "runtime-export:effect-build-node-sea:.:NodeSeaFailed",
+        "runtime-export:effect-build-node-sea:.:NodeSeaPreparationFailed",
+        "runtime-export:effect-build-node-sea:.:NodeSeaPreparationOperation",
+        "runtime-export:effect-build-node-sea:.:NodeSeaProbeFailed",
+        "runtime-export:effect-build-node-sea:.:NodeSeaSpawnFailed",
+        "runtime-export:effect-build-node-sea:.:NodeSeaSyntaxCheckFailed",
+        "runtime-export:effect-build-node-sea:.:NodeSeaToolNotFound"
+      ]
+    },
+    {
+      "rule": "MAP-NODE-STAGE-REMOVE",
+      "identities": ["declaration-only-export:effect-build-node-sea:.:NodeSeaStage"]
+    },
+    {
+      "rule": "MAP-NODE-SERVICE-LAYER-REPLACE",
+      "identities": [
+        "declaration-only-export:effect-build-node-sea:.:LayerOptions",
+        "declaration-only-export:effect-build-node-sea:.:NodeSeaLayerError",
+        "declaration-only-export:effect-build-node-sea:.:Service",
+        "documented-operation:effect-build-node-sea:.:layer",
+        "runtime-export:effect-build-node-sea:.:NodeSea",
+        "runtime-export:effect-build-node-sea:.:layer"
+      ]
+    }
+  ]
+}
