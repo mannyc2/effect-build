@@ -1,10 +1,12 @@
 # Cross-lane reconciliation: canonical operation model
 
 Date: 2026-08-18.
-Status: **reconciliation work product; schema reconciled, surface not frozen** under the protocol
-recorded in `DECISION-RECORD.md`. Determinations state whether they follow from a decision,
+Status: **completed reconciliation work product; superseded for future-0.4 surface authority by
+`../freeze/SURFACE.json` and `../freeze/MIGRATION.json`** under the protocol recorded in
+`DECISION-RECORD.md`. Determinations state whether they follow from a decision,
 evidence, maintainer choice, or open research; table rows also keep evidence, priority,
-compatibility, implementation, and certification status separate. Nothing pending is canon.
+compatibility, implementation, and certification status separate. Historical pending rows below
+are not the frozen surface.
 
 Inputs reconciled: `lanes/provider-native-breadth/provider-operation-inventory.csv` (54 rows),
 `lanes/compatibility-dx/operation-version-matrix.csv` (35 rows), `api-command-boundary.md`,
@@ -311,17 +313,18 @@ part of the independent D15 provider-package gate.
 
 ## 6. What this unlocks
 
-With §1's schema closed, the breadth supplement and probes can file results under stable identity
-dimensions; the D15 Rolldown dossier has its schema. It does **not** yet unlock Plan 039
-implementation. The remaining sequence is:
+The R1-R7 program completed the sequence below. Every candidate received an explicit final
+disposition, M1-M8 were decided, the exact surface and migration maps were frozen, the active
+instruction was cut over, and Plans 039-044 were rewritten. Plan 039 is now ready; implementation
+and certification have not begun.
 
 ```text
-complete operation crosswalk and bounded research
+completed operation crosswalk and bounded research
   -> record every ship/defer/reject disposition
   -> answer the genuine maintainer questions
   -> authorize the active-instruction cutover
   -> freeze one public surface and removal map
   -> rewrite Plans 039-044
-  -> implement
-  -> certify the frozen candidate
+  -> [next] implement Plans 039-044
+  -> [next] certify the frozen candidate
 ```

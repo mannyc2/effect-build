@@ -5,7 +5,7 @@
       "receipt": "repository-scope",
       "id": "research-only-repository-scope",
       "classification": "established",
-      "conclusion": "exact-head-descends-from-release-and-approved-base-with-only-research-workflow-plan-and-architecture-test-changes"
+      "conclusion": "exact-head-descends-from-release-and-approved-base-with-only-instruction-ci-research-workflow-plan-and-architecture-test-changes"
     },
     {
       "receipt": "remote-head",

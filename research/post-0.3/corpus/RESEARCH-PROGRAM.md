@@ -1,8 +1,11 @@
 # Research program required for the 0.4 surface freeze
 
-Date: 2026-08-18.
-Status: **bounded research assignments**. These are not implementation plans or certification
-claims.
+Date: 2026-08-18; completed freeze disposition: 2026-08-21.
+Status: **R1-R7 complete for the exact initial 0.4 freeze**. R8-R10 remain
+feature-bound follow-up research and do not block the deliberately narrower
+surface. These assignments are not production implementations or release
+authority. Exact results live under `../reconciliation/`; the future-0.4
+authority is `../freeze/SURFACE.json` together with `../freeze/MIGRATION.json`.
 
 The goal is not to wait for external adoption. The goal is to manufacture the missing evidence
 through broader native inventories, adversarial applications, independent implementations, and

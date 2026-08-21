@@ -63,6 +63,16 @@
     },
     {
       "lane": "linux",
+      "script": "research/post-0.3/certify-r3-r4.mjs",
+      "receipts": ["r3-provider-compatibility", "r4-author-laws", "r4-external-author-adapter"]
+    },
+    {
+      "lane": "linux",
+      "script": "research/post-0.3/certify-surface-freeze.mjs",
+      "receipts": ["surface-freeze"]
+    },
+    {
+      "lane": "linux",
       "script": "research/post-0.3/certify-r7-matrix-laws.mjs",
       "receipts": ["r7-matrix-laws"]
     },

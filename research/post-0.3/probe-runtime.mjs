@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
@@ -12,6 +12,25 @@ const execFileAsync = promisify(execFile);
 export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const sourceSha = process.env.SOURCE_SHA;
 infrastructure(typeof sourceSha === "string" && /^[0-9a-f]{40}$/.test(sourceSha), "SOURCE_SHA must be a commit SHA");
+
+const receiptRoot = process.env.RESEARCH_RECEIPTS_DIR;
+infrastructure(typeof receiptRoot === "string" && isAbsolute(receiptRoot), "RESEARCH_RECEIPTS_DIR must be an absolute path");
+const receiptRelative = relative(repository, receiptRoot);
+infrastructure(
+  receiptRelative === ".." || receiptRelative.startsWith(`..${sep}`) || isAbsolute(receiptRelative),
+  "RESEARCH_RECEIPTS_DIR must be outside the repository",
+);
+const repositoryHead = (await execFileAsync("git", ["rev-parse", "HEAD"], {
+  cwd: repository,
+  encoding: "utf8",
+})).stdout.trim();
+infrastructure(repositoryHead === sourceSha, `checked-out source ${repositoryHead} does not equal SOURCE_SHA ${sourceSha}`);
+const repositoryStatus = (await execFileAsync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+  cwd: repository,
+  encoding: "utf8",
+  maxBuffer: 64 * 1024 * 1024,
+})).stdout.trim();
+infrastructure(repositoryStatus.length === 0, `repository working tree is dirty:\n${repositoryStatus}`);
 
 export const requiredPath = async (name) => {
   const value = process.env[name];

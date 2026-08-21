@@ -1,5 +1,19 @@
 # effect-build implementation plans
 
+## Current 0.4 program
+
+The post-0.3 research-to-freeze program completed on 2026-08-21. Its exact
+machine-readable authority is
+`research/post-0.3/freeze/SURFACE.json` together with
+`research/post-0.3/freeze/MIGRATION.json`; `AGENTS.md` is the matching active
+execution instruction. Plans 039-044 have been rewritten from that frozen
+scope. Plan 039 is ready to begin. No Plan 039 production implementation, merge,
+publication, tag, or release is implied by the freeze.
+
+Plans 001-038 remain historical execution and decision records. Where their
+prose conflicts with the 0.4 freeze, the exact surface/migration artifacts and
+rewritten Plans 039-044 control future implementation.
+
 Originally reconciled by the `improve` skill on 2026-08-09 at commit `15b6abb`
 after a product-direction interview and source/verification audit. Re-audited
 with the same read-only planning workflow on 2026-08-12 at commit `eb2995c`
@@ -312,8 +326,14 @@ direction. Plans 016-020 remain factual implementation history.
 | 036 | Bootstrap npm namespaces and one trusted publisher | P0 | M | 032, 035, approval | DONE |
 | 037 | Recertify and release the exact five-package bytes | P0 | L | 028-036, approval | DONE |
 | 038 | Evaluate JavaScriptBundler and ExecutableBuilder promotion | P1 | L | 037, approval for public cut | DONE (NOT EARNED) |
+| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | READY |
+| 040 | Implement the admitted Esbuild operations | P1 | L | 039 | TODO |
+| 041 | Implement the frozen Bun executable lane | P1 | L | 039 | TODO |
+| 042 | Implement the frozen Deno executable lane | P1 | L | 039 | TODO |
+| 043 | Implement direct Node SEA assembly | P1 | L | 039 | TODO |
+| 044 | Hard-cut and certify the frozen 0.4 candidate | P0 | XL | 039-043 | TODO |
 
-Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
+Status values: `READY`, `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says
 the implementation happened; it does not make that design part of the active
 product. `DONE (NOT EARNED)` is the completed evidence-backed decision variant

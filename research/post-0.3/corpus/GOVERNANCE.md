@@ -13,7 +13,8 @@ research import. It does not change repository execution authority.
 4. `PRODUCT-DECISIONS-REMAINING.md` — only questions that require maintainer preference.
 5. `RESEARCH-PROGRAM.md` — evidence work needed before the 0.4 surface freeze.
 6. Imported synthesis and lane reports — evidence, alternatives, and falsifiers.
-7. Plans 039-044 — historical execution proposals until they are rewritten from the frozen surface.
+7. `../freeze/SURFACE.json` and `../freeze/MIGRATION.json` — exact future-0.4 authority.
+8. Plans 039-044 — rewritten execution sequence for that exact frozen scope.
 
 `IMPORT-MANIFEST.sha256` authenticates the original corpus import. The hand-authored documents
 added after that import are intentionally outside it; modifying the import manifest to make a new
@@ -26,11 +27,15 @@ overriding an active `AGENTS.md`, session instruction, branch rule, release gate
 approval. When they disagree, the conflict is a blocker and must be resolved through the authority
 that owns the active instruction.
 
-At this commit, the repository instruction still requires exactly five packages and retention of
-the released compile matrix and bundle continuation. D15 proposes a sixth first-party Rolldown
-package, and D16 removes the bundle continuation; the matrix remains undecided. Therefore Plan 039
-implementation is not yet authorized. The required cutover is an explicit maintainer action after
-the surface and removal map are frozen, not an inference from the presence of this corpus.
+The 2026-08-21 freeze commit completes the required authority cutover. Its `AGENTS.md`,
+`../freeze/SURFACE.json`, `../freeze/MIGRATION.json`, and rewritten Plans 039-044 agree: five
+first-party packages remain, Rolldown and portable profiles are deferred, the bundle continuation
+is removed at the 0.4 hard cut, and the executable matrix is retained only with the independently
+committing result redesign. Plan 039 is ready to begin. No merge, publication, tag, release, or
+Plan 039 production change occurred as part of the research/freeze commit.
+The temporary write-capable canonical-closure workflow and bundled patch
+transport were removed; current research workflows are read-only and certify
+the checked-out head rather than rewriting it.
 
 The 0.3 public surface remains the contract for 0.3.x. The proposed 0.4 hard cut can retract named
 0.3 APIs only in 0.4, with migration documentation and negative export/type tests.

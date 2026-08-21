@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -161,6 +163,9 @@ const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "release"): st
       if (checkout?.uses !== checkoutAction) errors.push(`${jobName} must checkout first`);
       if (checkout?.with?.ref !== "${{ github.sha }}") errors.push(`${jobName} checkout ref is not github.sha`);
       if (checkout?.with?.["persist-credentials"] !== false) errors.push(`${jobName} checkout persists credentials`);
+      if (jobName === "quality" && checkout?.with?.["fetch-depth"] !== 0) {
+        errors.push("quality must fetch complete history for the frozen migration authority");
+      }
       if (
         guard?.env?.SOURCE_SHA !== "${{ github.sha }}"
         || guard.shell !== "bash"
@@ -203,6 +208,9 @@ const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "release"): st
         errors.push(`${jobName} checkout ref is not the validated source output`);
       }
       if (checkout?.with?.["persist-credentials"] !== false) errors.push(`${jobName} checkout persists credentials`);
+      if (jobName === "candidate-gates" && checkout?.with?.["fetch-depth"] !== 0) {
+        errors.push(`${jobName} must fetch complete history for the frozen migration authority`);
+      }
       if (
         guard?.env?.REQUESTED_SOURCE !== "${{ steps.source.outputs.sha }}"
         || guard.env?.WORKFLOW_SOURCE !== "${{ github.sha }}"
@@ -470,6 +478,9 @@ describe("tooling pins and workflow contracts", () => {
       "windows-research",
       "aggregate-certification",
     ]);
+    for (const job of Object.values(workflow.jobs)) {
+      expect(JSON.stringify(job.env ?? {})).not.toContain("runner.temp");
+    }
 
     const receiptContract = await import(
       pathToFileURL(resolve(root, "research/post-0.3/receipt-contract.mjs")).href
@@ -490,11 +501,37 @@ describe("tooling pins and workflow contracts", () => {
     expect(() => receiptContract.validateProducerCoverage(expectations, manifest)).not.toThrow();
     expect(manifest.receiptIds).toContain("repository-scope");
     expect(manifest.receiptIds).toContain("remote-head");
+    expect(manifest.receiptIds).toContain("surface-freeze");
     expect([...new Set(manifest.producers.map((producer) => producer.lane))].sort()).toEqual([
       "aggregate",
       "linux",
       "windows",
     ]);
+    const probeRuntime = await readFile(resolve(root, "research/post-0.3/probe-runtime.mjs"), "utf8");
+    expect(probeRuntime).toContain('["rev-parse", "HEAD"]');
+    expect(probeRuntime).toContain('["status", "--porcelain=v1", "--untracked-files=all"]');
+    expect(probeRuntime).toContain("RESEARCH_RECEIPTS_DIR must be outside the repository");
+    expect(probeRuntime).toContain("repository working tree is dirty");
+    const repositoryScope = await readFile(
+      resolve(root, "research/post-0.3/certify-repository-scope.mjs"),
+      "utf8",
+    );
+    expect(repositoryScope).not.toContain('path === ".github/workflows/research-toolchain-export.yml"');
+    expect(repositoryScope).not.toContain('path.startsWith(".github/research/")');
+    const linuxRuns = jobRuns(workflow, "linux-research");
+    expect(linuxRuns).not.toContain("node --test research/post-0.3/*.test.mjs");
+    for (
+      const nodeSuite of [
+        "architecture-laws.test.mjs",
+        "declaration-classifier.test.mjs",
+        "duplicate-core.test.mjs",
+        "r7-matrix-laws.test.mjs",
+        "receipt-contract.test.mjs",
+      ]
+    ) expect(linuxRuns).toContain(`research/post-0.3/${nodeSuite}`);
+    expect(linuxRuns).toContain("bun test");
+    expect(linuxRuns).toContain("research/post-0.3/r3-provider-compatibility.test.ts");
+    expect(linuxRuns).toContain("research/post-0.3/r4-author-laws.test.mjs");
 
     for (
       const [jobName, lane, fetchDepth] of [
@@ -516,9 +553,12 @@ describe("tooling pins and workflow contracts", () => {
       expect(jobRuns(workflow, jobName)).toContain(
         `node research/post-0.3/run-receipt-producers.mjs --lane ${lane}`,
       );
+      const producer = job.steps!.find((step) => step.run?.includes(`--lane ${lane}`))!;
+      expect(producer.env?.RESEARCH_RECEIPTS_DIR).toContain("${{ runner.temp }}");
       const upload = job.steps!.find((step) => step.uses === uploadArtifactAction)!;
       expect(upload.id).toBe("receipt-artifact");
       expect(upload.if).toBe("${{ always() }}");
+      expect(upload.with?.path).toContain("${{ runner.temp }}");
       expect(upload.with?.["if-no-files-found"]).toBe("error");
     }
 
@@ -547,8 +587,17 @@ describe("tooling pins and workflow contracts", () => {
     expect(download.with).toMatchObject({
       "artifact-ids":
         "${{ needs.linux-research.outputs.receipt-artifact-id }},${{ needs.windows-research.outputs.receipt-artifact-id }}",
+      path: "${{ runner.temp }}/effect-build-architecture-aggregate",
       "merge-multiple": true,
     });
+    const aggregateProducer = aggregate.steps!.find((step) => step.run?.includes("--lane aggregate"))!;
+    const aggregateValidator = aggregate.steps!.find((step) => step.run?.includes("validate-receipts.mjs"))!;
+    expect(aggregateProducer.env?.RESEARCH_RECEIPTS_DIR).toBe(
+      "${{ runner.temp }}/effect-build-architecture-aggregate",
+    );
+    expect(aggregateValidator.env?.RESEARCH_RECEIPTS_DIR).toBe(
+      "${{ runner.temp }}/effect-build-architecture-aggregate",
+    );
     expect(jobRuns(workflow, "aggregate-certification")).toContain(
       "node research/post-0.3/run-receipt-producers.mjs --lane aggregate",
     );
@@ -558,6 +607,31 @@ describe("tooling pins and workflow contracts", () => {
     const certificationUpload = aggregate.steps!.find((step) => step.uses === uploadArtifactAction)!;
     expect(certificationUpload.with?.["if-no-files-found"]).toBe("error");
     expect(JSON.stringify(workflow)).not.toContain('"if-no-files-found":"warn"');
+  });
+
+  it("keeps the surface, migration, active instruction, and implementation plans in one exact freeze", () => {
+    const report = JSON.parse(execFileSync(
+      process.execPath,
+      [resolve(root, "research/post-0.3/freeze/validate-freeze.mjs"), "--json"],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    )) as {
+      result: string;
+      migrationObservations: number;
+      migrationBlockers: number;
+      plan039: string;
+      productionImplementation: string;
+      publicationAuthority: string;
+    };
+    expect(report).toMatchObject({
+      result: "FREEZE_OK",
+      migrationObservations: 155,
+      migrationBlockers: 0,
+      plan039: "READY",
+      productionImplementation: "not-started",
+      publicationAuthority: "NONE",
+    });
+    expect(existsSync(resolve(root, ".github/workflows/research-toolchain-export.yml"))).toBe(false);
+    expect(existsSync(resolve(root, ".github/research/closure-patch/part-00"))).toBe(false);
   });
 
   it("makes specialized node-sea CI depend on quality without retaining full verification", async () => {
@@ -1234,6 +1308,12 @@ describe("tooling pins and workflow contracts", () => {
     delayedGuard.jobs.quality!.steps!.splice(1, 1);
     expect(workflowAuthorityErrors(delayedGuard, "ci")).toContain("quality lacks the immediate exact-SHA HEAD guard");
 
+    const shallowQuality = structuredClone(ci);
+    delete shallowQuality.jobs.quality!.steps![0]!.with!["fetch-depth"];
+    expect(workflowAuthorityErrors(shallowQuality, "ci")).toContain(
+      "quality must fetch complete history for the frozen migration authority",
+    );
+
     const credentials = structuredClone(ci);
     credentials.jobs.quality!.steps![0]!.with!["persist-credentials"] = true;
     expect(workflowAuthorityErrors(credentials, "ci")).toContain("quality checkout persists credentials");
@@ -1262,6 +1342,12 @@ describe("tooling pins and workflow contracts", () => {
     wrongDispatchRef.jobs["candidate-gates"]!.steps![1]!.with!.ref = "${{ inputs.commit }}";
     expect(workflowAuthorityErrors(wrongDispatchRef, "release")).toContain(
       "candidate-gates checkout ref is not the validated source output",
+    );
+
+    const shallowCandidate = structuredClone(dispatch);
+    delete shallowCandidate.jobs["candidate-gates"]!.steps![1]!.with!["fetch-depth"];
+    expect(workflowAuthorityErrors(shallowCandidate, "release")).toContain(
+      "candidate-gates must fetch complete history for the frozen migration authority",
     );
 
     const missingEquality = structuredClone(dispatch);

@@ -40,11 +40,12 @@ const changedPaths = (await git(["diff", "--name-only", "-z", `${baseSha}...${so
   .filter((path) => path.length > 0)
   .sort();
 const allowedPath = (path) =>
-  path === "dprint.json"
+  path === "AGENTS.md"
+  || path === "dprint.json"
+  || path === ".github/workflows/ci.yml"
+  || path === ".github/workflows/release.yml"
   || path === ".github/workflows/architecture-research.yml"
   || path === ".github/workflows/research-source-export.yml"
-  || path === ".github/workflows/research-toolchain-export.yml"
-  || path.startsWith(".github/research/")
   || path.startsWith("plans/")
   || path.startsWith("research/post-0.3/")
   || path.startsWith("test/architecture/");
@@ -62,7 +63,7 @@ await writeReceipt({
     id: "research-only-repository-scope",
     classification: "established",
     conclusion:
-      "exact-head-descends-from-release-and-approved-base-with-only-research-workflow-plan-and-architecture-test-changes",
+      "exact-head-descends-from-release-and-approved-base-with-only-instruction-ci-research-workflow-plan-and-architecture-test-changes",
     assertions: [
       assertion("checkout-equals-source-sha"),
       assertion("released-source-is-ancestor"),
