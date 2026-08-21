@@ -34,7 +34,7 @@ const firstOutput = async (outdir, source) => {
 };
 
 const collectText = (stream) =>
-  Stream.runFold(stream, "", (text, bytes) =>
+  Stream.runFold(stream, () => "", (text, bytes) =>
     text.length >= 64 * 1024 ? text : `${text}${new TextDecoder().decode(bytes)}`
   );
 
