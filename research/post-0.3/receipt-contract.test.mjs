@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import { dirname } from "node:path";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import {
   loadExpectedConclusions,
   loadReceiptProducers,
@@ -10,6 +14,8 @@ import {
 } from "./receipt-contract.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const repository = resolve(here, "../..");
+const execFileAsync = promisify(execFile);
 const expectations = await loadExpectedConclusions(here);
 const manifest = await loadReceiptProducers(here);
 const sourceSha = "a".repeat(40);
@@ -111,4 +117,39 @@ test("an expected receipt without a declared producer is structural drift", () =
   drifted.receiptIds.push("unproduced-receipt");
   drifted.receiptIds.sort();
   assert.throws(() => validateProducerCoverage(drifted, manifest), /declared producers drifted/);
+});
+
+test("importing a receipt producer dependency cannot emit that producer's receipt", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "effect-build-nested-receipt-"));
+  try {
+    const head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repository })).stdout.trim();
+    const environment = {
+      ...process.env,
+      RESEARCH_RECEIPTS_DIR: directory,
+      SOURCE_SHA: head,
+    };
+    await execFileAsync(
+      process.execPath,
+      ["research/post-0.3/check-contract-markdown.mjs"],
+      { cwd: repository, env: environment },
+    );
+    assert.deepEqual(await readdir(directory), ["contract-declarations.json"]);
+    const receipt = await readFile(resolve(directory, "contract-declarations.json"));
+    await execFileAsync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        'await import("./research/post-0.3/check-contract-markdown.mjs")',
+      ],
+      {
+        cwd: repository,
+        env: environment,
+      },
+    );
+    assert.deepEqual(await readdir(directory), ["contract-declarations.json"]);
+    assert.deepEqual(await readFile(resolve(directory, "contract-declarations.json")), receipt);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

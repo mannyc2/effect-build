@@ -6,6 +6,8 @@ import { writeReceipt } from "./receipt.mjs";
 import { assertion, sourceSha } from "./probe-runtime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const invokedDirectly = process.argv[1] !== undefined
+  && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 const sourcePath = resolve(root, "research/post-0.3/contracts.ts");
 const markdownPath = resolve(root, "research/post-0.3/FINAL-CONTRACTS.md");
 const sourceText = await readFile(sourcePath, "utf8");
@@ -86,14 +88,14 @@ for (const name of wantedInterfaces) {
 }
 const generated = `${lines.join("\n")}\n`;
 
-if (process.argv.includes("--write")) {
+if (invokedDirectly && process.argv.includes("--write")) {
   await writeFile(markdownPath, generated);
 } else {
   const observed = await readFile(markdownPath, "utf8");
   if (observed !== generated) {
     throw new Error("FINAL-CONTRACTS.md is not synchronized with contracts.ts");
   }
-  if (process.env.RESEARCH_RECEIPTS_DIR !== undefined) {
+  if (invokedDirectly && process.env.RESEARCH_RECEIPTS_DIR !== undefined) {
     await writeReceipt({
       id: "contract-declarations",
       sourceSha,
