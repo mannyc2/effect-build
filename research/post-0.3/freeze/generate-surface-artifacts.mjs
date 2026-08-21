@@ -12,6 +12,11 @@ const candidateVerdictsPath = join(root, "CANDIDATE-VERDICTS.json");
 const adjudicationJsonPath = join(root, "SURFACE-ADJUDICATION.json");
 const adjudicationCsvPath = join(root, "SURFACE-ADJUDICATION.csv");
 const surfacePath = join(root, "SURFACE.json");
+const arguments_ = process.argv.slice(2);
+if (arguments_.length > 1 || (arguments_.length === 1 && arguments_[0] !== "--check")) {
+  throw new Error("usage: node generate-surface-artifacts.mjs [--check]");
+}
+const checkOnly = arguments_[0] === "--check";
 
 const parseCsv = (source) => {
   const records = [];
@@ -55,12 +60,27 @@ const parseCsv = (source) => {
 };
 
 const quoteCsv = (value) => `"${String(value).replaceAll('"', '""')}"`;
-const writeJson = (path, value) => writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
+const renderJson = (value) => `${JSON.stringify(value, null, 2)}\n`;
 
 const sourceRows = parseCsv(await readFile(sourcePath, "utf8"));
 const stopCondition = JSON.parse(await readFile(stopPath, "utf8"));
 const policy = JSON.parse(await readFile(policyPath, "utf8"));
 const candidateVerdicts = JSON.parse(await readFile(candidateVerdictsPath, "utf8"));
+
+if (policy.schema !== "effect-build/surface-adjudication-policy@2") {
+  throw new Error("unexpected surface adjudication policy schema");
+}
+const contractFreeze = policy.contractFreeze;
+if (contractFreeze?.schema !== "effect-build/public-contract-freeze@1") {
+  throw new Error("missing frozen public contract semantics");
+}
+const contractOperationIds = contractFreeze.operations.map((operation) => operation.operationId);
+if (new Set(contractOperationIds).size !== contractOperationIds.length) {
+  throw new Error("frozen public contract semantics contain duplicate operation IDs");
+}
+const contractByOperationId = new Map(
+  contractFreeze.operations.map((operation) => [operation.operationId, operation]),
+);
 
 const blockerById = new Map(
   stopCondition.surface_freeze_blockers.map((blocker) => [blocker.operation_id, blocker.pre_freeze_gate]),
@@ -195,6 +215,10 @@ const selectedOperations = selectedCandidates.filter((candidate) =>
 const selectedInternalStages = selectedCandidates.filter((candidate) =>
   candidate.proposedSurface.kind === "internal-stage-no-public-export"
 );
+const selectedOperationIds = selectedOperations.map((candidate) => candidate.operationId);
+if (JSON.stringify(contractOperationIds) !== JSON.stringify(selectedOperationIds)) {
+  throw new Error("frozen public contract semantics do not exactly cover the selected operations in order");
+}
 
 const coreSubpaths = [
   {
@@ -497,8 +521,19 @@ const packages = [
   };
 });
 
+const surfaceSemanticIdentity = (candidate, frozen) => {
+  const historicalLane = frozen.compatibility.historicalR1Lane;
+  const surfaceLane = frozen.compatibility.surfaceLane;
+  if (historicalLane === surfaceLane) return candidate.semanticIdentity;
+  const needle = ` / ${historicalLane} / `;
+  if (candidate.semanticIdentity.split(needle).length !== 2) {
+    throw new Error(`cannot project historical R1 lane for ${candidate.operationId}`);
+  }
+  return candidate.semanticIdentity.replace(needle, ` / ${surfaceLane} / `);
+};
+
 const surface = {
-  schema: "effect-build/public-surface@1",
+  schema: "effect-build/public-surface@2",
   version: "0.4.0",
   date: policy.date,
   status: policy.status,
@@ -517,15 +552,31 @@ const surface = {
       },
     ],
   },
-  operations: selectedOperations.map((candidate) => ({
-    operationId: candidate.operationId,
-    package: candidate.proposedSurface.package,
-    subpath: candidate.proposedSurface.subpath,
-    export: candidate.proposedSurface.export,
-    rootNamespace: candidate.proposedSurface.rootNamespace,
-    semanticIdentity: candidate.semanticIdentity,
-    support: candidate.support,
-  })),
+  semanticContracts: {
+    schema: contractFreeze.schema,
+    evidence: contractFreeze.evidence,
+    typeRules: contractFreeze.typeRules,
+    r3Projection: contractFreeze.r3Projection,
+    reviewedAdmission: contractFreeze.reviewedAdmission,
+    errorContracts: contractFreeze.errorContracts,
+    esbuildCandidateBoundary: contractFreeze.esbuildCandidateBoundary,
+  },
+  operations: selectedOperations.map((candidate) => {
+    const frozen = contractByOperationId.get(candidate.operationId);
+    if (frozen === undefined) throw new Error(`missing frozen contract for ${candidate.operationId}`);
+    return {
+      operationId: candidate.operationId,
+      package: candidate.proposedSurface.package,
+      subpath: candidate.proposedSurface.subpath,
+      export: candidate.proposedSurface.export,
+      rootNamespace: candidate.proposedSurface.rootNamespace,
+      semanticIdentity: surfaceSemanticIdentity(candidate, frozen),
+      r1SemanticIdentity: candidate.semanticIdentity,
+      support: candidate.support,
+      compatibility: frozen.compatibility,
+      contract: frozen.contract,
+    };
+  }),
   derivedOperations: [
     {
       operationId: "BUN-COMPILE-EXECUTABLE-MATRIX",
@@ -629,55 +680,31 @@ const surface = {
   coreSurface: {
     status: "frozen-from-committed-r3-r4-author-contract",
     subpaths: coreSubpaths,
-    contracts: {
-      Artifact: {
-        AbsolutePath: "absolute normalized file path",
-        DecimalBytes: "type re-export of Author.Tool.DecimalBytes: canonical unbounded decimal string matching 0 or a nonzero digit followed by decimal digits",
-        Digest: "type re-export of Author.Tool.Digest: algorithm literal sha256 plus exactly 64 lowercase hexadecimal digits",
-        File: "mode-indexed HashedFile or UnhashedFile; only the hashed variant contains Digest",
-        Executable: "mode-indexed HashedExecutable or UnhashedExecutable; each adds runtime, exact SystemTarget, native format, and committed same-parent publication observation, and only the hashed variant contains Digest",
-      },
-      SystemTarget: {
-        literals: [
-          "macos-x64",
-          "macos-aarch64",
-          "linux-x64-gnu",
-          "linux-x64-musl",
-          "linux-aarch64-gnu",
-          "linux-aarch64-musl",
-          "windows-x64",
-          "windows-aarch64",
-        ],
-        Descriptor: "operating system, architecture, optional ABI, and executable suffix",
-      },
-      Matrix: {
-        CellIdentity: "provider, literal compileExecutable operation, and zero-based input index",
-        Success: "tagged CellIdentity plus committed Artifact",
-        Failure: "tagged CellIdentity plus typed scalar failure",
-        CellResult: "Success or Failure",
-        Input: "non-empty scalar inputs plus positive safe-integer concurrency",
-        Report: "provider, literal compileExecutable operation, input-ordered cells, and literal rollback none",
-        InvalidInput: "typed preflight failure; defects and interruption remain Effect Cause",
-      },
-      Author: {
-        canonicalRepresentations: {
-          owner: "./Author/Tool owns DecimalBytes, Sha256Value, Digest, decimalBytes, and sha256Digest.",
-          bytes: "Every bytes and totalBytes field uses the same Tool.DecimalBytes type identity; Artifact and BorrowedOutput re-export that identity. No JavaScript number byte counts are public.",
-          digest: "Every digest field uses the same Tool.Digest type identity; Artifact and BorrowedOutput re-export that identity. No second structural digest shape exists.",
-          contentIdentity: "Tool.ContentIdentity contains Tool.Digest plus Tool.DecimalBytes instead of restating algorithm/value fields.",
-        },
-        modules: ["./Author/Tool", "./Author/BorrowedOutput", "./Author/Executable"],
-      },
-    },
+    contracts: contractFreeze.coreContracts,
     note: "The three Author module export lists come from committed R3/R4 research. Artifact and BorrowedOutput re-export Tool's one canonical scalar type identity; Artifact, SystemTarget, and Matrix are the exact shared vocabulary required by selected operations.",
   },
 };
 
-await writeJson(adjudicationJsonPath, adjudication);
-await writeFile(adjudicationCsvPath, csv);
-await writeJson(surfacePath, surface);
+const generatedArtifacts = [
+  [adjudicationJsonPath, renderJson(adjudication)],
+  [adjudicationCsvPath, csv],
+  [surfacePath, renderJson(surface)],
+];
+if (checkOnly) {
+  const drifted = [];
+  for (const [path, expected] of generatedArtifacts) {
+    const actual = await readFile(path, "utf8").catch(() => undefined);
+    if (actual !== expected) drifted.push(path.slice(repositoryRoot.length + 1));
+  }
+  if (drifted.length > 0) {
+    throw new Error(`generated surface artifacts are stale: ${drifted.join(", ")}`);
+  }
+} else {
+  await Promise.all(generatedArtifacts.map(([path, contents]) => writeFile(path, contents)));
+}
 
 console.log(JSON.stringify({
+  mode: checkOnly ? "check" : "write",
   candidates: candidates.length,
   counts,
   selectedOperations: selectedOperations.map((candidate) => candidate.operationId),

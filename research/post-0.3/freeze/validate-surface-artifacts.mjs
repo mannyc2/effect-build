@@ -13,6 +13,10 @@ const fail = (message) => {
 const unique = (values, label) => {
   if (new Set(values).size !== values.length) fail(`${label} contains duplicates`);
 };
+const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const exactJson = (actual, expected, label) => {
+  if (!sameJson(actual, expected)) fail(`${label} changed`);
+};
 
 const parseCsv = (source) => {
   const records = [];
@@ -53,6 +57,10 @@ const sourceRows = parseCsv(
 );
 const stop = await readJson(join(repositoryRoot, "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"));
 const policy = await readJson(join(root, "SURFACE-ADJUDICATION-POLICY.json"));
+await execFileAsync(process.execPath, [join(root, "generate-surface-artifacts.mjs"), "--check"], {
+  cwd: repositoryRoot,
+  encoding: "utf8",
+});
 const adjudication = await readJson(join(root, "SURFACE-ADJUDICATION.json"));
 const adjudicationCsv = parseCsv(await readFile(join(root, "SURFACE-ADJUDICATION.csv"), "utf8"));
 const surface = await readJson(join(root, "SURFACE.json"));
@@ -80,8 +88,9 @@ if ((await git("diff", "--name-only", `${production.baseline}..HEAD`, "--", ...p
   fail("adjudicated HEAD changes production/package-lock/public-API bytes used for admission");
 }
 
+if (policy.schema !== "effect-build/surface-adjudication-policy@2") fail("unexpected policy schema");
 if (adjudication.schema !== "effect-build/surface-adjudication@1") fail("unexpected adjudication schema");
-if (surface.schema !== "effect-build/public-surface@1") fail("unexpected surface schema");
+if (surface.schema !== "effect-build/public-surface@2") fail("unexpected surface schema");
 if (policy.status !== "frozen" || adjudication.status !== "frozen" || surface.status !== "frozen") {
   fail("surface artifacts are not frozen");
 }
@@ -181,6 +190,12 @@ const actualShipIds = adjudication.candidates
   .filter((candidate) => candidate.finalDisposition === "ship")
   .map((candidate) => candidate.operationId);
 if (JSON.stringify(actualShipIds) !== JSON.stringify(exactShipIds)) fail("frozen R1 ship set changed");
+if (policy.contractFreeze?.schema !== "effect-build/public-contract-freeze@1") {
+  fail("missing frozen public contract semantics");
+}
+const policyContractIds = policy.contractFreeze.operations.map((operation) => operation.operationId);
+unique(policyContractIds, "policy contract operation IDs");
+exactJson(policyContractIds, exactShipIds, "policy contract operation membership or order");
 if (policy.targetedProofAudit.length !== 0 || adjudication.counts.targetedProofAuditPending !== 0) {
   fail("frozen adjudication retains a pending targeted proof audit");
 }
@@ -229,6 +244,29 @@ for (const operation of surface.operations) {
     || operation.export !== candidate.proposedSurface.export
     || operation.rootNamespace !== candidate.proposedSurface.rootNamespace) {
     fail(`surface coordinates drift for ${operation.operationId}`);
+  }
+}
+exactJson(surface.semanticContracts, {
+  schema: policy.contractFreeze.schema,
+  evidence: policy.contractFreeze.evidence,
+  typeRules: policy.contractFreeze.typeRules,
+  r3Projection: policy.contractFreeze.r3Projection,
+  reviewedAdmission: policy.contractFreeze.reviewedAdmission,
+  errorContracts: policy.contractFreeze.errorContracts,
+  esbuildCandidateBoundary: policy.contractFreeze.esbuildCandidateBoundary,
+}, "generated semantic contract projection");
+const frozenContractById = new Map(
+  policy.contractFreeze.operations.map((operation) => [operation.operationId, operation]),
+);
+for (const operation of surface.operations) {
+  const frozen = frozenContractById.get(operation.operationId);
+  exactJson(operation.compatibility, frozen?.compatibility, `${operation.operationId} compatibility contract`);
+  exactJson(operation.contract, frozen?.contract, `${operation.operationId} public contract`);
+  const r1Candidate = adjudication.candidates.find((candidate) => candidate.operationId === operation.operationId);
+  if (operation.r1SemanticIdentity !== r1Candidate?.semanticIdentity
+    || !operation.semanticIdentity.includes(` / ${operation.compatibility.surfaceLane} / `)
+    || !operation.r1SemanticIdentity.includes(` / ${operation.compatibility.historicalR1Lane} / `)) {
+    fail(`${operation.operationId} historical-to-surface semantic identity projection drifted`);
   }
 }
 
@@ -286,7 +324,8 @@ for (const [operationId, claim] of [
   const operation = byOperationId.get(operationId);
   const override = overrideById.get(operationId);
   if (operation?.support?.exactVersion !== "0.28.2"
-    || operation?.support?.providerHost !== "ubuntu-24.04/linux-x64") {
+    || operation?.support?.providerHost !== "ubuntu-24.04/linux-x64"
+    || operation?.support?.lane !== "installed-library-api") {
     fail(`${operationId} support broadened beyond esbuild 0.28.2 on Linux x64`);
   }
   if (!override?.evidence.includes(claim)) fail(`${operationId} lacks exact R4 receipt claim ${claim}`);
@@ -312,8 +351,10 @@ for (const [subpath, namespace] of requiredCore) {
   const entry = corePackage?.subpaths.find((candidate) => candidate.subpath === subpath);
   if (entry?.rootNamespace !== namespace) fail(`missing or misnamed core subpath ${subpath}`);
 }
-if (surface.coreSurface.contracts.Artifact.DecimalBytes.includes("safe integer")) {
-  fail("core DecimalBytes regressed to a bounded JavaScript number");
+exactJson(surface.coreSurface.contracts, policy.contractFreeze.coreContracts, "generated core contracts");
+if (surface.coreSurface.contracts.artifact.decimalBytes.javascriptNumberForbidden !== true
+  || surface.coreSurface.contracts.artifact.decimalBytes.pattern !== "^(0|[1-9][0-9]*)$") {
+  fail("core DecimalBytes is not the canonical unbounded decimal representation");
 }
 const exactAuthorExports = new Map([
   [
@@ -377,6 +418,306 @@ for (const [subpath, expected] of exactAuthorExports) {
 const borrowedExports = corePackage.subpaths.find((entry) => entry.subpath === "./Author/BorrowedOutput")?.exports ?? [];
 for (const name of ["DecimalBytes", "Digest"]) {
   if (!borrowedExports.includes(name)) fail(`BorrowedOutput is missing committed scalar type re-export ${name}`);
+}
+
+const semantics = policy.contractFreeze;
+exactJson(semantics.r3Projection.lane.mapping, {
+  "host-api": "host-api",
+  "installed-library-api": "installed-library-api",
+  "selected-command": "selected-command",
+}, "R3 lane projection");
+exactJson(semantics.r3Projection.lane.historicalR1Mapping, {
+  "in-process-api": "installed-library-api",
+}, "historical R1 lane projection");
+if (semantics.r3Projection.lane.unknownLane !== "reject-no-default"
+  || semantics.r3Projection.lane.admissionSerialization !== "retain-r3-source-lane"
+  || semantics.r3Projection.lane.interfaceAndMechanismAreIndependent !== true) {
+  fail("R3 lane projection is not total and admission-key preserving");
+}
+const contentProjection = semantics.r3Projection.contentIdentity;
+if (contentProjection.source.value.pattern !== "^sha256:[0-9a-f]{64}$"
+  || contentProjection.source.bytes.pattern !== "^(0|[1-9][0-9]*)$"
+  || contentProjection.steps[1]?.transform !== "remove-one-leading-sha256-prefix"
+  || contentProjection.steps[1]?.constructor !== "Author.Tool.sha256Digest"
+  || contentProjection.steps[2]?.constructor !== "Author.Tool.decimalBytes"
+  || contentProjection.invalidInput !== "reject-no-coercion") {
+  fail("R3 content identity projection no longer exactly targets Author.Tool canonical scalars");
+}
+const admission = semantics.reviewedAdmission;
+exactJson(admission.materialKeysInCanonicalObject, [
+  "schema",
+  "contentIdentity",
+  "provider",
+  "operation",
+  "lane",
+  "requestedOperation",
+  "requestedLane",
+  "host",
+  "target",
+  "capabilitySchemaRevision",
+  "policyRevision",
+  "capabilities",
+  "relationInputs",
+  "profileAndPeerInputs",
+], "reviewed admission material key set or order");
+if (admission.cacheKeySchema !== "effect-build/r3-probe-cache@1"
+  || admission.admissionKey.prefix !== "admission:"
+  || admission.canonicalJson.objectKeys !== "recursive-lexicographic-en"
+  || admission.material.contentIdentity.participantOrder !== "role-ascending-locale-en"
+  || admission.material.capabilities.order !== "id-ascending-locale-en"
+  || admission.material.relationInputs.order !== "id-ascending-locale-en"
+  || admission.material.profileAndPeerInputs.order !== "kind-colon-id-ascending-locale-en"
+  || admission.observedEvidenceSelfAdmits !== false
+  || admission.concreteReviewedAdmissionKeys.length !== 0) {
+  fail("reviewed admission is no longer the exact fail-closed R3 algorithm");
+}
+exactJson(admission.allowUntestedVersion.cannotOverride, [
+  "IdentityIncomplete",
+  "KnownDenyHole",
+  "CapabilityMissing",
+  "CapabilityIndeterminate",
+  "RelationUnsatisfied",
+  "RelationIndeterminate",
+  "ContractIncompatible",
+  "ContractIndeterminate",
+  "SelectedCommandChanged",
+  "SelectedCommandIndeterminate",
+], "allowUntestedVersion refusal boundary");
+
+const expectedCompatibility = new Map([
+  ["CAN-BUN-012", {
+    providerPackage: "effect-build-bun",
+    operation: "compile-executable",
+    historicalR1Lane: "selected-command",
+    r3Lane: "selected-command",
+    surfaceLane: "selected-command",
+    roles: ["builder", "target-runtime"],
+    capabilities: ["compile"],
+    relations: ["bun-builder-target"],
+    selectedCommandRole: "builder",
+  }],
+  ["CAN-DENO-010", {
+    providerPackage: "effect-build-deno",
+    operation: "compile-executable",
+    historicalR1Lane: "selected-command",
+    r3Lane: "selected-command",
+    surfaceLane: "selected-command",
+    roles: ["deno", "denort"],
+    capabilities: ["compile"],
+    relations: ["deno-denort"],
+    selectedCommandRole: "deno",
+  }],
+  ["CAN-ESB-001", {
+    providerPackage: "effect-build-esbuild",
+    operation: "build-memory",
+    historicalR1Lane: "in-process-api",
+    r3Lane: "installed-library-api",
+    surfaceLane: "installed-library-api",
+    roles: ["javascript-package", "declarations", "platform-package", "native-binary", "host-runtime"],
+    capabilities: ["build"],
+    relations: ["esbuild-package-api-native"],
+    selectedCommandRole: undefined,
+  }],
+  ["CAN-ESB-011", {
+    providerPackage: "effect-build-esbuild",
+    operation: "context-memory",
+    historicalR1Lane: "in-process-api",
+    r3Lane: "installed-library-api",
+    surfaceLane: "installed-library-api",
+    roles: ["javascript-package", "declarations", "platform-package", "native-binary", "host-runtime"],
+    capabilities: ["context", "cancel", "dispose"],
+    relations: ["esbuild-package-api-native"],
+    selectedCommandRole: undefined,
+  }],
+  ["CAN-NODE-001", {
+    providerPackage: "effect-build-node-sea",
+    operation: "assemble-direct",
+    historicalR1Lane: "selected-command",
+    r3Lane: "selected-command",
+    surfaceLane: "selected-command",
+    roles: ["builder", "base"],
+    capabilities: ["build-sea", "lief"],
+    relations: ["node-builder-base"],
+    selectedCommandRole: "builder",
+  }],
+]);
+for (const operation of semantics.operations) {
+  const expected = expectedCompatibility.get(operation.operationId);
+  const compatibility = operation.compatibility;
+  if (expected === undefined
+    || compatibility.providerPackage !== expected.providerPackage
+    || compatibility.operation !== expected.operation
+    || compatibility.historicalR1Lane !== expected.historicalR1Lane
+    || compatibility.r3Lane !== expected.r3Lane
+    || compatibility.surfaceLane !== expected.surfaceLane
+    || !sameJson(compatibility.requiredParticipantRoles, expected.roles)
+    || !sameJson(compatibility.requiredCapabilities, expected.capabilities)
+    || !sameJson(compatibility.requiredRelations, expected.relations)
+    || compatibility.policyRevision !== "policy-r3-v1"
+    || compatibility.capabilitySchemaRevision !== "capabilities-r3-v1"
+    || !sameJson(compatibility.requiredContracts, [{ id: "effect-build-core", kind: "provider-core-peer" }])
+    || compatibility.selectedCommandRole !== expected.selectedCommandRole
+    || compatibility.reviewedAdmissionKeys.length !== 0) {
+    fail(`${operation.operationId} compatibility policy drifted from committed R3 evidence`);
+  }
+}
+
+const coreContracts = semantics.coreContracts;
+const exactDescriptors = [
+  { target: "macos-x64", os: "macos", architecture: "x64", abi: null, executableSuffix: "", nativeFormat: "mach-o" },
+  { target: "macos-aarch64", os: "macos", architecture: "aarch64", abi: null, executableSuffix: "", nativeFormat: "mach-o" },
+  { target: "linux-x64-gnu", os: "linux", architecture: "x64", abi: "gnu", executableSuffix: "", nativeFormat: "elf" },
+  { target: "linux-x64-musl", os: "linux", architecture: "x64", abi: "musl", executableSuffix: "", nativeFormat: "elf" },
+  { target: "linux-aarch64-gnu", os: "linux", architecture: "aarch64", abi: "gnu", executableSuffix: "", nativeFormat: "elf" },
+  { target: "linux-aarch64-musl", os: "linux", architecture: "aarch64", abi: "musl", executableSuffix: "", nativeFormat: "elf" },
+  { target: "windows-x64", os: "windows", architecture: "x64", abi: null, executableSuffix: ".exe", nativeFormat: "pe" },
+  { target: "windows-aarch64", os: "windows", architecture: "aarch64", abi: null, executableSuffix: ".exe", nativeFormat: "pe" },
+];
+exactJson(coreContracts.systemTarget.descriptors, exactDescriptors, "SystemTarget descriptor table");
+exactJson(coreContracts.authorExecutableProjection.architecture.mapping, { x64: "x64", arm64: "aarch64" }, "Author architecture projection");
+if (coreContracts.authorExecutableProjection.target.mapping.length !== exactDescriptors.length
+  || coreContracts.authorExecutableProjection.destination.target !== "Artifact.AbsolutePath"
+  || coreContracts.authorExecutableProjection.artifactTypes.Artifact !== "direct-alias-of-Artifact.Executable"
+  || coreContracts.authorExecutableProjection.artifactTypes.HashedArtifact !== "direct-alias-of-Artifact.HashedExecutable"
+  || coreContracts.authorExecutableProjection.artifactTypes.UnhashedArtifact !== "direct-alias-of-Artifact.UnhashedExecutable"
+  || coreContracts.authorExecutableProjection.secondDurableArtifactRepresentationForbidden !== true) {
+  fail("Author.Executable no longer projects exactly onto core path, target, and artifact vocabulary");
+}
+const borrowed = coreContracts.borrowedOutput;
+exactJson(borrowed.stateMachine, ["open", "closing", "closed"], "BorrowedOutput state machine");
+if (borrowed.owner !== "producer"
+  || borrowed.cleanupAuthorityTransfersToCaller !== false
+  || borrowed.close.newObservations !== "BorrowedOutputExpired"
+  || borrowed.close.inFlightObservations !== "drain-before-cleanup"
+  || borrowed.close.cleanup !== "exactly-once"
+  || borrowed.locator.authority !== false
+  || borrowed.locator.useAfterExpiry !== "unsupported-even-if-object-still-exists"
+  || borrowed.observe.sameSizeMutation !== "BorrowedOutputChanged"
+  || borrowed.observe.containment !== "lexical-and-canonical"
+  || borrowed.failureAndInterruption.interruptionTranslatedToBorrowedFailure !== false
+  || borrowed.durability !== "none") {
+  fail("BorrowedOutput ownership or expiry semantics drifted");
+}
+
+const contractFor = (operationId) => frozenContractById.get(operationId)?.contract;
+for (const operationId of ["CAN-BUN-012", "CAN-DENO-010"]) {
+  const contract = contractFor(operationId);
+  exactJson(Object.keys(contract.LayerOptions.fields), ["executable", "allowUntestedVersion"], `${operationId} LayerOptions fields`);
+  exactJson(Object.keys(contract.CompileExecutableInput.fields), ["entrypoint", "outfile", "cwd", "target", "observation", "options"], `${operationId} scalar input fields`);
+  if (contract.CompileExecutableInput.fields.observation.presence !== "required"
+    || Object.hasOwn(contract.CompileExecutableInput.fields, "digest")
+    || contract.CompileExecutableMatrixInput !== "Core.Matrix.Input<CompileExecutableInput>"
+    || !contract.CompileExecutableError.startsWith("errorContracts.compileExecutable")) {
+    fail(`${operationId} scalar/matrix/result error contract is not the hard-cut mode-indexed shape`);
+  }
+}
+exactJson(Object.keys(contractFor("CAN-BUN-012").Options.fields), ["minify", "sourcemap", "bytecode"], "Bun Options fields");
+if (contractFor("CAN-DENO-010").Options.kind !== "exclusive-union"
+  || contractFor("CAN-DENO-010").Permissions.kind !== "exclusive-union") {
+  fail("Deno Options/Permissions lost their closed exclusive unions");
+}
+
+const esbuildBuild = contractFor("CAN-ESB-001");
+const esbuildContext = contractFor("CAN-ESB-011");
+for (const [label, contract] of [["build", esbuildBuild], ["context", esbuildContext]]) {
+  if (contract.Options.kind !== "native-provider-refinement"
+    || contract.Options.base !== "esbuild.BuildOptions"
+    || contract.Options.requiredLiteralFields.write !== false
+    || contract.Options.missingWrite !== "typed-preflight-failure"
+    || contract.Options.writeTrue !== "typed-preflight-failure"
+    || contract.Options.silentRewriteOrDefault !== false) {
+    fail(`esbuild ${label} Options no longer require native BuildOptions with explicit write:false`);
+  }
+}
+if (esbuildBuild.nativeSemantics.mechanismTopology !== "package-owned-native-service-child"
+  || esbuildBuild.nativeSemantics.serviceLifetime !== "long-lived-native-service-shared-by-package-api-calls"
+  || esbuildBuild.nativeSemantics.interfaceLaneDoesNotClaimSameProcessExecution !== true
+  || esbuildContext.Context.mechanismTopology !== "package-owned-native-service-child"
+  || esbuildContext.Context.serviceLifetime !== "long-lived-native-service") {
+  fail("Esbuild installed-library interface lane was conflated with its native service-child mechanism");
+}
+exactJson(Object.keys(esbuildContext.Context.publicMethods), ["rebuild", "watch", "serve", "cancel"], "Esbuild Context public methods");
+exactJson(esbuildContext.admittedNativeSuboperations, ["rebuild", "watch", "serve", "cancel", "dispose-as-hidden-release"], "Esbuild Context admitted native suboperations");
+if (esbuildContext.Context.hiddenNativeMethods.dispose !== "owned-only-by-Scope-finalizer"
+  || !sameJson(esbuildContext.Context.forbiddenPublicMethods, ["dispose"])
+  || esbuildContext.finalizer.sequence.join(",") !== "cancel,dispose"
+  || esbuildContext.finalizer.exactlyOnce !== true
+  || esbuildContext.finalizer.uninterruptible !== true
+  || esbuildContext.finalizer.callsEsbuildStop !== false
+  || esbuildContext.watchAndServeAdmission !== "methods-of-CAN-ESB-011-context-owner-not-independent-root-operations") {
+  fail("Esbuild Context ownership/watch/serve/dispose contract drifted");
+}
+exactJson(semantics.esbuildCandidateBoundary.selected, ["CAN-ESB-001", "CAN-ESB-011"], "selected Esbuild root operation set");
+exactJson(semantics.esbuildCandidateBoundary.directWriteDeferred, ["CAN-ESB-002", "CAN-ESB-012"], "deferred Esbuild direct-write set");
+for (const directWriteId of semantics.esbuildCandidateBoundary.directWriteDeferred) {
+  if (adjudication.candidates.find((candidate) => candidate.operationId === directWriteId)?.finalDisposition !== "defer") {
+    fail(`${directWriteId} direct-write operation entered the frozen surface`);
+  }
+}
+
+const nodeContract = contractFor("CAN-NODE-001");
+exactJson(nodeContract.mainFormatProjection.publicToSupport, { commonjs: "cjs", module: "esm" }, "Node main format projection");
+if (nodeContract.mainFormatProjection.unknown !== "reject-no-default"
+  || !sameJson(byOperationId.get("CAN-NODE-001")?.support?.mainFormats, ["cjs", "esm"])) {
+  fail("Node public main formats no longer map totally onto the frozen support vocabulary");
+}
+exactJson(Object.keys(nodeContract.AssembleExecutableInput.fields), [
+  "main",
+  "outfile",
+  "cwd",
+  "observation",
+  "assets",
+  "disableExperimentalSEAWarning",
+], "Node AssembleExecutableInput fields");
+if (nodeContract.AssembleExecutableInput.fields.observation.presence !== "required"
+  || Object.hasOwn(nodeContract.AssembleExecutableInput.fields, "digest")
+  || !nodeContract.AssembleExecutableInput.forbiddenFields.includes("useSnapshot")
+  || !nodeContract.AssembleExecutableInput.forbiddenFields.includes("useCodeCache")
+  || nodeContract.AssembleExecutableError !== "errorContracts.nodeAssembleExecutable") {
+  fail("Node input/result contract admitted an unsupported mode or optional digest");
+}
+
+const errors = semantics.errorContracts;
+if (errors.rules.interruption !== "Effect-Cause-not-typed-error"
+  || errors.rules.defect !== "Effect-Cause-not-typed-error"
+  || errors.rules.callerCallbackFailure !== "original-Effect-Cause-not-provider-error") {
+  fail("typed error algebra captured interruption, defects, or callback Causes");
+}
+exactJson(errors.compatibility.phaseOwnership.layer, ["ToolNotFound", "ToolProbeFailed", "IdentityIncomplete"], "compatibility Layer error tags");
+exactJson(errors.compatibility.phaseOwnership.operation, [
+  "KnownDenyHole",
+  "CapabilityMissing",
+  "CapabilityIndeterminate",
+  "RelationUnsatisfied",
+  "RelationIndeterminate",
+  "ContractIncompatible",
+  "ContractIndeterminate",
+  "SupportUnknown",
+  "SelectedCommandChanged",
+  "SelectedCommandIndeterminate",
+], "compatibility operation error tags");
+exactJson(Object.keys(errors.executable.tags), [
+  "ExecutableCandidateMissing",
+  "ExecutableCandidateChanged",
+  "ExecutableInspectionFailed",
+  "ExecutableDestinationLocked",
+  "ExecutableCommitFailed",
+], "Author.Executable failure tags");
+exactJson(errors.executable.v03Projection.map(({ sourceTag, at, targetTag }) => ({ sourceTag, at, targetTag })), [
+  { sourceTag: "OutputMissing", at: "candidate-existence-check", targetTag: "ExecutableCandidateMissing" },
+  { sourceTag: "OutputInvalid", at: "candidate-content-reauthentication", targetTag: "ExecutableCandidateChanged" },
+  { sourceTag: "OutputInvalid", at: "native-executable-inspection", targetTag: "ExecutableInspectionFailed" },
+  { sourceTag: "OutputLocked", at: "destination-replacement", targetTag: "ExecutableDestinationLocked" },
+  { sourceTag: "PublicationFailed", at: "destination-commit", targetTag: "ExecutableCommitFailed" },
+], "v0.3-to-Author.Executable failure projection");
+if (errors.executable.v03OutputInvalidClassification !== "producer-site-not-reason-string-matching") {
+  fail("v0.3 OutputInvalid projection depends on invented tags or diagnostic text");
+}
+if (errors.esbuildBuild.nativeDiagnostics !== "no-library-truncation-or-normalization"
+  || errors.esbuildContext.nativeDiagnostics !== "no-library-truncation-or-normalization"
+  || errors.esbuildContext.hiddenDisposeFailure !== "Scope-finalization-Effect-Cause-not-ContextError"
+  || errors.nodeAssembleExecutable.diagnostics !== "bounded-command-output-with-explicit-truncation") {
+  fail("provider-native diagnostic or bounded command diagnostic ownership drifted");
 }
 
 console.log(JSON.stringify({

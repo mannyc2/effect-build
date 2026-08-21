@@ -697,7 +697,7 @@
       "support": {
         "tool": "esbuild",
         "exactVersion": "0.28.2",
-        "lane": "in-process-api",
+        "lane": "installed-library-api",
         "providerHost": "ubuntu-24.04/linux-x64",
         "unadmittedByInference": [
           "windows",
@@ -956,7 +956,7 @@
       "support": {
         "tool": "esbuild",
         "exactVersion": "0.28.2",
-        "lane": "in-process-api",
+        "lane": "installed-library-api",
         "providerHost": "ubuntu-24.04/linux-x64",
         "unadmittedByInference": [
           "windows",
