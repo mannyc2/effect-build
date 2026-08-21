@@ -153,3 +153,8 @@ test("importing a receipt producer dependency cannot emit that producer's receip
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("independent receipt producers do not import another declared certifier", async () => {
+  const source = await readFile(resolve(here, "certify-independent-versioning.mjs"), "utf8");
+  assert.doesNotMatch(source, /certify-contract-and-compatibility/);
+});

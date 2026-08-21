@@ -263,49 +263,66 @@ const withStaticServer = async (root, entry, use) => {
   }
 };
 
-const allocatePort = async () => {
-  const server = createServer();
-  await new Promise((resolveListen, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolveListen);
-  });
-  const address = server.address();
-  infrastructure(typeof address === "object" && address !== null, "port allocator failed");
-  const port = address.port;
-  await new Promise((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose()));
-  return port;
-};
-
 const evaluateInChrome = async (url) => {
-  const port = await allocatePort();
   const userData = await mkdtemp(join(tmpdir(), "effect-build-browser-chrome-"));
+  const chromeEnvironment = { ...process.env };
+  delete chromeEnvironment.DBUS_SESSION_BUS_ADDRESS;
   const child = spawn(chrome, [
     "--headless=new",
     "--no-sandbox",
     "--disable-dev-shm-usage",
-    `--remote-debugging-port=${port}`,
+    "--disable-background-networking",
+    "--disable-component-update",
+    "--disable-default-apps",
+    "--disable-extensions",
+    "--disable-gpu",
+    "--disable-sync",
+    "--metrics-recording-only",
+    "--no-default-browser-check",
+    "--no-first-run",
+    "--remote-debugging-address=127.0.0.1",
+    "--remote-debugging-port=0",
     `--user-data-dir=${userData}`,
     "about:blank",
-  ], { stdio: ["ignore", "ignore", "pipe"] });
+  ], { env: chromeEnvironment, stdio: ["ignore", "ignore", "pipe"] });
   let browserStderr = "";
+  let browserExit;
+  child.once("exit", (code, signal) => {
+    browserExit = { code, signal };
+  });
   child.stderr.on("data", (chunk) => {
     if (browserStderr.length < 64 * 1024) browserStderr += chunk.toString("utf8");
   });
   try {
+    let port;
     let version;
-    for (let attempt = 0; attempt < 120; attempt += 1) {
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      if (port === undefined) {
+        try {
+          const [candidate] = (await readFile(join(userData, "DevToolsActivePort"), "utf8")).split(/\r?\n/);
+          if (/^[1-9][0-9]*$/.test(candidate)) port = Number(candidate);
+        } catch {
+          // Chrome has not published its exclusively allocated port yet.
+        }
+      }
       try {
-        const response = await fetch(`http://127.0.0.1:${port}/json/version`);
-        if (response.ok) {
-          version = await response.json();
-          break;
+        if (port !== undefined) {
+          const response = await fetch(`http://127.0.0.1:${port}/json/version`);
+          if (response.ok) {
+            version = await response.json();
+            break;
+          }
         }
       } catch {
         // Browser endpoint is not ready yet.
       }
-      await sleep(50);
+      if (browserExit !== undefined) break;
+      await sleep(100);
     }
-    infrastructure(version !== undefined, `Chrome remote debugging failed: ${browserStderr}`);
+    infrastructure(
+      version !== undefined,
+      `Chrome remote debugging failed (exit=${JSON.stringify(browserExit)}): ${browserStderr}`,
+    );
     const targetResponse = await fetch(`http://127.0.0.1:${port}/json/new?${url}`, { method: "PUT" });
     infrastructure(targetResponse.ok, `Chrome target creation failed: ${targetResponse.status}`);
     const target = await targetResponse.json();

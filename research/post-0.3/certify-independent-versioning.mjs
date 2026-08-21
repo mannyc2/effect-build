@@ -1,8 +1,6 @@
 import { conclusion, writeReceipt } from "./receipt.mjs";
 import { assertion, markerValue, runRequired, sourceSha } from "./probe-runtime.mjs";
 
-await import("./certify-contract-and-compatibility.mjs");
-
 const result = markerValue((await runRequired(process.execPath, ["research/post-0.3/independent-versioning.mjs"], {
   timeout: 600_000,
 })).stdout, "EFFECT_BUILD_VERSIONING_RECEIPT");
