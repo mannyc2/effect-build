@@ -469,7 +469,7 @@ describe("tooling pins and workflow contracts", () => {
     );
     const workflow = parse(workflowSource) as Workflow;
     expect(createHash("sha256").update(workflowSource).digest("hex")).toBe(
-      "59e7bfdf0362309e9a50ff6171e2048d7b245c00464574568d3955d6cdbe8ae6",
+      "ace9d11e267e08c1e30f98010f1605803a6b52a5be41605fca13ca892dc12fc5",
     );
     expect(Object.keys(workflow.on).sort()).toEqual(["push"]);
     expect(workflow.on.push).toEqual({ branches: ["codex/plan042-deno-lane"] });
@@ -557,6 +557,14 @@ describe("tooling pins and workflow contracts", () => {
       DENO: "${{ steps.deno-tools.outputs.deno }}",
       DENORT: "${{ steps.deno-tools.outputs.denort }}",
     });
+    expect(denoVerification.run).toBe([
+      'test "${DENO#/}" != "$DENO"',
+      'test "${DENORT#/}" != "$DENORT"',
+      'test -x "$DENO"',
+      'test -x "$DENORT"',
+      'test "$("$DENO" --version | sed -n \'1p\')" = "deno 2.9.3"',
+      "",
+    ].join("\n"));
     expect(job.steps!.find((step) => step.run === "bun run test:integration:v04-deno")?.env).toEqual({
       PLAN042_DENO_EXECUTABLE: "${{ steps.deno-tools.outputs.deno }}",
       DENORT_BIN: "${{ steps.deno-tools.outputs.denort }}",

@@ -242,7 +242,7 @@ test("receipt and certificate contain Plan 041 only as historical input", () => 
         bunStagedDiff: [],
         immutablePublicDiff: [],
         requiredCommands: requiredImplementationCommands,
-        workflowDigest: "sha256:59e7bfdf0362309e9a50ff6171e2048d7b245c00464574568d3955d6cdbe8ae6",
+        workflowDigest: "sha256:ace9d11e267e08c1e30f98010f1605803a6b52a5be41605fca13ca892dc12fc5",
         activeInstructions: {
           handoffSha: profile.productionBaseline.handoffSha,
           path: "AGENTS.md",

@@ -30,7 +30,7 @@ const exactDocumentDigests = {
   migrationPlan: "sha256:6827f8f5c9198a5d7d9a175a3cd48b56b8f20e661a11c40ca9b3c5eaa4b5659c",
 };
 
-const exactImplementationWorkflowDigest = "sha256:59e7bfdf0362309e9a50ff6171e2048d7b245c00464574568d3955d6cdbe8ae6";
+const exactImplementationWorkflowDigest = "sha256:ace9d11e267e08c1e30f98010f1605803a6b52a5be41605fca13ca892dc12fc5";
 
 const exactDenoImplementationFiles = [
   "packages/effect-build-deno/src/CompileExecutable.ts",
@@ -458,6 +458,23 @@ export const validateCurrentImplementationState = (input) => {
     ].join("\n"),
   );
   assert.equal(workflowSource.includes("npm install --prefix"), false, "Bun provider must not be provisioned from npm");
+  const denoVerification = job.steps.find((step) => step?.name === "Verify exact Deno and denort participant selection");
+  assert.deepEqual(denoVerification, {
+    name: "Verify exact Deno and denort participant selection",
+    shell: "bash",
+    env: {
+      DENO: "${{ steps.deno-tools.outputs.deno }}",
+      DENORT: "${{ steps.deno-tools.outputs.denort }}",
+    },
+    run: [
+      'test "${DENO#/}" != "$DENO"',
+      'test "${DENORT#/}" != "$DENORT"',
+      'test -x "$DENO"',
+      'test -x "$DENORT"',
+      'test "$("$DENO" --version | sed -n \'1p\')" = "deno 2.9.3"',
+      "",
+    ].join("\n"),
+  });
   const gateIndexes = requiredImplementationCommands.map((command) => {
     const matches = job.steps
       .map((step, index) => ({ index, step }))

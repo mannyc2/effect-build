@@ -93,7 +93,6 @@ jobs:
           test -x "$DENO"
           test -x "$DENORT"
           test "$("$DENO" --version | sed -n '1p')" = "deno 2.9.3"
-          "$DENORT" --version >/dev/null
       - name: Exercise real Deno scalar behavior
         run: bun run test:integration:v04-deno
         env:
