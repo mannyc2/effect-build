@@ -9,7 +9,7 @@ import {
   expectedReceiptClaims,
   historicalAuthoritySummary,
   loadProfileDocuments,
-  plan042CertificationRef,
+  plan043CertificationRef,
   sha256,
   sourcePolicyVerifierOrigin,
   sourcePolicyVerifierPaths,
@@ -18,8 +18,8 @@ import {
   validateCurrentReceipt,
   validateCurrentRemoteEvidence,
   validateImplementationCertificate,
-  validatePlan041Api,
-  validatePlan041Archive,
+  validatePlan042Api,
+  validatePlan042Archive,
   validateWorkspaceManifest,
 } from "./certification-contract.mjs";
 
@@ -36,7 +36,7 @@ const requiredEnvironment = (name) => {
 const githubHeaders = (token) => ({
   Accept: "application/vnd.github+json",
   Authorization: `Bearer ${token}`,
-  "User-Agent": "effect-build-plan042-certifier",
+  "User-Agent": "effect-build-plan043-certifier",
   "X-GitHub-Api-Version": "2022-11-28",
 });
 
@@ -57,9 +57,9 @@ const requestJson = async ({ origin, repositoryName, token, url }) => {
   return await response.json();
 };
 
-const downloadArtifact = async ({ artifact, origin, plan041Anchor, repositoryName, token }) => {
+const downloadArtifact = async ({ artifact, origin, plan042Anchor, repositoryName, token }) => {
   const url = trustedApiUrl(artifact.archive_download_url, origin, repositoryName);
-  assert.equal(url.pathname, `/repos/${repositoryName}/actions/artifacts/${plan041Anchor.aggregateArtifact.id}/zip`);
+  assert.equal(url.pathname, `/repos/${repositoryName}/actions/artifacts/${plan042Anchor.aggregateArtifact.id}/zip`);
   const redirect = await fetch(url, {
     headers: githubHeaders(token),
     redirect: "manual",
@@ -76,8 +76,8 @@ const downloadArtifact = async ({ artifact, origin, plan041Anchor, repositoryNam
 };
 
 const readArchive = async (anchor, archiveBytes) => {
-  const directory = await mkdtemp(join(tmpdir(), "effect-build-plan042-plan041-"));
-  const archive = join(directory, "plan041.zip");
+  const directory = await mkdtemp(join(tmpdir(), "effect-build-plan043-plan042-"));
+  const archive = join(directory, "plan042.zip");
   try {
     await writeFile(archive, archiveBytes, { flag: "wx" });
     const listing = await execute("unzip", ["-Z1", archive], { encoding: "utf8", maxBuffer: 1024 * 1024 });
@@ -135,7 +135,7 @@ const authenticateRemoteHead = async ({ apiBase, origin, repositoryName, sourceS
   const ref = requiredEnvironment("GITHUB_REF");
   const refType = requiredEnvironment("GITHUB_REF_TYPE");
   assert.equal(event.ref, ref);
-  assert.equal(ref, plan042CertificationRef);
+  assert.equal(ref, plan043CertificationRef);
   assert.equal(refType, "branch");
   const encoded = ref.slice("refs/".length).split("/").map(encodeURIComponent).join("/");
   const remote = await requestJson({
@@ -166,24 +166,24 @@ const authenticateSourcePolicyVerifierOrigin = async (sourceSha) => {
   return sourcePolicyVerifierOrigin({ documents, sourceSha });
 };
 
-const authenticatePlan041Artifact = async ({ apiBase, documents, origin, repositoryName, token }) => {
-  const { plan041Anchor } = documents;
+const authenticatePlan042Artifact = async ({ apiBase, documents, origin, repositoryName, token }) => {
+  const { plan042Anchor } = documents;
   const run = await requestJson({
     origin,
     repositoryName,
     token,
-    url: `${apiBase}/repos/${repositoryName}/actions/runs/${plan041Anchor.workflow.runId}`,
+    url: `${apiBase}/repos/${repositoryName}/actions/runs/${plan042Anchor.workflow.runId}`,
   });
   const artifact = await requestJson({
     origin,
     repositoryName,
     token,
-    url: `${apiBase}/repos/${repositoryName}/actions/artifacts/${plan041Anchor.aggregateArtifact.id}`,
+    url: `${apiBase}/repos/${repositoryName}/actions/artifacts/${plan042Anchor.aggregateArtifact.id}`,
   });
-  validatePlan041Api({ artifact, plan041Anchor, run });
-  const archiveBytes = await downloadArtifact({ artifact, origin, plan041Anchor, repositoryName, token });
-  const archive = await readArchive(plan041Anchor, archiveBytes);
-  const authenticated = validatePlan041Archive({ archiveBytes, plan041Anchor, ...archive });
+  validatePlan042Api({ artifact, plan042Anchor, run });
+  const archiveBytes = await downloadArtifact({ artifact, origin, plan042Anchor, repositoryName, token });
+  const archive = await readArchive(plan042Anchor, archiveBytes);
+  const authenticated = validatePlan042Archive({ archiveBytes, plan042Anchor, ...archive });
   return { ...authenticated, transport: "github-api" };
 };
 
@@ -196,13 +196,14 @@ export const certifyCurrentHead = async () => {
     plan039Anchor,
     plan040Anchor,
     plan041Anchor,
+    plan042Anchor,
     profile,
   } = documents;
   assert.equal(requiredEnvironment("CERTIFICATION_PROFILE"), profile.profileId);
-  assert.equal(process.env.GITHUB_ACTIONS, "true", "Plan 042 certification is authoritative only in GitHub Actions");
+  assert.equal(process.env.GITHUB_ACTIONS, "true", "Plan 043 certification is authoritative only in GitHub Actions");
   const sourceSha = requiredEnvironment("SOURCE_SHA");
   const repositoryName = requiredEnvironment("GITHUB_REPOSITORY");
-  assert.equal(repositoryName, plan041Anchor.workflow.repository);
+  assert.equal(repositoryName, plan042Anchor.workflow.repository);
   const token = requiredEnvironment("GITHUB_TOKEN");
   const apiBase = requiredEnvironment("GITHUB_API_URL").replace(/\/$/, "");
   const origin = new URL(apiBase).origin;
@@ -220,7 +221,8 @@ export const certifyCurrentHead = async () => {
     handoffIsPlan039Ancestor: await ancestor(profile.productionBaseline.handoffSha, profile.productionBaseline.plan039Sha),
     plan039IsPlan040Ancestor: await ancestor(profile.productionBaseline.plan039Sha, profile.productionBaseline.plan040Sha),
     plan040IsPlan041Ancestor: await ancestor(profile.productionBaseline.plan040Sha, profile.productionBaseline.plan041Sha),
-    plan041IsCurrentAncestor: await ancestor(profile.productionBaseline.plan041Sha, sourceSha),
+    plan041IsPlan042Ancestor: await ancestor(profile.productionBaseline.plan041Sha, profile.productionBaseline.plan042Sha),
+    plan042IsCurrentAncestor: await ancestor(profile.productionBaseline.plan042Sha, sourceSha),
   };
   const currentManifest = JSON.parse(await readFile(resolve(repository, profile.workspaceManifest.path), "utf8"));
   const handoffManifest = JSON.parse(await git(["show", `${profile.productionBaseline.handoffSha}:${profile.workspaceManifest.path}`]));
@@ -234,31 +236,44 @@ export const certifyCurrentHead = async () => {
     coreStagedDiff: await changedPaths(profile.productionBaseline.plan039Sha, sourceSha, profile.coreStagedFiles),
     esbuildStagedDiff: await changedPaths(profile.productionBaseline.plan040Sha, sourceSha, profile.esbuildImplementationFiles),
     bunStagedDiff: await changedPaths(profile.productionBaseline.plan041Sha, sourceSha, profile.bunImplementationFiles),
+    denoStagedDiff: await changedPaths(profile.productionBaseline.plan042Sha, sourceSha, profile.denoImplementationFiles),
     head,
     immutablePublicDiff: await changedPaths(profile.productionBaseline.handoffSha, sourceSha, profile.immutablePublicPaths),
-    implementationAddedOrModifiedPaths: await changedPaths(
-      profile.productionBaseline.plan041Sha,
+    nodeSeaScopedAddedOrModifiedPaths: await changedPaths(
+      profile.productionBaseline.plan042Sha,
       sourceSha,
-      profile.denoImplementationFiles,
+      profile.nodeSeaScopedPaths,
       "AM",
     ),
+    nodeSeaCompanionAddedOrModifiedPaths: await changedPaths(
+      profile.productionBaseline.plan042Sha,
+      sourceSha,
+      profile.nodeSeaCompanionPaths,
+      "AM",
+    ),
+    importBoundarySource: await readFile(resolve(repository, "test/architecture/import-boundaries.test.ts"), "utf8"),
+    nodeSeaConsumerSource: await readFile(
+      resolve(repository, "research/post-0.3/implementation/staged-node-sea-adapter.mjs"),
+      "utf8",
+    ),
     planIndexSource: await readFile(resolve(repository, "plans/README.md"), "utf8"),
-    planSource: await readFile(resolve(repository, "plans/042-add-deno-bundle-command-lanes.md"), "utf8"),
+    planSource: await readFile(resolve(repository, "plans/043-publish-single-node-program-profile.md"), "utf8"),
     profile,
     sourceSha,
     workflowSource: await readFile(resolve(repository, ".github/workflows/architecture-research.yml"), "utf8"),
   });
   const currentHead = await authenticateRemoteHead({ apiBase, origin, repositoryName, sourceSha, token });
-  const plan041 = await authenticatePlan041Artifact({ apiBase, documents, origin, repositoryName, token });
+  const plan042 = await authenticatePlan042Artifact({ apiBase, documents, origin, repositoryName, token });
 
   await mkdir(receiptDirectory, { recursive: true });
-  assert.deepEqual(await readdir(receiptDirectory), [], "Plan 042 receipt directory is not empty");
+  assert.deepEqual(await readdir(receiptDirectory), [], "Plan 043 receipt directory is not empty");
   const historicalAuthority = historicalAuthoritySummary({
     freezeAnchor,
     handoffAnchor,
     plan039Anchor,
     plan040Anchor,
     plan041Anchor,
+    plan042Anchor,
   });
   const receipt = {
     schema: "effect-build/implementation-receipt@1",
@@ -269,7 +284,7 @@ export const certifyCurrentHead = async () => {
     claims: expectedReceiptClaims(expected),
     evidence: {
       historicalAuthority,
-      plan041Artifact: { sourceSha: plan041.sourceSha, transport: plan041.transport },
+      plan042Artifact: { sourceSha: plan042.sourceSha, transport: plan042.transport },
       currentHead,
       sourcePolicyVerifierOrigin: policyVerifierOrigin,
       repositoryScope: { ...implementationState, activeInstructions, workspaceManifest },
@@ -290,6 +305,7 @@ export const certifyCurrentHead = async () => {
     plan039Anchor,
     plan040Anchor,
     plan041Anchor,
+    plan042Anchor,
     profile,
     receipt,
     sourceSha,
@@ -329,6 +345,7 @@ export const certifyCurrentHead = async () => {
     plan039Anchor,
     plan040Anchor,
     plan041Anchor,
+    plan042Anchor,
     profile,
     sourcePolicyVerifierOrigin: policyVerifierOrigin,
     sourceSha,
@@ -336,8 +353,8 @@ export const certifyCurrentHead = async () => {
   const certificateBytes = Buffer.from(`${JSON.stringify(certificate, null, 2)}\n`);
   await writeFile(join(receiptDirectory, profile.certificateFile), certificateBytes, { flag: "wx" });
   assert.deepEqual(sorted(await readdir(receiptDirectory)), sorted([profile.certificateFile, receiptFile]));
-  process.stdout.write(`EFFECT_BUILD_PLAN042_CERTIFIED=${sourceSha}\n`);
-  process.stdout.write(`EFFECT_BUILD_PLAN042_CERTIFICATE_SHA256=${sha256(certificateBytes)}\n`);
+  process.stdout.write(`EFFECT_BUILD_PLAN043_CERTIFIED=${sourceSha}\n`);
+  process.stdout.write(`EFFECT_BUILD_PLAN043_CERTIFICATE_SHA256=${sha256(certificateBytes)}\n`);
   return certificate;
 };
 

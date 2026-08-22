@@ -66,7 +66,7 @@ describe("staged 0.4 Bun CompileExecutable surface", () => {
     expect(provider!.root).toEqual({ form: "namespace-only", namespaces: ["CompileExecutable"] });
     expect(provider!.subpaths.map(({ subpath }) => subpath)).toEqual([expectedSubpath]);
     expect(provider!.subpaths[0]!.operationIds).toEqual(["CAN-BUN-012"]);
-    expect(profile.plan).toBe("042");
+    expect(profile.plan).toBe("043");
     expect(profile.bunImplementationFiles).toContain(sourcePath);
 
     const manifest = await readJson<{ readonly exports: Readonly<Record<string, unknown>> }>(

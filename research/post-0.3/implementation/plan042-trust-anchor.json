@@ -1,0 +1,50 @@
+{
+  "schema": "effect-build/plan042-implementation-trust-anchor@1",
+  "profileId": "effect-build/plan042-implementation@1",
+  "sourceSha": "9d15d17ccf7d74f14cf95c06162d95be8ed7d27f",
+  "releaseSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+  "freezeSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+  "handoffSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+  "plan039Sha": "e12e930de5622be3f23814f3235293c93fcfd8bf",
+  "plan040Sha": "3ced06d29fe8644eae5465fed4878a6faea322f3",
+  "plan041Sha": "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
+  "workflow": {
+    "repository": "mannyc2/effect-build",
+    "name": "plan-042-implementation-certification",
+    "path": ".github/workflows/architecture-research.yml",
+    "runId": "32603983985",
+    "runAttempt": "1",
+    "eventName": "push",
+    "ref": "refs/heads/codex/plan042-deno-lane",
+    "conclusion": "success",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32603983985"
+  },
+  "aggregateArtifact": {
+    "id": "9483687179",
+    "name": "plan042-implementation-certification-9d15d17ccf7d74f14cf95c06162d95be8ed7d27f",
+    "sizeInBytes": 7798,
+    "digest": "sha256:c06530be389696e96ed7996e0e80eee9fb2ece23cccb06b5ceadb1499b1c62fe",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32603983985/artifacts/9483687179"
+  },
+  "certification": {
+    "file": "plan042-certification.json",
+    "schema": "effect-build/implementation-certification@1",
+    "digest": "sha256:6ee3b724c2ff73a229dcad59da7f5d9c3f80d9a2140d9f115f83e350b217a779",
+    "phase": "implementation",
+    "claims": 5,
+    "result": "certified"
+  },
+  "receipt": {
+    "id": "plan042-implementation",
+    "file": "plan042-implementation.json",
+    "digest": "sha256:545275dfc5d081887882dd02f9cb54843994cab538141c2229e66db3f0c72ddc"
+  },
+  "plan041Input": {
+    "profileId": "effect-build/plan041-implementation@1",
+    "sourceSha": "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
+    "aggregateArtifactId": "9482238619",
+    "aggregateArtifactDigest": "sha256:4c54dc0458a5811ce5008795b3988427c8b98b5a902caae2ff968862dd27c545",
+    "certificationDigest": "sha256:9d0c9f14aee6bd3add8808b9f4084bcb2704b84d07206e24c3b27867da6c1ce6",
+    "receiptDigest": "sha256:2d758590ad8ac9177d910fef64d26389e57e2f20592ca3a5e1de54fcb49ee3b4"
+  }
+}

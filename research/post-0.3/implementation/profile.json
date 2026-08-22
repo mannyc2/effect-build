@@ -1,29 +1,32 @@
 {
   "schema": "effect-build/implementation-certification-profile@2",
-  "profileId": "effect-build/plan042-implementation@1",
-  "plan": "042",
+  "profileId": "effect-build/plan043-implementation@1",
+  "plan": "043",
   "phase": "implementation",
   "trustAnchor": "research/post-0.3/implementation/freeze-trust-anchor.json",
   "handoffTrustAnchor": "research/post-0.3/implementation/handoff-trust-anchor.json",
   "plan039TrustAnchor": "research/post-0.3/implementation/plan039-trust-anchor.json",
   "plan040TrustAnchor": "research/post-0.3/implementation/plan040-trust-anchor.json",
   "plan041TrustAnchor": "research/post-0.3/implementation/plan041-trust-anchor.json",
+  "plan042TrustAnchor": "research/post-0.3/implementation/plan042-trust-anchor.json",
   "expectedClaims": "research/post-0.3/implementation/expected-claims.json",
-  "receiptDirectoryEnvironment": "PLAN042_RECEIPTS_DIR",
-  "certificateFile": "plan042-certification.json",
+  "receiptDirectoryEnvironment": "PLAN043_RECEIPTS_DIR",
+  "certificateFile": "plan043-certification.json",
   "producers": [{
     "lane": "implementation",
     "script": "research/post-0.3/implementation/certify-current-head.mjs",
-    "receipts": ["plan042-implementation"]
+    "receipts": ["plan043-implementation"]
   }],
-  "currentReceiptIds": ["plan042-implementation"],
+  "currentReceiptIds": ["plan043-implementation"],
   "historicalProfileIds": [
+    "effect-build/plan042-implementation@1",
     "effect-build/plan041-implementation@1",
     "effect-build/plan040-implementation@1",
     "effect-build/plan039-implementation@1",
     "post-0.3-surface-freeze-v1"
   ],
   "forbiddenCurrentReceiptIds": [
+    "plan042-implementation",
     "plan041-implementation",
     "plan040-implementation",
     "plan039-implementation",
@@ -53,6 +56,10 @@
     "packages/effect-build-deno/src/internal/v04/executable.ts",
     "packages/effect-build-deno/src/internal/v04/matrix.ts",
     "packages/effect-build-deno/src/internal/v04/selected.ts",
+    "packages/effect-build-node-sea/src/AssembleExecutable.ts",
+    "packages/effect-build-node-sea/src/internal/v04/compatibility.ts",
+    "packages/effect-build-node-sea/src/internal/v04/executable.ts",
+    "packages/effect-build-node-sea/src/internal/v04/selected.ts",
     "packages/effect-build/src/Artifact.ts",
     "packages/effect-build/src/Author/BorrowedOutput.ts",
     "packages/effect-build/src/Author/Executable.ts",
@@ -63,9 +70,12 @@
     "plans/040-expose-esbuild-api-lane.md",
     "plans/041-add-bun-api-command-lanes.md",
     "plans/042-add-deno-bundle-command-lanes.md",
+    "plans/043-publish-single-node-program-profile.md",
     "plans/README.md",
     "plans/RESEARCH-BRANCH-LANDING-PLAN.md",
     "research/post-0.3/implementation/",
+    "scripts/read-tooling.mjs",
+    "scripts/provision-tool-assets.mjs",
     "scripts/verify-target-support.mjs",
     "scripts/verify-v04-bun-target-support.mjs",
     "scripts/verify-v04-deno-target-support.mjs",
@@ -77,11 +87,16 @@
     "test/architecture/v04-staged-esbuild-surface.test.ts",
     "test/architecture/v04-staged-bun-surface.test.ts",
     "test/architecture/v04-staged-deno-surface.test.ts",
+    "test/architecture/v04-staged-node-sea-surface.test.ts",
     "test/fixtures/v04/fake-bun.mjs",
     "test/fixtures/v04/fake-deno.mjs",
+    "test/fixtures/v04/node-sea/main.cjs",
+    "test/fixtures/v04/node-sea/main.mjs",
+    "test/fixtures/v04/node-sea/message.txt",
     "test/integration/standalone-target-support.test.ts",
     "test/integration/v04-bun-compile-executable.test.ts",
     "test/integration/v04-deno-compile-executable.test.ts",
+    "test/integration/v04-node-sea-assemble-executable.test.ts",
     "test/unit/v04-artifact.test.ts",
     "test/unit/v04-esbuild-build.test.ts",
     "test/unit/v04-esbuild-context.test.ts",
@@ -90,6 +105,8 @@
     "test/unit/v04-bun-matrix.test.ts",
     "test/unit/v04-deno-compile-executable.test.ts",
     "test/unit/v04-deno-matrix.test.ts",
+    "test/unit/v04-node-sea-assemble-executable.test.ts",
+    "tooling/tool-pins.json",
     "typetest/v04-artifact.tst.ts",
     "typetest/v04-author-borrowed-output.tst.ts",
     "typetest/v04-author-executable.tst.ts",
@@ -99,7 +116,8 @@
     "typetest/v04-matrix.tst.ts",
     "typetest/v04-system-target.tst.ts",
     "typetest/v04-bun-compile-executable.tst.ts",
-    "typetest/v04-deno-compile-executable.tst.ts"
+    "typetest/v04-deno-compile-executable.tst.ts",
+    "typetest/v04-node-sea-assemble-executable.tst.ts"
   ],
   "bunImplementationFiles": [
     "packages/effect-build-bun/src/CompileExecutable.ts",
@@ -114,6 +132,30 @@
     "packages/effect-build-deno/src/internal/v04/executable.ts",
     "packages/effect-build-deno/src/internal/v04/matrix.ts",
     "packages/effect-build-deno/src/internal/v04/selected.ts"
+  ],
+  "nodeSeaImplementationFiles": [
+    "packages/effect-build-node-sea/src/AssembleExecutable.ts",
+    "packages/effect-build-node-sea/src/internal/v04/compatibility.ts",
+    "packages/effect-build-node-sea/src/internal/v04/executable.ts",
+    "packages/effect-build-node-sea/src/internal/v04/selected.ts"
+  ],
+  "nodeSeaScopedPaths": [
+    "packages/effect-build-node-sea/src/AssembleExecutable.ts",
+    "packages/effect-build-node-sea/src/internal/v04/compatibility.ts",
+    "packages/effect-build-node-sea/src/internal/v04/executable.ts",
+    "packages/effect-build-node-sea/src/internal/v04/selected.ts",
+    "test/architecture/v04-staged-node-sea-surface.test.ts",
+    "test/fixtures/v04/node-sea/main.cjs",
+    "test/fixtures/v04/node-sea/main.mjs",
+    "test/fixtures/v04/node-sea/message.txt",
+    "test/integration/v04-node-sea-assemble-executable.test.ts",
+    "test/unit/v04-node-sea-assemble-executable.test.ts",
+    "typetest/v04-node-sea-assemble-executable.tst.ts"
+  ],
+  "nodeSeaCompanionPaths": [
+    "package.json",
+    "research/post-0.3/implementation/staged-node-sea-adapter.mjs",
+    "test/architecture/import-boundaries.test.ts"
   ],
   "esbuildImplementationFiles": [
     "packages/effect-build-esbuild/src/Build.ts",
@@ -149,17 +191,19 @@
     "handoffSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e",
     "plan039Sha": "e12e930de5622be3f23814f3235293c93fcfd8bf",
     "plan040Sha": "3ced06d29fe8644eae5465fed4878a6faea322f3",
-    "plan041Sha": "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40"
+    "plan041Sha": "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
+    "plan042Sha": "9d15d17ccf7d74f14cf95c06162d95be8ed7d27f"
   },
   "workspaceManifest": {
     "path": "package.json",
     "scriptAppends": {
-      "test:unit": " test/unit/v04-artifact.test.ts test/unit/v04-primitives.test.ts test/unit/v04-esbuild-build.test.ts test/unit/v04-esbuild-context.test.ts test/unit/v04-bun-compile-executable.test.ts test/unit/v04-bun-matrix.test.ts test/unit/v04-deno-compile-executable.test.ts test/unit/v04-deno-matrix.test.ts",
-      "test:architecture": " test/architecture/v04-staged-core-surface.test.ts test/architecture/v04-staged-esbuild-surface.test.ts test/architecture/v04-staged-bun-surface.test.ts test/architecture/v04-staged-deno-surface.test.ts"
+      "test:unit": " test/unit/v04-artifact.test.ts test/unit/v04-primitives.test.ts test/unit/v04-esbuild-build.test.ts test/unit/v04-esbuild-context.test.ts test/unit/v04-bun-compile-executable.test.ts test/unit/v04-bun-matrix.test.ts test/unit/v04-deno-compile-executable.test.ts test/unit/v04-deno-matrix.test.ts test/unit/v04-node-sea-assemble-executable.test.ts",
+      "test:architecture": " test/architecture/v04-staged-core-surface.test.ts test/architecture/v04-staged-esbuild-surface.test.ts test/architecture/v04-staged-bun-surface.test.ts test/architecture/v04-staged-deno-surface.test.ts test/architecture/v04-staged-node-sea-surface.test.ts"
     },
     "scriptAdds": {
       "test:integration:v04-bun": "vitest run test/integration/v04-bun-compile-executable.test.ts",
-      "test:integration:v04-deno": "vitest run test/integration/v04-deno-compile-executable.test.ts"
+      "test:integration:v04-deno": "vitest run test/integration/v04-deno-compile-executable.test.ts",
+      "test:integration:v04-node-sea": "vitest run test/integration/v04-node-sea-assemble-executable.test.ts"
     }
   },
   "migrationPlan": "research/post-0.3/implementation/core-migration-plan.json"
