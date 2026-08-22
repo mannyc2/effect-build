@@ -62,16 +62,36 @@ const expectedPublicApi = {
   version: 2,
   packages: {
     "effect-build": {
-      subpaths: [".", "./Provider"],
+      subpaths: [".", "./Integration", "./Provider"],
       runtimeKeys: {
-        ".": ["Artifact", "BuildError", "MatrixError", "Target"],
+        ".": ["Artifact", "BuildError", "JavaScriptBundle", "MatrixError", "Target"],
+        "./Integration": [
+          "executeCommand",
+          "inspectLiveJavaScriptBundle",
+          "produceExecutable",
+          "withOwnedJavaScriptBundle",
+        ],
         "./Provider": ["define"],
       },
     },
     "effect-build-bun": {
       subpaths: ["."],
       runtimeKeys: {
-        ".": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+        ".": [
+          "BunBundleFailed",
+          "BunBundleInvalid",
+          "BunBundleMaterializationFailed",
+          "BunBundleMaterializationOperation",
+          "BunBundleSpawnFailed",
+          "BunBundleVersionMismatch",
+          "Compiler",
+          "InvalidBundleInput",
+          "Target",
+          "compileExecutable",
+          "compileExecutableMatrix",
+          "layer",
+          "withJavaScriptBundle",
+        ],
       },
     },
     "effect-build-deno": {
@@ -80,10 +100,39 @@ const expectedPublicApi = {
         ".": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
       },
     },
+    "effect-build-esbuild": {
+      subpaths: ["."],
+      runtimeKeys: {
+        ".": [
+          "BundleMaterializationFailed",
+          "BundleMaterializationOperation",
+          "Esbuild",
+          "EsbuildDiagnostic",
+          "EsbuildFailed",
+          "EsbuildVersionMismatch",
+          "InvalidBundleInput",
+          "JavaScriptBundleInvalid",
+          "layer",
+          "withJavaScriptBundle",
+        ],
+      },
+    },
     "effect-build-node-sea": {
       subpaths: ["."],
       runtimeKeys: {
-        ".": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+        ".": [
+          "InvalidNodeSeaInput",
+          "NodeSea",
+          "NodeSeaFailed",
+          "NodeSeaPreparationFailed",
+          "NodeSeaPreparationOperation",
+          "NodeSeaProbeFailed",
+          "NodeSeaSpawnFailed",
+          "NodeSeaSyntaxCheckFailed",
+          "NodeSeaToolNotFound",
+          "createExecutable",
+          "layer",
+        ],
       },
     },
   },

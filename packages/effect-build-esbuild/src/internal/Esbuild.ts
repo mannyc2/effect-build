@@ -1,4 +1,6 @@
-import { Context, Effect, FileSystem, Layer, Path, Schema, type Scope } from "effect";
+import { Cause, Context, Crypto, Effect, FileSystem, Layer, Path, Result, Schema, type Scope } from "effect";
+import { JavaScriptBundle } from "effect-build";
+import * as Integration from "effect-build/Integration";
 import * as esbuild from "esbuild";
 
 const expectedVersion = "0.28.2" as const;
@@ -30,19 +32,15 @@ export interface JavaScriptBundleInput {
   readonly cwd?: string;
 }
 
-export interface JavaScriptBundleArtifact {
-  readonly path: string;
-  readonly format: "esm" | "cjs";
-  readonly nodeSyntaxTarget: "node26.7";
-  readonly observedExternalImports: readonly string[];
-  readonly stage: {
-    readonly operation: "bundle";
-    readonly tool: {
-      readonly name: "esbuild";
-      readonly version: "0.28.2";
-    };
+interface EsbuildStage {
+  readonly operation: "bundle";
+  readonly tool: {
+    readonly name: "esbuild";
+    readonly version: "0.28.2";
   };
 }
+
+type JavaScriptBundleArtifact = JavaScriptBundle.Artifact<readonly [EsbuildStage]>;
 
 const EsbuildDiagnosticLocation = Schema.Struct({
   file: Schema.String,
@@ -57,29 +55,86 @@ export const EsbuildDiagnostic = Schema.Struct({
 });
 export type EsbuildDiagnostic = typeof EsbuildDiagnostic.Type;
 
-export class EsbuildVersionMismatch extends Schema.TaggedError<EsbuildVersionMismatch>()(
+export class EsbuildVersionMismatch extends Schema.TaggedError<EsbuildVersionMismatch>(
+  "effect-build-esbuild/EsbuildVersionMismatch",
+)(
   "EsbuildVersionMismatch",
   { expected: Schema.Literal(expectedVersion), observed: Schema.String },
 ) {}
 
-export class InvalidBundleInput extends Schema.TaggedError<InvalidBundleInput>()("InvalidBundleInput", {
-  reason: Schema.String,
+const InvalidBundleInputReason = Schema.Literals(
+  [
+    "expected-object",
+    "unknown-field",
+    "missing-field",
+    "invalid-entrypoint",
+    "invalid-format",
+    "invalid-cwd",
+    "unsupported-entrypoint-extension",
+    "entrypoint-not-regular",
+  ] as const,
+);
+type InvalidBundleInputReason = typeof InvalidBundleInputReason.Type;
+
+export class InvalidBundleInput extends Schema.TaggedError<InvalidBundleInput>(
+  "effect-build-esbuild/InvalidBundleInput",
+)("InvalidBundleInput", {
+  reason: InvalidBundleInputReason,
 }) {}
 
-export class EsbuildFailed extends Schema.TaggedError<EsbuildFailed>()("EsbuildFailed", {
-  diagnostics: Schema.Array(EsbuildDiagnostic),
-  truncated: Schema.Boolean,
-}) {}
-
-export class JavaScriptBundleInvalid extends Schema.TaggedError<JavaScriptBundleInvalid>()(
-  "JavaScriptBundleInvalid",
-  { reason: Schema.String },
+export class EsbuildFailed extends Schema.TaggedError<EsbuildFailed>("effect-build-esbuild/EsbuildFailed")(
+  "EsbuildFailed",
+  {
+    diagnostics: Schema.Array(EsbuildDiagnostic),
+    truncated: Schema.Boolean,
+  },
 ) {}
 
-export const BundleMaterializationOperation = Schema.Literals(["make-temp", "write", "stat"] as const);
+const EsbuildBundleInvalidReason = Schema.Union([
+  JavaScriptBundle.InvalidReason,
+  Schema.Literals(
+    [
+      "expected-one-output-file",
+      "output-file-path-mismatch",
+      "missing-metafile",
+      "expected-one-metafile-output",
+      "metafile-output-mismatch",
+      "entrypoint-mismatch",
+      "css-output-not-supported",
+      "invalid-input-metafile-record",
+      "invalid-input-import",
+      "runtime-import-not-supported",
+      "require-resolve-not-supported",
+      "unknown-input-import-kind",
+      "invalid-output-imports",
+      "invalid-output-import",
+      "unsupported-output-import",
+    ] as const,
+  ),
+]);
+
+export class JavaScriptBundleInvalid extends Schema.TaggedError<JavaScriptBundleInvalid>(
+  "effect-build-esbuild/JavaScriptBundleInvalid",
+)(
+  "JavaScriptBundleInvalid",
+  { reason: EsbuildBundleInvalidReason },
+) {}
+
+export const BundleMaterializationOperation = Schema.Literals(
+  [
+    "make-temp",
+    "write",
+    "realpath",
+    "stat",
+    "read",
+    "digest",
+  ] as const,
+);
 export type BundleMaterializationOperation = typeof BundleMaterializationOperation.Type;
 
-export class BundleMaterializationFailed extends Schema.TaggedError<BundleMaterializationFailed>()(
+export class BundleMaterializationFailed extends Schema.TaggedError<BundleMaterializationFailed>(
+  "effect-build-esbuild/BundleMaterializationFailed",
+)(
   "BundleMaterializationFailed",
   {
     path: Schema.String,
@@ -95,23 +150,16 @@ export type EsbuildBundleError =
   | JavaScriptBundleInvalid
   | BundleMaterializationFailed;
 
-export interface EsbuildService {
+export interface Service {
   readonly withJavaScriptBundle: <A, E, R>(
     input: JavaScriptBundleInput,
     use: (bundle: JavaScriptBundleArtifact) => Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, EsbuildBundleError | E, Exclude<R, Scope.Scope>>;
 }
 
-export class Esbuild extends Context.Service<Esbuild, EsbuildService>()("effect-build/internal/Esbuild") {}
+export type EsbuildService = Service;
 
-const liveArtifacts = new WeakSet<JavaScriptBundleArtifact>();
-
-export const getJavaScriptBundleArtifact = (value: unknown): JavaScriptBundleArtifact | undefined =>
-  typeof value === "object"
-    && value !== null
-    && liveArtifacts.has(value as JavaScriptBundleArtifact)
-    ? value as JavaScriptBundleArtifact
-    : undefined;
+export class Esbuild extends Context.Service<Esbuild, Service>()("effect-build-esbuild/Esbuild") {}
 
 interface BoundedString {
   readonly value: string;
@@ -188,33 +236,48 @@ const esbuildFailure = (error: unknown): EsbuildFailed => {
   );
 };
 
-const invalidInput = (reason: string): InvalidBundleInput => new InvalidBundleInput({ reason });
+const invalidInput = (reason: InvalidBundleInputReason): InvalidBundleInput => new InvalidBundleInput({ reason });
+
+const InputPath = Schema.String.pipe(
+  Schema.check(
+    Schema.makeFilter((value: string) => value.length > 0 && !value.includes("\0") ? true : "invalid path"),
+  ),
+);
+const InputFormat = Schema.Literals(["esm", "cjs"] as const);
+
+const decodeField = <A>(
+  schema: Schema.ConstraintDecoder<A>,
+  value: unknown,
+  reason: InvalidBundleInputReason,
+): Result.Result<A, InvalidBundleInput> =>
+  Result.mapError(Schema.decodeUnknownResult(schema)(value), () => invalidInput(reason));
+
+const decodeInputResult = (value: unknown): Result.Result<JavaScriptBundleInput, InvalidBundleInput> => {
+  if (!isRecord(value)) return Result.fail(invalidInput("expected-object"));
+  const keys = Reflect.ownKeys(value);
+  if (keys.some((key) => typeof key !== "string" || !["entrypoint", "format", "cwd"].includes(key))) {
+    return Result.fail(invalidInput("unknown-field"));
+  }
+  if (!Object.hasOwn(value, "entrypoint") || !Object.hasOwn(value, "format")) {
+    return Result.fail(invalidInput("missing-field"));
+  }
+  const entrypoint = decodeField(InputPath, value.entrypoint, "invalid-entrypoint");
+  if (Result.isFailure(entrypoint)) return Result.fail(entrypoint.failure);
+  const format = decodeField(InputFormat, value.format, "invalid-format");
+  if (Result.isFailure(format)) return Result.fail(format.failure);
+  const cwd = Object.hasOwn(value, "cwd")
+    ? decodeField(InputPath, value.cwd, "invalid-cwd")
+    : Result.succeed(undefined);
+  if (Result.isFailure(cwd)) return Result.fail(cwd.failure);
+  return Result.succeed({
+    entrypoint: entrypoint.success,
+    format: format.success,
+    ...(cwd.success === undefined ? {} : { cwd: cwd.success }),
+  });
+};
 
 const decodeInput = (value: unknown): Effect.Effect<JavaScriptBundleInput, InvalidBundleInput> =>
-  Effect.gen(function*() {
-    if (!isRecord(value)) return yield* invalidInput("expected-object");
-    const keys = Reflect.ownKeys(value);
-    if (keys.some((key) => typeof key !== "string" || !["entrypoint", "format", "cwd"].includes(key))) {
-      return yield* invalidInput("unknown-field");
-    }
-    if (!Object.hasOwn(value, "entrypoint") || !Object.hasOwn(value, "format")) {
-      return yield* invalidInput("missing-field");
-    }
-    if (typeof value.entrypoint !== "string" || value.entrypoint.length === 0 || value.entrypoint.includes("\0")) {
-      return yield* invalidInput("invalid-entrypoint");
-    }
-    if (value.format !== "esm" && value.format !== "cjs") return yield* invalidInput("invalid-format");
-    const cwd = Object.hasOwn(value, "cwd") ? value.cwd : undefined;
-    if (
-      cwd !== undefined
-      && (typeof cwd !== "string" || cwd.length === 0 || cwd.includes("\0"))
-    ) return yield* invalidInput("invalid-cwd");
-    return {
-      entrypoint: value.entrypoint,
-      format: value.format,
-      ...(cwd === undefined ? {} : { cwd }),
-    };
-  });
+  Effect.fromResult(decodeInputResult(value));
 
 const materializationFailed = (
   path: string,
@@ -348,91 +411,120 @@ const validateResult = (
     return { bytes: outputFile.contents, externalImports: Object.freeze([...externalImports].sort()) };
   });
 
-const makeArtifact = (
+const makeDescriptor = (
   path: string,
   format: "esm" | "cjs",
   observedExternalImports: readonly string[],
-): JavaScriptBundleArtifact => {
+): JavaScriptBundle.Input<readonly [EsbuildStage]> => {
   const tool = Object.freeze({ name: "esbuild" as const, version: expectedVersion });
   const stage = Object.freeze({ operation: "bundle" as const, tool });
   return Object.freeze({
     path,
     format,
-    nodeSyntaxTarget,
+    resolutionTarget: "node",
     observedExternalImports,
-    stage,
+    stages: Object.freeze([stage]) as readonly [EsbuildStage],
   });
 };
+
+const mapCoreBundleError = (
+  error: JavaScriptBundle.JavaScriptBundleError,
+  resolvedCwd: string,
+): JavaScriptBundleInvalid | BundleMaterializationFailed => {
+  if (JavaScriptBundle.InvalidJavaScriptBundle.is(error)) {
+    return new JavaScriptBundleInvalid({ reason: error.reason });
+  }
+  if (JavaScriptBundle.JavaScriptBundleAccessFailed.is(error)) {
+    return new BundleMaterializationFailed({
+      path: error.path,
+      operation: error.operation,
+      reason: error.reason,
+    });
+  }
+  return new BundleMaterializationFailed({
+    path: resolvedCwd,
+    operation: "make-temp",
+    reason: error.reason,
+  });
+};
+
+const mapOwnedCoreBundleError = <E>(
+  error: E,
+  resolvedCwd: string,
+): E | JavaScriptBundleInvalid | BundleMaterializationFailed =>
+  JavaScriptBundle.InvalidJavaScriptBundle.is(error)
+    || JavaScriptBundle.JavaScriptBundleAccessFailed.is(error)
+    || JavaScriptBundle.JavaScriptBundleTemporaryDirectoryFailed.is(error)
+    ? mapCoreBundleError(error, resolvedCwd)
+    : error;
 
 export const makeEsbuildService = (
   fileSystem: FileSystem.FileSystem,
   path: Path.Path,
   api: EsbuildApi,
-): Effect.Effect<EsbuildService, EsbuildVersionMismatch> =>
+): Effect.Effect<EsbuildService, EsbuildVersionMismatch, Crypto.Crypto> =>
   Effect.gen(function*() {
     if (api.version !== expectedVersion) {
       return yield* new EsbuildVersionMismatch({ expected: expectedVersion, observed: api.version });
     }
-    const withJavaScriptBundle: EsbuildService["withJavaScriptBundle"] = Effect.fn(
-      "Esbuild.withJavaScriptBundle",
+    const crypto = yield* Crypto.Crypto;
+    const withJavaScriptBundle: Service["withJavaScriptBundle"] = Effect.fn(
+      "effect-build-esbuild/Esbuild.withJavaScriptBundle",
     )(<A, E, R>(input: JavaScriptBundleInput, use: (bundle: JavaScriptBundleArtifact) => Effect.Effect<A, E, R>) =>
-      Effect.scoped(
-        Effect.gen(function*() {
-          const decoded = yield* decodeInput(input);
-          const resolvedCwd = path.normalize(path.resolve(decoded.cwd ?? ""));
-          const resolvedEntrypoint = path.normalize(path.resolve(resolvedCwd, decoded.entrypoint));
-          if (!allowedEntrypointExtensions.has(path.extname(resolvedEntrypoint).toLowerCase())) {
-            return yield* invalidInput("unsupported-entrypoint-extension");
-          }
-          const inputInformation = yield* fileSystem.stat(resolvedEntrypoint).pipe(
-            Effect.mapError((error) => invalidInput(error.message)),
-          );
-          if (inputInformation.type !== "File") return yield* invalidInput("entrypoint-not-regular");
-          const temporaryDirectory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "effect-build-esbuild-" })
-            .pipe(
-              Effect.mapError((error) => materializationFailed(resolvedCwd, "make-temp", error)),
-            );
-          const stagedPath = path.normalize(
-            path.resolve(temporaryDirectory, decoded.format === "esm" ? "main.mjs" : "main.cjs"),
-          );
-          const options = fixedOptions(resolvedCwd, resolvedEntrypoint, stagedPath, decoded.format);
-          const context = yield* Effect.acquireRelease(
-            Effect.tryPromise({ try: () => api.context(options), catch: esbuildFailure }),
-            releaseContext,
-          );
-          const result = yield* Effect.tryPromise({ try: () => context.rebuild(), catch: esbuildFailure });
-          const validated = yield* validateResult(
-            path,
-            result,
-            resolvedCwd,
-            resolvedEntrypoint,
-            stagedPath,
-            decoded.format,
-          );
-          yield* fileSystem.writeFile(stagedPath, validated.bytes).pipe(
-            Effect.mapError((error) => materializationFailed(stagedPath, "write", error)),
-          );
-          const information = yield* fileSystem.stat(stagedPath).pipe(
-            Effect.mapError((error) => materializationFailed(stagedPath, "stat", error)),
-          );
-          if (information.type !== "File") {
-            return yield* new BundleMaterializationFailed({
-              path: stagedPath,
-              operation: "stat",
-              reason: "not-regular",
-            });
-          }
-          const artifact = makeArtifact(stagedPath, decoded.format, validated.externalImports);
-          const registered = yield* Effect.acquireRelease(
-            Effect.sync(() => {
-              liveArtifacts.add(artifact);
-              return artifact;
-            }),
-            (value) => Effect.sync(() => liveArtifacts.delete(value)),
-          );
-          return yield* use(registered);
-        }),
-      )
+      Effect.gen(function*() {
+        const decoded = yield* decodeInput(input);
+        const resolvedCwd = path.normalize(path.resolve(decoded.cwd ?? ""));
+        const resolvedEntrypoint = path.normalize(path.resolve(resolvedCwd, decoded.entrypoint));
+        if (!allowedEntrypointExtensions.has(path.extname(resolvedEntrypoint).toLowerCase())) {
+          return yield* invalidInput("unsupported-entrypoint-extension");
+        }
+        const inputInformation = yield* fileSystem.stat(resolvedEntrypoint).pipe(
+          Effect.mapError((error) =>
+            error.reason._tag === "NotFound"
+              ? invalidInput("entrypoint-not-regular")
+              : materializationFailed(resolvedEntrypoint, "stat", error)
+          ),
+        );
+        if (inputInformation.type !== "File") return yield* invalidInput("entrypoint-not-regular");
+        const exit = yield* Integration.withOwnedJavaScriptBundle(
+          {
+            temporaryPrefix: "effect-build-esbuild-",
+            produce: (temporaryDirectory) =>
+              Effect.gen(function*() {
+                const stagedPath = path.normalize(
+                  path.resolve(temporaryDirectory, decoded.format === "esm" ? "main.mjs" : "main.cjs"),
+                );
+                const options = fixedOptions(resolvedCwd, resolvedEntrypoint, stagedPath, decoded.format);
+                const context = yield* Effect.acquireRelease(
+                  Effect.tryPromise({ try: () => api.context(options), catch: esbuildFailure }),
+                  releaseContext,
+                );
+                const result = yield* Effect.tryPromise({ try: () => context.rebuild(), catch: esbuildFailure });
+                const validated = yield* validateResult(
+                  path,
+                  result,
+                  resolvedCwd,
+                  resolvedEntrypoint,
+                  stagedPath,
+                  decoded.format,
+                );
+                yield* fileSystem.writeFile(stagedPath, validated.bytes).pipe(
+                  Effect.mapError((error) => materializationFailed(stagedPath, "write", error)),
+                );
+                return makeDescriptor(stagedPath, decoded.format, validated.externalImports);
+              }),
+          },
+          (bundle) => Effect.exit(use(bundle)),
+        ).pipe(
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+          Effect.provideService(Crypto.Crypto, crypto),
+          Effect.catchCause((cause) =>
+            Effect.failCause(Cause.map(cause, (error) => mapOwnedCoreBundleError(error, resolvedCwd)))
+          ),
+        );
+        return yield* exit;
+      }) as Effect.Effect<A, EsbuildBundleError | E, Exclude<R, Scope.Scope>>
     );
     return { withJavaScriptBundle };
   });
@@ -451,7 +543,7 @@ const realApi: EsbuildApi = {
 export const makeLiveEsbuildService: Effect.Effect<
   EsbuildService,
   EsbuildVersionMismatch,
-  FileSystem.FileSystem | Path.Path
+  FileSystem.FileSystem | Path.Path | Crypto.Crypto
 > = Effect.gen(function*() {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -461,7 +553,7 @@ export const makeLiveEsbuildService: Effect.Effect<
 export const layer: Layer.Layer<
   Esbuild,
   EsbuildVersionMismatch,
-  FileSystem.FileSystem | Path.Path
+  FileSystem.FileSystem | Path.Path | Crypto.Crypto
 > = Layer.effect(
   Esbuild,
   Effect.gen(function*() {

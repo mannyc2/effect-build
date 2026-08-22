@@ -1,3 +1,6 @@
+import { Result, Schema } from "effect";
+import * as Core from "effect-build";
+import type * as Integration from "effect-build/Integration";
 import type * as Provider from "effect-build/Provider";
 
 export type PermissionValue = true | readonly string[];
@@ -30,7 +33,7 @@ export type Options =
 
 const invalid = <A = never>(
   reason: string,
-): Provider.Validation<A> => ({ _tag: "Invalid", reason });
+): Result.Result<A, string> => Result.fail(reason);
 
 const allowedOptions: ReadonlySet<string> = new Set([
   "bundle",
@@ -68,8 +71,8 @@ const renderPermission = (
 
 const validatePermissions = (
   permissions: Permissions | undefined,
-): Provider.Validation<readonly string[]> => {
-  if (permissions === undefined) return { _tag: "Valid", value: [] };
+): Result.Result<readonly string[], string> => {
+  if (permissions === undefined) return Result.succeed([]);
   if (
     typeof permissions !== "object"
     || permissions === null
@@ -86,7 +89,7 @@ const validatePermissions = (
   }
   if (all === true) {
     return Object.keys(permissions).length === 1
-      ? { _tag: "Valid", value: ["--allow-all"] }
+      ? Result.succeed(["--allow-all"])
       : invalid("allow-all cannot be mixed with scoped permissions");
   }
   const permissionArgs: string[] = [];
@@ -98,7 +101,7 @@ const validatePermissions = (
     }
     permissionArgs.push(renderPermission(name, value));
   }
-  return { _tag: "Valid", value: permissionArgs };
+  return Result.succeed(permissionArgs);
 };
 
 export interface ValidatedOptions {
@@ -109,7 +112,7 @@ export interface ValidatedOptions {
 
 const validateOptions = (
   input: unknown,
-): Provider.Validation<ValidatedOptions> => {
+): Result.Result<ValidatedOptions, string> => {
   const value: unknown = input ?? {};
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return invalid("options must be an object");
@@ -133,36 +136,42 @@ const validateOptions = (
   const permissionArgs = validatePermissions(
     permissions as Permissions | undefined,
   );
-  return permissionArgs._tag === "Invalid"
-    ? permissionArgs
-    : {
-      _tag: "Valid",
-      value: {
-        ...(bundle === undefined ? {} : { bundle }),
-        ...(minify === undefined ? {} : { minify }),
-        permissionArgs: permissionArgs.value,
-      },
-    };
+  return Result.isFailure(permissionArgs)
+    ? Result.fail(permissionArgs.failure)
+    : Result.succeed({
+      ...(bundle === undefined ? {} : { bundle }),
+      ...(minify === undefined ? {} : { minify }),
+      permissionArgs: permissionArgs.success,
+    });
 };
 
-export const targetTokens = {
-  "macos-x64": "x86_64-apple-darwin",
-  "macos-aarch64": "aarch64-apple-darwin",
-  "linux-x64-gnu": "x86_64-unknown-linux-gnu",
-  "linux-aarch64-gnu": "aarch64-unknown-linux-gnu",
-  "windows-x64": "x86_64-pc-windows-msvc",
-  "windows-aarch64": "aarch64-pc-windows-msvc",
-} as const satisfies Readonly<
-  Record<Provider.TargetFor<"deno">, string>
->;
+export const targetEntries = [
+  ["macos-x64", "x86_64-apple-darwin"],
+  ["macos-aarch64", "aarch64-apple-darwin"],
+  ["linux-x64-gnu", "x86_64-unknown-linux-gnu"],
+  ["linux-aarch64-gnu", "aarch64-unknown-linux-gnu"],
+  ["windows-x64", "x86_64-pc-windows-msvc"],
+  ["windows-aarch64", "aarch64-pc-windows-msvc"],
+] as const;
+
+export const Stages = Schema.Tuple([
+  Schema.Struct({
+    operation: Schema.Literal("compile-executable"),
+    tool: Schema.Struct({
+      name: Schema.Literal("deno"),
+      version: Schema.NonEmptyString,
+      path: Core.Artifact.AbsolutePath,
+    }),
+  }),
+]);
 
 export const definition = {
-  kind: "command",
   probeArgv: [
     "eval",
-    'console.log(JSON.stringify({path:Deno.execPath(),version:Deno.version.deno,hostOs:Deno.build.os==="darwin"?"macos":Deno.build.os}))',
+    "console.log(JSON.stringify({path:Deno.execPath(),version:Deno.version.deno}))",
   ],
-  targetTokens,
+  targetEntries,
+  Stages,
   validateOptions,
   renderArgv: ({
     input,
@@ -171,7 +180,7 @@ export const definition = {
   }: {
     readonly input: Provider.PreparedCommandInput<
       ValidatedOptions,
-      Provider.TargetFor<"deno">
+      (typeof targetEntries)[number][0]
     >;
     readonly nativeTarget?: string;
     readonly stagedOutfile: string;
@@ -189,8 +198,8 @@ export const definition = {
     ];
   },
   interpretFailure: (
-    completion: Provider.CommandCompletion,
-  ): readonly Provider.Diagnostic[] => [
+    completion: Integration.CommandCompletion,
+  ): readonly Core.BuildError.Diagnostic[] => [
     { channel: "stdout", ...completion.stdout },
     { channel: "stderr", ...completion.stderr },
   ],

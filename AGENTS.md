@@ -1,13 +1,22 @@
 # effect-build execution rules
 
-- Keep exactly two public operations: scalar `compileExecutable` and homogeneous-provider `compileExecutableMatrix`.
-- Select exactly one provider package (`effect-build-bun`, `effect-build-deno`, or `effect-build-node-sea`). There is no registry, fallback, raw argv, retry, or automatic installation.
-- Keep package manager, orchestrator runtime, compiler, and artifact target independent. Applications provide one official Effect platform layer at composition time.
-- Keep exactly four lockstep public packages: `effect-build`, `effect-build-bun`, `effect-build-deno`, and `effect-build-node-sea`. Providers depend one way on core.
-- Shared lifecycle code owns sibling staging, scoped child processes, candidate identity, executable validation, optional hashing, and atomic replacement. Provider packages own discovery inputs, probing, target mapping, argv, and diagnostics.
-- `effect-build/Provider.define` is the only provider-author SPI. It is closed to Bun, Deno, and Node SEA and never exposes lifecycle, publication, or raw process capabilities.
+- Architecture generation: `completion-release-program-v1`.
+- Keep exactly five lockstep public packages: `effect-build`, `effect-build-bun`, `effect-build-deno`, `effect-build-esbuild`, and `effect-build-node-sea`. Every integration depends one way on core and never on an integration sibling.
+- Keep Bun and Deno's existing public scalar `compileExecutable` and homogeneous-provider `compileExecutableMatrix` operations and behavior. Bun additionally exposes one scoped Node-resolution JavaScript-bundle continuation; Deno gains no bundle API without separate evidence. There is no registry, fallback, retry, caller-facing raw argv, or automatic installation.
+- `effect-build` owns only provider-neutral Artifact/Target semantics plus the narrow `./Integration` and command-only `./Provider` author boundaries earned by current consumers. Do not add a generic builder, bundler, packager, plan, executor, store, cache, transport, or backend registry.
+- Esbuild and Bun independently produce the core scoped JavaScript-bundle capability. Node SEA consumes it and creates an executable. Application Effect code owns composition; do not add a combined facade/package or an integration sibling dependency.
+- Bun's Node target controls resolution and builtin handling, not a Node release or syntax lowering. The exact selected Node tool owns syntax acceptance before SEA assembly; core does not carry a provenance-only syntax mode.
+- Shared lifecycle code exclusively owns sibling staging, scoped child processes, candidate identity, executable validation, optional hashing, lifetime-safe publication claims, and atomic replacement. Integrations own tool discovery/probing, native invocation, semantic input validation, and diagnostics.
+- `effect-build/Provider.define` is a command-provider author SPI with Bun and Deno as its consumers. It may construct a provider-specific service from one selected bound command, but that command is not an end-user service or generic bundler protocol. Esbuild and Node SEA do not implement it.
+- `effect-build/Integration.executeCommand` is the one bounded/scoped integration-author command function. Do not expose a process handle, replaceable process service, candidate, commit, raw native inspector, or publication mutation capability.
+- Keep package manager, orchestrator runtime, build tool, and artifact target independent. Applications provide one official Effect platform Layer at composition time.
 - Library source uses Effect platform-neutral services. Do not import `node:*` or call `Effect.runPromise` under `packages/*/src/`.
-- Preserve compiler CLI behavior for project configuration and environment unless a future public option explicitly changes it.
-- Interruption closes the scope and terminates the compiler child. Do not translate interruption into a build error.
-- Keep internal adapters and process capabilities package-private.
+- Preserve compiler CLI project/environment behavior unless a dedicated public decision explicitly changes it.
+- Interruption closes Scope and terminates active children. Do not translate interruption into a build error. Atomic rename remains the publication point of no return.
 - Run `bun run verify` before handing off a complete implementation.
+- Plans 028-034 alone may make their bounded internal correctness, security, and performance changes while preserving the certified five-package star and current public APIs, except for Plan 030's explicitly documented total-invalid-input tightening.
+- No generic public service or target family is authorized before Plan 038 produces evidence and receives explicit parent approval.
+- Creating or changing a `ts-release` branch or source requires explicit parent approval.
+- npm login or mutation, namespace reservation, ownership or trust changes, publishing, tagging, and GitHub Releases remain forbidden until their named parent approval gate.
+- Candidate packages are packed once; consumer verification and publication must consume the same exact tarball bytes.
+- Manual, token, or fallback publication may not replace the qualified ordered coordinator. Observe partial or unknown outcomes rather than blindly retrying.

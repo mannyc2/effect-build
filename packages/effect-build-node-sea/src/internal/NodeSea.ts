@@ -1,19 +1,25 @@
-import { Context, Effect, FileSystem, HashSet, Path, type PlatformError, Schema } from "effect";
-import type { CommandCompletion, Diagnostic, ExecuteCommand } from "effect-build/Provider";
-import type { JavaScriptBundleArtifact } from "./Esbuild.js";
-import { getJavaScriptBundleArtifact } from "./Esbuild.js";
+import {
+  Cause,
+  Context,
+  Crypto,
+  Effect,
+  FileSystem,
+  HashSet,
+  Layer,
+  Path,
+  type PlatformError,
+  Result,
+  Schema,
+} from "effect";
+import * as Core from "effect-build";
+import * as Integration from "effect-build/Integration";
+import { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
 import { inspectSelectedNodeExecutable } from "./SelectedNodeExecutable.js";
 
-const DiagnosticSchema = Schema.Struct({
-  channel: Schema.Literals(["stdout", "stderr"] as const),
-  text: Schema.String,
-  truncated: Schema.Boolean,
-});
-
-export type ProcessCompletion = CommandCompletion;
+const DiagnosticSchema = Core.BuildError.Diagnostic;
+const StageObservationSchema = Core.Artifact.StageObservation;
 
 export const nodeSeaVersion = "26.7.0" as const;
-export const nodeSeaSyntaxTarget = "node26.7" as const;
 export const nodeSeaTarget = "linux-x64-gnu" as const;
 
 export const nodeSeaMetadataProbeSource = [
@@ -33,82 +39,118 @@ export const nodeSeaMetadataProbeSource = [
   "}));",
 ].join("\n");
 
-export interface NodeSeaAssetInput {
-  readonly key: string;
-  readonly path: string;
+export interface NodeSeaStage {
+  readonly operation: "assemble-node-sea";
+  readonly tool: {
+    readonly name: "node";
+    readonly version: "26.7.0";
+    readonly path: Core.Artifact.FileArtifact["path"];
+  };
 }
 
-export interface NodeSeaCandidateInput {
-  readonly main: JavaScriptBundleArtifact;
-  readonly stagedOutfile: string;
-  readonly resolvedDestination: string;
+export type Artifact<
+  MainStages extends readonly Core.Artifact.StageObservation[] = readonly Core.Artifact.StageObservation[],
+> = Readonly<
+  Omit<Core.Artifact.ExecutableArtifact, "target" | "stages"> & {
+    readonly provider: "node-sea";
+    readonly target: "linux-x64-gnu";
+    readonly stages: readonly [...MainStages, NodeSeaStage];
+  }
+>;
+
+export interface CreateExecutableInput<
+  MainStages extends readonly Core.Artifact.StageObservation[] = readonly Core.Artifact.StageObservation[],
+> {
+  readonly main: Core.JavaScriptBundle.Artifact<MainStages>;
+  readonly outfile: string;
   readonly cwd?: string;
-  readonly assets?: readonly NodeSeaAssetInput[];
+  readonly digest?: boolean;
+  readonly assets?: readonly {
+    readonly key: string;
+    readonly path: string;
+  }[];
 }
 
-export type NodeSeaStages = readonly [
-  JavaScriptBundleArtifact["stage"],
-  {
-    readonly operation: "assemble-node-sea";
-    readonly tool: {
-      readonly name: "node";
-      readonly version: "26.7.0";
-      readonly path: string;
-    };
-  },
-];
-
-export interface SelectedNodeSeaTool {
-  readonly path: string;
-  readonly version: "26.7.0";
-  readonly target: "linux-x64-gnu";
-  readonly builtinSpecifiers: HashSet.HashSet<string>;
-}
-
-export interface NodeSeaLayerOptions {
+export interface LayerOptions {
   readonly executable?: string;
 }
 
-export class NodeSeaToolNotFound extends Schema.TaggedError<NodeSeaToolNotFound>()(
-  "NodeSeaToolNotFound",
-  { command: Schema.String },
-) {}
+export class NodeSeaToolNotFound extends Schema.TaggedError<NodeSeaToolNotFound>(
+  "effect-build-node-sea/NodeSeaToolNotFound",
+)("NodeSeaToolNotFound", { command: Schema.String }) {}
 
-export class NodeSeaProbeFailed extends Schema.TaggedError<NodeSeaProbeFailed>()(
-  "NodeSeaProbeFailed",
-  { reason: Schema.String },
-) {}
+export class NodeSeaProbeFailed extends Schema.TaggedError<NodeSeaProbeFailed>(
+  "effect-build-node-sea/NodeSeaProbeFailed",
+)("NodeSeaProbeFailed", { reason: Schema.String }) {}
 
-export class InvalidNodeSeaInput extends Schema.TaggedError<InvalidNodeSeaInput>()(
-  "InvalidNodeSeaInput",
-  { reason: Schema.String },
-) {}
+const InvalidNodeSeaInputReason = Schema.Union([
+  Schema.Literals(
+    [
+      "expected-object",
+      "unknown-field",
+      "missing-field",
+      "invalid-outfile",
+      "invalid-cwd",
+      "invalid-digest",
+      "invalid-assets",
+      "invalid-asset",
+      "invalid-asset-key",
+      "asset-key-too-long",
+      "duplicate-asset-key",
+      "invalid-asset-path",
+      "main-artifact-not-live",
+      "main-artifact-not-regular",
+      "main-artifact-invalid-byte-count",
+      "main-artifact-changed",
+      "main-resolution-target-mismatch",
+      "cwd-not-directory",
+      "asset-not-regular",
+      "destination-aliases-input",
+    ] as const,
+  ),
+  Schema.TemplateLiteral(["external-import-not-builtin:", Schema.NonEmptyString]),
+]);
+type InvalidNodeSeaInputReason = typeof InvalidNodeSeaInputReason.Type;
+
+export class InvalidNodeSeaInput extends Schema.TaggedError<InvalidNodeSeaInput>(
+  "effect-build-node-sea/InvalidNodeSeaInput",
+)("InvalidNodeSeaInput", { reason: InvalidNodeSeaInputReason }) {}
 
 export const NodeSeaPreparationOperation = Schema.Literals(
   [
     "realpath",
     "stat",
+    "read-main",
+    "digest-main",
     "make-config",
     "write-config",
+    "copy-main",
+    "digest-main-copy",
+    "decode-stages",
   ] as const,
 );
 export type NodeSeaPreparationOperation = typeof NodeSeaPreparationOperation.Type;
 
-export class NodeSeaPreparationFailed extends Schema.TaggedError<NodeSeaPreparationFailed>()(
-  "NodeSeaPreparationFailed",
-  {
-    path: Schema.String,
-    operation: NodeSeaPreparationOperation,
-    reason: Schema.String,
-  },
-) {}
+export class NodeSeaPreparationFailed extends Schema.TaggedError<NodeSeaPreparationFailed>(
+  "effect-build-node-sea/NodeSeaPreparationFailed",
+)("NodeSeaPreparationFailed", {
+  path: Schema.String,
+  operation: NodeSeaPreparationOperation,
+  reason: Schema.String,
+}) {}
 
-export class NodeSeaSpawnFailed extends Schema.TaggedError<NodeSeaSpawnFailed>()(
-  "NodeSeaSpawnFailed",
-  { reason: Schema.String },
-) {}
+export class NodeSeaSpawnFailed extends Schema.TaggedError<NodeSeaSpawnFailed>(
+  "effect-build-node-sea/NodeSeaSpawnFailed",
+)("NodeSeaSpawnFailed", { reason: Schema.String }) {}
 
-export class NodeSeaFailed extends Schema.TaggedError<NodeSeaFailed>()(
+export class NodeSeaSyntaxCheckFailed extends Schema.TaggedError<NodeSeaSyntaxCheckFailed>(
+  "effect-build-node-sea/NodeSeaSyntaxCheckFailed",
+)("NodeSeaSyntaxCheckFailed", {
+  exitCode: Schema.Number,
+  diagnostics: Schema.Array(DiagnosticSchema),
+}) {}
+
+export class NodeSeaFailed extends Schema.TaggedError<NodeSeaFailed>("effect-build-node-sea/NodeSeaFailed")(
   "NodeSeaFailed",
   {
     exitCode: Schema.Number,
@@ -117,48 +159,47 @@ export class NodeSeaFailed extends Schema.TaggedError<NodeSeaFailed>()(
 ) {}
 
 export type NodeSeaLayerError = NodeSeaToolNotFound | NodeSeaProbeFailed;
-export type NodeSeaCandidateError =
+export type NodeSeaCreateError =
   | InvalidNodeSeaInput
   | NodeSeaPreparationFailed
   | NodeSeaSpawnFailed
-  | NodeSeaFailed;
+  | NodeSeaSyntaxCheckFailed
+  | NodeSeaFailed
+  | Core.BuildError.OutputMissing
+  | Core.BuildError.OutputInvalid
+  | Core.BuildError.OutputLocked
+  | Core.BuildError.PublicationFailed;
 
-export interface NodeSeaService {
-  readonly selectedTool: SelectedNodeSeaTool;
-  readonly produceCandidate: (
-    input: NodeSeaCandidateInput,
-  ) => Effect.Effect<NodeSeaStages, NodeSeaCandidateError>;
+export interface Service {
+  readonly createExecutable: <const MainStages extends readonly Core.Artifact.StageObservation[]>(
+    input: CreateExecutableInput<MainStages>,
+  ) => Effect.Effect<Artifact<MainStages>, NodeSeaCreateError>;
 }
 
-export class NodeSea extends Context.Service<NodeSea, NodeSeaService>()(
-  "effect-build-node-sea/internal/NodeSea",
-) {}
+export class NodeSea extends Context.Service<NodeSea, Service>()("effect-build-node-sea/NodeSea") {}
+
+export const createExecutable = <const MainStages extends readonly Core.Artifact.StageObservation[]>(
+  input: CreateExecutableInput<MainStages>,
+): Effect.Effect<Artifact<MainStages>, NodeSeaCreateError, NodeSea> =>
+  NodeSea.use((service) => service.createExecutable(input));
+
+export interface SelectedNodeSeaTool {
+  readonly path: Core.Artifact.AbsolutePath;
+  readonly version: "26.7.0";
+  readonly target: "linux-x64-gnu";
+  readonly builtinSpecifiers: HashSet.HashSet<string>;
+}
 
 export interface NodeSeaRuntime {
-  readonly run: ExecuteCommand;
+  readonly run: (
+    executable: string,
+    argv: readonly string[],
+    cwd?: string,
+  ) => Effect.Effect<Integration.CommandCompletion, PlatformError.PlatformError>;
 }
 
-interface DecodedInput {
-  readonly main: JavaScriptBundleArtifact;
-  readonly stagedOutfile: string;
-  readonly resolvedDestination: string;
-  readonly cwd?: string;
-  readonly assets: readonly NodeSeaAssetInput[];
-}
-
-interface PreparedAsset {
-  readonly key: string;
-  readonly path: string;
-  readonly realPath: string;
-}
-
-interface PreparedInput {
-  readonly main: JavaScriptBundleArtifact;
-  readonly resolvedCwd: string;
-  readonly resolvedDestination: string;
-  readonly stagedOutfile: string;
-  readonly mainFormat: "commonjs" | "module";
-  readonly assets: readonly PreparedAsset[];
+export interface NodeSeaService extends Service {
+  readonly selectedTool: SelectedNodeSeaTool;
 }
 
 interface MetadataProbe {
@@ -170,74 +211,40 @@ interface MetadataProbe {
   readonly builtinSpecifiers: readonly string[];
 }
 
-class DecodeFailure extends Error {}
+interface DecodedAsset {
+  readonly key: string;
+  readonly path: string;
+}
 
-const invalidInput = (reason: string): InvalidNodeSeaInput => new InvalidNodeSeaInput({ reason });
+interface DecodedInput<MainStages extends readonly Core.Artifact.StageObservation[]> {
+  readonly main: Core.JavaScriptBundle.Artifact<MainStages>;
+  readonly outfile: string;
+  readonly cwd?: string;
+  readonly digest?: boolean;
+  readonly assets: readonly DecodedAsset[];
+}
 
-const isRecord = (value: unknown): value is Record<PropertyKey, unknown> =>
+interface PreparedAsset {
+  readonly key: string;
+  readonly path: string;
+  readonly realPath: string;
+}
+
+interface PreparedInput<MainStages extends readonly Core.Artifact.StageObservation[]> {
+  readonly mainPath: string;
+  readonly mainStages: MainStages;
+  readonly privateMainPath: string;
+  readonly configPath: string;
+  readonly mainFormat: "commonjs" | "module";
+  readonly resolvedCwd: string;
+  readonly assets: readonly PreparedAsset[];
+  readonly nodeStage: NodeSeaStage;
+}
+
+const isRecord = (value: unknown): value is Readonly<Record<PropertyKey, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const assertExactKeys = (
-  value: Record<PropertyKey, unknown>,
-  required: readonly string[],
-  optional: readonly string[],
-): void => {
-  const allowed = new Set([...required, ...optional]);
-  const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => typeof key !== "string" || !allowed.has(key))) {
-    throw new DecodeFailure("unknown-field");
-  }
-  if (required.some((key) => !Object.hasOwn(value, key))) throw new DecodeFailure("missing-field");
-};
-
-const nonEmptyPath = (value: unknown, reason: string): string => {
-  if (typeof value !== "string" || value.length === 0 || value.includes("\0")) {
-    throw new DecodeFailure(reason);
-  }
-  return value;
-};
-
-const decodeInput = (value: unknown): Effect.Effect<DecodedInput, InvalidNodeSeaInput> =>
-  Effect.try({
-    try: () => {
-      if (!isRecord(value)) throw new DecodeFailure("expected-object");
-      assertExactKeys(value, ["main", "stagedOutfile", "resolvedDestination"], ["cwd", "assets"]);
-      const stagedOutfile = nonEmptyPath(value.stagedOutfile, "invalid-staged-outfile");
-      const resolvedDestination = nonEmptyPath(value.resolvedDestination, "invalid-destination");
-      const cwd = Object.hasOwn(value, "cwd")
-        ? nonEmptyPath(value.cwd, "invalid-cwd")
-        : undefined;
-      const assetsValue = Object.hasOwn(value, "assets") ? value.assets : [];
-      if (!Array.isArray(assetsValue) || assetsValue.length > 256) {
-        throw new DecodeFailure("invalid-assets");
-      }
-      const keys = new Set<string>();
-      const assets: NodeSeaAssetInput[] = [];
-      for (let index = 0; index < assetsValue.length; index++) {
-        if (!Object.hasOwn(assetsValue, index)) throw new DecodeFailure("invalid-asset");
-        const asset = assetsValue[index];
-        if (!isRecord(asset)) throw new DecodeFailure("invalid-asset");
-        assertExactKeys(asset, ["key", "path"], []);
-        const key = nonEmptyPath(asset.key, "invalid-asset-key");
-        if (new TextEncoder().encode(key).byteLength > 1024) {
-          throw new DecodeFailure("asset-key-too-long");
-        }
-        if (keys.has(key)) throw new DecodeFailure("duplicate-asset-key");
-        keys.add(key);
-        assets.push({ key, path: nonEmptyPath(asset.path, "invalid-asset-path") });
-      }
-      return {
-        main: value.main as JavaScriptBundleArtifact,
-        stagedOutfile,
-        resolvedDestination,
-        ...(cwd === undefined ? {} : { cwd }),
-        assets,
-      };
-    },
-    catch: (error) => invalidInput(error instanceof DecodeFailure ? error.message : "invalid-input"),
-  });
-
-const probeFailed = (reason: string): NodeSeaProbeFailed => new NodeSeaProbeFailed({ reason });
+const invalidInput = (reason: InvalidNodeSeaInputReason): InvalidNodeSeaInput => new InvalidNodeSeaInput({ reason });
 
 const preparationFailed = (
   path: string,
@@ -245,7 +252,79 @@ const preparationFailed = (
   reason: string,
 ): NodeSeaPreparationFailed => new NodeSeaPreparationFailed({ path, operation, reason });
 
-const parseMetadata = (completion: ProcessCompletion): Effect.Effect<MetadataProbe, NodeSeaProbeFailed> =>
+const InputPath = Schema.String.pipe(
+  Schema.check(
+    Schema.makeFilter((value: string) => value.length > 0 && !value.includes("\0") ? true : "invalid path"),
+  ),
+);
+
+const decodeField = <A>(
+  schema: Schema.ConstraintDecoder<A>,
+  value: unknown,
+  reason: InvalidNodeSeaInputReason,
+): Result.Result<A, InvalidNodeSeaInput> =>
+  Result.mapError(Schema.decodeUnknownResult(schema)(value), () => invalidInput(reason));
+
+const decodeInput = <MainStages extends readonly Core.Artifact.StageObservation[]>(
+  input: unknown,
+): Result.Result<DecodedInput<MainStages>, InvalidNodeSeaInput> => {
+  if (!isRecord(input)) return Result.fail(invalidInput("expected-object"));
+  const allowed = new Set(["main", "outfile", "cwd", "digest", "assets"]);
+  if (Reflect.ownKeys(input).some((key) => typeof key !== "string" || !allowed.has(key))) {
+    return Result.fail(invalidInput("unknown-field"));
+  }
+  if (!Object.hasOwn(input, "main") || !Object.hasOwn(input, "outfile")) {
+    return Result.fail(invalidInput("missing-field"));
+  }
+  const outfile = decodeField(InputPath, input.outfile, "invalid-outfile");
+  if (Result.isFailure(outfile)) return Result.fail(outfile.failure);
+  const cwd = Object.hasOwn(input, "cwd")
+    ? decodeField(InputPath, input.cwd, "invalid-cwd")
+    : Result.succeed(undefined);
+  if (Result.isFailure(cwd)) return Result.fail(cwd.failure);
+  const digest = Object.hasOwn(input, "digest")
+    ? decodeField(Schema.Boolean, input.digest, "invalid-digest")
+    : Result.succeed(undefined);
+  if (Result.isFailure(digest)) return Result.fail(digest.failure);
+  const rawAssets = Object.hasOwn(input, "assets") ? input.assets : [];
+  if (!Array.isArray(rawAssets) || rawAssets.length > 256) {
+    return Result.fail(invalidInput("invalid-assets"));
+  }
+  const keys = new Set<string>();
+  const assets: DecodedAsset[] = [];
+  for (let index = 0; index < rawAssets.length; index++) {
+    if (!Object.hasOwn(rawAssets, index) || !isRecord(rawAssets[index])) {
+      return Result.fail(invalidInput("invalid-asset"));
+    }
+    const asset = rawAssets[index];
+    if (
+      Reflect.ownKeys(asset).some((key) => typeof key !== "string" || (key !== "key" && key !== "path"))
+      || !Object.hasOwn(asset, "key")
+      || !Object.hasOwn(asset, "path")
+    ) return Result.fail(invalidInput("invalid-asset"));
+    const key = decodeField(InputPath, asset.key, "invalid-asset-key");
+    if (Result.isFailure(key)) return Result.fail(key.failure);
+    if (new TextEncoder().encode(key.success).byteLength > 1024) {
+      return Result.fail(invalidInput("asset-key-too-long"));
+    }
+    if (keys.has(key.success)) return Result.fail(invalidInput("duplicate-asset-key"));
+    const assetPath = decodeField(InputPath, asset.path, "invalid-asset-path");
+    if (Result.isFailure(assetPath)) return Result.fail(assetPath.failure);
+    keys.add(key.success);
+    assets.push({ key: key.success, path: assetPath.success });
+  }
+  return Result.succeed({
+    main: input.main as Core.JavaScriptBundle.Artifact<MainStages>,
+    outfile: outfile.success,
+    ...(cwd.success === undefined ? {} : { cwd: cwd.success }),
+    ...(digest.success === undefined ? {} : { digest: digest.success }),
+    assets: Object.freeze(assets),
+  });
+};
+
+const probeFailed = (reason: string): NodeSeaProbeFailed => new NodeSeaProbeFailed({ reason });
+
+const parseMetadata = (completion: Integration.CommandCompletion): Effect.Effect<MetadataProbe, NodeSeaProbeFailed> =>
   Effect.try({
     try: () => {
       if (completion.exitCode !== 0) {
@@ -299,7 +378,7 @@ const validateSelectedFile = (
   fileSystem: FileSystem.FileSystem,
   path: Path.Path,
   command: string,
-): Effect.Effect<string, NodeSeaToolNotFound | NodeSeaProbeFailed> =>
+): Effect.Effect<Core.Artifact.AbsolutePath, NodeSeaToolNotFound | NodeSeaProbeFailed> =>
   Effect.gen(function*() {
     const real = yield* fileSystem.realPath(command).pipe(
       Effect.mapError((error) => mapLayerPlatformError(command, error)),
@@ -312,15 +391,15 @@ const validateSelectedFile = (
     if (information.type !== "File") return yield* probeFailed("selected executable is not a regular file");
     if ((information.mode & 0o111) === 0) return yield* probeFailed("selected executable is not executable");
     yield* inspectSelectedNodeExecutable(fileSystem, canonical, information.size).pipe(
-      Effect.mapError((error) => probeFailed(error.reason)),
+      Effect.catchCause((cause) => Effect.failCause(Cause.map(cause, (error) => probeFailed(error.reason)))),
     );
-    return canonical;
+    return canonical as Core.Artifact.AbsolutePath;
   });
 
-const samePath = (left: string, right: string): boolean => left === right;
-
-const within = (path: Path.Path, child: string, parent: string): boolean =>
-  child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : `${parent}${path.sep}`);
+const processDiagnostics = (completion: Integration.CommandCompletion): readonly Core.BuildError.Diagnostic[] => [
+  { channel: "stdout", text: completion.stdout.text, truncated: completion.stdout.truncated },
+  { channel: "stderr", text: completion.stderr.text, truncated: completion.stderr.truncated },
+];
 
 const nearestCanonicalPath = (
   fileSystem: FileSystem.FileSystem,
@@ -347,40 +426,103 @@ const nearestCanonicalPath = (
     }
   });
 
-const statRegularInput = (
+const mapMainArtifactError = (
+  error: Core.JavaScriptBundle.InvalidJavaScriptBundle | Core.JavaScriptBundle.JavaScriptBundleAccessFailed,
+): InvalidNodeSeaInput | NodeSeaPreparationFailed => {
+  if (Core.JavaScriptBundle.JavaScriptBundleAccessFailed.is(error)) {
+    return preparationFailed(
+      error.path,
+      error.operation === "read" ? "read-main" : error.operation === "digest" ? "digest-main" : error.operation,
+      error.reason,
+    );
+  }
+  switch (error.reason) {
+    case "file-not-regular":
+      return invalidInput("main-artifact-not-regular");
+    case "invalid-byte-count":
+      return invalidInput("main-artifact-invalid-byte-count");
+    case "byte-count-changed":
+    case "digest-changed":
+      return invalidInput("main-artifact-changed");
+    default:
+      return invalidInput("main-artifact-not-live");
+  }
+};
+
+const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+const digestFile = (
   fileSystem: FileSystem.FileSystem,
-  path: string,
-  reason: string,
-): Effect.Effect<void, InvalidNodeSeaInput | NodeSeaPreparationFailed> =>
-  fileSystem.stat(path).pipe(
-    Effect.mapError((error) =>
-      error.reason._tag === "NotFound"
-        ? invalidInput(reason)
-        : preparationFailed(path, "stat", error.message)
-    ),
-    Effect.flatMap((information) => information.type === "File" ? Effect.void : Effect.fail(invalidInput(reason))),
+  crypto: Crypto.Crypto,
+  file: string,
+): Effect.Effect<Core.Artifact.Digest, NodeSeaPreparationFailed> =>
+  fileSystem.readFile(file).pipe(
+    Effect.flatMap((contents) => crypto.digest("SHA-256", contents)),
+    Effect.map((digest) => `sha256:${hex(digest)}` as Core.Artifact.Digest),
+    Effect.mapError((error) => preparationFailed(file, "digest-main-copy", error.message)),
   );
 
-const prepareInput = (
+const freezeStages = <Stages extends readonly Core.Artifact.StageObservation[]>(
+  stages: readonly Core.Artifact.StageObservation[],
+): Stages =>
+  Object.freeze(stages.map((stage) => Object.freeze({ ...stage, tool: Object.freeze({ ...stage.tool }) }))) as Stages;
+
+const stageEquals = (left: Core.Artifact.StageObservation, right: Core.Artifact.StageObservation): boolean =>
+  left.operation === right.operation
+  && left.tool.name === right.tool.name
+  && left.tool.version === right.tool.version
+  && left.tool.path === right.tool.path
+  && Object.keys(left.tool).length === Object.keys(right.tool).length
+  && Object.keys(left).length === Object.keys(right).length;
+
+const decodeStages = <MainStages extends readonly Core.Artifact.StageObservation[]>(
+  prepared: PreparedInput<MainStages>,
+  value: unknown,
+): Result.Result<readonly [...MainStages, NodeSeaStage], NodeSeaPreparationFailed> =>
+  Result.flatMap(
+    Result.mapError(
+      Schema.decodeUnknownResult(Schema.Array(StageObservationSchema), { onExcessProperty: "error" })(value),
+      () => preparationFailed(prepared.mainPath, "decode-stages", "invalid stage array"),
+    ),
+    (observed) => {
+      const expected = [...prepared.mainStages, prepared.nodeStage] as const;
+      if (
+        observed.length !== expected.length
+        || observed.some((stage, index) => !stageEquals(stage, expected[index]!))
+      ) return Result.fail(preparationFailed(prepared.mainPath, "decode-stages", "stage observations changed"));
+      return Result.succeed(
+        Object.freeze([...prepared.mainStages, prepared.nodeStage]) as readonly [...MainStages, NodeSeaStage],
+      );
+    },
+  );
+
+const prepareInput = <MainStages extends readonly Core.Artifact.StageObservation[]>(
   fileSystem: FileSystem.FileSystem,
   path: Path.Path,
+  crypto: Crypto.Crypto,
+  runtime: NodeSeaRuntime,
   tool: SelectedNodeSeaTool,
-  rawInput: unknown,
-): Effect.Effect<PreparedInput, InvalidNodeSeaInput | NodeSeaPreparationFailed> =>
+  decoded: DecodedInput<MainStages>,
+  resolvedDestination: string,
+): Effect.Effect<
+  PreparedInput<MainStages>,
+  InvalidNodeSeaInput | NodeSeaPreparationFailed | NodeSeaSpawnFailed | NodeSeaSyntaxCheckFailed,
+  import("effect").Scope.Scope
+> =>
   Effect.gen(function*() {
-    const decoded = yield* decodeInput(rawInput);
-    const main = getJavaScriptBundleArtifact(decoded.main);
-    if (main === undefined) return yield* invalidInput("main-artifact-not-live");
-    if (main.nodeSyntaxTarget !== nodeSeaSyntaxTarget) return yield* invalidInput("main-syntax-target-mismatch");
-    if (!path.isAbsolute(main.path)) return yield* invalidInput("main-path-not-absolute");
-    yield* statRegularInput(fileSystem, main.path, "main-artifact-not-regular");
+    const main = yield* Integration.inspectLiveJavaScriptBundle(decoded.main).pipe(
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(Crypto.Crypto, crypto),
+      Effect.mapError(mapMainArtifactError),
+    );
+    if (main.resolutionTarget !== "node") return yield* invalidInput("main-resolution-target-mismatch");
     for (const specifier of main.observedExternalImports) {
       if (!HashSet.has(tool.builtinSpecifiers, specifier)) {
         return yield* invalidInput(`external-import-not-builtin:${specifier}`);
       }
     }
+
     const resolvedCwd = path.normalize(path.resolve(decoded.cwd ?? ""));
-    if (!path.isAbsolute(resolvedCwd)) return yield* invalidInput("cwd-not-absolute");
     const cwdInformation = yield* fileSystem.stat(resolvedCwd).pipe(
       Effect.mapError((error) =>
         error.reason._tag === "NotFound"
@@ -390,58 +532,74 @@ const prepareInput = (
     );
     if (cwdInformation.type !== "Directory") return yield* invalidInput("cwd-not-directory");
 
-    const mainRealPath = yield* fileSystem.realPath(main.path).pipe(
-      Effect.mapError((error) => preparationFailed(main.path, "realpath", error.message)),
-    );
-    const bundleDirectory = path.normalize(path.dirname(main.path));
-    const bundleDirectoryRealPath = path.normalize(path.dirname(mainRealPath));
     const assets: PreparedAsset[] = [];
     for (const asset of decoded.assets) {
       const resolved = path.normalize(path.resolve(resolvedCwd, asset.path));
-      if (!path.isAbsolute(resolved)) return yield* invalidInput("asset-path-not-absolute");
-      yield* statRegularInput(fileSystem, resolved, "asset-not-regular");
+      const information = yield* fileSystem.stat(resolved).pipe(
+        Effect.mapError((error) =>
+          error.reason._tag === "NotFound"
+            ? invalidInput("asset-not-regular")
+            : preparationFailed(resolved, "stat", error.message)
+        ),
+      );
+      if (information.type !== "File") return yield* invalidInput("asset-not-regular");
       const real = yield* fileSystem.realPath(resolved).pipe(
         Effect.mapError((error) => preparationFailed(resolved, "realpath", error.message)),
       );
       assets.push({ key: asset.key, path: resolved, realPath: path.normalize(real) });
     }
 
-    const resolvedDestination = path.normalize(decoded.resolvedDestination);
-    if (!path.isAbsolute(resolvedDestination)) return yield* invalidInput("destination-not-absolute");
-    const stagedOutfile = path.normalize(decoded.stagedOutfile);
-    if (!path.isAbsolute(stagedOutfile)) return yield* invalidInput("staged-outfile-not-absolute");
-    if (stagedOutfile === resolvedDestination) return yield* invalidInput("candidate-must-not-be-destination");
-    const destinationRealPath = yield* nearestCanonicalPath(fileSystem, path, resolvedDestination);
-    const sourcePaths = [main.path, tool.path, ...assets.map((asset) => asset.path)];
-    const sourceRealPaths = [path.normalize(mainRealPath), tool.path, ...assets.map((asset) => asset.realPath)];
-    if (
-      sourcePaths.some((source) => samePath(resolvedDestination, source))
-      || sourceRealPaths.some((source) => samePath(destinationRealPath, source))
-    ) return yield* invalidInput("destination-aliases-input");
-    if (
-      within(path, resolvedDestination, bundleDirectory)
-      || within(path, destinationRealPath, bundleDirectoryRealPath)
-    ) return yield* invalidInput("destination-inside-bundle-scope");
+    const destinationPhysical = yield* nearestCanonicalPath(fileSystem, path, resolvedDestination);
+    const sources = [main.path, tool.path, ...assets.map((asset) => asset.path)];
+    const physicalSources = [main.path, tool.path, ...assets.map((asset) => asset.realPath)];
+    if (sources.includes(resolvedDestination) || physicalSources.includes(destinationPhysical)) {
+      return yield* invalidInput("destination-aliases-input");
+    }
 
+    const configDirectory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "effect-build-node-sea-" }).pipe(
+      Effect.mapError((error) => preparationFailed(resolvedDestination, "make-config", error.message)),
+    );
+    const privateMainPath = path.normalize(
+      path.resolve(configDirectory, main.format === "esm" ? "sea-main.mjs" : "sea-main.cjs"),
+    );
+    const configPath = path.normalize(path.resolve(configDirectory, "sea-config.json"));
+    yield* fileSystem.copyFile(main.path, privateMainPath).pipe(
+      Effect.mapError((error) => preparationFailed(privateMainPath, "copy-main", error.message)),
+    );
+    const privateDigest = yield* digestFile(fileSystem, crypto, privateMainPath);
+    if (privateDigest !== main.digest) return yield* invalidInput("main-artifact-changed");
+
+    const syntax = yield* runtime.run(tool.path, ["--check", privateMainPath], resolvedCwd).pipe(
+      Effect.mapError((error) => new NodeSeaSpawnFailed({ reason: error.message })),
+    );
+    if (syntax.exitCode !== 0) {
+      return yield* new NodeSeaSyntaxCheckFailed({
+        exitCode: syntax.exitCode,
+        diagnostics: processDiagnostics(syntax),
+      });
+    }
+
+    const nodeStage = Object.freeze({
+      operation: "assemble-node-sea" as const,
+      tool: Object.freeze({ name: "node" as const, version: nodeSeaVersion, path: tool.path }),
+    });
     return {
-      main,
-      resolvedCwd,
-      resolvedDestination,
-      stagedOutfile,
+      mainPath: main.path,
+      mainStages: freezeStages<MainStages>(main.stages),
+      privateMainPath,
+      configPath,
       mainFormat: main.format === "cjs" ? "commonjs" : "module",
-      assets,
+      resolvedCwd,
+      assets: Object.freeze(assets),
+      nodeStage,
     };
   });
-
-const processDiagnostics = (completion: ProcessCompletion): readonly Diagnostic[] => [
-  { channel: "stdout", text: completion.stdout.text, truncated: completion.stdout.truncated },
-  { channel: "stderr", text: completion.stderr.text, truncated: completion.stderr.truncated },
-];
 
 export const makeNodeSeaService = (
   fileSystem: FileSystem.FileSystem,
   path: Path.Path,
-  options: NodeSeaLayerOptions,
+  crypto: Crypto.Crypto,
+  options: LayerOptions,
   runtime: NodeSeaRuntime,
 ): Effect.Effect<NodeSeaService, NodeSeaLayerError> =>
   Effect.gen(function*() {
@@ -459,7 +617,7 @@ export const makeNodeSeaService = (
     }
 
     const command = explicit ?? "node";
-    let canonical: string;
+    let canonical: Core.Artifact.AbsolutePath;
     let metadata: MetadataProbe;
     if (explicit !== undefined) {
       canonical = yield* validateSelectedFile(fileSystem, path, explicit);
@@ -510,41 +668,37 @@ export const makeNodeSeaService = (
       builtinSpecifiers: HashSet.fromIterable(metadata.builtinSpecifiers),
     });
 
-    const produceCandidate: NodeSeaService["produceCandidate"] = Effect.fn(
-      "NodeSea.produceCandidate",
-    )((input: NodeSeaCandidateInput) =>
-      Effect.gen(function*() {
-        const prepared = yield* prepareInput(fileSystem, path, selectedTool, input);
-        return yield* Effect.scoped(
+    const createExecutable: Service["createExecutable"] = Effect.fn(
+      "effect-build-node-sea/NodeSea.createExecutable",
+    )(<const MainStages extends readonly Core.Artifact.StageObservation[]>(
+      input: CreateExecutableInput<MainStages>,
+    ) => {
+      const decoded = decodeInput<MainStages>(input);
+      if (Result.isFailure(decoded)) return Effect.fail(decoded.failure);
+      return Integration.produceExecutable({
+        outfile: decoded.success.outfile,
+        ...(decoded.success.cwd === undefined ? {} : { cwd: decoded.success.cwd }),
+        ...(decoded.success.digest === undefined ? {} : { digest: decoded.success.digest }),
+        prepare: ({ resolvedDestination }) =>
+          prepareInput(fileSystem, path, crypto, runtime, selectedTool, decoded.success, resolvedDestination),
+        produce: ({ prepared, stagedOutfile }) =>
           Effect.gen(function*() {
-            const configDirectory = yield* fileSystem.makeTempDirectoryScoped({
-              prefix: "effect-build-node-sea-",
-            }).pipe(
-              Effect.mapError((error) => preparationFailed(prepared.resolvedDestination, "make-config", error.message)),
-            );
-            const configPath = path.normalize(path.resolve(configDirectory, "sea-config.json"));
-            if (!path.isAbsolute(configPath)) {
-              return yield* preparationFailed(configPath, "make-config", "config path is not absolute");
-            }
-            if (!path.isAbsolute(prepared.stagedOutfile)) {
-              return yield* Effect.die(new Error("executable candidate path is not absolute"));
-            }
             const assets = Object.fromEntries(prepared.assets.map((asset) => [asset.key, asset.path]));
             const config = {
-              main: prepared.main.path,
+              main: prepared.privateMainPath,
               mainFormat: prepared.mainFormat,
               executable: selectedTool.path,
-              output: prepared.stagedOutfile,
+              output: stagedOutfile,
               useSnapshot: false,
               useCodeCache: false,
               ...(prepared.assets.length === 0 ? {} : { assets }),
             };
-            yield* fileSystem.writeFileString(configPath, JSON.stringify(config)).pipe(
-              Effect.mapError((error) => preparationFailed(configPath, "write-config", error.message)),
+            yield* fileSystem.writeFileString(prepared.configPath, JSON.stringify(config)).pipe(
+              Effect.mapError((error) => preparationFailed(prepared.configPath, "write-config", error.message)),
             );
             const completion = yield* runtime.run(
               selectedTool.path,
-              ["--build-sea", configPath],
+              ["--build-sea", prepared.configPath],
               prepared.resolvedCwd,
             ).pipe(Effect.mapError((error) => new NodeSeaSpawnFailed({ reason: error.message })));
             if (completion.exitCode !== 0) {
@@ -553,38 +707,54 @@ export const makeNodeSeaService = (
                 diagnostics: processDiagnostics(completion),
               });
             }
-            const nodeStage = Object.freeze({
-              operation: "assemble-node-sea" as const,
-              tool: Object.freeze({
-                name: "node" as const,
-                version: nodeSeaVersion,
-                path: selectedTool.path,
-              }),
-            });
-            return Object.freeze([prepared.main.stage, nodeStage]) as NodeSeaStages;
+            return Object.freeze([...prepared.mainStages, prepared.nodeStage]);
           }),
-        );
-      })
-    );
+        decodeStages,
+        resolveTarget: (observation) =>
+          observation.format === "elf"
+            && observation.os === "linux"
+            && observation.architecture === "x64"
+            && observation.abi === "gnu"
+            ? Result.succeed(nodeSeaTarget)
+            : Result.fail("native target does not match selected Node SEA target"),
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.map((artifact) => Object.freeze({ ...artifact, provider: "node-sea" as const })),
+      ) as Effect.Effect<Artifact<MainStages>, NodeSeaCreateError>;
+    });
 
-    return { selectedTool, produceCandidate };
+    return { selectedTool, createExecutable };
   });
 
-export const makeLiveNodeSeaService = (
-  options: NodeSeaLayerOptions,
-  execute: ExecuteCommand,
-): Effect.Effect<
+const makeLiveNodeSeaService = (options: LayerOptions): Effect.Effect<
   NodeSeaService,
   NodeSeaLayerError,
-  FileSystem.FileSystem | Path.Path
+  | FileSystem.FileSystem
+  | Path.Path
+  | Crypto.Crypto
+  | EffectChildProcessSpawner.ChildProcessSpawner
 > =>
   Effect.gen(function*() {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    return yield* makeNodeSeaService(fileSystem, path, options, { run: execute });
+    const crypto = yield* Crypto.Crypto;
+    const spawner = yield* EffectChildProcessSpawner.ChildProcessSpawner;
+    const runtime: NodeSeaRuntime = {
+      run: (executable, argv, cwd) =>
+        Integration.executeCommand(executable, argv, cwd).pipe(
+          Effect.provideService(EffectChildProcessSpawner.ChildProcessSpawner, spawner),
+        ),
+    };
+    return yield* makeNodeSeaService(fileSystem, path, crypto, options, runtime);
   });
 
-export const produceCandidate = (
-  input: NodeSeaCandidateInput,
-): Effect.Effect<NodeSeaStages, NodeSeaCandidateError, NodeSea> =>
-  NodeSea.use((service) => service.produceCandidate(input));
+export const layer = (options: LayerOptions = {}): Layer.Layer<
+  NodeSea,
+  NodeSeaLayerError,
+  | FileSystem.FileSystem
+  | Path.Path
+  | Crypto.Crypto
+  | EffectChildProcessSpawner.ChildProcessSpawner
+> => Layer.effect(NodeSea, makeLiveNodeSeaService(options));

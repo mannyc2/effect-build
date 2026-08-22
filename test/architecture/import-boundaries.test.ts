@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const packagesRoot = resolve(root, "packages");
-const providerPackages = ["effect-build-bun", "effect-build-deno", "effect-build-node-sea"] as const;
+const integrationPackages = [
+  "effect-build-bun",
+  "effect-build-deno",
+  "effect-build-esbuild",
+  "effect-build-node-sea",
+] as const;
 
 const sourceFiles = async (): Promise<string[]> => {
   const entries = await readdir(packagesRoot, { recursive: true });
@@ -25,8 +30,8 @@ describe("source ownership boundaries", () => {
     }
   });
 
-  it("confines esbuild to the Node SEA package-private bundle producer", async () => {
-    const allowed = resolve(root, "packages/effect-build-node-sea/src/internal/Esbuild.ts");
+  it("confines raw esbuild to its independently installable integration", async () => {
+    const allowed = resolve(root, "packages/effect-build-esbuild/src/internal/Esbuild.ts");
     const found: string[] = [];
     for (const file of await sourceFiles()) {
       if (importSpecifiers(await readFile(file, "utf8")).includes("esbuild")) found.push(file);
@@ -45,9 +50,14 @@ describe("source ownership boundaries", () => {
       expect(source, file).not.toMatch(/\b(?:exec|spawn)Sync\b|\bexecFileSync\b/);
     }
     expect(processImporters.sort()).toEqual([
+      "packages/effect-build-node-sea/src/internal/NodeSea.ts",
+      "packages/effect-build/src/Integration.ts",
       "packages/effect-build/src/Provider.ts",
-      "packages/effect-build/src/standalone/internal/Process.ts",
+      "packages/effect-build/src/standalone/internal/CompilerEngine.ts",
+      "packages/effect-build/src/standalone/internal/ToolDiscovery.ts",
     ]);
+    const integration = await readFile(resolve(root, "packages/effect-build/src/Integration.ts"), "utf8");
+    expect(integration.match(/ChildProcess\.make\(/g)).toHaveLength(1);
     const nodeSea = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/NodeSea.ts"), "utf8");
     expect(nodeSea).not.toMatch(/postject|download|npm|pnpm|yarn|bun add|https?:\/\//i);
   });
@@ -57,16 +67,16 @@ describe("source ownership boundaries", () => {
       const file of (await sourceFiles()).filter((path) => path.startsWith(resolve(root, "packages/effect-build/src")))
     ) {
       for (const specifier of importSpecifiers(await readFile(file, "utf8"))) {
-        expect(specifier, file).not.toMatch(/^effect-build-(?:bun|deno|node-sea)(?:\/|$)/);
+        expect(specifier, file).not.toMatch(/^effect-build-(?:bun|deno|esbuild|node-sea)(?:\/|$)/);
       }
     }
-    for (const provider of providerPackages) {
+    for (const provider of integrationPackages) {
       for (
         const file of (await sourceFiles()).filter((path) => path.startsWith(resolve(root, `packages/${provider}/src`)))
       ) {
         for (const specifier of importSpecifiers(await readFile(file, "utf8"))) {
           expect(specifier, file).not.toMatch(/^effect-build\/(?:internal|standalone)/);
-          for (const sibling of providerPackages) {
+          for (const sibling of integrationPackages) {
             if (sibling !== provider) expect(specifier, file).not.toMatch(new RegExp(`^${sibling}(?:/|$)`));
           }
         }
@@ -79,9 +89,9 @@ describe("source ownership boundaries", () => {
       resolve(root, "packages/effect-build/src/standalone/internal/ExecutableLifecycle.ts"),
       "utf8",
     );
-    expect(lifecycle).not.toMatch(/effect-build-(?:bun|deno|node-sea)/);
+    expect(lifecycle).not.toMatch(/effect-build-(?:bun|deno|esbuild|node-sea)/);
 
-    for (const provider of providerPackages) {
+    for (const provider of integrationPackages) {
       const source = await readFile(resolve(root, `packages/${provider}/src/index.ts`), "utf8");
       expect(source).not.toMatch(/ExecutableLifecycle|ChildProcessSpawner|JavaScriptBundleArtifact|NodeSeaService/);
     }
@@ -89,29 +99,51 @@ describe("source ownership boundaries", () => {
     expect(coreIndex).not.toMatch(/Esbuild|NodeSea|ExecutableLifecycle|Process/);
   });
 
-  it("keeps one closed provider-target authority", async () => {
-    const authority = await readFile(resolve(root, "packages/effect-build/src/internal/ProviderContracts.ts"), "utf8");
-    expect(authority.match(/export const ProviderContracts\b/g)).toHaveLength(1);
-    for (const provider of ["bun", "deno"]) expect(authority).toContain(`${provider}:`);
-    expect(authority).toContain('"node-sea":');
+  it("names each reusable Effect boundary exactly once", async () => {
+    const compiler = await readFile(
+      resolve(root, "packages/effect-build/src/standalone/internal/CompilerEngine.ts"),
+      "utf8",
+    );
+    expect(
+      compiler.match(/Effect\.fn\(\s*`effect-build\/\$\{adapter\.toolName\}\.compileExecutable`,/g),
+    ).toHaveLength(1);
+    expect(
+      compiler.match(/Effect\.fn\(\s*`effect-build\/\$\{adapter\.toolName\}\.compileExecutableMatrix`/g),
+    ).toHaveLength(1);
 
-    for (const provider of providerPackages) {
-      const sources = (await sourceFiles()).filter((path) =>
-        path.startsWith(resolve(root, `packages/${provider}/src`))
-      );
-      for (const file of sources) {
-        expect(await readFile(file, "utf8"), file).not.toContain("ProviderContracts");
-      }
+    const esbuild = await readFile(resolve(root, "packages/effect-build-esbuild/src/internal/Esbuild.ts"), "utf8");
+    expect(esbuild.match(/Effect\.fn\(\s*"effect-build-esbuild\/Esbuild\.withJavaScriptBundle"/g)).toHaveLength(1);
+    const bun = await readFile(resolve(root, "packages/effect-build-bun/src/Bundle.ts"), "utf8");
+    expect(bun.match(/Effect\.fn\(\s*"Bun\.withJavaScriptBundle"/g)).toHaveLength(1);
+    expect(bun).not.toMatch(/Bun\.build|globalThis\.Bun|node:/);
+    const nodeSea = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/NodeSea.ts"), "utf8");
+    expect(nodeSea.match(/Effect\.fn\(\s*"effect-build-node-sea\/NodeSea\.createExecutable"/g)).toHaveLength(1);
+  });
+
+  it("keeps target authority local to each scalar compiler integration", async () => {
+    await expect(
+      readFile(resolve(root, "packages/effect-build/src/internal/ProviderContracts.ts"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+
+    for (const provider of ["bun", "deno"] as const) {
+      const adapter = await readFile(resolve(root, `packages/effect-build-${provider}/src/Adapter.ts`), "utf8");
+      expect(adapter).toContain("targetEntries");
+      expect(adapter).toContain("export const Stages");
     }
+
+    const provider = await readFile(resolve(root, "packages/effect-build/src/Provider.ts"), "utf8");
+    expect(provider).not.toMatch(/\b(?:bun|deno|esbuild|node-sea)\b/);
   });
 
   it("publishes only package roots plus the closed provider-author SPI", async () => {
-    for (const name of ["effect-build", ...providerPackages]) {
+    for (const name of ["effect-build", ...integrationPackages]) {
       const manifest = JSON.parse(await readFile(resolve(root, `packages/${name}/package.json`), "utf8")) as {
         exports: Record<string, unknown>;
         engines?: unknown;
       };
-      expect(Object.keys(manifest.exports)).toEqual(name === "effect-build" ? [".", "./Provider"] : ["."]);
+      expect(Object.keys(manifest.exports)).toEqual(
+        name === "effect-build" ? [".", "./Integration", "./Provider"] : ["."],
+      );
       expect(manifest.engines).toBeUndefined();
       expect(Object.keys(manifest.exports).some((path) => /internal|standalone/.test(path))).toBe(false);
     }

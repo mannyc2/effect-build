@@ -1,57 +1,74 @@
 # Errors
 
-The two public operations have separate closed tagged-error unions. Match
-`_tag` or use `Effect.catchTags`; do not parse diagnostic strings and do not add
-matrix coordination tags to scalar build handling.
+The public operations keep separate closed tagged-error boundaries. Match
+`_tag` or use `Effect.catchTags`; do not parse diagnostic text.
 
-## BuildError
+## Bun and Deno compilation
 
-`compileExecutable` fails only with `BuildError.BuildError`:
+`compileExecutable` uses `BuildError.BuildError`: `ToolNotFound`,
+`ToolProbeFailed`, `ToolFailed`, `TargetUnsupported`, `InvalidDriverOptions`,
+`OutputMissing`, `OutputInvalid`, `OutputLocked`, and `PublicationFailed`.
+Diagnostics keep stdout and stderr separate and bounded.
 
-| Tag                    | Meaning                                                    | Typical response                                               |
-| ---------------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
-| `ToolNotFound`         | compiler was not found on `PATH` or at the override        | install it or correct the Layer path                           |
-| `ToolProbeFailed`      | the compiler probe failed or returned invalid data         | run the compiler directly and inspect its installation         |
-| `ToolFailed`           | the compiler exited nonzero                                | inspect bounded stdout and stderr diagnostics                  |
-| `TargetUnsupported`    | the selected compiler cannot emit the requested target     | choose a target from that provider's `Target`                  |
-| `InvalidDriverOptions` | runtime input did not match the compiler's option contract | correct the typed compiler options                             |
-| `OutputMissing`        | the compiler exited successfully without an output         | inspect compiler configuration and diagnostics                 |
-| `OutputInvalid`        | output was not a valid executable for the requested target | correct target/configuration or replace the compiler           |
-| `OutputLocked`         | atomic replacement could not access the destination        | close the process holding the destination and retry explicitly |
-| `PublicationFailed`    | staging or atomic rename failed                            | inspect filesystem permissions and the reported operation      |
+Malformed untyped scalar envelopes and common fields fail with the existing
+provider-attributed `InvalidDriverOptions`; its deterministic reason is
+`<field> <finite reason>` (for example, `digest must be boolean`). Provider
+option failures preserve their existing exact reason, such as
+`unknown Bun option`. Unknown own fields fail as an `input` issue. Unsupported
+runtime targets keep the existing `TargetUnsupported` tag. These rejections
+occur before scalar staging or compiler execution, after any command selection
+and probe required to construct a fresh provider Layer.
 
-`ToolFailed.diagnostics` contains separate stdout and stderr entries. Each
-entry has `text` and `truncated`; output is retained up to one MiB per channel.
+`compileExecutableMatrix` uses the separate `InvalidMatrixInput | MatrixFailed`
+union. Invalid input reports every deterministic preflight issue before any
+filesystem work. `MatrixFailed` preserves already committed Artifacts and all
+cell failures in target input order; there is no matrix-wide rollback.
 
-## MatrixError
+## Core JavaScript bundle capability
 
-`compileExecutableMatrix` fails only with the separate two-tag
-`MatrixError.MatrixError` union:
+The narrow integration-author union is `InvalidJavaScriptBundle`,
+`JavaScriptBundleAccessFailed`, or
+`JavaScriptBundleTemporaryDirectoryFailed`. Its invalid reasons are finite and
+machine-readable. Integrations map only genuine core error instances, so an
+unrelated callback error with the same `_tag` passes through unchanged.
 
-| Tag                  | Meaning                                                         | Typical response                                                                           |
-| -------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `InvalidMatrixInput` | total preflight found one or more deterministic request issues  | correct every ordered issue; no output/staging, compile-argv, or build-child work occurred |
-| `MatrixFailed`       | traversal completed with at least one typed scalar cell failure | inspect ordered failures and retain or remove committed Artifacts                          |
+## Esbuild
 
-An `InvalidMatrixInput` issue identifies `input`, `entrypoint`, `outdir`,
-`name`, `targets`, `cwd`, `digest`, `options`, `concurrency`, or `output`; a
-target issue may also identify its input index. Preflight accumulates all
-deterministic issues in stable order.
+Layer failure is `EsbuildVersionMismatch`. The scoped operation fails with
+`InvalidBundleInput`, `EsbuildFailed`, `JavaScriptBundleInvalid`, or
+`BundleMaterializationFailed`. Input and invalid-bundle reasons use closed
+Schemas; external platform messages appear only in infrastructure `reason`
+fields.
 
-The compiler Layer's discovery probe runs before the operation. The preflight
-guarantee concerns matrix output/staging work and compiler build invocations,
-not Layer acquisition.
+## Bun bundling
 
-`MatrixFailed.artifacts` contains successful Artifacts in target input order.
-`MatrixFailed.failures` contains every failed cell in target input order, with
-its provider, target, intended absolute path, and original
-`BuildError.BuildError`. These Artifacts have already been atomically committed.
-The matrix does not roll them back, and retry is an explicit caller decision.
+The existing Bun Layer still uses `ToolNotFound | ToolProbeFailed`; exact Bun
+1.3.9 is enforced only when `withJavaScriptBundle` runs. Its operation union is
+`BunBundleVersionMismatch`, `InvalidBundleInput`, `BunBundleSpawnFailed`,
+`BunBundleFailed`, `BunBundleInvalid`, or
+`BunBundleMaterializationFailed`. A spawn failure never stands for a completed
+nonzero child, and a nonzero child retains separate bounded stdout/stderr
+diagnostics. Input, invalid-output, and materialization-operation vocabularies
+are finite. Genuine core bundle errors are mapped before caller code runs, so
+a caller error with a colliding `_tag` retains its identity.
+
+## Node SEA
+
+Layer failure is `NodeSeaToolNotFound | NodeSeaProbeFailed`. Assembly fails
+with `InvalidNodeSeaInput`, `NodeSeaPreparationFailed`, `NodeSeaSpawnFailed`,
+`NodeSeaSyntaxCheckFailed`, `NodeSeaFailed`, or the four core publication
+errors `OutputMissing`, `OutputInvalid`, `OutputLocked`, and
+`PublicationFailed`.
+
+Syntax rejection has its own tag because selected Node `--check` runs before
+candidate acquisition. Main liveness, content drift, resolution mismatch,
+asset validation, and builtin validation use finite input reasons. File access,
+private-copy, digest, config, and stage decoding failures retain their named
+preparation operation.
 
 ## Interruption
 
-Interruption belongs to neither union. Closing the running Scope terminates
-every active compiler child, skips queued matrix cells, and removes their
-unused staging. Existing destinations and Artifacts committed before
-interruption remain intact. The exact interruption Cause propagates unchanged;
-it is never converted into `BuildError` or `MatrixError`.
+Interruption belongs to none of these unions. Closing Scope terminates active
+children, skips queued matrix cells, cleans temporary state, and propagates the
+exact interruption Cause. Atomic rename remains the publication point of no
+return.

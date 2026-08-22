@@ -1,6 +1,4 @@
 import { Schema } from "effect";
-import { targetSchemaFor, targetsFor } from "../internal/ProviderContracts.js";
-import type { TargetFor } from "../Provider.js";
 import * as Artifact from "./Artifact.js";
 import * as BuildError from "./BuildError.js";
 
@@ -41,83 +39,25 @@ export class InvalidMatrixInput extends Schema.TaggedError<InvalidMatrixInput>()
   issues: Schema.NonEmptyArray(MatrixIssue),
 }) {}
 
-type BunArtifact = Artifact.Artifact & {
-  readonly target: TargetFor<"bun">;
-  readonly provider: "bun";
-};
-type DenoArtifact = Artifact.Artifact & {
-  readonly target: TargetFor<"deno">;
-  readonly provider: "deno";
-};
-type NodeSeaArtifact = Artifact.Artifact & {
-  readonly target: TargetFor<"node-sea">;
-  readonly provider: "node-sea";
-};
+const ProviderArtifact = Schema.Struct({
+  ...Artifact.ExecutableArtifact.fields,
+  provider: Schema.NonEmptyString,
+});
 
-const BunArtifact = Artifact.Artifact.pipe(
-  Schema.refine(
-    (artifact): artifact is BunArtifact =>
-      artifact.provider === "bun" && targetsFor("bun").includes(artifact.target as never),
-    { message: "artifact target must be supported by Bun" },
-  ),
-);
-const DenoArtifact = Artifact.Artifact.pipe(
-  Schema.refine(
-    (artifact): artifact is DenoArtifact =>
-      artifact.provider === "deno" && targetsFor("deno").includes(artifact.target as never),
-    { message: "artifact target must be supported by Deno" },
-  ),
-);
-const NodeSeaArtifact = Artifact.Artifact.pipe(
-  Schema.refine(
-    (artifact): artifact is NodeSeaArtifact =>
-      artifact.provider === "node-sea" && targetsFor("node-sea").includes(artifact.target as never),
-    { message: "artifact target must be supported by Node SEA" },
-  ),
-);
-const ProviderArtifact = Schema.Union([BunArtifact, DenoArtifact, NodeSeaArtifact]);
-
-const failureProviderMatches = (value: {
-  readonly provider: Artifact.ToolName;
-  readonly error: BuildError.BuildError;
-}): boolean => {
-  const error = value.error;
-  return !("tool" in error) || error.tool === value.provider;
-};
-
-const BunCellFailure = Schema.Struct({
-  provider: Schema.Literal("bun"),
-  target: targetSchemaFor("bun"),
+export const CellFailure = Schema.Struct({
+  provider: Schema.NonEmptyString,
+  target: Artifact.ExecutableArtifact.fields.target,
   path: Artifact.AbsolutePath,
   error: BuildError.BuildError,
 }).pipe(
   Schema.check(
-    Schema.makeFilter((value) => failureProviderMatches(value) ? true : "nested error tool must match cell provider"),
+    Schema.makeFilter((value) =>
+      !("tool" in value.error) || value.error.tool === value.provider
+        ? true
+        : "nested error tool must match cell provider"
+    ),
   ),
 );
-const DenoCellFailure = Schema.Struct({
-  provider: Schema.Literal("deno"),
-  target: targetSchemaFor("deno"),
-  path: Artifact.AbsolutePath,
-  error: BuildError.BuildError,
-}).pipe(
-  Schema.check(
-    Schema.makeFilter((value) => failureProviderMatches(value) ? true : "nested error tool must match cell provider"),
-  ),
-);
-
-const NodeSeaCellFailure = Schema.Struct({
-  provider: Schema.Literal("node-sea"),
-  target: targetSchemaFor("node-sea"),
-  path: Artifact.AbsolutePath,
-  error: BuildError.BuildError,
-}).pipe(
-  Schema.check(
-    Schema.makeFilter((value) => failureProviderMatches(value) ? true : "nested error tool must match cell provider"),
-  ),
-);
-
-export const CellFailure = Schema.Union([BunCellFailure, DenoCellFailure, NodeSeaCellFailure]);
 export type CellFailure = typeof CellFailure.Type;
 
 const MatrixFailedFields = Schema.Struct({

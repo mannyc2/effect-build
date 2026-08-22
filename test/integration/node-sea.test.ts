@@ -7,6 +7,7 @@ import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
+import * as Esbuild from "../../packages/effect-build-esbuild/src/index.js";
 import * as NodeSea from "../../packages/effect-build-node-sea/src/index.js";
 import { inspectNativeExecutable } from "../../packages/effect-build/src/standalone/internal/NativeExecutable.js";
 
@@ -153,7 +154,7 @@ describe("exact Node 26.7 direct SEA characterization", () => {
     expect(`${String(failure?.stdout ?? "")}${String(failure?.stderr ?? "")}`.trim()).not.toBe("");
   }, 60_000);
 
-  it("runs the complete public effect-build-node-sea provider", async () => {
+  it("runs the complete public Esbuild to Node SEA composition", async () => {
     const executable = requiredSelectedNode();
     const asset = join(fixtures, "message.txt");
 
@@ -165,14 +166,17 @@ describe("exact Node 26.7 direct SEA characterization", () => {
     ) {
       const output = join(root, `pipeline-${format}`);
       const artifact = await Effect.runPromise(
-        NodeSea.compileExecutable({
-          entrypoint,
-          outfile: output,
-          cwd: fixtures,
-          target: "linux-x64-gnu",
-          options: { format, assets: [{ key: "message", path: asset }] },
-        }).pipe(
+        Esbuild.withJavaScriptBundle(
+          { entrypoint, format, cwd: fixtures },
+          (main) =>
+            NodeSea.createExecutable({
+              main,
+              outfile: output,
+              assets: [{ key: "message", path: asset }],
+            }),
+        ).pipe(
           Effect.provide(NodeSea.layer({ executable })),
+          Effect.provide(Esbuild.layer),
           Effect.provide(NodeServices.layer),
         ),
       );

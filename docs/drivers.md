@@ -1,119 +1,73 @@
-# Compiler providers
+# Integrations
 
-Importing `effect-build-bun`, `effect-build-deno`, or
-`effect-build-node-sea` selects one provider's semantics for both
-`compileExecutable` and `compileExecutableMatrix`. It does not select the
-runtime that hosts the Effect program. A matrix never mixes compilers.
+## Bun command compiler
 
-## Discovery and override
-
-Both `Bun.layer()` and `Deno.layer()` use `PATH` when no option is supplied,
-then probe the resolved executable for its absolute path and version. An
-explicit Layer option bypasses `PATH`:
+`Bun.layer()` discovers one Bun command on `PATH`, or accepts an absolute
+`executable` override. The Layer probes once and the same selected command
+serves scalar and matrix calls. The probe reports only its canonical absolute
+path and version; an explicit override must resolve to that same path. PATH
+discovery ignores empty and relative entries and considers only regular
+executables from absolute entries.
 
 ```ts
 Bun.layer({ executable: "/opt/bun/bin/bun" });
 ```
 
-The Deno provider has the same explicit selection:
+The typed options are `minify`, `sourcemap: "linked" | "inline"`, and
+`bytecode`. `Bun.Target` is exactly `macos-x64`, `macos-aarch64`,
+`linux-x64-gnu`, `linux-x64-musl`, `linux-aarch64-gnu`, and `windows-x64`.
+Pinned support evidence uses Bun 1.3.9.
+
+## Deno command compiler
+
+`Deno.layer()` has the same discovery/absolute-override rule. Options cover
+`bundle`, `minify` when bundling, and typed permissions. `Deno.Target` is
+exactly `macos-x64`, `macos-aarch64`, `linux-x64-gnu`, `linux-aarch64-gnu`,
+`windows-x64`, and `windows-aarch64`. Pinned support evidence uses Deno 2.9.3.
+
+Untargeted staging suffixes and execute-bit validation follow the host
+filesystem described by the supplied Effect `Path` service, never a compiler
+OS report or the output target suffix.
+
+Bun and Deno each retain `compileExecutable` and
+`compileExecutableMatrix`. Their target authority lives in their package, not
+in core. Project configuration and environment retain the compiler CLI's
+normal behavior.
+
+## Esbuild bundle producer
+
+`Esbuild.layer` captures the platform FileSystem, Path, and Crypto services and
+checks exact raw Esbuild 0.28.2. `Esbuild.withJavaScriptBundle(input, use)`
+creates one ESM or CJS Node-resolving bundle and keeps it live only for `use`.
+It exposes no raw BuildOptions, plugin, watch, rebuild, or durable outfile.
+
+The fixed producer policy is one regular supported entrypoint, one JavaScript
+output, `bundle: true`, no splitting, packages bundled, and `node26.7`
+lowering. Structured unresolved runtime imports and unsupported output imports
+are rejected.
+
+## Node SEA consumer
+
+`NodeSea.layer({ executable? })` selects and probes one exact Node 26.7.0 Linux
+x64 GNU producer. `NodeSea.createExecutable` accepts a live core JavaScript
+bundle, a destination, optional digest, and optional `{ key, path }` assets.
+It has no bundler options, target switch, matrix, raw argv, or download path.
 
 ```ts
-Deno.layer({ executable: "/opt/deno/bin/deno" });
+const executable = Esbuild.withJavaScriptBundle(
+  { entrypoint: "src/main.ts", format: "esm" },
+  (main) => NodeSea.createExecutable({ main, outfile: "dist/app" }),
+);
 ```
 
-The Node SEA provider accepts the same exact executable override and requires
-that it identify Node 26.7.0 on Linux x64 GNU:
+The consumer authenticates and privately copies the main before both Node
+reads. It runs `--check` before candidate acquisition, then direct SEA
+assembly. It never uses postject and never downloads or installs Node.
 
-```ts
-NodeSea.layer({ executable: "/opt/node-26.7.0/bin/node" });
-```
+## Evidence boundary
 
-The explicit path must be absolute. A missing tool raises `ToolNotFound`; a bad
-probe raises `ToolProbeFailed`. One provided Layer discovers and probes once,
-then serves both scalar and matrix calls. The package never downloads or
-installs a compiler.
-
-## Target authority
-
-One private value in core is the single authority for both public `Target`
-schemas, static target types, native validation, root Artifact and
-matrix-failure correlation, and support-manifest equality. Each provider owns
-an exact native-token record whose keys must equal that closed set. Target
-literals are not copied into a registry or broad string overload.
-
-Matrix output paths are canonical:
-`<resolved outdir>/<name>-<canonical target>[.exe]`. The Windows suffix is
-derived from the target; callers cannot override it per cell.
-
-## Bun
-
-| Option      | Type                   | CLI meaning           |
-| ----------- | ---------------------- | --------------------- |
-| `minify`    | `boolean`              | `--minify`            |
-| `sourcemap` | `"linked" \| "inline"` | `--sourcemap=<value>` |
-| `bytecode`  | `boolean`              | `--bytecode`          |
-
-`Bun.Target` has exactly six targets:
-
-- `macos-x64`
-- `macos-aarch64`
-- `linux-x64-gnu`
-- `linux-x64-musl`
-- `linux-aarch64-gnu`
-- `windows-x64`
-
-Bun 1.3.9 is the pinned support fixture used to compile and externally validate
-all six under the Node orchestrator.
-
-## Deno
-
-| Option             | Type                                | CLI meaning                                          |
-| ------------------ | ----------------------------------- | ---------------------------------------------------- |
-| `bundle`           | `boolean`                           | `--bundle`                                           |
-| `minify`           | `boolean`, only with `bundle: true` | `--minify`                                           |
-| `permissions.all`  | `true`                              | `--allow-all`                                        |
-| scoped permissions | `true \| readonly string[]`         | `--allow-read`, `--allow-net=...`, and related flags |
-
-Scoped permission names are `read`, `write`, `net`, `env`, `run`, `ffi`, `sys`,
-and `import`. `Deno.Target` has exactly six targets:
-
-- `macos-x64`
-- `macos-aarch64`
-- `linux-x64-gnu`
-- `linux-aarch64-gnu`
-- `windows-x64`
-- `windows-aarch64`
-
-Deno musl targets are absent from `Deno.Target` and reject at both the static
-and runtime schema boundaries. Deno 2.9.3 is the pinned support fixture used to
-compile and externally validate all six supported targets under the Node
-orchestrator.
-
-## Node SEA
-
-`NodeSea.Target` contains only `linux-x64-gnu`. Its required options are
-`format: "esm" | "cjs"`; optional assets have exact `{ key, path }` entries
-with unique non-empty keys. It bundles once with exact esbuild 0.28.2 and asks
-the selected exact Node 26.7.0 executable to assemble SEA directly. It never
-uses postject and never downloads or installs Node.
-
-The provider writes only the core-owned staged output. Core then validates the
-native executable, optionally hashes it, and atomically publishes it. The
-Artifact records the exact ordered esbuild and Node stages.
-
-## Support evidence boundary
-
-The required Linux x64 support lane compiles every Bun 6/6 and Deno 6/6 cell.
-`/usr/bin/file` checks each native format and architecture; `/usr/bin/readelf`
-also checks ELF architecture and distinguishes GNU from musl through the
-interpreter. Current Linux x64 GNU Artifacts are separately executed. Foreign
-Artifacts are not executed on the Linux runner.
-
-These pinned, regularly revalidated fixtures define the advertised support
-boundary. The library does not reject a different installed compiler version
-at runtime, so an accepted target is not a promise that every historical or
-future compiler version supports it.
-
-Project configuration and environment are left to the compiler CLI. If a
-future control is needed, it must become a typed option rather than a raw
-argument list.
+The required Linux lane validates all six Bun and six Deno target cells with
+pinned tools and external native-format inspection. A separate exact Node
+26.7.0 lane runs public Esbuild-to-Node-SEA ESM and CJS executables while Node
+24.14.1 remains the orchestrator. Foreign native outputs are inspected but not
+executed on the Linux runner.

@@ -4,8 +4,14 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
-const providerPackages = ["effect-build-bun", "effect-build-deno", "effect-build-node-sea"] as const;
-const packageNames = ["effect-build", ...providerPackages] as const;
+const providerPackages = ["effect-build-bun", "effect-build-deno"] as const;
+const integrationPackages = [
+  "effect-build-bun",
+  "effect-build-deno",
+  "effect-build-esbuild",
+  "effect-build-node-sea",
+] as const;
+const packageNames = ["effect-build", ...integrationPackages] as const;
 const providerRuntimeKeys = ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"];
 
 const declarationFiles = Object.fromEntries(packageNames.map((name) => [
@@ -13,6 +19,7 @@ const declarationFiles = Object.fromEntries(packageNames.map((name) => [
   resolve(root, `packages/${name}/dist/index.d.ts`),
 ])) as Record<typeof packageNames[number], string>;
 const providerDeclarationFile = resolve(root, "packages/effect-build/dist/Provider.d.ts");
+const integrationDeclarationFile = resolve(root, "packages/effect-build/dist/Integration.d.ts");
 
 const declarationExports = (): Readonly<Record<typeof packageNames[number], readonly string[]>> => {
   const program = ts.createProgram({
@@ -36,19 +43,31 @@ const declarationExports = (): Readonly<Record<typeof packageNames[number], read
 };
 
 const exactDeclarations = {
-  "effect-build": ["Artifact", "BuildError", "MatrixError", "Target"],
+  "effect-build": ["Artifact", "BuildError", "JavaScriptBundle", "MatrixError", "Target"],
   "effect-build-bun": [
     "Artifact",
+    "BunBundleError",
+    "BunBundleFailed",
+    "BunBundleInvalid",
+    "BunBundleMaterializationFailed",
+    "BunBundleMaterializationOperation",
+    "BunBundleSpawnFailed",
+    "BunBundleStage",
+    "BunBundleVersionMismatch",
     "CompileExecutableInput",
     "CompileExecutableMatrixInput",
     "Compiler",
+    "InvalidBundleInput",
+    "JavaScriptBundleInput",
     "LayerOptions",
     "MatrixError",
     "Options",
+    "Service",
     "Target",
     "compileExecutable",
     "compileExecutableMatrix",
     "layer",
+    "withJavaScriptBundle",
   ],
   "effect-build-deno": [
     "Artifact",
@@ -65,50 +84,87 @@ const exactDeclarations = {
     "compileExecutableMatrix",
     "layer",
   ],
+  "effect-build-esbuild": [
+    "BundleMaterializationFailed",
+    "BundleMaterializationOperation",
+    "Esbuild",
+    "EsbuildBundleError",
+    "EsbuildDiagnostic",
+    "EsbuildFailed",
+    "EsbuildLayerError",
+    "EsbuildVersionMismatch",
+    "InvalidBundleInput",
+    "JavaScriptBundleInput",
+    "JavaScriptBundleInvalid",
+    "Service",
+    "layer",
+    "withJavaScriptBundle",
+  ],
   "effect-build-node-sea": [
     "Artifact",
-    "CompileExecutableInput",
-    "CompileExecutableMatrixInput",
-    "Compiler",
+    "CreateExecutableInput",
+    "InvalidNodeSeaInput",
     "LayerOptions",
-    "MatrixError",
-    "Options",
-    "Target",
-    "compileExecutable",
-    "compileExecutableMatrix",
+    "NodeSea",
+    "NodeSeaCreateError",
+    "NodeSeaFailed",
+    "NodeSeaLayerError",
+    "NodeSeaPreparationFailed",
+    "NodeSeaPreparationOperation",
+    "NodeSeaProbeFailed",
+    "NodeSeaSpawnFailed",
+    "NodeSeaStage",
+    "NodeSeaSyntaxCheckFailed",
+    "NodeSeaToolNotFound",
+    "Service",
+    "createExecutable",
     "layer",
   ],
 } as const;
 
 const exactProviderDeclarations = [
+  "BoundCommand",
   "BuildError",
-  "CommandCompletion",
   "CommandDefinition",
-  "CommandOutput",
-  "CommandProviderName",
+  "CommandServiceContext",
   "CompileExecutableInput",
   "CompileExecutableMatrixInput",
   "CompilerService",
-  "ComposedCandidateInput",
-  "ComposedDefinition",
-  "ComposedProducer",
-  "ComposedProviderRequirements",
   "Defined",
-  "Definition",
-  "Diagnostic",
-  "ExecuteCommand",
   "LayerOptions",
-  "MatrixErrorFor",
   "PreparedCommandInput",
   "ProviderArtifact",
   "ProviderLayerRequirements",
-  "ProviderName",
-  "ProviderTargets",
-  "TargetFor",
+  "ProviderMatrixError",
+  "ProviderStage",
+  "ProviderStages",
   "ToolNotFound",
   "ToolProbeFailed",
-  "Validation",
   "define",
+] as const;
+
+const exactIntegrationDeclarations = [
+  "CommandCompletion",
+  "CommandOutput",
+  "ExecuteCommand",
+  "NativeExecutableObservation",
+  "PublishedExecutable",
+  "executeCommand",
+  "inspectLiveJavaScriptBundle",
+  "produceExecutable",
+  "withOwnedJavaScriptBundle",
+] as const;
+
+const exactJavaScriptBundleDeclarations = [
+  "Artifact",
+  "Format",
+  "Input",
+  "InvalidJavaScriptBundle",
+  "InvalidReason",
+  "JavaScriptBundleAccessFailed",
+  "JavaScriptBundleAccessOperation",
+  "JavaScriptBundleError",
+  "JavaScriptBundleTemporaryDirectoryFailed",
 ] as const;
 
 const providerDeclarationExports = (): readonly string[] => {
@@ -126,6 +182,44 @@ const providerDeclarationExports = (): readonly string[] => {
   const symbol = source === undefined ? undefined : checker.getSymbolAtLocation(source);
   if (source === undefined || symbol === undefined) throw new Error("missing effect-build/Provider declaration module");
   return checker.getExportsOfModule(symbol).map((entry) => entry.getName()).sort();
+};
+
+const declarationModuleExports = (file: string): readonly string[] => {
+  const program = ts.createProgram({
+    rootNames: [file],
+    options: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      skipLibCheck: true,
+    },
+  });
+  const source = program.getSourceFile(file);
+  const checker = program.getTypeChecker();
+  const symbol = source === undefined ? undefined : checker.getSymbolAtLocation(source);
+  if (source === undefined || symbol === undefined) throw new Error(`missing declaration module ${file}`);
+  return checker.getExportsOfModule(symbol).map((entry) => entry.getName()).sort();
+};
+
+const javaScriptBundleDeclarationExports = (): readonly string[] => {
+  const file = declarationFiles["effect-build"];
+  const program = ts.createProgram({
+    rootNames: [file],
+    options: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      skipLibCheck: true,
+    },
+  });
+  const source = program.getSourceFile(file);
+  const checker = program.getTypeChecker();
+  const moduleSymbol = source === undefined ? undefined : checker.getSymbolAtLocation(source);
+  const bundleSymbol = moduleSymbol === undefined
+    ? undefined
+    : checker.getExportsOfModule(moduleSymbol).find((entry) => entry.getName() === "JavaScriptBundle");
+  if (bundleSymbol === undefined) throw new Error("missing JavaScriptBundle declaration namespace");
+  return checker.getExportsOfModule(bundleSymbol).map((entry) => entry.getName()).sort();
 };
 
 const providerCallTypeParameterCounts = (): Readonly<Record<typeof providerPackages[number], readonly number[]>> => {
@@ -177,7 +271,7 @@ describe("built public API", () => {
       expect(Object.keys(packageJson.exports)).toEqual(contract.subpaths);
       for (const subpath of contract.subpaths) {
         const built = await import(resolve(root, `packages/${name}`, packageJson.exports[subpath]!.import));
-        expect(Object.keys(built), `${name}${subpath === "." ? "" : subpath.slice(1)}`).toEqual(
+        expect(Object.keys(built).sort(), `${name}${subpath === "." ? "" : subpath.slice(1)}`).toEqual(
           contract.runtimeKeys[subpath],
         );
       }
@@ -185,10 +279,22 @@ describe("built public API", () => {
     const core = await import(resolve(root, "packages/effect-build/dist/index.js"));
     expect(Object.keys(core.Artifact).sort()).toEqual([
       "AbsolutePath",
-      "Artifact",
       "ByteCount",
       "Digest",
-      "ToolName",
+      "ExecutableArtifact",
+      "FileArtifact",
+      "StageObservation",
+      "ToolObservation",
+    ]);
+    expect(Object.keys(core.Target).sort()).toEqual(["ResolutionTarget", "SystemTarget"]);
+    expect(Object.keys(core.JavaScriptBundle)).toEqual([
+      "Format",
+      "InvalidReason",
+      "InvalidJavaScriptBundle",
+      "JavaScriptBundleAccessOperation",
+      "JavaScriptBundleAccessFailed",
+      "JavaScriptBundleTemporaryDirectoryFailed",
+      "withFile",
     ]);
   });
 
@@ -196,13 +302,18 @@ describe("built public API", () => {
     const exports = declarationExports();
     for (const name of packageNames) expect(exports[name], name).toEqual([...exactDeclarations[name]].sort());
     expect(providerDeclarationExports(), "effect-build/Provider").toEqual([...exactProviderDeclarations].sort());
+    expect(declarationModuleExports(integrationDeclarationFile), "effect-build/Integration").toEqual(
+      [...exactIntegrationDeclarations].sort(),
+    );
+    expect(javaScriptBundleDeclarationExports(), "effect-build.JavaScriptBundle").toEqual(
+      [...exactJavaScriptBundleDeclarations].sort(),
+    );
   });
 
-  it("keeps all six provider calls concrete rather than publicly generic", () => {
+  it("keeps all four command-provider calls concrete rather than publicly generic", () => {
     expect(providerCallTypeParameterCounts()).toEqual({
       "effect-build-bun": [0, 0],
       "effect-build-deno": [0, 0],
-      "effect-build-node-sea": [0, 0],
     });
   });
 
@@ -237,14 +348,13 @@ describe("built public API", () => {
 
   it("keeps build output package-local", async () => {
     await expect(access(resolve(root, "dist"))).rejects.toThrow();
-    for (const name of providerPackages) {
+    for (const name of integrationPackages) {
       const entries = await readdir(resolve(root, `packages/${name}/dist`), { withFileTypes: true });
       expect(entries.some((entry) => entry.isFile() && entry.name === "index.js"), name).toBe(true);
       expect(entries.some((entry) => entry.isFile() && entry.name === "index.d.ts"), name).toBe(true);
     }
     const coreEntries = await readdir(resolve(root, "packages/effect-build/dist"), { withFileTypes: true });
     expect(coreEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()).toEqual([
-      "internal",
       "standalone",
     ]);
     expect(providerRuntimeKeys).toHaveLength(5);

@@ -1,6 +1,18 @@
 # Plan 021: Adopt the certified ts-release 0.2 line for the four-package release
 
-> **Executor instructions**: Implement only after Plan 020 is green and a real
+> **SUPERSEDED — DO NOT EXECUTE (2026-08-14)**: This file preserves the factual
+> qualification record for Plan 020's completed four-package candidate. The
+> selected successor program in Plans 023-026 adds `effect-build-esbuild`,
+> promotes independent Esbuild and Bun bundle producers,
+> requires a five-package star graph. Its steps and done criteria below are
+> therefore historical, not an executable release recipe. After Plan 026, a
+> newly restamped release-activation plan must cover five npm subjects in
+> dependency order — core, Bun, Deno, Esbuild, Node SEA — plus GitHub. Nothing
+> in this historical four-package wording authorizes omitting Esbuild. The
+> recorded clean-install and singular-package failures remain valid blockers.
+
+> **Historical executor instructions (superseded; do not follow)**: Implement
+> only after Plan 020 is green and a real
 > public release from the `@mannyc1/ts-release` 0.2 line proves coordinated
 > multi-package behavior. Qualify the exact current patch release; do not require
 > nonexistent `0.2.0` bytes, copy development-branch syntax, run four independent
@@ -12,7 +24,7 @@
 - **Effort**: L
 - **Risk**: HIGH
 - **Depends on**: completed Plan 020 and every external qualification below
-- **Current state**: `BLOCKED: 0.2.2 is public, but its stock released surface is singular-package and its clean npm/Node install fails`
+- **Current state**: `BLOCKED/SUPERSEDED: historical four-package qualifier; 0.2.2 is singular-package and its clean npm/Node install fails`
 
 ## Historical state at Plan 020 start
 

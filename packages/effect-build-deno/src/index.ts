@@ -1,29 +1,42 @@
 import { Context, type Effect, type Layer } from "effect";
 import * as Provider from "effect-build/Provider";
-import { definition, type Options } from "./Adapter.js";
+import { definition, type Options, Stages, targetEntries } from "./Adapter.js";
 
 export type { Options, Permissions, PermissionValue } from "./Adapter.js";
 
+type TargetType = (typeof targetEntries)[number][0];
+type StageType = typeof Stages.Type;
+type Service = Provider.CompilerService<"deno", Options, TargetType, StageType>;
+
 export class Compiler extends Context.Service<
   Compiler,
-  Provider.CompilerService<"deno", Options>
+  Service
 >()("effect-build-deno/Compiler") {}
+
+const makeService = (
+  context: Provider.CommandServiceContext<"deno", Options, TargetType, StageType>,
+): Service =>
+  Object.freeze({
+    compileExecutable: context.compileExecutable,
+    compileExecutableMatrix: context.compileExecutableMatrix,
+  });
 
 const implementation = Provider.define({
   name: "deno",
   service: Compiler,
+  makeService,
   ...definition,
 });
 
 export const Target = implementation.Target;
 export type Target = typeof Target.Type;
-export type Artifact = Provider.ProviderArtifact<"deno", Target>;
+export type Artifact = typeof implementation.Artifact.Type;
 export type CompileExecutableInput = Provider.CompileExecutableInput<
   Options,
   Target
 >;
 export type CompileExecutableMatrixInput = Provider.CompileExecutableMatrixInput<Target, Options>;
-export type MatrixError = Provider.MatrixErrorFor<"deno", Target>;
+export type MatrixError = typeof implementation.MatrixError.Type;
 export type LayerOptions = Provider.LayerOptions;
 
 export const compileExecutable: (

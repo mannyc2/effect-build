@@ -1,4 +1,5 @@
 import {
+  Cause,
   Crypto,
   Effect,
   type FileSystem,
@@ -12,6 +13,7 @@ import {
 import { OutputInvalid, OutputLocked, OutputMissing, PublicationFailed } from "../BuildError.js";
 import {
   inspectNativeExecutableChunks,
+  NativeExecutableInvalid,
   type NativeExecutableObservation,
   NativeExecutableRangeRequired,
 } from "./NativeExecutable.js";
@@ -37,7 +39,6 @@ export interface NativeExecutableInspectionError {
 
 interface CandidateState {
   readonly destination: string;
-  readonly executableSuffix: "" | ".exe";
   readonly publish: Effect.Effect<void, OutputLocked | PublicationFailed>;
 }
 
@@ -59,8 +60,15 @@ export const isLockedRenameError = (error: PlatformError.PlatformError): boolean
   lockedReasons.has(error.reason._tag)
   || (error.reason._tag === "Unknown" && lockedErrnoCodes.has(errnoCode(error) ?? ""));
 
-const publicationFailed =
-  (path: string, operation: string) => (error: PlatformError.PlatformError): PublicationFailed =>
+export type LifecyclePublicationOperation =
+  | "make-directory"
+  | "make-staging"
+  | "rename"
+  | "resolve-destination-parent";
+
+export const makePublicationFailed =
+  (path: string, operation: LifecyclePublicationOperation) =>
+  (error: { readonly message: string }): PublicationFailed =>
     new PublicationFailed({ path, operation, reason: error.message });
 
 const withExeSuffix = (basename: string, executableSuffix: "" | ".exe"): string =>
@@ -83,24 +91,24 @@ export const acquireExecutableCandidate = (
     const executableSuffix = options.executableSuffix ?? "";
     const parent = path.dirname(destination);
     yield* fileSystem.makeDirectory(parent, { recursive: true }).pipe(
-      Effect.mapError(publicationFailed(destination, "make-directory")),
+      Effect.mapError(makePublicationFailed(destination, "make-directory")),
     );
     const stagingDirectory = yield* fileSystem.makeTempDirectoryScoped({
       directory: parent,
       prefix: ".effect-build-",
-    }).pipe(Effect.mapError(publicationFailed(destination, "make-staging")));
+    }).pipe(Effect.mapError(makePublicationFailed(destination, "make-staging")));
     const staged = path.join(stagingDirectory, withExeSuffix(path.basename(destination), executableSuffix));
     const candidate = Object.freeze({ staged, [CandidateTypeId]: CandidateTypeId }) as ExecutableCandidate;
     const publish = publicationSemaphore.withPermit(fileSystem.rename(staged, destination)).pipe(
       Effect.mapError((error) =>
         isLockedRenameError(error)
           ? new OutputLocked({ path: destination })
-          : publicationFailed(destination, "rename")(error)
+          : makePublicationFailed(destination, "rename")(error)
       ),
     );
     return yield* Effect.acquireRelease(
       Effect.sync(() => {
-        candidateStates.set(candidate, { destination, executableSuffix, publish });
+        candidateStates.set(candidate, { destination, publish });
         return candidate;
       }),
       (registered) => Effect.sync(() => candidateStates.delete(registered)),
@@ -109,12 +117,43 @@ export const acquireExecutableCandidate = (
 
 const collectRange = (fileSystem: FileSystem.FileSystem, file: string, offset: number, bytesToRead: number) =>
   fileSystem.stream(file, { offset, bytesToRead }).pipe(
-    Stream.runFold(() => new Uint8Array(0), (current, chunk) => {
-      const combined = new Uint8Array(current.byteLength + chunk.byteLength);
-      combined.set(current);
-      combined.set(chunk, current.byteLength);
+    Stream.runFold(
+      () => ({ chunks: [] as Array<Uint8Array>, byteLength: 0, excess: false }),
+      (collected, chunk) => {
+        if (collected.excess || chunk.byteLength === 0) return collected;
+        const byteLength = collected.byteLength + chunk.byteLength;
+        if (byteLength > bytesToRead) {
+          collected.excess = true;
+          return collected;
+        }
+        collected.chunks.push(chunk);
+        collected.byteLength = byteLength;
+        return collected;
+      },
+    ),
+    Effect.map((collected) => {
+      if (collected.excess || collected.byteLength !== bytesToRead) {
+        // The caller converts every length mismatch to a typed truncated-header
+        // failure. Do not copy bytes that cannot be inspected.
+        return new Uint8Array(0);
+      }
+      const combined = new Uint8Array(bytesToRead);
+      let writeOffset = 0;
+      for (const chunk of collected.chunks) {
+        combined.set(chunk, writeOffset);
+        writeOffset += chunk.byteLength;
+      }
       return combined;
     }),
+  );
+
+const mapFailureCause = <A, E, R, E2>(
+  operation: Effect.Effect<A, E, R>,
+  mapError: (error: E) => E2,
+): Effect.Effect<A, E2, R> =>
+  Effect.catchCause(
+    operation,
+    (cause) => Effect.failCause(Cause.map(cause, mapError)),
   );
 
 export const inspectNativeExecutableFile = (
@@ -123,37 +162,45 @@ export const inspectNativeExecutableFile = (
   size: number,
 ): Effect.Effect<NativeExecutableObservation, NativeExecutableInspectionError> =>
   Effect.gen(function*() {
-    const initialLength = Math.min(size, 1024 * 1024);
+    const readRange = (offset: number, length: number) =>
+      mapFailureCause(
+        collectRange(fileSystem, file, offset, length),
+        (): NativeExecutableInspectionError => ({ path: file, reason: "read-failed" }),
+      );
+    const initialLength = Math.min(size, 64);
     const initial = initialLength === 0
       ? new Uint8Array(0)
-      : yield* collectRange(fileSystem, file, 0, initialLength);
-    if (initial.byteLength !== initialLength) return yield* Effect.fail(new Error("truncated-header"));
+      : yield* readRange(0, initialLength);
+    if (initial.byteLength !== initialLength) {
+      return yield* Effect.fail({ path: file, reason: "truncated-header" });
+    }
     const chunks = [{ offset: 0, bytes: initial }];
     for (let reads = 0;; reads++) {
-      const step = yield* Effect.sync(() => {
-        try {
-          return { _tag: "Done", value: inspectNativeExecutableChunks(size, chunks) } as const;
-        } catch (error) {
-          return error instanceof NativeExecutableRangeRequired
-            ? { _tag: "Read", request: error } as const
-            : { _tag: "Failed", error } as const;
-        }
+      const parsed = Result.try({
+        try: () => inspectNativeExecutableChunks(size, chunks),
+        catch: (error) => error,
       });
-      if (step._tag === "Done") return step.value;
-      if (step._tag === "Failed") return yield* Effect.fail(step.error);
-      if (reads === 4) return yield* Effect.fail(new Error("too-many-header-ranges"));
-      const bytes = yield* collectRange(fileSystem, file, step.request.offset, step.request.length);
-      if (bytes.byteLength !== step.request.length) return yield* Effect.fail(new Error("truncated-header"));
-      chunks.push({ offset: step.request.offset, bytes });
+      if (Result.isSuccess(parsed)) return parsed.success;
+      if (parsed.failure instanceof NativeExecutableInvalid) {
+        return yield* Effect.fail({ path: file, reason: parsed.failure.reason });
+      }
+      if (!(parsed.failure instanceof NativeExecutableRangeRequired)) {
+        return yield* Effect.fail({ path: file, reason: "invalid-native-executable" });
+      }
+      if (reads === 2) return yield* Effect.fail({ path: file, reason: "too-many-header-ranges" });
+      const bytes = yield* readRange(parsed.failure.offset, parsed.failure.length);
+      if (bytes.byteLength !== parsed.failure.length) {
+        return yield* Effect.fail({ path: file, reason: "truncated-header" });
+      }
+      chunks.push({ offset: parsed.failure.offset, bytes });
     }
-  }).pipe(
-    Effect.mapError((error): NativeExecutableInspectionError => ({ path: file, reason: String(error) })),
-  );
+  });
 
 const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
 export const validateAndPublishExecutable = <Target>(
   fileSystem: FileSystem.FileSystem,
+  path: Path.Path,
   crypto: Crypto.Crypto,
   candidate: ExecutableCandidate,
   options: {
@@ -178,15 +225,16 @@ export const validateAndPublishExecutable = <Target>(
     if (information.type !== "File") {
       return yield* new OutputInvalid({ path: candidate.staged, reason: "not-regular" });
     }
-    if (state.executableSuffix !== ".exe" && (information.mode & 0o111) === 0) {
+    if (path.sep !== "\\" && (information.mode & 0o111) === 0) {
       return yield* new OutputInvalid({ path: candidate.staged, reason: "not-executable" });
     }
-    const bytes = Number(information.size);
-    if (!Number.isSafeInteger(bytes) || bytes < 0) {
+    if (information.size < 0n || information.size > BigInt(Number.MAX_SAFE_INTEGER)) {
       return yield* new OutputInvalid({ path: candidate.staged, reason: "invalid-byte-count" });
     }
-    const observation = yield* inspectNativeExecutableFile(fileSystem, candidate.staged, bytes).pipe(
-      Effect.mapError((error) => new OutputInvalid({ path: error.path, reason: error.reason })),
+    const bytes = Number(information.size);
+    const observation = yield* mapFailureCause(
+      inspectNativeExecutableFile(fileSystem, candidate.staged, bytes),
+      (error) => new OutputInvalid({ path: error.path, reason: error.reason }),
     );
     const resolved = yield* Effect.sync(() => options.resolveTarget(observation));
     if (Result.isFailure(resolved)) {

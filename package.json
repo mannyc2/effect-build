@@ -1,5 +1,6 @@
 {
   "name": "effect-build-workspace",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.14",
@@ -7,6 +8,7 @@
     "packages/*",
     "examples/bun",
     "examples/deno",
+    "examples/esbuild",
     "examples/node-sea"
   ],
   "scripts": {
@@ -14,16 +16,18 @@
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
     "build": "bun run clean && tsc -b tsconfig.packages.json --force",
     "test:types": "tstyche",
-    "test:unit": "vitest run test/unit/standalone-contract.test.ts test/unit/standalone-process.test.ts test/unit/standalone-publication.test.ts test/unit/standalone-bun.test.ts test/unit/standalone-deno.test.ts test/unit/standalone-matrix.test.ts test/unit/esbuild-bundle.test.ts test/unit/node-sea.test.ts test/unit/esbuild-node-sea-pipeline.test.ts",
-    "test:architecture": "vitest run test/architecture/import-boundaries.test.ts test/architecture/public-api.test.ts test/architecture/generated-and-ci.test.ts test/architecture/docs-contract.test.ts test/architecture/workspace-topology.test.ts test/architecture/provider-spi.test.ts",
+    "test:unit": "vitest run test/unit/core-artifact.test.ts test/unit/standalone-contract.test.ts test/unit/standalone-process.test.ts test/unit/standalone-publication.test.ts test/unit/standalone-bun.test.ts test/unit/standalone-deno.test.ts test/unit/standalone-matrix.test.ts test/unit/esbuild-bundle.test.ts test/unit/bun-bundle.test.ts test/unit/node-sea.test.ts test/unit/esbuild-node-sea-pipeline.test.ts test/unit/bun-node-sea-pipeline.test.ts",
+    "test:architecture": "vitest run test/architecture/import-boundaries.test.ts test/architecture/public-api.test.ts test/architecture/generated-and-ci.test.ts test/architecture/release-config-and-artifact.test.ts test/architecture/workflow-and-consumer-security.test.ts test/architecture/docs-contract.test.ts test/architecture/workspace-topology.test.ts test/architecture/provider-spi.test.ts",
     "test:consumer": "node scripts/test-built-consumer.mjs",
     "test:consumer:fresh": "node scripts/test-built-consumer.mjs --fresh-install",
     "test:publication": "vitest run test/unit/standalone-publication.test.ts",
     "test:integration:real": "vitest run test/integration/standalone-bun.test.ts test/integration/standalone-deno.test.ts",
     "test:integration:node-sea": "vitest run test/integration/node-sea.test.ts",
+    "test:integration:bun-bundle": "vitest run test/integration/bun-bundle.test.ts",
+    "test:integration:bun-node-sea": "vitest run test/integration/bun-node-sea.test.ts",
     "test:integration:target": "vitest run test/integration/standalone-target-support.test.ts",
     "test:host:standalone": "vitest run test/host/standalone-node.smoke.ts",
-    "test:host:extra": "bun run test/host/standalone-bun.smoke.ts && deno run --sloppy-imports --allow-run --allow-read --allow-write --allow-env test/host/standalone-deno.smoke.ts",
+    "audit:dependencies": "bun audit --audit-level=high",
     "lint": "oxlint packages test typetest examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
@@ -42,12 +46,13 @@
     "effect-build": "workspace:*",
     "effect-build-bun": "workspace:*",
     "effect-build-deno": "workspace:*",
+    "effect-build-esbuild": "workspace:*",
     "effect-build-node-sea": "workspace:*",
     "esbuild": "0.28.2",
     "oxlint": "0.15.1",
     "tstyche": "7.2.2",
     "typescript": "6.0.3",
-    "vitest": "3.2.4",
+    "vitest": "3.2.6",
     "yaml": "2.9.0"
   }
 }

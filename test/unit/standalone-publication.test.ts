@@ -1,8 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, Latch, Path, PlatformError, Result } from "effect";
+import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, Latch, Path, PlatformError, Result, Stream } from "effect";
 import { createHash } from "node:crypto";
 import {
-  chmodSync,
   closeSync,
   existsSync,
   mkdirSync,
@@ -12,25 +11,22 @@ import {
   readFileSync,
   rmSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { ToolFailed } from "../../packages/effect-build/src/standalone/BuildError.js";
-import type {
-  CandidateProducer,
-  CommandCompilerAdapter,
-  CompilerAdapter,
-} from "../../packages/effect-build/src/standalone/internal/CompilerAdapter.js";
+import type { CommandCompilerAdapter } from "../../packages/effect-build/src/standalone/internal/CompilerAdapter.js";
 import { makeCompilerService } from "../../packages/effect-build/src/standalone/internal/CompilerEngine.js";
 import {
   acquireExecutableCandidate,
   type ExecutableCandidate,
+  inspectNativeExecutableFile,
   isLockedRenameError,
   validateAndPublishExecutable,
 } from "../../packages/effect-build/src/standalone/internal/ExecutableLifecycle.js";
-import type { OperatingSystem } from "../../packages/effect-build/src/standalone/internal/TargetCatalog.js";
 import { makeTargetTable } from "../../packages/effect-build/src/standalone/internal/TargetTable.js";
 
 const roots: string[] = [];
@@ -42,41 +38,150 @@ const windowsHost = process.platform === "win32";
 const hostTarget = windowsHost ? "windows-x64" as const : "macos-aarch64" as const;
 const successMode = windowsHost ? "pe" : "success";
 
-const targetTable = makeTargetTable(
-  {
-    "macos-aarch64": "test-macos-aarch64",
-    "windows-x64": "test-windows-x64",
-  } as const,
-);
-type TestTarget = typeof targetTable.Target.Type;
-
-const nodeSeaTargetTable = makeTargetTable({ "linux-x64-gnu": "linux-x64-gnu" } as const);
-type NodeSeaTarget = typeof nodeSeaTargetTable.Target.Type;
-
-const nodeSeaAdapter: CompilerAdapter<Record<string, never>, "node-sea", NodeSeaTarget> = {
-  toolName: "node-sea",
-  targetTable: nodeSeaTargetTable,
-  defaultTarget: "linux-x64-gnu",
-  validateOptions: () => ({ _tag: "Valid", value: {} }),
+const fat64 = (byteOrder: "big" | "little"): Uint8Array => {
+  const bytes = new Uint8Array(40);
+  bytes.set(byteOrder === "big" ? [0xca, 0xfe, 0xba, 0xbf] : [0xbf, 0xba, 0xfe, 0xca], 0);
+  new DataView(bytes.buffer).setUint32(4, 1, byteOrder === "little");
+  return bytes;
 };
 
-const nodeSeaStages = Object.freeze(
+const unsafeElfProgramHeaderOffset = (): Uint8Array => {
+  const bytes = new Uint8Array(64);
+  bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+  bytes.set([0x3e, 0x00], 18);
+  new DataView(bytes.buffer).setBigUint64(32, BigInt(Number.MAX_SAFE_INTEGER) + 1n, true);
+  new DataView(bytes.buffer).setUint16(54, 56, true);
+  new DataView(bytes.buffer).setUint16(56, 1, true);
+  return bytes;
+};
+
+const malformedPublicationCases = [
+  {
+    name: "big-endian FAT64",
+    bytes: fat64("big"),
+    reason: "unsupported-fat64",
+    preserveOldDestination: false,
+  },
+  {
+    name: "byte-swapped FAT64",
+    bytes: fat64("little"),
+    reason: "unsupported-fat64",
+    preserveOldDestination: true,
+  },
+  {
+    name: "unsafe ELF program-header offset",
+    bytes: unsafeElfProgramHeaderOffset(),
+    reason: "header-offset-overflow",
+    preserveOldDestination: true,
+  },
+] as const;
+
+const targetTable = makeTargetTable(
   [
-    Object.freeze({
-      operation: "bundle" as const,
-      tool: Object.freeze({ name: "esbuild" as const, version: "0.28.2" as const }),
-    }),
-    Object.freeze({
-      operation: "assemble-node-sea" as const,
-      tool: Object.freeze({ name: "node" as const, version: "26.7.0" as const, path: process.execPath }),
-    }),
+    ["macos-aarch64", "test-macos-aarch64"],
+    ["windows-x64", "test-windows-x64"],
   ] as const,
 );
+type TestTarget = typeof targetTable.Target.Type;
+type BunStages = readonly [{
+  readonly operation: "compile-executable";
+  readonly tool: { readonly name: "bun"; readonly version: string; readonly path: string };
+}];
 
-const discoveredCompiler = (hostOs: OperatingSystem = windowsHost ? "windows" : "macos") => ({
+const failureOf = (exit: Exit.Exit<unknown, unknown>): unknown =>
+  Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined;
+
+const discoveredCompiler = () => ({
   artifactTool: { name: "bun" as const, version: "test", path: process.execPath },
-  hostOs,
 });
+
+const platformFailure = () =>
+  PlatformError.systemError({
+    _tag: "Unknown",
+    module: "test",
+    method: "stream",
+    cause: new Error("controlled platform failure"),
+  });
+
+const virtualNativePath = "/virtual/native-executable";
+
+const inspectWithStream = (
+  size: number,
+  stream: FileSystem.FileSystem["stream"],
+) =>
+  Effect.gen(function*() {
+    const hostFileSystem = yield* FileSystem.FileSystem;
+    return yield* inspectNativeExecutableFile(
+      { ...hostFileSystem, stream },
+      virtualNativePath,
+      size,
+    );
+  }).pipe(Effect.provide(NodeServices.layer));
+
+const distantElfHeader = (programHeaderOffset: number): Uint8Array => {
+  const header = new Uint8Array(64);
+  const view = new DataView(header.buffer);
+  header.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+  view.setUint16(18, 62, true);
+  view.setBigUint64(32, BigInt(programHeaderOffset), true);
+  view.setUint16(54, 56, true);
+  view.setUint16(56, 1, true);
+  return header;
+};
+
+const maximalElf64 = (): Uint8Array => {
+  const programHeaderOffset = 2_000_000;
+  const programHeaderCount = 4096;
+  const interpreterOffset = 5_000_000;
+  const interpreterLength = 4096;
+  const bytes = new Uint8Array(interpreterOffset + interpreterLength);
+  bytes.set(distantElfHeader(programHeaderOffset));
+  const view = new DataView(bytes.buffer);
+  view.setUint16(56, programHeaderCount, true);
+  const interpreterEntry = programHeaderOffset + (programHeaderCount - 1) * 56;
+  view.setUint32(interpreterEntry, 3, true);
+  view.setBigUint64(interpreterEntry + 8, BigInt(interpreterOffset), true);
+  view.setBigUint64(interpreterEntry + 32, BigInt(interpreterLength), true);
+  bytes.set(new TextEncoder().encode("/lib64/ld-linux-x86-64.so.2\0"), interpreterOffset);
+  return bytes;
+};
+
+const distantPe = (): Uint8Array => {
+  const signatureOffset = 2_000_000;
+  const bytes = new Uint8Array(signatureOffset + 6);
+  bytes.set([0x4d, 0x5a], 0);
+  new DataView(bytes.buffer).setUint32(60, signatureOffset, true);
+  bytes.set([0x50, 0x45, 0, 0, 0x64, 0x86], signatureOffset);
+  return bytes;
+};
+
+const paddedThinMacho = (): Uint8Array => {
+  const bytes = new Uint8Array(64);
+  bytes.set([0xcf, 0xfa, 0xed, 0xfe], 0);
+  new DataView(bytes.buffer).setUint32(4, 0x01000007, true);
+  return bytes;
+};
+
+const maximalFat32 = (): Uint8Array => {
+  const count = 4096;
+  const tableEnd = 8 + count * 20;
+  const sliceLength = 8;
+  const bytes = new Uint8Array(tableEnd + count * sliceLength);
+  const view = new DataView(bytes.buffer);
+  bytes.set([0xca, 0xfe, 0xba, 0xbe], 0);
+  view.setUint32(4, count, false);
+  for (let index = 0; index < count; index++) {
+    const entry = 8 + index * 20;
+    const sliceOffset = tableEnd + index * sliceLength;
+    view.setUint32(entry, index === count - 1 ? 0x01000007 : 7, false);
+    view.setUint32(entry + 8, sliceOffset, false);
+    view.setUint32(entry + 12, sliceLength, false);
+  }
+  const selectedOffset = tableEnd + (count - 1) * sliceLength;
+  bytes.set([0xcf, 0xfa, 0xed, 0xfe], selectedOffset);
+  view.setUint32(selectedOffset + 4, 0x01000007, true);
+  return bytes;
+};
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -88,7 +193,14 @@ const makeRoot = () => {
   return root;
 };
 
-const adapter = (mode = successMode): CommandCompilerAdapter<Record<string, never>, "bun", TestTarget> => ({
+const pathWithSeparator = (path: Path.Path, sep: "/" | "\\"): Path.Path => ({ ...path, sep });
+
+const adapter = (mode = successMode): CommandCompilerAdapter<
+  "bun",
+  TestTarget,
+  BunStages,
+  Record<string, never>
+> => ({
   toolName: "bun",
   targetTable,
   validateOptions: () => ({ _tag: "Valid", value: {} }),
@@ -102,6 +214,18 @@ const adapter = (mode = successMode): CommandCompilerAdapter<Record<string, neve
         { channel: "stderr", ...completion.stderr },
       ],
     }),
+  decodeStages: (input) =>
+    Array.isArray(input)
+      && input.length === 1
+      && typeof input[0] === "object"
+      && input[0] !== null
+      && "tool" in input[0]
+      && typeof input[0].tool === "object"
+      && input[0].tool !== null
+      && "name" in input[0].tool
+      && input[0].tool.name === "bun"
+      ? Result.succeed(input as unknown as BunStages)
+      : Result.fail(new ToolFailed({ tool: "bun", exitCode: 1, diagnostics: [] })),
 });
 
 const compile = (root: string, mode = successMode, digest = true) =>
@@ -139,6 +263,323 @@ const assertCandidateCapabilityIsStagedPathOnly = (candidate: ExecutableCandidat
 void assertCandidateCapabilityIsStagedPathOnly;
 
 describe("standalone atomic publication", () => {
+  it.each(malformedPublicationCases)(
+    "maps $name to a typed finite publication failure without replacing destination bytes",
+    async ({ bytes, reason, preserveOldDestination }) => {
+      const root = makeRoot();
+      const destination = join(root, "nested", "app");
+      if (preserveOldDestination) {
+        mkdirSync(dirname(destination), { recursive: true });
+        writeFileSync(destination, "old", { flush: true });
+      }
+
+      let staged = "";
+      let targetResolutions = 0;
+      const exit = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function*() {
+            const fileSystem = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const crypto = yield* Crypto.Crypto;
+            const candidate = yield* acquireExecutableCandidate(fileSystem, path, { destination });
+            staged = candidate.staged;
+            yield* fileSystem.writeFile(candidate.staged, bytes);
+            yield* fileSystem.chmod(candidate.staged, 0o755);
+            return yield* validateAndPublishExecutable(fileSystem, path, crypto, candidate, {
+              digest: false,
+              resolveTarget: () => {
+                targetResolutions += 1;
+                return Result.succeed(hostTarget);
+              },
+            }).pipe(Effect.exit);
+          }),
+        ).pipe(Effect.provide(NodeServices.layer)),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(Exit.hasDies(exit)).toBe(false);
+      const failure = failureOf(exit);
+      expect(failure).toMatchObject({
+        _tag: "OutputInvalid",
+        path: staged,
+      });
+      expect(targetResolutions).toBe(0);
+      if (preserveOldDestination) expect(readFileSync(destination, "utf8")).toBe("old");
+      else expect(existsSync(destination)).toBe(false);
+      expect(existsSync(dirname(staged))).toBe(false);
+      expect(failure).toMatchObject({ reason });
+    },
+  );
+
+  it("preserves interruption combined with a native-inspection read failure and cleans staging", async () => {
+    const root = makeRoot();
+    const destination = join(root, "nested", "app");
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, "old", { flush: true });
+    const interruptor = 31_031;
+    const mixed = Cause.combine(Cause.fail(platformFailure()), Cause.interrupt(interruptor));
+    let staged = "";
+
+    const exit = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const hostFileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const crypto = yield* Crypto.Crypto;
+          const fileSystem: FileSystem.FileSystem = {
+            ...hostFileSystem,
+            stream: () => Stream.failCause(mixed),
+          };
+          const candidate = yield* acquireExecutableCandidate(fileSystem, path, { destination });
+          staged = candidate.staged;
+          yield* fileSystem.writeFile(candidate.staged, new Uint8Array(64));
+          yield* fileSystem.chmod(candidate.staged, 0o755);
+          return yield* validateAndPublishExecutable(fileSystem, path, crypto, candidate, {
+            digest: false,
+            resolveTarget: () => Result.succeed(hostTarget),
+          }).pipe(Effect.exit);
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) throw new Error("expected native inspection to fail");
+    expect([...Cause.interruptors(exit.cause)]).toContain(interruptor);
+    expect(failureOf(exit)).toMatchObject({
+      _tag: "OutputInvalid",
+      path: staged,
+      reason: "read-failed",
+    });
+    expect(readFileSync(destination, "utf8")).toBe("old");
+    expect(existsSync(dirname(staged))).toBe(false);
+  });
+
+  it("collects a native inspection range from one-byte stream chunks without changing its observation", async () => {
+    const bytes = new Uint8Array(257);
+    bytes.set([0xcf, 0xfa, 0xed, 0xfe], 0);
+    new DataView(bytes.buffer).setUint32(4, 0x01000007, true);
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+
+    const observation = await Effect.runPromise(
+      inspectWithStream(bytes.byteLength, (_file, options) => {
+        const offset = Number(options?.offset ?? 0);
+        const length = Number(options?.bytesToRead ?? bytes.byteLength - offset);
+        requests.push({ offset, length });
+        const range = bytes.slice(offset, offset + length);
+        return Stream.fromIterable([...range].map((byte) => Uint8Array.of(byte)));
+      }),
+    );
+
+    expect(observation).toEqual({ format: "macho", os: "macos", architecture: "x64" });
+    expect(requests).toEqual([{ offset: 0, length: 64 }]);
+  });
+
+  it.each(
+    [
+      {
+        name: "ELF64",
+        makeBytes: maximalElf64,
+        observation: { format: "elf", os: "linux", architecture: "x64", abi: "gnu" },
+        requests: [
+          { offset: 0, length: 64 },
+          { offset: 2_000_000, length: 229_376 },
+          { offset: 5_000_000, length: 4096 },
+        ],
+        calls: 3,
+        requestedBytes: 233_536,
+      },
+      {
+        name: "PE",
+        makeBytes: distantPe,
+        observation: { format: "pe", os: "windows", architecture: "x64" },
+        requests: [
+          { offset: 0, length: 64 },
+          { offset: 2_000_000, length: 6 },
+        ],
+        calls: 2,
+        requestedBytes: 70,
+      },
+      {
+        name: "thin Mach-O",
+        makeBytes: paddedThinMacho,
+        observation: { format: "macho", os: "macos", architecture: "x64" },
+        requests: [{ offset: 0, length: 64 }],
+        calls: 1,
+        requestedBytes: 64,
+      },
+      {
+        name: "FAT32",
+        makeBytes: maximalFat32,
+        observation: { format: "macho", os: "macos", architecture: "x64" },
+        requests: [
+          { offset: 0, length: 64 },
+          { offset: 8, length: 81_920 },
+          { offset: 114_688, length: 8 },
+        ],
+        calls: 3,
+        requestedBytes: 81_992,
+      },
+    ] as const,
+  )("bounds $name native inspection to $calls calls and $requestedBytes requested bytes", async (fixture) => {
+    const bytes = fixture.makeBytes();
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+
+    const observation = await Effect.runPromise(
+      inspectWithStream(bytes.byteLength, (_file, options) => {
+        const offset = Number(options?.offset ?? 0);
+        const length = Number(options?.bytesToRead ?? bytes.byteLength - offset);
+        requests.push({ offset, length });
+        return Stream.make(bytes.slice(offset, offset + length));
+      }),
+    );
+
+    expect(observation).toEqual(fixture.observation);
+    expect(requests).toEqual(fixture.requests);
+    expect(requests).toHaveLength(fixture.calls);
+    expect(requests.reduce((total, request) => total + request.length, 0)).toBe(fixture.requestedBytes);
+  });
+
+  it.each(
+    [
+      ["short", -1],
+      ["excess", 1],
+    ] as const,
+  )("rejects a %s additional native-inspection range", async (_name, byteDelta) => {
+    const programHeaderOffset = 2_000_000;
+    const size = programHeaderOffset + 56;
+    const header = distantElfHeader(programHeaderOffset);
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+
+    const exit = await Effect.runPromise(
+      inspectWithStream(size, (_file, options) => {
+        const offset = Number(options?.offset ?? 0);
+        const length = Number(options?.bytesToRead ?? size - offset);
+        requests.push({ offset, length });
+        if (offset === 0) {
+          const initial = new Uint8Array(length);
+          initial.set(header);
+          return Stream.make(initial);
+        }
+        return Stream.make(new Uint8Array(length + byteDelta));
+      }).pipe(Effect.exit),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(Exit.hasDies(exit)).toBe(false);
+    expect(failureOf(exit)).toEqual({ path: virtualNativePath, reason: "truncated-header" });
+    expect(requests).toEqual([
+      { offset: 0, length: 64 },
+      { offset: programHeaderOffset, length: 56 },
+    ]);
+  });
+
+  it("preserves Fail plus Interrupt emitted after an excess native-inspection range", async () => {
+    const programHeaderOffset = 2_000_000;
+    const size = programHeaderOffset + 56;
+    const header = distantElfHeader(programHeaderOffset);
+    const interruptor = 34_034;
+    const mixed = Cause.combine(Cause.fail(platformFailure()), Cause.interrupt(interruptor));
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+
+    const exit = await Effect.runPromise(
+      inspectWithStream(size, (_file, options) => {
+        const offset = Number(options?.offset ?? 0);
+        const length = Number(options?.bytesToRead ?? size - offset);
+        requests.push({ offset, length });
+        if (offset === 0) {
+          const initial = new Uint8Array(length);
+          initial.set(header);
+          return Stream.make(initial);
+        }
+        return Stream.concat(
+          Stream.make(new Uint8Array(length + 1)),
+          Stream.failCause(mixed),
+        );
+      }).pipe(Effect.exit),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) throw new Error("expected native inspection to fail");
+    expect([...Cause.interruptors(exit.cause)]).toContain(interruptor);
+    expect(failureOf(exit)).toEqual({ path: virtualNativePath, reason: "read-failed" });
+    expect(requests).toEqual([
+      { offset: 0, length: 64 },
+      { offset: programHeaderOffset, length: 56 },
+    ]);
+  });
+
+  it("publishes through the production bounded range reader for a sparse distant ELF", async () => {
+    const root = makeRoot();
+    const destination = join(root, "nested", "app");
+    const programHeaderOffset = 2_000_000;
+    const interpreterOffset = 3_000_000;
+    const interpreter = new TextEncoder().encode("/lib64/ld-linux-x86-64.so.2\0");
+    const requests: Array<{ readonly offset: number; readonly length: number }> = [];
+    let staged = "";
+
+    const artifact = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const hostFileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const crypto = yield* Crypto.Crypto;
+          const fileSystem: FileSystem.FileSystem = {
+            ...hostFileSystem,
+            stream: (file, options) => {
+              requests.push({
+                offset: Number(options?.offset ?? 0),
+                length: Number(options?.bytesToRead ?? 0),
+              });
+              return hostFileSystem.stream(file, options);
+            },
+          };
+          const candidate = yield* acquireExecutableCandidate(fileSystem, path, { destination });
+          staged = candidate.staged;
+          const header = new Uint8Array(64);
+          header.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+          const headerView = new DataView(header.buffer);
+          headerView.setUint16(18, 62, true);
+          headerView.setBigUint64(32, BigInt(programHeaderOffset), true);
+          headerView.setUint16(54, 56, true);
+          headerView.setUint16(56, 1, true);
+          const programHeader = new Uint8Array(56);
+          const programHeaderView = new DataView(programHeader.buffer);
+          programHeaderView.setUint32(0, 3, true);
+          programHeaderView.setBigUint64(8, BigInt(interpreterOffset), true);
+          programHeaderView.setBigUint64(32, BigInt(interpreter.byteLength), true);
+          const handle = openSync(candidate.staged, "w");
+          try {
+            writeSync(handle, header, 0, header.byteLength, 0);
+            writeSync(handle, programHeader, 0, programHeader.byteLength, programHeaderOffset);
+            writeSync(handle, interpreter, 0, interpreter.byteLength, interpreterOffset);
+          } finally {
+            closeSync(handle);
+          }
+          yield* fileSystem.chmod(candidate.staged, 0o755);
+          return yield* validateAndPublishExecutable(fileSystem, path, crypto, candidate, {
+            digest: false,
+            resolveTarget: (observation) =>
+              observation.format === "elf"
+                && observation.os === "linux"
+                && observation.architecture === "x64"
+                && observation.abi === "gnu"
+                ? Result.succeed("linux-x64-gnu" as const)
+                : Result.fail("unexpected-observation"),
+          });
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(artifact).toMatchObject({ path: destination, target: "linux-x64-gnu" });
+    expect(requests).toEqual([
+      { offset: 0, length: 64 },
+      { offset: programHeaderOffset, length: 56 },
+      { offset: interpreterOffset, length: interpreter.byteLength },
+    ]);
+    expect(existsSync(destination)).toBe(true);
+    expect(existsSync(dirname(staged))).toBe(false);
+  });
+
   it("rejects forged and scope-closed candidates as defects before filesystem effects", async () => {
     const root = makeRoot();
     const hostFileSystem = await Effect.runPromise(
@@ -162,8 +603,9 @@ describe("standalone atomic publication", () => {
     };
     const check = (candidate: ExecutableCandidate) =>
       Effect.gen(function*() {
+        const path = yield* Path.Path;
         const crypto = yield* Crypto.Crypto;
-        return yield* validateAndPublishExecutable(countingFileSystem, crypto, candidate, {
+        return yield* validateAndPublishExecutable(countingFileSystem, path, crypto, candidate, {
           digest: false,
           resolveTarget: () => Result.succeed(hostTarget),
         });
@@ -231,12 +673,12 @@ describe("standalone atomic publication", () => {
             ]),
           );
           yield* fileSystem.chmod(candidate.staged, 0o755);
-          const first = yield* validateAndPublishExecutable(countingFileSystem, crypto, candidate, {
+          const first = yield* validateAndPublishExecutable(countingFileSystem, path, crypto, candidate, {
             digest: false,
             resolveTarget: () => Result.succeed("macos-aarch64" as const),
           });
           const effectsAfterFirst = fileEffects;
-          const second = yield* validateAndPublishExecutable(countingFileSystem, crypto, candidate, {
+          const second = yield* validateAndPublishExecutable(countingFileSystem, path, crypto, candidate, {
             digest: false,
             resolveTarget: () => Result.succeed("macos-aarch64" as const),
           }).pipe(Effect.exit);
@@ -248,6 +690,76 @@ describe("standalone atomic publication", () => {
     expect(result.first.path).toBe(join(root, "published"));
     expect(Exit.hasDies(result.second)).toBe(true);
     expect(fileEffects).toBe(result.effectsAfterFirst);
+  });
+
+  it("uses host Path semantics for execute bits independently of the output target suffix", async () => {
+    const root = makeRoot();
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const crypto = yield* Crypto.Crypto;
+
+          const windowsHostCandidate = yield* acquireExecutableCandidate(
+            fileSystem,
+            pathWithSeparator(path, "\\"),
+            { destination: join(root, "windows-host-linux-target") },
+          );
+          const elf = new Uint8Array(120);
+          elf.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+          elf.set([0x3e, 0x00], 18);
+          new DataView(elf.buffer).setBigUint64(32, 64n, true);
+          new DataView(elf.buffer).setUint16(54, 56, true);
+          new DataView(elf.buffer).setUint16(56, 1, true);
+          yield* fileSystem.writeFile(windowsHostCandidate.staged, elf);
+          const windowsHostArtifact = yield* validateAndPublishExecutable(
+            fileSystem,
+            pathWithSeparator(path, "\\"),
+            crypto,
+            windowsHostCandidate,
+            {
+              digest: false,
+              resolveTarget: (observation) =>
+                observation.format === "elf"
+                  && observation.os === "linux"
+                  && observation.architecture === "x64"
+                  ? Result.succeed("linux-x64-gnu" as const)
+                  : Result.fail("not-linux-x64"),
+            },
+          );
+
+          const posixHostCandidate = yield* acquireExecutableCandidate(
+            fileSystem,
+            pathWithSeparator(path, "/"),
+            { destination: join(root, "posix-host-windows-target"), executableSuffix: ".exe" },
+          );
+          const pe = new Uint8Array(72);
+          pe.set([0x4d, 0x5a], 0);
+          pe[60] = 64;
+          pe.set([0x50, 0x45, 0x00, 0x00], 64);
+          pe.set([0x64, 0x86], 68);
+          yield* fileSystem.writeFile(posixHostCandidate.staged, pe);
+          const posixHostExit = yield* validateAndPublishExecutable(
+            fileSystem,
+            pathWithSeparator(path, "/"),
+            crypto,
+            posixHostCandidate,
+            {
+              digest: false,
+              resolveTarget: () => Result.succeed("windows-x64" as const),
+            },
+          ).pipe(Effect.exit);
+          return { windowsHostArtifact, posixHostExit };
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(result.windowsHostArtifact.target).toBe("linux-x64-gnu");
+    expect(failureOf(result.posixHostExit)).toMatchObject({
+      _tag: "OutputInvalid",
+      reason: "not-executable",
+    });
   });
 
   it("recognizes normalized locks and Windows rename EPERM", () => {
@@ -262,6 +774,75 @@ describe("standalone atomic publication", () => {
     expect(isLockedRenameError(platformError("Busy"))).toBe(true);
     expect(isLockedRenameError(platformError("Unknown", "EPERM"))).toBe(true);
     expect(isLockedRenameError(platformError("Unknown", "ENOENT"))).toBe(false);
+  });
+
+  it("digests the exact staged bytes through one separate full-file read only when requested", async () => {
+    const root = makeRoot();
+    const bytes = paddedThinMacho();
+    let readFileCalls = 0;
+    let readsAfterWithoutDigest = -1;
+    let fullReadContents: Uint8Array | undefined;
+    let digestCalls = 0;
+    let digestAlgorithm: Crypto.DigestAlgorithm | undefined;
+    let digestContents: Uint8Array | undefined;
+
+    const artifacts = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const hostFileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const crypto = yield* Crypto.Crypto;
+          const fileSystem: FileSystem.FileSystem = {
+            ...hostFileSystem,
+            readFile: (file) =>
+              hostFileSystem.readFile(file).pipe(
+                Effect.map((contents) => {
+                  readFileCalls += 1;
+                  fullReadContents = contents;
+                  return contents;
+                }),
+              ),
+          };
+          const recordingCrypto: Crypto.Crypto = {
+            ...crypto,
+            digest: (algorithm, contents) => {
+              digestCalls += 1;
+              digestAlgorithm = algorithm;
+              digestContents = contents;
+              return crypto.digest(algorithm, contents);
+            },
+          };
+          const publish = (name: string, digest: boolean) =>
+            Effect.gen(function*() {
+              const candidate = yield* acquireExecutableCandidate(fileSystem, path, {
+                destination: join(root, name),
+              });
+              yield* fileSystem.writeFile(candidate.staged, bytes);
+              yield* fileSystem.chmod(candidate.staged, 0o755);
+              return yield* validateAndPublishExecutable(fileSystem, path, recordingCrypto, candidate, {
+                digest,
+                resolveTarget: () => Result.succeed("macos-x64" as const),
+              });
+            });
+
+          const withoutDigest = yield* publish("without-digest", false);
+          readsAfterWithoutDigest = readFileCalls;
+          const withDigest = yield* publish("with-digest", true);
+          return { withoutDigest, withDigest };
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(artifacts.withoutDigest.digest).toBeUndefined();
+    expect(readsAfterWithoutDigest).toBe(0);
+    expect(readFileCalls).toBe(1);
+    expect(digestCalls).toBe(1);
+    expect(digestAlgorithm).toBe("SHA-256");
+    expect(digestContents).toBe(fullReadContents);
+    expect([...fullReadContents!]).toEqual([...bytes]);
+    expect(artifacts.withDigest.digest).toBe(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
+    expect([...readFileSync(artifacts.withoutDigest.path)]).toEqual([...bytes]);
+    expect([...readFileSync(artifacts.withDigest.path)]).toEqual([...bytes]);
   });
 
   it("publishes a validated artifact and replaces old bytes atomically", async () => {
@@ -293,71 +874,10 @@ describe("standalone atomic publication", () => {
     expect(readdirSync(join(root, "nested")).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
   });
 
-  it.each(["invalid", "wrong-target"] as const)(
-    "rejects a composed Node SEA %s candidate through core publication",
-    async (behavior) => {
-      const root = makeRoot();
-      const outfile = join(root, "nested", "app");
-      mkdirSync(join(root, "nested"));
-      writeFileSync(outfile, "old", { flush: true });
-      let staged = "";
-      const producer: CandidateProducer<"node-sea", NodeSeaTarget, Record<string, never>> = {
-        hostOs: "linux",
-        produceCandidate: (request) =>
-          Effect.sync(() => {
-            staged = request.stagedOutfile;
-            writeFileSync(
-              staged,
-              behavior === "invalid"
-                ? "not-native"
-                : new Uint8Array([0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0x00, 0x00, 0x01]),
-            );
-            chmodSync(staged, 0o755);
-            return nodeSeaStages;
-          }),
-      };
-
-      await expect(
-        Effect.runPromise(
-          Effect.gen(function*() {
-            const platformFileSystem = yield* FileSystem.FileSystem;
-            const executableCandidateFileSystem: FileSystem.FileSystem = {
-              ...platformFileSystem,
-              stat: (path) =>
-                platformFileSystem.stat(path).pipe(
-                  Effect.map((information) =>
-                    path === staged ? { ...information, mode: information.mode | 0o111 } : information
-                  ),
-                ),
-            };
-            return yield* Effect.gen(function*() {
-              const service = yield* makeCompilerService(nodeSeaAdapter, producer);
-              return yield* service.compileExecutable({
-                entrypoint: "unused.ts",
-                outfile,
-                target: "linux-x64-gnu",
-              });
-            }).pipe(Effect.provideService(FileSystem.FileSystem, executableCandidateFileSystem));
-          }).pipe(Effect.provide(NodeServices.layer)),
-        ),
-      ).rejects.toMatchObject({
-        _tag: "OutputInvalid",
-        reason: expect.stringContaining(
-          behavior === "invalid" ? "invalid-native-magic" : "native target does not match requested target",
-        ),
-      });
-
-      expect(staged).not.toBe("");
-      expect(existsSync(staged)).toBe(false);
-      expect(readFileSync(outfile, "utf8")).toBe("old");
-      expect(readdirSync(join(root, "nested")).filter((name) => name.startsWith(".effect-build-"))).toEqual([]);
-    },
-  );
-
   it("uses the destination basename for the staged compiler path", async () => {
     const root = makeRoot();
     let staged = "";
-    const capturing: CommandCompilerAdapter<Record<string, never>, "bun", TestTarget> = {
+    const capturing: CommandCompilerAdapter<"bun", TestTarget, BunStages, Record<string, never>> = {
       ...adapter(),
       renderArgv: ({ stagedOutfile }) => {
         staged = stagedOutfile;
@@ -385,7 +905,7 @@ describe("standalone atomic publication", () => {
     mkdirSync(join(root, "nested"));
     writeFileSync(outfile, "old", { flush: true });
     const sentinel = join(root, "started");
-    const hanging: CommandCompilerAdapter<Record<string, never>, "bun", TestTarget> = {
+    const hanging: CommandCompilerAdapter<"bun", TestTarget, BunStages, Record<string, never>> = {
       ...adapter(),
       renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, "hang", sentinel],
     };
@@ -472,11 +992,12 @@ describe("standalone atomic publication", () => {
     const root = makeRoot();
     const outfile = join(root, "win-app");
     let staged = "";
-    const windowsTargetTable = makeTargetTable({ "windows-x64": "test-windows-x64" } as const);
+    const windowsTargetTable = makeTargetTable([["windows-x64", "test-windows-x64"]] as const);
     const windows: CommandCompilerAdapter<
-      Record<string, never>,
       "bun",
-      typeof windowsTargetTable.Target.Type
+      typeof windowsTargetTable.Target.Type,
+      BunStages,
+      Record<string, never>
     > = {
       toolName: "bun",
       targetTable: windowsTargetTable,
@@ -486,10 +1007,11 @@ describe("standalone atomic publication", () => {
         return [fixture, stagedOutfile, "pe"];
       },
       interpretFailure: adapter().interpretFailure,
+      decodeStages: adapter().decodeStages,
     };
     const artifact = await Effect.runPromise(
       Effect.gen(function*() {
-        const service = yield* makeCompilerService(windows, discoveredCompiler("windows"));
+        const service = yield* makeCompilerService(windows, discoveredCompiler());
         return yield* service.compileExecutable({
           entrypoint: "unused.ts",
           outfile,
@@ -504,15 +1026,16 @@ describe("standalone atomic publication", () => {
     expect(existsSync(`${outfile}.exe`)).toBe(false);
   });
 
-  it("uses the compiler host OS for omitted-target Windows staging without leaking it", async () => {
+  it("uses the host Path separator for omitted-target Windows staging without leaking it", async () => {
     const root = makeRoot();
     const outfile = join(root, "host-win-app");
     let staged = "";
-    const windowsTargetTable = makeTargetTable({ "windows-x64": "test-windows-x64" } as const);
+    const windowsTargetTable = makeTargetTable([["windows-x64", "test-windows-x64"]] as const);
     const windows: CommandCompilerAdapter<
-      Record<string, never>,
       "bun",
-      typeof windowsTargetTable.Target.Type
+      typeof windowsTargetTable.Target.Type,
+      BunStages,
+      Record<string, never>
     > = {
       toolName: "bun",
       targetTable: windowsTargetTable,
@@ -522,12 +1045,17 @@ describe("standalone atomic publication", () => {
         return [fixture, stagedOutfile, "pe"];
       },
       interpretFailure: adapter().interpretFailure,
+      decodeStages: adapter().decodeStages,
     };
+    const hostPath = await Effect.runPromise(Path.Path.pipe(Effect.provide(NodeServices.layer)));
     const artifact = await Effect.runPromise(
       Effect.gen(function*() {
-        const service = yield* makeCompilerService(windows, discoveredCompiler("windows"));
+        const service = yield* makeCompilerService(windows, discoveredCompiler());
         return yield* service.compileExecutable({ entrypoint: "unused.ts", outfile });
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(
+        Effect.provideService(Path.Path, pathWithSeparator(hostPath, "\\")),
+        Effect.provide(NodeServices.layer),
+      ),
     );
 
     expect(basename(staged)).toBe("host-win-app.exe");
@@ -535,7 +1063,6 @@ describe("standalone atomic publication", () => {
     expect(artifact.target).toBe("windows-x64");
     expect(artifact.provider).toBe("bun");
     expect(Object.keys(artifact.stages[0].tool).sort()).toEqual(["name", "path", "version"]);
-    expect(Object.hasOwn(artifact.stages[0].tool, "hostOs")).toBe(false);
     expect(existsSync(outfile)).toBe(true);
     expect(existsSync(`${outfile}.exe`)).toBe(false);
   });
@@ -543,23 +1070,25 @@ describe("standalone atomic publication", () => {
   it("rejects an observed canonical target outside the selected provider table", async () => {
     const root = makeRoot();
     const outfile = join(root, "outside-provider");
-    const windowsTargetTable = makeTargetTable({ "windows-x64": "test-windows-x64" } as const);
+    const windowsTargetTable = makeTargetTable([["windows-x64", "test-windows-x64"]] as const);
     const windowsOnly: CommandCompilerAdapter<
-      Record<string, never>,
       "bun",
-      typeof windowsTargetTable.Target.Type
+      typeof windowsTargetTable.Target.Type,
+      BunStages,
+      Record<string, never>
     > = {
       toolName: "bun",
       targetTable: windowsTargetTable,
       validateOptions: () => ({ _tag: "Valid", value: {} }),
       renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, "success"],
       interpretFailure: adapter().interpretFailure,
+      decodeStages: adapter().decodeStages,
     };
 
     await expect(
       Effect.runPromise(
         Effect.gen(function*() {
-          const service = yield* makeCompilerService(windowsOnly, discoveredCompiler("windows"));
+          const service = yield* makeCompilerService(windowsOnly, discoveredCompiler());
           return yield* service.compileExecutable({ entrypoint: "unused.ts", outfile });
         }).pipe(Effect.provide(NodeServices.layer)),
       ),
@@ -577,17 +1106,23 @@ describe("standalone atomic publication", () => {
     mkdirSync(join(root, "nested"));
     writeFileSync(outfile, "old", { flush: true });
     const wideTargetTable = makeTargetTable(
-      {
-        "macos-x64": "test-macos-x64",
-        "macos-aarch64": "test-macos-aarch64",
-      } as const,
+      [
+        ["macos-x64", "test-macos-x64"],
+        ["macos-aarch64", "test-macos-aarch64"],
+      ] as const,
     );
-    const wide: CommandCompilerAdapter<Record<string, never>, "bun", typeof wideTargetTable.Target.Type> = {
+    const wide: CommandCompilerAdapter<
+      "bun",
+      typeof wideTargetTable.Target.Type,
+      BunStages,
+      Record<string, never>
+    > = {
       toolName: "bun",
       targetTable: wideTargetTable,
       validateOptions: () => ({ _tag: "Valid", value: {} }),
       renderArgv: ({ stagedOutfile }) => [fixture, stagedOutfile, successMode],
       interpretFailure: adapter().interpretFailure,
+      decodeStages: adapter().decodeStages,
     };
     await expect(
       Effect.runPromise(
@@ -608,7 +1143,7 @@ describe("standalone atomic publication", () => {
   it("rejects an unsupported target before rendering or spawning", async () => {
     const root = makeRoot();
     let rendered = 0;
-    const counting: CommandCompilerAdapter<Record<string, never>, "bun", TestTarget> = {
+    const counting: CommandCompilerAdapter<"bun", TestTarget, BunStages, Record<string, never>> = {
       ...adapter(),
       renderArgv: ({ stagedOutfile }) => {
         rendered += 1;

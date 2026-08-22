@@ -1,13 +1,14 @@
 {
   "name": "effect-build-bun",
   "version": "0.3.0",
-  "description": "Bun compiler provider for effect-build.",
+  "description": "Bun compiler and scoped JavaScript bundle provider for effect-build.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
   "keywords": [
     "effect",
     "bun",
+    "bundle",
     "compiler",
     "executable"
   ],

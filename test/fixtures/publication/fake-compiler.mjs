@@ -17,6 +17,7 @@ if (mode === "hang") {
   pe.set([0x50, 0x45, 0x00, 0x00], 64);
   pe.set([0x64, 0x86], 68);
   writeFileSync(outfile, pe);
+  chmodSync(outfile, 0o755);
 } else {
   const header = new Uint8Array(64);
   // Little-endian 64-bit Mach-O, arm64.

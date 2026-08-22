@@ -27,14 +27,14 @@ const catalog = {
   "windows-aarch64": { os: "windows", architecture: "aarch64", executableSuffix: ".exe" },
 } as const satisfies Readonly<Record<string, TargetDescriptor>>;
 
-export type Target = keyof typeof catalog;
+export type SystemTarget = keyof typeof catalog;
 
 // Object.keys cannot retain literal keys. Keep the one audited assertion here.
-const literals = Object.freeze(Object.keys(catalog)) as readonly [Target, ...Target[]];
+const literals = Object.freeze(Object.keys(catalog)) as readonly [SystemTarget, ...SystemTarget[]];
 
-export const Target = Schema.Literals(literals);
+export const SystemTarget = Schema.Literals(literals);
 
-export const descriptorOf = (target: Target): TargetDescriptor => catalog[target];
+export const descriptorOf = (target: SystemTarget): TargetDescriptor => catalog[target];
 
 export interface NativeTargetObservation {
   readonly os: OperatingSystem;
@@ -42,7 +42,7 @@ export interface NativeTargetObservation {
   readonly abi?: Abi;
 }
 
-export const matchesObservation = (target: Target, observation: NativeTargetObservation): boolean => {
+export const matchesObservation = (target: SystemTarget, observation: NativeTargetObservation): boolean => {
   const descriptor = descriptorOf(target);
   return descriptor.os === observation.os
     && descriptor.architecture === observation.architecture
@@ -51,9 +51,9 @@ export const matchesObservation = (target: Target, observation: NativeTargetObse
 
 export const targetFromObservation = (
   observation: NativeTargetObservation,
-  fallback?: Target,
-): Target | undefined => {
-  const matches = Target.literals.filter((target) => matchesObservation(target, observation));
+  fallback?: SystemTarget,
+): SystemTarget | undefined => {
+  const matches = SystemTarget.literals.filter((target) => matchesObservation(target, observation));
   if (matches.length === 1) return matches[0];
   if (fallback !== undefined && matches.includes(fallback)) return fallback;
   return undefined;

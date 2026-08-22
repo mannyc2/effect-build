@@ -1,202 +1,176 @@
 # API
 
-The workspace publishes four packages with five public entry points:
+The workspace publishes five packages with seven public entry points:
 
 ```ts
-import { Artifact, BuildError, MatrixError, Target } from "effect-build";
+import { Artifact, BuildError, JavaScriptBundle, MatrixError, Target } from "effect-build";
+import * as Bun from "effect-build-bun";
+import * as Deno from "effect-build-deno";
+import * as Esbuild from "effect-build-esbuild";
+import * as NodeSea from "effect-build-node-sea";
+import * as Integration from "effect-build/Integration";
 import { define } from "effect-build/Provider";
 ```
 
-Select the Bun provider:
+There is no root compile operation or provider argument. `effect-build` owns
+provider-neutral file, executable, target, error, and scoped-bundle semantics.
+`effect-build/Integration` is the narrow package-author boundary for bounded
+commands, bundle inspection/production, and executable production.
+`effect-build/Provider` contains only the command-provider `define` factory
+used by Bun and Deno; it is not a registry or application operation.
+
+## Command compilers
+
+Bun and Deno both expose `Compiler`, `Target`, `compileExecutable`,
+`compileExecutableMatrix`, and `layer` at runtime. Bun also exposes the scoped
+bundle operation and its closed error Schemas described below. Their scalar
+input is:
 
 ```ts
-import * as Bun from "effect-build-bun";
-```
-
-Or select the Deno provider:
-
-```ts
-import * as Deno from "effect-build-deno";
-```
-
-Or select the Node SEA provider:
-
-```ts
-import * as NodeSea from "effect-build-node-sea";
-```
-
-The core root runtime keys are `Artifact`, `BuildError`, `MatrixError`, and
-`Target`; its provider-author path has only `define`. Each provider package has
-exactly five runtime keys: `Compiler`, `Target`,
-`compileExecutable`, `compileExecutableMatrix`, and `layer`. Provider Artifact,
-input, options, and MatrixError aliases are type-only. There is no root compile
-operation or provider argument. `define` is the closed first-party authoring
-SPI, not an application build call.
-
-## Scalar compile
-
-Each provider exports a concrete `CompileExecutableInput` with this shape:
-
-```ts
-interface CompileExecutableInput {
+interface CompileExecutableInput<Options, Target> {
   readonly entrypoint: string;
   readonly outfile: string;
   readonly cwd?: string;
-  readonly target?: Bun.Target; // Deno.Target or NodeSea.Target in those modules
+  readonly target?: Target;
   readonly digest?: boolean;
-  readonly options?: Bun.Options; // provider-specific Options in the other modules
+  readonly options?: Options;
 }
 ```
 
-`entrypoint` and `outfile` are the only common required fields. Node SEA also
-requires `options.format` to be `"esm"` or `"cjs"`. Relative paths are
-resolved using `cwd` when supplied. `target` is `Bun.Target` or `Deno.Target`,
-never a broad string. `digest: true` reads the completed output and adds its
-SHA-256 digest. Options remain provider-specific.
+The scalar result is the provider-refined executable Artifact. Its error
+channel is `BuildError.BuildError`, and its environment is the selected
+provider service.
 
-The scalar result is the provider Artifact and its error channel remains the
-closed `BuildError.BuildError` union. The public type is equivalent to:
+Scalar runtime input is totally decoded in deterministic field order. Malformed
+untyped scalar inputs now fail before request-owned filesystem, argv-rendering,
+staging, or compiler-child work. The existing `InvalidDriverOptions` carries a
+provider-attributed `<field> <reason>` for envelope and common-field failures;
+provider-option failures retain their adapter's existing exact reason, and
+invalid targets retain `TargetUnsupported`. Valid TypeScript callers remain
+source-compatible. Layer construction is a separate acquisition boundary: a
+freshly provided Layer still selects and probes the command before scalar
+request preflight, while a reused Layer shares that acquisition.
+
+The homogeneous matrix input shares one entrypoint, output directory, name,
+options value, and non-empty target tuple. `concurrency` defaults to one and
+must be a positive safe integer. Total preflight runs before any filesystem,
+argv-rendering, or child-process work. Execution is bounded and collect-all.
+`MatrixFailed` keeps already committed Artifacts and every cell failure in
+target input order; it does not roll them back.
+
+### Native inspection and digest cost
+
+Before publishing an executable Artifact, core reads an initial range of at
+most 64 bytes and follows at most two exact ranges declared by the native
+parser. A distant table or slice offset does not allocate or read the gap. These
+are internal validation bounds, not a public executable-inspection operation.
+
+When `digest` is absent or false, validation performs no whole-file read. When
+`digest: true`, core separately loads the complete staged executable with
+`FileSystem.readFile` after range inspection, then passes that exact buffer to
+the current one-shot `Crypto.digest("SHA-256", contents)` service. Digesting
+therefore adds memory and IO proportional to the complete executable; it does
+not have a constant-memory guarantee. An incremental implementation remains
+future work until Effect exposes a platform-neutral incremental digest service;
+core does not substitute a Node-only crypto adapter.
+
+## Scoped JavaScript bundles
+
+`JavaScriptBundle.Artifact<Stages>` is a nominal, continuation-scoped capability,
+not a serializable file record. It carries an authenticated path,
+safe byte count, SHA-256 identity, `format`, Node `resolutionTarget`, observed
+external imports, and the producer's exact stage tuple. The handle can be
+inspected only while its continuation is live.
+
+`effect-build-esbuild` exposes:
 
 ```ts
-Effect.Effect<Bun.Artifact, BuildError.BuildError, Bun.Compiler>;
+interface JavaScriptBundleInput {
+  readonly entrypoint: string;
+  readonly format: "esm" | "cjs";
+  readonly cwd?: string;
+}
+
+declare const withJavaScriptBundle: <A, E, R>(
+  input: JavaScriptBundleInput,
+  use: (bundle: JavaScriptBundle.Artifact) => Effect.Effect<A, E, R>,
+) => Effect.Effect<A, Esbuild.EsbuildBundleError | E, Esbuild.Esbuild | Exclude<R, Scope.Scope>>;
 ```
 
-## Target matrix
+Its fixed producer behavior is one Node-resolving bundle, one JavaScript
+output, Esbuild 0.28.2, ESM or CJS, no splitting, no plugins, and explicit
+`node26.7` lowering.
 
-Each provider also exports a concrete `CompileExecutableMatrixInput`. For Bun:
+The existing Bun `Compiler` service and Layer additionally expose:
 
 ```ts
-interface BunMatrixInput {
-  readonly entrypoint: string;
-  readonly outdir: string;
-  readonly name: string;
-  readonly targets: readonly [Bun.Target, ...Bun.Target[]];
+declare const withJavaScriptBundle: <A, E, R>(
+  input: JavaScriptBundleInput,
+  use: (
+    bundle: JavaScriptBundle.Artifact<
+      readonly [{
+        readonly operation: "bundle-javascript";
+        readonly tool: { readonly name: "bun"; readonly version: "1.3.9"; readonly path: string };
+      }]
+    >,
+  ) => Effect.Effect<A, E, R>,
+) => Effect.Effect<A, Bun.BunBundleError | E, Bun.Compiler | Exclude<R, Scope.Scope>>;
+```
+
+The same selected Bun command serves scalar compile, matrix compile, and bundle
+calls. Bundling fixes `target=node`, packages bundled, one output, and the
+pinned Bun 1.3.9 producer defaults. Here `node` controls resolution and builtin
+handling; it cannot select Node 26.7 or a syntax-lowering level. Metafile
+`external: true` edges are sorted observations, not a complete import closure.
+Bun's generated `import.meta.main` behavior is intentionally documented as
+different from Esbuild when an ESM bundle is imported.
+
+## Node SEA
+
+`effect-build-node-sea` exposes granular assembly rather than compile/matrix:
+
+```ts
+interface CreateExecutableInput<MainStages extends readonly Artifact.StageObservation[]> {
+  readonly main: JavaScriptBundle.Artifact<MainStages>;
+  readonly outfile: string;
   readonly cwd?: string;
   readonly digest?: boolean;
-  readonly options?: Bun.Options;
-  readonly concurrency?: number;
+  readonly assets?: readonly { readonly key: string; readonly path: string }[];
 }
+
+declare const createExecutable: <const MainStages extends readonly Artifact.StageObservation[]>(
+  input: CreateExecutableInput<MainStages>,
+) => Effect.Effect<NodeSea.Artifact<MainStages>, NodeSea.NodeSeaCreateError, NodeSea.NodeSea>;
 ```
 
-`targets` is non-empty and provider-homogeneous. `concurrency` defaults to 1;
-an explicit value must be a positive safe integer. Every intended path is
-`<resolved outdir>/<name>-<canonical target>[.exe]`. For example:
+The result keeps the main's exact stage prefix and appends one observed
+Node 26.7.0 `assemble-node-sea` stage. A borrowed bundle with no stages therefore
+produces exactly one stage; an Esbuild bundle produces Esbuild then Node; a
+Bun bundle produces Bun then Node.
+
+Application Effect code owns composition:
 
 ```ts
-const artifacts = Bun.compileExecutableMatrix({
-  entrypoint: "src/main.ts",
-  outdir: "dist",
-  name: "app",
-  targets: ["macos-aarch64", "linux-x64-gnu", "windows-x64"],
-  concurrency: 2,
-  digest: true,
-  options: { minify: true },
-});
-```
-
-This effect is equivalent to:
-
-```ts
-Effect.Effect<readonly Bun.Artifact[], Bun.MatrixError, Bun.Compiler>;
-```
-
-The successful Artifact order is exactly the target input order, independent
-of cell completion order. Before any output or staging filesystem operation,
-compile argv rendering, or build-child spawn, total preflight validates all
-fields, every target, the shared provider options, and all canonical output
-paths. Provider discovery and its one probe happen earlier, when the compiler
-Layer is acquired. `InvalidMatrixInput` contains every deterministic issue from
-that pass.
-
-Execution is bounded and collect-all. A `MatrixFailed` contains the successful,
-already committed Artifacts and every typed cell failure, each in target input
-order. Successful cells are not rolled back when another cell fails. If the
-matrix is interrupted, active children are terminated and their staging is
-cleaned, queued cells do not start, and already committed Artifacts remain.
-Interruption stays in the Effect Cause and is not returned as `MatrixError`.
-
-## Artifact
-
-```ts
-type ObservedStage =
-  | {
-    readonly operation: "compile-executable";
-    readonly tool: {
-      readonly name: "bun" | "deno";
-      readonly version: string;
-      readonly path: string;
-    };
-  }
-  | {
-    readonly operation: "bundle";
-    readonly tool: { readonly name: "esbuild"; readonly version: "0.28.2" };
-  }
-  | {
-    readonly operation: "assemble-node-sea";
-    readonly tool: { readonly name: "node"; readonly version: "26.7.0"; readonly path: string };
-  };
-
-interface Artifact {
-  readonly path: string;
-  readonly bytes: number;
-  readonly digest?: `sha256:${string}`;
-  readonly target: Target.Target;
-  readonly provider: "bun" | "deno" | "node-sea";
-  readonly stages: readonly [ObservedStage, ...ObservedStage[]];
-}
-```
-
-The root `Artifact.Artifact` runtime schema is a provider-correlated
-Bun/Deno/Node-SEA union. Bun and Deno have one `compile-executable` stage.
-Node SEA has exactly a `bundle` stage for esbuild 0.28.2 followed by an
-`assemble-node-sea` stage for Node 26.7.0. It accepts only provider, target,
-and stage tuples present in the closed contracts. Stages report observed work;
-they are not provenance, receipts, or reproducibility claims.
-
-## Exhaustive scalar error handling
-
-`BuildError.BuildError` applies only to `compileExecutable`. Existing exhaustive
-scalar handlers do not need matrix cases:
-
-```ts
-const scalar: Effect.Effect<Bun.Artifact, never, Bun.Compiler> = Bun.compileExecutable({
-  entrypoint: "src/main.ts",
-  outfile: "dist/app",
-}).pipe(
-  Effect.catchTags({
-    ToolNotFound: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-    ToolProbeFailed: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-    ToolFailed: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-    TargetUnsupported: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-    InvalidDriverOptions: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-    OutputMissing: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-    OutputInvalid: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-    OutputLocked: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-    PublicationFailed: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-  }),
+const executable = Esbuild.withJavaScriptBundle(
+  { entrypoint: "src/main.ts", format: "cjs" },
+  (main) => NodeSea.createExecutable({ main, outfile: "dist/app" }),
 );
 ```
 
-## Exhaustive matrix error handling
+Node SEA accepts only Node-resolution bundles, validates externals against the
+selected Node builtin set, authenticates a private main copy, runs `--check`,
+and then performs direct SEA assembly. Exact syntax acceptance belongs to the
+selected Node tool for every producer, not a neutral core syntax mode.
 
-`Bun.MatrixError`, `Deno.MatrixError`, and `NodeSea.MatrixError` are
-provider-narrowed type aliases of
-the separate root `MatrixError.MatrixError` schema. Exhaustive matrix handling
-has exactly two cases:
+## Artifacts and errors
 
-```ts
-const matrix: Effect.Effect<readonly Bun.Artifact[], never, Bun.Compiler> = Bun.compileExecutableMatrix({
-  entrypoint: "src/main.ts",
-  outdir: "dist",
-  name: "app",
-  targets: ["macos-aarch64", "linux-x64-gnu"],
-}).pipe(
-  Effect.catchTags({
-    InvalidMatrixInput: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-    MatrixFailed: (error) => Effect.logError(error).pipe(Effect.andThen(Effect.die(error))),
-  }),
-);
-```
+Core `Artifact` has exactly the neutral runtime schemas `AbsolutePath`,
+`ByteCount`, `Digest`, `ExecutableArtifact`, `FileArtifact`,
+`StageObservation`, and `ToolObservation`. Core `Target` has only
+`ResolutionTarget` and `SystemTarget`. Provider literals and exact stage tuples
+are owned by their integration packages.
 
-The unions are intentionally separate: matrix coordination does not add tags
-to `BuildError.BuildError`, and interruption is a Cause for both operations.
+Stages are observations of work. They are not provenance, receipts, or
+reproducibility claims. See [Errors](errors.md) for the separate compiler,
+matrix, bundle-producer, and Node SEA unions. Interruption remains an Effect
+Cause rather than any build error.

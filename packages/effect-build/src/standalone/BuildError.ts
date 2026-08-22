@@ -1,6 +1,5 @@
 import { Schema } from "effect";
-import { ToolName } from "./Artifact.js";
-import { Target } from "./Target.js";
+import { SystemTarget } from "./Target.js";
 
 export const DiagnosticChannel = Schema.Literals(["stdout", "stderr"] as const);
 export type DiagnosticChannel = typeof DiagnosticChannel.Type;
@@ -13,29 +12,29 @@ export const Diagnostic = Schema.Struct({
 export type Diagnostic = typeof Diagnostic.Type;
 
 export class ToolNotFound extends Schema.TaggedError<ToolNotFound>()("ToolNotFound", {
-  tool: ToolName,
+  tool: Schema.NonEmptyString,
   command: Schema.String,
 }) {}
 
 export class ToolProbeFailed extends Schema.TaggedError<ToolProbeFailed>()("ToolProbeFailed", {
-  tool: ToolName,
+  tool: Schema.NonEmptyString,
   reason: Schema.String,
 }) {}
 
 export class ToolFailed extends Schema.TaggedError<ToolFailed>()("ToolFailed", {
-  tool: ToolName,
+  tool: Schema.NonEmptyString,
   exitCode: Schema.Number,
   diagnostics: Schema.Array(Diagnostic),
 }) {}
 
 export class TargetUnsupported extends Schema.TaggedError<TargetUnsupported>()("TargetUnsupported", {
-  tool: ToolName,
+  tool: Schema.NonEmptyString,
   requested: Schema.String,
-  available: Schema.Array(Target),
+  available: Schema.Array(SystemTarget),
 }) {}
 
 export class InvalidDriverOptions extends Schema.TaggedError<InvalidDriverOptions>()("InvalidDriverOptions", {
-  tool: ToolName,
+  tool: Schema.NonEmptyString,
   reason: Schema.String,
 }) {}
 

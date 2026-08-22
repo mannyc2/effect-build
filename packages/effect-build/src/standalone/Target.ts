@@ -1,4 +1,8 @@
-import { Target as TargetSchema } from "./internal/TargetCatalog.js";
+import { Schema } from "effect";
+import { SystemTarget as SystemTargetSchema } from "./internal/TargetCatalog.js";
 
-export const Target = TargetSchema;
-export type Target = typeof Target.Type;
+export const SystemTarget = SystemTargetSchema;
+export type SystemTarget = typeof SystemTarget.Type;
+
+export const ResolutionTarget = Schema.Literals(["node"] as const);
+export type ResolutionTarget = typeof ResolutionTarget.Type;

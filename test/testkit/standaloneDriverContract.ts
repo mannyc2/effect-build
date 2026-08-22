@@ -1,38 +1,47 @@
 import { NodeServices } from "@effect/platform-node";
 import type { Crypto, FileSystem, Layer, Path } from "effect";
-import { Effect } from "effect";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { ConfigProvider, Effect } from "effect";
+import type { ChildProcessSpawner as EffectChildProcessSpawner } from "effect/unstable/process";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Artifact } from "../../packages/effect-build/src/standalone/Artifact.js";
+import type { ExecutableArtifact } from "../../packages/effect-build/src/standalone/Artifact.js";
 import type {
   BuildError,
   ToolNotFound,
   ToolProbeFailed,
 } from "../../packages/effect-build/src/standalone/BuildError.js";
-import type {
-  CompileExecutableMatrixInput,
-  MatrixErrorFor,
-} from "../../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
+import type { CompileExecutableMatrixInput } from "../../packages/effect-build/src/standalone/CompileExecutableMatrix.js";
 import type { CompileExecutableInput } from "../../packages/effect-build/src/standalone/Driver.js";
-import type { ChildProcessSpawner } from "../../packages/effect-build/src/standalone/internal/Process.js";
-import type { Target } from "../../packages/effect-build/src/standalone/Target.js";
+import type { SystemTarget } from "../../packages/effect-build/src/standalone/Target.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/driver/fake-tool.mjs", import.meta.url));
 
 export interface StandaloneDriverContractConfig<
   Self,
   Options,
-  SupportedTarget extends Target,
-  ProviderArtifact extends Extract<Artifact, { readonly provider: "bun" | "deno" }>,
+  SupportedTarget extends SystemTarget,
+  ProviderArtifact extends ExecutableArtifact & {
+    readonly provider: "bun" | "deno";
+    readonly target: SupportedTarget;
+  },
 > {
   readonly tool: "bun" | "deno";
   readonly layer: (options?: { readonly executable?: string }) => Layer.Layer<
     Self,
     ToolNotFound | ToolProbeFailed,
-    ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
+    EffectChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Crypto.Crypto
   >;
   readonly compileExecutable: (
     input: CompileExecutableInput<Options, SupportedTarget>,
@@ -41,21 +50,24 @@ export interface StandaloneDriverContractConfig<
     input: CompileExecutableMatrixInput<SupportedTarget, Options>,
   ) => Effect.Effect<
     readonly ProviderArtifact[],
-    MatrixErrorFor<ProviderArtifact["provider"], SupportedTarget>,
+    unknown,
     Self
   >;
   readonly matrixTarget: SupportedTarget;
   readonly probeFirstArg: string;
   readonly compileFirstArg: string;
   readonly invalidOptions: Options;
-  readonly unsupportedTarget?: Target;
+  readonly unsupportedTarget?: SystemTarget;
 }
 
 export const describeStandaloneDriverContract = <
   Self,
   Options,
-  SupportedTarget extends Target,
-  ProviderArtifact extends Extract<Artifact, { readonly provider: "bun" | "deno" }>,
+  SupportedTarget extends SystemTarget,
+  ProviderArtifact extends ExecutableArtifact & {
+    readonly provider: "bun" | "deno";
+    readonly target: SupportedTarget;
+  },
 >(
   config: StandaloneDriverContractConfig<Self, Options, SupportedTarget, ProviderArtifact>,
 ): void => {
@@ -75,18 +87,18 @@ export const describeStandaloneDriverContract = <
 
   const makeFakeTool = (
     root: string,
-    behavior: "ok" | "garbage" | "missing-host" | "unknown-host" = "ok",
+    behavior: "ok" | "garbage" | "missing-path" | "empty-version" = "ok",
   ): { executable: string; log: string } => {
     const log = join(root, "spawns.log");
     writeFileSync(log, "");
     const executable = join(root, config.tool);
     const script = behavior === "garbage"
       ? `#!/bin/sh\nprintf 'not-json'\n`
-      : behavior === "missing-host"
-      ? `#!/bin/sh\nprintf '{"path":"%s","version":"9.9.9"}' "$0"\n`
-      : `#!/bin/sh\nEFFECT_BUILD_FAKE_HOST_OS=${
-        behavior === "unknown-host" ? "plan9" : "macos"
-      } EFFECT_BUILD_FAKE_TOOL_PATH="$0" exec "${process.execPath}" "${fixture}" ${config.tool} "${log}" "$@"\n`;
+      : behavior === "missing-path"
+      ? `#!/bin/sh\nprintf '{"version":"9.9.9"}'\n`
+      : behavior === "empty-version"
+      ? `#!/bin/sh\nprintf '{"path":"%s","version":""}' "$0"\n`
+      : `#!/bin/sh\nEFFECT_BUILD_FAKE_TOOL_PATH="$0" exec "${process.execPath}" "${fixture}" ${config.tool} "${log}" "$@"\n`;
     writeFileSync(executable, script);
     chmodSync(executable, 0o755);
     return { executable, log };
@@ -114,7 +126,8 @@ export const describeStandaloneDriverContract = <
       config.compileExecutable(input).pipe(
         Effect.provide(config.layer(layerOptions)),
         Effect.provide(NodeServices.layer),
-      ) as Effect.Effect<Artifact, unknown, never>,
+        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
+      ) as Effect.Effect<ExecutableArtifact, unknown, never>,
     ).then((artifact) => ({ artifact: artifact as ProviderArtifact, root }));
 
   const matrixInput = (
@@ -140,7 +153,7 @@ export const describeStandaloneDriverContract = <
       expect(artifact.provider).toBe(config.tool);
       expect(artifact.stages[0].tool.name).toBe(config.tool);
       expect(artifact.stages[0].tool.version).toBe("9.9.9");
-      expect(artifact.stages[0].tool.path.startsWith("/")).toBe(true);
+      expect(artifact.stages[0].tool.path!.startsWith("/")).toBe(true);
       const lines = spawnLog(log).map((line) => JSON.parse(line) as string[]);
       expect(lines).toHaveLength(2);
       expect(lines[0]?.[0]).toBe(config.probeFirstArg);
@@ -148,6 +161,33 @@ export const describeStandaloneDriverContract = <
       const compileArgv = lines[1] ?? [];
       expect(compileArgv[compileArgv.length - 1]).toBe("main.ts");
       expect(compileArgv.some((value) => value.includes(".effect-build-"))).toBe(true);
+    });
+
+    it("ignores empty and relative PATH entries while accepting a shim-reported canonical executable", async () => {
+      const shimRoot = makeRoot();
+      const toolRoot = makeRoot();
+      const nonExecutableRoot = makeRoot();
+      const nonRegularRoot = makeRoot();
+      const { executable, log } = makeFakeTool(toolRoot);
+      writeFileSync(join(nonExecutableRoot, config.tool), "not executable\n");
+      chmodSync(join(nonExecutableRoot, config.tool), 0o644);
+      mkdirSync(join(nonRegularRoot, config.tool));
+      const shim = join(shimRoot, config.tool);
+      writeFileSync(shim, `#!/bin/sh\nexec "${executable}" "$@"\n`);
+      chmodSync(shim, 0o755);
+      const previous = process.env.PATH;
+      restores.push(() => {
+        process.env.PATH = previous;
+      });
+      process.env.PATH = `:${nonExecutableRoot}:${nonRegularRoot}:relative:${shimRoot}`;
+
+      const { artifact } = await compileOnce(toolRoot, {
+        entrypoint: "main.ts",
+        outfile: join(toolRoot, "out", "app"),
+      });
+
+      expect(artifact.stages[0].tool.path).toBe(realpathSync(executable));
+      expect(spawnLog(log)).toHaveLength(2);
     });
 
     it("shares one discovery and probe across two matrix calls under one provided Layer", async () => {
@@ -330,7 +370,7 @@ export const describeStandaloneDriverContract = <
     });
 
     it("fails layer construction with ToolProbeFailed on malformed probe output", async () => {
-      for (const behavior of ["garbage", "missing-host", "unknown-host"] as const) {
+      for (const behavior of ["garbage", "missing-path", "empty-version"] as const) {
         const root = makeRoot();
         const { executable } = makeFakeTool(root, behavior);
         await expect(

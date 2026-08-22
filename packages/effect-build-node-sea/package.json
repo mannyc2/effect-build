@@ -1,11 +1,11 @@
 {
   "name": "effect-build-node-sea",
   "version": "0.3.0",
-  "description": "Node SEA executable provider for effect-build.",
+  "description": "Granular Node SEA executable integration for effect-build.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
-  "keywords": ["effect", "node", "sea", "esbuild", "executable"],
+  "keywords": ["effect", "node", "sea", "executable"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mannyc2/effect-build.git",
@@ -22,10 +22,7 @@
     "build": "tsc -b tsconfig.json --force",
     "check": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": {
-    "effect-build": "workspace:^",
-    "esbuild": "0.28.2"
-  },
+  "dependencies": { "effect-build": "workspace:^" },
   "peerDependencies": { "effect": ">=4.0.0-beta.104 <4.1.0-0" },
   "devDependencies": { "effect": "4.0.0-rc.108" }
 }

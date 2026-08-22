@@ -7,6 +7,7 @@ const publicPackages = [
   "effect-build",
   "effect-build-bun",
   "effect-build-deno",
+  "effect-build-esbuild",
   "effect-build-node-sea",
 ] as const;
 const peerRange = ">=4.0.0-beta.104 <4.1.0-0";
@@ -19,13 +20,34 @@ const manifestFor = (name: typeof publicPackages[number]): Promise<Record<string
   readJson(`packages/${name}/package.json`);
 
 describe("Bun workspace package graph", () => {
+  it("registers every unit and architecture test in its explicit package script", async () => {
+    const manifest = await readJson("package.json") as { scripts: Record<string, string> };
+    const files = (await readdir(resolve(root, "test"), { recursive: true }))
+      .filter((path) => path.startsWith("unit/") || path.startsWith("architecture/"))
+      .filter((path) => path.endsWith(".test.ts"))
+      .map((path) => `test/${path}`)
+      .sort();
+    for (const [scriptName, directory] of [["test:unit", "unit"], ["test:architecture", "architecture"]] as const) {
+      const registered = manifest.scripts[scriptName]!.split(/\s+/)
+        .filter((token) => token.startsWith(`test/${directory}/`) && token.endsWith(".test.ts"))
+        .sort();
+      expect(registered).toEqual(files.filter((path) => path.startsWith(`test/${directory}/`)));
+    }
+  });
+
   it("has one private, exactly pinned workspace root", async () => {
     const manifest = await readJson("package.json");
     expect(manifest.name).toBe("effect-build-workspace");
     expect(manifest.private).toBe(true);
     expect(manifest.type).toBe("module");
     expect(manifest.packageManager).toBe("bun@1.3.14");
-    expect(manifest.workspaces).toEqual(["packages/*", "examples/bun", "examples/deno", "examples/node-sea"]);
+    expect(manifest.workspaces).toEqual([
+      "packages/*",
+      "examples/bun",
+      "examples/deno",
+      "examples/esbuild",
+      "examples/node-sea",
+    ]);
     expect(await readFile(resolve(root, ".npmrc"), "utf8")).toBe("@jsr:registry=https://npm.jsr.io\n");
     await expect(access(resolve(root, "bun.lock"))).resolves.toBeUndefined();
     for (const alternate of ["pnpm-lock.yaml", "package-lock.json", "yarn.lock"]) {
@@ -33,7 +55,7 @@ describe("Bun workspace package graph", () => {
     }
   });
 
-  it("contains exactly the four lockstep public packages", async () => {
+  it("contains exactly the five lockstep public packages", async () => {
     const directories = (await readdir(resolve(root, "packages"), { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
@@ -51,17 +73,21 @@ describe("Bun workspace package graph", () => {
     const core = await manifestFor("effect-build");
     const bun = await manifestFor("effect-build-bun");
     const deno = await manifestFor("effect-build-deno");
+    const esbuild = await manifestFor("effect-build-esbuild");
     const nodeSea = await manifestFor("effect-build-node-sea");
     expect(core.dependencies).toBeUndefined();
     expect(core.peerDependencies).toEqual({ effect: peerRange });
     expect(bun.dependencies).toEqual({ "effect-build": "workspace:^" });
     expect(deno.dependencies).toEqual({ "effect-build": "workspace:^" });
-    expect(nodeSea.dependencies).toEqual({ "effect-build": "workspace:^", esbuild: "0.28.2" });
+    expect(esbuild.dependencies).toEqual({ "effect-build": "workspace:^", esbuild: "0.28.2" });
+    expect(nodeSea.dependencies).toEqual({ "effect-build": "workspace:^" });
     for (
-      const [provider, name] of [[bun, "effect-build-bun"], [deno, "effect-build-deno"], [
-        nodeSea,
-        "effect-build-node-sea",
-      ]] as const
+      const [provider, name] of [
+        [bun, "effect-build-bun"],
+        [deno, "effect-build-deno"],
+        [esbuild, "effect-build-esbuild"],
+        [nodeSea, "effect-build-node-sea"],
+      ] as const
     ) {
       expect((provider.peerDependencies as Record<string, string>)["effect-build"]).toBeUndefined();
       for (const sibling of publicPackages) {
@@ -88,7 +114,9 @@ describe("Bun workspace package graph", () => {
       });
       expect(Object.keys(manifest)).not.toContain("engines");
       const exports = manifest.exports as Record<string, { types: string; import: string }>;
-      expect(Object.keys(exports).sort()).toEqual(name === "effect-build" ? [".", "./Provider"] : ["."]);
+      expect(Object.keys(exports).sort()).toEqual(
+        name === "effect-build" ? [".", "./Integration", "./Provider"] : ["."],
+      );
       for (const value of Object.values(exports)) {
         expect(value.types).toMatch(/^\.\/dist\/.*\.d\.ts$/);
         expect(value.import).toMatch(/^\.\/dist\/.*\.js$/);
@@ -100,7 +128,7 @@ describe("Bun workspace package graph", () => {
 
   it("has no legacy provider subpath or alternate public package", async () => {
     const core = await manifestFor("effect-build");
-    expect(Object.keys(core.exports as Record<string, unknown>)).toEqual([".", "./Provider"]);
+    expect(Object.keys(core.exports as Record<string, unknown>)).toEqual([".", "./Integration", "./Provider"]);
     expect((core.exports as Record<string, unknown>)["./bun"]).toBeUndefined();
     expect((core.exports as Record<string, unknown>)["./deno"]).toBeUndefined();
     expect((core.exports as Record<string, unknown>)["./node-sea"]).toBeUndefined();
