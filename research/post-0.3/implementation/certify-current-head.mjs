@@ -206,7 +206,7 @@ export const certifyCurrentHead = async () => {
   const handoffManifest = JSON.parse(await git(["show", `${profile.productionBaseline.handoffSha}:${profile.workspaceManifest.path}`]));
   const workspaceManifest = validateWorkspaceManifest({ currentManifest, handoffManifest, profile });
   const currentInstructions = await readFile(resolve(repository, "AGENTS.md"), "utf8");
-  const handoffInstructions = await git(["show", `${profile.productionBaseline.handoffSha}:AGENTS.md"]);
+  const handoffInstructions = await git(["show", `${profile.productionBaseline.handoffSha}:AGENTS.md`]);
   const activeInstructions = validateActiveInstructions({ currentInstructions, handoffInstructions });
   const implementationState = validateCurrentImplementationState({
     ancestry,

@@ -40,6 +40,12 @@ const currentInstructions = await readFile(resolve(repository, "AGENTS.md"), "ut
 const clone = (value) => structuredClone(value);
 const mustReject = (operation, pattern) => assert.throws(operation, pattern);
 
+test("the Plan 041 certifier is syntactically executable by the CI Node runtime", () => {
+  assert.doesNotThrow(() =>
+    execFileSync(process.execPath, ["--check", resolve(here, "certify-current-head.mjs")], { encoding: "utf8" })
+  );
+});
+
 test("Plan 041 profile binds the exact historical chain and frozen file sets", () => {
   assert.equal(profile.profileId, "effect-build/plan041-implementation@1");
   assert.equal(profile.productionBaseline.plan040Sha, plan040Anchor.sourceSha);
