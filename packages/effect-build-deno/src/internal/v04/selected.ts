@@ -311,7 +311,11 @@ const parseProbe = (completion: CommandCompletion): Effect.Effect<ProbeReport, I
     }
     const value = raw as Readonly<Record<string, unknown>>;
     const os = value.os === "darwin" ? "macos" : value.os === "win32" ? "windows" : value.os;
-    const architecture = value.architecture === "arm64" ? "aarch64" : value.architecture;
+    const architecture = value.architecture === "arm64"
+      ? "aarch64"
+      : value.architecture === "x86_64"
+      ? "x64"
+      : value.architecture;
     const distribution = value.distribution;
     if (
       typeof value.path !== "string"

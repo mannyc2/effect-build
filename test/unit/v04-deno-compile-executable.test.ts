@@ -203,6 +203,37 @@ describe.sequential("staged 0.4 Deno CompileExecutable", () => {
     }
   });
 
+  it("canonicalizes native x86_64 while rejecting an unknown Deno architecture", async () => {
+    const inheritedArchitecture = process.env.FAKE_DENO_ARCH;
+    const inheritedDenort = process.env.DENORT_BIN;
+    delete process.env.DENORT_BIN;
+    const acquire = () =>
+      Effect.runPromise(
+        DenoCompile.Compiler.pipe(
+          Effect.provide(DenoCompile.layer({ executable: executable as AbsolutePath })),
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+    try {
+      process.env.FAKE_DENO_ARCH = "x86_64";
+      await expect(acquire()).resolves.toMatchObject({
+        compileExecutable: expect.any(Function),
+        compileExecutableMatrix: expect.any(Function),
+      });
+
+      process.env.FAKE_DENO_ARCH = "amd64";
+      await expect(acquire()).rejects.toMatchObject({
+        _tag: "IdentityIncomplete",
+        reason: "identity-probe-fields-are-incomplete",
+      });
+    } finally {
+      if (inheritedArchitecture === undefined) delete process.env.FAKE_DENO_ARCH;
+      else process.env.FAKE_DENO_ARCH = inheritedArchitecture;
+      if (inheritedDenort === undefined) delete process.env.DENORT_BIN;
+      else process.env.DENORT_BIN = inheritedDenort;
+    }
+  });
+
   it("refuses a missing default denort archive before destination or candidate mutation", async () => {
     const denoDir = join(root, "empty-deno-cache");
     const outputDirectory = join(root, "cold-output");
