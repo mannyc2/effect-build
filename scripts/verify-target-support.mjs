@@ -126,7 +126,7 @@ export const verifyTargetSupport = async ({
         ...(stagedBun ? { EFFECT_BUILD_V04_BUN: "1" } : {}),
         ...(stagedDeno ? { EFFECT_BUILD_V04_DENO: "1" } : {}),
       };
-      if (!stagedDeno) delete cellEnvironment.DENORT_BIN;
+      delete cellEnvironment.DENORT_BIN;
       delete cellEnvironment.EFFECT_BUILD_BUN_BIN;
       delete cellEnvironment.EFFECT_BUILD_DENO_BIN;
       delete cellEnvironment.BUN_INSTALL_CACHE_DIR;

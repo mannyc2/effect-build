@@ -63,6 +63,8 @@ describe("source ownership boundaries", () => {
     expect(processImporters.sort()).toEqual([
       "packages/effect-build-bun/src/CompileExecutable.ts",
       "packages/effect-build-bun/src/internal/v04/selected.ts",
+      "packages/effect-build-deno/src/CompileExecutable.ts",
+      "packages/effect-build-deno/src/internal/v04/selected.ts",
       "packages/effect-build-node-sea/src/internal/NodeSea.ts",
       "packages/effect-build/src/Author/Tool.ts",
       "packages/effect-build/src/Integration.ts",

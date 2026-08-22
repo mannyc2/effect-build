@@ -28,7 +28,7 @@ const exactDocumentDigests = {
   migrationPlan: "sha256:6827f8f5c9198a5d7d9a175a3cd48b56b8f20e661a11c40ca9b3c5eaa4b5659c",
 };
 
-const exactImplementationWorkflowDigest = "sha256:a45349f686cb26597fe8e45db2f67acc7bb28b9b2470e3c0fdd601ceac73fef0";
+const exactImplementationWorkflowDigest = "sha256:07bafc286241f6645cbd5ab12220b6d0c51a2e5712bcacf328c30cdeee28a889";
 
 const exactDenoImplementationFiles = [
   "packages/effect-build-deno/src/CompileExecutable.ts",
@@ -408,7 +408,6 @@ export const validateCurrentImplementationState = (input) => {
       }
       : [
         "bun run test:integration:v04-deno",
-        "node scripts/verify-v04-deno-target-support.mjs",
       ].includes(command)
       ? denoEnvironment
       : command === "node research/post-0.3/implementation/staged-deno-adapter.mjs"

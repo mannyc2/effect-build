@@ -93,10 +93,6 @@ jobs:
           DENO_DIR: ${{ runner.temp }}/effect-build-plan042-deno-cache
       - name: Verify all six Deno targets with independent binary oracles
         run: node scripts/verify-v04-deno-target-support.mjs
-        env:
-          PLAN042_DENO_EXECUTABLE: ${{ steps.deno-tools.outputs.deno }}
-          DENORT_BIN: ${{ steps.deno-tools.outputs.denort }}
-          DENO_DIR: ${{ runner.temp }}/effect-build-plan042-deno-cache
       - name: Exercise the nonpublished staged Deno consumer
         run: node research/post-0.3/implementation/staged-deno-adapter.mjs
         env:

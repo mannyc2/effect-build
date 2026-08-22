@@ -469,7 +469,7 @@ describe("tooling pins and workflow contracts", () => {
     );
     const workflow = parse(workflowSource) as Workflow;
     expect(createHash("sha256").update(workflowSource).digest("hex")).toBe(
-      "a45349f686cb26597fe8e45db2f67acc7bb28b9b2470e3c0fdd601ceac73fef0",
+      "07bafc286241f6645cbd5ab12220b6d0c51a2e5712bcacf328c30cdeee28a889",
     );
     expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
     expect(workflow.permissions).toEqual({ actions: "read", contents: "read" });
@@ -537,24 +537,118 @@ describe("tooling pins and workflow contracts", () => {
       DENO: "${{ steps.deno-tools.outputs.deno }}",
       DENORT: "${{ steps.deno-tools.outputs.denort }}",
     });
-    for (
-      const command of [
-        "bun run test:integration:v04-deno",
-        "node scripts/verify-v04-deno-target-support.mjs",
-      ]
-    ) {
-      expect(job.steps!.find((step) => step.run === command)?.env).toEqual({
-        PLAN042_DENO_EXECUTABLE: "${{ steps.deno-tools.outputs.deno }}",
-        DENORT_BIN: "${{ steps.deno-tools.outputs.denort }}",
-        DENO_DIR: "${{ runner.temp }}/effect-build-plan042-deno-cache",
-      });
-    }
+    expect(job.steps!.find((step) => step.run === "bun run test:integration:v04-deno")?.env).toEqual({
+      PLAN042_DENO_EXECUTABLE: "${{ steps.deno-tools.outputs.deno }}",
+      DENORT_BIN: "${{ steps.deno-tools.outputs.denort }}",
+      DENO_DIR: "${{ runner.temp }}/effect-build-plan042-deno-cache",
+    });
+    expect(job.steps!.find((step) => step.run === "node scripts/verify-v04-deno-target-support.mjs")?.env)
+      .toBeUndefined();
     expect(job.steps!.find((step) => step.run === "node research/post-0.3/implementation/staged-deno-adapter.mjs")?.env)
       .toEqual({
         PLAN042_DENO_EXECUTABLE: "${{ steps.deno-tools.outputs.deno }}",
         DENORT_BIN: "${{ steps.deno-tools.outputs.denort }}",
         DENO_DIR: "${{ runner.temp }}/effect-build-plan042-deno-consumer-cache",
       });
+    const targetSupport = await loadScript<{
+      denortArchives: Array<{ triple: string; file: string; size: number; sha256: string; url: string }>;
+      prewarmDenortArchives: (input: Record<string, unknown>) => Promise<Map<string, string>>;
+    }>("verify-v04-deno-target-support.mjs");
+    expect(targetSupport.denortArchives).toEqual([
+      {
+        triple: "x86_64-apple-darwin",
+        file: "denort-x86_64-apple-darwin.zip",
+        size: 31_455_927,
+        sha256: "19c5b64ea27524fb33380cb2b676e07b972f8c023514f9e8297119ffbaec1ab8",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-x86_64-apple-darwin.zip",
+      },
+      {
+        triple: "aarch64-apple-darwin",
+        file: "denort-aarch64-apple-darwin.zip",
+        size: 28_693_550,
+        sha256: "75146eb2630ac07976120d2a7d2e2f950c7a31bf4505ba985ac7b1484e7907e1",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-aarch64-apple-darwin.zip",
+      },
+      {
+        triple: "x86_64-unknown-linux-gnu",
+        file: "denort-x86_64-unknown-linux-gnu.zip",
+        size: 36_531_946,
+        sha256: "9fd1ecebd84bfd99b406442f40176e32e948b00edb91221358ec44d25a2092bd",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-x86_64-unknown-linux-gnu.zip",
+      },
+      {
+        triple: "aarch64-unknown-linux-gnu",
+        file: "denort-aarch64-unknown-linux-gnu.zip",
+        size: 36_436_977,
+        sha256: "38ea978dc575538f0779c62c2f1b7ab0306af2f918a449d1bf1af909d041a857",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-aarch64-unknown-linux-gnu.zip",
+      },
+      {
+        triple: "x86_64-pc-windows-msvc",
+        file: "denort-x86_64-pc-windows-msvc.zip",
+        size: 32_603_181,
+        sha256: "c044e54b2cfa6f39e87b5cb98745d9cc5088273d3672a339a062b6a10b432653",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-x86_64-pc-windows-msvc.zip",
+      },
+      {
+        triple: "aarch64-pc-windows-msvc",
+        file: "denort-aarch64-pc-windows-msvc.zip",
+        size: 31_117_493,
+        sha256: "a48da86ee7f74c6aeca2eafe55e8bd7d72d56d187f3d7d6cb15dfe1954c0590f",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-aarch64-pc-windows-msvc.zip",
+      },
+    ]);
+    const fixtureArchive = { ...targetSupport.denortArchives[0]!, size: 1, sha256: "fixture" };
+    const madeDirectories: string[] = [];
+    const writes: Array<{ path: string; options: unknown }> = [];
+    const moves: Array<{ from: string; to: string }> = [];
+    const removals: string[] = [];
+    const prewarmed = await targetSupport.prewarmDenortArchives({
+      denoDir: "/tmp/effect-build-denort-fixture",
+      archives: [fixtureArchive],
+      digest: () => "fixture",
+      fetchAsset: async (url: string) => ({
+        ok: true,
+        status: 200,
+        url,
+        arrayBuffer: async () => new Uint8Array([1]).buffer,
+      }),
+      makeDirectory: async (path: string) => void madeDirectories.push(path),
+      writeAsset: async (path: string, _bytes: Uint8Array, options: unknown) => void writes.push({ path, options }),
+      moveFile: async (from: string, to: string) => void moves.push({ from, to }),
+      removeFile: async (path: string) => void removals.push(path),
+    });
+    const fixtureDestination = "/tmp/effect-build-denort-fixture/dl/release/2.9.3/denort-x86_64-apple-darwin.zip";
+    expect(madeDirectories).toEqual(["/tmp/effect-build-denort-fixture/dl/release/2.9.3"]);
+    expect(prewarmed.get(fixtureArchive.triple)).toBe(fixtureDestination);
+    expect(writes).toEqual([{
+      path: expect.stringMatching(/denort-x86_64-apple-darwin\.zip\.partial-[0-9]+-0$/),
+      options: { flag: "wx" },
+    }]);
+    expect(moves).toEqual([{ from: writes[0]!.path, to: fixtureDestination }]);
+    expect(removals).toEqual([writes[0]!.path]);
+    const rejectedWrites: string[] = [];
+    const rejectedMoves: string[] = [];
+    const rejectPrewarm = (archive: typeof fixtureArchive) =>
+      targetSupport.prewarmDenortArchives({
+        denoDir: "/tmp/effect-build-denort-rejected",
+        archives: [archive],
+        digest: () => "fixture",
+        fetchAsset: async (url: string) => ({
+          ok: true,
+          status: 200,
+          url,
+          arrayBuffer: async () => new Uint8Array([1]).buffer,
+        }),
+        makeDirectory: async () => undefined,
+        writeAsset: async (path: string) => void rejectedWrites.push(path),
+        moveFile: async (from: string) => void rejectedMoves.push(from),
+        removeFile: async () => undefined,
+      });
+    await expect(rejectPrewarm({ ...fixtureArchive, sha256: "wrong-digest" })).rejects.toThrow(/checksum mismatch/);
+    await expect(rejectPrewarm({ ...fixtureArchive, size: 2 })).rejects.toThrow(/size mismatch/);
+    expect(rejectedWrites).toEqual([]);
+    expect(rejectedMoves).toEqual([]);
     const upload = job.steps!.find((step) => step.uses === uploadArtifactAction)!;
     expect(upload.with).toEqual({
       name: "plan042-implementation-certification-${{ env.SOURCE_SHA }}",
