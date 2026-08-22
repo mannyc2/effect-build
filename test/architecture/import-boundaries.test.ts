@@ -31,15 +31,26 @@ describe("source ownership boundaries", () => {
   });
 
   it("confines raw esbuild to its independently installable integration", async () => {
-    const allowed = resolve(root, "packages/effect-build-esbuild/src/internal/Esbuild.ts");
+    const released = resolve(root, "packages/effect-build-esbuild/src/internal/Esbuild.ts");
+    const staged = [
+      "packages/effect-build-esbuild/src/Build.ts",
+      "packages/effect-build-esbuild/src/Context.ts",
+      "packages/effect-build-esbuild/src/internal/v04/compatibility.ts",
+      "packages/effect-build-esbuild/src/internal/v04/installed.ts",
+    ].map((path) => resolve(root, path));
     const found: string[] = [];
     for (const file of await sourceFiles()) {
       if (importSpecifiers(await readFile(file, "utf8")).includes("esbuild")) found.push(file);
     }
-    expect(found).toEqual([allowed]);
-    const producer = await readFile(allowed, "utf8");
+    expect(found.sort()).toEqual([released, ...staged].sort());
+    const producer = await readFile(released, "utf8");
     expect(producer).not.toContain(".watch(");
     expect(producer).not.toContain("esbuild.stop");
+    for (const path of staged) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).not.toContain("esbuild.stop");
+      expect(source, path).not.toContain("esbuild.initialize");
+    }
   });
 
   it("keeps one core-owned process implementation and forbids shell or download escapes", async () => {

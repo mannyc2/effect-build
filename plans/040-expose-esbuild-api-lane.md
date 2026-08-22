@@ -6,7 +6,7 @@
 - Effort: L
 - Risk: HIGH native callback and scoped-context lifecycle
 - Depends on: Plan 039
-- Status: TODO
+- Status: DONE
 - Publication authority: NONE
 
 ## Authority and objective

@@ -7,7 +7,6 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   expectedReceiptClaims,
-  freezeReceiptSetDigest,
   historicalAuthoritySummary,
   historicalFreezeSummary,
   loadProfileDocuments,
@@ -18,9 +17,9 @@ import {
   validateCurrentImplementationState,
   validateCurrentReceipt,
   validateCurrentRemoteEvidence,
-  validateHandoffApi,
-  validateHandoffArchive,
   validateImplementationCertificate,
+  validatePlan039Api,
+  validatePlan039Archive,
   validateProfileDocuments,
   validateWorkspaceManifest,
 } from "./certification-contract.mjs";
@@ -56,118 +55,152 @@ const handoffLegacySourceFiles = execFileSync(
   { cwd: repository, encoding: "utf8" },
 ).split(/\r?\n/).filter((path) => path.length > 0 && path !== "packages/effect-build/src/index.ts").sort();
 
-const handoffApiFixture = () => ({
+const plan039ApiFixture = () => ({
   run: {
-    id: Number(documents.handoffAnchor.workflow.runId),
-    run_attempt: Number(documents.handoffAnchor.workflow.runAttempt),
-    name: documents.handoffAnchor.workflow.name,
-    path: documents.handoffAnchor.workflow.path,
-    event: documents.handoffAnchor.workflow.eventName,
+    id: Number(documents.plan039Anchor.workflow.runId),
+    run_attempt: Number(documents.plan039Anchor.workflow.runAttempt),
+    name: documents.plan039Anchor.workflow.name,
+    path: documents.plan039Anchor.workflow.path,
+    event: documents.plan039Anchor.workflow.eventName,
     status: "completed",
-    conclusion: documents.handoffAnchor.workflow.conclusion,
-    head_sha: documents.handoffAnchor.sourceSha,
-    repository: { full_name: documents.handoffAnchor.workflow.repository },
+    conclusion: documents.plan039Anchor.workflow.conclusion,
+    head_sha: documents.plan039Anchor.sourceSha,
+    repository: { full_name: documents.plan039Anchor.workflow.repository },
   },
   artifact: {
-    id: Number(documents.handoffAnchor.aggregateArtifact.id),
-    name: documents.handoffAnchor.aggregateArtifact.name,
-    size_in_bytes: documents.handoffAnchor.aggregateArtifact.sizeInBytes,
-    digest: documents.handoffAnchor.aggregateArtifact.digest,
+    id: Number(documents.plan039Anchor.aggregateArtifact.id),
+    name: documents.plan039Anchor.aggregateArtifact.name,
+    size_in_bytes: documents.plan039Anchor.aggregateArtifact.sizeInBytes,
+    digest: documents.plan039Anchor.aggregateArtifact.digest,
     expired: false,
     workflow_run: {
-      id: Number(documents.handoffAnchor.workflow.runId),
-      head_sha: documents.handoffAnchor.sourceSha,
+      id: Number(documents.plan039Anchor.workflow.runId),
+      head_sha: documents.plan039Anchor.sourceSha,
     },
   },
 });
 
-const handoffArchiveFixture = () => {
+const plan039ArchiveFixture = () => {
   const freezeAnchor = structuredClone(documents.freezeAnchor);
   const handoffAnchor = structuredClone(documents.handoffAnchor);
+  const plan039Anchor = structuredClone(documents.plan039Anchor);
   const receipt = {
     schema: "effect-build/implementation-receipt@1",
-    profileId: handoffAnchor.profileId,
-    id: handoffAnchor.receipt.id,
-    sourceSha: handoffAnchor.sourceSha,
+    profileId: plan039Anchor.profileId,
+    id: plan039Anchor.receipt.id,
+    sourceSha: plan039Anchor.sourceSha,
     status: "reproduced",
-    claims: Array.from({ length: handoffAnchor.certification.claims }, (_, index) => ({
-      id: `handoff-fixture-${index}`,
+    claims: Array.from({ length: plan039Anchor.certification.claims }, (_, index) => ({
+      id: `plan039-fixture-${index}`,
       classification: "established",
       conclusion: "fixture",
       assertions: [{ name: "fixture", passed: true }],
     })),
     evidence: {
-      historicalFreeze: {
-        profileId: freezeAnchor.profileId,
-        sourceSha: freezeAnchor.sourceSha,
-        receiptCount: freezeAnchor.receipts.length,
-        receiptSetDigest: freezeReceiptSetDigest(freezeAnchor),
+      historicalAuthority: {
+        freeze: {
+          profileId: freezeAnchor.profileId,
+          sourceSha: freezeAnchor.sourceSha,
+        },
+        handoff: {
+          profileId: handoffAnchor.profileId,
+          sourceSha: handoffAnchor.sourceSha,
+        },
       },
       currentHead: {
-        observedSha: handoffAnchor.sourceSha,
-        repository: handoffAnchor.workflow.repository,
+        observedSha: plan039Anchor.sourceSha,
+        repository: plan039Anchor.workflow.repository,
       },
       profileSeparation: {
-        currentProfileId: handoffAnchor.profileId,
-        currentReceiptIds: [handoffAnchor.receipt.id],
+        currentProfileId: plan039Anchor.profileId,
+        currentReceiptIds: [plan039Anchor.receipt.id],
       },
     },
   };
   const receiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
-  handoffAnchor.receipt.digest = sha256(receiptBytes);
+  plan039Anchor.receipt.digest = sha256(receiptBytes);
   const certificate = {
-    schema: handoffAnchor.certification.schema,
-    profileId: handoffAnchor.profileId,
+    schema: plan039Anchor.certification.schema,
+    profileId: plan039Anchor.profileId,
     plan: "039",
-    phase: handoffAnchor.certification.phase,
-    sourceSha: handoffAnchor.sourceSha,
+    phase: plan039Anchor.certification.phase,
+    sourceSha: plan039Anchor.sourceSha,
     workflow: {
-      repository: handoffAnchor.workflow.repository,
-      workflow: handoffAnchor.workflow.name,
-      runId: handoffAnchor.workflow.runId,
-      runAttempt: handoffAnchor.workflow.runAttempt,
-      eventName: handoffAnchor.workflow.eventName,
+      repository: plan039Anchor.workflow.repository,
+      workflow: plan039Anchor.workflow.name,
+      runId: plan039Anchor.workflow.runId,
+      runAttempt: plan039Anchor.workflow.runAttempt,
+      eventName: plan039Anchor.workflow.eventName,
     },
-    historicalInputs: { freeze: historicalFreezeSummary(freezeAnchor) },
-    currentReceipts: [handoffAnchor.receipt],
-    claims: handoffAnchor.certification.claims,
-    result: handoffAnchor.certification.result,
+    historicalInputs: {
+      freeze: {
+        profileId: freezeAnchor.profileId,
+        sourceSha: freezeAnchor.sourceSha,
+        aggregateArtifact: {
+          id: freezeAnchor.aggregateArtifact.id,
+          digest: freezeAnchor.aggregateArtifact.digest,
+        },
+        certification: { digest: freezeAnchor.certification.digest },
+        receiptCount: freezeAnchor.receipts.length,
+      },
+      handoff: {
+        profileId: handoffAnchor.profileId,
+        sourceSha: handoffAnchor.sourceSha,
+        workflow: {
+          runId: handoffAnchor.workflow.runId,
+          runAttempt: handoffAnchor.workflow.runAttempt,
+          conclusion: handoffAnchor.workflow.conclusion,
+        },
+        aggregateArtifact: {
+          id: handoffAnchor.aggregateArtifact.id,
+          digest: handoffAnchor.aggregateArtifact.digest,
+        },
+        certification: {
+          file: handoffAnchor.certification.file,
+          digest: handoffAnchor.certification.digest,
+        },
+        receipt: handoffAnchor.receipt,
+      },
+    },
+    currentReceipts: [plan039Anchor.receipt],
+    claims: plan039Anchor.certification.claims,
+    result: plan039Anchor.certification.result,
   };
   const certificateBytes = Buffer.from(`${JSON.stringify(certificate, null, 2)}\n`);
-  handoffAnchor.certification.digest = sha256(certificateBytes);
-  const archiveBytes = Buffer.from("deterministic synthetic handoff artifact archive");
-  handoffAnchor.aggregateArtifact.sizeInBytes = archiveBytes.byteLength;
-  handoffAnchor.aggregateArtifact.digest = sha256(archiveBytes);
+  plan039Anchor.certification.digest = sha256(certificateBytes);
+  const archiveBytes = Buffer.from("deterministic synthetic plan039 artifact archive");
+  plan039Anchor.aggregateArtifact.sizeInBytes = archiveBytes.byteLength;
+  plan039Anchor.aggregateArtifact.digest = sha256(archiveBytes);
   return {
     archiveBytes,
     certificateBytes,
-    entries: [handoffAnchor.certification.file, handoffAnchor.receipt.file],
+    entries: [plan039Anchor.certification.file, plan039Anchor.receipt.file],
     freezeAnchor,
     handoffAnchor,
+    plan039Anchor,
     receiptBytes,
   };
 };
 
 const implementationStateFixture = async () => {
-  const plan = await readFile(resolve(repository, "plans/039-establish-core-capability-boundaries.md"), "utf8");
+  const plan = await readFile(resolve(repository, "plans/040-expose-esbuild-api-lane.md"), "utf8");
   const index = await readFile(resolve(repository, "plans/README.md"), "utf8");
   return {
     changedPaths: [
       ...documents.profile.implementationFiles,
       ".github/workflows/architecture-research.yml",
-      "plans/039-establish-core-capability-boundaries.md",
+      "plans/040-expose-esbuild-api-lane.md",
       "plans/README.md",
       "research/post-0.3/implementation/certification-contract.mjs",
     ],
+    coreStagedDiff: [],
     freezeIsHandoffAncestor: true,
-    handoffIsCurrentAncestor: true,
+    handoffIsPlan039Ancestor: true,
     head: "b".repeat(40),
     immutablePublicDiff: [],
     implementationAddedOrModifiedPaths: [...documents.profile.implementationFiles],
-    planIndexSource: index.replace(
-      /\| 039 \| Implement the frozen core capability laws \| P0 \| XL \| exact 0\.4 surface freeze \| (?:IN PROGRESS|DONE) \|/,
-      "| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | DONE |",
-    ),
+    plan039IsCurrentAncestor: true,
+    planIndexSource: index,
     planSource: plan.replace(/^- Status: (?:IN PROGRESS|DONE)$/m, "- Status: DONE"),
     profile: documents.profile,
     releaseIsFreezeAncestor: true,
@@ -176,41 +209,33 @@ const implementationStateFixture = async () => {
   };
 };
 
-test("the profile pins the exact freeze and green handoff authority", () => {
+test("the profile pins the exact freeze, handoff, and certified Plan 039 authority", () => {
   assert.equal(documents.freezeAnchor.sourceSha, "a3017657e0851530892a9f3d2d55ac5736769881");
   assert.equal(documents.freezeAnchor.workflow.runId, "32502909677");
   assert.equal(documents.freezeAnchor.aggregateArtifact.id, "9454270941");
   assert.equal(documents.freezeAnchor.receipts.length, 20);
   assert.equal(documents.handoffAnchor.sourceSha, "7de4ffe68931f721317f6be92aac1e01dae6e21e");
-  assert.deepEqual(documents.handoffAnchor.workflow, {
+  assert.equal(documents.handoffAnchor.workflow.runId, "32505419081");
+  assert.equal(documents.plan039Anchor.sourceSha, "e12e930de5622be3f23814f3235293c93fcfd8bf");
+  assert.deepEqual(documents.plan039Anchor.workflow, {
     repository: "mannyc2/effect-build",
     name: "plan-039-implementation-certification",
     path: ".github/workflows/architecture-research.yml",
-    runId: "32505419081",
+    runId: "32514192057",
     runAttempt: "1",
     eventName: "push",
     conclusion: "success",
-    url: "https://github.com/mannyc2/effect-build/actions/runs/32505419081",
   });
-  assert.deepEqual(documents.handoffAnchor.aggregateArtifact, {
-    id: "9455113555",
-    name: "plan039-implementation-certification-7de4ffe68931f721317f6be92aac1e01dae6e21e",
-    sizeInBytes: 3896,
-    digest: "sha256:5234a76e040291df7d1dbdd2037f51319736cde5ababbeda66f7fd00ff110504",
-    url: "https://github.com/mannyc2/effect-build/actions/runs/32505419081/artifacts/9455113555",
+  assert.deepEqual(documents.plan039Anchor.aggregateArtifact, {
+    id: "9458198780",
+    name: "plan039-implementation-certification-e12e930de5622be3f23814f3235293c93fcfd8bf",
+    sizeInBytes: 4021,
+    digest: "sha256:d8398357cebab738a693e55944f0e60a311f6509e65ce3585d524e5227943a5b",
   });
-  assert.equal(
-    documents.handoffAnchor.certification.digest,
-    "sha256:77eacc05831d0362b33def11c9ded232a2baa2c14056809b7b751afb343dff56",
-  );
-  assert.equal(
-    documents.handoffAnchor.receipt.digest,
-    "sha256:7963f1bbd1a5d015fcb9b963936e7ae153c0d2c07d08a0551b2d2313989d7995",
-  );
 });
 
-test("profile loading follows only the four explicit implementation documents", async () => {
-  const temporaryRepository = await mkdtemp(join(tmpdir(), "effect-build-plan039-profile-"));
+test("profile loading follows only the five explicit implementation documents", async () => {
+  const temporaryRepository = await mkdtemp(join(tmpdir(), "effect-build-plan040-profile-"));
   const implementation = resolve(temporaryRepository, "research/post-0.3/implementation");
   const freeze = resolve(temporaryRepository, "research/post-0.3/freeze");
   try {
@@ -224,6 +249,10 @@ test("profile loading follows only the four explicit implementation documents", 
     await writeFile(
       resolve(implementation, "handoff-trust-anchor.json"),
       `${JSON.stringify(documents.handoffAnchor, null, 2)}\n`,
+    );
+    await writeFile(
+      resolve(implementation, "plan039-trust-anchor.json"),
+      `${JSON.stringify(documents.plan039Anchor, null, 2)}\n`,
     );
     await writeFile(resolve(implementation, "expected-claims.json"), `${JSON.stringify(documents.expected, null, 2)}\n`);
     await writeFile(
@@ -252,16 +281,16 @@ test("profile ids, producer sets, and document coordinates fail closed", () => {
   assert.throws(() => validateProfileDocuments(autoProducer), /one producer/);
 
   const historicalReceipt = structuredClone(documents);
-  historicalReceipt.profile.currentReceiptIds = ["plan039-phase-handoff"];
+  historicalReceipt.profile.currentReceiptIds = ["plan039-implementation"];
   assert.throws(() => validateProfileDocuments(historicalReceipt), /current receipt set/);
 
-  const foreignHandoff = structuredClone(documents);
-  foreignHandoff.handoffAnchor.sourceSha = "c".repeat(40);
-  assert.throws(() => validateProfileDocuments(foreignHandoff), /handoff source SHA/);
+  const foreignPlan039 = structuredClone(documents);
+  foreignPlan039.plan039Anchor.sourceSha = "c".repeat(40);
+  assert.throws(() => validateProfileDocuments(foreignPlan039), /plan039 source SHA/);
 
-  const counterfeitHandoff = structuredClone(documents);
-  counterfeitHandoff.handoffAnchor.aggregateArtifact.digest = `sha256:${"0".repeat(64)}`;
-  assert.throws(() => validateProfileDocuments(counterfeitHandoff), /handoff artifact digest drifted/);
+  const counterfeitPlan039 = structuredClone(documents);
+  counterfeitPlan039.plan039Anchor.aggregateArtifact.digest = `sha256:${"0".repeat(64)}`;
+  assert.throws(() => validateProfileDocuments(counterfeitPlan039), /plan039 artifact digest drifted/);
 
   const foreignManifest = structuredClone(documents);
   foreignManifest.profile.workspaceManifest.path = "packages/effect-build/package.json";
@@ -274,6 +303,10 @@ test("profile ids, producer sets, and document coordinates fail closed", () => {
   const weakenedImmutableScope = structuredClone(documents);
   weakenedImmutableScope.profile.immutablePublicPaths.pop();
   assert.throws(() => validateProfileDocuments(weakenedImmutableScope), /immutable public-path set drifted/);
+
+  const touchedCoreModule = structuredClone(documents);
+  touchedCoreModule.profile.coreStagedFiles.pop();
+  assert.throws(() => validateProfileDocuments(touchedCoreModule), /core staged files drifted/);
 
   const inventedClaim = structuredClone(documents);
   inventedClaim.expected.claims[0].conclusion = "anything-can-pass";
@@ -309,12 +342,13 @@ test("the root manifest equals the handoff except for exact v0.4 test registrati
   assert.throws(() => validateWorkspaceManifest(missingRegistration), /differs from the handoff/);
 });
 
-test("active instructions differ from the handoff only by the Plan 039 completion marker", () => {
+test("active instructions differ from the handoff only by the Plan 040 completion marker", () => {
   assert.deepEqual(validateActiveInstructions({ currentInstructions, handoffInstructions }), {
     handoffSha: documents.profile.productionBaseline.handoffSha,
     path: "AGENTS.md",
     plan039: "DONE",
-    nextPlan: "040",
+    plan040: "DONE",
+    nextPlan: "041",
     publicationAuthority: "NONE",
   });
 
@@ -323,7 +357,7 @@ test("active instructions differ from the handoff only by the Plan 039 completio
       currentInstructions: `${currentInstructions}\nextra authority\n`,
       handoffInstructions,
     }),
-    /beyond the exact Plan 039 completion update/,
+    /beyond the exact Plan 040 completion update/,
   );
 });
 
@@ -343,38 +377,6 @@ test("the migration plan resolves exactly the frozen 71-authority core cut", () 
   missingRule.migrationPlan.rules.pop();
   assert.throws(() => validateCoreMigrationPlan(missingRule), /11 rules/);
 
-  const changedIdentity = structuredClone(input);
-  const group = changedIdentity.migrationAuthority.mappingGroups.find((value) =>
-    value.rule === changedIdentity.migrationPlan.rules[0].rule
-  );
-  group.identities[0] += "-drift";
-  assert.throws(() => validateCoreMigrationPlan(changedIdentity), /digest drifted/);
-
-  const changedDisposition = structuredClone(input);
-  changedDisposition.migrationPlan.rules[0].disposition = "replace";
-  assert.throws(() => validateCoreMigrationPlan(changedDisposition), /disposition drifted/);
-
-  const removalTarget = structuredClone(input);
-  removalTarget.migrationPlan.rules[0].target = {};
-  assert.throws(() => validateCoreMigrationPlan(removalTarget), /has a target/);
-
-  const replacementTarget = structuredClone(input);
-  const replacement = replacementTarget.migrationPlan.rules.find((rule) => rule.disposition === "replace");
-  replacement.target = {};
-  assert.throws(() => validateCoreMigrationPlan(replacementTarget), /replacement coordinates drifted/);
-
-  const missingLegacyFile = structuredClone(input);
-  missingLegacyFile.handoffLegacySourceFiles.pop();
-  assert.throws(() => validateCoreMigrationPlan(missingLegacyFile), /every handoff core source/);
-
-  const earlyRuleAction = structuredClone(input);
-  earlyRuleAction.migrationPlan.rules[0].plan044Action = "delete-now";
-  assert.throws(() => validateCoreMigrationPlan(earlyRuleAction), /Plan 044 action drifted/);
-
-  const earlyLegacyDelete = structuredClone(input);
-  earlyLegacyDelete.migrationPlan.legacySourceFiles[0].action = "delete-now";
-  assert.throws(() => validateCoreMigrationPlan(earlyLegacyDelete), /legacy source action drifted/);
-
   const compatibilityDelegate = structuredClone(input);
   compatibilityDelegate.migrationPlan.stagingRules.compatibilityDelegates = "allowed";
   assert.throws(() => validateCoreMigrationPlan(compatibilityDelegate), /compatibility or second public path/);
@@ -382,55 +384,47 @@ test("the migration plan resolves exactly the frozen 71-authority core cut", () 
   const inventedMigrationAuthority = structuredClone(input);
   inventedMigrationAuthority.migrationPlan.publicationAuthority = "GRANTED";
   assert.throws(() => validateCoreMigrationPlan(inventedMigrationAuthority), /unknown authority fields/);
-
-  const inventedRuleAuthority = structuredClone(input);
-  inventedRuleAuthority.migrationPlan.rules[0].compatibilityAlias = "allowed";
-  assert.throws(() => validateCoreMigrationPlan(inventedRuleAuthority), /unknown authority fields/);
-
-  const inventedLegacyAuthority = structuredClone(input);
-  inventedLegacyAuthority.migrationPlan.legacySourceFiles[0].earlyDelete = "authorized";
-  assert.throws(() => validateCoreMigrationPlan(inventedLegacyAuthority), /unknown authority fields/);
 });
 
-test("green handoff run and artifact metadata authenticate exactly", () => {
-  const input = handoffApiFixture();
-  assert.doesNotThrow(() => validateHandoffApi({ handoffAnchor: documents.handoffAnchor, ...input }));
+test("green Plan 039 run and artifact metadata authenticate exactly", () => {
+  const input = plan039ApiFixture();
+  assert.doesNotThrow(() => validatePlan039Api({ plan039Anchor: documents.plan039Anchor, ...input }));
 
-  const wrongAttempt = handoffApiFixture();
+  const wrongAttempt = plan039ApiFixture();
   wrongAttempt.run.run_attempt = 2;
-  assert.throws(() => validateHandoffApi({ handoffAnchor: documents.handoffAnchor, ...wrongAttempt }), /attempt drifted/);
+  assert.throws(() => validatePlan039Api({ plan039Anchor: documents.plan039Anchor, ...wrongAttempt }), /attempt drifted/);
 
-  const wrongArtifact = handoffApiFixture();
+  const wrongArtifact = plan039ApiFixture();
   wrongArtifact.artifact.digest = `sha256:${"0".repeat(64)}`;
-  assert.throws(() => validateHandoffApi({ handoffAnchor: documents.handoffAnchor, ...wrongArtifact }), /digest drifted/);
+  assert.throws(() => validatePlan039Api({ plan039Anchor: documents.plan039Anchor, ...wrongArtifact }), /digest drifted/);
 
-  const expired = handoffApiFixture();
+  const expired = plan039ApiFixture();
   expired.artifact.expired = true;
-  assert.throws(() => validateHandoffApi({ handoffAnchor: documents.handoffAnchor, ...expired }), /expired/);
+  assert.throws(() => validatePlan039Api({ plan039Anchor: documents.plan039Anchor, ...expired }), /expired/);
 });
 
-test("handoff artifact, certificate, receipt, and freeze binding authenticate together", () => {
-  const input = handoffArchiveFixture();
-  assert.doesNotThrow(() => validateHandoffArchive(input));
+test("plan039 artifact, certificate, receipt, and anchor bindings authenticate together", () => {
+  const input = plan039ArchiveFixture();
+  assert.doesNotThrow(() => validatePlan039Archive(input));
 
-  const changedReceipt = handoffArchiveFixture();
+  const changedReceipt = plan039ArchiveFixture();
   changedReceipt.receiptBytes = Buffer.from("changed");
-  assert.throws(() => validateHandoffArchive(changedReceipt), /receipt bytes changed/);
+  assert.throws(() => validatePlan039Archive(changedReceipt), /receipt bytes changed/);
 
-  const mixedArtifact = handoffArchiveFixture();
+  const mixedArtifact = plan039ArchiveFixture();
   mixedArtifact.entries.push("surface-freeze.json");
-  assert.throws(() => validateHandoffArchive(mixedArtifact), /entry set drifted/);
+  assert.throws(() => validatePlan039Archive(mixedArtifact), /entry set drifted/);
 
-  const changedCertificate = handoffArchiveFixture();
+  const changedCertificate = plan039ArchiveFixture();
   changedCertificate.certificateBytes = Buffer.from("{}\n");
-  assert.throws(() => validateHandoffArchive(changedCertificate), /certification bytes changed/);
+  assert.throws(() => validatePlan039Archive(changedCertificate), /certification bytes changed/);
 
-  const foreignFreeze = handoffArchiveFixture();
+  const foreignFreeze = plan039ArchiveFixture();
   foreignFreeze.freezeAnchor.sourceSha = "d".repeat(40);
-  assert.throws(() => validateHandoffArchive(foreignFreeze), /exact freeze anchor/);
+  assert.throws(() => validatePlan039Archive(foreignFreeze), /exact freeze anchor/);
 });
 
-test("the implementation boundary is linear, six-file exact, immutable, and DONE", async () => {
+test("the implementation boundary is linear, four-file exact, core-frozen, immutable, and DONE", async () => {
   const input = await implementationStateFixture();
   assert.doesNotThrow(() => validateCurrentImplementationState(input));
 
@@ -440,15 +434,19 @@ test("the implementation boundary is linear, six-file exact, immutable, and DONE
 
   const missingImplementation = structuredClone(input);
   missingImplementation.implementationAddedOrModifiedPaths.pop();
-  assert.throws(() => validateCurrentImplementationState(missingImplementation), /six implementation files/);
+  assert.throws(() => validateCurrentImplementationState(missingImplementation), /four esbuild implementation files/);
+
+  const touchedCore = structuredClone(input);
+  touchedCore.coreStagedDiff.push("packages/effect-build/src/Artifact.ts");
+  assert.throws(() => validateCurrentImplementationState(touchedCore), /frozen Plan 039 core module changed/);
 
   const publicDrift = structuredClone(input);
   publicDrift.immutablePublicDiff.push("packages/effect-build/package.json");
   assert.throws(() => validateCurrentImplementationState(publicDrift), /immutable public path/);
 
   const brokenAncestry = structuredClone(input);
-  brokenAncestry.freezeIsHandoffAncestor = false;
-  assert.throws(() => validateCurrentImplementationState(brokenAncestry), /freeze is not an ancestor/);
+  brokenAncestry.plan039IsCurrentAncestor = false;
+  assert.throws(() => validateCurrentImplementationState(brokenAncestry), /Plan 039 head is not an ancestor/);
 
   const unfinished = structuredClone(input);
   unfinished.planSource = unfinished.planSource.replace("- Status: DONE", "- Status: IN PROGRESS");
@@ -458,18 +456,10 @@ test("the implementation boundary is linear, six-file exact, immutable, and DONE
   contradictory.planSource += "\n- Status: CANCELLED\n";
   assert.throws(() => validateCurrentImplementationState(contradictory), /contradictory/);
 
-  const commentedDone = structuredClone(input);
-  const exactStatusBlock = commentedDone.planSource.slice(0, commentedDone.planSource.indexOf("Stage the implementation"));
-  commentedDone.planSource = commentedDone.planSource.replace(
-    /^# Plan 039:[\s\S]*?## Authority and objective\n\n/,
-    "# Plan 039: Implement the frozen core capability laws\n\n## Status\n\nStatus: IN PROGRESS\n\n## Authority and objective\n\n",
-  ) + `\n<!--\n${exactStatusBlock}\n-->\n`;
-  assert.throws(() => validateCurrentImplementationState(commentedDone), /metadata prefix drifted|Status heading/);
-
   const contradictoryIndexSummary = structuredClone(input);
   contradictoryIndexSummary.planIndexSource = contradictoryIndexSummary.planIndexSource.replace(
-    "Plan 039 is complete at the export-inert core-contract stage",
-    "Plan 039 is IN PROGRESS and is not complete",
+    "Plans 039 and 040 are complete at their export-inert stages",
+    "Plan 040 is IN PROGRESS and is not complete",
   );
   assert.throws(() => validateCurrentImplementationState(contradictoryIndexSummary), /index summary drifted/);
 
@@ -493,8 +483,8 @@ test("the implementation boundary is linear, six-file exact, immutable, and DONE
 
   const extraStep = structuredClone(input);
   extraStep.workflowSource = extraStep.workflowSource.replace(
-    "      - name: Upload successful Plan 039 implementation certificate",
-    "      - run: echo mutate-certificate\n      - name: Upload successful Plan 039 implementation certificate",
+    "      - name: Upload successful Plan 040 implementation certificate",
+    "      - run: echo mutate-certificate\n      - name: Upload successful Plan 040 implementation certificate",
   );
   assert.throws(() => validateCurrentImplementationState(extraStep), /workflow bytes drifted/);
 });
@@ -504,7 +494,7 @@ test("current remote evidence fails closed on event or observed-head drift", () 
   const input = {
     eventName: "push",
     eventSourceSha: sourceSha,
-    observedRef: "refs/heads/plan039",
+    observedRef: "refs/heads/plan040",
     observedSha: sourceSha,
     repository: "mannyc2/effect-build",
     sourceSha,
@@ -521,7 +511,7 @@ test("current remote evidence fails closed on event or observed-head drift", () 
   assert.throws(() => validateCurrentRemoteEvidence(localEvent), /unsupported certification event/);
 });
 
-test("current receipt and certificate exclude handoff and freeze receipts", async () => {
+test("current receipt and certificate exclude plan039, handoff, and freeze receipts", async () => {
   const sourceSha = "b".repeat(40);
   const repositoryScope = validateCurrentImplementationState(await implementationStateFixture());
   const coreMigration = validateCoreMigrationPlan({
@@ -558,19 +548,21 @@ test("current receipt and certificate exclude handoff and freeze receipts", asyn
     expected: documents.expected,
     freezeAnchor: documents.freezeAnchor,
     handoffAnchor: documents.handoffAnchor,
+    plan039Anchor: documents.plan039Anchor,
     profile: documents.profile,
     receipt,
     sourceSha,
   }));
 
-  const handoffReceipt = structuredClone(receipt);
-  handoffReceipt.id = "plan039-phase-handoff";
+  const plan039Receipt = structuredClone(receipt);
+  plan039Receipt.id = "plan039-implementation";
   assert.throws(() => validateCurrentReceipt({
     expected: documents.expected,
     freezeAnchor: documents.freezeAnchor,
     handoffAnchor: documents.handoffAnchor,
+    plan039Anchor: documents.plan039Anchor,
     profile: documents.profile,
-    receipt: handoffReceipt,
+    receipt: plan039Receipt,
     sourceSha,
   }), /current receipt id/);
 
@@ -583,7 +575,7 @@ test("current receipt and certificate exclude handoff and freeze receipts", asyn
     sourceSha,
     workflow: {
       repository: "mannyc2/effect-build",
-      workflow: "plan-039-implementation-certification",
+      workflow: "plan-040-implementation-certification",
       runId: "123456789",
       runAttempt: "1",
       eventName: "push",
@@ -599,6 +591,7 @@ test("current receipt and certificate exclude handoff and freeze receipts", asyn
     expected: documents.expected,
     freezeAnchor: documents.freezeAnchor,
     handoffAnchor: documents.handoffAnchor,
+    plan039Anchor: documents.plan039Anchor,
     profile: documents.profile,
     sourceSha,
   }));
@@ -618,13 +611,14 @@ test("current receipt and certificate exclude handoff and freeze receipts", asyn
       expected: documents.expected,
       freezeAnchor: documents.freezeAnchor,
       handoffAnchor: documents.handoffAnchor,
+      plan039Anchor: documents.plan039Anchor,
       profile: documents.profile,
       sourceSha,
     }),
     /certificate workflow drifted|run id is invalid|GitHub gate event/,
   );
 
-  certificate.currentReceipts = [{ id: "surface-freeze", file: "surface-freeze.json", digest }];
+  certificate.currentReceipts = [{ id: "plan039-implementation", file: "plan039-implementation.json", digest }];
   assert.throws(
     () => validateImplementationCertificate({
       certificate,
@@ -632,6 +626,7 @@ test("current receipt and certificate exclude handoff and freeze receipts", asyn
       expected: documents.expected,
       freezeAnchor: documents.freezeAnchor,
       handoffAnchor: documents.handoffAnchor,
+      plan039Anchor: documents.plan039Anchor,
       profile: documents.profile,
       sourceSha,
     }),

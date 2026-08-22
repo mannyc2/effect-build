@@ -462,24 +462,24 @@ describe("tooling pins and workflow contracts", () => {
     }
   });
 
-  it("keeps Plan 039 implementation certification exact-head, complete, disjoint, and fail-closed", async () => {
+  it("keeps Plan 040 implementation certification exact-head, complete, disjoint, and fail-closed", async () => {
     const workflowSource = await readFile(
       resolve(root, ".github/workflows/architecture-research.yml"),
       "utf8",
     );
     const workflow = parse(workflowSource) as Workflow;
     expect(createHash("sha256").update(workflowSource).digest("hex")).toBe(
-      "9dff92e100e5002393f36e485d099db1a4546a15f225ec74db17d6f8190b8829",
+      "1ba5f1232667f9f7a5d5474566c470ed79f41453c5b9b48321a1359cacec95ac",
     );
     expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
     expect(workflow.permissions).toEqual({ actions: "read", contents: "read" });
     expect(workflow.env).toEqual({
       SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
-      CERTIFICATION_PROFILE: "effect-build/plan039-implementation@1",
+      CERTIFICATION_PROFILE: "effect-build/plan040-implementation@1",
     });
-    expect(Object.keys(workflow.jobs)).toEqual(["plan039-implementation"]);
+    expect(Object.keys(workflow.jobs)).toEqual(["plan040-implementation"]);
 
-    const job = workflow.jobs["plan039-implementation"]!;
+    const job = workflow.jobs["plan040-implementation"]!;
     expect(Object.keys(job).sort()).toEqual(["runs-on", "steps"]);
     expect(job["runs-on"]).toBe("ubuntu-24.04");
     const checkout = job.steps!.find((step) => step.uses === checkoutAction)!;
@@ -492,7 +492,7 @@ describe("tooling pins and workflow contracts", () => {
       step.uses === "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6"
     )!;
     expect(setupBun.with).toEqual({ "bun-version": "1.3.14" });
-    const runs = jobRuns(workflow, "plan039-implementation");
+    const runs = jobRuns(workflow, "plan040-implementation");
     const requiredRuns = [
       'test "$(bun --version)" = "1.3.14"',
       "bun install --frozen-lockfile",
@@ -501,6 +501,7 @@ describe("tooling pins and workflow contracts", () => {
       "bun test research/post-0.3/r3-provider-compatibility.test.ts research/post-0.3/r4-author-laws.test.mjs",
       "node --test research/post-0.3/r7-matrix-laws.test.mjs",
       "node research/post-0.3/implementation/staged-external-author-adapter.mjs",
+      "node research/post-0.3/implementation/staged-esbuild-adapter.mjs",
       "node research/post-0.3/implementation/certify-current-head.mjs",
     ];
     for (const run of requiredRuns) expect(runs).toContain(run);
@@ -518,12 +519,12 @@ describe("tooling pins and workflow contracts", () => {
     const certifier = job.steps!.find((step) => step.run?.includes("certify-current-head.mjs"))!;
     expect(certifier.env).toEqual({
       GITHUB_TOKEN: "${{ github.token }}",
-      PLAN039_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan039-implementation",
+      PLAN040_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan040-implementation",
     });
     const upload = job.steps!.find((step) => step.uses === uploadArtifactAction)!;
     expect(upload.with).toEqual({
-      name: "plan039-implementation-certification-${{ env.SOURCE_SHA }}",
-      path: "${{ runner.temp }}/effect-build-plan039-implementation",
+      name: "plan040-implementation-certification-${{ env.SOURCE_SHA }}",
+      path: "${{ runner.temp }}/effect-build-plan040-implementation",
       "if-no-files-found": "error",
       "retention-days": 90,
     });
@@ -532,11 +533,11 @@ describe("tooling pins and workflow contracts", () => {
       "utf8",
     );
     expect(certifierSource).toMatch(/process\.env\.GITHUB_ACTIONS[\s\S]*"true"/);
-    expect(certifierSource).not.toMatch(/PLAN039_HANDOFF_ARCHIVE|PLAN039_REMOTE_REF|local-authenticated-archive/);
     for (
       const forbidden of [
         "surface-freeze",
         "plan039-phase-handoff",
+        "PLAN039_RECEIPTS_DIR",
         "RESEARCH_RECEIPTS_DIR",
         "run-receipt-producers.mjs",
         "validate-receipts.mjs",
@@ -548,6 +549,7 @@ describe("tooling pins and workflow contracts", () => {
       phase: string;
       trustAnchor: string;
       handoffTrustAnchor: string;
+      plan039TrustAnchor: string;
       expectedClaims: string;
       migrationPlan: string;
       receiptDirectoryEnvironment: string;
@@ -556,8 +558,9 @@ describe("tooling pins and workflow contracts", () => {
       historicalProfileIds: string[];
       forbiddenCurrentReceiptIds: string[];
       implementationFiles: string[];
+      coreStagedFiles: string[];
       immutablePublicPaths: string[];
-      productionBaseline: { releaseSha: string; freezeSha: string; handoffSha: string };
+      productionBaseline: { releaseSha: string; freezeSha: string; handoffSha: string; plan039Sha: string };
       producers: Array<{ script: string; receipts: string[] }>;
     };
     const freezeAnchor = await readJson(profile.trustAnchor) as {
@@ -568,7 +571,7 @@ describe("tooling pins and workflow contracts", () => {
       certification: { digest: string };
       receipts: Array<{ id: string; file: string; digest: string }>;
     };
-    const handoffAnchor = await readJson(profile.handoffTrustAnchor) as {
+    const plan039Anchor = await readJson(profile.plan039TrustAnchor) as {
       profileId: string;
       sourceSha: string;
       workflow: { runId: string; runAttempt: string; conclusion: string };
@@ -581,6 +584,7 @@ describe("tooling pins and workflow contracts", () => {
         certificationDigest: string;
         receiptCount: number;
       };
+      handoffInput: { sourceSha: string; aggregateArtifactId: string };
     };
     const expected = await readJson(profile.expectedClaims) as {
       profileId: string;
@@ -588,25 +592,32 @@ describe("tooling pins and workflow contracts", () => {
       claims: Array<{ id: string }>;
     };
     expect(profile).toMatchObject({
-      profileId: "effect-build/plan039-implementation@1",
+      profileId: "effect-build/plan040-implementation@1",
       phase: "implementation",
-      receiptDirectoryEnvironment: "PLAN039_RECEIPTS_DIR",
-      certificateFile: "plan039-certification.json",
-      currentReceiptIds: ["plan039-implementation"],
-      historicalProfileIds: ["post-0.3-surface-freeze-v1"],
-      forbiddenCurrentReceiptIds: ["plan039-phase-handoff", "surface-freeze"],
+      receiptDirectoryEnvironment: "PLAN040_RECEIPTS_DIR",
+      certificateFile: "plan040-certification.json",
+      currentReceiptIds: ["plan040-implementation"],
+      historicalProfileIds: ["effect-build/plan039-implementation@1", "post-0.3-surface-freeze-v1"],
+      forbiddenCurrentReceiptIds: ["plan039-implementation", "plan039-phase-handoff", "surface-freeze"],
       productionBaseline: {
         releaseSha: "f06f96ca88b6278e5f23a898d758b99fa9322108",
         freezeSha: "a3017657e0851530892a9f3d2d55ac5736769881",
         handoffSha: "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+        plan039Sha: "e12e930de5622be3f23814f3235293c93fcfd8bf",
       },
     });
     expect(profile.producers).toEqual([{
       lane: "implementation",
       script: "research/post-0.3/implementation/certify-current-head.mjs",
-      receipts: ["plan039-implementation"],
+      receipts: ["plan040-implementation"],
     }]);
     expect(profile.implementationFiles).toEqual([
+      "packages/effect-build-esbuild/src/Build.ts",
+      "packages/effect-build-esbuild/src/Context.ts",
+      "packages/effect-build-esbuild/src/internal/v04/compatibility.ts",
+      "packages/effect-build-esbuild/src/internal/v04/installed.ts",
+    ]);
+    expect(profile.coreStagedFiles).toEqual([
       "packages/effect-build/src/Artifact.ts",
       "packages/effect-build/src/Author/BorrowedOutput.ts",
       "packages/effect-build/src/Author/Executable.ts",
@@ -621,60 +632,56 @@ describe("tooling pins and workflow contracts", () => {
       id: "9454270941",
       digest: "sha256:a502ab64e0cda8fb743f3f6175dfcde4c098eeb9546cc98173a7a6b339002233",
     });
-    expect(freezeAnchor.certification.digest).toBe(
-      "sha256:363b4981470cc95eb6c43fc8e56623aaca1f5d2f89c2e9ca38bcc8e3b2e0fc5c",
-    );
     expect(freezeAnchor.receipts).toHaveLength(20);
     expect(freezeAnchor.receipts.map((receipt) => receipt.id)).toContain("surface-freeze");
-    expect(handoffAnchor).toMatchObject({
-      profileId: profile.profileId,
-      sourceSha: "7de4ffe68931f721317f6be92aac1e01dae6e21e",
-      workflow: { runId: "32505419081", runAttempt: "1", conclusion: "success" },
+    expect(plan039Anchor).toMatchObject({
+      profileId: "effect-build/plan039-implementation@1",
+      sourceSha: "e12e930de5622be3f23814f3235293c93fcfd8bf",
+      workflow: { runId: "32514192057", runAttempt: "1", conclusion: "success" },
       aggregateArtifact: {
-        id: "9455113555",
-        name: "plan039-implementation-certification-7de4ffe68931f721317f6be92aac1e01dae6e21e",
-        sizeInBytes: 3896,
-        digest: "sha256:5234a76e040291df7d1dbdd2037f51319736cde5ababbeda66f7fd00ff110504",
+        id: "9458198780",
+        name: "plan039-implementation-certification-e12e930de5622be3f23814f3235293c93fcfd8bf",
+        sizeInBytes: 4021,
+        digest: "sha256:d8398357cebab738a693e55944f0e60a311f6509e65ce3585d524e5227943a5b",
       },
-      certification: {
-        phase: "workflow-handoff",
-        digest: "sha256:77eacc05831d0362b33def11c9ded232a2baa2c14056809b7b751afb343dff56",
-      },
-      receipt: {
-        id: "plan039-phase-handoff",
-        file: "plan039-phase-handoff.json",
-        digest: "sha256:7963f1bbd1a5d015fcb9b963936e7ae153c0d2c07d08a0551b2d2313989d7995",
-      },
+      certification: { phase: "implementation" },
+      receipt: { id: "plan039-implementation", file: "plan039-implementation.json" },
     });
-    expect(handoffAnchor.freezeInput).toMatchObject({
+    expect(plan039Anchor.freezeInput).toMatchObject({
       sourceSha: freezeAnchor.sourceSha,
       aggregateArtifactId: freezeAnchor.aggregateArtifact.id,
       certificationDigest: freezeAnchor.certification.digest,
       receiptCount: 20,
     });
+    expect(plan039Anchor.handoffInput).toMatchObject({
+      sourceSha: "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+      aggregateArtifactId: "9455113555",
+    });
     expect(expected).toMatchObject({
       profileId: profile.profileId,
-      receiptId: "plan039-implementation",
+      receiptId: "plan040-implementation",
     });
     expect(expected.claims).toHaveLength(4);
     expect(expected.claims.flatMap((claim) => Object.values(claim)).join(" ")).toContain(
-      "core-migration-plan-resolves-exactly-71-frozen-identities",
+      "six-core-staged-files-are-byte-identical-to-the-plan039-head",
     );
   });
 
-  it("certifies the exact six-file Plan 039 boundary from green handoff to DONE", async () => {
+  it("certifies the exact four-file Plan 040 boundary from the certified Plan 039 head to DONE", async () => {
     const profile = await readJson("research/post-0.3/implementation/profile.json") as {
       implementationAllowedPaths: string[];
       implementationFiles: string[];
+      coreStagedFiles: string[];
       immutablePublicPaths: string[];
-      productionBaseline: { releaseSha: string; freezeSha: string; handoffSha: string };
+      productionBaseline: { releaseSha: string; freezeSha: string; handoffSha: string; plan039Sha: string };
     };
-    const { releaseSha, freezeSha, handoffSha } = profile.productionBaseline;
+    const { handoffSha, plan039Sha, releaseSha, freezeSha } = profile.productionBaseline;
     for (
       const [ancestor, descendant] of [
         [releaseSha, freezeSha],
         [freezeSha, handoffSha],
-        [handoffSha, "HEAD"],
+        [handoffSha, plan039Sha],
+        [plan039Sha, "HEAD"],
       ] as const
     ) {
       expect(() =>
@@ -700,7 +707,7 @@ describe("tooling pins and workflow contracts", () => {
 
     const trackedImplementation = nulPaths(execFileSync(
       "git",
-      ["diff", "--name-only", "-z", "--diff-filter=AM", handoffSha, "--", ...profile.implementationFiles],
+      ["diff", "--name-only", "-z", "--diff-filter=AM", plan039Sha, "--", ...profile.implementationFiles],
       { cwd: root },
     ));
     const implementationFiles = [
@@ -711,6 +718,18 @@ describe("tooling pins and workflow contracts", () => {
     ].sort();
     expect(implementationFiles).toEqual([...profile.implementationFiles].sort());
     expect(implementationFiles.every((path) => existsSync(resolve(root, path)))).toBe(true);
+
+    const coreStagedDiff = nulPaths(execFileSync(
+      "git",
+      ["diff", "--name-only", "-z", plan039Sha, "--", ...profile.coreStagedFiles],
+      { cwd: root },
+    ));
+    expect([
+      ...new Set([
+        ...coreStagedDiff,
+        ...untracked.filter((path) => profile.coreStagedFiles.includes(path)),
+      ]),
+    ]).toEqual([]);
 
     const immutableDiff = nulPaths(execFileSync(
       "git",
@@ -748,11 +767,14 @@ describe("tooling pins and workflow contracts", () => {
       )
     ).not.toThrow();
 
-    const plan = await readFile(resolve(root, "plans/039-establish-core-capability-boundaries.md"), "utf8");
+    const plan = await readFile(resolve(root, "plans/040-expose-esbuild-api-lane.md"), "utf8");
     const index = await readFile(resolve(root, "plans/README.md"), "utf8");
     expect(plan.match(/^- Status: DONE$/gm) ?? []).toHaveLength(1);
     expect(index).toContain(
       "| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | DONE |",
+    );
+    expect(index).toContain(
+      "| 040 | Implement the admitted Esbuild operations | P1 | L | 039 | DONE |",
     );
   });
 

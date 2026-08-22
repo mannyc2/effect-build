@@ -1,0 +1,52 @@
+{
+  "schema": "effect-build/plan039-implementation-trust-anchor@1",
+  "profileId": "effect-build/plan039-implementation@1",
+  "sourceSha": "e12e930de5622be3f23814f3235293c93fcfd8bf",
+  "releaseSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+  "freezeSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+  "handoffSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+  "workflow": {
+    "repository": "mannyc2/effect-build",
+    "name": "plan-039-implementation-certification",
+    "path": ".github/workflows/architecture-research.yml",
+    "runId": "32514192057",
+    "runAttempt": "1",
+    "eventName": "push",
+    "conclusion": "success"
+  },
+  "aggregateArtifact": {
+    "id": "9458198780",
+    "name": "plan039-implementation-certification-e12e930de5622be3f23814f3235293c93fcfd8bf",
+    "sizeInBytes": 4021,
+    "digest": "sha256:d8398357cebab738a693e55944f0e60a311f6509e65ce3585d524e5227943a5b"
+  },
+  "certification": {
+    "file": "plan039-certification.json",
+    "schema": "effect-build/implementation-certification@1",
+    "digest": "sha256:a55ee67eb064b1c23f4705d2122e45dd9e5c789ebe522f5f072f853b0a6ee0d7",
+    "phase": "implementation",
+    "claims": 4,
+    "result": "certified"
+  },
+  "receipt": {
+    "id": "plan039-implementation",
+    "file": "plan039-implementation.json",
+    "digest": "sha256:c928fc3e718376f0569e1fedb41165d350aa29355cf5e82aef22ea0d525af3bb"
+  },
+  "freezeInput": {
+    "profileId": "post-0.3-surface-freeze-v1",
+    "sourceSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+    "aggregateArtifactId": "9454270941",
+    "aggregateArtifactDigest": "sha256:a502ab64e0cda8fb743f3f6175dfcde4c098eeb9546cc98173a7a6b339002233",
+    "certificationDigest": "sha256:363b4981470cc95eb6c43fc8e56623aaca1f5d2f89c2e9ca38bcc8e3b2e0fc5c",
+    "receiptCount": 20
+  },
+  "handoffInput": {
+    "profileId": "effect-build/plan039-implementation@1",
+    "sourceSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+    "aggregateArtifactId": "9455113555",
+    "aggregateArtifactDigest": "sha256:5234a76e040291df7d1dbdd2037f51319736cde5ababbeda66f7fd00ff110504",
+    "certificationDigest": "sha256:77eacc05831d0362b33def11c9ded232a2baa2c14056809b7b751afb343dff56",
+    "receiptDigest": "sha256:7963f1bbd1a5d015fcb9b963936e7ae153c0d2c07d08a0551b2d2313989d7995"
+  }
+}

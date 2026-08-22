@@ -12,22 +12,24 @@ const allowedClassifications = new Set(["established", "sequenced"]);
 const exactReleaseSha = "f06f96ca88b6278e5f23a898d758b99fa9322108";
 const exactFreezeSha = "a3017657e0851530892a9f3d2d55ac5736769881";
 const exactHandoffSha = "7de4ffe68931f721317f6be92aac1e01dae6e21e";
-const exactImplementationWorkflowDigest = "sha256:9dff92e100e5002393f36e485d099db1a4546a15f225ec74db17d6f8190b8829";
+const exactPlan039Sha = "e12e930de5622be3f23814f3235293c93fcfd8bf";
+const exactImplementationWorkflowDigest = "sha256:1ba5f1232667f9f7a5d5474566c470ed79f41453c5b9b48321a1359cacec95ac";
 const exactFreezeAnchorDigest = "sha256:bddbed308ae05697663b10a63234f52ee4e5b1baca919463da8edbf4aec16888";
 const exactHandoffAnchorDigest = "sha256:601dc271d3deb50a6f0aeb69bc15e776ff9d8b1e05ccd9625bd3fd3108c0ab57";
-const exactProfileDigest = "sha256:d2886a8c4747df4eed90c6239e2b4e73082b6cbd656c643896b4bcfef491097e";
-const exactExpectedClaimsDigest = "sha256:81f27d06a91ea1e08e930790069cf1aeee147e99e5a427406fdb036dd5a20890";
+const exactPlan039AnchorDigest = "sha256:bb954a00a206189b38b7e2b78fbe5178f6850a5f2191aa46387f39649b64265b";
+const exactProfileDigest = "sha256:027608b84c6455cc2d18c41a5b04159a6e7241c37f3ecd9f98dca0f9ff716337";
+const exactExpectedClaimsDigest = "sha256:e2e027a7dcbc2f0eae194204159529aeea2b24c50fa6d9610fce00e164a98dd0";
 const exactCoreMigrationPlanDigest = "sha256:6827f8f5c9198a5d7d9a175a3cd48b56b8f20e661a11c40ca9b3c5eaa4b5659c";
 const handoffPlan039Instruction = "- Plans 039-044 are the only implementation sequence authorized by this freeze. Plan 039 is ready to begin, but this instruction does not itself authorize a merge, package publication, npm mutation, tag, GitHub Release, or release-line activation.";
-const currentPlan039Instruction = "- Plans 039-044 are the only implementation sequence authorized by this freeze. Plan 039 is complete at its export-inert core-contract stage and Plan 040 is ready to begin, but this instruction does not itself authorize a merge, package publication, npm mutation, tag, GitHub Release, or release-line activation.";
-const exactPlan039StatusPrefix = `# Plan 039: Implement the frozen core capability laws
+const currentPlan040Instruction = "- Plans 039-044 are the only implementation sequence authorized by this freeze. Plans 039 and 040 are complete at their export-inert stages and Plan 041 is ready to begin, but this instruction does not itself authorize a merge, package publication, npm mutation, tag, GitHub Release, or release-line activation.";
+const exactPlan040StatusPrefix = `# Plan 040: Implement the admitted Esbuild operations
 
 ## Status
 
-- Priority: P0 architecture foundation
-- Effort: XL
-- Risk: HIGH lifecycle, interruption, and public author contracts
-- Depends on: exact 0.4 surface-freeze commit
+- Priority: P1 provider implementation
+- Effort: L
+- Risk: HIGH native callback and scoped-context lifecycle
+- Depends on: Plan 039
 - Status: DONE
 - Publication authority: NONE
 
@@ -43,16 +45,18 @@ machine-readable authority is
 \`research/post-0.3/freeze/SURFACE.json\` together with
 \`research/post-0.3/freeze/MIGRATION.json\`; \`AGENTS.md\` is the matching active
 execution instruction. Plans 039-044 have been rewritten from that frozen
-scope. Plan 039 is complete at the export-inert core-contract stage: its six
-frozen modules are implemented internally, while the released 0.3 export map
-remains byte-identical. Plan 040 is the next implementation plan. No merge,
-publication, tag, or release is authorized by Plan 039 completion.
+scope. Plans 039 and 040 are complete at their export-inert stages: the six
+frozen core modules and the two admitted Esbuild operation modules are
+implemented internally, while the released 0.3 export map remains
+byte-identical. Plan 041 is the next implementation plan. No merge,
+publication, tag, or release is authorized by Plan 039 or Plan 040 completion.
 
 `;
 
 const exactProfileDocuments = [
   "research/post-0.3/implementation/freeze-trust-anchor.json",
   "research/post-0.3/implementation/handoff-trust-anchor.json",
+  "research/post-0.3/implementation/plan039-trust-anchor.json",
   "research/post-0.3/implementation/expected-claims.json",
   "research/post-0.3/implementation/core-migration-plan.json",
 ];
@@ -60,12 +64,12 @@ const exactProfileDocuments = [
 const exactWorkspaceManifest = {
   path: "package.json",
   scriptAppends: {
-    "test:unit": " test/unit/v04-artifact.test.ts test/unit/v04-primitives.test.ts",
-    "test:architecture": " test/architecture/v04-staged-core-surface.test.ts",
+    "test:unit": " test/unit/v04-artifact.test.ts test/unit/v04-primitives.test.ts test/unit/v04-esbuild-build.test.ts test/unit/v04-esbuild-context.test.ts",
+    "test:architecture": " test/architecture/v04-staged-core-surface.test.ts test/architecture/v04-staged-esbuild-surface.test.ts",
   },
 };
 
-const exactImplementationFiles = [
+const exactCoreStagedFiles = [
   "packages/effect-build/src/Artifact.ts",
   "packages/effect-build/src/Author/BorrowedOutput.ts",
   "packages/effect-build/src/Author/Executable.ts",
@@ -74,25 +78,40 @@ const exactImplementationFiles = [
   "packages/effect-build/src/SystemTarget.ts",
 ];
 
+const exactImplementationFiles = [
+  "packages/effect-build-esbuild/src/Build.ts",
+  "packages/effect-build-esbuild/src/Context.ts",
+  "packages/effect-build-esbuild/src/internal/v04/compatibility.ts",
+  "packages/effect-build-esbuild/src/internal/v04/installed.ts",
+];
+
 const exactImplementationAllowedPaths = [
   ".github/workflows/architecture-research.yml",
   "AGENTS.md",
   "package.json",
   ...exactImplementationFiles,
+  ...exactCoreStagedFiles,
   "plans/039-establish-core-capability-boundaries.md",
+  "plans/040-expose-esbuild-api-lane.md",
   "plans/README.md",
+  "plans/RESEARCH-BRANCH-LANDING-PLAN.md",
   "research/post-0.3/implementation/",
   "test/architecture/docs-contract.test.ts",
   "test/architecture/generated-and-ci.test.ts",
   "test/architecture/import-boundaries.test.ts",
   "test/architecture/public-api.test.ts",
   "test/architecture/v04-staged-core-surface.test.ts",
+  "test/architecture/v04-staged-esbuild-surface.test.ts",
   "test/unit/v04-artifact.test.ts",
+  "test/unit/v04-esbuild-build.test.ts",
+  "test/unit/v04-esbuild-context.test.ts",
   "test/unit/v04-primitives.test.ts",
   "typetest/v04-artifact.tst.ts",
   "typetest/v04-author-borrowed-output.tst.ts",
   "typetest/v04-author-executable.tst.ts",
   "typetest/v04-author-tool.tst.ts",
+  "typetest/v04-esbuild-build.tst.ts",
+  "typetest/v04-esbuild-context.tst.ts",
   "typetest/v04-matrix.tst.ts",
   "typetest/v04-system-target.tst.ts",
 ];
@@ -114,25 +133,25 @@ const exactImmutablePublicPaths = [
 
 const exactExpectedClaims = {
   schema: "effect-build/expected-implementation-claims@1",
-  profileId: "effect-build/plan039-implementation@1",
-  receiptId: "plan039-implementation",
+  profileId: "effect-build/plan040-implementation@1",
+  receiptId: "plan040-implementation",
   claims: [
     {
       id: "historical-authority-authenticated",
       classification: "established",
-      conclusion: "exact-freeze-anchor-and-green-plan039-handoff-run-artifact-certificate-and-receipt-are-content-authenticated",
+      conclusion: "exact-freeze-handoff-and-green-plan039-implementation-run-artifact-certificate-and-receipt-are-content-authenticated",
       assertions: [
-        "freeze-anchor-is-bound-to-the-green-handoff",
-        "handoff-run-is-exact-successful-push-at-attempt-1",
-        "handoff-artifact-id-name-size-and-digest-match",
-        "handoff-certificate-and-receipt-bytes-match",
-        "release-freeze-handoff-current-ancestry-is-linear",
+        "freeze-and-handoff-anchors-are-bound-to-the-green-plan039-implementation",
+        "plan039-run-is-exact-successful-push-at-attempt-1",
+        "plan039-artifact-id-name-size-and-digest-match",
+        "plan039-certificate-and-receipt-bytes-match",
+        "release-freeze-handoff-plan039-current-ancestry-is-linear",
       ],
     },
     {
       id: "current-head-authenticated",
       classification: "established",
-      conclusion: "checked-out-event-and-fresh-remote-head-all-equal-the-exact-plan039-certification-source",
+      conclusion: "checked-out-event-and-fresh-remote-head-all-equal-the-exact-plan040-certification-source",
       assertions: [
         "checkout-equals-source-sha",
         "workflow-event-equals-source-sha",
@@ -142,12 +161,13 @@ const exactExpectedClaims = {
     {
       id: "implementation-scope-certified",
       classification: "established",
-      conclusion: "plan039-is-done-with-exactly-the-six-authorized-core-files-staged-and-no-immutable-public-path-change",
+      conclusion: "plan040-is-done-with-exactly-the-four-authorized-esbuild-files-staged-frozen-core-modules-byte-identical-and-no-immutable-public-path-change",
       assertions: [
-        "plan039-status-is-done",
-        "active-instructions-record-plan039-done-and-plan040-ready",
+        "plan040-status-is-done",
+        "active-instructions-record-plan040-done-and-plan041-ready",
         "all-post-handoff-paths-are-explicitly-allowed-implementation-paths",
-        "exactly-six-implementation-files-are-added-or-changed",
+        "exactly-the-four-esbuild-implementation-files-are-added-or-changed-after-plan039",
+        "six-core-staged-files-are-byte-identical-to-the-plan039-head",
         "workspace-manifest-matches-handoff-except-exact-v04-test-registration-appends",
         "immutable-public-paths-match-the-handoff",
         "core-migration-plan-resolves-exactly-71-frozen-identities",
@@ -157,12 +177,12 @@ const exactExpectedClaims = {
     {
       id: "certification-profiles-disjoint",
       classification: "established",
-      conclusion: "freeze-handoff-and-current-implementation-evidence-remain-explicit-inputs-with-disjoint-current-receipts",
+      conclusion: "freeze-handoff-and-plan039-evidence-remain-explicit-inputs-with-disjoint-current-receipts",
       assertions: [
         "profile-identities-are-distinct",
         "profile-documents-claims-and-producer-sets-are-explicit",
-        "current-receipt-is-plan039-implementation",
-        "current-receipts-exclude-handoff-and-freeze-receipts",
+        "current-receipt-is-plan040-implementation",
+        "current-receipts-exclude-plan039-handoff-and-freeze-receipts",
         "current-workflow-does-not-invoke-freeze-producers-or-validators",
         "historical-inputs-are-separated-from-current-receipts",
       ],
@@ -191,6 +211,7 @@ export const requiredImplementationCommands = [
   "bun test research/post-0.3/r3-provider-compatibility.test.ts research/post-0.3/r4-author-laws.test.mjs",
   "node --test research/post-0.3/r7-matrix-laws.test.mjs",
   "node research/post-0.3/implementation/staged-external-author-adapter.mjs",
+  "node research/post-0.3/implementation/staged-esbuild-adapter.mjs",
   "node research/post-0.3/implementation/certify-current-head.mjs",
 ];
 
@@ -333,7 +354,65 @@ const validateHandoffAnchor = ({ freezeAnchor, handoffAnchor }) => {
   return handoffAnchor;
 };
 
-export const historicalAuthoritySummary = ({ freezeAnchor, handoffAnchor }) => ({
+const validatePlan039Anchor = ({ freezeAnchor, handoffAnchor, plan039Anchor }) => {
+  assert.equal(
+    plan039Anchor.schema,
+    "effect-build/plan039-implementation-trust-anchor@1",
+    "invalid Plan 039 implementation anchor schema",
+  );
+  assert.equal(plan039Anchor.profileId, "effect-build/plan039-implementation@1", "plan039 profile id drifted");
+  assert.equal(plan039Anchor.sourceSha, exactPlan039Sha, "plan039 source SHA drifted");
+  assert.equal(plan039Anchor.releaseSha, exactReleaseSha, "plan039 release SHA drifted");
+  assert.equal(plan039Anchor.freezeSha, exactFreezeSha, "plan039 freeze SHA drifted");
+  assert.equal(plan039Anchor.handoffSha, exactHandoffSha, "plan039 handoff SHA drifted");
+  assert.equal(plan039Anchor.workflow.repository, freezeAnchor.workflow.repository, "plan039 repository drifted");
+  assert.equal(plan039Anchor.workflow.name, "plan-039-implementation-certification", "plan039 workflow drifted");
+  assert.equal(plan039Anchor.workflow.path, ".github/workflows/architecture-research.yml", "plan039 workflow path drifted");
+  assert.equal(plan039Anchor.workflow.runId, "32514192057", "plan039 run id drifted");
+  assert.equal(plan039Anchor.workflow.runAttempt, "1", "plan039 run attempt drifted");
+  assert.equal(plan039Anchor.workflow.eventName, "push", "plan039 trust must use a push run");
+  assert.equal(plan039Anchor.workflow.conclusion, "success", "plan039 run was not successful");
+  assert.equal(plan039Anchor.aggregateArtifact.id, "9458198780", "plan039 artifact id drifted");
+  assert.equal(
+    plan039Anchor.aggregateArtifact.name,
+    `plan039-implementation-certification-${exactPlan039Sha}`,
+    "plan039 artifact name drifted",
+  );
+  assert.equal(plan039Anchor.aggregateArtifact.sizeInBytes, 4021, "plan039 artifact size drifted");
+  assert.equal(
+    plan039Anchor.aggregateArtifact.digest,
+    "sha256:d8398357cebab738a693e55944f0e60a311f6509e65ce3585d524e5227943a5b",
+    "plan039 artifact digest drifted",
+  );
+  assert.equal(plan039Anchor.certification.file, "plan039-certification.json");
+  assert.equal(plan039Anchor.certification.schema, "effect-build/implementation-certification@1");
+  assertDigest(plan039Anchor.certification.digest, "invalid plan039 certification digest");
+  assert.equal(plan039Anchor.certification.phase, "implementation");
+  assert.equal(plan039Anchor.certification.claims, 4);
+  assert.equal(plan039Anchor.certification.result, "certified");
+  assert.equal(plan039Anchor.receipt.id, "plan039-implementation");
+  assert.equal(plan039Anchor.receipt.file, "plan039-implementation.json");
+  assertDigest(plan039Anchor.receipt.digest, "invalid plan039 receipt digest");
+  assert.deepEqual(plan039Anchor.freezeInput, {
+    profileId: freezeAnchor.profileId,
+    sourceSha: freezeAnchor.sourceSha,
+    aggregateArtifactId: freezeAnchor.aggregateArtifact.id,
+    aggregateArtifactDigest: freezeAnchor.aggregateArtifact.digest,
+    certificationDigest: freezeAnchor.certification.digest,
+    receiptCount: freezeAnchor.receipts.length,
+  }, "plan039 anchor is not bound to the exact freeze anchor");
+  assert.deepEqual(plan039Anchor.handoffInput, {
+    profileId: handoffAnchor.profileId,
+    sourceSha: handoffAnchor.sourceSha,
+    aggregateArtifactId: handoffAnchor.aggregateArtifact.id,
+    aggregateArtifactDigest: handoffAnchor.aggregateArtifact.digest,
+    certificationDigest: handoffAnchor.certification.digest,
+    receiptDigest: handoffAnchor.receipt.digest,
+  }, "plan039 anchor is not bound to the exact green handoff");
+  return plan039Anchor;
+};
+
+export const historicalAuthoritySummary = ({ freezeAnchor, handoffAnchor, plan039Anchor }) => ({
   freeze: {
     profileId: freezeAnchor.profileId,
     sourceSha: freezeAnchor.sourceSha,
@@ -362,6 +441,24 @@ export const historicalAuthoritySummary = ({ freezeAnchor, handoffAnchor }) => (
     },
     receipt: handoffAnchor.receipt,
   },
+  plan039: {
+    profileId: plan039Anchor.profileId,
+    sourceSha: plan039Anchor.sourceSha,
+    workflow: {
+      runId: plan039Anchor.workflow.runId,
+      runAttempt: plan039Anchor.workflow.runAttempt,
+      conclusion: plan039Anchor.workflow.conclusion,
+    },
+    aggregateArtifact: {
+      id: plan039Anchor.aggregateArtifact.id,
+      digest: plan039Anchor.aggregateArtifact.digest,
+    },
+    certification: {
+      file: plan039Anchor.certification.file,
+      digest: plan039Anchor.certification.digest,
+    },
+    receipt: plan039Anchor.receipt,
+  },
 });
 
 export const validateProfileDocuments = ({
@@ -370,10 +467,12 @@ export const validateProfileDocuments = ({
   handoffAnchor,
   migrationAuthority,
   migrationPlan,
+  plan039Anchor,
   profile,
 }) => {
   assert.deepEqual(Object.keys(profile).sort(), [
     "certificateFile",
+    "coreStagedFiles",
     "currentReceiptIds",
     "expectedClaims",
     "forbiddenCurrentReceiptIds",
@@ -386,6 +485,7 @@ export const validateProfileDocuments = ({
     "migrationPlan",
     "phase",
     "plan",
+    "plan039TrustAnchor",
     "producers",
     "productionBaseline",
     "profileId",
@@ -396,16 +496,22 @@ export const validateProfileDocuments = ({
   ], "implementation profile contains unknown authority fields");
   assert.equal(
     profile.schema,
-    "effect-build/implementation-certification-profile@1",
-    "invalid Plan 039 profile schema",
+    "effect-build/implementation-certification-profile@2",
+    "invalid Plan 040 profile schema",
   );
-  assert.equal(profile.profileId, "effect-build/plan039-implementation@1", "unexpected Plan 039 profile id");
-  assert.equal(profile.plan, "039", "unexpected implementation plan");
-  assert.equal(profile.phase, "implementation", "unexpected Plan 039 phase");
-  assert.equal(profile.receiptDirectoryEnvironment, "PLAN039_RECEIPTS_DIR", "receipt directory is not disjoint");
-  assert.equal(profile.certificateFile, "plan039-certification.json", "unexpected Plan 039 certificate name");
+  assert.equal(profile.profileId, "effect-build/plan040-implementation@1", "unexpected Plan 040 profile id");
+  assert.equal(profile.plan, "040", "unexpected implementation plan");
+  assert.equal(profile.phase, "implementation", "unexpected Plan 040 phase");
+  assert.equal(profile.receiptDirectoryEnvironment, "PLAN040_RECEIPTS_DIR", "receipt directory is not disjoint");
+  assert.equal(profile.certificateFile, "plan040-certification.json", "unexpected Plan 040 certificate name");
 
-  const profileDocuments = [profile.trustAnchor, profile.handoffTrustAnchor, profile.expectedClaims, profile.migrationPlan];
+  const profileDocuments = [
+    profile.trustAnchor,
+    profile.handoffTrustAnchor,
+    profile.plan039TrustAnchor,
+    profile.expectedClaims,
+    profile.migrationPlan,
+  ];
   for (const path of profileDocuments) {
     assertExplicitRepositoryPath(path, "profile document paths must be explicit repository paths");
   }
@@ -418,13 +524,17 @@ export const validateProfileDocuments = ({
   assert.deepEqual(producer, {
     lane: "implementation",
     script: "research/post-0.3/implementation/certify-current-head.mjs",
-    receipts: ["plan039-implementation"],
-  }, "unexpected Plan 039 producer");
-  assert.deepEqual(profile.currentReceiptIds, ["plan039-implementation"], "current receipt set drifted");
-  assert.deepEqual(profile.historicalProfileIds, ["post-0.3-surface-freeze-v1"], "historical profile set drifted");
+    receipts: ["plan040-implementation"],
+  }, "unexpected Plan 040 producer");
+  assert.deepEqual(profile.currentReceiptIds, ["plan040-implementation"], "current receipt set drifted");
+  assert.deepEqual(
+    profile.historicalProfileIds,
+    ["effect-build/plan039-implementation@1", "post-0.3-surface-freeze-v1"],
+    "historical profile set drifted",
+  );
   assert.deepEqual(
     profile.forbiddenCurrentReceiptIds,
-    ["plan039-phase-handoff", "surface-freeze"],
+    ["plan039-implementation", "plan039-phase-handoff", "surface-freeze"],
     "forbidden current receipt set drifted",
   );
   assert.deepEqual(
@@ -447,18 +557,23 @@ export const validateProfileDocuments = ({
       directory: path.endsWith("/"),
     });
   }
-  assert.deepEqual(profile.implementationFiles, exactImplementationFiles, "the six implementation files drifted");
+  assert.deepEqual(profile.implementationFiles, exactImplementationFiles, "the four implementation files drifted");
+  assert.deepEqual(profile.coreStagedFiles, exactCoreStagedFiles, "the six frozen core staged files drifted");
   assertUniqueStrings(profile.immutablePublicPaths, "immutable public paths must be explicit and unique");
   assert.deepEqual(profile.immutablePublicPaths, exactImmutablePublicPaths, "immutable public-path set drifted");
-  for (const path of [...profile.implementationFiles, ...profile.immutablePublicPaths]) {
+  for (
+    const path of [...profile.implementationFiles, ...profile.coreStagedFiles, ...profile.immutablePublicPaths]
+  ) {
     assertExplicitRepositoryPath(path, "implementation boundary paths must be explicit repository paths");
   }
   assert.equal(
-    profile.implementationFiles.some((path) => profile.immutablePublicPaths.includes(path)),
+    profile.implementationFiles.some((path) =>
+      profile.immutablePublicPaths.includes(path) || profile.coreStagedFiles.includes(path)
+    ),
     false,
-    "implementation and immutable paths overlap",
+    "implementation, core-staged, and immutable paths overlap",
   );
-  for (const path of profile.implementationFiles) {
+  for (const path of [...profile.implementationFiles, ...profile.coreStagedFiles]) {
     assert.equal(
       profile.implementationAllowedPaths.includes(path),
       true,
@@ -468,13 +583,17 @@ export const validateProfileDocuments = ({
 
   validateFreezeAnchor(freezeAnchor);
   validateHandoffAnchor({ freezeAnchor, handoffAnchor });
+  validatePlan039Anchor({ freezeAnchor, handoffAnchor, plan039Anchor });
   assert.deepEqual(profile.productionBaseline, {
     releaseSha: exactReleaseSha,
     freezeSha: exactFreezeSha,
     handoffSha: exactHandoffSha,
+    plan039Sha: exactPlan039Sha,
   }, "implementation ancestry baseline drifted");
   assert.equal(profile.historicalProfileIds.includes(freezeAnchor.profileId), true);
-  assert.equal(profile.profileId, handoffAnchor.profileId);
+  assert.equal(profile.historicalProfileIds.includes(plan039Anchor.profileId), true);
+  assert.equal(plan039Anchor.profileId, handoffAnchor.profileId);
+  assert.notEqual(profile.profileId, plan039Anchor.profileId);
   assert.notEqual(profile.profileId, freezeAnchor.profileId);
 
   assert.equal(migrationPlan.schema, "effect-build/plan039-core-migration@1", "invalid core migration plan schema");
@@ -489,8 +608,8 @@ export const validateProfileDocuments = ({
   assert.deepEqual(expected, exactExpectedClaims, "expected implementation claims drifted");
   assert.equal(expected.schema, "effect-build/expected-implementation-claims@1", "invalid expected-claim schema");
   assert.equal(expected.profileId, profile.profileId, "expected claims name another profile");
-  assert.equal(expected.receiptId, "plan039-implementation", "expected claims name another receipt");
-  assert.ok(Array.isArray(expected.claims) && expected.claims.length === 4, "Plan 039 implementation must have four claims");
+  assert.equal(expected.receiptId, "plan040-implementation", "expected claims name another receipt");
+  assert.ok(Array.isArray(expected.claims) && expected.claims.length === 4, "Plan 040 implementation must have four claims");
   const claimIds = expected.claims.map((claim) => claim.id);
   assert.equal(new Set(claimIds).size, claimIds.length, "expected claim ids are duplicated");
   for (const claim of expected.claims) {
@@ -500,7 +619,7 @@ export const validateProfileDocuments = ({
     assertUniqueStrings(claim.assertions, `expected assertions are missing or duplicated: ${claim.id}`);
   }
 
-  return { expected, freezeAnchor, handoffAnchor, migrationAuthority, migrationPlan, profile };
+  return { expected, freezeAnchor, handoffAnchor, migrationAuthority, migrationPlan, plan039Anchor, profile };
 };
 
 export const loadProfileDocuments = async (repository) => {
@@ -508,17 +627,26 @@ export const loadProfileDocuments = async (repository) => {
   assert.equal(sha256(profileBytes), exactProfileDigest, "implementation profile bytes drifted");
   const profile = JSON.parse(profileBytes.toString("utf8"));
   assert.deepEqual(
-    [profile.trustAnchor, profile.handoffTrustAnchor, profile.expectedClaims, profile.migrationPlan],
+    [
+      profile.trustAnchor,
+      profile.handoffTrustAnchor,
+      profile.plan039TrustAnchor,
+      profile.expectedClaims,
+      profile.migrationPlan,
+    ],
     exactProfileDocuments,
     "unexpected implementation profile document path",
   );
   assert.deepEqual(profile.workspaceManifest, exactWorkspaceManifest, "workspace manifest coordinates drifted");
   const freezeAnchorBytes = await readFile(resolve(repository, profile.trustAnchor));
   const handoffAnchorBytes = await readFile(resolve(repository, profile.handoffTrustAnchor));
+  const plan039AnchorBytes = await readFile(resolve(repository, profile.plan039TrustAnchor));
   assert.equal(sha256(freezeAnchorBytes), exactFreezeAnchorDigest, "freeze trust-anchor bytes drifted");
   assert.equal(sha256(handoffAnchorBytes), exactHandoffAnchorDigest, "handoff trust-anchor bytes drifted");
+  assert.equal(sha256(plan039AnchorBytes), exactPlan039AnchorDigest, "plan039 trust-anchor bytes drifted");
   const freezeAnchor = JSON.parse(freezeAnchorBytes.toString("utf8"));
   const handoffAnchor = JSON.parse(handoffAnchorBytes.toString("utf8"));
+  const plan039Anchor = JSON.parse(plan039AnchorBytes.toString("utf8"));
   const expectedBytes = await readFile(resolve(repository, profile.expectedClaims));
   const migrationPlanBytes = await readFile(resolve(repository, profile.migrationPlan));
   assert.equal(sha256(expectedBytes), exactExpectedClaimsDigest, "expected-claim bytes drifted");
@@ -533,6 +661,7 @@ export const loadProfileDocuments = async (repository) => {
     handoffAnchor,
     migrationAuthority,
     migrationPlan,
+    plan039Anchor,
     profile,
   });
 };
@@ -572,14 +701,15 @@ export const validateActiveInstructions = ({ currentInstructions, handoffInstruc
   );
   assert.equal(
     currentInstructions,
-    handoffInstructions.replace(handoffPlan039Instruction, currentPlan039Instruction),
-    "active instructions differ from the handoff beyond the exact Plan 039 completion update",
+    handoffInstructions.replace(handoffPlan039Instruction, currentPlan040Instruction),
+    "active instructions differ from the handoff beyond the exact Plan 040 completion update",
   );
   return {
     handoffSha: exactHandoffSha,
     path: "AGENTS.md",
     plan039: "DONE",
-    nextPlan: "040",
+    plan040: "DONE",
+    nextPlan: "041",
     publicationAuthority: "NONE",
   };
 };
@@ -732,72 +862,104 @@ export const validateCoreMigrationPlan = ({ handoffLegacySourceFiles, migrationA
   };
 };
 
-export const validateHandoffApi = ({ artifact, handoffAnchor, run }) => {
-  assert.equal(String(run.id), handoffAnchor.workflow.runId, "handoff run id drifted");
-  assert.equal(String(run.run_attempt), handoffAnchor.workflow.runAttempt, "handoff run attempt drifted");
-  assert.equal(run.name, handoffAnchor.workflow.name, "handoff workflow name drifted");
-  assert.equal(run.path, handoffAnchor.workflow.path, "handoff workflow path drifted");
-  assert.equal(run.event, handoffAnchor.workflow.eventName, "handoff workflow event drifted");
-  assert.equal(run.status, "completed", "handoff workflow is no longer completed");
-  assert.equal(run.conclusion, handoffAnchor.workflow.conclusion, "handoff workflow conclusion drifted");
-  assert.equal(run.head_sha, handoffAnchor.sourceSha, "handoff workflow source drifted");
-  assert.equal(run.repository?.full_name, handoffAnchor.workflow.repository, "handoff workflow repository drifted");
+export const validatePlan039Api = ({ artifact, plan039Anchor, run }) => {
+  assert.equal(String(run.id), plan039Anchor.workflow.runId, "plan039 run id drifted");
+  assert.equal(String(run.run_attempt), plan039Anchor.workflow.runAttempt, "plan039 run attempt drifted");
+  assert.equal(run.name, plan039Anchor.workflow.name, "plan039 workflow name drifted");
+  assert.equal(run.path, plan039Anchor.workflow.path, "plan039 workflow path drifted");
+  assert.equal(run.event, plan039Anchor.workflow.eventName, "plan039 workflow event drifted");
+  assert.equal(run.status, "completed", "plan039 workflow is no longer completed");
+  assert.equal(run.conclusion, plan039Anchor.workflow.conclusion, "plan039 workflow conclusion drifted");
+  assert.equal(run.head_sha, plan039Anchor.sourceSha, "plan039 workflow source drifted");
+  assert.equal(run.repository?.full_name, plan039Anchor.workflow.repository, "plan039 workflow repository drifted");
 
-  assert.equal(String(artifact.id), handoffAnchor.aggregateArtifact.id, "handoff artifact id drifted");
-  assert.equal(artifact.name, handoffAnchor.aggregateArtifact.name, "handoff artifact name drifted");
-  assert.equal(artifact.size_in_bytes, handoffAnchor.aggregateArtifact.sizeInBytes, "handoff artifact size drifted");
-  assert.equal(artifact.digest, handoffAnchor.aggregateArtifact.digest, "handoff artifact digest drifted");
-  assert.equal(artifact.expired, false, "handoff artifact has expired");
-  assert.equal(String(artifact.workflow_run?.id), handoffAnchor.workflow.runId, "handoff artifact names another run");
-  assert.equal(artifact.workflow_run?.head_sha, handoffAnchor.sourceSha, "handoff artifact names another source");
+  assert.equal(String(artifact.id), plan039Anchor.aggregateArtifact.id, "plan039 artifact id drifted");
+  assert.equal(artifact.name, plan039Anchor.aggregateArtifact.name, "plan039 artifact name drifted");
+  assert.equal(artifact.size_in_bytes, plan039Anchor.aggregateArtifact.sizeInBytes, "plan039 artifact size drifted");
+  assert.equal(artifact.digest, plan039Anchor.aggregateArtifact.digest, "plan039 artifact digest drifted");
+  assert.equal(artifact.expired, false, "plan039 artifact has expired");
+  assert.equal(String(artifact.workflow_run?.id), plan039Anchor.workflow.runId, "plan039 artifact names another run");
+  assert.equal(artifact.workflow_run?.head_sha, plan039Anchor.sourceSha, "plan039 artifact names another source");
   return { artifact, run };
 };
 
-export const validateHandoffArchive = ({
+export const validatePlan039Archive = ({
   archiveBytes,
   certificateBytes,
   entries,
   freezeAnchor,
   handoffAnchor,
+  plan039Anchor,
   receiptBytes,
 }) => {
-  assert.equal(archiveBytes.byteLength, handoffAnchor.aggregateArtifact.sizeInBytes, "handoff artifact byte size changed");
-  assert.equal(sha256(archiveBytes), handoffAnchor.aggregateArtifact.digest, "handoff artifact bytes failed authentication");
-  const expectedEntries = sorted([handoffAnchor.certification.file, handoffAnchor.receipt.file]);
-  assert.deepEqual(sorted(entries), expectedEntries, "handoff artifact entry set drifted or mixed profiles");
-  assert.equal(new Set(entries).size, entries.length, "handoff artifact contains duplicate entries");
-  assert.equal(sha256(certificateBytes), handoffAnchor.certification.digest, "handoff certification bytes changed");
-  assert.equal(sha256(receiptBytes), handoffAnchor.receipt.digest, "handoff receipt bytes changed");
+  assert.equal(archiveBytes.byteLength, plan039Anchor.aggregateArtifact.sizeInBytes, "plan039 artifact byte size changed");
+  assert.equal(sha256(archiveBytes), plan039Anchor.aggregateArtifact.digest, "plan039 artifact bytes failed authentication");
+  const expectedEntries = sorted([plan039Anchor.certification.file, plan039Anchor.receipt.file]);
+  assert.deepEqual(sorted(entries), expectedEntries, "plan039 artifact entry set drifted or mixed profiles");
+  assert.equal(new Set(entries).size, entries.length, "plan039 artifact contains duplicate entries");
+  assert.equal(sha256(certificateBytes), plan039Anchor.certification.digest, "plan039 certification bytes changed");
+  assert.equal(sha256(receiptBytes), plan039Anchor.receipt.digest, "plan039 receipt bytes changed");
 
   const certificate = JSON.parse(Buffer.from(certificateBytes).toString("utf8"));
-  assert.equal(certificate.schema, handoffAnchor.certification.schema, "handoff certification schema drifted");
-  assert.equal(certificate.profileId, handoffAnchor.profileId, "handoff certification profile drifted");
-  assert.equal(certificate.plan, "039", "handoff certification plan drifted");
-  assert.equal(certificate.phase, handoffAnchor.certification.phase, "handoff certification phase drifted");
-  assert.equal(certificate.sourceSha, handoffAnchor.sourceSha, "handoff certification source drifted");
+  assert.equal(certificate.schema, plan039Anchor.certification.schema, "plan039 certification schema drifted");
+  assert.equal(certificate.profileId, plan039Anchor.profileId, "plan039 certification profile drifted");
+  assert.equal(certificate.plan, "039", "plan039 certification plan drifted");
+  assert.equal(certificate.phase, plan039Anchor.certification.phase, "plan039 certification phase drifted");
+  assert.equal(certificate.sourceSha, plan039Anchor.sourceSha, "plan039 certification source drifted");
   assert.deepEqual(certificate.workflow, {
-    repository: handoffAnchor.workflow.repository,
-    workflow: handoffAnchor.workflow.name,
-    runId: handoffAnchor.workflow.runId,
-    runAttempt: handoffAnchor.workflow.runAttempt,
-    eventName: handoffAnchor.workflow.eventName,
-  }, "handoff certification workflow identity drifted");
+    repository: plan039Anchor.workflow.repository,
+    workflow: plan039Anchor.workflow.name,
+    runId: plan039Anchor.workflow.runId,
+    runAttempt: plan039Anchor.workflow.runAttempt,
+    eventName: plan039Anchor.workflow.eventName,
+  }, "plan039 certification workflow identity drifted");
   assert.deepEqual(
     certificate.historicalInputs?.freeze,
-    historicalFreezeSummary(freezeAnchor),
-    "handoff certification is not bound to the exact freeze anchor",
+    {
+      profileId: freezeAnchor.profileId,
+      sourceSha: freezeAnchor.sourceSha,
+      aggregateArtifact: {
+        id: freezeAnchor.aggregateArtifact.id,
+        digest: freezeAnchor.aggregateArtifact.digest,
+      },
+      certification: { digest: freezeAnchor.certification.digest },
+      receiptCount: freezeAnchor.receipts.length,
+    },
+    "plan039 certification is not bound to the exact freeze anchor",
   );
-  assert.deepEqual(certificate.currentReceipts, [handoffAnchor.receipt], "handoff certification receipt set drifted");
-  assert.equal(certificate.claims, handoffAnchor.certification.claims, "handoff certification claim count drifted");
-  assert.equal(certificate.result, handoffAnchor.certification.result, "handoff certification result drifted");
+  assert.deepEqual(
+    certificate.historicalInputs?.handoff,
+    {
+      profileId: handoffAnchor.profileId,
+      sourceSha: handoffAnchor.sourceSha,
+      workflow: {
+        runId: handoffAnchor.workflow.runId,
+        runAttempt: handoffAnchor.workflow.runAttempt,
+        conclusion: handoffAnchor.workflow.conclusion,
+      },
+      aggregateArtifact: {
+        id: handoffAnchor.aggregateArtifact.id,
+        digest: handoffAnchor.aggregateArtifact.digest,
+      },
+      certification: {
+        file: handoffAnchor.certification.file,
+        digest: handoffAnchor.certification.digest,
+      },
+      receipt: handoffAnchor.receipt,
+    },
+    "plan039 certification is not bound to the exact green handoff",
+  );
+  assert.deepEqual(certificate.currentReceipts, [plan039Anchor.receipt], "plan039 certification receipt set drifted");
+  assert.equal(certificate.claims, plan039Anchor.certification.claims, "plan039 certification claim count drifted");
+  assert.equal(certificate.result, plan039Anchor.certification.result, "plan039 certification result drifted");
 
   const receipt = JSON.parse(Buffer.from(receiptBytes).toString("utf8"));
-  assert.equal(receipt.schema, "effect-build/implementation-receipt@1", "handoff receipt schema drifted");
-  assert.equal(receipt.profileId, handoffAnchor.profileId, "handoff receipt profile drifted");
-  assert.equal(receipt.id, handoffAnchor.receipt.id, "handoff receipt id drifted");
-  assert.equal(receipt.sourceSha, handoffAnchor.sourceSha, "handoff receipt source drifted");
-  assert.equal(receipt.status, "reproduced", "handoff receipt status drifted");
-  assert.ok(Array.isArray(receipt.claims) && receipt.claims.length === handoffAnchor.certification.claims);
+  assert.equal(receipt.schema, "effect-build/implementation-receipt@1", "plan039 receipt schema drifted");
+  assert.equal(receipt.profileId, plan039Anchor.profileId, "plan039 receipt profile drifted");
+  assert.equal(receipt.id, plan039Anchor.receipt.id, "plan039 receipt id drifted");
+  assert.equal(receipt.sourceSha, plan039Anchor.sourceSha, "plan039 receipt source drifted");
+  assert.equal(receipt.status, "reproduced", "plan039 receipt status drifted");
+  assert.ok(Array.isArray(receipt.claims) && receipt.claims.length === plan039Anchor.certification.claims);
   assert.equal(
     receipt.claims.every((claim) =>
       Array.isArray(claim.assertions)
@@ -805,29 +967,25 @@ export const validateHandoffArchive = ({
       && claim.assertions.every((value) => value.passed === true)
     ),
     true,
-    "handoff receipt contains an unsuccessful assertion",
+    "plan039 receipt contains an unsuccessful assertion",
   );
-  assert.equal(receipt.evidence?.historicalFreeze?.profileId, freezeAnchor.profileId);
-  assert.equal(receipt.evidence?.historicalFreeze?.sourceSha, freezeAnchor.sourceSha);
-  assert.equal(receipt.evidence?.historicalFreeze?.receiptCount, freezeAnchor.receipts.length);
-  assert.equal(
-    receipt.evidence?.historicalFreeze?.receiptSetDigest,
-    freezeReceiptSetDigest(freezeAnchor),
-    "handoff freeze receipt-set digest drifted",
-  );
-  assert.equal(receipt.evidence?.currentHead?.observedSha, handoffAnchor.sourceSha);
-  assert.equal(receipt.evidence?.currentHead?.repository, handoffAnchor.workflow.repository);
-  assert.equal(receipt.evidence?.profileSeparation?.currentProfileId, handoffAnchor.profileId);
-  assert.deepEqual(receipt.evidence?.profileSeparation?.currentReceiptIds, [handoffAnchor.receipt.id]);
+  assert.equal(receipt.evidence?.historicalAuthority?.freeze?.profileId, freezeAnchor.profileId);
+  assert.equal(receipt.evidence?.historicalAuthority?.freeze?.sourceSha, freezeAnchor.sourceSha);
+  assert.equal(receipt.evidence?.historicalAuthority?.handoff?.sourceSha, handoffAnchor.sourceSha);
+  assert.equal(receipt.evidence?.currentHead?.observedSha, plan039Anchor.sourceSha);
+  assert.equal(receipt.evidence?.currentHead?.repository, plan039Anchor.workflow.repository);
+  assert.equal(receipt.evidence?.profileSeparation?.currentProfileId, plan039Anchor.profileId);
+  assert.deepEqual(receipt.evidence?.profileSeparation?.currentReceiptIds, [plan039Anchor.receipt.id]);
 
   return {
-    profileId: handoffAnchor.profileId,
-    sourceSha: handoffAnchor.sourceSha,
-    workflow: handoffAnchor.workflow,
-    aggregateArtifact: handoffAnchor.aggregateArtifact,
-    certification: handoffAnchor.certification,
-    receipt: handoffAnchor.receipt,
-    freezeInput: handoffAnchor.freezeInput,
+    profileId: plan039Anchor.profileId,
+    sourceSha: plan039Anchor.sourceSha,
+    workflow: plan039Anchor.workflow,
+    aggregateArtifact: plan039Anchor.aggregateArtifact,
+    certification: plan039Anchor.certification,
+    receipt: plan039Anchor.receipt,
+    freezeInput: plan039Anchor.freezeInput,
+    handoffInput: plan039Anchor.handoffInput,
   };
 };
 
@@ -856,11 +1014,13 @@ const allowedImplementationPath = (path, allowedPaths) =>
 
 export const validateCurrentImplementationState = ({
   changedPaths,
+  coreStagedDiff,
   freezeIsHandoffAncestor,
-  handoffIsCurrentAncestor,
+  handoffIsPlan039Ancestor,
   head,
   immutablePublicDiff,
   implementationAddedOrModifiedPaths,
+  plan039IsCurrentAncestor,
   planIndexSource,
   planSource,
   profile,
@@ -872,7 +1032,8 @@ export const validateCurrentImplementationState = ({
   assert.equal(head, sourceSha, "checkout does not equal SOURCE_SHA");
   assert.equal(releaseIsFreezeAncestor, true, "v0.3 release is not an ancestor of the authenticated freeze");
   assert.equal(freezeIsHandoffAncestor, true, "authenticated freeze is not an ancestor of the green handoff");
-  assert.equal(handoffIsCurrentAncestor, true, "green handoff is not an ancestor of the current head");
+  assert.equal(handoffIsPlan039Ancestor, true, "green handoff is not an ancestor of the certified Plan 039 head");
+  assert.equal(plan039IsCurrentAncestor, true, "certified Plan 039 head is not an ancestor of the current head");
   assert.ok(Array.isArray(changedPaths) && changedPaths.length > 0, "implementation has no post-handoff change");
   assert.equal(new Set(changedPaths).size, changedPaths.length, "post-handoff path list contains duplicates");
   for (const path of changedPaths) {
@@ -885,20 +1046,26 @@ export const validateCurrentImplementationState = ({
   assert.deepEqual(
     sorted(implementationAddedOrModifiedPaths),
     sorted(profile.implementationFiles),
-    "exactly the six implementation files must be added or changed",
+    "exactly the four esbuild implementation files must be added or changed after Plan 039",
   );
+  assert.deepEqual(coreStagedDiff, [], "a frozen Plan 039 core module changed after its certification");
   assert.deepEqual(immutablePublicDiff, [], "an immutable public path changed after the handoff");
   assert.deepEqual(
     planSource.match(/^- Status:.*$/gm) ?? [],
     ["- Status: DONE"],
-    "Plan 039 status is absent, contradictory, or ambiguous",
+    "Plan 040 status is absent, contradictory, or ambiguous",
   );
-  assert.equal(planSource.startsWith(exactPlan039StatusPrefix), true, "Plan 039 status metadata prefix drifted");
-  assert.equal((planSource.match(/^## Status$/gm) ?? []).length, 1, "Plan 039 Status heading is ambiguous");
+  assert.equal(planSource.startsWith(exactPlan040StatusPrefix), true, "Plan 040 status metadata prefix drifted");
+  assert.equal((planSource.match(/^## Status$/gm) ?? []).length, 1, "Plan 040 Status heading is ambiguous");
   assert.equal(
     (planSource.match(/^## Authority and objective$/gm) ?? []).length,
     1,
-    "Plan 039 authority heading is ambiguous",
+    "Plan 040 authority heading is ambiguous",
+  );
+  assert.deepEqual(
+    planIndexSource.match(/^\| 040 \|.*$/gm) ?? [],
+    ["| 040 | Implement the admitted Esbuild operations | P1 | L | 039 | DONE |"],
+    "Plan 040 index row is absent, contradictory, or ambiguous",
   );
   assert.deepEqual(
     planIndexSource.match(/^\| 039 \|.*$/gm) ?? [],
@@ -908,7 +1075,7 @@ export const validateCurrentImplementationState = ({
   assert.equal(
     planIndexSource.startsWith(exactPlanIndexSummaryPrefix),
     true,
-    "Plan 039 index summary drifted or contradicts completion",
+    "Plan 040 index summary drifted or contradicts completion",
   );
   const workflowDigest = sha256(Buffer.from(workflowSource));
   assert.equal(workflowDigest, exactImplementationWorkflowDigest, "active implementation workflow bytes drifted");
@@ -923,11 +1090,11 @@ export const validateCurrentImplementationState = ({
     "run-receipt-producers.mjs",
     "validate-receipts.mjs",
   ]) assert.equal(workflowSource.includes(forbidden), false, `active workflow mixes a historical profile: ${forbidden}`);
-  assert.equal(workflowSource.includes(profile.profileId), true, "active workflow does not bind the Plan 039 profile id");
+  assert.equal(workflowSource.includes(profile.profileId), true, "active workflow does not bind the Plan 040 profile id");
   assert.equal(
     workflowSource.includes(profile.receiptDirectoryEnvironment),
     true,
-    "active workflow does not bind the Plan 039 receipt directory",
+    "active workflow does not bind the Plan 040 receipt directory",
   );
   assert.equal(workflowSource.includes("bun-version: 1.3.14"), true, "active workflow does not pin Bun 1.3.14");
   assert.equal(
@@ -936,8 +1103,8 @@ export const validateCurrentImplementationState = ({
     "active workflow does not verify the selected Bun version",
   );
   const workflow = parseYaml(workflowSource);
-  assert.deepEqual(Object.keys(workflow.jobs ?? {}), ["plan039-implementation"], "implementation job set drifted");
-  const job = workflow.jobs["plan039-implementation"];
+  assert.deepEqual(Object.keys(workflow.jobs ?? {}), ["plan040-implementation"], "implementation job set drifted");
+  const job = workflow.jobs["plan040-implementation"];
   assert.ok(job !== null && typeof job === "object", "implementation job is missing");
   assert.deepEqual(Object.keys(job).sort(), ["runs-on", "steps"], "implementation job can be skipped or altered");
   assert.equal(job["runs-on"], "ubuntu-24.04", "implementation runner drifted");
@@ -956,7 +1123,7 @@ export const validateCurrentImplementationState = ({
       : command === "node research/post-0.3/implementation/certify-current-head.mjs"
       ? {
         GITHUB_TOKEN: "${{ github.token }}",
-        PLAN039_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan039-implementation",
+        PLAN040_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan040-implementation",
       }
       : undefined;
     assert.deepEqual(step.env, expectedEnvironment, `required workflow gate environment drifted: ${command}`);
@@ -973,9 +1140,11 @@ export const validateCurrentImplementationState = ({
       releaseSha: profile.productionBaseline.releaseSha,
       freezeSha: profile.productionBaseline.freezeSha,
       handoffSha: profile.productionBaseline.handoffSha,
+      plan039Sha: profile.productionBaseline.plan039Sha,
       currentSha: sourceSha,
     },
     changedPaths: sorted(changedPaths),
+    coreStagedDiff: [],
     implementationFiles: sorted(implementationAddedOrModifiedPaths),
     immutablePublicDiff,
     planStatus: "DONE",
@@ -995,20 +1164,21 @@ export const validateCurrentReceipt = ({
   expected,
   freezeAnchor,
   handoffAnchor,
+  plan039Anchor,
   profile,
   receipt,
   sourceSha,
 }) => {
   assert.equal(receipt.schema, "effect-build/implementation-receipt@1", "invalid implementation receipt schema");
   assert.equal(receipt.profileId, profile.profileId, "current receipt names another profile");
-  assert.equal(receipt.id, "plan039-implementation", "current receipt id drifted");
+  assert.equal(receipt.id, "plan040-implementation", "current receipt id drifted");
   assert.equal(receipt.id, expected.receiptId, "current receipt differs from the expected claim set");
   assert.equal(receipt.sourceSha, sourceSha, "current receipt names another source");
   assert.equal(receipt.status, "reproduced", "current receipt is not reproduced");
   assert.deepEqual(receipt.claims, expectedReceiptClaims(expected), "current receipt claims drifted");
   assert.deepEqual(
     receipt.evidence?.historicalAuthority,
-    historicalAuthoritySummary({ freezeAnchor, handoffAnchor }),
+    historicalAuthoritySummary({ freezeAnchor, handoffAnchor, plan039Anchor }),
     "current receipt historical authority drifted",
   );
   assert.equal(receipt.evidence?.currentHead?.observedSha, sourceSha, "current remote evidence drifted");
@@ -1016,8 +1186,9 @@ export const validateCurrentReceipt = ({
   assert.deepEqual(
     receipt.evidence?.repositoryScope?.implementationFiles,
     sorted(profile.implementationFiles),
-    "current receipt does not name the six implementation files",
+    "current receipt does not name the four esbuild implementation files",
   );
+  assert.deepEqual(receipt.evidence?.repositoryScope?.coreStagedDiff, []);
   assert.deepEqual(receipt.evidence?.repositoryScope?.immutablePublicDiff, []);
   assert.deepEqual(receipt.evidence?.repositoryScope?.requiredCommands, requiredImplementationCommands);
   assert.equal(
@@ -1029,7 +1200,8 @@ export const validateCurrentReceipt = ({
     handoffSha: exactHandoffSha,
     path: "AGENTS.md",
     plan039: "DONE",
-    nextPlan: "040",
+    plan040: "DONE",
+    nextPlan: "041",
     publicationAuthority: "NONE",
   }, "current receipt active-instruction scope drifted");
   assert.equal(receipt.evidence?.repositoryScope?.coreMigration?.authorityCount, 71);
@@ -1043,8 +1215,8 @@ export const validateCurrentReceipt = ({
     scriptAppends: exactWorkspaceManifest.scriptAppends,
   }, "current receipt workspace-manifest scope drifted");
   assert.equal(receipt.evidence?.profileSeparation?.currentProfileId, profile.profileId);
-  assert.equal(receipt.evidence?.profileSeparation?.currentReceiptDirectoryEnvironment, "PLAN039_RECEIPTS_DIR");
-  assert.deepEqual(receipt.evidence?.profileSeparation?.currentReceiptIds, ["plan039-implementation"]);
+  assert.equal(receipt.evidence?.profileSeparation?.currentReceiptDirectoryEnvironment, "PLAN040_RECEIPTS_DIR");
+  assert.deepEqual(receipt.evidence?.profileSeparation?.currentReceiptIds, ["plan040-implementation"]);
   assert.equal(receipt.evidence?.profileSeparation?.historicalArtifactsAreInputsOnly, true);
   assert.equal(
     profile.forbiddenCurrentReceiptIds.includes(receipt.id),
@@ -1052,7 +1224,7 @@ export const validateCurrentReceipt = ({
     "current receipt uses a historical receipt id",
   );
   assert.equal(receipt.evidence?.historicalAuthority?.freeze?.receipts, undefined);
-  assert.equal(receipt.evidence?.historicalAuthority?.handoff?.receiptBytes, undefined);
+  assert.equal(receipt.evidence?.historicalAuthority?.plan039?.receiptBytes, undefined);
   return receipt;
 };
 
@@ -1062,6 +1234,7 @@ export const validateImplementationCertificate = ({
   expected,
   freezeAnchor,
   handoffAnchor,
+  plan039Anchor,
   profile,
   sourceSha,
 }) => {
@@ -1073,7 +1246,7 @@ export const validateImplementationCertificate = ({
   assert.equal(certificate.workflow?.repository, "mannyc2/effect-build", "implementation certificate repository drifted");
   assert.equal(
     certificate.workflow?.workflow,
-    "plan-039-implementation-certification",
+    "plan-040-implementation-certification",
     "implementation certificate workflow drifted",
   );
   assert.match(certificate.workflow?.runId, /^[1-9][0-9]*$/, "implementation certificate run id is invalid");
@@ -1085,12 +1258,12 @@ export const validateImplementationCertificate = ({
   );
   assert.deepEqual(
     certificate.historicalInputs,
-    historicalAuthoritySummary({ freezeAnchor, handoffAnchor }),
+    historicalAuthoritySummary({ freezeAnchor, handoffAnchor, plan039Anchor }),
     "implementation certificate historical inputs drifted",
   );
   assert.deepEqual(certificate.currentReceipts, [{
-    id: "plan039-implementation",
-    file: "plan039-implementation.json",
+    id: "plan040-implementation",
+    file: "plan040-implementation.json",
     digest: currentReceiptDigest,
   }]);
   assert.equal(

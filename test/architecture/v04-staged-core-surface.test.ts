@@ -25,7 +25,7 @@ interface Surface {
 
 interface Profile {
   readonly phase: string;
-  readonly implementationFiles: readonly string[];
+  readonly coreStagedFiles: readonly string[];
   readonly immutablePublicPaths: readonly string[];
   readonly productionBaseline: { readonly handoffSha: string };
   readonly workspaceManifest: {
@@ -138,7 +138,7 @@ describe("staged 0.4 core surface", () => {
     expect(
       surface.coreSurface.subpaths.map(({ rootNamespace, subpath }) => [subpath, rootNamespace]).sort(),
     ).toEqual(expectedRootNamespaces);
-    expect(profile.implementationFiles.slice().sort()).toEqual(subpaths.map(sourcePathForSubpath).sort());
+    expect(profile.coreStagedFiles.slice().sort()).toEqual(subpaths.map(sourcePathForSubpath).sort());
     expect(surface.coreSurface.subpaths.filter(({ subpath }) => subpath.startsWith("./Author/"))).toHaveLength(3);
 
     const manifest = await readJson<{ readonly exports: Readonly<Record<string, unknown>> }>(
@@ -280,9 +280,9 @@ describe("staged 0.4 core surface", () => {
       "packages/effect-build/src",
     ).split("\n");
     expect(sourceFiles.filter((path) => !historicalFiles.includes(path)).sort()).toEqual(
-      profile.implementationFiles.slice().sort(),
+      profile.coreStagedFiles.slice().sort(),
     );
-    for (const path of profile.implementationFiles) {
+    for (const path of profile.coreStagedFiles) {
       const source = await readFile(resolve(root, path), "utf8");
       for (const specifier of importSpecifiers(source)) {
         expect(specifier, relative(root, path)).not.toMatch(/(?:standalone|Integration|Provider|JavaScriptBundle)/);
