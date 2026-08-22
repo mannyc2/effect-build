@@ -1,0 +1,390 @@
+{
+  "schema": "effect-build/interface-mechanism-probe-summary@2",
+  "generatedAt": "2026-08-21T23:11:40.617Z",
+  "completedAt": "2026-08-21T23:11:40.617Z",
+  "cohort": {
+    "schema": "effect-build/interface-mechanism-probe-cohort@1",
+    "id": "effect-build/interface-mechanism-probes@1",
+    "runId": "7dd22185-3ae5-43d4-8e7d-9ee183fa4bca",
+    "startedAt": "2026-08-21T23:11:21.768Z",
+    "runner": {
+      "path": "research/post-0.3/interface-mechanisms/run-probes.mjs",
+      "sha256": "39667e7e9f9c217f95ee83dfa842a992660eb4f08b5953c32e1e07644f5ee8d8"
+    },
+    "sourceSha256": "9010b2f5ec748b860edbeec8fa4ed8a0f3af7dbe04e17d8ab41ab895d0ea711c",
+    "sources": [
+      {
+        "path": "research/post-0.3/interface-mechanisms/EXPECTED-CONCLUSIONS.json",
+        "sha256": "c38695b676c18a011653165d588ade0f4033fbeac19e3bb48be3d2fd99753d0f"
+      },
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/bun-direct-plugin.ts",
+        "sha256": "cb6cefa3764dfef4d1d6b8bd8bd4267a4fbacaf879f0f1f63ad197ff20ad365a"
+      },
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-probe.mjs",
+        "sha256": "a2598d6705d50c81b6afe20bb35bca461a07a259e7e429991f8b0e103e551d96"
+      },
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-server.ts",
+        "sha256": "da0af45bf70a644e3f81fa5564869abe0aac519ee6a89fafa8a81fe09c0abe94"
+      },
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/esbuild-js-service-probe.mjs",
+        "sha256": "4ae30bd4b3aeee8d14d73c58b40b9b6970b8de10f5a0c0ad2a357c2e80f0628a"
+      },
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/esbuild-wasm-browser-probe.mjs",
+        "sha256": "16eb6263b7fb5c55f7e8a81383bd39e0b1c6ac5e1cff4bbe1e3c7a52d5fa520e"
+      },
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/node-postject-probe.mjs",
+        "sha256": "1cf93c231787d0442dc70f464f2c43f75f790e2b22d13dc7182095582cccf030"
+      },
+      {
+        "path": "research/post-0.3/interface-mechanisms/run-probes.mjs",
+        "sha256": "39667e7e9f9c217f95ee83dfa842a992660eb4f08b5953c32e1e07644f5ee8d8"
+      }
+    ],
+    "probes": [
+      {
+        "id": "bun-sidecar",
+        "file": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-probe.mjs",
+        "timeoutMs": 60000,
+        "sourceSha256": "ae8483418a82e9d9a99f0e59b15fd488b8d28b0ffbc7b36f34024bc71fbeec1c",
+        "sources": [
+          {
+            "path": "research/post-0.3/interface-mechanisms/probes/bun-direct-plugin.ts",
+            "sha256": "cb6cefa3764dfef4d1d6b8bd8bd4267a4fbacaf879f0f1f63ad197ff20ad365a"
+          },
+          {
+            "path": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-probe.mjs",
+            "sha256": "a2598d6705d50c81b6afe20bb35bca461a07a259e7e429991f8b0e103e551d96"
+          },
+          {
+            "path": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-server.ts",
+            "sha256": "da0af45bf70a644e3f81fa5564869abe0aac519ee6a89fafa8a81fe09c0abe94"
+          }
+        ],
+        "environment": {
+          "required": [
+            "BUN_EXE",
+            "BUN_EXPECTED_VERSION",
+            "BUN_EXPECTED_SHA256"
+          ],
+          "optionalForwarded": [],
+          "forwarded": [
+            "BUN_EXE",
+            "BUN_EXPECTED_SHA256",
+            "BUN_EXPECTED_VERSION",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "PATH",
+            "TMPDIR"
+          ],
+          "selectionSha256": "f4879ef460bb6c7a2cfce910a2d0e8664b8fc96201d1ac97202838ba9be0d363"
+        }
+      },
+      {
+        "id": "esbuild-js-service",
+        "file": "research/post-0.3/interface-mechanisms/probes/esbuild-js-service-probe.mjs",
+        "timeoutMs": 45000,
+        "sourceSha256": "7eb4d7ede24c857d0a5cdd31f5e940d05022758d939dde5cc1272f54e09ffa35",
+        "sources": [
+          {
+            "path": "research/post-0.3/interface-mechanisms/probes/esbuild-js-service-probe.mjs",
+            "sha256": "4ae30bd4b3aeee8d14d73c58b40b9b6970b8de10f5a0c0ad2a357c2e80f0628a"
+          }
+        ],
+        "environment": {
+          "required": [],
+          "optionalForwarded": [],
+          "forwarded": [
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "PATH",
+            "TMPDIR"
+          ],
+          "selectionSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        }
+      },
+      {
+        "id": "esbuild-wasm-browser",
+        "file": "research/post-0.3/interface-mechanisms/probes/esbuild-wasm-browser-probe.mjs",
+        "timeoutMs": 120000,
+        "sourceSha256": "ea69a45161cad6b5e54d37bf323f37d4cdd1485d125d321bd22bd023881c4ba4",
+        "sources": [
+          {
+            "path": "research/post-0.3/interface-mechanisms/probes/esbuild-wasm-browser-probe.mjs",
+            "sha256": "16eb6263b7fb5c55f7e8a81383bd39e0b1c6ac5e1cff4bbe1e3c7a52d5fa520e"
+          }
+        ],
+        "environment": {
+          "required": [],
+          "optionalForwarded": [],
+          "forwarded": [
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "PATH",
+            "TMPDIR"
+          ],
+          "selectionSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        }
+      },
+      {
+        "id": "node-postject",
+        "file": "research/post-0.3/interface-mechanisms/probes/node-postject-probe.mjs",
+        "timeoutMs": 120000,
+        "sourceSha256": "527de8d5e23abdf9b1a746a0d58b7b9c7d7baacfe7c9678d9bba14df9ea20912",
+        "sources": [
+          {
+            "path": "research/post-0.3/interface-mechanisms/probes/node-postject-probe.mjs",
+            "sha256": "1cf93c231787d0442dc70f464f2c43f75f790e2b22d13dc7182095582cccf030"
+          }
+        ],
+        "environment": {
+          "required": [
+            "NODE_267_EXE",
+            "NODE_267_EXPECTED_SHA256",
+            "POSTJECT_ROOT",
+            "POSTJECT_EXPECTED_API_SHA256"
+          ],
+          "optionalForwarded": [],
+          "forwarded": [
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "NODE_267_EXE",
+            "NODE_267_EXPECTED_SHA256",
+            "PATH",
+            "POSTJECT_EXPECTED_API_SHA256",
+            "POSTJECT_ROOT",
+            "TMPDIR"
+          ],
+          "selectionSha256": "293afd7fedf06d7973c5bb9ebe1a8310f880f02022c755e11e0fa78b1648c668"
+        }
+      }
+    ]
+  },
+  "cohortSha256": "3fce577c926d0ed749a94cf8726971f109ee5f1dbea828f0a91bd213f00fd73b",
+  "probes": [
+    {
+      "id": "bun-sidecar",
+      "file": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-probe.mjs",
+      "assertions": {
+        "exactVersionAndContentHandshake": true,
+        "mismatchFailsClosed": true,
+        "reusableHandleWorks": true,
+        "providerFailureStructured": true,
+        "sessionRecoversAfterFailure": true,
+        "largeFrameRoundTrip": true,
+        "pipelinedCorrelation": true,
+        "transportBackpressureObserved": true,
+        "callbackLostByJson": true,
+        "callbackBoundaryFailsClosed": true,
+        "directHostCallbackWorks": true,
+        "staleHandleRejected": true,
+        "gracefulShutdownNoRemnant": true,
+        "forcedStopNoRemnant": true
+      },
+      "stderr": "",
+      "startedAt": "2026-08-21T23:11:21.774Z",
+      "completedAt": "2026-08-21T23:11:21.935Z",
+      "durationMs": 160.3805,
+      "timeoutMs": 60000,
+      "sourceSha256": "ae8483418a82e9d9a99f0e59b15fd488b8d28b0ffbc7b36f34024bc71fbeec1c",
+      "sources": [
+        {
+          "path": "research/post-0.3/interface-mechanisms/probes/bun-direct-plugin.ts",
+          "sha256": "cb6cefa3764dfef4d1d6b8bd8bd4267a4fbacaf879f0f1f63ad197ff20ad365a"
+        },
+        {
+          "path": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-probe.mjs",
+          "sha256": "a2598d6705d50c81b6afe20bb35bca461a07a259e7e429991f8b0e103e551d96"
+        },
+        {
+          "path": "research/post-0.3/interface-mechanisms/probes/bun-sidecar-server.ts",
+          "sha256": "da0af45bf70a644e3f81fa5564869abe0aac519ee6a89fafa8a81fe09c0abe94"
+        }
+      ],
+      "environment": {
+        "required": [
+          "BUN_EXE",
+          "BUN_EXPECTED_VERSION",
+          "BUN_EXPECTED_SHA256"
+        ],
+        "optionalForwarded": [],
+        "forwarded": [
+          "BUN_EXE",
+          "BUN_EXPECTED_SHA256",
+          "BUN_EXPECTED_VERSION",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LC_CTYPE",
+          "PATH",
+          "TMPDIR"
+        ],
+        "selectionSha256": "f4879ef460bb6c7a2cfce910a2d0e8664b8fc96201d1ac97202838ba9be0d363"
+      },
+      "receipt": {
+        "file": "bun-sidecar.json",
+        "sha256": "79b8f638bf5aca0a6be17369666595ff1cf329afd9d49924c36594dd0b00fe69"
+      }
+    },
+    {
+      "id": "esbuild-js-service",
+      "file": "research/post-0.3/interface-mechanisms/probes/esbuild-js-service-probe.mjs",
+      "assertions": {
+        "noServiceBeforeFirstCall": true,
+        "firstCallStartsNativeService": true,
+        "transformWorks": true,
+        "callbacksRoundTripAcrossProtocol": true,
+        "providerFailureStructured": true,
+        "serviceRecoversAfterFailure": true,
+        "contextsShareOneProcess": true,
+        "contextDisposeDoesNotStopProcess": true,
+        "cancelWaitsForHostCallback": true,
+        "canceledRebuildFails": true,
+        "stopTerminatesProcess": true,
+        "laterCallRestartsProcess": true,
+        "exactPackageAndNativeBinary": true
+      },
+      "stderr": "✘ [ERROR] The build was canceled",
+      "startedAt": "2026-08-21T23:11:21.935Z",
+      "completedAt": "2026-08-21T23:11:22.242Z",
+      "durationMs": 307.6565,
+      "timeoutMs": 45000,
+      "sourceSha256": "7eb4d7ede24c857d0a5cdd31f5e940d05022758d939dde5cc1272f54e09ffa35",
+      "sources": [
+        {
+          "path": "research/post-0.3/interface-mechanisms/probes/esbuild-js-service-probe.mjs",
+          "sha256": "4ae30bd4b3aeee8d14d73c58b40b9b6970b8de10f5a0c0ad2a357c2e80f0628a"
+        }
+      ],
+      "environment": {
+        "required": [],
+        "optionalForwarded": [],
+        "forwarded": [
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LC_CTYPE",
+          "PATH",
+          "TMPDIR"
+        ],
+        "selectionSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "receipt": {
+        "file": "esbuild-js-service.json",
+        "sha256": "96ad4ccef75aaa6ff4b25b91afe219c1d355e9c094b3a31e90160e86c46c59c3"
+      }
+    },
+    {
+      "id": "esbuild-wasm-browser",
+      "file": "research/post-0.3/interface-mechanisms/probes/esbuild-wasm-browser-probe.mjs",
+      "assertions": {
+        "exactPackage": true,
+        "exactBrowserHost": true,
+        "wasmWorkerInitializes": true,
+        "transformWorks": true,
+        "callbacksCrossWorkerBoundary": true,
+        "providerFailureStructured": true,
+        "workerRecoversAfterFailure": true,
+        "reusableContextWorks": true,
+        "watchFailsClosed": true,
+        "serveFailsClosed": true,
+        "filesystemWriteFailsClosed": true,
+        "concurrentRequestsWork": true,
+        "browserProcessGroupCleaned": true
+      },
+      "stderr": "",
+      "startedAt": "2026-08-21T23:11:22.242Z",
+      "completedAt": "2026-08-21T23:11:24.823Z",
+      "durationMs": 2580.277084,
+      "timeoutMs": 120000,
+      "sourceSha256": "ea69a45161cad6b5e54d37bf323f37d4cdd1485d125d321bd22bd023881c4ba4",
+      "sources": [
+        {
+          "path": "research/post-0.3/interface-mechanisms/probes/esbuild-wasm-browser-probe.mjs",
+          "sha256": "16eb6263b7fb5c55f7e8a81383bd39e0b1c6ac5e1cff4bbe1e3c7a52d5fa520e"
+        }
+      ],
+      "environment": {
+        "required": [],
+        "optionalForwarded": [],
+        "forwarded": [
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LC_CTYPE",
+          "PATH",
+          "TMPDIR"
+        ],
+        "selectionSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "receipt": {
+        "file": "esbuild-wasm-browser.json",
+        "sha256": "62c4a29bb086edaa1a627c75840753398c831b70220dacc53bbf971bb357d138"
+      }
+    },
+    {
+      "id": "node-postject",
+      "file": "research/post-0.3/interface-mechanisms/probes/node-postject-probe.mjs",
+      "assertions": {
+        "exactNodeVersionAndContent": true,
+        "exactPostjectVersionAndApiEntrypoint": true,
+        "directSeaRuns": true,
+        "legacyProgrammaticSeaRuns": true,
+        "reinjectionFailsClosed": true,
+        "directWriteFailureIsNonzero": true,
+        "preexistingDirectoryPreserved": true
+      },
+      "stderr": "",
+      "startedAt": "2026-08-21T23:11:24.823Z",
+      "completedAt": "2026-08-21T23:11:40.615Z",
+      "durationMs": 15792.289791,
+      "timeoutMs": 120000,
+      "sourceSha256": "527de8d5e23abdf9b1a746a0d58b7b9c7d7baacfe7c9678d9bba14df9ea20912",
+      "sources": [
+        {
+          "path": "research/post-0.3/interface-mechanisms/probes/node-postject-probe.mjs",
+          "sha256": "1cf93c231787d0442dc70f464f2c43f75f790e2b22d13dc7182095582cccf030"
+        }
+      ],
+      "environment": {
+        "required": [
+          "NODE_267_EXE",
+          "NODE_267_EXPECTED_SHA256",
+          "POSTJECT_ROOT",
+          "POSTJECT_EXPECTED_API_SHA256"
+        ],
+        "optionalForwarded": [],
+        "forwarded": [
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LC_CTYPE",
+          "NODE_267_EXE",
+          "NODE_267_EXPECTED_SHA256",
+          "PATH",
+          "POSTJECT_EXPECTED_API_SHA256",
+          "POSTJECT_ROOT",
+          "TMPDIR"
+        ],
+        "selectionSha256": "293afd7fedf06d7973c5bb9ebe1a8310f880f02022c755e11e0fa78b1648c668"
+      },
+      "receipt": {
+        "file": "node-postject.json",
+        "sha256": "19c8fcc9bf8517804250369b0a29dae62fd0dda5da7bb952657e0d8ff24a3567"
+      }
+    }
+  ]
+}

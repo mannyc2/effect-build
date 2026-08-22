@@ -1,0 +1,81 @@
+{
+  "schema": "effect-build/interface-mechanism-probe@1",
+  "probe": "node-direct-sea-and-programmatic-postject",
+  "classification": "official-direct-baseline-plus-third-party-programmatic-alternative",
+  "hostNodeVersion": "24.14.1",
+  "hostNodeExecutable": "/opt/homebrew/Cellar/node@24/24.14.1/bin/node",
+  "hostNodeSha256": "94ad1fdaedeb02971e70b45be05ad7d73d228c3cf4d68b49a8a96db40b4cb689",
+  "selectedSeaNodeVersion": "26.7.0",
+  "selectedSeaNodeSha256": "a9bd0630891c2dcdee70de88270fee2cc0c4a9e76495039dd3b4f91c5e6b71df",
+  "postjectVersion": "1.0.0-alpha.6",
+  "postjectApiSha256": "88931f26b4d3e99e08dc8219a45f576986952fad4d0c78444d27048232b2881b",
+  "assertions": {
+    "exactNodeVersionAndContent": true,
+    "exactPostjectVersionAndApiEntrypoint": true,
+    "directSeaRuns": true,
+    "legacyProgrammaticSeaRuns": true,
+    "reinjectionFailsClosed": true,
+    "directWriteFailureIsNonzero": true,
+    "preexistingDirectoryPreserved": true
+  },
+  "observations": {
+    "directStdout": "sea:effect-build-node-sea",
+    "legacyStdout": "sea:effect-build-node-sea",
+    "preparationBlobBytes": 268,
+    "preparationBlobPrefixHex": "20da43010900000001005b0000000000",
+    "reinjection": {
+      "rejected": true,
+      "name": "Error",
+      "message": "Segment and section with that name already exists: NODE_SEA/__NODE_SEA_BLOB\nUse --overwrite to overwrite the existing content"
+    },
+    "directFailure": {
+      "exitCode": 1,
+      "stderr": "Error: Couldn't write output executable: /var/folders/ry/99l80v5j1dg7g7w_l9t6m1jm0000gn/T/effect-build-node-postject-ItPXBu/output-is-directory: illegal operation on a directory"
+    },
+    "platform": "darwin",
+    "architecture": "arm64"
+  },
+  "run": {
+    "schema": "effect-build/interface-mechanism-probe-run@1",
+    "cohort": "effect-build/interface-mechanism-probes@1",
+    "runId": "7dd22185-3ae5-43d4-8e7d-9ee183fa4bca",
+    "cohortSha256": "3fce577c926d0ed749a94cf8726971f109ee5f1dbea828f0a91bd213f00fd73b",
+    "startedAt": "2026-08-21T23:11:24.823Z",
+    "completedAt": "2026-08-21T23:11:40.615Z",
+    "durationMs": 15792.289791,
+    "timeoutMs": 120000,
+    "runner": {
+      "path": "research/post-0.3/interface-mechanisms/run-probes.mjs",
+      "sha256": "39667e7e9f9c217f95ee83dfa842a992660eb4f08b5953c32e1e07644f5ee8d8"
+    },
+    "sourceSha256": "527de8d5e23abdf9b1a746a0d58b7b9c7d7baacfe7c9678d9bba14df9ea20912",
+    "sources": [
+      {
+        "path": "research/post-0.3/interface-mechanisms/probes/node-postject-probe.mjs",
+        "sha256": "1cf93c231787d0442dc70f464f2c43f75f790e2b22d13dc7182095582cccf030"
+      }
+    ],
+    "environment": {
+      "required": [
+        "NODE_267_EXE",
+        "NODE_267_EXPECTED_SHA256",
+        "POSTJECT_ROOT",
+        "POSTJECT_EXPECTED_API_SHA256"
+      ],
+      "optionalForwarded": [],
+      "forwarded": [
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "NODE_267_EXE",
+        "NODE_267_EXPECTED_SHA256",
+        "PATH",
+        "POSTJECT_EXPECTED_API_SHA256",
+        "POSTJECT_ROOT",
+        "TMPDIR"
+      ],
+      "selectionSha256": "293afd7fedf06d7973c5bb9ebe1a8310f880f02022c755e11e0fa78b1648c668"
+    }
+  }
+}
