@@ -71,7 +71,7 @@ describe("staged 0.4 esbuild surface", () => {
     expect(
       providerPackage!.subpaths.map(({ operationIds, subpath }) => [subpath, ...operationIds]).sort(),
     ).toEqual(expectedOperationIds.map((pair) => [...pair]));
-    expect(profile.plan).toBe("041");
+    expect(profile.plan).toBe("042");
     for (const subpath of subpaths) {
       expect(profile.esbuildImplementationFiles).toContain(sourcePathForSubpath(subpath));
     }

@@ -6,7 +6,7 @@
 - Effort: L
 - Risk: HIGH runtime acquisition, cache/offline behavior, and target identity
 - Depends on: Plan 039
-- Status: TODO
+- Status: DONE
 - Publication authority: NONE
 
 ## Authority and objective

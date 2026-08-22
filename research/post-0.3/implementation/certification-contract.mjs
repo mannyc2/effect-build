@@ -14,20 +14,29 @@ const exact = {
   handoff: "7de4ffe68931f721317f6be92aac1e01dae6e21e",
   plan039: "e12e930de5622be3f23814f3235293c93fcfd8bf",
   plan040: "3ced06d29fe8644eae5465fed4878a6faea322f3",
+  plan041: "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
 };
 
 const exactDocumentDigests = {
-  profile: "sha256:99733b3205065bf0ea31676e092db47841a6698ba7aafb6e463d9cdf97c9e80a",
-  expected: "sha256:0c6e5ebdc51400aa33a0afc94f5cd0399fd20d24d15f8bacabb14a4cf41c6a00",
+  profile: "sha256:e0047da788d57238cd8edce53fee6378ff2857805e6167e8c7122365380b80b7",
+  expected: "sha256:91e76f3b8c46e51c351e25186bf9fb4919c8ad4b36c3074eba118f031be8556f",
   freezeAnchor: "sha256:bddbed308ae05697663b10a63234f52ee4e5b1baca919463da8edbf4aec16888",
   handoffAnchor: "sha256:601dc271d3deb50a6f0aeb69bc15e776ff9d8b1e05ccd9625bd3fd3108c0ab57",
   plan039Anchor: "sha256:bb954a00a206189b38b7e2b78fbe5178f6850a5f2191aa46387f39649b64265b",
   plan040Anchor: "sha256:8974166230c7878419496b6c4b7c9a62aa1e2878ef699e32dd92a336062251ff",
+  plan041Anchor: "sha256:a8c7b5d7abd7447cf313f13baad354968d74b817853a9756f1421cc3357222a3",
   migrationPlan: "sha256:6827f8f5c9198a5d7d9a175a3cd48b56b8f20e661a11c40ca9b3c5eaa4b5659c",
 };
 
-const exactImplementationWorkflowDigest =
-  "sha256:fb7a8ec475a2a9bad2c6c0854fb534850c514718142a92014e4a02a4d31677cc";
+const exactImplementationWorkflowDigest = "sha256:a45349f686cb26597fe8e45db2f67acc7bb28b9b2470e3c0fdd601ceac73fef0";
+
+const exactDenoImplementationFiles = [
+  "packages/effect-build-deno/src/CompileExecutable.ts",
+  "packages/effect-build-deno/src/internal/v04/compatibility.ts",
+  "packages/effect-build-deno/src/internal/v04/executable.ts",
+  "packages/effect-build-deno/src/internal/v04/matrix.ts",
+  "packages/effect-build-deno/src/internal/v04/selected.ts",
+];
 
 export const requiredImplementationCommands = [
   "bun install --frozen-lockfile",
@@ -40,6 +49,9 @@ export const requiredImplementationCommands = [
   "bun run test:integration:v04-bun",
   "node scripts/verify-v04-bun-target-support.mjs",
   "node research/post-0.3/implementation/staged-bun-adapter.mjs",
+  "bun run test:integration:v04-deno",
+  "node scripts/verify-v04-deno-target-support.mjs",
+  "node research/post-0.3/implementation/staged-deno-adapter.mjs",
   "node research/post-0.3/implementation/certify-current-head.mjs",
 ];
 
@@ -133,31 +145,105 @@ export const validatePlan040Anchor = ({ plan039Anchor, plan040Anchor }) => {
   return plan040Anchor;
 };
 
+export const validatePlan041Anchor = ({ plan040Anchor, plan041Anchor }) => {
+  assert.equal(plan041Anchor.schema, "effect-build/plan041-implementation-trust-anchor@1");
+  assert.equal(plan041Anchor.profileId, "effect-build/plan041-implementation@1");
+  assert.equal(plan041Anchor.sourceSha, exact.plan041);
+  assert.deepEqual(
+    {
+      releaseSha: plan041Anchor.releaseSha,
+      freezeSha: plan041Anchor.freezeSha,
+      handoffSha: plan041Anchor.handoffSha,
+      plan039Sha: plan041Anchor.plan039Sha,
+      plan040Sha: plan041Anchor.plan040Sha,
+    },
+    {
+      releaseSha: exact.release,
+      freezeSha: exact.freeze,
+      handoffSha: exact.handoff,
+      plan039Sha: exact.plan039,
+      plan040Sha: exact.plan040,
+    },
+  );
+  assert.deepEqual(plan041Anchor.workflow, {
+    repository: "mannyc2/effect-build",
+    name: "plan-041-implementation-certification",
+    path: ".github/workflows/architecture-research.yml",
+    runId: "32598492666",
+    runAttempt: "1",
+    eventName: "pull_request",
+    conclusion: "success",
+    url: "https://github.com/mannyc2/effect-build/actions/runs/32598492666",
+  });
+  assert.deepEqual(plan041Anchor.aggregateArtifact, {
+    id: "9482238619",
+    name: `plan041-implementation-certification-${exact.plan041}`,
+    sizeInBytes: 5885,
+    digest: "sha256:4c54dc0458a5811ce5008795b3988427c8b98b5a902caae2ff968862dd27c545",
+    url: "https://github.com/mannyc2/effect-build/actions/runs/32598492666/artifacts/9482238619",
+  });
+  assert.deepEqual(plan041Anchor.certification, {
+    file: "plan041-certification.json",
+    schema: "effect-build/implementation-certification@1",
+    digest: "sha256:9d0c9f14aee6bd3add8808b9f4084bcb2704b84d07206e24c3b27867da6c1ce6",
+    phase: "implementation",
+    claims: 4,
+    result: "certified",
+  });
+  assert.deepEqual(plan041Anchor.receipt, {
+    id: "plan041-implementation",
+    file: "plan041-implementation.json",
+    digest: "sha256:2d758590ad8ac9177d910fef64d26389e57e2f20592ca3a5e1de54fcb49ee3b4",
+  });
+  assert.deepEqual(plan041Anchor.plan040Input, {
+    profileId: plan040Anchor.profileId,
+    sourceSha: plan040Anchor.sourceSha,
+    aggregateArtifactId: plan040Anchor.aggregateArtifact.id,
+    aggregateArtifactDigest: plan040Anchor.aggregateArtifact.digest,
+    certificationDigest: plan040Anchor.certification.digest,
+    receiptDigest: plan040Anchor.receipt.digest,
+  });
+  return plan041Anchor;
+};
+
 export const validateProfileDocuments = (documents) => {
-  const { expected, freezeAnchor, handoffAnchor, migrationPlan, plan039Anchor, plan040Anchor, profile } = documents;
+  const {
+    expected,
+    freezeAnchor,
+    handoffAnchor,
+    migrationPlan,
+    plan039Anchor,
+    plan040Anchor,
+    plan041Anchor,
+    profile,
+  } = documents;
   validateHistoricalAnchors({ freezeAnchor, handoffAnchor, plan039Anchor });
   validatePlan040Anchor({ plan039Anchor, plan040Anchor });
+  validatePlan041Anchor({ plan040Anchor, plan041Anchor });
   assert.equal(profile.schema, "effect-build/implementation-certification-profile@2");
-  assert.equal(profile.profileId, "effect-build/plan041-implementation@1");
-  assert.equal(profile.plan, "041");
+  assert.equal(profile.profileId, "effect-build/plan042-implementation@1");
+  assert.equal(profile.plan, "042");
   assert.equal(profile.phase, "implementation");
-  assert.equal(profile.receiptDirectoryEnvironment, "PLAN041_RECEIPTS_DIR");
-  assert.equal(profile.certificateFile, "plan041-certification.json");
-  assert.equal(profile.plan040TrustAnchor, "research/post-0.3/implementation/plan040-trust-anchor.json");
+  assert.equal(profile.receiptDirectoryEnvironment, "PLAN042_RECEIPTS_DIR");
+  assert.equal(profile.certificateFile, "plan042-certification.json");
+  assert.equal(profile.plan041TrustAnchor, "research/post-0.3/implementation/plan041-trust-anchor.json");
   assert.deepEqual(profile.productionBaseline, {
     releaseSha: exact.release,
     freezeSha: exact.freeze,
     handoffSha: exact.handoff,
     plan039Sha: exact.plan039,
     plan040Sha: exact.plan040,
+    plan041Sha: exact.plan041,
   });
   unique(profile.implementationAllowedPaths, "implementation allowlist is invalid");
+  unique(profile.denoImplementationFiles, "Deno implementation file set is invalid");
   unique(profile.bunImplementationFiles, "Bun implementation file set is invalid");
   unique(profile.esbuildImplementationFiles, "Esbuild implementation file set is invalid");
   unique(profile.coreStagedFiles, "core staged file set is invalid");
   unique(profile.immutablePublicPaths, "immutable public path set is invalid");
-  assert.deepEqual(profile.currentReceiptIds, ["plan041-implementation"]);
-  assert.equal(profile.forbiddenCurrentReceiptIds.includes("plan040-implementation"), true);
+  assert.deepEqual(profile.denoImplementationFiles, exactDenoImplementationFiles);
+  assert.deepEqual(profile.currentReceiptIds, ["plan042-implementation"]);
+  assert.equal(profile.forbiddenCurrentReceiptIds.includes("plan041-implementation"), true);
   assert.equal(profile.producers.length, 1);
   assert.deepEqual(profile.producers[0].receipts, profile.currentReceiptIds);
   assert.equal(expected.schema, "effect-build/expected-implementation-claims@1");
@@ -181,36 +267,13 @@ export const loadProfileDocuments = async (repository) => {
   const profile = await authenticatedJson(profilePath, exactDocumentDigests.profile, "implementation profile");
   const documents = {
     profile,
-    freezeAnchor: await authenticatedJson(
-      profile.trustAnchor,
-      exactDocumentDigests.freezeAnchor,
-      "freeze trust anchor",
-    ),
-    handoffAnchor: await authenticatedJson(
-      profile.handoffTrustAnchor,
-      exactDocumentDigests.handoffAnchor,
-      "handoff trust anchor",
-    ),
-    plan039Anchor: await authenticatedJson(
-      profile.plan039TrustAnchor,
-      exactDocumentDigests.plan039Anchor,
-      "Plan 039 trust anchor",
-    ),
-    plan040Anchor: await authenticatedJson(
-      profile.plan040TrustAnchor,
-      exactDocumentDigests.plan040Anchor,
-      "Plan 040 trust anchor",
-    ),
-    expected: await authenticatedJson(
-      profile.expectedClaims,
-      exactDocumentDigests.expected,
-      "expected claims",
-    ),
-    migrationPlan: await authenticatedJson(
-      profile.migrationPlan,
-      exactDocumentDigests.migrationPlan,
-      "core migration plan",
-    ),
+    freezeAnchor: await authenticatedJson(profile.trustAnchor, exactDocumentDigests.freezeAnchor, "freeze trust anchor"),
+    handoffAnchor: await authenticatedJson(profile.handoffTrustAnchor, exactDocumentDigests.handoffAnchor, "handoff trust anchor"),
+    plan039Anchor: await authenticatedJson(profile.plan039TrustAnchor, exactDocumentDigests.plan039Anchor, "Plan 039 trust anchor"),
+    plan040Anchor: await authenticatedJson(profile.plan040TrustAnchor, exactDocumentDigests.plan040Anchor, "Plan 040 trust anchor"),
+    plan041Anchor: await authenticatedJson(profile.plan041TrustAnchor, exactDocumentDigests.plan041Anchor, "Plan 041 trust anchor"),
+    expected: await authenticatedJson(profile.expectedClaims, exactDocumentDigests.expected, "expected claims"),
+    migrationPlan: await authenticatedJson(profile.migrationPlan, exactDocumentDigests.migrationPlan, "core migration plan"),
   };
   return validateProfileDocuments(documents);
 };
@@ -225,28 +288,35 @@ export const validateWorkspaceManifest = ({ currentManifest, handoffManifest, pr
     assert.equal(expected.scripts[name], undefined, `new script already existed at handoff: ${name}`);
     expected.scripts[name] = value;
   }
-  assert.deepEqual(currentManifest, expected, "workspace manifest drifted outside exact Plan 041 registrations");
+  assert.deepEqual(currentManifest, expected, "workspace manifest drifted outside exact Plan 042 registrations");
   return { handoffSha: profile.productionBaseline.handoffSha, ...profile.workspaceManifest };
 };
 
 export const validateActiveInstructions = ({ currentInstructions, handoffInstructions }) => {
   assert.equal(handoffInstructions.includes("Plan 039 is ready to begin"), true);
-  assert.equal(currentInstructions.includes("Plans 039, 040, and 041 are complete"), true);
-  assert.equal(currentInstructions.includes("Plan 042 is ready to begin"), true);
+  assert.equal(currentInstructions.includes("Plans 039, 040, 041, and 042 are complete"), true);
+  assert.equal(currentInstructions.includes("Plan 043 is ready to begin"), true);
   assert.equal(currentInstructions.includes("publication"), true);
   return {
     handoffSha: exact.handoff,
     path: "AGENTS.md",
-    completedPlans: ["039", "040", "041"],
-    nextPlan: "042",
+    completedPlans: ["039", "040", "041", "042"],
+    nextPlan: "043",
     publicationAuthority: "NONE",
   };
 };
 
 const pathAllowed = (path, allowed) => allowed.some((entry) => entry.endsWith("/") ? path.startsWith(entry) : path === entry);
 
+const denoEnvironment = {
+  PLAN042_DENO_EXECUTABLE: "${{ steps.deno-tools.outputs.deno }}",
+  DENORT_BIN: "${{ steps.deno-tools.outputs.denort }}",
+  DENO_DIR: "${{ runner.temp }}/effect-build-plan042-deno-cache",
+};
+
 export const validateCurrentImplementationState = (input) => {
   const {
+    bunStagedDiff,
     changedPaths,
     coreStagedDiff,
     esbuildStagedDiff,
@@ -266,31 +336,33 @@ export const validateCurrentImplementationState = (input) => {
     freezeIsHandoffAncestor: true,
     handoffIsPlan039Ancestor: true,
     plan039IsPlan040Ancestor: true,
-    plan040IsCurrentAncestor: true,
+    plan040IsPlan041Ancestor: true,
+    plan041IsCurrentAncestor: true,
   }, "implementation ancestry is not linear");
-  assert.deepEqual(coreStagedDiff, [], "Plan 039 core changed during Plan 041");
-  assert.deepEqual(esbuildStagedDiff, [], "Plan 040 Esbuild changed during Plan 041");
-  assert.deepEqual(immutablePublicDiff, [], "released 0.3 public path changed during Plan 041");
+  assert.deepEqual(coreStagedDiff, [], "Plan 039 core changed during Plan 042");
+  assert.deepEqual(esbuildStagedDiff, [], "Plan 040 Esbuild changed during Plan 042");
+  assert.deepEqual(bunStagedDiff, [], "Plan 041 Bun changed during Plan 042");
+  assert.deepEqual(immutablePublicDiff, [], "released 0.3 public path changed during Plan 042");
   assert.ok(Array.isArray(changedPaths) && changedPaths.length > 0, "implementation has no post-handoff change");
   assert.equal(new Set(changedPaths).size, changedPaths.length, "post-handoff path list contains duplicates");
   assert.deepEqual(
     sorted(implementationAddedOrModifiedPaths),
-    sorted(profile.bunImplementationFiles),
-    "exactly the five Bun implementation files must be added after Plan 040",
+    sorted(profile.denoImplementationFiles),
+    "exactly the five Deno implementation files must be added after Plan 041",
   );
   for (const path of changedPaths) assert.equal(pathAllowed(path, profile.implementationAllowedPaths), true, `path outside implementation scope: ${path}`);
-  assert.deepEqual(planSource.match(/^- Status:.*$/gm) ?? [], ["- Status: DONE"], "Plan 041 status is ambiguous");
-  assert.deepEqual(
-    planIndexSource.match(/^\| 041 \|.*$/gm) ?? [],
-    ["| 041 | Implement the frozen Bun executable lane | P1 | L | 039 | DONE |"],
-    "Plan 041 index status drifted",
-  );
+  assert.deepEqual(planSource.match(/^- Status:.*$/gm) ?? [], ["- Status: DONE"], "Plan 042 status is ambiguous");
   assert.deepEqual(
     planIndexSource.match(/^\| 042 \|.*$/gm) ?? [],
-    ["| 042 | Implement the frozen Deno executable lane | P1 | L | 039 | TODO |"],
+    ["| 042 | Implement the frozen Deno executable lane | P1 | L | 039 | DONE |"],
     "Plan 042 index status drifted",
   );
-  assert.equal(planIndexSource.includes("Plan 042 is the next"), true, "Plan 042 is not the documented next plan");
+  assert.deepEqual(
+    planIndexSource.match(/^\| 043 \|.*$/gm) ?? [],
+    ["| 043 | Implement direct Node SEA assembly | P1 | L | 039 | TODO |"],
+    "Plan 043 index status drifted",
+  );
+  assert.equal(planIndexSource.includes("Plan 043 is the next"), true, "Plan 043 is not the documented next plan");
   const workflowDigest = sha256(Buffer.from(workflowSource));
   assert.equal(workflowDigest, exactImplementationWorkflowDigest, "active implementation workflow bytes drifted");
   for (const forbidden of profile.forbiddenInvocations) {
@@ -303,6 +375,7 @@ export const validateCurrentImplementationState = (input) => {
     "run-receipt-producers.mjs",
     "validate-receipts.mjs",
     "PLAN040_RECEIPTS_DIR",
+    "PLAN041_RECEIPTS_DIR",
   ]) assert.equal(workflowSource.includes(forbidden), false, `active workflow mixes historical authority: ${forbidden}`);
   const workflow = parseYaml(workflowSource);
   assert.deepEqual(Object.keys(workflow.on ?? {}).sort(), ["pull_request", "push"]);
@@ -311,9 +384,9 @@ export const validateCurrentImplementationState = (input) => {
     SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
     CERTIFICATION_PROFILE: profile.profileId,
   });
-  assert.equal(workflow.name, "plan-041-implementation-certification");
-  assert.deepEqual(Object.keys(workflow.jobs), ["plan041-implementation"]);
-  const job = workflow.jobs["plan041-implementation"];
+  assert.equal(workflow.name, "plan-042-implementation-certification");
+  assert.deepEqual(Object.keys(workflow.jobs), ["plan042-implementation"]);
+  const job = workflow.jobs["plan042-implementation"];
   assert.deepEqual(Object.keys(job).sort(), ["runs-on", "steps"], "implementation job can be skipped or altered");
   assert.equal(job["runs-on"], "ubuntu-24.04");
   assert.ok(Array.isArray(job.steps));
@@ -331,8 +404,15 @@ export const validateCurrentImplementationState = (input) => {
       : command === "node research/post-0.3/implementation/certify-current-head.mjs"
       ? {
         GITHUB_TOKEN: "${{ github.token }}",
-        PLAN041_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan041-implementation",
+        PLAN042_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan042-implementation",
       }
+      : [
+        "bun run test:integration:v04-deno",
+        "node scripts/verify-v04-deno-target-support.mjs",
+      ].includes(command)
+      ? denoEnvironment
+      : command === "node research/post-0.3/implementation/staged-deno-adapter.mjs"
+      ? { ...denoEnvironment, DENO_DIR: "${{ runner.temp }}/effect-build-plan042-deno-consumer-cache" }
       : undefined;
     assert.deepEqual(step.env, expectedEnvironment, `required workflow gate environment drifted: ${command}`);
     return index;
@@ -343,7 +423,8 @@ export const validateCurrentImplementationState = (input) => {
     changedPaths: sorted(changedPaths),
     coreStagedDiff,
     esbuildStagedDiff,
-    implementationFiles: sorted(profile.bunImplementationFiles),
+    bunStagedDiff,
+    implementationFiles: sorted(profile.denoImplementationFiles),
     immutablePublicDiff,
     planStatus: "DONE",
     requiredCommands: requiredImplementationCommands,
@@ -365,48 +446,49 @@ export const validateCurrentRemoteEvidence = (evidence) => {
   };
 };
 
-export const validatePlan040Api = ({ artifact, plan040Anchor, run }) => {
-  assert.equal(String(run.id), plan040Anchor.workflow.runId);
-  assert.equal(String(run.run_attempt), plan040Anchor.workflow.runAttempt);
-  assert.equal(run.name, plan040Anchor.workflow.name);
-  assert.equal(run.path, plan040Anchor.workflow.path);
-  assert.equal(run.event, "push");
+export const validatePlan041Api = ({ artifact, plan041Anchor, run }) => {
+  assert.equal(String(run.id), plan041Anchor.workflow.runId);
+  assert.equal(String(run.run_attempt), plan041Anchor.workflow.runAttempt);
+  assert.equal(run.name, plan041Anchor.workflow.name);
+  assert.equal(run.path, plan041Anchor.workflow.path);
+  assert.equal(run.event, plan041Anchor.workflow.eventName);
   assert.equal(run.status, "completed");
   assert.equal(run.conclusion, "success");
-  assert.equal(run.head_sha, plan040Anchor.sourceSha);
-  assert.equal(run.repository?.full_name, plan040Anchor.workflow.repository);
-  assert.equal(String(artifact.id), plan040Anchor.aggregateArtifact.id);
-  assert.equal(artifact.name, plan040Anchor.aggregateArtifact.name);
-  assert.equal(artifact.size_in_bytes, plan040Anchor.aggregateArtifact.sizeInBytes);
-  assert.equal(artifact.digest, plan040Anchor.aggregateArtifact.digest);
+  assert.equal(run.head_sha, plan041Anchor.sourceSha);
+  assert.equal(run.repository?.full_name, plan041Anchor.workflow.repository);
+  assert.equal(String(artifact.id), plan041Anchor.aggregateArtifact.id);
+  assert.equal(artifact.name, plan041Anchor.aggregateArtifact.name);
+  assert.equal(artifact.size_in_bytes, plan041Anchor.aggregateArtifact.sizeInBytes);
+  assert.equal(artifact.digest, plan041Anchor.aggregateArtifact.digest);
   assert.equal(artifact.expired, false);
-  assert.equal(String(artifact.workflow_run.id), plan040Anchor.workflow.runId);
-  assert.equal(artifact.workflow_run.head_sha, plan040Anchor.sourceSha);
+  assert.equal(String(artifact.workflow_run.id), plan041Anchor.workflow.runId);
+  assert.equal(artifact.workflow_run.head_sha, plan041Anchor.sourceSha);
 };
 
-export const validatePlan040Archive = ({ archiveBytes, certificateBytes, entries, plan040Anchor, receiptBytes }) => {
-  assert.equal(archiveBytes.byteLength, plan040Anchor.aggregateArtifact.sizeInBytes);
-  assert.equal(sha256(archiveBytes), plan040Anchor.aggregateArtifact.digest);
-  assert.deepEqual(sorted(entries), sorted([plan040Anchor.certification.file, plan040Anchor.receipt.file]));
-  assert.equal(sha256(certificateBytes), plan040Anchor.certification.digest);
-  assert.equal(sha256(receiptBytes), plan040Anchor.receipt.digest);
+export const validatePlan041Archive = ({ archiveBytes, certificateBytes, entries, plan041Anchor, receiptBytes }) => {
+  assert.equal(archiveBytes.byteLength, plan041Anchor.aggregateArtifact.sizeInBytes);
+  assert.equal(sha256(archiveBytes), plan041Anchor.aggregateArtifact.digest);
+  assert.deepEqual(sorted(entries), sorted([plan041Anchor.certification.file, plan041Anchor.receipt.file]));
+  assert.equal(sha256(certificateBytes), plan041Anchor.certification.digest);
+  assert.equal(sha256(receiptBytes), plan041Anchor.receipt.digest);
   const certificate = JSON.parse(certificateBytes);
   const receipt = JSON.parse(receiptBytes);
-  assert.equal(certificate.profileId, plan040Anchor.profileId);
-  assert.equal(certificate.sourceSha, plan040Anchor.sourceSha);
+  assert.equal(certificate.profileId, plan041Anchor.profileId);
+  assert.equal(certificate.sourceSha, plan041Anchor.sourceSha);
   assert.equal(certificate.result, "certified");
-  assert.equal(receipt.profileId, plan040Anchor.profileId);
-  assert.equal(receipt.id, plan040Anchor.receipt.id);
-  assert.equal(receipt.sourceSha, plan040Anchor.sourceSha);
+  assert.equal(receipt.profileId, plan041Anchor.profileId);
+  assert.equal(receipt.id, plan041Anchor.receipt.id);
+  assert.equal(receipt.sourceSha, plan041Anchor.sourceSha);
   assert.equal(receipt.status, "reproduced");
-  return { certificate, receipt, sourceSha: plan040Anchor.sourceSha };
+  return { certificate, receipt, sourceSha: plan041Anchor.sourceSha };
 };
 
-export const historicalAuthoritySummary = ({ freezeAnchor, handoffAnchor, plan039Anchor, plan040Anchor }) => ({
+export const historicalAuthoritySummary = ({ freezeAnchor, handoffAnchor, plan039Anchor, plan040Anchor, plan041Anchor }) => ({
   freeze: { profileId: freezeAnchor.profileId, sourceSha: freezeAnchor.sourceSha, aggregateArtifact: freezeAnchor.aggregateArtifact, certification: freezeAnchor.certification },
   handoff: { profileId: handoffAnchor.profileId, sourceSha: handoffAnchor.sourceSha, workflow: handoffAnchor.workflow, aggregateArtifact: handoffAnchor.aggregateArtifact, certification: handoffAnchor.certification, receipt: handoffAnchor.receipt },
   plan039: { profileId: plan039Anchor.profileId, sourceSha: plan039Anchor.sourceSha, workflow: plan039Anchor.workflow, aggregateArtifact: plan039Anchor.aggregateArtifact, certification: plan039Anchor.certification, receipt: plan039Anchor.receipt },
   plan040: { profileId: plan040Anchor.profileId, sourceSha: plan040Anchor.sourceSha, workflow: plan040Anchor.workflow, aggregateArtifact: plan040Anchor.aggregateArtifact, certification: plan040Anchor.certification, receipt: plan040Anchor.receipt },
+  plan041: { profileId: plan041Anchor.profileId, sourceSha: plan041Anchor.sourceSha, workflow: plan041Anchor.workflow, aggregateArtifact: plan041Anchor.aggregateArtifact, certification: plan041Anchor.certification, receipt: plan041Anchor.receipt },
 });
 
 export const validateCurrentReceipt = ({
@@ -415,6 +497,7 @@ export const validateCurrentReceipt = ({
   handoffAnchor,
   plan039Anchor,
   plan040Anchor,
+  plan041Anchor,
   profile,
   receipt,
   sourceSha,
@@ -427,24 +510,25 @@ export const validateCurrentReceipt = ({
   assert.deepEqual(receipt.claims, expectedReceiptClaims(expected));
   assert.deepEqual(
     receipt.evidence?.historicalAuthority,
-    historicalAuthoritySummary({ freezeAnchor, handoffAnchor, plan039Anchor, plan040Anchor }),
+    historicalAuthoritySummary({ freezeAnchor, handoffAnchor, plan039Anchor, plan040Anchor, plan041Anchor }),
     "current receipt historical authority drifted",
   );
-  assert.deepEqual(receipt.evidence?.plan040Artifact, { sourceSha: plan040Anchor.sourceSha, transport: "github-api" });
+  assert.deepEqual(receipt.evidence?.plan041Artifact, { sourceSha: plan041Anchor.sourceSha, transport: "github-api" });
   assert.equal(receipt.evidence?.currentHead?.observedSha, sourceSha);
-  assert.equal(receipt.evidence?.currentHead?.repository, plan040Anchor.workflow.repository);
+  assert.equal(receipt.evidence?.currentHead?.repository, plan041Anchor.workflow.repository);
   assert.equal(receipt.evidence?.repositoryScope?.planStatus, "DONE");
-  assert.deepEqual(receipt.evidence?.repositoryScope?.implementationFiles, sorted(profile.bunImplementationFiles));
+  assert.deepEqual(receipt.evidence?.repositoryScope?.implementationFiles, sorted(profile.denoImplementationFiles));
   assert.deepEqual(receipt.evidence?.repositoryScope?.coreStagedDiff, []);
   assert.deepEqual(receipt.evidence?.repositoryScope?.esbuildStagedDiff, []);
+  assert.deepEqual(receipt.evidence?.repositoryScope?.bunStagedDiff, []);
   assert.deepEqual(receipt.evidence?.repositoryScope?.immutablePublicDiff, []);
   assert.deepEqual(receipt.evidence?.repositoryScope?.requiredCommands, requiredImplementationCommands);
   assert.equal(receipt.evidence?.repositoryScope?.workflowDigest, exactImplementationWorkflowDigest);
   assert.deepEqual(receipt.evidence?.repositoryScope?.activeInstructions, {
     handoffSha: exact.handoff,
     path: "AGENTS.md",
-    completedPlans: ["039", "040", "041"],
-    nextPlan: "042",
+    completedPlans: ["039", "040", "041", "042"],
+    nextPlan: "043",
     publicationAuthority: "NONE",
   });
   assert.deepEqual(receipt.evidence?.repositoryScope?.workspaceManifest, {
@@ -471,22 +555,23 @@ export const validateImplementationCertificate = ({
   handoffAnchor,
   plan039Anchor,
   plan040Anchor,
+  plan041Anchor,
   profile,
   sourceSha,
 }) => {
   assert.equal(certificate.schema, "effect-build/implementation-certification@1");
   assert.equal(certificate.profileId, profile.profileId);
-  assert.equal(certificate.plan, "041");
+  assert.equal(certificate.plan, "042");
   assert.equal(certificate.phase, "implementation");
   assert.equal(certificate.sourceSha, sourceSha);
-  assert.deepEqual(certificate.workflow?.repository, plan040Anchor.workflow.repository);
-  assert.equal(certificate.workflow?.workflow, "plan-041-implementation-certification");
+  assert.deepEqual(certificate.workflow?.repository, plan041Anchor.workflow.repository);
+  assert.equal(certificate.workflow?.workflow, "plan-042-implementation-certification");
   assert.match(certificate.workflow?.runId, /^[1-9][0-9]*$/);
   assert.match(certificate.workflow?.runAttempt, /^[1-9][0-9]*$/);
   assert.equal(certificate.workflow?.eventName === "push" || certificate.workflow?.eventName === "pull_request", true);
   assert.deepEqual(
     certificate.historicalInputs,
-    historicalAuthoritySummary({ freezeAnchor, handoffAnchor, plan039Anchor, plan040Anchor }),
+    historicalAuthoritySummary({ freezeAnchor, handoffAnchor, plan039Anchor, plan040Anchor, plan041Anchor }),
   );
   assert.deepEqual(certificate.currentReceipts, [{
     id: expected.receiptId,

@@ -1,24 +1,24 @@
 {
   "schema": "effect-build/expected-implementation-claims@1",
-  "profileId": "effect-build/plan041-implementation@1",
-  "receiptId": "plan041-implementation",
+  "profileId": "effect-build/plan042-implementation@1",
+  "receiptId": "plan042-implementation",
   "claims": [
     {
       "id": "historical-authority-authenticated",
       "classification": "established",
-      "conclusion": "exact-freeze-handoff-plan039-and-green-plan040-run-artifact-certificate-and-receipt-are-content-authenticated",
+      "conclusion": "exact-freeze-handoff-plan039-plan040-and-green-plan041-run-artifact-certificate-and-receipt-are-content-authenticated",
       "assertions": [
-        "plan040-run-is-exact-successful-push-at-attempt-1",
-        "plan040-artifact-id-name-size-and-digest-match",
-        "plan040-certificate-and-receipt-bytes-match",
-        "plan040-anchor-is-bound-to-plan039",
-        "release-freeze-handoff-plan039-plan040-current-ancestry-is-linear"
+        "plan041-run-is-exact-successful-pull-request-at-attempt-1",
+        "plan041-artifact-id-name-size-and-digest-match",
+        "plan041-certificate-and-receipt-bytes-match",
+        "plan041-anchor-is-bound-to-plan040",
+        "release-freeze-handoff-plan039-plan040-plan041-current-ancestry-is-linear"
       ]
     },
     {
       "id": "current-head-authenticated",
       "classification": "established",
-      "conclusion": "checked-out-event-and-fresh-remote-head-all-equal-the-exact-plan041-certification-source",
+      "conclusion": "checked-out-event-and-fresh-remote-head-all-equal-the-exact-plan042-certification-source",
       "assertions": [
         "checkout-equals-source-sha",
         "workflow-event-equals-source-sha",
@@ -28,14 +28,15 @@
     {
       "id": "implementation-scope-certified",
       "classification": "established",
-      "conclusion": "plan041-is-done-with-exactly-the-five-authorized-bun-files-staged-plan039-core-and-plan040-esbuild-byte-identical-and-no-immutable-public-path-change",
+      "conclusion": "plan042-is-done-with-exactly-the-five-authorized-deno-files-staged-plan039-core-plan040-esbuild-and-plan041-bun-byte-identical-and-no-immutable-public-path-change",
       "assertions": [
-        "plan041-status-is-done",
-        "active-instructions-record-plan041-done-and-plan042-ready",
+        "plan042-status-is-done",
+        "active-instructions-record-plan042-done-and-plan043-ready",
         "all-post-handoff-paths-are-explicitly-allowed-implementation-paths",
-        "exactly-the-five-bun-implementation-files-are-added-after-plan040",
+        "exactly-the-five-deno-implementation-files-are-added-after-plan041",
         "six-core-staged-files-are-byte-identical-to-plan039",
         "four-esbuild-files-are-byte-identical-to-plan040",
+        "five-bun-files-are-byte-identical-to-plan041",
         "workspace-manifest-matches-handoff-except-exact-v04-test-registrations",
         "immutable-public-paths-match-the-handoff",
         "required-gates-precede-current-head-certification"
@@ -44,10 +45,10 @@
     {
       "id": "certification-profiles-disjoint",
       "classification": "established",
-      "conclusion": "freeze-handoff-plan039-and-plan040-evidence-remain-explicit-inputs-with-disjoint-current-receipts",
+      "conclusion": "freeze-handoff-plan039-plan040-and-plan041-evidence-remain-explicit-inputs-with-disjoint-current-receipts",
       "assertions": [
         "profile-identities-are-distinct",
-        "current-receipt-is-plan041-implementation",
+        "current-receipt-is-plan042-implementation",
         "current-receipts-exclude-historical-receipts",
         "current-workflow-does-not-invoke-freeze-producers-or-validators",
         "historical-inputs-are-separated-from-current-receipts"

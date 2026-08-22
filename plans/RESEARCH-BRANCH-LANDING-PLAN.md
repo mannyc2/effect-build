@@ -156,7 +156,10 @@ Gates A and B were executed the same day the maintainer approved the plan.
 - **Plan 041 — DONE.** The export-inert Bun selected-command executable lane
   is staged with its exact-head implementation certificate; the released 0.3
   export map remains unchanged.
-- **Next action:** execute Plan 042 (`plans/042-add-deno-api-command-lanes.md`)
+- **Plan 042 — DONE.** The export-inert Deno selected-command executable lane
+  is staged with the Plan 041 artifact as an authenticated predecessor; the
+  released 0.3 export map remains unchanged.
+- **Next action:** execute Plan 043 (`plans/043-publish-single-node-program-profile.md`)
   on one branch off `main` under the Gate D cadence.
 
 ## 5. Summary of the finish line

@@ -1,0 +1,48 @@
+{
+  "schema": "effect-build/plan041-implementation-trust-anchor@1",
+  "profileId": "effect-build/plan041-implementation@1",
+  "sourceSha": "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
+  "releaseSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+  "freezeSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+  "handoffSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+  "plan039Sha": "e12e930de5622be3f23814f3235293c93fcfd8bf",
+  "plan040Sha": "3ced06d29fe8644eae5465fed4878a6faea322f3",
+  "workflow": {
+    "repository": "mannyc2/effect-build",
+    "name": "plan-041-implementation-certification",
+    "path": ".github/workflows/architecture-research.yml",
+    "runId": "32598492666",
+    "runAttempt": "1",
+    "eventName": "pull_request",
+    "conclusion": "success",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32598492666"
+  },
+  "aggregateArtifact": {
+    "id": "9482238619",
+    "name": "plan041-implementation-certification-2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
+    "sizeInBytes": 5885,
+    "digest": "sha256:4c54dc0458a5811ce5008795b3988427c8b98b5a902caae2ff968862dd27c545",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32598492666/artifacts/9482238619"
+  },
+  "certification": {
+    "file": "plan041-certification.json",
+    "schema": "effect-build/implementation-certification@1",
+    "digest": "sha256:9d0c9f14aee6bd3add8808b9f4084bcb2704b84d07206e24c3b27867da6c1ce6",
+    "phase": "implementation",
+    "claims": 4,
+    "result": "certified"
+  },
+  "receipt": {
+    "id": "plan041-implementation",
+    "file": "plan041-implementation.json",
+    "digest": "sha256:2d758590ad8ac9177d910fef64d26389e57e2f20592ca3a5e1de54fcb49ee3b4"
+  },
+  "plan040Input": {
+    "profileId": "effect-build/plan040-implementation@1",
+    "sourceSha": "3ced06d29fe8644eae5465fed4878a6faea322f3",
+    "aggregateArtifactId": "9478924759",
+    "aggregateArtifactDigest": "sha256:474cf45b62c3447e48a247940973f87bedab53c3a013d897ea069200dcb68ebc",
+    "certificationDigest": "sha256:e661ebe80b6c1d7cb739c85c319fb33c6942f1ea410239a8e459d61a2c423068",
+    "receiptDigest": "sha256:6a893378814a6061a862fb8bffcdf20bf43d76c046bf53e8ac8efcc323a54f25"
+  }
+}
