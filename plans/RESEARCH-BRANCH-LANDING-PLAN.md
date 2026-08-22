@@ -150,7 +150,13 @@ Gates A and B were executed the same day the maintainer approved the plan.
   delete the absorbed branches from the GitHub UI at leisure. Keep
   `research/interface-mechanisms-beyond-cli-host-api` until its study lands.
 - **Gate C — DECIDED.** Option 1, full frozen scope (recorded above).
-- **Next action:** execute Plan 040 (`plans/040-expose-esbuild-api-lane.md`)
+- **Plan 040 — DONE.** PR #16 merged the export-inert Esbuild lane to `main`
+  at `3ced06d`; exact-head run `32585389513` produced the authenticated Plan
+  040 implementation certificate.
+- **Plan 041 — DONE.** The export-inert Bun selected-command executable lane
+  is staged with its exact-head implementation certificate; the released 0.3
+  export map remains unchanged.
+- **Next action:** execute Plan 042 (`plans/042-add-deno-api-command-lanes.md`)
   on one branch off `main` under the Gate D cadence.
 
 ## 5. Summary of the finish line

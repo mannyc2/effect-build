@@ -10,6 +10,7 @@ import { basename, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
+import * as BunV04 from "../../packages/effect-build-bun/src/CompileExecutable.js";
 
 const execFileAsync = promisify(execFile);
 const root = mkdtempSync(join(tmpdir(), "effect-build-target-support-"));
@@ -115,12 +116,22 @@ describe("required provider target support", () => {
       }
       target = requested;
       const outfile = join(root, `${compiler}-${target}${target.startsWith("windows-") ? ".exe" : ""}`);
-      artifact = await Effect.runPromise(
-        Bun.compileExecutable({ entrypoint, outfile, target, digest: true }).pipe(
-          Effect.provide(Bun.layer({ executable })),
-          Effect.provide(NodeServices.layer),
-        ),
-      );
+      artifact = process.env.EFFECT_BUILD_V04_BUN === "1"
+        ? await Effect.runPromise(
+          BunV04.compileExecutable({ entrypoint, outfile, target, observation: "hashed" }).pipe(
+            Effect.provide(BunV04.layer({
+              executable: executable as import("../../packages/effect-build/src/Artifact.js").AbsolutePath,
+              allowUntestedVersion: true,
+            })),
+            Effect.provide(NodeServices.layer),
+          ),
+        ) as unknown as Bun.Artifact
+        : await Effect.runPromise(
+          Bun.compileExecutable({ entrypoint, outfile, target, digest: true }).pipe(
+            Effect.provide(Bun.layer({ executable })),
+            Effect.provide(NodeServices.layer),
+          ),
+        );
     } else {
       if (!Schema.is(Deno.Target)(requested)) {
         throw new Error(`${compiler}/${requested} is not in the provider target table`);
@@ -140,17 +151,31 @@ describe("required provider target support", () => {
     const bytes = readFileSync(artifact.path);
     const expectedVersion = support.compilerFixtures.find((fixture) => fixture.tool === compiler)?.version;
     expect(expectedVersion).toBeDefined();
-    expect(artifact).toMatchObject({
-      path: outfile,
-      bytes: bytes.byteLength,
-      target,
-      provider: compiler,
-      stages: [{
-        operation: "compile-executable",
-        tool: { name: compiler, version: expectedVersion, path: executable },
-      }],
-    });
-    expect(artifact.digest).toBe(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
+    if (compiler === "bun" && process.env.EFFECT_BUILD_V04_BUN === "1") {
+      const staged = artifact as unknown as BunV04.Artifact<"hashed">;
+      expect(staged).toMatchObject({
+        _tag: "HashedExecutable",
+        path: outfile,
+        bytes: String(bytes.byteLength),
+        target,
+        provider: "bun",
+        runtime: { name: "bun", version: expectedVersion },
+        publication: { commit: "same-parent-rename", committed: true },
+      });
+      expect(staged.digest.value).toBe(createHash("sha256").update(bytes).digest("hex"));
+    } else {
+      expect(artifact).toMatchObject({
+        path: outfile,
+        bytes: bytes.byteLength,
+        target,
+        provider: compiler,
+        stages: [{
+          operation: "compile-executable",
+          tool: { name: compiler, version: expectedVersion, path: executable },
+        }],
+      });
+      expect(artifact.digest).toBe(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
+    }
     expect(isAbsolute(artifact.path)).toBe(true);
     if (windows) expect(basename(artifact.path)).toMatch(/\.exe$/);
     else expect(basename(artifact.path)).not.toMatch(/\.exe$/);

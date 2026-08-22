@@ -31,8 +31,12 @@ interface Surface {
 
 interface Profile {
   readonly plan: string;
-  readonly implementationFiles: readonly string[];
-  readonly productionBaseline: { readonly handoffSha: string; readonly plan039Sha: string };
+  readonly esbuildImplementationFiles: readonly string[];
+  readonly productionBaseline: {
+    readonly handoffSha: string;
+    readonly plan039Sha: string;
+    readonly plan040Sha: string;
+  };
 }
 
 const expectedSubpaths = ["./Build", "./Context"];
@@ -67,9 +71,9 @@ describe("staged 0.4 esbuild surface", () => {
     expect(
       providerPackage!.subpaths.map(({ operationIds, subpath }) => [subpath, ...operationIds]).sort(),
     ).toEqual(expectedOperationIds.map((pair) => [...pair]));
-    expect(profile.plan).toBe("040");
+    expect(profile.plan).toBe("041");
     for (const subpath of subpaths) {
-      expect(profile.implementationFiles).toContain(sourcePathForSubpath(subpath));
+      expect(profile.esbuildImplementationFiles).toContain(sourcePathForSubpath(subpath));
     }
 
     const manifest = await readJson<{ readonly exports: Readonly<Record<string, unknown>> }>(
@@ -121,9 +125,9 @@ describe("staged 0.4 esbuild surface", () => {
       "packages/effect-build-esbuild/src",
     ).split("\n");
     expect(sourceFiles.filter((path) => !historicalFiles.includes(path)).sort()).toEqual(
-      profile.implementationFiles.slice().sort(),
+      profile.esbuildImplementationFiles.slice().sort(),
     );
-    for (const path of profile.implementationFiles) {
+    for (const path of profile.esbuildImplementationFiles) {
       const source = await readFile(resolve(root, path), "utf8");
       for (const specifier of importSpecifiers(source)) {
         expect(specifier, relative(root, path)).not.toMatch(/(?:standalone|Integration|Provider|JavaScriptBundle)/);

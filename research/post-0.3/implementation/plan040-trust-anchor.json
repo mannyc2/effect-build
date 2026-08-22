@@ -1,0 +1,47 @@
+{
+  "schema": "effect-build/plan040-implementation-trust-anchor@1",
+  "profileId": "effect-build/plan040-implementation@1",
+  "sourceSha": "3ced06d29fe8644eae5465fed4878a6faea322f3",
+  "releaseSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+  "freezeSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+  "handoffSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+  "plan039Sha": "e12e930de5622be3f23814f3235293c93fcfd8bf",
+  "workflow": {
+    "repository": "mannyc2/effect-build",
+    "name": "plan-040-implementation-certification",
+    "path": ".github/workflows/architecture-research.yml",
+    "runId": "32585389513",
+    "runAttempt": "1",
+    "eventName": "push",
+    "conclusion": "success",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32585389513"
+  },
+  "aggregateArtifact": {
+    "id": "9478924759",
+    "name": "plan040-implementation-certification-3ced06d29fe8644eae5465fed4878a6faea322f3",
+    "sizeInBytes": 4620,
+    "digest": "sha256:474cf45b62c3447e48a247940973f87bedab53c3a013d897ea069200dcb68ebc",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32585389513/artifacts/9478924759"
+  },
+  "certification": {
+    "file": "plan040-certification.json",
+    "schema": "effect-build/implementation-certification@1",
+    "digest": "sha256:e661ebe80b6c1d7cb739c85c319fb33c6942f1ea410239a8e459d61a2c423068",
+    "phase": "implementation",
+    "claims": 4,
+    "result": "certified"
+  },
+  "receipt": {
+    "id": "plan040-implementation",
+    "file": "plan040-implementation.json",
+    "digest": "sha256:6a893378814a6061a862fb8bffcdf20bf43d76c046bf53e8ac8efcc323a54f25"
+  },
+  "plan039Input": {
+    "profileId": "effect-build/plan039-implementation@1",
+    "sourceSha": "e12e930de5622be3f23814f3235293c93fcfd8bf",
+    "aggregateArtifactId": "9458198780",
+    "aggregateArtifactDigest": "sha256:d8398357cebab738a693e55944f0e60a311f6509e65ce3585d524e5227943a5b",
+    "certificationDigest": "sha256:a55ee67eb064b1c23f4705d2122e45dd9e5c789ebe522f5f072f853b0a6ee0d7",
+    "receiptDigest": "sha256:c928fc3e718376f0569e1fedb41165d350aa29355cf5e82aef22ea0d525af3bb"
+  }
+}

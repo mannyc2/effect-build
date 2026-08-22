@@ -31,6 +31,7 @@ interface Profile {
   readonly workspaceManifest: {
     readonly path: string;
     readonly scriptAppends: Readonly<Record<string, string>>;
+    readonly scriptAdds: Readonly<Record<string, string>>;
   };
   readonly migrationPlan: string;
 }
@@ -159,6 +160,9 @@ describe("staged 0.4 core surface", () => {
     const expectedWorkspace = structuredClone(handoffWorkspace);
     for (const [script, append] of Object.entries(profile.workspaceManifest.scriptAppends)) {
       expectedWorkspace.scripts[script] = `${expectedWorkspace.scripts[script]}${append}`;
+    }
+    for (const [script, value] of Object.entries(profile.workspaceManifest.scriptAdds)) {
+      expectedWorkspace.scripts[script] = value;
     }
     expect(await readJson(profile.workspaceManifest.path)).toEqual(expectedWorkspace);
   });

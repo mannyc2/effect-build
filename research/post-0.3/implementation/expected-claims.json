@@ -1,24 +1,24 @@
 {
   "schema": "effect-build/expected-implementation-claims@1",
-  "profileId": "effect-build/plan040-implementation@1",
-  "receiptId": "plan040-implementation",
+  "profileId": "effect-build/plan041-implementation@1",
+  "receiptId": "plan041-implementation",
   "claims": [
     {
       "id": "historical-authority-authenticated",
       "classification": "established",
-      "conclusion": "exact-freeze-handoff-and-green-plan039-implementation-run-artifact-certificate-and-receipt-are-content-authenticated",
+      "conclusion": "exact-freeze-handoff-plan039-and-green-plan040-run-artifact-certificate-and-receipt-are-content-authenticated",
       "assertions": [
-        "freeze-and-handoff-anchors-are-bound-to-the-green-plan039-implementation",
-        "plan039-run-is-exact-successful-push-at-attempt-1",
-        "plan039-artifact-id-name-size-and-digest-match",
-        "plan039-certificate-and-receipt-bytes-match",
-        "release-freeze-handoff-plan039-current-ancestry-is-linear"
+        "plan040-run-is-exact-successful-push-at-attempt-1",
+        "plan040-artifact-id-name-size-and-digest-match",
+        "plan040-certificate-and-receipt-bytes-match",
+        "plan040-anchor-is-bound-to-plan039",
+        "release-freeze-handoff-plan039-plan040-current-ancestry-is-linear"
       ]
     },
     {
       "id": "current-head-authenticated",
       "classification": "established",
-      "conclusion": "checked-out-event-and-fresh-remote-head-all-equal-the-exact-plan040-certification-source",
+      "conclusion": "checked-out-event-and-fresh-remote-head-all-equal-the-exact-plan041-certification-source",
       "assertions": [
         "checkout-equals-source-sha",
         "workflow-event-equals-source-sha",
@@ -28,28 +28,27 @@
     {
       "id": "implementation-scope-certified",
       "classification": "established",
-      "conclusion": "plan040-is-done-with-exactly-the-four-authorized-esbuild-files-staged-frozen-core-modules-byte-identical-and-no-immutable-public-path-change",
+      "conclusion": "plan041-is-done-with-exactly-the-five-authorized-bun-files-staged-plan039-core-and-plan040-esbuild-byte-identical-and-no-immutable-public-path-change",
       "assertions": [
-        "plan040-status-is-done",
-        "active-instructions-record-plan040-done-and-plan041-ready",
+        "plan041-status-is-done",
+        "active-instructions-record-plan041-done-and-plan042-ready",
         "all-post-handoff-paths-are-explicitly-allowed-implementation-paths",
-        "exactly-the-four-esbuild-implementation-files-are-added-or-changed-after-plan039",
-        "six-core-staged-files-are-byte-identical-to-the-plan039-head",
-        "workspace-manifest-matches-handoff-except-exact-v04-test-registration-appends",
+        "exactly-the-five-bun-implementation-files-are-added-after-plan040",
+        "six-core-staged-files-are-byte-identical-to-plan039",
+        "four-esbuild-files-are-byte-identical-to-plan040",
+        "workspace-manifest-matches-handoff-except-exact-v04-test-registrations",
         "immutable-public-paths-match-the-handoff",
-        "core-migration-plan-resolves-exactly-71-frozen-identities",
         "required-gates-precede-current-head-certification"
       ]
     },
     {
       "id": "certification-profiles-disjoint",
       "classification": "established",
-      "conclusion": "freeze-handoff-and-plan039-evidence-remain-explicit-inputs-with-disjoint-current-receipts",
+      "conclusion": "freeze-handoff-plan039-and-plan040-evidence-remain-explicit-inputs-with-disjoint-current-receipts",
       "assertions": [
         "profile-identities-are-distinct",
-        "profile-documents-claims-and-producer-sets-are-explicit",
-        "current-receipt-is-plan040-implementation",
-        "current-receipts-exclude-plan039-handoff-and-freeze-receipts",
+        "current-receipt-is-plan041-implementation",
+        "current-receipts-exclude-historical-receipts",
         "current-workflow-does-not-invoke-freeze-producers-or-validators",
         "historical-inputs-are-separated-from-current-receipts"
       ]
