@@ -1,0 +1,169 @@
+{
+  "schema": "effect-build/historical-freeze-trust-anchor@1",
+  "profileId": "post-0.3-surface-freeze-v1",
+  "sourceSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+  "baseSha": "15c811bb9904142a33d119766b62082f3c689f13",
+  "releaseSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+  "workflow": {
+    "repository": "mannyc2/effect-build",
+    "name": "post-0.3-architecture-research",
+    "path": ".github/workflows/architecture-research.yml",
+    "runId": "32502909677",
+    "runAttempt": "1",
+    "eventName": "push",
+    "conclusion": "success",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32502909677"
+  },
+  "aggregateArtifact": {
+    "id": "9454270941",
+    "name": "post-0.3-architecture-certification-a3017657e0851530892a9f3d2d55ac5736769881",
+    "sizeInBytes": 34766,
+    "digest": "sha256:a502ab64e0cda8fb743f3f6175dfcde4c098eeb9546cc98173a7a6b339002233",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32502909677/artifacts/9454270941"
+  },
+  "certification": {
+    "file": "certification.json",
+    "schema": "effect-build/architecture-certification@3",
+    "digest": "sha256:363b4981470cc95eb6c43fc8e56623aaca1f5d2f89c2e9ca38bcc8e3b2e0fc5c",
+    "claims": 44,
+    "result": "certified",
+    "requiredJobs": {
+      "linux-research": "success",
+      "windows-research": "success"
+    },
+    "artifacts": {
+      "linux-research": {
+        "id": "9454264529",
+        "digest": "sha256:6b8e64d3b794385e3af8c284ab7f24e672703cc6e40776e2f17649e029a8233c"
+      },
+      "windows-research": {
+        "id": "9454187181",
+        "digest": "sha256:34f210706fdd13d46289b8818b42ab29153dca7c30e633929db3bb424d575190"
+      }
+    },
+    "expectedDocuments": [
+      "expected-certification-conclusions.json",
+      "expected-conclusions.json",
+      "expected-contract-conclusions.json",
+      "expected-dependency-conclusions.json",
+      "expected-freeze-conclusions.json",
+      "expected-surface-conclusions.json",
+      "expected-watch-conclusions.json",
+      "expected-windows-conclusions.json"
+    ],
+    "repositoryScope": {
+      "result": "passed",
+      "changedPathDigest": "sha256:c202dac770d738be8635e87eefe41f9e83d06a0bb79116424134dfc7a59c7c1a"
+    },
+    "remoteHead": {
+      "result": "passed",
+      "eventName": "push",
+      "repository": "mannyc2/effect-build",
+      "observedRef": "refs/heads/codex/post-0.3-native-capability-architecture",
+      "eventSourceSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+      "observedSha": "a3017657e0851530892a9f3d2d55ac5736769881"
+    }
+  },
+  "receipts": [
+    {
+      "id": "compatibility-model",
+      "file": "compatibility-model.json",
+      "digest": "sha256:edd9fba49e66fe2fd67f7a2178b1ee6855036a9e679a85f5fffd7440487a7f93"
+    },
+    {
+      "id": "contract-declarations",
+      "file": "contract-declarations.json",
+      "digest": "sha256:71f0bf5575f60fa9c86b69b17a71d1360d7210ee533350590a70a979e34a3eb5"
+    },
+    {
+      "id": "dependency-and-offline",
+      "file": "dependency-and-offline.json",
+      "digest": "sha256:c39e839413986697dce9f59458ea3ed064310d86020f7d2a4196e0929d14c610"
+    },
+    {
+      "id": "effect-contract-endpoints",
+      "file": "effect-contract-endpoints.json",
+      "digest": "sha256:b99a1a1e632629e19d5b0879c95b2e4208a338487ebd98ccec59ecc47f59bfc4"
+    },
+    {
+      "id": "existing-provider-research",
+      "file": "existing-provider-research.json",
+      "digest": "sha256:46172ff5a0e6f2f914043c5c1f1eb0ddd6ee2e90b94f60d1a2f567e6eec38871"
+    },
+    {
+      "id": "external-provider-research",
+      "file": "external-provider-research.json",
+      "digest": "sha256:930392e278f9b467dce2946cf44081cf3c91c893aa771a466735439c88140794"
+    },
+    {
+      "id": "host-api-boundaries",
+      "file": "host-api-boundaries.json",
+      "digest": "sha256:1330e2f34db67b8891fd3c26ceae6635275631d4784ba07a3a4ada969c903155"
+    },
+    {
+      "id": "independent-versioning",
+      "file": "independent-versioning.json",
+      "digest": "sha256:2da8b8d4a263a7c0128874a62ec57953eb6bced31fcd712a1259a68ac05f4083"
+    },
+    {
+      "id": "node-sea-relations",
+      "file": "node-sea-relations.json",
+      "digest": "sha256:9419b30f6b3fb9a866ac32b2dfee268fcf0bba145d3ff34fc57b2d62529e4753"
+    },
+    {
+      "id": "profile-refinement",
+      "file": "profile-refinement.json",
+      "digest": "sha256:65cecf89a002a13c8baa3a04961046c00f6b9427bb399d6213ce7c4d0be97630"
+    },
+    {
+      "id": "provider-native-watch",
+      "file": "provider-native-watch.json",
+      "digest": "sha256:e2458e0e10044a7b6c8aa6792901e0f9e52a835a8d8937693c302a55cd81c8ce"
+    },
+    {
+      "id": "r3-provider-compatibility",
+      "file": "r3-provider-compatibility.json",
+      "digest": "sha256:71375dc8892e47391620ef50fc67188b8d2c894130c1701f28da9b5596f4a4f3"
+    },
+    {
+      "id": "r4-author-laws",
+      "file": "r4-author-laws.json",
+      "digest": "sha256:8a2bfc451312b1b000a14a1db9670f8902982c9845bf2857937c63e3acce0155"
+    },
+    {
+      "id": "r4-external-author-adapter",
+      "file": "r4-external-author-adapter.json",
+      "digest": "sha256:e7eecfe31722892ec25ec76e93bd62b98228588ff79ebb022da982631044b794"
+    },
+    {
+      "id": "r7-matrix-laws",
+      "file": "r7-matrix-laws.json",
+      "digest": "sha256:c083eefc51d54fb8455ec62250c813d2a60996aadff994d41342f563bae1444a"
+    },
+    {
+      "id": "remote-head",
+      "file": "remote-head.json",
+      "digest": "sha256:37606875133a9d81fff2ee5f5729aded84b6ab94898d2bf4d9c6f846523aacdc"
+    },
+    {
+      "id": "repository-scope",
+      "file": "repository-scope.json",
+      "digest": "sha256:95ff1c0a93798f1ba15e86e30e5be95ca9f61d730883343eac68f2c4937bd37b"
+    },
+    {
+      "id": "surface-freeze",
+      "file": "surface-freeze.json",
+      "digest": "sha256:2b6a75e58a7eb142f5096ff0293041311e25fc46703fca9fb3c91810aeea1d7d"
+    },
+    {
+      "id": "version-boundaries",
+      "file": "version-boundaries.json",
+      "digest": "sha256:736a6540dd398c5d810bf25c92a257355bdd2e0f471385054c802fa864e9663f"
+    },
+    {
+      "id": "windows-lifecycle",
+      "file": "windows-lifecycle.json",
+      "digest": "sha256:f801ecdcaeb4bfd846819fc1c441f5a672d51ed5537ba36ce1882bbb51add2eb"
+    }
+  ]
+}

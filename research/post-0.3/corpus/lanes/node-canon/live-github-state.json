@@ -1,0 +1,160 @@
+{
+  "schema": "effect-build/node-canon-live-github-state@1",
+  "observedAt": "2026-08-17T15:23:57Z",
+  "observationMethod": "GitHub connector, read-only direct API/ref/file/check access",
+  "repository": "mannyc2/effect-build",
+  "pullRequest": {
+    "number": 4,
+    "state": "open",
+    "draft": true,
+    "title": "architecture: validate provider-native APIs and portable roles",
+    "createdAt": "2026-08-15T17:42:10Z",
+    "updatedAt": "2026-08-16T16:30:27Z",
+    "head": {
+      "ref": "codex/post-0.3-native-capability-architecture",
+      "liveSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2"
+    },
+    "base": {
+      "ref": "codex/granular-integration-program",
+      "liveBranchSha": "15c811bb9904142a33d119766b62082f3c689f13",
+      "eventTimeShaSeenInCurrentHeadCheckMetadata": "15c811bb9904142a33d119766b62082f3c689f13",
+      "note": "The direct branch ref and current-head check-run PR metadata both identified this base SHA at the final refresh."
+    },
+    "bodyClaimedFinalSha": "af4887c36753a82c3c97fafc54b3c368cd98b34d",
+    "bodyClaimStatus": "contradicted-by-live-head",
+    "endpointObservation": {
+      "directRestTitle": "architecture: validate provider-native APIs and portable roles",
+      "connectorSummaryEarlierReturnedTitle": "docs: define post-0.3 native capability architecture",
+      "treatment": "The direct REST pull payload was retained as the live title; the discrepancy is recorded rather than silently reconciled."
+    }
+  },
+  "headCommit": {
+    "sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "tree": "88bd428556172ca4b5ec0673b18f57d4839b9431",
+    "parent": "d56251a1b3039c973f15273d0ede61b461778be4",
+    "message": "Document the canonical Node-main representation",
+    "author": {
+      "name": "CJ Harries",
+      "email": "manny@codefolio.com",
+      "date": "2026-08-16T16:30:23Z"
+    },
+    "committer": {
+      "name": "CJ Harries",
+      "email": "manny@codefolio.com",
+      "date": "2026-08-16T16:30:23Z"
+    },
+    "signature": {
+      "verified": true,
+      "reason": "valid",
+      "verifiedAt": "2026-08-16T16:30:24Z"
+    },
+    "stats": {
+      "additions": 2041,
+      "deletions": 97,
+      "files": 11
+    }
+  },
+  "selectedBlobs": [
+    {
+      "path": "plans/POST-0.3-API-CANDIDATES.md",
+      "sha": "72a9bf011528d683a3e3445d00cb058d444a9e3b",
+      "bytes": 35335
+    },
+    {
+      "path": "plans/POST-0.3-NATIVE-CAPABILITY-ARCHITECTURE.md",
+      "sha": "4157893362568ea506030f234e778df9e772da63",
+      "bytes": 35935
+    },
+    {
+      "path": "plans/POST-0.3-PROVIDER-CAPABILITY-MATRIX.md",
+      "sha": "841817e9d311628cf8f3dea703f13ea58a634648",
+      "bytes": 27538
+    },
+    {
+      "path": "plans/043-publish-single-node-program-profile.md",
+      "sha": "9e2fba144e19cae0773de9e4da27048961bc97b0",
+      "bytes": 17398
+    },
+    {
+      "path": "research/post-0.3/node-main-canon-probe.mjs",
+      "sha": "480026ae15648d9e482f963d41222cc531fa80ae",
+      "bytes": 19907
+    },
+    {
+      "path": ".github/workflows/architecture-research.yml",
+      "sha": "fa1017f5996bce1195be3bb129735c781f535b14",
+      "bytes": 5621
+    },
+    {
+      "path": "research/post-0.3/expected-conclusions.json",
+      "sha": "af106e79404cacbbb60c5311c97a57622560cfa6"
+    }
+  ],
+  "researchReceipts": {
+    "committedFinalDirectory": [
+      ".gitkeep"
+    ],
+    "structuredReceiptDirectoryPresentInCurrentFailedWorkflow": false,
+    "claimability": "No complete current-head receipt set was available for this audit."
+  },
+  "currentHeadChecks": {
+    "totalCount": 27,
+    "selected": [
+      {
+        "name": "node-sea",
+        "status": "completed",
+        "conclusion": "skipped",
+        "countObserved": 2
+      },
+      {
+        "name": "executable-research",
+        "status": "completed",
+        "conclusion": "failure",
+        "countObserved": 2
+      },
+      {
+        "name": "quality",
+        "status": "completed",
+        "conclusion": "failure",
+        "countObserved": 2
+      },
+      {
+        "name": "esbuild",
+        "status": "completed",
+        "conclusion": "success",
+        "countObserved": 2
+      },
+      {
+        "name": "bun-bundle",
+        "status": "completed",
+        "conclusion": "success",
+        "countObserved": 2
+      },
+      {
+        "name": "real-tools",
+        "status": "completed",
+        "conclusion": "success",
+        "countObserved": 2
+      },
+      {
+        "name": "source-export",
+        "status": "completed",
+        "conclusion": "success",
+        "countObserved": 1
+      }
+    ],
+    "executableResearchFailureAnnotations": [
+      "No files found at the architecture receipt upload path.",
+      "Process completed with exit code 2.",
+      "contracts.typecheck.ts line 348: Stages does not satisfy the declared non-empty step constraint.",
+      "contracts.typecheck.ts line 111: an Effect return type does not match the required executable result type."
+    ],
+    "workflowOrderConsequence": "The type-check step precedes final contract compilation, compatibility execution, certification scripts, receipt validation, and upload. Therefore the current failure prevents those later current-head steps from establishing a complete receipt set."
+  },
+  "scope": {
+    "githubMutated": false,
+    "workflowsDispatched": false,
+    "implementationWritten": false,
+    "providerExecutionPerformedByThisAssignment": false
+  }
+}

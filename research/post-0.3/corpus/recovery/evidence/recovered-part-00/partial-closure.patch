@@ -1,0 +1,427 @@
+diff --git a/.github/workflows/architecture-research.yml b/.github/workflows/architecture-research.yml
+index fa1017f5996bce1195be3bb129735c781f535b14..7b82c4c0aa4d4ea538f512b21e89994beda04314 100644
+--- a/.github/workflows/architecture-research.yml
++++ b/.github/workflows/architecture-research.yml
+@@ -7,30 +7,34 @@ on:
+ permissions:
+   contents: read
+ 
++env:
++  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
++  RESEARCH_BASE_SHA: 15c811bb9904142a33d119766b62082f3c689f13
++
+ jobs:
+-  executable-research:
++  linux-research:
+     runs-on: ubuntu-24.04
++    env:
++      RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-linux
+     steps:
+       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+         with:
+-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
++          ref: ${{ env.SOURCE_SHA }}
+           persist-credentials: false
+-      - name: Validate checked-out source and initialize receipts
++          fetch-depth: 0
++      - name: Validate exact source
+         shell: bash
+-        env:
+-          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+         run: |
+-          test "$EXPECTED_SOURCE_SHA" = "$(git rev-parse HEAD)"
+-          test -f research/post-0.3/expected-conclusions.json
+-          test -f research/post-0.3/validate-receipts.mjs
+-          echo "SOURCE_SHA=$EXPECTED_SOURCE_SHA" >> "$GITHUB_ENV"
+-          echo "RESEARCH_RECEIPTS_DIR=$RUNNER_TEMP/effect-build-architecture-receipts" >> "$GITHUB_ENV"
++          test "$SOURCE_SHA" = "$(git rev-parse HEAD)"
++          test -f research/post-0.3/canonical/contracts.ts
++          test -f research/post-0.3/CANONICAL-CONTRACTS.md
++          test ! -e research/post-0.3/contracts.ts
++          test ! -e research/post-0.3/final/contracts.ts
+       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+         with:
+           node-version: 25.5.0
+           package-manager-cache: false
+       - id: node25
+-        name: Capture Node 25 assembler
+         shell: bash
+         run: |
+           test "$(node --version)" = "v25.5.0"
+@@ -40,7 +44,6 @@ jobs:
+           node-version: 26.7.0
+           package-manager-cache: false
+       - id: node26
+-        name: Capture Node 26 assembler
+         shell: bash
+         run: |
+           test "$(node --version)" = "v26.7.0"
+@@ -53,24 +56,27 @@ jobs:
+         with:
+           bun-version: 1.3.14
+       - id: bun-current
+-        name: Capture current Bun host and command
+         shell: bash
+         run: echo "path=$(command -v bun)" >> "$GITHUB_OUTPUT"
+       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+         with:
+           path: ${{ runner.temp }}/bun-install-cache
+-          key: architecture-research-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
++          key: post-0.3-research-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+       - run: bun install --frozen-lockfile
+         env:
+           BUN_INSTALL_CACHE_DIR: ${{ runner.temp }}/bun-install-cache
+       - run: bun run build
++      - name: Install research-only parser and SemVer dependencies
++        run: >-
++          bun add --no-save
++          semver@7.7.2 @types/semver@7.7.1
++          parse5@8.0.0 postcss@8.5.6 postcss-value-parser@4.2.0
+       - id: tools
+         run: node scripts/provision-tool-assets.mjs >> "$GITHUB_OUTPUT"
+       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed
+         with:
+           deno-version: v2.9.5
+       - id: deno-current
+-        name: Capture current Deno command
+         shell: bash
+         run: echo "path=$(command -v deno)" >> "$GITHUB_OUTPUT"
+       - name: Install comparison providers outside the workspace
+@@ -82,19 +88,13 @@ jobs:
+             rolldown@1.2.4 rolldown-plugin-dts@0.28.2 @yao-pkg/pkg@6.22.0 \
+             esbuild-0281@npm:esbuild@0.28.1 esbuild-0282@npm:esbuild@0.28.2 typescript@6.0.3
+           echo "RESEARCH_EXTERNAL_NODE_MODULES=$external/node_modules" >> "$GITHUB_ENV"
+-      - name: Run architecture law tests
+-        run: node --test research/post-0.3/*.test.mjs
+-      - name: Type-check current contract prototypes
+-        run: >-
+-          bun x tsc --ignoreConfig --noEmit --strict --skipLibCheck
+-          --module NodeNext --moduleResolution NodeNext --target ES2022
+-          research/post-0.3/contracts.ts
+-          research/post-0.3/contracts.typecheck.ts
+-      - name: Compile exact final research contracts
+-        run: bun x tsc -p research/post-0.3/final/tsconfig.json
+-      - name: Execute exact compatibility laws
+-        run: node research/post-0.3/final/dist/compatibility.test.js
+-      - name: Reproduce all existing architectural conclusions
++      - name: Compile the one canonical contract graph
++        run: bun x tsc -p research/post-0.3/canonical/tsconfig.json
++      - name: Run canonical and lifecycle law tests
++        run: |
++          node --test research/post-0.3/canonical/dist/compatibility.test.js
++          node --test research/post-0.3/*.test.mjs
++      - name: Reproduce every Linux architecture conclusion
+         shell: bash
+         env:
+           EFFECT_BUILD_BUN_BIN: ${{ steps.tools.outputs.bun }}
+@@ -104,8 +104,14 @@ jobs:
+           EFFECT_BUILD_DENORT_BIN: ${{ steps.tools.outputs.denort }}
+           EFFECT_BUILD_NODE_25_BIN: ${{ steps.node25.outputs.path }}
+           EFFECT_BUILD_NODE_26_BIN: ${{ steps.node26.outputs.path }}
++          EFFECT_BUILD_NODE_SEA_BIN: ${{ steps.node26.outputs.path }}
++          EFFECT_BUILD_PACKAGE_MANAGER_BIN: ${{ steps.bun-current.outputs.path }}
++          DENORT_BIN: ${{ steps.tools.outputs.denort }}
+           RESEARCH_EXTERNAL_NODE_MODULES: ${{ env.RESEARCH_EXTERNAL_NODE_MODULES }}
+         run: |
++          node research/post-0.3/check-contract-markdown.mjs --check
++          node research/post-0.3/certify-canonical-contracts.mjs
++          node research/post-0.3/certify-canonical-compatibility.mjs
+           node research/post-0.3/certify-provider-conformance.mjs
+           node research/post-0.3/certify-host-boundaries.mjs
+           node research/post-0.3/certify-external-providers.mjs
+@@ -113,13 +119,74 @@ jobs:
+           node research/post-0.3/certify-version-boundaries.mjs
+           node research/post-0.3/certify-node-sea-relations.mjs
+           node research/post-0.3/certify-independent-versioning.mjs
+-      - name: Validate the complete conclusion set
+-        run: node research/post-0.3/validate-receipts.mjs
+-      - name: Upload structured architecture receipts
++          node research/post-0.3/certify-dependency-and-offline.mjs
++          node research/post-0.3/certify-provider-native-watch.mjs
++          node research/post-0.3/certify-lifecycle-effect.mjs
++          node research/post-0.3/certify-effect-contract-endpoints.mjs
++          node research/post-0.3/certify-repository-scope.mjs
++      - name: Upload Linux diagnostic receipts
+         if: ${{ always() }}
+         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+         with:
+-          name: post-0.3-architecture-receipts-${{ env.SOURCE_SHA }}
++          name: post-0.3-architecture-diagnostics-linux-${{ env.SOURCE_SHA }}
+           path: ${{ env.RESEARCH_RECEIPTS_DIR }}
+           if-no-files-found: warn
+           retention-days: 30
++
++  windows-research:
++    runs-on: windows-2025
++    env:
++      RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}\effect-build-architecture-windows
++    steps:
++      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
++        with:
++          ref: ${{ env.SOURCE_SHA }}
++          persist-credentials: false
++          fetch-depth: 1
++      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
++        with:
++          node-version: 24.14.1
++          package-manager-cache: false
++      - name: Validate exact source
++        shell: pwsh
++        run: |
++          if ((git rev-parse HEAD) -ne $env:SOURCE_SHA) { throw "wrong checkout" }
++      - name: Reproduce Windows lock and cleanup laws
++        run: node research/post-0.3/windows-lifecycle-probe.mjs
++      - name: Upload Windows diagnostic receipts
++        if: ${{ always() }}
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
++        with:
++          name: post-0.3-architecture-diagnostics-windows-${{ env.SOURCE_SHA }}
++          path: ${{ env.RESEARCH_RECEIPTS_DIR }}
++          if-no-files-found: warn
++          retention-days: 30
++
++  aggregate-certification:
++    needs: [linux-research, windows-research]
++    if: ${{ success() }}
++    runs-on: ubuntu-24.04
++    env:
++      RESEARCH_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-architecture-aggregate
++    steps:
++      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
++        with:
++          ref: ${{ env.SOURCE_SHA }}
++          persist-credentials: false
++          fetch-depth: 1
++      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
++        with:
++          pattern: post-0.3-architecture-diagnostics-*-${{ env.SOURCE_SHA }}
++          path: ${{ env.RESEARCH_RECEIPTS_DIR }}
++          merge-multiple: true
++      - name: Certify live branch and PR heads
++        run: node research/post-0.3/certify-remote-head.mjs
++      - name: Validate the complete conclusion set
++        run: node research/post-0.3/validate-receipts.mjs
++      - name: Upload successful aggregate certification receipt
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
++        with:
++          name: post-0.3-architecture-certification-${{ env.SOURCE_SHA }}
++          path: ${{ env.RESEARCH_RECEIPTS_DIR }}
++          if-no-files-found: error
++          retention-days: 30
+diff --git a/plans/039-establish-core-capability-boundaries.md b/plans/039-establish-core-capability-boundaries.md
+index c414714f92760a8e7414f91542787d8a624c4bfa..8433ee74f60ff946ff2cd7defc23eff38f15ab5b 100644
+--- a/plans/039-establish-core-capability-boundaries.md
++++ b/plans/039-establish-core-capability-boundaries.md
+@@ -1,316 +1,129 @@
+-# Plan 039: Establish core tool, borrowed-output, and executable laws
++# Plan 039: Establish core capability boundaries
+ 
+-## Status
+-
+-- Priority: P0 architecture foundation
+-- Effort: XL
+-- Risk: HIGH lifecycle, compatibility, and integration-author API
+-- Depends on: approval of the revised C2 architecture decision
+-- Research evidence: `research/post-0.3/`
++- Priority: P0
+ - Status: TODO
+ - Publication authority: NONE
++- Depends on: accepted post-0.3 architecture PR
+ 
+-## Objective
++## Goal
+ 
+-Refactor released 0.3 internals into three precise public integration-author
+-capabilities without changing released behavior:
++Implement only the provider-neutral authorities proven by the canonical research:
+ 
+ ```text
+ effect-build/Author/Tool
+ effect-build/Author/BorrowedOutput
+ effect-build/Author/Executable
++HostPath.Observed
++BuildStepObservation
++operation-specific compatibility vocabulary/evaluator
++Effect-native tracing and warning delivery
+ ```
+ 
+-Also establish shared durable/runtime observations, provider-owned tool-version
+-compatibility vocabulary, and exporter-neutral Effect telemetry.
+-
+-Do not add provider-native build features, profiles, recipes, final 0.4 exports,
+-package publication, tags, releases, or merges.
+-
+-This plan deliberately does **not** publish the earlier proposed
+-`Author/Command` or `Author/CommandCompiler` modules.
+-
+-## Baseline and drift check
++Do not implement profiles or provider `Api`/`Command` moves in this plan.
+ 
+-Before editing:
++## Canonical source
+ 
+-1. verify ancestry from released source
+-   `f06f96ca88b6278e5f23a898d758b99fa9322108`;
+-2. verify the implementation branch descends from the release-line base rather
+-   than stale `main`;
+-3. record the exact parent SHA;
+-4. freeze 0.3 runtime keys, declaration keys, errors, target tables, lifecycle
+-   tests, and packed consumers;
+-5. read the executable research receipts and reproduce the law tests;
+-6. stop if unrelated production changes overlap process, temporary-root,
+-   publication, or provider-definition internals.
++Implementation must conform to:
+ 
+-## Architectural correction
+-
+-### Use official Effect process APIs directly
+-
+-Official Effect `ChildProcess` already owns:
+-
+-- command and argv construction;
+-- cwd/environment/shell policy;
+-- stdout/stderr streams and sinks;
+-- scoped child handles;
+-- exit status;
+-- signals and force-kill timeout;
+-- host-specific spawner Layers.
+-
+-Core must not create a second public process API. Existing bounded command
+-capture may remain package-private while 0.3 delegates exist.
+-
+-### No public command-compiler factory
++```text
++research/post-0.3/canonical/contracts.ts
++research/post-0.3/canonical/compatibility.ts
++research/post-0.3/CANONICAL-CONTRACTS.md
++```
+ 
+-`Provider.define` combines Bun/Deno convenience policy rather than a stable
+-cross-provider law. Its reusable parts are selected-tool compatibility,
+-provider validation, and executable publication. Replace reflective wrapping
+-internally, but do not publish a successor factory.
++No alternative contract graph may be introduced.
+ 
+-## Target public modules
++## Public invariants
+ 
+ ### `Author/Tool`
+ 
+-Own:
+-
+-- explicit executable or PATH selection;
+-- canonical selected-path observation;
+-- exact version probing;
+-- provider-owned tested ranges and known-incompatible versions;
+-- operation capability probes;
+-- strict default and explicit untested override;
+-- stable tool/build-step observations;
+-- no auto-installation, fallback, or hidden substitution.
+-
+-Sketch:
++- select and canonicalize one host API package/runtime or command executable;
++- observe exact version and executable identity;
++- evaluate provider/lane/operation policy through one evaluator;
++- support exact sets, maintained SemVer ranges, provider predicates, capability probes, and relations;
++- fail known incompatibility, missing capability, relation failure, and unsupported version before output mutation;
++- permit only unknown-but-capable override;
++- emit stable `ToolVersionUntestedOverride` through Effect logging/reporting and retain compatibility status in observations;
++- reject executable replacement after acquisition;
++- never install, fall back, or substitute a tool.
+ 
+-```ts
+-export interface Selected<Name extends string> {
+-  readonly observation: ToolObservation<Name>
+-  readonly command: (
+-    argv: readonly string[],
+-    options?: ChildProcess.CommandOptions
+-  ) => ChildProcess.Command
+-}
+-```
+-
+-`command` delegates to official Effect `ChildProcess.make` with the captured
+-canonical executable. It exposes no custom handle.
++Add an exact runtime dependency on the maintained `semver` implementation. Do not implement a private SemVer parser.
+ 
+ ### `Author/BorrowedOutput`
+ 
+-Own:
+-
+-- temporary files and trees;
+-- cleanup-root claims;
+-- destination/cleanup overlap checks;
+-- root containment;
+-- observed file/tree manifests;
+-- liveness, byte-count, and digest checks;
+-- closure-owned authority used by profiles;
+-- cleanup after every callback Exit;
+-- deterministic expiry after release.
+-
+-The implementation must support both one-file Node-main and multi-file browser
+-application profiles without exposing mutable liveness tokens or root claims.
++- own one cleanup root;
++- normalize portable relative paths;
++- reject traversal, symlinks, unsupported entries, and normalized/case-fold collisions according to the advertised target rules;
++- expose closure-owned file/tree acquisition Effects;
++- reobserve byte counts and digests;
++- expire after the producer continuation;
++- prevent a consumer publication destination from overlapping the cleanup root;
++- interoperate across compatible duplicate core copies through the capability closure, not a receiver-global registry.
+ 
+ ### `Author/Executable`
+ 
+-Own one durable single-file state machine:
+-
+-```text
+-prepare
+--> resolve and claim destination
+--> same-parent staging
+--> producer writes candidate
+--> regular/executable validation
+--> ELF/Mach-O/PE inspection
+--> runtime and SystemTarget resolution
+--> optional digest
+--> atomic rename
+-```
+-
+-The result includes runtime observation in addition to system target and ordered
+-steps. Candidate IDs, claim maps, parser internals, and rename operations remain
+-private.
++- allocate same-parent staging;
++- validate candidate regular-file/native format/runtime/system target;
++- optionally digest;
++- atomically replace the destination;
++- expose the commit point truthfully;
++- leave destination unchanged before commit;
++- document that interruption visible after the uninterruptible rename can coexist with durable output.
+ 
+-## Shared root vocabulary
++## Observability
+ 
+-Introduce internally while retaining 0.3 projections until Plan 044:
++Use Effect spans/logs/annotations only. Stable attributes:
+ 
+ ```text
+-HostPath.Observed
+-HostPath.observe
+-ToolCompatibility
+-ToolObservation
+-ToolVersionUnsupported
+-ToolVersionUntestedOverride
+-BuildStepObservation
+-steps
+-systemTarget
+-Artifact.Executable.runtime
++provider.package
++provider.lane
++build.operation
++tool.name
++tool.version
++tool.compatibility
++profile.protocol
++runtime.target
++system.target
++build.outcome
+ ```
+ 
+-`HostPath.Observed` is a point-in-time canonical host observation. There i

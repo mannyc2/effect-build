@@ -1,0 +1,285 @@
+{
+  "schema": "effect-build/plan039-core-migration@1",
+  "source": "research/post-0.3/freeze/MIGRATION.json",
+  "scope": "effect-build remove-or-replace authorities",
+  "authorityCount": 71,
+  "authoritySetSha256": "a0bdf3b59a1a85bbc448decd0186e29c0fabe7c04e3203ff6657af5f746bb3fe",
+  "rules": [
+    {
+      "rule": "MAP-INTEGRATION-SUBPATH-REMOVE",
+      "disposition": "remove",
+      "target": null,
+      "redesignGuidance": [
+        "effect-build/Author/BorrowedOutput",
+        "effect-build/Author/Executable"
+      ],
+      "plan044Action": "delete",
+      "ownerPlans": [
+        "040",
+        "041",
+        "042",
+        "043",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-PROVIDER-SUBPATH-REMOVE",
+      "disposition": "remove",
+      "target": null,
+      "redesignGuidance": [
+        "effect-build/Author/Tool",
+        "provider-private finite policy and layer code"
+      ],
+      "plan044Action": "delete",
+      "ownerPlans": [
+        "040",
+        "041",
+        "042",
+        "043",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-ARTIFACT-REPLACE",
+      "disposition": "replace",
+      "target": {
+        "namespace-runtime-export:effect-build:.:Artifact.AbsolutePath": "effect-build/Artifact#AbsolutePath",
+        "namespace-runtime-export:effect-build:.:Artifact.ByteCount": "effect-build/Artifact#DecimalBytes",
+        "namespace-runtime-export:effect-build:.:Artifact.Digest": "effect-build/Artifact#Digest",
+        "namespace-runtime-export:effect-build:.:Artifact.ExecutableArtifact": "effect-build/Artifact#Executable",
+        "namespace-runtime-export:effect-build:.:Artifact.FileArtifact": "effect-build/Artifact#File",
+        "namespace-runtime-export:effect-build:.:Artifact.ToolObservation": "effect-build/Author/Tool#Observation",
+        "runtime-export:effect-build:.:Artifact": "effect-build#Artifact"
+      },
+      "plan044Action": "replace",
+      "ownerPlans": [
+        "039",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-STAGE-REMOVE",
+      "disposition": "remove",
+      "target": null,
+      "redesignGuidance": [
+        "provider-private stage observations"
+      ],
+      "plan044Action": "delete",
+      "ownerPlans": [
+        "040",
+        "041",
+        "042",
+        "043",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-BUILD-ERROR-REMOVE",
+      "disposition": "remove",
+      "target": null,
+      "redesignGuidance": [
+        "operation-owned exact error unions"
+      ],
+      "plan044Action": "delete",
+      "ownerPlans": [
+        "040",
+        "041",
+        "042",
+        "043",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-BUNDLE-REMOVE",
+      "disposition": "remove",
+      "target": null,
+      "redesignGuidance": [
+        "effect-build/Author/BorrowedOutput",
+        "provider-owned native output contracts"
+      ],
+      "plan044Action": "delete",
+      "ownerPlans": [
+        "040",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-MATRIX-REPLACE",
+      "disposition": "replace",
+      "target": {
+        "namespace-runtime-export:effect-build:.:MatrixError.CellFailure": "effect-build/Matrix#Failure",
+        "namespace-runtime-export:effect-build:.:MatrixError.InvalidMatrixInput": "effect-build/Matrix#InvalidInput",
+        "namespace-runtime-export:effect-build:.:MatrixError.MatrixError": [
+          "effect-build/Matrix#InvalidInput",
+          "effect-build/Matrix#Report"
+        ],
+        "namespace-runtime-export:effect-build:.:MatrixError.MatrixFailed": "effect-build/Matrix#Report",
+        "namespace-runtime-export:effect-build:.:MatrixError.MatrixIssue": "effect-build/Matrix#Failure",
+        "runtime-export:effect-build:.:MatrixError": "effect-build#Matrix"
+      },
+      "plan044Action": "replace",
+      "ownerPlans": [
+        "039",
+        "041",
+        "042",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-TARGET-REPLACE",
+      "disposition": "replace",
+      "target": {
+        "namespace-runtime-export:effect-build:.:Target.SystemTarget": "effect-build/SystemTarget#SystemTarget",
+        "runtime-export:effect-build:.:Target": "effect-build#SystemTarget"
+      },
+      "plan044Action": "replace",
+      "ownerPlans": [
+        "039",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-CORE-RESOLUTION-TARGET-REMOVE",
+      "disposition": "remove",
+      "target": null,
+      "redesignGuidance": [
+        "provider-owned target mapping"
+      ],
+      "plan044Action": "delete",
+      "ownerPlans": [
+        "041",
+        "042",
+        "043",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-INTEGRATION-EXPORTS-REMOVE",
+      "disposition": "remove",
+      "target": null,
+      "redesignGuidance": [
+        "effect-build/Author/BorrowedOutput",
+        "effect-build/Author/Executable",
+        "provider-private integration code"
+      ],
+      "plan044Action": "delete",
+      "ownerPlans": [
+        "040",
+        "041",
+        "042",
+        "043",
+        "044"
+      ]
+    },
+    {
+      "rule": "MAP-PROVIDER-EXPORTS-REMOVE",
+      "disposition": "remove",
+      "target": null,
+      "redesignGuidance": [
+        "effect-build/Author/Tool",
+        "provider-private services and finite policies"
+      ],
+      "plan044Action": "delete",
+      "ownerPlans": [
+        "040",
+        "041",
+        "042",
+        "043",
+        "044"
+      ]
+    }
+  ],
+  "legacySourceFiles": [
+    {
+      "path": "packages/effect-build/src/Integration.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "plans-040-through-043"
+    },
+    {
+      "path": "packages/effect-build/src/JavaScriptBundle.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "plan-040"
+    },
+    {
+      "path": "packages/effect-build/src/Provider.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "plans-040-through-043"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/Artifact.ts",
+      "action": "replace-at-plan044",
+      "actionOwner": "packages/effect-build/src/Artifact.ts"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/BuildError.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "operation-owned-errors"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/CompileExecutable.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "plans-041-and-042"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/CompileExecutableMatrix.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "plans-041-and-042"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/Driver.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "plans-041-and-042"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/MatrixError.ts",
+      "action": "replace-at-plan044",
+      "actionOwner": "packages/effect-build/src/Matrix.ts"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/Target.ts",
+      "action": "replace-at-plan044",
+      "actionOwner": "packages/effect-build/src/SystemTarget.ts"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/internal/CompilerAdapter.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "plans-041-and-042"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/internal/CompilerEngine.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "plans-041-and-042"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/internal/ExecutableLifecycle.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "provider-private-author-implementations"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/internal/NativeExecutable.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "provider-private-author-implementations"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/internal/TargetCatalog.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "provider-owned-target-mapping"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/internal/TargetTable.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "provider-owned-target-mapping"
+    },
+    {
+      "path": "packages/effect-build/src/standalone/internal/ToolDiscovery.ts",
+      "action": "delete-at-plan044",
+      "actionOwner": "provider-private-tool-layer"
+    }
+  ],
+  "stagingRules": {
+    "throughPlan043": "all legacy source files and released exports remain byte-identical to the handoff ancestor",
+    "plan044": "apply the listed delete-or-replace actions in one coordinated hard cut",
+    "compatibilityDelegates": "forbidden",
+    "secondPublicPaths": "forbidden"
+  }
+}

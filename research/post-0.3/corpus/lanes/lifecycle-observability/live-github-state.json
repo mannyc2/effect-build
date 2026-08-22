@@ -1,0 +1,70 @@
+{
+  "base_branch": {
+    "classification": "GITHUB-DIRECT",
+    "head": "15c811bb9904142a33d119766b62082f3c689f13",
+    "head_api": "https://api.github.com/repos/mannyc2/effect-build/git/ref/heads/codex/granular-integration-program",
+    "name": "codex/granular-integration-program"
+  },
+  "classification": "GITHUB-DIRECT",
+  "effect_upstream_pin": {
+    "classification": "UPSTREAM-DIRECT",
+    "commit": "66114151c2b4640bf773f2b3456ce70d679422f6",
+    "tag": "effect@4.0.0-rc.110",
+    "tag_api": "https://api.github.com/repos/Effect-TS/effect/tags?per_page=10",
+    "version_files": {
+      "effect": "packages/effect/package.json",
+      "opentelemetry": "packages/opentelemetry/package.json"
+    }
+  },
+  "head_discrepancy": {
+    "classification": "GITHUB-DIRECT",
+    "interpretation": "The live branch ref is authoritative for current GitHub state. Claims of execution tied to the PR body's earlier named head remain recorded historical evidence, not validation of the live tip.",
+    "live_branch_head": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "pr_body_named_final_research_head": "af4887c36753a82c3c97fafc54b3c368cd98b34d",
+    "same": false
+  },
+  "live_tip_commit": {
+    "classification": "GITHUB-DIRECT",
+    "committed_at": "2026-08-17T03:17:17Z",
+    "message": "research: stage canonical closure payload 00",
+    "noted_change": ".github/research/closure-patch/part-00",
+    "parent": "11617dd",
+    "sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2"
+  },
+  "observed_at_utc": "2026-08-17T15:43:36Z",
+  "pull_request": {
+    "classification": "GITHUB-DIRECT",
+    "created_at": "2026-08-16T00:20:57Z",
+    "draft": true,
+    "mergeable_at_observation": true,
+    "merged": false,
+    "number": 4,
+    "reported_additions": 14506,
+    "reported_changed_files": 73,
+    "reported_commits": 66,
+    "reported_deletions": 0,
+    "state": "open",
+    "title": "architecture: validate provider-native APIs and portable roles",
+    "updated_at": "2026-08-17T03:17:20Z",
+    "url": "https://github.com/mannyc2/effect-build/pull/4"
+  },
+  "repository": {
+    "full_name": "mannyc2/effect-build",
+    "url": "https://github.com/mannyc2/effect-build"
+  },
+  "research_branch": {
+    "classification": "GITHUB-DIRECT",
+    "head": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "head_api": "https://api.github.com/repos/mannyc2/effect-build/git/ref/heads/codex/post-0.3-native-capability-architecture",
+    "name": "codex/post-0.3-native-capability-architecture"
+  },
+  "schema_version": 1,
+  "session_validation": {
+    "classification": "RECORDED-EXECUTION",
+    "effect_build_runtime_commands_run": [],
+    "github_mutations": [],
+    "provider_binaries_run": [],
+    "statement": "Only read-only retrieval and local document/archive integrity checks were performed.",
+    "workflows_dispatched": []
+  }
+}

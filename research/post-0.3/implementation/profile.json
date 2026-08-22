@@ -1,0 +1,96 @@
+{
+  "schema": "effect-build/implementation-certification-profile@1",
+  "profileId": "effect-build/plan039-implementation@1",
+  "plan": "039",
+  "phase": "implementation",
+  "trustAnchor": "research/post-0.3/implementation/freeze-trust-anchor.json",
+  "handoffTrustAnchor": "research/post-0.3/implementation/handoff-trust-anchor.json",
+  "expectedClaims": "research/post-0.3/implementation/expected-claims.json",
+  "receiptDirectoryEnvironment": "PLAN039_RECEIPTS_DIR",
+  "certificateFile": "plan039-certification.json",
+  "producers": [
+    {
+      "lane": "implementation",
+      "script": "research/post-0.3/implementation/certify-current-head.mjs",
+      "receipts": [
+        "plan039-implementation"
+      ]
+    }
+  ],
+  "currentReceiptIds": [
+    "plan039-implementation"
+  ],
+  "historicalProfileIds": [
+    "post-0.3-surface-freeze-v1"
+  ],
+  "forbiddenCurrentReceiptIds": [
+    "plan039-phase-handoff",
+    "surface-freeze"
+  ],
+  "forbiddenInvocations": [
+    "research/post-0.3/certify-surface-freeze.mjs",
+    "research/post-0.3/freeze/validate-freeze.mjs"
+  ],
+  "implementationAllowedPaths": [
+    ".github/workflows/architecture-research.yml",
+    "AGENTS.md",
+    "package.json",
+    "packages/effect-build/src/Artifact.ts",
+    "packages/effect-build/src/Author/BorrowedOutput.ts",
+    "packages/effect-build/src/Author/Executable.ts",
+    "packages/effect-build/src/Author/Tool.ts",
+    "packages/effect-build/src/Matrix.ts",
+    "packages/effect-build/src/SystemTarget.ts",
+    "plans/039-establish-core-capability-boundaries.md",
+    "plans/README.md",
+    "research/post-0.3/implementation/",
+    "test/architecture/docs-contract.test.ts",
+    "test/architecture/generated-and-ci.test.ts",
+    "test/architecture/import-boundaries.test.ts",
+    "test/architecture/public-api.test.ts",
+    "test/architecture/v04-staged-core-surface.test.ts",
+    "test/unit/v04-artifact.test.ts",
+    "test/unit/v04-primitives.test.ts",
+    "typetest/v04-artifact.tst.ts",
+    "typetest/v04-author-borrowed-output.tst.ts",
+    "typetest/v04-author-executable.tst.ts",
+    "typetest/v04-author-tool.tst.ts",
+    "typetest/v04-matrix.tst.ts",
+    "typetest/v04-system-target.tst.ts"
+  ],
+  "implementationFiles": [
+    "packages/effect-build/src/Artifact.ts",
+    "packages/effect-build/src/Author/BorrowedOutput.ts",
+    "packages/effect-build/src/Author/Executable.ts",
+    "packages/effect-build/src/Author/Tool.ts",
+    "packages/effect-build/src/Matrix.ts",
+    "packages/effect-build/src/SystemTarget.ts"
+  ],
+  "immutablePublicPaths": [
+    "bun.lock",
+    "packages/effect-build-bun/package.json",
+    "packages/effect-build-bun/src/index.ts",
+    "packages/effect-build-deno/package.json",
+    "packages/effect-build-deno/src/index.ts",
+    "packages/effect-build-esbuild/package.json",
+    "packages/effect-build-esbuild/src/index.ts",
+    "packages/effect-build-node-sea/package.json",
+    "packages/effect-build-node-sea/src/index.ts",
+    "packages/effect-build/package.json",
+    "packages/effect-build/src/index.ts",
+    "tooling/public-api.json"
+  ],
+  "productionBaseline": {
+    "releaseSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+    "freezeSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+    "handoffSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e"
+  },
+  "workspaceManifest": {
+    "path": "package.json",
+    "scriptAppends": {
+      "test:unit": " test/unit/v04-artifact.test.ts test/unit/v04-primitives.test.ts",
+      "test:architecture": " test/architecture/v04-staged-core-surface.test.ts"
+    }
+  },
+  "migrationPlan": "research/post-0.3/implementation/core-migration-plan.json"
+}

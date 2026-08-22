@@ -25,5 +25,5 @@
     "examples/**/*.md",
     "packages/**/*.md"
   ],
-  "excludes": ["node_modules", "dist", ".agent-sources", "plans"]
+  "excludes": ["node_modules", "dist", ".agent-sources", "plans", "research/post-0.3/corpus"]
 }

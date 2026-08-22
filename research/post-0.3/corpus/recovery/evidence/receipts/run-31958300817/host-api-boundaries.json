@@ -1,0 +1,207 @@
+{
+  "schema": "effect-build/architecture-receipt@2",
+  "id": "host-api-boundaries",
+  "sourceSha": "96d5123f54ef1258a6de6e10d17f2c1dadb2ec14",
+  "status": "reproduced",
+  "claims": [
+    {
+      "id": "bun-host-boundaries",
+      "classification": "established",
+      "conclusion": "bun-host-api-shape-reproduced-at-1.3.9-and-1.3.14",
+      "assertions": [
+        {
+          "name": "oldest-host-executed",
+          "passed": true
+        },
+        {
+          "name": "current-host-executed",
+          "passed": true
+        },
+        {
+          "name": "one-shot-no-cancel-handle",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "deno-host-boundaries",
+      "classification": "established",
+      "conclusion": "deno-host-api-shape-reproduced-at-2.9.3-and-2.9.5",
+      "assertions": [
+        {
+          "name": "oldest-host-executed",
+          "passed": true
+        },
+        {
+          "name": "current-host-executed",
+          "passed": true
+        },
+        {
+          "name": "memory-and-write-modes",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "deno-permission-comments",
+      "classification": "falsified",
+      "conclusion": "local-read-and-write-succeeded-without-explicit-grants",
+      "assertions": [
+        {
+          "name": "read-without-grant",
+          "passed": true
+        },
+        {
+          "name": "write-without-grant",
+          "passed": true
+        },
+        {
+          "name": "both-version-boundaries",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "bun": {
+      "oldest": {
+        "runtime": "1.3.9",
+        "compile": {
+          "success": true,
+          "logs": [],
+          "outputs": [
+            {
+              "path": "/tmp/effect-build-bun-host-research-gf52zs/compiled-bun",
+              "size": 8388731,
+              "kind": "entry-point"
+            }
+          ],
+          "outputExistsAfterPromise": true,
+          "outputObservedBeforePromiseSettlement": false,
+          "cancellationHandle": false
+        },
+        "browser": {
+          "success": true,
+          "logs": [],
+          "outputs": [
+            {
+              "path": "/tmp/effect-build-bun-host-research-gf52zs/web-dist/chunk-bwmj3zbg.js",
+              "size": 115,
+              "kind": "entry-point"
+            },
+            {
+              "path": "/tmp/effect-build-bun-host-research-gf52zs/web-dist/index.html",
+              "size": 187,
+              "kind": "entry-point"
+            },
+            {
+              "path": "/tmp/effect-build-bun-host-research-gf52zs/web-dist/chunk-ymc7brnq.css",
+              "size": 101,
+              "kind": "asset"
+            }
+          ],
+          "writtenEntries": [
+            "chunk-bwmj3zbg.js",
+            "chunk-ymc7brnq.css",
+            "index.html"
+          ]
+        }
+      },
+      "current": {
+        "runtime": "1.3.14",
+        "compile": {
+          "success": true,
+          "logs": [],
+          "outputs": [
+            {
+              "path": "/tmp/effect-build-bun-host-research-7aipap/compiled-bun",
+              "size": 8388731,
+              "kind": "entry-point"
+            }
+          ],
+          "outputExistsAfterPromise": true,
+          "outputObservedBeforePromiseSettlement": false,
+          "cancellationHandle": false
+        },
+        "browser": {
+          "success": true,
+          "logs": [],
+          "outputs": [
+            {
+              "path": "/tmp/effect-build-bun-host-research-7aipap/web-dist/chunk-zdr1kvd1.js",
+              "size": 115,
+              "kind": "entry-point"
+            },
+            {
+              "path": "/tmp/effect-build-bun-host-research-7aipap/web-dist/index.html",
+              "size": 187,
+              "kind": "entry-point"
+            },
+            {
+              "path": "/tmp/effect-build-bun-host-research-7aipap/web-dist/chunk-egqdyktt.css",
+              "size": 101,
+              "kind": "asset"
+            }
+          ],
+          "writtenEntries": [
+            "chunk-egqdyktt.css",
+            "chunk-zdr1kvd1.js",
+            "index.html"
+          ]
+        }
+      }
+    },
+    "deno": {
+      "oldest": {
+        "success": {
+          "runtime": "2.9.3",
+          "memory": {
+            "success": true,
+            "errors": [],
+            "warnings": [],
+            "outputs": [
+              {
+                "path": "<stdout>",
+                "hash": "cumlK1IBFWE",
+                "bytes": 111
+              }
+            ]
+          },
+          "written": {
+            "success": true,
+            "errors": [],
+            "warnings": []
+          },
+          "cancellationHandle": false
+        },
+        "readWithoutGrant": "unexpected-success",
+        "writeWithoutGrant": "unexpected-success"
+      },
+      "current": {
+        "success": {
+          "runtime": "2.9.5",
+          "memory": {
+            "success": true,
+            "errors": [],
+            "warnings": [],
+            "outputs": [
+              {
+                "path": "<stdout>",
+                "hash": "yX5g3/1QHn8",
+                "bytes": 111
+              }
+            ]
+          },
+          "written": {
+            "success": true,
+            "errors": [],
+            "warnings": []
+          },
+          "cancellationHandle": false
+        },
+        "readWithoutGrant": "unexpected-success",
+        "writeWithoutGrant": "unexpected-success"
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schema": "effect-build/expected-architecture-conclusions@2",
+  "claims": [
+    {
+      "receipt": "provider-native-watch",
+      "id": "provider-native-command-watch",
+      "classification": "established",
+      "conclusion": "bun-and-deno-command-watch-surfaces-preserve-scoped-process-stdio-signals-exit-and-force-kill-without-portable-events"
+    }
+  ]
+}

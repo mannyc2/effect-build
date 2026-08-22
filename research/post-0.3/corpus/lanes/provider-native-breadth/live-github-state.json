@@ -1,0 +1,181 @@
+{
+  "base": "15c811bb9904142a33d119766b62082f3c689f13",
+  "branch": "codex/post-0.3-native-capability-architecture",
+  "changedFileCount": 73,
+  "changedFiles": [
+    ".github/research/closure-patch/part-00",
+    ".github/workflows/architecture-research.yml",
+    ".github/workflows/research-source-export.yml",
+    ".github/workflows/research-toolchain-export.yml",
+    "plans/039-establish-core-capability-boundaries.md",
+    "plans/040-expose-esbuild-api-lane.md",
+    "plans/041-add-bun-api-command-lanes.md",
+    "plans/042-add-deno-bundle-command-lanes.md",
+    "plans/043-publish-single-node-program-profile.md",
+    "plans/044-hard-cut-certify-v0.4.md",
+    "plans/POST-0.3-API-CANDIDATES.md",
+    "plans/POST-0.3-NATIVE-CAPABILITY-ARCHITECTURE.md",
+    "plans/POST-0.3-PROVIDER-CAPABILITY-MATRIX.md",
+    "research/post-0.3/FINAL-CONTRACTS.md",
+    "research/post-0.3/README.md",
+    "research/post-0.3/architecture-laws.mjs",
+    "research/post-0.3/architecture-laws.test.mjs",
+    "research/post-0.3/browser-behavior-probe-v2.mjs",
+    "research/post-0.3/browser-behavior-probe.mjs",
+    "research/post-0.3/bun-host-probe.mjs",
+    "research/post-0.3/certify-compatibility-model.ts",
+    "research/post-0.3/certify-contract-and-compatibility.mjs",
+    "research/post-0.3/certify-dependency-and-offline.mjs",
+    "research/post-0.3/certify-effect-contract-endpoints.mjs",
+    "research/post-0.3/certify-external-providers.mjs",
+    "research/post-0.3/certify-host-boundaries.mjs",
+    "research/post-0.3/certify-independent-versioning.mjs",
+    "research/post-0.3/certify-lifecycle-effect.mjs",
+    "research/post-0.3/certify-node-sea-relations.mjs",
+    "research/post-0.3/certify-profile-refinement.mjs",
+    "research/post-0.3/certify-provider-conformance.mjs",
+    "research/post-0.3/certify-provider-native-watch.mjs",
+    "research/post-0.3/certify-version-boundaries.mjs",
+    "research/post-0.3/check-contract-markdown.mjs",
+    "research/post-0.3/compatibility.test.ts",
+    "research/post-0.3/compatibility.ts",
+    "research/post-0.3/contracts.ts",
+    "research/post-0.3/contracts.typecheck.ts",
+    "research/post-0.3/declaration-classifier.mjs",
+    "research/post-0.3/declaration-classifier.test.mjs",
+    "research/post-0.3/deno-host-probe.ts",
+    "research/post-0.3/deno-write-permission-probe.ts",
+    "research/post-0.3/dependency-and-offline-probe.mjs",
+    "research/post-0.3/duplicate-core.test.mjs",
+    "research/post-0.3/expected-conclusions.json",
+    "research/post-0.3/expected-contract-conclusions.json",
+    "research/post-0.3/expected-dependency-conclusions.json",
+    "research/post-0.3/expected-watch-conclusions.json",
+    "research/post-0.3/expected-windows-conclusions.json",
+    "research/post-0.3/external-provider-probe.mjs",
+    "research/post-0.3/final/compatibility.test.ts",
+    "research/post-0.3/final/compatibility.ts",
+    "research/post-0.3/final/consumers.ts",
+    "research/post-0.3/final/contracts.ts",
+    "research/post-0.3/final/node-main.ts",
+    "research/post-0.3/final/node-sea-adapter.ts",
+    "research/post-0.3/final/provider-adapters.ts",
+    "research/post-0.3/final/recipe.ts",
+    "research/post-0.3/final/tsconfig.json",
+    "research/post-0.3/independent-versioning.mjs",
+    "research/post-0.3/lifecycle-effect-probe.mjs",
+    "research/post-0.3/node-main-canon-probe.mjs",
+    "research/post-0.3/node-sea-version-probe.mjs",
+    "research/post-0.3/packed-protocol-graph-probe.mjs",
+    "research/post-0.3/probe-runtime.mjs",
+    "research/post-0.3/profile-refinement-probe.mjs",
+    "research/post-0.3/provider-conformance.mjs",
+    "research/post-0.3/provider-native-watch-probe.mjs",
+    "research/post-0.3/receipt.mjs",
+    "research/post-0.3/validate-receipts.mjs",
+    "research/post-0.3/version-boundary-probe.mjs",
+    "research/post-0.3/watch-contracts.ts",
+    "research/post-0.3/windows-lifecycle-probe.mjs"
+  ],
+  "checks": [
+    {
+      "artifactCount": 0,
+      "conclusion": "failure",
+      "runId": 31990684160,
+      "workflow": "effect-build"
+    },
+    {
+      "artifactCount": 0,
+      "conclusion": "failure",
+      "runId": 31990684158,
+      "workflow": "post-0.3-architecture-research"
+    }
+  ],
+  "conflicts": [
+    {
+      "kind": "head-claim",
+      "liveRef": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "prBody": "af4887c36753a82c3c97fafc54b3c368cd98b34d",
+      "resolution": "report conflict; live ref controls live status"
+    }
+  ],
+  "head": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+  "historicalReceiptRun": {
+    "artifactBytes": 8951,
+    "artifactId": 9269991589,
+    "conclusion": "success",
+    "head": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+    "runId": 31971767617,
+    "sha256": "d783cfb14665c891f32e76aca095de08777c5b00e9fb517b26faa38eeb5582d9",
+    "siblingCiConclusion": "failure"
+  },
+  "instructions": {
+    "boundedSearchNote": "No nested AGENTS.md was found in the reviewed recursive tree/search.",
+    "gitBlobSha1": "8323e8cb3f795fea8d71f460412c43f21997ac11",
+    "materialQuotedExcerpts": [
+      "No generic public service or target family is authorized before Plan 038 produces evidence and receives explicit parent approval.",
+      "`effect-build/Integration.executeCommand` is the one bounded/scoped integration-author command function.",
+      "Interruption closes Scope and terminates active children. Do not translate interruption into a build error. Atomic rename remains the publication point of no return."
+    ],
+    "nestedInstructionsFound": false,
+    "path": "AGENTS.md",
+    "sameAt": [
+      "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "15c811bb9904142a33d119766b62082f3c689f13",
+      "f06f96ca88b6278e5f23a898d758b99fa9322108"
+    ],
+    "sha256": "2804cce7b22dcba052f83a72004e9bddc312baeb798f48b8fe8278389bcce34e"
+  },
+  "lastReproducedReceiptSource": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+  "lastSubstantiveResearchHead": "49cd5e1be7917bf14e89068afb4fa47cf78488fb",
+  "limitations": [
+    "GitHub state is mutable after observedAtUtc.",
+    "No workflow was executed by this research.",
+    "No repository or PR mutation occurred."
+  ],
+  "manifests": {
+    "effect-build": {
+      "effectPeer": ">=4.0.0-beta.104 <4.1.0-0",
+      "exports": [
+        ".",
+        "./Integration",
+        "./Provider"
+      ]
+    },
+    "providerPackages": {
+      "effect-build-bun": [
+        "."
+      ],
+      "effect-build-deno": [
+        "."
+      ],
+      "effect-build-esbuild": [
+        "."
+      ],
+      "effect-build-node-sea": [
+        "."
+      ]
+    },
+    "root": {
+      "@effect/platform": "4.0.0-rc.108",
+      "@types/node": "24.3.0",
+      "effect": "4.0.0-rc.108",
+      "esbuild": "0.28.2",
+      "packageManager": "bun@1.3.14",
+      "typescript": "6.0.3",
+      "version": "0.3.0"
+    }
+  },
+  "observedAtUtc": "2026-08-17T21:04:37Z",
+  "prBodyClaimedFinalHead": "af4887c36753a82c3c97fafc54b3c368cd98b34d",
+  "previouslyObservedIncompleteHead": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+  "pullRequest": 4,
+  "releasedV030Source": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+  "repository": "mannyc2/effect-build",
+  "requiredSynthesisArchive": {
+    "available": false,
+    "name": "effect-build-research-synthesis-2026-08-17.zip",
+    "treatment": "excluded; no contents inferred"
+  },
+  "schemaVersion": 1
+}

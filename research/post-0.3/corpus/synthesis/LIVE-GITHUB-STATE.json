@@ -1,0 +1,68 @@
+{
+  "schema": "effect-build/research-synthesis-live-state@1",
+  "observedAt": "2026-08-17T16:42:44Z",
+  "repository": "mannyc2/effect-build",
+  "pullRequest": {
+    "number": 4,
+    "url": "https://github.com/mannyc2/effect-build/pull/4",
+    "state": "open",
+    "draft": true,
+    "merged": false,
+    "mergeable": true,
+    "headRef": "codex/post-0.3-native-capability-architecture",
+    "headSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "baseRef": "codex/granular-integration-program",
+    "baseSha": "15c811bb9904142a33d119766b62082f3c689f13",
+    "changedFiles": 73,
+    "additions": 14506,
+    "deletions": 0,
+    "changedPathGroups": {
+      ".github": 4,
+      "plans": 9,
+      "research": 60
+    },
+    "productionOrManifestPathsChanged": false,
+    "bodyNamedFinalResearchSha": "af4887c36753a82c3c97fafc54b3c368cd98b34d",
+    "bodyIsStale": true
+  },
+  "currentHeadCommit": {
+    "sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "parent": "11617dd64ce9e22f778fc915a35ce698c80bbe02",
+    "message": "research: stage canonical closure payload 00"
+  },
+  "workflowRuns": {
+    "ordinaryPr": {
+      "id": 31990684160,
+      "url": "https://github.com/mannyc2/effect-build/actions/runs/31990684160",
+      "conclusion": "failure",
+      "quality": "failure",
+      "nodeSea": "skipped"
+    },
+    "architecturePr": {
+      "id": 31990684158,
+      "url": "https://github.com/mannyc2/effect-build/actions/runs/31990684158",
+      "conclusion": "failure",
+      "job": "executable-research"
+    },
+    "sourceExportPush": {
+      "id": 31990680610,
+      "url": "https://github.com/mannyc2/effect-build/actions/runs/31990680610",
+      "conclusion": "success"
+    }
+  },
+  "artifactsAtHead": [
+    {
+      "id": 9275193303,
+      "name": "architecture-source-96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "kind": "source-export",
+      "digest": "sha256:edddbe810ad37d8f67e109c82ebf66b8ca75ae090727f15840862ee8ef997353",
+      "architectureCertification": false
+    }
+  ],
+  "architectureReceiptAtHead": null,
+  "plan039": {
+    "status": "TODO",
+    "publicationAuthority": "NONE"
+  },
+  "mutationsPerformedBySynthesis": []
+}

@@ -1,0 +1,161 @@
+claim_id,classification,claim_summary,operation_ref,semantic_identity,provenance,semantic_disposition,product_priority,compatibility_commitment,implementation_status,certification_status,evidence_coordinate_refs
+LAW-001,architecture-law,A legacy inventory row may decompo…,,,G,A,N,N,R,G,
+LAW-002,architecture-law,Only actual operations receive pro…,,,G,A,N,N,R,G,
+LAW-003,architecture-law,"Provider implementation identity,…",,,G,A,N,N,R,G,
+LAW-004,architecture-law,"Provenance, semantic disposition,…",,,G,A,N,N,R,G,
+LAW-005,architecture-law,Upstream existence proves neither…,,,G,A,N,N,R,G,
+LAW-006,architecture-law,Lack of an existing adopter is not…,,,G,A,N,N,R,G,
+LAW-007,architecture-law,Documentation and declarations can…,,,G,A,N,N,R,G,
+LAW-008,architecture-law,Interrupting an Effect fiber await…,,,G,A,N,N,R,G,
+LAW-009,architecture-law,A provider-direct output write is…,,,G,A,N,N,R,G,
+LAW-010,architecture-law,Human stdout or stderr from a watc…,,,G,A,N,N,R,G,E-BUN-026
+LAW-011,architecture-law,Internal Zig functions do not beco…,,,C,A,R,N,R,S,E-BUN-020
+LAW-012,architecture-law,A Bun-produced standalone executab…,,,G,A,N,N,R,G,E-BUN-015;E-BUN-016;E-BUN-027
+LAW-013,architecture-law,"Code signing, notarization, packag…",,,G,A,D,N,R,G,
+LAW-014,architecture-law,A successful HTML fixture does not…,,,G,A,N,N,R,G,E-BUN-024;E-BUN-025
+LAW-015,architecture-law,Two successful exact Bun versions…,,,G,A,N,N,R,G,E-BUN-028;E-BUN-029
+OPC-001,operation,new Bun.Transpiler(options) is a d…,OP-BUN-001,"Bun / create-transpiler / host-api / one-shot / {long-lived-handle, none}",U,O,S,X,U,S,E-BUN-001;E-BUN-002
+OPC-002,operation,"Bun.Transpiler.transform(code, loa…",OP-BUN-002,"Bun / transpile-source-async / host-api / one-shot / {caller-owned-value, none}",U,O,S,X,U,S,E-BUN-003
+OPC-003,operation,"Bun.Transpiler.transformSync(code,…",OP-BUN-003,"Bun / transpile-source-sync / host-api / one-shot / {caller-owned-value, none}",U,O,S,X,U,S,E-BUN-004
+OPC-004,operation,Bun.Transpiler.scan(code) is a dis…,OP-BUN-004,"Bun / scan-source / host-api / one-shot / {caller-owned-value, none}",U,O,S,X,U,S,E-BUN-005
+OPC-005,operation,Bun.Transpiler.scanImports(code) i…,OP-BUN-005,"Bun / scan-imports-fast / host-api / one-shot / {caller-owned-value, none}",U,O,S,X,U,S,E-BUN-006
+OPC-006,operation,Bun.build(config) without outdir a…,OP-BUN-006,"Bun / build / host-api / one-shot / {caller-owned-value, none}",U,O,S,X,U,S,E-BUN-007;E-BUN-008;E-BUN-009;E-BUN-010
+OPC-007,operation,Bun.build(config) with outdir or a…,OP-BUN-007,"Bun / build / host-api / one-shot / {caller-owned-value, provider-direct-durable}",R,O,S,X,U,R,E-BUN-011;E-BUN-021;E-BUN-022
+OPC-008,operation,selected bun build command with st…,OP-BUN-008,"Bun / build / selected-command / one-shot / {caller-owned-value, none}",U,O,S,X,N,S,E-BUN-012
+OPC-009,operation,selected bun build command with ou…,OP-BUN-009,"Bun / build / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",R,O,S,P,P,R,E-BUN-013;E-BUN-023;E-BUN-024;E-BUN-025
+OPC-010,operation,selected bun build --watch command…,OP-BUN-010,"Bun / build-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",R,O,S,P,N,R,E-BUN-014;E-BUN-026
+OPC-011,operation,Bun.build({compile:...}) for Bun r…,OP-BUN-011,"Bun / compile-executable / host-api / one-shot / {caller-owned-value, provider-direct-durable}",R,O,S,X,U,R,E-BUN-015;E-BUN-016;E-BUN-021
+OPC-012,operation,selected bun build --compile comma…,OP-BUN-012,"Bun / compile-executable / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",R,O,S,P,I,R,E-BUN-017;E-BUN-027
+OPC-013,operation,effect-build compileExecutable sta…,OP-BUN-013,"Bun / compile-executable / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",E,O,S,C,I,N,E-EB-001
+OPC-014,operation,Bun.plugin(plugin) is a distinct r…,OP-BUN-014,"Bun / plugin-register-global / runtime-api / one-shot / {caller-owned-value, none}",U,O,R,X,N,S,E-BUN-018
+OPC-015,operation,Bun.plugin.clearAll() is a distinc…,OP-BUN-015,"Bun / plugin-clear-global / runtime-api / one-shot / {none, none}",U,O,R,X,N,S,E-BUN-019
+C-BUN-001,request mode,The Transpiler constructor capture…,OP-BUN-001,,U,E,N,X,U,S,E-BUN-001;E-BUN-002
+C-BUN-002,request mode,The Transpiler constructor capture…,OP-BUN-001,,U,E,N,X,U,S,E-BUN-001;E-BUN-002
+C-BUN-003,modifier,Transpiler options may replace def…,OP-BUN-001,,U,E,N,X,U,S,E-BUN-001
+C-BUN-004,modifier,Transpiler options may provide tsc…,OP-BUN-001,,U,E,N,X,U,S,E-BUN-001;E-BUN-002
+C-BUN-005,modifier,Transpiler options may map imports…,OP-BUN-001,,U,E,D,X,U,S,E-BUN-001;E-BUN-002
+C-BUN-006,modifier,Transpiler options may eliminate o…,OP-BUN-001,,U,E,N,X,U,S,E-BUN-001
+C-BUN-007,modifier,Transpiler options include unused-…,OP-BUN-001,,U,E,N,X,U,S,E-BUN-001;E-BUN-002
+C-BUN-008,relation,The Transpiler object reuses its c…,OP-BUN-001,,U,E,N,X,U,S,E-BUN-001;E-BUN-002
+C-BUN-009,runtime capability,The Transpiler declaration has no…,OP-BUN-001,,U,E,D,X,U,S,E-BUN-001
+C-BUN-010,modifier,transform may override the constru…,OP-BUN-002,,U,E,N,X,U,S,E-BUN-003
+C-BUN-011,result field,transform resolves to a JavaScript…,OP-BUN-002,,U,E,N,X,U,S,E-BUN-003
+C-BUN-012,runtime capability,The documented async transform run…,OP-BUN-002,,U,E,N,X,U,S,E-BUN-003
+C-BUN-013,relation,transform transpiles one source un…,OP-BUN-002,,U,E,N,X,U,S,E-BUN-003
+C-BUN-014,runtime capability,The async transform Promise expose…,OP-BUN-002,,U,U,D,X,U,S,E-BUN-003
+C-BUN-015,modifier,transformSync may override the con…,OP-BUN-003,,U,E,N,X,U,S,E-BUN-004
+C-BUN-016,result field,transformSync returns a JavaScript…,OP-BUN-003,,U,E,N,X,U,S,E-BUN-004
+C-BUN-017,runtime capability,The documented synchronous transfo…,OP-BUN-003,,U,E,N,X,U,S,E-BUN-004
+C-BUN-018,relation,transformSync transpiles one sourc…,OP-BUN-003,,U,E,N,X,U,S,E-BUN-004
+C-BUN-019,result field,scan returns separate exports and…,OP-BUN-004,,U,E,N,X,U,S,E-BUN-005
+C-BUN-020,result field,Each scanned import contains a pat…,OP-BUN-004,,U,E,N,X,U,S,E-BUN-005
+C-BUN-021,relation,scan ignores TypeScript type-only…,OP-BUN-004,,U,E,N,X,U,S,E-BUN-005
+C-BUN-022,result field,scanImports returns only import re…,OP-BUN-005,,U,E,N,X,U,S,E-BUN-006
+C-BUN-023,relation,scanImports is documented as faste…,OP-BUN-005,,U,E,N,X,U,S,E-BUN-006
+C-BUN-024,result field,Import kinds distinguish import st…,OP-BUN-004;OP-BUN-005,,U,E,N,X,U,S,E-BUN-005;E-BUN-006
+C-BUN-025,request mode,Bun.build without outdir and witho…,OP-BUN-006,,U,E,N,X,U,S,E-BUN-007;E-BUN-008
+C-BUN-026,request mode,Bun.build with outdir performs pro…,OP-BUN-007,,U,E,N,X,U,S,E-BUN-007;E-BUN-011
+C-BUN-027,request mode,Build entrypoints are an ordered r…,OP-BUN-006;OP-BUN-007,,U,E,N,X,U,S,E-BUN-007;E-BUN-010
+C-BUN-028,request mode,"Build target browser, bun, or node…",OP-BUN-006;OP-BUN-007,,U,E,N,X,U,S,E-BUN-007
+C-BUN-029,modifier,The files option supplies virtual…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007;E-BUN-009
+C-BUN-030,relation,Virtual files are a request mode o…,OP-BUN-006;OP-BUN-007,,U,A,S,X,U,S,E-BUN-007;E-BUN-009
+C-BUN-031,modifier,The loader map assigns provider lo…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007;E-BUN-009
+C-BUN-032,modifier,Per-build plugins may register lif…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-009
+C-BUN-033,modifier,external patterns preserve matchin…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007
+C-BUN-034,modifier,allowUnresolved is distinct from e…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007
+C-BUN-035,modifier,packages may bundle all packages o…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007
+C-BUN-036,modifier,splitting requests shared chunks a…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007;E-BUN-008
+C-BUN-037,modifier,naming templates separately contro…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007;E-BUN-011
+C-BUN-038,modifier,publicPath rewrites emitted refere…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007;E-BUN-010
+C-BUN-039,modifier,"sourcemap modes include none, inli…",OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-007;E-BUN-017
+C-BUN-040,modifier,metafile may request returned grap…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007;E-BUN-011;E-BUN-023
+C-BUN-041,modifier,"format, conditions, define, env in…",OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007;E-BUN-011
+C-BUN-042,modifier,bytecode requests provider bytecod…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-007;E-BUN-017
+C-BUN-043,request mode,The throw option changes failure d…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-007
+C-BUN-044,result field,BuildOutput.success reports whethe…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,N,X,U,S,E-BUN-007
+C-BUN-045,result field,BuildOutput.outputs is a collectio…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,N,X,U,S,E-BUN-007
+C-BUN-046,result field,BuildOutput.logs retains provider-…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-007
+C-BUN-047,result field,BuildOutput.metafile is optional p…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-007;E-BUN-023
+C-BUN-048,result field,A BuildArtifact exposes Blob bytes…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-007
+C-BUN-049,result field,BuildArtifact kinds distinguish en…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-007;E-BUN-011
+C-BUN-050,relation,"Chunks, assets, source maps, metaf…",OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,A,S,X,U,S,E-BUN-007;E-BUN-011
+C-BUN-051,relation,Memory and direct-write Bun.build…,OP-BUN-006;OP-BUN-007,,U,A,S,X,U,S,E-BUN-007;E-BUN-008;E-BUN-011
+C-BUN-052,runtime capability,Bun.build returns a Promise and ex…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,U,D,X,U,S,E-BUN-007
+C-BUN-053,runtime capability,Retention of BuildArtifact bytes a…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,U,D,X,U,S,E-BUN-007
+C-BUN-054,relation,The exact receipt's absence of out…,OP-BUN-007;OP-BUN-011,,R,E,D,E,R,R,E-BUN-021;E-BUN-022
+C-BUN-055,sub-operation,plugin setup executes before the b…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-009
+C-BUN-056,sub-operation,onStart callbacks run at the begin…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-009
+C-BUN-057,sub-operation,onResolve callbacks can rewrite pa…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-009
+C-BUN-058,sub-operation,onLoad callbacks can synthesize mo…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-009
+C-BUN-059,sub-operation,onBeforeParse is a native-plugin c…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,D,X,U,S,E-BUN-009;E-BUN-020
+C-BUN-060,sub-operation,onEnd callbacks observe or modify…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-009
+C-BUN-061,runtime capability,Per-build JavaScript plugin callba…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,S,X,U,S,E-BUN-009
+C-BUN-062,relation,JavaScript plugin callbacks and vi…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,A,S,X,U,S,E-BUN-009;E-BUN-013
+C-BUN-063,runtime capability,"Ordering, concurrency, reentrancy,…",OP-BUN-006;OP-BUN-007;OP-BUN-011,,D,U,D,N,R,S,E-BUN-009
+C-BUN-064,relation,Bun.plugin(plugin) mutates an ambi…,OP-BUN-014,,U,E,R,X,U,S,E-BUN-018
+C-BUN-065,relation,Bun.plugin.clearAll() is a separat…,OP-BUN-015,,U,E,R,X,U,S,E-BUN-019
+C-BUN-066,request mode,An HTML entrypoint causes Bun.buil…,OP-BUN-006;OP-BUN-007;OP-BUN-009,,U,E,S,X,U,S,E-BUN-010;E-BUN-024
+C-BUN-067,result field,An HTML graph build may emit rewri…,OP-BUN-006;OP-BUN-007;OP-BUN-009,,U,E,S,X,U,S,E-BUN-010;E-BUN-021;E-BUN-022;E-BUN-024
+C-BUN-068,relation,HTML graph output is narrower than…,OP-BUN-006;OP-BUN-007;OP-BUN-009,,U,A,D,X,U,S,E-BUN-010;E-BUN-024
+C-BUN-069,request mode,Bun's full-stack mode starts from…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-010;E-BUN-015
+C-BUN-070,relation,Full-stack build mode is provider-…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,A,S,X,U,S,E-BUN-010;E-BUN-015
+C-BUN-071,result field,A full-stack build may contain dis…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-010;E-BUN-015
+C-BUN-072,request mode,Compile plus target browser with a…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-010;E-BUN-011
+C-BUN-073,result field,Standalone-HTML mode produces one…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-010
+C-BUN-074,relation,Standalone HTML is not a Bun runti…,OP-BUN-006;OP-BUN-007,,U,A,S,X,U,S,E-BUN-010;E-BUN-011
+C-BUN-075,modifier,Code splitting is rejected by tagg…,OP-BUN-006;OP-BUN-007,,U,E,S,X,U,S,E-BUN-010;E-BUN-011
+C-BUN-076,relation,Remote absolute URLs in HTML remai…,OP-BUN-006;OP-BUN-007;OP-BUN-009,,U,E,S,X,U,S,E-BUN-010
+C-BUN-077,external-platform-primitive,"A browser, CDN, or web server that…",OP-BUN-006;OP-BUN-007;OP-BUN-009,,U,E,N,N,E,N,E-BUN-010;E-BUN-024
+C-BUN-078,request mode,The selected bun build command wit…,OP-BUN-008,,U,E,S,X,U,S,E-BUN-012
+C-BUN-079,result field,A one-shot selected command expose…,OP-BUN-008;OP-BUN-009;OP-BUN-012,,U,E,S,X,U,S,E-BUN-012;E-BUN-013;E-BUN-017
+C-BUN-080,relation,Selected-command builds inherit au…,OP-BUN-008;OP-BUN-009;OP-BUN-010;OP-BUN-012,,U,E,S,X,U,S,E-BUN-013;E-BUN-014;E-BUN-017
+C-BUN-081,relation,CLI and host API builds are separa…,OP-BUN-006;OP-BUN-007;OP-BUN-008;OP-BUN-009,,U,A,S,X,U,S,E-BUN-007;E-BUN-009;E-BUN-012;E-BUN-013
+C-BUN-082,runtime capability,A selected one-shot process can be…,OP-BUN-008;OP-BUN-009;OP-BUN-012,,U,E,S,X,U,S,E-BUN-013;E-BUN-017
+C-BUN-083,request mode,bun build --watch retains a select…,OP-BUN-010,,U,E,S,X,U,S,E-BUN-014;E-BUN-026
+C-BUN-084,result field,Raw watch exposes child-process li…,OP-BUN-010,,U,E,S,X,U,S,E-BUN-014;E-BUN-026
+C-BUN-085,runtime capability,The exact receipt observed an init…,OP-BUN-010,,R,E,N,E,R,R,E-BUN-026
+C-BUN-086,relation,No machine-readable watch event pr…,OP-BUN-010,,U,F,R,X,U,S,E-BUN-014;E-BUN-026
+C-BUN-087,runtime capability,"Watch termination, cleanup, partia…",OP-BUN-010,,D,U,D,N,R,S,E-BUN-026
+C-BUN-088,request mode,Bun.build compile true or a compil…,OP-BUN-011,,U,E,S,X,U,S,E-BUN-015;E-BUN-011
+C-BUN-089,request mode,bun build --compile selects the co…,OP-BUN-012,,U,E,S,X,U,S,E-BUN-016;E-BUN-017;E-BUN-027
+C-BUN-090,result field,Executable compilation publishes a…,OP-BUN-011;OP-BUN-012;OP-BUN-013,,U,E,S,X,U,S,E-BUN-015;E-BUN-017;E-BUN-027
+C-BUN-091,relation,API and selected-command executabl…,OP-BUN-011;OP-BUN-012,,U,A,S,X,U,S,E-BUN-015;E-BUN-017
+C-BUN-092,request mode,Compile target encodes Bun runtime…,OP-BUN-011;OP-BUN-012;OP-BUN-013,,U,E,S,X,U,S,E-BUN-016
+C-BUN-093,relation,"browser, bun, and node bundle targ…",OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-007;E-BUN-016
+C-BUN-094,request mode,The documented executable matrix i…,OP-BUN-011;OP-BUN-012;OP-BUN-013,,U,E,S,X,U,S,E-BUN-016
+C-BUN-095,relation,Tagged source contains parsing or…,OP-BUN-011;OP-BUN-012,,T,E,D,X,U,S,E-BUN-016
+C-BUN-096,sub-operation,Cross-target compilation may locat…,OP-BUN-011;OP-BUN-012,,T,E,D,X,U,S,E-BUN-016
+C-BUN-097,relation,Runtime acquisition is a sub-opera…,OP-BUN-011;OP-BUN-012,,U,A,D,X,U,S,E-BUN-016
+C-BUN-098,external-platform-primitive,"Bun's package registry, HTTP proxy…",OP-BUN-011;OP-BUN-012,,U,E,D,N,E,N,E-BUN-016
+C-BUN-099,modifier,compile options may choose an expl…,OP-BUN-011,,U,E,S,X,U,S,E-BUN-015
+C-BUN-100,modifier,compile options control runtime au…,OP-BUN-011,,U,E,S,X,U,S,E-BUN-015
+C-BUN-101,modifier,"Compile may embed imported files,…",OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-015;E-BUN-017
+C-BUN-102,modifier,Windows executable metadata and co…,OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-015;E-BUN-017
+C-BUN-103,modifier,Bytecode may be embedded in a comp…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-017
+C-BUN-104,relation,ESM bytecode requires compile mode…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-017
+C-BUN-105,relation,Bun bytecode is documented as arch…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-017
+C-BUN-106,runtime capability,A mismatched bytecode cache is doc…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-017
+C-BUN-107,relation,Bytecode is a startup optimization…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,E,S,X,U,S,E-BUN-017
+C-BUN-108,post-production mutation,macOS code signing acts on the pro…,OP-BUN-011;OP-BUN-012;OP-BUN-013,,U,E,D,N,N,N,E-BUN-017
+C-BUN-109,external-platform-primitive,The platform codesign tool and sig…,OP-BUN-011;OP-BUN-012;OP-BUN-013,,U,E,D,N,E,N,E-BUN-017
+C-BUN-110,runtime capability,"API compile cancellation, interrup…",OP-BUN-011,,D,U,D,N,R,S,E-BUN-015;E-BUN-021;E-BUN-022
+C-BUN-111,runtime capability,Selected-command compile signal be…,OP-BUN-012;OP-BUN-013,,D,U,D,N,R,S,E-BUN-017;E-BUN-027
+C-BUN-112,relation,The exact 1.3.9 executable receipt…,OP-BUN-012;OP-BUN-013,,R,E,N,E,R,R,E-BUN-027
+C-BUN-113,external-platform-primitive,bun:ffi is an experimental JavaScr…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,R,N,E,S,E-BUN-020
+C-BUN-114,external-platform-primitive,Node-API is Bun's documented stabl…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,D,N,E,S,E-BUN-020
+C-BUN-115,relation,Bun's native onBeforeParse plugin…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,D,X,U,S,E-BUN-009;E-BUN-020
+C-BUN-116,runtime capability,No supported public embeddable ABI…,OP-BUN-006;OP-BUN-007;OP-BUN-011,,U,E,R,X,U,S,E-BUN-020
+C-BUN-117,relation,effect-build should call the suppo…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,U,A,S,N,P,N,E-BUN-020
+C-BUN-118,portable-role,SourceTransform can be investigate…,OP-BUN-002;OP-BUN-003,,P,P,D,N,N,N,E-BUN-003;E-BUN-004
+C-BUN-119,portable-role,SourceImportScan can be investigat…,OP-BUN-004;OP-BUN-005,,P,P,D,N,N,N,E-BUN-005;E-BUN-006
+C-BUN-120,portable-role,BrowserModulePayload is a possible…,OP-BUN-006;OP-BUN-007;OP-BUN-009,,P,P,D,N,N,N,E-BUN-025
+C-BUN-121,portable-role,HTMLResourceGraph is a possible fi…,OP-BUN-006;OP-BUN-007;OP-BUN-009,,P,P,D,N,N,N,E-BUN-010;E-BUN-024
+C-BUN-122,portable-role,NodeMainProgram remains a possible…,OP-BUN-006;OP-BUN-007;OP-BUN-009,,P,P,D,N,P,N,E-BUN-023;E-EB-001
+C-BUN-123,portable-role,BunRuntimeExecutable is a truthful…,OP-BUN-011;OP-BUN-012;OP-BUN-013,,P,P,D,N,P,N,E-BUN-015;E-BUN-016;E-BUN-027;E-EB-001
+C-BUN-124,portable-role,A runtime-neutral RuntimeExecutabl…,OP-BUN-011;OP-BUN-012;OP-BUN-013,,P,R,R,N,N,A,E-BUN-015;E-BUN-016;E-BUN-027
+C-BUN-125,portable-role,FullStackBunApplication is provide…,OP-BUN-006;OP-BUN-007;OP-BUN-011;OP-BUN-012,,P,P,D,N,N,N,E-BUN-010;E-BUN-015
+C-BUN-126,portable-role,RawCommandWatch is a finite lifecy…,OP-BUN-010,,P,P,D,N,N,N,E-BUN-014;E-BUN-026
+C-BUN-127,relation,The immutable effect-build package…,OP-BUN-009;OP-BUN-012;OP-BUN-013,,E,E,N,B,I,S,E-EB-001
+C-BUN-128,relation,Current implementation absence for…,OP-BUN-001;OP-BUN-002;OP-BUN-003;OP-BUN-004;OP-BUN-005;OP-BUN-006;OP-BUN-007;OP-BUN-008;OP-BUN-010,,E,E,N,B,N,S,E-EB-001
+C-BUN-129,relation,The existing compile adapter's enu…,OP-BUN-013,,E,E,D,B,P,S,E-EB-001;E-BUN-016
+C-BUN-130,relation,The existing withJavaScriptBundle…,OP-BUN-009,,E,E,D,B,P,S,E-EB-001;E-BUN-023

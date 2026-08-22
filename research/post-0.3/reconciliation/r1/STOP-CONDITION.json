@@ -1,0 +1,140 @@
+{
+  "schema": "effect-build-r1-stop-condition-v1",
+  "result": "PASS",
+  "original_inventory_rows": 54,
+  "original_atomic_mappings": 73,
+  "supplemental_operation_rows": 70,
+  "canonical_operations": 67,
+  "proposed_public_ship_exports": 28,
+  "proposed_root_namespace_rows": 24,
+  "explicitly_empty_provider_roots": [
+    "effect-build-rolldown"
+  ],
+  "internal_ship_identities_without_export": [
+    "CAN-NODE-002"
+  ],
+  "ship_meaning": "selected-candidate-not-frozen; not merely product priority",
+  "surface_freeze_result": "BLOCKED",
+  "surface_freeze_blockers": [
+    {
+      "operation_id": "CAN-BUN-001",
+      "pre_freeze_gate": "GC/native backing lifetime and concurrency"
+    },
+    {
+      "operation_id": "CAN-BUN-002",
+      "pre_freeze_gate": "provider work after Effect interruption"
+    },
+    {
+      "operation_id": "CAN-BUN-003",
+      "pre_freeze_gate": "non-interruptible execution boundary"
+    },
+    {
+      "operation_id": "CAN-BUN-004",
+      "pre_freeze_gate": "latency and adversarial accuracy"
+    },
+    {
+      "operation_id": "CAN-BUN-005",
+      "pre_freeze_gate": "adversarial accuracy boundary"
+    },
+    {
+      "operation_id": "CAN-BUN-006",
+      "pre_freeze_gate": "cancellation and retained artifact lifetime"
+    },
+    {
+      "operation_id": "CAN-BUN-007",
+      "pre_freeze_gate": "partial writes; pre-existing outputs; interruption remnants"
+    },
+    {
+      "operation_id": "CAN-BUN-008",
+      "pre_freeze_gate": "collection bounds and signal outcome"
+    },
+    {
+      "operation_id": "CAN-BUN-009",
+      "pre_freeze_gate": "partial writes; replacement; signal remnants"
+    },
+    {
+      "operation_id": "CAN-BUN-010",
+      "pre_freeze_gate": "readiness; recovery; subtree termination; remnants"
+    },
+    {
+      "operation_id": "CAN-BUN-011",
+      "pre_freeze_gate": "target matrix; acquisition; interruption remnants"
+    },
+    {
+      "operation_id": "CAN-BUN-012",
+      "pre_freeze_gate": "target matrix; acquisition; interruption and publication certification"
+    },
+    {
+      "operation_id": "CAN-DENO-007",
+      "pre_freeze_gate": "collection bounds and diagnostics execution"
+    },
+    {
+      "operation_id": "CAN-DENO-008",
+      "pre_freeze_gate": "interruption and map remnants"
+    },
+    {
+      "operation_id": "CAN-DENO-009",
+      "pre_freeze_gate": "declaration failure and topology"
+    },
+    {
+      "operation_id": "CAN-DENO-010",
+      "pre_freeze_gate": "host-target; cache/offline; denort relation; runtime"
+    },
+    {
+      "operation_id": "CAN-ESB-001",
+      "pre_freeze_gate": "one-shot provider continuation after interruption"
+    },
+    {
+      "operation_id": "CAN-ESB-002",
+      "pre_freeze_gate": "partial writes and interruption remnants"
+    },
+    {
+      "operation_id": "CAN-ESB-003",
+      "pre_freeze_gate": "large-input temporary-file cleanup"
+    },
+    {
+      "operation_id": "CAN-ESB-004",
+      "pre_freeze_gate": "runtime rendering receipt"
+    },
+    {
+      "operation_id": "CAN-ESB-005",
+      "pre_freeze_gate": "runtime rendering receipt"
+    },
+    {
+      "operation_id": "CAN-ESB-011",
+      "pre_freeze_gate": "race matrix; post-dispose; delayed plugin cleanup"
+    },
+    {
+      "operation_id": "CAN-ESB-012",
+      "pre_freeze_gate": "context races and mixed-generation remnants"
+    },
+    {
+      "operation_id": "CAN-ESB-015",
+      "pre_freeze_gate": "bounds; bin form; signal and reaping"
+    },
+    {
+      "operation_id": "CAN-ESB-016",
+      "pre_freeze_gate": "partial writes; bin form; signal and reaping"
+    },
+    {
+      "operation_id": "CAN-ESB-017",
+      "pre_freeze_gate": "termination choice; descendants; remnants"
+    },
+    {
+      "operation_id": "CAN-NODE-001",
+      "pre_freeze_gate": "exact binary capability; host-target and runtime matrix"
+    },
+    {
+      "operation_id": "CAN-NODE-002",
+      "pre_freeze_gate": "generator/base relations; cleanup and interruption"
+    },
+    {
+      "operation_id": "CAN-NODE-003",
+      "pre_freeze_gate": "injector candidate; target matrix; lifecycle"
+    }
+  ],
+  "gate_failure_rule": "block freeze or record an explicit pre-freeze disposition revision; never silently omit a failed selected operation",
+  "reviewer_a_direct_failures": [],
+  "reviewer_b_shadow_failures": [],
+  "scope": "R1 crosswalk only; not surface freeze, runtime certification, compatibility admission, or implementation authorization"
+}

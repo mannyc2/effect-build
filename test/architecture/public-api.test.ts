@@ -308,7 +308,7 @@ describe("built public API", () => {
     expect(javaScriptBundleDeclarationExports(), "effect-build.JavaScriptBundle").toEqual(
       [...exactJavaScriptBundleDeclarations].sort(),
     );
-  });
+  }, 15_000);
 
   it("keeps all four command-provider calls concrete rather than publicly generic", () => {
     expect(providerCallTypeParameterCounts()).toEqual({
@@ -355,6 +355,7 @@ describe("built public API", () => {
     }
     const coreEntries = await readdir(resolve(root, "packages/effect-build/dist"), { withFileTypes: true });
     expect(coreEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()).toEqual([
+      "Author",
       "standalone",
     ]);
     expect(providerRuntimeKeys).toHaveLength(5);

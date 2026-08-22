@@ -1,0 +1,2349 @@
+{
+  "schema": "effect-build/browser-role-evidence-ledger@1",
+  "generatedAt": "2026-08-17T15:53:21Z",
+  "repository": {
+    "name": "mannyc2/effect-build",
+    "observedHead": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "base": "15c811bb9904142a33d119766b62082f3c689f13",
+    "pullRequest": 4
+  },
+  "classificationDefinitions": {
+    "GITHUB-DIRECT": "Observed live GitHub state or exact repository source/declaration.",
+    "UPSTREAM-DIRECT": "Official standard, provider documentation, declaration, or upstream source.",
+    "RECORDED-EXECUTION": "Structured receipt from a completed run, limited to exact SHA/version/fixture/oracle.",
+    "INFERENCE": "Reasoned conclusion from direct evidence, standards, and falsifiers.",
+    "PROPOSAL": "Recommended architecture, law, policy, or proof obligation.",
+    "UNKNOWN": "Material behavior not established by reviewed evidence."
+  },
+  "sources": [
+    {
+      "id": "GH-REF-HEAD",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/git/ref/heads/codex/post-0.3-native-capability-architecture",
+      "note": "Live research ref; observed SHA 96e53a27be4ef96fb47f1a745480e0c5382640f2."
+    },
+    {
+      "id": "GH-REF-BASE",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/git/ref/heads/codex/granular-integration-program",
+      "note": "Live base ref; observed SHA 15c811bb9904142a33d119766b62082f3c689f13."
+    },
+    {
+      "id": "GH-PR-4",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/pulls/4",
+      "note": "PR state, head/base, title, draft status, and body-declared earlier “final research head.”"
+    },
+    {
+      "id": "GH-COMMIT-HEAD",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/commits/96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "note": "Head commit/tree/parent/message/time."
+    },
+    {
+      "id": "GH-TREE-HEAD",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/git/trees/96e53a27be4ef96fb47f1a745480e0c5382640f2?recursive=1",
+      "note": "Complete observed tree and browser-research path inventory."
+    },
+    {
+      "id": "GH-COMPARE",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/compare/15c811bb9904142a33d119766b62082f3c689f13...96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "note": "Base/head relationship and change context."
+    },
+    {
+      "id": "GH-PR-FILES",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/pulls/4/files?per_page=100",
+      "note": "Changed-file inventory; 74 filenames observed through the GitHub plugin."
+    },
+    {
+      "id": "GH-WORKFLOW-SOURCE",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/.github/workflows/architecture-research.yml",
+      "note": "Workflow steps and which probes/certifiers are invoked."
+    },
+    {
+      "id": "GH-RUN-118",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/actions/runs/31990684158",
+      "note": "Latest PR workflow run at observed head; completed/failure."
+    },
+    {
+      "id": "GH-JOBS-118",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/actions/runs/31990684158/jobs?per_page=100",
+      "note": "Typecheck failure and skipped later steps."
+    },
+    {
+      "id": "GH-RUN-48",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/actions/runs/31971767617",
+      "note": "Last successful architecture run used for downloaded receipts; source SHA 9b0d2f5...."
+    },
+    {
+      "id": "GH-ARTIFACT-RECEIPTS",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/actions/artifacts/9269991589",
+      "note": "Receipt artifact metadata, size, and GitHub SHA-256 digest."
+    },
+    {
+      "id": "GH-PROBE-REFINEMENT",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/profile-refinement-probe.mjs",
+      "note": "Hardcoded module/HTML fixtures and extension/regex predicates."
+    },
+    {
+      "id": "GH-PROBE-BROWSER-V1",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/browser-behavior-probe.mjs",
+      "note": "Earlier browser-behavior source."
+    },
+    {
+      "id": "GH-PROBE-BROWSER-V2",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/browser-behavior-probe-v2.mjs",
+      "note": "Fixture tree, top-level copy, asset copy, markup injection, HTML selection, browser and map checks."
+    },
+    {
+      "id": "GH-COMMIT-V2-INTRO",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/commits/5fdfd5bca49ca0b45578bec0fca63537800e90df",
+      "note": "First observed commit containing browser v2 source."
+    },
+    {
+      "id": "GH-V2-RUNS",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://api.github.com/repos/mannyc2/effect-build/actions/runs?head_sha=5fdfd5bca49ca0b45578bec0fca63537800e90df&per_page=20",
+      "note": "Run state around v2 introduction."
+    },
+    {
+      "id": "GH-CONTRACTS",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/contracts.ts",
+      "note": "Prototype role and ownership contracts."
+    },
+    {
+      "id": "GH-FINAL-CONTRACTS",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/final/contracts.ts",
+      "note": "Later candidate contract prototypes."
+    },
+    {
+      "id": "GH-FINAL-ADAPTERS",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/final/provider-adapters.ts",
+      "note": "Final-research adapter implementations; Node-main only in reviewed file."
+    },
+    {
+      "id": "GH-PROVIDER-CONFORMANCE",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/provider-conformance.mjs",
+      "note": "Provider conformance research source."
+    },
+    {
+      "id": "GH-CERT-PROFILE",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/certify-profile-refinement.mjs",
+      "note": "Receipt certification logic for profile refinement."
+    },
+    {
+      "id": "GH-CERT-PROVIDER",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/certify-provider-conformance.mjs",
+      "note": "Receipt certification logic for provider research."
+    },
+    {
+      "id": "GH-EXPECTED",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/research/post-0.3/expected-conclusions.json",
+      "note": "Expected conclusion registry."
+    },
+    {
+      "id": "GH-PLAN-ARCH",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-NATIVE-CAPABILITY-ARCHITECTURE.md",
+      "note": "Selected architecture and role rationale."
+    },
+    {
+      "id": "GH-PLAN-API",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-API-CANDIDATES.md",
+      "note": "Candidate API names and public paths."
+    },
+    {
+      "id": "GH-PLAN-MATRIX",
+      "classification": "GITHUB-DIRECT",
+      "locator": "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/POST-0.3-PROVIDER-CAPABILITY-MATRIX.md",
+      "note": "Claimed provider capabilities, evidence classes, and exclusions."
+    },
+    {
+      "id": "REC-ARCHIVE-9B0D",
+      "classification": "RECORDED-EXECUTION",
+      "locator": "GitHub Actions artifact 9269991589 from run 31971767617",
+      "note": "ZIP size 8,951 bytes; SHA-256 d783cfb14665c891f32e76aca095de08777c5b00e9fb517b26faa38eeb5582d9; local downloaded digest matched GitHub metadata. Source SHA 9b0d2f59567a7684b62df932c67b7a96050b605f."
+    },
+    {
+      "id": "REC-PROFILE-REFINEMENT",
+      "classification": "RECORDED-EXECUTION",
+      "locator": "profile-refinement.json inside REC-ARCHIVE-9B0D",
+      "note": "Records Bun 1.3.9/Deno 2.9.3 output-set and narrow HTML-module fixture outputs/oracles."
+    },
+    {
+      "id": "REC-EXISTING-PROVIDER",
+      "classification": "RECORDED-EXECUTION",
+      "locator": "existing-provider-research.json inside REC-ARCHIVE-9B0D",
+      "note": "Records broad static-web top-level stylesheet counterexample and provider versions."
+    },
+    {
+      "id": "REC-CERT-SUMMARY",
+      "classification": "RECORDED-EXECUTION",
+      "locator": "certification-summary.json inside REC-ARCHIVE-9B0D",
+      "note": "Artifact-level certification summary at exact source SHA."
+    },
+    {
+      "id": "STD-HTML-URL",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://html.spec.whatwg.org/multipage/urls-and-fetching.html",
+      "note": "HTML URL parsing, document/API bases, fetch context."
+    },
+    {
+      "id": "STD-HTML-SEMANTICS",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://html.spec.whatwg.org/multipage/semantics.html",
+      "note": "Link and document metadata/fetch-bearing semantics."
+    },
+    {
+      "id": "STD-HTML-SCRIPT",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://html.spec.whatwg.org/multipage/scripting.html",
+      "note": "Script elements, classic/module script processing."
+    },
+    {
+      "id": "STD-HTML-IMAGES",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://html.spec.whatwg.org/multipage/images.html",
+      "note": "Images, srcset, candidate selection."
+    },
+    {
+      "id": "STD-HTML-WEBAPIS",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://html.spec.whatwg.org/multipage/webappapis.html",
+      "note": "Module graph fetching, import maps, environment settings."
+    },
+    {
+      "id": "STD-HTML-WORKERS",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://html.spec.whatwg.org/multipage/workers.html",
+      "note": "Worker and SharedWorker construction/graphs."
+    },
+    {
+      "id": "STD-SERVICE-WORKER",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://w3c.github.io/ServiceWorker/",
+      "note": "Registration, script/scope URLs, origin/path/header semantics."
+    },
+    {
+      "id": "STD-URL",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://url.spec.whatwg.org/",
+      "note": "URL records, path/query/fragment and parsing/serialization."
+    },
+    {
+      "id": "STD-CSS-VALUES",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://www.w3.org/TR/css-values-4/",
+      "note": "CSS URL values and base resolution."
+    },
+    {
+      "id": "STD-CSS-CASCADE",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://www.w3.org/TR/css-cascade-5/#at-import",
+      "note": "@import, conditional/layer/import ordering semantics."
+    },
+    {
+      "id": "STD-ECMASCRIPT-DYNAMIC-IMPORT",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-import-calls",
+      "note": "Runtime evaluation of import(expression)."
+    },
+    {
+      "id": "STD-WASM-JS",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://webassembly.github.io/spec/js-api/",
+      "note": "WebAssembly JavaScript embedding/API."
+    },
+    {
+      "id": "STD-WASM-WEB",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://webassembly.github.io/spec/web-api/",
+      "note": "Streaming fetch/compile/instantiate and MIME/CORS behavior."
+    },
+    {
+      "id": "STD-SOURCE-MAPS",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://tc39.es/ecma426/",
+      "note": "ECMA-426 source-map format and URL associations."
+    },
+    {
+      "id": "STD-SRI",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://w3c.github.io/webappsec-subresource-integrity/",
+      "note": "Integrity metadata and response-byte verification."
+    },
+    {
+      "id": "STD-CSP",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://w3c.github.io/webappsec-csp/",
+      "note": "Content Security Policy sources, nonces, hashes, execution restrictions."
+    },
+    {
+      "id": "STD-POSIX-RENAME",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html",
+      "note": "POSIX rename behavior, directory replacement restrictions, atomic naming rationale."
+    },
+    {
+      "id": "STD-WIN-MOVEFILEEX",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexa",
+      "note": "Windows move/replace/cross-volume behavior."
+    },
+    {
+      "id": "STD-WIN-REPLACEFILE",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilea",
+      "note": "Windows file replacement semantics."
+    },
+    {
+      "id": "BUN-DOC-BUNDLER",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://bun.sh/docs/bundler",
+      "note": "Entries, target, splitting, minification, source maps, output files, metafile, public path, loaders/plugins."
+    },
+    {
+      "id": "BUN-DOC-HTML",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://bun.sh/docs/bundler/html",
+      "note": "HTML selector coverage, asset/CSS processing, generated HTML behavior."
+    },
+    {
+      "id": "BUN-REF-MAIN",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://api.github.com/repos/oven-sh/bun/git/ref/heads/main",
+      "note": "Upstream main observed at 1dd66afde213732c645c60ac08cf68f1087a271d."
+    },
+    {
+      "id": "BUN-DTS",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://github.com/oven-sh/bun/blob/1dd66afde213732c645c60ac08cf68f1087a271d/packages/bun-types/bun.d.ts",
+      "note": "BuildArtifact, source-map relation, metafile declarations and output types."
+    },
+    {
+      "id": "DENO-DOC-BUNDLING",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://docs.deno.com/runtime/reference/bundling/",
+      "note": "Current bundling overview, HTML/CSS/splitting/maps/minify guidance and experimental status."
+    },
+    {
+      "id": "DENO-DOC-CLI-BUNDLE",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://docs.deno.com/runtime/reference/cli/bundle/",
+      "note": "CLI flags/output semantics and experimental warning."
+    },
+    {
+      "id": "DENO-API-BUNDLER",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://docs.deno.com/api/deno/bundler/",
+      "note": "Deno.bundle() result and OutputFile declarations."
+    },
+    {
+      "id": "DENO-REF-MAIN",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://api.github.com/repos/denoland/deno/git/ref/heads/main",
+      "note": "Upstream main observed at 89f33cbef296a2b287f323d42de54c871fa69c77."
+    },
+    {
+      "id": "DENO-SOURCE-MAIN",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://github.com/denoland/deno/tree/89f33cbef296a2b287f323d42de54c871fa69c77",
+      "note": "Version-pinned upstream source tree for follow-up source validation."
+    },
+    {
+      "id": "ESBUILD-API",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://esbuild.github.io/api/",
+      "note": "Entrypoints, splitting, output files, metafile, public path, CSS bundle, source maps, direct outdir behavior."
+    },
+    {
+      "id": "VITE-ASSETS",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://vite.dev/guide/assets.html",
+      "note": "Imported assets, CSS URLs, public directory, new URL limitations."
+    },
+    {
+      "id": "VITE-BUILD",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://vite.dev/guide/build",
+      "note": "HTML entry/build behavior and public base rewriting."
+    },
+    {
+      "id": "VITE-FEATURES",
+      "classification": "UPSTREAM-DIRECT",
+      "locator": "https://vite.dev/guide/features",
+      "note": "Worker conventions and broader frontend feature surface."
+    }
+  ],
+  "claims": [
+    {
+      "id": "AUD-001",
+      "classification": "GITHUB-DIRECT",
+      "statement": "The research branch was observed at `96e53a27be4ef96fb47f1a745480e0c5382640f2`. The PR body still calls `af4887c36753a82c3c97fafc54b3c368cd98b34d` the “final research head.” This audit uses the live ref and records the mismatch.",
+      "document": "current-probe-audit.md",
+      "line": 5,
+      "sourceIds": [
+        "GH-REF-HEAD",
+        "GH-PR-4"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-002",
+      "classification": "GITHUB-DIRECT",
+      "statement": "Architecture workflow run 118 at the live head completed with failure. The current contract-prototype typecheck failed; later compile, compatibility, reproduction, and receipt validation steps were skipped. The live head therefore has no successful end-to-end architecture certification run.",
+      "document": "current-probe-audit.md",
+      "line": 7,
+      "sourceIds": [
+        "GH-RUN-118",
+        "GH-JOBS-118"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-003",
+      "classification": "GITHUB-DIRECT",
+      "statement": "`browser-behavior-probe-v2.mjs` first appeared at commit `5fdfd5bca49ca0b45578bec0fca63537800e90df`, after the last successful receipt run at `9b0d2f59567a7684b62df932c67b7a96050b605f`. Runs at or after that addition did not successfully reach certification, and the reviewed workflow does not directly invoke v2 in its normal certification path.",
+      "document": "current-probe-audit.md",
+      "line": 9,
+      "sourceIds": [
+        "GH-COMMIT-V2-INTRO",
+        "GH-RUN-48",
+        "GH-V2-RUNS",
+        "GH-WORKFLOW-SOURCE"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-004",
+      "classification": "INFERENCE",
+      "statement": "The v2 program is `GITHUB-DIRECT` source evidence, not `RECORDED-EXECUTION` evidence at the live head.",
+      "document": "current-probe-audit.md",
+      "line": 11,
+      "sourceIds": [
+        "GH-PROBE-BROWSER-V2",
+        "GH-RUN-118",
+        "GH-WORKFLOW-SOURCE"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": "Repository source presence is not upgraded to recorded execution."
+    },
+    {
+      "id": "AUD-005",
+      "classification": "GITHUB-DIRECT",
+      "statement": "The probe constructs hardcoded fixture directories/names including `browser-module`, `browser-html`, `app.ts`, `style.css`, and `index.html`, and invokes providers with literal entry names. Its output predicates are primarily file-extension predicates.",
+      "document": "current-probe-audit.md",
+      "line": 17,
+      "sourceIds": [
+        "GH-PROBE-REFINEMENT"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-006",
+      "classification": "RECORDED-EXECUTION",
+      "statement": "At source SHA `9b0d2f...`, Bun 1.3.9 and Deno 2.9.3 each emitted `app.js` (45 bytes) and `app.css` (17 bytes). This directly establishes that exact fixture/output fact.",
+      "document": "current-probe-audit.md",
+      "line": 23,
+      "sourceIds": [
+        "REC-PROFILE-REFINEMENT"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": "Exact fixture at source SHA 9b0d2f5..., Bun 1.3.9 and Deno 2.9.3; no generality implied."
+    },
+    {
+      "id": "AUD-007",
+      "classification": "INFERENCE",
+      "statement": "It does not establish a general `BrowserModuleOutputSet` law because the oracle lacks requested-entry association, chunk/edge closure, external-import classification, multi-entry scenarios, runtime loading, and ownership checks specific to the browser result.",
+      "document": "current-probe-audit.md",
+      "line": 25,
+      "sourceIds": [
+        "GH-PROBE-REFINEMENT",
+        "REC-PROFILE-REFINEMENT"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-008",
+      "classification": "GITHUB-DIRECT",
+      "statement": "The probe finds `src`/`href` strings with a regular expression, skips scheme/protocol-relative strings, strips query and fragment text, and resolves the remaining string through the filesystem.",
+      "document": "current-probe-audit.md",
+      "line": 29,
+      "sourceIds": [
+        "GH-PROBE-REFINEMENT"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-009",
+      "classification": "RECORDED-EXECUTION",
+      "statement": "The successful receipt records one HTML, one JS, and one CSS output for each provider; the module imported CSS; and regex-matched generated `src|href` paths mapped to files. Deno’s stderr identified `deno bundle` as experimental.",
+      "document": "current-probe-audit.md",
+      "line": 47,
+      "sourceIds": [
+        "REC-PROFILE-REFINEMENT"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": "Exact narrow HTML fixture and regex/filesystem oracle only."
+    },
+    {
+      "id": "AUD-010",
+      "classification": "INFERENCE",
+      "statement": "This proves a small script-rooted CSS tree was generated consistently enough for that filesystem oracle. It does not prove the broader browser application contract.",
+      "document": "current-probe-audit.md",
+      "line": 49,
+      "sourceIds": [
+        "REC-PROFILE-REFINEMENT",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES",
+        "STD-SRI",
+        "STD-CSP"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-011",
+      "classification": "RECORDED-EXECUTION",
+      "statement": "`existing-provider-research.json` records a broad fixture where Bun emitted HTML, JS, and a top-level linked CSS file, while Deno emitted HTML and JS but omitted that stylesheet. The receipt classified the broad static-web role as falsified.",
+      "document": "current-probe-audit.md",
+      "line": 53,
+      "sourceIds": [
+        "REC-EXISTING-PROVIDER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": "Exact broad static-web fixture and tested versions; counterexample applies to the broad admitted claim."
+    },
+    {
+      "id": "AUD-012",
+      "classification": "GITHUB-DIRECT",
+      "statement": "The v2 source uses a fixed tree/naming vocabulary including `index.html`, `top.css`, `module.css`, `app.ts`, nested chunks, and an `assets/` directory. Its checks and normalization know these names.",
+      "document": "current-probe-audit.md",
+      "line": 61,
+      "sourceIds": [
+        "GH-PROBE-BROWSER-V2"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-013",
+      "classification": "GITHUB-DIRECT",
+      "statement": "`normalizeTopLevelResources` copies source `top.css` to output `top.css` and recursively copies the entire source `assets/` directory to output `assets/`.",
+      "document": "current-probe-audit.md",
+      "line": 67,
+      "sourceIds": [
+        "GH-PROBE-BROWSER-V2"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-014",
+      "classification": "GITHUB-DIRECT",
+      "statement": "When references are absent, v2 injects a stylesheet link, preload link, and image element targeting copied fixture files, writes the modified HTML, and then launches Chrome.",
+      "document": "current-probe-audit.md",
+      "line": 78,
+      "sourceIds": [
+        "GH-PROBE-BROWSER-V2"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-015",
+      "classification": "INFERENCE",
+      "statement": "The browser oracle validates the normalized output actually served. It cannot prove that the normalization algorithm is complete or semantically neutral for applications outside the fixture. A strong runtime oracle does not repair an undergeneral discovery/rewrite algorithm.",
+      "document": "current-probe-audit.md",
+      "line": 80,
+      "sourceIds": [
+        "GH-PROBE-BROWSER-V2",
+        "STD-HTML-URL",
+        "STD-CSS-VALUES",
+        "STD-SRI",
+        "STD-CSP"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-016",
+      "classification": "GITHUB-DIRECT",
+      "statement": "V2 locates emitted HTML by extension and uses the first candidate. This is ambiguous for multiple HTML entries, auxiliary HTML files, or provider metadata. A portable HTML role requires requested-entry-to-output association.",
+      "document": "current-probe-audit.md",
+      "line": 84,
+      "sourceIds": [
+        "GH-PROBE-BROWSER-V2"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-017",
+      "classification": "GITHUB-DIRECT",
+      "statement": "V2 observes whether source-map configuration was accepted and whether a `.map` output exists. It does not validate generated-file linkage, inline/header modes, map JSON, `sources`/`sourceRoot`, CSS maps, or whether source URLs resolve as intended.",
+      "document": "current-probe-audit.md",
+      "line": 88,
+      "sourceIds": [
+        "GH-PROBE-BROWSER-V2",
+        "STD-SOURCE-MAPS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-018",
+      "classification": "GITHUB-DIRECT",
+      "statement": "The plans and prototype contracts select browser profile paths, but the reviewed `research/post-0.3/final/provider-adapters.ts` implements Bun and Esbuild Node-main adapters only. No production or final browser adapter implementation was found at the live head.",
+      "document": "current-probe-audit.md",
+      "line": 96,
+      "sourceIds": [
+        "GH-TREE-HEAD",
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-FINAL-ADAPTERS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-019",
+      "classification": "INFERENCE",
+      "statement": "Browser conclusions at the live head are research/proposal claims, not shipped or final-adapter behavior.",
+      "document": "current-probe-audit.md",
+      "line": 98,
+      "sourceIds": [
+        "GH-TREE-HEAD",
+        "GH-FINAL-ADAPTERS",
+        "GH-PLAN-ARCH"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "AUD-020",
+      "classification": "INFERENCE",
+      "statement": "The current research establishes useful narrow facts and one important broad counterexample. It does not establish a general provider-neutral `BrowserModuleApplication`. The v2 copies and markup injection prove only an explicit fixture normalizer. The strongest truthful direction is `BrowserModulePayload`, plus a separately bounded HTML-entry role and permanent provider-native output surfaces.",
+      "document": "current-probe-audit.md",
+      "line": 132,
+      "sourceIds": [
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "B-001",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Bun’s official bundler surface supports browser targets, multiple entrypoints, splitting, minification, source maps, naming, `publicPath`, plugins, loaders, output files, and metafiles. Its declarations expose output kinds and relations such as entry point/chunk/asset/sourcemap, paths, hashes, and source-map linkage; its metafile records input/output imports, output entry points, and associated CSS bundles.",
+      "document": "standards-and-provider-survey.md",
+      "line": 112,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DTS",
+        "BUN-REF-MAIN"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "B-002",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Bun’s HTML bundling is a finite, documented transform rather than the entire HTML fetch model. The official documentation enumerates recognized selectors such as script sources, stylesheet links, images/`srcset`, selected preload-like links, media, icons, manifests, and posters. It documents JavaScript/CSS bundling, CSS `@import`/`url()` processing, asset hashing/copying, preservation of HTTP(S) URLs, and `publicPath` behavior.",
+      "document": "standards-and-provider-survey.md",
+      "line": 114,
+      "sourceIds": [
+        "BUN-DOC-HTML",
+        "BUN-DOC-BUNDLER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "B-003",
+      "classification": "INFERENCE",
+      "statement": "Bun appears capable of supporting a rich `BrowserModulePayload` observation through `BuildArtifact` and metafile data. That does not establish every edge required by a strict HTML-entry profile; each admitted HTML surface still needs versioned proof.",
+      "document": "standards-and-provider-survey.md",
+      "line": 116,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DTS",
+        "BUN-DOC-HTML"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-001",
+      "classification": "INFERENCE",
+      "statement": "“Module-reachable” is not a complete browser application boundary. It does not specify whether reachability includes provider-loader assets, `new URL`, dynamic imports, workers, import maps, CSS recursion, preload hints, WASM glue, or runtime-created URLs. Nor does it define the host/deployment policy under which generated HTML is substitutable.",
+      "document": "browser-role-candidates.md",
+      "line": 22,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-002",
+      "classification": "PROPOSAL",
+      "statement": "Do not publish the current broad name/claim as established. Retain the research as input to a stricter HTML-entry candidate.",
+      "document": "browser-role-candidates.md",
+      "line": 39,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-003",
+      "classification": "INFERENCE",
+      "statement": "A bag of files is not enough for substitution. Consumers need entry association, CSS association, closure/external observations, media types, lifetime, and a mount rule. Extension presence does not distinguish entries from chunks, shared CSS, source maps, or unrelated outputs.",
+      "document": "browser-role-candidates.md",
+      "line": 55,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-004",
+      "classification": "PROPOSAL",
+      "statement": "A one-shot provider build from explicit browser-module entries to a borrowed, isolated output tree with:",
+      "document": "browser-role-candidates.md",
+      "line": 69,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-005",
+      "classification": "PROPOSAL",
+      "statement": "For consumers that construct their host document only from returned entry/style observations and serve the returned tree at the admitted relative same-origin mount, provider substitution preserves the consumer-defined browser readiness/result predicate and the resolution of all provider-declared internal edges. Filenames, bytes, splitting, minification, maps, request ordering, and provider metadata may differ.",
+      "document": "browser-role-candidates.md",
+      "line": 81,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-006",
+      "classification": "INFERENCE",
+      "statement": "Bun and Deno both have a browser-module bundling center; the recorded fixture shows a non-empty intersection. The standards analysis gives a durable abstraction boundary independent of fixture filenames. Richer Bun graph metadata can be retained provider-natively without forcing Deno to fabricate it. A Deno adapter may reject requests whose entry/closure association cannot be proven.",
+      "document": "browser-role-candidates.md",
+      "line": 94,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-007",
+      "classification": "UNKNOWN",
+      "statement": "The role is architecturally plausible but not conformance-proven for current provider versions. Missing proof includes multiple entries, split chunks, nested dynamic imports, asset/CSS association, externals, source-map linkage, failure/partial-write behavior, and browser behavior under the precise host contract.",
+      "document": "browser-role-candidates.md",
+      "line": 98,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": "Architectural validity is separate from current provider conformance."
+    },
+    {
+      "id": "CAND-008",
+      "classification": "PROPOSAL",
+      "statement": "A future role accepting one explicitly named HTML entry under a deliberately small source language, delegating HTML discovery and rewriting to the provider, and returning provider-generated HTML plus its module payload in a borrowed tree.",
+      "document": "browser-role-candidates.md",
+      "line": 117,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-009",
+      "classification": "INFERENCE",
+      "statement": "The role remains significantly harder than Candidate C because HTML itself carries policy, base, fetch, hint, integrity, and metadata semantics. It should not ship until each admitted construct is enumerated and each provider exposes reliable entry association.",
+      "document": "browser-role-candidates.md",
+      "line": 143,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-010",
+      "classification": "INFERENCE",
+      "statement": "Native-only leaves a real portable semantic center unmodeled: explicit browser-module entry to borrowed module payload for caller-owned HTML. “No current consumer” is not a semantic counterexample. Rejecting Candidate C solely for lack of adoption would violate the architectural rule.",
+      "document": "browser-role-candidates.md",
+      "line": 167,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-011",
+      "classification": "PROPOSAL",
+      "statement": "Keep these permanently provider-native:",
+      "document": "browser-role-candidates.md",
+      "line": 192,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "CAND-012",
+      "classification": "INFERENCE",
+      "statement": "Candidate C may be semantically valid yet deferred if the release cannot fund the required conformance matrix. Deferral must be recorded as priority/capacity, not as “invalid because no consumer.” Candidate D requires substantially more proof and should follow C, not replace it through fixture-specific normalization.",
+      "document": "browser-role-candidates.md",
+      "line": 210,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "D-001",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Deno documents `deno bundle` as experimental and powered by esbuild. Current documentation covers browser targeting, CSS, minification, source maps, code splitting, and HTML entrypoints. For HTML entrypoints, Deno says it finds script references, bundles their dependencies, updates script paths, and injects CSS imported by those scripts. It recommends the feature for small static applications and points complex projects to tools such as Vite.",
+      "document": "standards-and-provider-survey.md",
+      "line": 122,
+      "sourceIds": [
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-REF-MAIN"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "D-002",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "The reviewed `Deno.bundle()` API can return in-memory output files with `path`, `contents`, `hash`, and `text`, plus success/errors/warnings. The reviewed public API does not expose Bun-like output kind, entrypoint association, import-edge, or `cssBundle` fields.",
+      "document": "standards-and-provider-survey.md",
+      "line": 124,
+      "sourceIds": [
+        "DENO-API-BUNDLER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "D-003",
+      "classification": "UNKNOWN",
+      "statement": "No official Deno option equivalent to Bun’s broadly documented `publicPath` or Vite’s `base` was established in the reviewed current bundling documentation. This is unknown, not proof of absence from source, flags, future versions, or narrower modes.",
+      "document": "standards-and-provider-survey.md",
+      "line": 126,
+      "sourceIds": [
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": "Reviewed official documentation did not establish the option; absence is not proved."
+    },
+    {
+      "id": "D-004",
+      "classification": "INFERENCE",
+      "statement": "A Deno portable adapter must derive entry/style associations only from official structured behavior that is proven for the admitted request, or reject ambiguity. Extension-only guessing is insufficient for multiple entries and shared chunks.",
+      "document": "standards-and-provider-survey.md",
+      "line": 128,
+      "sourceIds": [
+        "DENO-API-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "DEC-001",
+      "classification": "INFERENCE",
+      "statement": "A corrected `BrowserModulePayload` can be semantically valid without a current consumer. Lack of adoption can justify deferring implementation or release, but not declaring the abstraction invalid.",
+      "document": "decision-table.md",
+      "line": 77,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "STD-HTML-URL",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "DEC-002",
+      "classification": "INFERENCE",
+      "statement": "Publishing the current `BrowserModuleApplication` because one fixture succeeded would make fixture/adoption evidence substitute for a semantic boundary—the opposite error.",
+      "document": "decision-table.md",
+      "line": 79,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "STD-HTML-URL",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "DEC-003",
+      "classification": "PROPOSAL",
+      "statement": "Use distinct statuses:",
+      "document": "decision-table.md",
+      "line": 83,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "STD-HTML-URL",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "DEC-004",
+      "classification": "PROPOSAL",
+      "statement": "Replace the planned public browser surface with this sequence:",
+      "document": "decision-table.md",
+      "line": 96,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PLAN-API",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "STD-HTML-URL",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "E-001",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Esbuild supports explicit entrypoints, splitting, `publicPath`, source maps, in-memory output, and a metafile with output imports, external flags, entrypoint association, and CSS bundle association. It is a JavaScript/CSS bundler rather than a standards-complete browser application framework; HTML integration is normally caller/plugin/framework territory.",
+      "document": "standards-and-provider-survey.md",
+      "line": 134,
+      "sourceIds": [
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "F-001",
+      "classification": "INFERENCE",
+      "statement": "Existing recorded evidence already falsifies a broad top-level-resource interpretation: tested Deno omitted the linked stylesheet. Narrowing the source language may yield a valid role; it does not make the broader claim true.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 7,
+      "sourceIds": [
+        "REC-EXISTING-PROVIDER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "F-002",
+      "classification": "INFERENCE",
+      "statement": "The first group constrains any truthful abstraction. The second group constrains confidence in the current research only and can be improved without changing the semantic law.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 129,
+      "sourceIds": [
+        "REC-EXISTING-PROVIDER",
+        "GH-PROBE-BROWSER-V2",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "I-001",
+      "classification": "INFERENCE",
+      "statement": "`effect-build` can define a provider-portable browser abstraction, but the first truthful abstraction is a **browser module payload**—a corrected and more explicit form of `BrowserModuleOutputSet`—rather than a general `BrowserModuleApplication`. It begins with explicit JavaScript/TypeScript browser-module entries; delegates module/CSS/asset graph construction and URL rewriting to Bun or Deno; returns a borrowed, isolated output tree with stable entry associations and provider-declared closure observations; and leaves host-document discovery, deployment headers, public-base policy, workers, service workers, framework conventions, and durable directory publication outside the portable law.",
+      "document": "README.md",
+      "line": 11,
+      "sourceIds": [
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "I-002",
+      "classification": "INFERENCE",
+      "statement": "The live branch does not establish the current `BrowserModuleApplication` claim. The last successful receipt demonstrates one script-rooted CSS fixture and an extension/`src|href` existence oracle. The later v2 probe source copies a fixture-specific top-level stylesheet and asset directory, injects links/elements into provider-generated HTML, and then exercises the normalized result. That is evidence about one explicit normalizer, not a general Bun/Deno browser-application substitution law.",
+      "document": "README.md",
+      "line": 13,
+      "sourceIds": [
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "I-003",
+      "classification": "INFERENCE",
+      "statement": "The portable core should delegate source discovery and rewriting to providers, then expose and validate output observations. It may check containment, path uniqueness, digest stability, declared edges, and lifetime. It should not make a regex, filename convention, or independent HTML/CSS/JavaScript parser the semantic authority. A caller-enumerated copy helper can exist, but that is explicit composition—not application discovery.",
+      "document": "README.md",
+      "line": 48,
+      "sourceIds": [
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "I-004",
+      "classification": "INFERENCE",
+      "statement": "No. A finite declarative subset is feasible; complete browser-application discovery is not. JavaScript can construct URLs from runtime data, import maps alter module resolution, CSS resolves relative to stylesheet-specific bases, service workers add scope/header semantics, and frameworks/plugins define additional asset conventions. A purported general algorithm must either become a bundler/frontend framework or execute an open-ended application under necessarily incomplete environments.",
+      "document": "README.md",
+      "line": 66,
+      "sourceIds": [
+        "GH-PROBE-REFINEMENT",
+        "GH-PROBE-BROWSER-V2",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-001",
+      "classification": "INFERENCE",
+      "statement": "The portable browser role can honestly promise a borrowed tree. It cannot infer durable multi-file atomicity from successful provider output.",
+      "document": "output-tree-ownership.md",
+      "line": 10,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-002",
+      "classification": "PROPOSAL",
+      "statement": "A successful `withPayload(request, use)` operation should promise:",
+      "document": "output-tree-ownership.md",
+      "line": 14,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-003",
+      "classification": "PROPOSAL",
+      "statement": "Provider execution into staging has this honest law:",
+      "document": "output-tree-ownership.md",
+      "line": 30,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-004",
+      "classification": "INFERENCE",
+      "statement": "A manifest of relative names is not itself an ownership proof. Root authority, canonical containment, lifetime, and mutation behavior are separate laws.",
+      "document": "output-tree-ownership.md",
+      "line": 53,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-005",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "POSIX `rename()` provides strong atomic naming behavior on the same filesystem, but replacement rules differ for files and directories; replacing a non-empty existing directory fails. Cross-filesystem moves fail rather than becoming an atomic tree transaction.",
+      "document": "output-tree-ownership.md",
+      "line": 57,
+      "sourceIds": [
+        "STD-POSIX-RENAME"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-006",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Windows `MoveFileEx` and `ReplaceFile` have different file/directory and same-volume/cross-volume behaviors. `REPLACE_EXISTING` does not yield a universal non-empty-directory replacement primitive; `ReplaceFile` is file-oriented.",
+      "document": "output-tree-ownership.md",
+      "line": 59,
+      "sourceIds": [
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-007",
+      "classification": "INFERENCE",
+      "statement": "There is no honest cross-platform law of “atomically replace this live non-empty directory with the provider’s multi-file output.” Even where a rename of a new directory is atomic, replacement, open handles, antivirus/indexers, permissions, mount boundaries, and recovery policy differ.",
+      "document": "output-tree-ownership.md",
+      "line": 61,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-008",
+      "classification": "PROPOSAL",
+      "statement": "Recommended publication pattern:",
+      "document": "output-tree-ownership.md",
+      "line": 67,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-009",
+      "classification": "INFERENCE",
+      "statement": "Direct-write provider APIs should remain provider-native. A portable role should isolate them behind staging rather than normalize partial durable outcomes into “artifact success.”",
+      "document": "output-tree-ownership.md",
+      "line": 89,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-010",
+      "classification": "PROPOSAL",
+      "statement": "Portable one-shot builds should use a newly created empty staging root. Incremental/watch roles, if added later, need a different scoped-generation contract with generation IDs, change sets, and provider-specific lifecycle semantics.",
+      "document": "output-tree-ownership.md",
+      "line": 95,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-011",
+      "classification": "INFERENCE",
+      "statement": "“Borrowed” is a temporal ownership law, not merely a temporary directory implementation detail.",
+      "document": "output-tree-ownership.md",
+      "line": 107,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-012",
+      "classification": "PROPOSAL",
+      "statement": "Unknown or unrepresentable provider metadata belongs in an opaque/provider-native observation, never discarded to make providers appear identical.",
+      "document": "output-tree-ownership.md",
+      "line": 130,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "OWN-013",
+      "classification": "INFERENCE",
+      "statement": "The strongest honest common ownership law is: *one completed provider build lends one isolated, validated output snapshot for one continuation; it publishes nothing.* This is sufficient for a semantically useful portable browser payload and avoids false cross-platform directory-transaction claims.",
+      "document": "output-tree-ownership.md",
+      "line": 134,
+      "sourceIds": [
+        "GH-PLAN-ARCH",
+        "GH-PROVIDER-CONFORMANCE",
+        "STD-POSIX-RENAME",
+        "STD-WIN-MOVEFILEEX",
+        "STD-WIN-REPLACEFILE",
+        "ESBUILD-API"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "P-001",
+      "classification": "PROPOSAL",
+      "statement": "Preserve four distinct layers:",
+      "document": "README.md",
+      "line": 15,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "GH-PLAN-ARCH"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "P-002",
+      "classification": "PROPOSAL",
+      "statement": "Let `S` be an admitted source project, `E` a non-empty set of explicit browser-module entries, `P` a conforming provider adapter, `T_P` the borrowed tree returned by that adapter, and `H_P` a consumer host document constructed only from the adapter’s returned entry/style observations.",
+      "document": "README.md",
+      "line": 26,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING",
+        "GH-PLAN-ARCH"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-001",
+      "classification": "UNKNOWN",
+      "statement": "Can supported Deno versions expose a reliable mapping from each explicit module entry to emitted JS, associated CSS, chunks, and copied assets through public API or structured output? The reviewed `Deno.bundle.OutputFile` shape lacks Bun-like graph/kind fields.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 44,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-002",
+      "classification": "UNKNOWN",
+      "statement": "Does Deno expose an official public-base/public-path option with defined coverage across JS chunks, CSS URLs, HTML, and assets? It was not established from reviewed docs.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 46,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-003",
+      "classification": "UNKNOWN",
+      "statement": "Beyond documented script references and module-imported CSS, which exact HTML attributes/resources does Deno preserve, copy, hash, or rewrite at each supported version?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 48,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-004",
+      "classification": "UNKNOWN",
+      "statement": "How does current Bun HTML bundling handle import maps, scopes, integrity entries, and map relocation? The finite selector documentation does not establish a complete import-map law.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 50,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-005",
+      "classification": "UNKNOWN",
+      "statement": "Do both providers expose nested literal dynamic-import chunks strongly enough in public metadata to prove closure without parsing emitted JavaScript?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 52,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-006",
+      "classification": "UNKNOWN",
+      "statement": "What exact static `new URL(..., import.meta.url)` and worker forms do Bun and Deno recognize, and how are asset/entry associations represented?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 54,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-007",
+      "classification": "UNKNOWN",
+      "statement": "Is a dedicated `BrowserWorkerModulePayload` feasible across both providers without importing framework conventions? SharedWorker/classic worker variants may require separate roles.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 56,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-HTML-WORKERS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-008",
+      "classification": "UNKNOWN",
+      "statement": "Can either provider expose service-worker output with enough scope/deployment metadata for a portable role, or is service-worker deployment necessarily native?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 58,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-SERVICE-WORKER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-009",
+      "classification": "UNKNOWN",
+      "statement": "For WASM loaders, can both providers expose the emitted WASM/glue relation, required MIME, and target behavior under one bounded role?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 60,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-WASM-JS",
+        "STD-WASM-WEB"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-010",
+      "classification": "UNKNOWN",
+      "statement": "Which source-map modes and generated-to-map associations can be projected truthfully from both providers? Deno’s simple `OutputFile` surface may require narrower observations.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 62,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-SOURCE-MAPS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-011",
+      "classification": "UNKNOWN",
+      "statement": "What are the exact partial-write and cancellation semantics of current in-process Bun and Deno APIs when targeting adapter-owned staging?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 64,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-012",
+      "classification": "UNKNOWN",
+      "statement": "Do provider APIs guarantee output-file arrays are complete before resolution, and can direct writes continue after the calling fiber stops waiting?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 66,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-013",
+      "classification": "UNKNOWN",
+      "statement": "Can generated HTML be associated to the requested HTML entry through official metadata in both providers when multiple HTML entries are present?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 68,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-014",
+      "classification": "UNKNOWN",
+      "statement": "Which provider-generated manifests/metadata are stable public contracts versus diagnostic/internal formats across supported versions?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 70,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-015",
+      "classification": "UNKNOWN",
+      "statement": "Which browser engines/environments constitute the portable runtime oracle, and which behavior differences are excluded? One Chromium execution is not a browser-neutral proof.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 72,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-016",
+      "classification": "UNKNOWN",
+      "statement": "Should the portable payload require a full edge list, or allow a weaker “entry + associated styles + all output files” result when one provider cannot expose edge metadata? A weak mode may be useful but must not be called closed.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 76,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-017",
+      "classification": "UNKNOWN",
+      "statement": "Should source maps be outside v1 entirely, or optional observations with provider-specific modes? Requiring false equivalence would be worse than omission.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 78,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-SOURCE-MAPS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-018",
+      "classification": "UNKNOWN",
+      "statement": "Should `minify` be a portable boolean, a provider-default marker, or provider-native only? Behavioral equivalence can tolerate different minifiers, but policy/security and debugging may not.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 80,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-019",
+      "classification": "UNKNOWN",
+      "statement": "Which MIME mapping belongs to the role versus the consumer test host? A payload can report media types, but serving remains deployment behavior.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 82,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-020",
+      "classification": "UNKNOWN",
+      "statement": "Should external bare specifiers be allowed in the first role? Allowing them requires the consumer host/import-map contract; forbidding them yields a clearer closed payload.",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 84,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-021",
+      "classification": "UNKNOWN",
+      "statement": "Is same-origin relative colocated serving sufficient for the first consumer set, or should public-base support be a separate profile from inception?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 86,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "Q-022",
+      "classification": "UNKNOWN",
+      "statement": "What protocol/version string governs independent provider-package conformance without npm lockstep?",
+      "document": "falsifiers-and-open-questions.md",
+      "line": 88,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DOC-HTML",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-DOC-CLI-BUNDLE",
+        "DENO-API-BUNDLER",
+        "GH-TREE-HEAD",
+        "GH-CONTRACTS",
+        "GH-FINAL-CONTRACTS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "RDM-001",
+      "classification": "INFERENCE",
+      "statement": "A browser application’s actual fetch graph is partly declarative, partly provider-conventional, and partly programmable at runtime. A portable build abstraction can truthfully expose a **provider-declared output closure**; it cannot claim to enumerate every request the application may construct in every environment.",
+      "document": "resource-discovery-model.md",
+      "line": 5,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES",
+        "STD-HTML-WORKERS",
+        "STD-SERVICE-WORKER",
+        "BUN-DTS",
+        "DENO-API-BUNDLER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "RDM-002",
+      "classification": "PROPOSAL",
+      "statement": "`BrowserModulePayload.Request` should contain only portable, semantically necessary inputs:",
+      "document": "resource-discovery-model.md",
+      "line": 19,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES",
+        "STD-HTML-WORKERS",
+        "STD-SERVICE-WORKER",
+        "BUN-DTS",
+        "DENO-API-BUNDLER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "RDM-003",
+      "classification": "PROPOSAL",
+      "statement": "The borrowed result should expose only facts the adapter can prove:",
+      "document": "resource-discovery-model.md",
+      "line": 39,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES",
+        "STD-HTML-WORKERS",
+        "STD-SERVICE-WORKER",
+        "BUN-DTS",
+        "DENO-API-BUNDLER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "RDM-004",
+      "classification": "PROPOSAL",
+      "statement": "A truthful adapter procedure is:",
+      "document": "resource-discovery-model.md",
+      "line": 116,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES",
+        "STD-HTML-WORKERS",
+        "STD-SERVICE-WORKER",
+        "BUN-DTS",
+        "DENO-API-BUNDLER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "RDM-005",
+      "classification": "INFERENCE",
+      "statement": "General discovery requires solving multiple open-ended problems simultaneously:",
+      "document": "resource-discovery-model.md",
+      "line": 167,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES",
+        "STD-HTML-WORKERS",
+        "STD-SERVICE-WORKER",
+        "BUN-DTS",
+        "DENO-API-BUNDLER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-001",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "HTML parses URL strings against a context-specific base URL. A document uses the frozen base URL of the first `<base href>` in tree order when present; otherwise it uses its fallback base URL. Environment APIs can use an API base URL rather than the document base. Consequently, “resolve relative to `dirname(index.html)`” is not a standards-equivalent rule.",
+      "document": "standards-and-provider-survey.md",
+      "line": 7,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-002",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "HTML can initiate, prioritize, or configure resource fetches through a broad set of element/attribute algorithms. A portable HTML role must enumerate admitted surfaces rather than scan generic `src` and `href` text.",
+      "document": "standards-and-provider-survey.md",
+      "line": 18,
+      "sourceIds": [
+        "STD-HTML-SEMANTICS",
+        "STD-HTML-SCRIPT",
+        "STD-HTML-IMAGES"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-003",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "HTML module-script processing fetches a module and then its descendants. Static `import` and `export ... from` requests are source-level module requests. ECMAScript defines `import(expression)` by evaluating the expression at runtime, converting it to a string, and asking the host to load that specifier. Literal dynamic imports are often statically recognized by bundlers; computed dynamic imports are not generally closed source graphs.",
+      "document": "standards-and-provider-survey.md",
+      "line": 37,
+      "sourceIds": [
+        "STD-HTML-WEBAPIS",
+        "STD-ECMASCRIPT-DYNAMIC-IMPORT"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-004",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Import maps normalize keys and addresses against a base URL, support scopes and integrity metadata, and are merged under rules affected by module resolution state. Relocating or rewriting an import map can change bare-specifier and scope matching. Copying an import-map text block while independently rewriting surrounding module URLs is not automatically semantics-preserving.",
+      "document": "standards-and-provider-survey.md",
+      "line": 53,
+      "sourceIds": [
+        "STD-HTML-WEBAPIS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-005",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Relative URLs in an external stylesheet resolve against the stylesheet’s own URL. Embedded CSS resolves using its container-associated base. `@import` recursively adds stylesheets, and `url()` appears in far more places than background images: fonts, cursors, masks, filters, list markers, generated content, SVG references, image sets, and other properties.",
+      "document": "standards-and-provider-survey.md",
+      "line": 63,
+      "sourceIds": [
+        "STD-CSS-VALUES",
+        "STD-CSS-CASCADE"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-006",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Worker and SharedWorker constructors resolve script URLs through worker-constructor algorithms and may create classic or module graphs. Service-worker registration parses script and scope URLs against the relevant API base, then applies same-origin, secure-context, path, update, and scope rules. Deployment headers such as `Service-Worker-Allowed` can alter effective scope.",
+      "document": "standards-and-provider-survey.md",
+      "line": 76,
+      "sourceIds": [
+        "STD-HTML-WORKERS",
+        "STD-SERVICE-WORKER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-007",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "WebAssembly bytes can be obtained by ordinary `fetch`, streaming compilation/instantiation, provider loader imports, generated glue, data URLs, or runtime-computed URLs. Streaming APIs require response and MIME properties. The JavaScript and Web APIs do not define a universal build-time asset convention.",
+      "document": "standards-and-provider-survey.md",
+      "line": 82,
+      "sourceIds": [
+        "STD-WASM-JS",
+        "STD-WASM-WEB"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-008",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Absolute HTTP(S) and protocol-relative URLs normally resolve outside the local output tree unless a provider intentionally vendors them. `data:` URLs embed payloads in the URL. `blob:` URLs identify entries in a runtime blob URL store and do not name build-tree files.",
+      "document": "standards-and-provider-survey.md",
+      "line": 88,
+      "sourceIds": [
+        "STD-URL",
+        "STD-HTML-URL"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-009",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "The URL Standard models path, query, and fragment as distinct components. Queries can select different bytes and participate in request/module identity and caching. Fragments can affect navigation or resource interpretation and may not denote a separate network fetch.",
+      "document": "standards-and-provider-survey.md",
+      "line": 94,
+      "sourceIds": [
+        "STD-URL"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-010",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "ECMA-426 defines linked and inline source maps, `sourceMappingURL`, `sourceRoot`, `sources`, optional `sourcesContent`, and URL resolution relative to generated code. A `.map` file may exist without being linked; a linked map may be inline, supplied by a response header, or reference original sources outside the deployment tree.",
+      "document": "standards-and-provider-survey.md",
+      "line": 100,
+      "sourceIds": [
+        "STD-SOURCE-MAPS"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-011",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Subresource Integrity checks response bytes against cryptographic metadata. Content Security Policy may authorize scripts/styles by source expression, nonce, or hash and may reject generated forms such as inline code or eval-like constructs. Any post-provider byte rewrite can invalidate SRI or hash-based CSP; injected markup can require new nonce/hash/source policy.",
+      "document": "standards-and-provider-survey.md",
+      "line": 106,
+      "sourceIds": [
+        "STD-SRI",
+        "STD-CSP"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-012",
+      "classification": "INFERENCE",
+      "statement": "The common portable center is not “all resources an HTML application can load.” It is “a provider-produced browser module payload with explicit entry observations and a bounded provider-declared closure.” Bun can expose richer metadata through provider-native observations; the portable interface must not force Deno to synthesize precision it cannot prove.",
+      "document": "standards-and-provider-survey.md",
+      "line": 142,
+      "sourceIds": [
+        "BUN-DOC-BUNDLER",
+        "BUN-DTS",
+        "DENO-DOC-BUNDLING",
+        "DENO-API-BUNDLER",
+        "REC-EXISTING-PROVIDER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "S-013",
+      "classification": "PROPOSAL",
+      "statement": "A future HTML-entry role is valid only if it defines a small admitted source language, delegates transformation to providers, and has scenario-specific browser oracles. “HTML + JS + CSS exist and regex-matched paths resolve” is not an application equivalence law.",
+      "document": "standards-and-provider-survey.md",
+      "line": 144,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-HTML-WEBAPIS",
+        "STD-CSS-VALUES",
+        "GH-PROBE-REFINEMENT"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "U-001",
+      "classification": "UNKNOWN",
+      "statement": "The reviewed repository contains no evidence broad enough to classify current Bun or Deno adapters as conforming to this proposed law. This package defines a candidate law and its falsifiers; it makes no conformance claim.",
+      "document": "README.md",
+      "line": 38,
+      "sourceIds": [
+        "GH-TREE-HEAD",
+        "GH-RUN-118",
+        "REC-PROFILE-REFINEMENT",
+        "REC-EXISTING-PROVIDER"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": "Insufficient evidence is not proof that providers cannot conform."
+    },
+    {
+      "id": "URL-001",
+      "classification": "PROPOSAL",
+      "statement": "`BrowserModulePayload` should not rewrite source or emitted HTML/CSS/JavaScript. Each provider owns transformations performed by its supported build mode. The adapter records output relations, validates containment, and exposes observations. A separately named HTML composition role may rewrite only under an explicit contract and ledger.",
+      "document": "url-rewrite-contract.md",
+      "line": 5,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL",
+        "STD-CSS-VALUES",
+        "STD-SOURCE-MAPS",
+        "STD-SRI",
+        "STD-CSP",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "URL-002",
+      "classification": "INFERENCE",
+      "statement": "A filesystem existence check is useful only after correct URL classification and mapping. It cannot determine browser URL semantics.",
+      "document": "url-rewrite-contract.md",
+      "line": 24,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL",
+        "STD-CSS-VALUES",
+        "STD-SOURCE-MAPS",
+        "STD-SRI",
+        "STD-CSP",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "URL-003",
+      "classification": "PROPOSAL",
+      "statement": "Resolve or classify the original URL string under its standards-defined context before deciding whether it maps to an output member. Never strip query/fragment text, ignore `<base>`, or call a filesystem resolver first.",
+      "document": "url-rewrite-contract.md",
+      "line": 42,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL",
+        "STD-CSS-VALUES",
+        "STD-SOURCE-MAPS",
+        "STD-SRI",
+        "STD-CSP",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "URL-004",
+      "classification": "PROPOSAL",
+      "statement": "Portable v1 should require relative, colocated serving:",
+      "document": "url-rewrite-contract.md",
+      "line": 48,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL",
+        "STD-CSS-VALUES",
+        "STD-SOURCE-MAPS",
+        "STD-SRI",
+        "STD-CSP",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "URL-005",
+      "classification": "PROPOSAL",
+      "statement": "Any library-owned rewrite operation should return a complete ledger:",
+      "document": "url-rewrite-contract.md",
+      "line": 60,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL",
+        "STD-CSS-VALUES",
+        "STD-SOURCE-MAPS",
+        "STD-SRI",
+        "STD-CSP",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "URL-006",
+      "classification": "PROPOSAL",
+      "statement": "For each provider-declared internal edge, the adapter should require:",
+      "document": "url-rewrite-contract.md",
+      "line": 85,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL",
+        "STD-CSS-VALUES",
+        "STD-SOURCE-MAPS",
+        "STD-SRI",
+        "STD-CSP",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "URL-007",
+      "classification": "INFERENCE",
+      "statement": "“No failed local requests” is not an application proof under CSP. A scenario claiming policy compatibility must serve the intended headers/meta policy and treat policy violations as failures.",
+      "document": "url-rewrite-contract.md",
+      "line": 102,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL",
+        "STD-CSS-VALUES",
+        "STD-SOURCE-MAPS",
+        "STD-SRI",
+        "STD-CSP",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "URL-008",
+      "classification": "PROPOSAL",
+      "statement": "Common observations may include:",
+      "document": "url-rewrite-contract.md",
+      "line": 115,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL",
+        "STD-CSS-VALUES",
+        "STD-SOURCE-MAPS",
+        "STD-SRI",
+        "STD-CSP",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "URL-009",
+      "classification": "INFERENCE",
+      "statement": "URL rewriting is too cross-cutting to be an implicit portable-core responsibility. Provider-native transforms are authoritative. Any library-owned HTML composition must be explicit, policy-aware, fully ledgered, and narrower than a general frontend framework.",
+      "document": "url-rewrite-contract.md",
+      "line": 166,
+      "sourceIds": [
+        "STD-HTML-URL",
+        "STD-URL",
+        "STD-CSS-VALUES",
+        "STD-SOURCE-MAPS",
+        "STD-SRI",
+        "STD-CSP",
+        "BUN-DOC-BUNDLER",
+        "DENO-DOC-BUNDLING"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "V-001",
+      "classification": "UPSTREAM-DIRECT",
+      "statement": "Vite’s official documentation covers HTML entry processing, imported assets, CSS URLs, public directories, worker conventions, `new URL(..., import.meta.url)`, static-analysis limits, and base-path rewriting across HTML/CSS/JavaScript. It requires conventions and plugins for framework-specific templates and notes cases where dynamically constructed URLs cannot be transformed.",
+      "document": "standards-and-provider-survey.md",
+      "line": 136,
+      "sourceIds": [
+        "VITE-ASSETS",
+        "VITE-BUILD",
+        "VITE-FEATURES"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    },
+    {
+      "id": "V-002",
+      "classification": "INFERENCE",
+      "statement": "Vite demonstrates the engineering surface hidden by the phrase “general browser application”: public-directory policy, HTML transformation, worker recognition, framework transforms, asset-query syntax, SSR distinctions, and public-base rewriting. Recreating these neutrally inside `effect-build` would create a frontend build system, not a thin role adapter.",
+      "document": "standards-and-provider-survey.md",
+      "line": 138,
+      "sourceIds": [
+        "VITE-ASSETS",
+        "VITE-BUILD",
+        "VITE-FEATURES"
+      ],
+      "dependsOnClaimIds": [],
+      "scopeNote": null
+    }
+  ],
+  "decision": {
+    "portableCandidate": "BrowserModulePayload (corrected BrowserModuleOutputSet)",
+    "currentBrowserModuleApplicationEstablished": false,
+    "strictHtmlRole": "Architecturally valid as a separate bounded future candidate; not conformance-proven.",
+    "providerNativeOutputs": "Permanent canonical surfaces.",
+    "portableOutputOwnership": "Borrowed isolated tree; no durable directory publication.",
+    "conformanceClaimed": false
+  },
+  "recordedExecutionBoundary": {
+    "artifactSha256": "d783cfb14665c891f32e76aca095de08777c5b00e9fb517b26faa38eeb5582d9",
+    "sourceSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+    "browserV2Included": false,
+    "reason": "browser-behavior-probe-v2.mjs was introduced later and has no successful recorded certification at the observed live head."
+  },
+  "integrity": {
+    "claimCount": 117,
+    "sourceCount": 63,
+    "allClaimIdsUnique": true,
+    "allReferencesResolved": true
+  }
+}

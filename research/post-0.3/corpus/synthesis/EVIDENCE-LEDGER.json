@@ -1,0 +1,260 @@
+{
+  "schema": "effect-build/research-synthesis-evidence@1",
+  "generatedAt": "2026-08-17T16:42:44Z",
+  "repository": "mannyc2/effect-build",
+  "observedHead": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+  "claims": [
+    {
+      "id": "SYN-001",
+      "claim": "PR #4 and the research branch resolve to 96e53a27be4ef96fb47f1a745480e0c5382640f2, while the PR body names an older final head.",
+      "class": "LIVE_GITHUB",
+      "status": "observed",
+      "confidence": "high",
+      "sources": [
+        "https://github.com/mannyc2/effect-build/pull/4",
+        "https://github.com/mannyc2/effect-build/commit/96e53a27be4ef96fb47f1a745480e0c5382640f2"
+      ]
+    },
+    {
+      "id": "SYN-002",
+      "claim": "Exact-head ordinary CI and architecture research fail, and no exact-head architecture receipt artifact exists.",
+      "class": "LIVE_GITHUB",
+      "status": "observed",
+      "confidence": "high",
+      "sources": [
+        "https://github.com/mannyc2/effect-build/actions/runs/31990684160",
+        "https://github.com/mannyc2/effect-build/actions/runs/31990684158"
+      ],
+      "limitation": "The source-export artifact is not architecture certification."
+    },
+    {
+      "id": "SYN-003",
+      "claim": "The PR file list contains only .github, plans, and research paths; Plan 039 remains TODO with no publication authority.",
+      "class": "LIVE_GITHUB",
+      "status": "observed",
+      "confidence": "high",
+      "sources": [
+        "https://github.com/mannyc2/effect-build/pull/4/files",
+        "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/plans/039-establish-core-capability-boundaries.md"
+      ]
+    },
+    {
+      "id": "SYN-004",
+      "claim": "Provider-native operations plus finite role capabilities and ordinary Effect composition is the strongest macro-architecture.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "recommended",
+      "confidence": "high",
+      "sources": [
+        "effect-build-architecture-recovery.zip:reconstruction/ARCHITECTURE-DECISION.md:21-76",
+        "effect-build-node-canon-research.zip:composition-api-candidates.md:1-170",
+        "effect-build-browser-role-research.zip:browser-role-candidates.md:20-171"
+      ],
+      "falsifier": "A smaller general algebra must preserve native semantics while eliminating more invalid states and duplicate workflows."
+    },
+    {
+      "id": "SYN-005",
+      "claim": "The current C2 NodeMain observation bag is too permissive to mean SEA-admissible main.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "accepted",
+      "confidence": "high",
+      "sources": [
+        "effect-build-node-canon-research.zip:composition-api-candidates.md:40-69",
+        "effect-build-node-canon-research.zip:node-sea-admissibility.md:111-145"
+      ]
+    },
+    {
+      "id": "SYN-006",
+      "claim": "Node SEA supports one CJS or ESM injected main and its default loader loads built-ins rather than ordinary filesystem/package modules; builder/blob and injected-binary version relation is explicit.",
+      "class": "UPSTREAM_DIRECT",
+      "status": "documented",
+      "confidence": "high",
+      "sources": [
+        "https://nodejs.org/api/single-executable-applications.html",
+        "https://github.com/nodejs/node/blob/v26.7.0/doc/api/single-executable-applications.md"
+      ]
+    },
+    {
+      "id": "SYN-007",
+      "claim": "A profile-specific opaque sealed Node main with a deterministic semantic compatibility agreement is the strongest replacement candidate.",
+      "class": "PROPOSAL",
+      "status": "semantically-proposed",
+      "confidence": "medium-high",
+      "sources": [
+        "effect-build-node-canon-research.zip:node-main-domain-model.md:1-139",
+        "effect-build-node-canon-research.zip:composition-api-candidates.md:102-132",
+        "NODE-CANON-DECISION.md"
+      ],
+      "limitation": "Trusted Bun/esbuild adapters have not passed the complete closure and SEA execution matrix."
+    },
+    {
+      "id": "SYN-008",
+      "claim": "The broad BrowserModuleApplication claim should be withdrawn.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "accepted",
+      "confidence": "high",
+      "sources": [
+        "effect-build-browser-role-research.zip:current-probe-audit.md:23-92",
+        "effect-build-browser-role-research.zip:decision-table.md:3-13"
+      ],
+      "limitation": "The strongest positive receipt covered a narrow fixture; a broader top-level stylesheet case diverged."
+    },
+    {
+      "id": "SYN-009",
+      "claim": "BrowserModulePayload is the strongest browser-role candidate: explicit module entries, provider-owned graph/rewrite, caller-owned HTML, bounded associations, and a borrowed snapshot.",
+      "class": "PROPOSAL",
+      "status": "semantically-proposed",
+      "confidence": "medium",
+      "sources": [
+        "effect-build-browser-role-research.zip:README.md:9-38",
+        "effect-build-browser-role-research.zip:browser-role-candidates.md:65-99",
+        "BROWSER-ROLE-DECISION.md"
+      ]
+    },
+    {
+      "id": "SYN-010",
+      "claim": "Whether supported Deno APIs can prove entry, style, chunk, asset, and complete edge associations remains unresolved.",
+      "class": "UNKNOWN",
+      "status": "open",
+      "confidence": "high",
+      "sources": [
+        "effect-build-browser-role-research.zip:standards-and-provider-survey.md:120-128",
+        "effect-build-browser-role-research.zip:falsifiers-and-open-questions.md:42-53",
+        "https://docs.deno.com/api/deno/bundler/"
+      ]
+    },
+    {
+      "id": "SYN-011",
+      "claim": "Official Effect primitives should own Scope, process handles, streams, filesystem/path mechanics, and telemetry; effect-build should not duplicate them.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "accepted",
+      "confidence": "high",
+      "sources": [
+        "effect-build-lifecycle-observability-research.zip:effect-platform-capability-map.md:9-83",
+        "effect-build-lifecycle-observability-research.zip:primitive-rent-audit.md:155-184"
+      ]
+    },
+    {
+      "id": "SYN-012",
+      "claim": "Borrowed output authority has distinct potential rent: cleanup-root authority, overlap exclusion, containment, revocable observations, mutation, expiry, and Cause/cleanup policy.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "candidate-law",
+      "confidence": "medium-high",
+      "sources": [
+        "effect-build-lifecycle-observability-research.zip:primitive-rent-audit.md:50-75",
+        "effect-build-lifecycle-observability-research.zip:ownership-laws.md:32-155"
+      ],
+      "limitation": "Race, alias, platform, and exact Cause laws remain unexecuted in the supplied lifecycle study."
+    },
+    {
+      "id": "SYN-013",
+      "claim": "Selected-tool authority and durable-file/executable publication are useful shared concepts but are not automatically justified public author exports.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "public-status-unresolved",
+      "confidence": "medium-high",
+      "sources": [
+        "effect-build-lifecycle-observability-research.zip:primitive-rent-audit.md:24-48",
+        "effect-build-lifecycle-observability-research.zip:primitive-rent-audit.md:77-98"
+      ]
+    },
+    {
+      "id": "SYN-014",
+      "claim": "A universal SourceLocator string and public generic command/compiler wrappers should not be published.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "accepted",
+      "confidence": "high",
+      "sources": [
+        "effect-build-lifecycle-observability-research.zip:primitive-rent-audit.md:125-184"
+      ]
+    },
+    {
+      "id": "SYN-015",
+      "claim": "Raw provider command-watch process semantics are valid, while typed portable readiness/rebuild events are not justified by human terminal output.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "accepted",
+      "confidence": "high",
+      "sources": [
+        "effect-build-architecture-recovery.zip:reconstruction/WATCH-AND-OBSERVABILITY.md:12-57",
+        "effect-build-lifecycle-observability-research.zip:command-watch-contract.md:28-125"
+      ]
+    },
+    {
+      "id": "SYN-016",
+      "claim": "Operator telemetry, provider build graphs, source maps, and durable provenance are four different information classes.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "accepted",
+      "confidence": "high",
+      "sources": [
+        "effect-build-lifecycle-observability-research.zip:source-trace-ontology.md:3-174",
+        "effect-build-lifecycle-observability-research.zip:observability-and-provenance-model.md:5-301"
+      ]
+    },
+    {
+      "id": "SYN-017",
+      "claim": "Concrete provider compatibility policy remains unresolved because the dedicated compatibility/DX archive was not supplied and boundary versions do not prove ranges.",
+      "class": "UNKNOWN",
+      "status": "open",
+      "confidence": "high",
+      "sources": [
+        "effect-build-architecture-recovery.zip:reconstruction/VERSION-COMPATIBILITY.md:71-90",
+        "INPUT-AND-METHOD.md"
+      ]
+    },
+    {
+      "id": "SYN-018",
+      "claim": "Exact native provider operation breadth remains unresolved because the dedicated provider-breadth archive was not supplied.",
+      "class": "UNKNOWN",
+      "status": "open",
+      "confidence": "high",
+      "sources": [
+        "effect-build-architecture-recovery.zip:reconstruction/PROVIDER-CAPABILITY-MATRIX.md:19-73",
+        "INPUT-AND-METHOD.md"
+      ]
+    },
+    {
+      "id": "SYN-019",
+      "claim": "NodeSourceExecutable does not currently earn a distinct Recipe protocol or architecture layer.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "accepted",
+      "confidence": "high",
+      "sources": [
+        "effect-build-node-canon-research.zip:composition-api-candidates.md:204-224"
+      ]
+    },
+    {
+      "id": "SYN-020",
+      "claim": "A portable browser build may honestly return a borrowed isolated snapshot but not a cross-platform atomic durable output tree.",
+      "class": "SYNTHESIS_INFERENCE",
+      "status": "accepted",
+      "confidence": "high",
+      "sources": [
+        "effect-build-browser-role-research.zip:output-tree-ownership.md:1-134",
+        "https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html",
+        "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexa"
+      ]
+    },
+    {
+      "id": "SYN-021",
+      "claim": "Lack of an existing consumer affects product priority but is not an architectural falsifier.",
+      "class": "GOVERNING_PRINCIPLE",
+      "status": "accepted",
+      "confidence": "high",
+      "sources": [
+        "user-provided decision rule",
+        "effect-build-architecture-recovery.zip:reconstruction/PROFILE-LAWS.md:12-16"
+      ]
+    },
+    {
+      "id": "SYN-022",
+      "claim": "The governing workspace instruction requires one provider-selected public compileExecutable operation, while AGENTS.md at the observed PR head and base records a different historical multi-operation rule.",
+      "class": "AUTHORITY_OBSERVATION",
+      "status": "reconciliation-required",
+      "confidence": "high",
+      "sources": [
+        "governing workspace AGENTS.md:3-10",
+        "https://github.com/mannyc2/effect-build/blob/96e53a27be4ef96fb47f1a745480e0c5382640f2/AGENTS.md",
+        "https://github.com/mannyc2/effect-build/blob/15c811bb9904142a33d119766b62082f3c689f13/AGENTS.md"
+      ],
+      "limitation": "This is an authority/versioning mismatch, not evidence for either architectural design. Maintainer reconciliation is required before implementation."
+    }
+  ]
+}

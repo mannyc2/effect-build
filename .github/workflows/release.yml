@@ -91,6 +91,7 @@ jobs:
         with:
           ref: ${{ steps.source.outputs.sha }}
           persist-credentials: false
+          fetch-depth: 0
       - name: Validate checked-out candidate source
         shell: bash
         env:

@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -40,6 +42,7 @@ interface WorkflowJob {
   name?: string;
   if?: string;
   needs?: string | string[];
+  env?: Record<string, string>;
   environment?: string;
   outputs?: Record<string, string>;
   permissions?: Record<string, string>;
@@ -60,6 +63,7 @@ interface WorkflowJob {
 interface Workflow {
   on: Record<string, unknown>;
   permissions: Record<string, string>;
+  env?: Record<string, string>;
   jobs: Record<string, WorkflowJob>;
 }
 
@@ -159,6 +163,9 @@ const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "release"): st
       if (checkout?.uses !== checkoutAction) errors.push(`${jobName} must checkout first`);
       if (checkout?.with?.ref !== "${{ github.sha }}") errors.push(`${jobName} checkout ref is not github.sha`);
       if (checkout?.with?.["persist-credentials"] !== false) errors.push(`${jobName} checkout persists credentials`);
+      if (jobName === "quality" && checkout?.with?.["fetch-depth"] !== 0) {
+        errors.push("quality must fetch complete history for the frozen migration authority");
+      }
       if (
         guard?.env?.SOURCE_SHA !== "${{ github.sha }}"
         || guard.shell !== "bash"
@@ -201,6 +208,9 @@ const workflowAuthorityErrors = (workflow: Workflow, kind: "ci" | "release"): st
         errors.push(`${jobName} checkout ref is not the validated source output`);
       }
       if (checkout?.with?.["persist-credentials"] !== false) errors.push(`${jobName} checkout persists credentials`);
+      if (jobName === "candidate-gates" && checkout?.with?.["fetch-depth"] !== 0) {
+        errors.push(`${jobName} must fetch complete history for the frozen migration authority`);
+      }
       if (
         guard?.env?.REQUESTED_SOURCE !== "${{ steps.source.outputs.sha }}"
         || guard.env?.WORKFLOW_SOURCE !== "${{ github.sha }}"
@@ -450,6 +460,300 @@ describe("tooling pins and workflow contracts", () => {
         expect(setup.with?.["package-manager-cache"]).toBe(false);
       }
     }
+  });
+
+  it("keeps Plan 039 implementation certification exact-head, complete, disjoint, and fail-closed", async () => {
+    const workflowSource = await readFile(
+      resolve(root, ".github/workflows/architecture-research.yml"),
+      "utf8",
+    );
+    const workflow = parse(workflowSource) as Workflow;
+    expect(createHash("sha256").update(workflowSource).digest("hex")).toBe(
+      "9dff92e100e5002393f36e485d099db1a4546a15f225ec74db17d6f8190b8829",
+    );
+    expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
+    expect(workflow.permissions).toEqual({ actions: "read", contents: "read" });
+    expect(workflow.env).toEqual({
+      SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
+      CERTIFICATION_PROFILE: "effect-build/plan039-implementation@1",
+    });
+    expect(Object.keys(workflow.jobs)).toEqual(["plan039-implementation"]);
+
+    const job = workflow.jobs["plan039-implementation"]!;
+    expect(Object.keys(job).sort()).toEqual(["runs-on", "steps"]);
+    expect(job["runs-on"]).toBe("ubuntu-24.04");
+    const checkout = job.steps!.find((step) => step.uses === checkoutAction)!;
+    expect(checkout.with).toEqual({
+      ref: "${{ env.SOURCE_SHA }}",
+      "persist-credentials": false,
+      "fetch-depth": 0,
+    });
+    const setupBun = job.steps!.find((step) =>
+      step.uses === "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6"
+    )!;
+    expect(setupBun.with).toEqual({ "bun-version": "1.3.14" });
+    const runs = jobRuns(workflow, "plan039-implementation");
+    const requiredRuns = [
+      'test "$(bun --version)" = "1.3.14"',
+      "bun install --frozen-lockfile",
+      "node --test research/post-0.3/implementation/certification-contract.test.mjs",
+      "bun run verify",
+      "bun test research/post-0.3/r3-provider-compatibility.test.ts research/post-0.3/r4-author-laws.test.mjs",
+      "node --test research/post-0.3/r7-matrix-laws.test.mjs",
+      "node research/post-0.3/implementation/staged-external-author-adapter.mjs",
+      "node research/post-0.3/implementation/certify-current-head.mjs",
+    ];
+    for (const run of requiredRuns) expect(runs).toContain(run);
+    const runIndexes = requiredRuns.map((run) => job.steps!.findIndex((step) => step.run === run));
+    expect(runIndexes.every((index) => index >= 0)).toBe(true);
+    expect(runIndexes).toEqual([...runIndexes].sort((left, right) => left - right));
+    for (const index of runIndexes) {
+      const step = job.steps![index]!;
+      expect(step.if).toBeUndefined();
+      expect(step["continue-on-error"]).toBeUndefined();
+      expect(step.shell).toBeUndefined();
+    }
+    const install = job.steps![runIndexes[1]!]!;
+    expect(install.env).toEqual({ BUN_INSTALL_CACHE_DIR: "${{ runner.temp }}/bun-install-cache" });
+    const certifier = job.steps!.find((step) => step.run?.includes("certify-current-head.mjs"))!;
+    expect(certifier.env).toEqual({
+      GITHUB_TOKEN: "${{ github.token }}",
+      PLAN039_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan039-implementation",
+    });
+    const upload = job.steps!.find((step) => step.uses === uploadArtifactAction)!;
+    expect(upload.with).toEqual({
+      name: "plan039-implementation-certification-${{ env.SOURCE_SHA }}",
+      path: "${{ runner.temp }}/effect-build-plan039-implementation",
+      "if-no-files-found": "error",
+      "retention-days": 90,
+    });
+    const certifierSource = await readFile(
+      resolve(root, "research/post-0.3/implementation/certify-current-head.mjs"),
+      "utf8",
+    );
+    expect(certifierSource).toMatch(/process\.env\.GITHUB_ACTIONS[\s\S]*"true"/);
+    expect(certifierSource).not.toMatch(/PLAN039_HANDOFF_ARCHIVE|PLAN039_REMOTE_REF|local-authenticated-archive/);
+    for (
+      const forbidden of [
+        "surface-freeze",
+        "plan039-phase-handoff",
+        "RESEARCH_RECEIPTS_DIR",
+        "run-receipt-producers.mjs",
+        "validate-receipts.mjs",
+      ]
+    ) expect(workflowSource).not.toContain(forbidden);
+
+    const profile = await readJson("research/post-0.3/implementation/profile.json") as {
+      profileId: string;
+      phase: string;
+      trustAnchor: string;
+      handoffTrustAnchor: string;
+      expectedClaims: string;
+      migrationPlan: string;
+      receiptDirectoryEnvironment: string;
+      certificateFile: string;
+      currentReceiptIds: string[];
+      historicalProfileIds: string[];
+      forbiddenCurrentReceiptIds: string[];
+      implementationFiles: string[];
+      immutablePublicPaths: string[];
+      productionBaseline: { releaseSha: string; freezeSha: string; handoffSha: string };
+      producers: Array<{ script: string; receipts: string[] }>;
+    };
+    const freezeAnchor = await readJson(profile.trustAnchor) as {
+      profileId: string;
+      sourceSha: string;
+      workflow: { runId: string; runAttempt: string };
+      aggregateArtifact: { id: string; digest: string };
+      certification: { digest: string };
+      receipts: Array<{ id: string; file: string; digest: string }>;
+    };
+    const handoffAnchor = await readJson(profile.handoffTrustAnchor) as {
+      profileId: string;
+      sourceSha: string;
+      workflow: { runId: string; runAttempt: string; conclusion: string };
+      aggregateArtifact: { id: string; name: string; sizeInBytes: number; digest: string };
+      certification: { digest: string; phase: string };
+      receipt: { id: string; file: string; digest: string };
+      freezeInput: {
+        sourceSha: string;
+        aggregateArtifactId: string;
+        certificationDigest: string;
+        receiptCount: number;
+      };
+    };
+    const expected = await readJson(profile.expectedClaims) as {
+      profileId: string;
+      receiptId: string;
+      claims: Array<{ id: string }>;
+    };
+    expect(profile).toMatchObject({
+      profileId: "effect-build/plan039-implementation@1",
+      phase: "implementation",
+      receiptDirectoryEnvironment: "PLAN039_RECEIPTS_DIR",
+      certificateFile: "plan039-certification.json",
+      currentReceiptIds: ["plan039-implementation"],
+      historicalProfileIds: ["post-0.3-surface-freeze-v1"],
+      forbiddenCurrentReceiptIds: ["plan039-phase-handoff", "surface-freeze"],
+      productionBaseline: {
+        releaseSha: "f06f96ca88b6278e5f23a898d758b99fa9322108",
+        freezeSha: "a3017657e0851530892a9f3d2d55ac5736769881",
+        handoffSha: "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+      },
+    });
+    expect(profile.producers).toEqual([{
+      lane: "implementation",
+      script: "research/post-0.3/implementation/certify-current-head.mjs",
+      receipts: ["plan039-implementation"],
+    }]);
+    expect(profile.implementationFiles).toEqual([
+      "packages/effect-build/src/Artifact.ts",
+      "packages/effect-build/src/Author/BorrowedOutput.ts",
+      "packages/effect-build/src/Author/Executable.ts",
+      "packages/effect-build/src/Author/Tool.ts",
+      "packages/effect-build/src/Matrix.ts",
+      "packages/effect-build/src/SystemTarget.ts",
+    ]);
+    expect(freezeAnchor.profileId).not.toBe(profile.profileId);
+    expect(freezeAnchor.sourceSha).toBe("a3017657e0851530892a9f3d2d55ac5736769881");
+    expect(freezeAnchor.workflow).toMatchObject({ runId: "32502909677", runAttempt: "1" });
+    expect(freezeAnchor.aggregateArtifact).toMatchObject({
+      id: "9454270941",
+      digest: "sha256:a502ab64e0cda8fb743f3f6175dfcde4c098eeb9546cc98173a7a6b339002233",
+    });
+    expect(freezeAnchor.certification.digest).toBe(
+      "sha256:363b4981470cc95eb6c43fc8e56623aaca1f5d2f89c2e9ca38bcc8e3b2e0fc5c",
+    );
+    expect(freezeAnchor.receipts).toHaveLength(20);
+    expect(freezeAnchor.receipts.map((receipt) => receipt.id)).toContain("surface-freeze");
+    expect(handoffAnchor).toMatchObject({
+      profileId: profile.profileId,
+      sourceSha: "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+      workflow: { runId: "32505419081", runAttempt: "1", conclusion: "success" },
+      aggregateArtifact: {
+        id: "9455113555",
+        name: "plan039-implementation-certification-7de4ffe68931f721317f6be92aac1e01dae6e21e",
+        sizeInBytes: 3896,
+        digest: "sha256:5234a76e040291df7d1dbdd2037f51319736cde5ababbeda66f7fd00ff110504",
+      },
+      certification: {
+        phase: "workflow-handoff",
+        digest: "sha256:77eacc05831d0362b33def11c9ded232a2baa2c14056809b7b751afb343dff56",
+      },
+      receipt: {
+        id: "plan039-phase-handoff",
+        file: "plan039-phase-handoff.json",
+        digest: "sha256:7963f1bbd1a5d015fcb9b963936e7ae153c0d2c07d08a0551b2d2313989d7995",
+      },
+    });
+    expect(handoffAnchor.freezeInput).toMatchObject({
+      sourceSha: freezeAnchor.sourceSha,
+      aggregateArtifactId: freezeAnchor.aggregateArtifact.id,
+      certificationDigest: freezeAnchor.certification.digest,
+      receiptCount: 20,
+    });
+    expect(expected).toMatchObject({
+      profileId: profile.profileId,
+      receiptId: "plan039-implementation",
+    });
+    expect(expected.claims).toHaveLength(4);
+    expect(expected.claims.flatMap((claim) => Object.values(claim)).join(" ")).toContain(
+      "core-migration-plan-resolves-exactly-71-frozen-identities",
+    );
+  });
+
+  it("certifies the exact six-file Plan 039 boundary from green handoff to DONE", async () => {
+    const profile = await readJson("research/post-0.3/implementation/profile.json") as {
+      implementationAllowedPaths: string[];
+      implementationFiles: string[];
+      immutablePublicPaths: string[];
+      productionBaseline: { releaseSha: string; freezeSha: string; handoffSha: string };
+    };
+    const { releaseSha, freezeSha, handoffSha } = profile.productionBaseline;
+    for (
+      const [ancestor, descendant] of [
+        [releaseSha, freezeSha],
+        [freezeSha, handoffSha],
+        [handoffSha, "HEAD"],
+      ] as const
+    ) {
+      expect(() =>
+        execFileSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], {
+          cwd: root,
+          stdio: "pipe",
+        })
+      ).not.toThrow();
+    }
+
+    const nulPaths = (value: Buffer | string) => value.toString().split("\0").filter((path) => path.length > 0);
+    const trackedChanged = nulPaths(execFileSync("git", ["diff", "--name-only", "-z", handoffSha, "--", "."], {
+      cwd: root,
+    }));
+    const untracked = nulPaths(execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], {
+      cwd: root,
+    }));
+    const changedPaths = [...new Set([...trackedChanged, ...untracked])].sort();
+    const allowed = (path: string) =>
+      profile.implementationAllowedPaths.some((entry) => entry.endsWith("/") ? path.startsWith(entry) : path === entry);
+    expect(changedPaths.length).toBeGreaterThan(0);
+    expect(changedPaths.filter((path) => !allowed(path))).toEqual([]);
+
+    const trackedImplementation = nulPaths(execFileSync(
+      "git",
+      ["diff", "--name-only", "-z", "--diff-filter=AM", handoffSha, "--", ...profile.implementationFiles],
+      { cwd: root },
+    ));
+    const implementationFiles = [
+      ...new Set([
+        ...trackedImplementation,
+        ...untracked.filter((path) => profile.implementationFiles.includes(path)),
+      ]),
+    ].sort();
+    expect(implementationFiles).toEqual([...profile.implementationFiles].sort());
+    expect(implementationFiles.every((path) => existsSync(resolve(root, path)))).toBe(true);
+
+    const immutableDiff = nulPaths(execFileSync(
+      "git",
+      ["diff", "--name-only", "-z", handoffSha, "--", ...profile.immutablePublicPaths],
+      { cwd: root },
+    ));
+    expect([
+      ...new Set([
+        ...immutableDiff,
+        ...untracked.filter((path) => profile.immutablePublicPaths.includes(path)),
+      ]),
+    ]).toEqual([]);
+
+    const migrationPlan = await readJson("research/post-0.3/implementation/core-migration-plan.json") as {
+      authorityCount: number;
+      authoritySetSha256: string;
+      legacySourceFiles: Array<{ path: string; action: string }>;
+      stagingRules: { compatibilityDelegates: string; secondPublicPaths: string };
+    };
+    expect(migrationPlan).toMatchObject({
+      authorityCount: 71,
+      authoritySetSha256: "a0bdf3b59a1a85bbc448decd0186e29c0fabe7c04e3203ff6657af5f746bb3fe",
+      stagingRules: { compatibilityDelegates: "forbidden", secondPublicPaths: "forbidden" },
+    });
+    expect(
+      migrationPlan.legacySourceFiles.every((entry) =>
+        entry.action === "delete-at-plan044" || entry.action === "replace-at-plan044"
+      ),
+    ).toBe(true);
+    expect(() =>
+      execFileSync(
+        "git",
+        ["diff", "--exit-code", handoffSha, "--", ...migrationPlan.legacySourceFiles.map((entry) => entry.path)],
+        { cwd: root, stdio: "pipe" },
+      )
+    ).not.toThrow();
+
+    const plan = await readFile(resolve(root, "plans/039-establish-core-capability-boundaries.md"), "utf8");
+    const index = await readFile(resolve(root, "plans/README.md"), "utf8");
+    expect(plan.match(/^- Status: DONE$/gm) ?? []).toHaveLength(1);
+    expect(index).toContain(
+      "| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | DONE |",
+    );
   });
 
   it("makes specialized node-sea CI depend on quality without retaining full verification", async () => {
@@ -1126,6 +1430,12 @@ describe("tooling pins and workflow contracts", () => {
     delayedGuard.jobs.quality!.steps!.splice(1, 1);
     expect(workflowAuthorityErrors(delayedGuard, "ci")).toContain("quality lacks the immediate exact-SHA HEAD guard");
 
+    const shallowQuality = structuredClone(ci);
+    delete shallowQuality.jobs.quality!.steps![0]!.with!["fetch-depth"];
+    expect(workflowAuthorityErrors(shallowQuality, "ci")).toContain(
+      "quality must fetch complete history for the frozen migration authority",
+    );
+
     const credentials = structuredClone(ci);
     credentials.jobs.quality!.steps![0]!.with!["persist-credentials"] = true;
     expect(workflowAuthorityErrors(credentials, "ci")).toContain("quality checkout persists credentials");
@@ -1154,6 +1464,12 @@ describe("tooling pins and workflow contracts", () => {
     wrongDispatchRef.jobs["candidate-gates"]!.steps![1]!.with!.ref = "${{ inputs.commit }}";
     expect(workflowAuthorityErrors(wrongDispatchRef, "release")).toContain(
       "candidate-gates checkout ref is not the validated source output",
+    );
+
+    const shallowCandidate = structuredClone(dispatch);
+    delete shallowCandidate.jobs["candidate-gates"]!.steps![1]!.with!["fetch-depth"];
+    expect(workflowAuthorityErrors(shallowCandidate, "release")).toContain(
+      "candidate-gates must fetch complete history for the frozen migration authority",
     );
 
     const missingEquality = structuredClone(dispatch);

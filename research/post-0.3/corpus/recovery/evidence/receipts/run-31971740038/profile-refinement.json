@@ -1,0 +1,235 @@
+{
+  "schema": "effect-build/architecture-receipt@2",
+  "id": "profile-refinement",
+  "sourceSha": "6b56909018c42f90a67749662013ae0c360fc02f",
+  "status": "reproduced",
+  "claims": [
+    {
+      "id": "browser-module-output-set",
+      "classification": "established",
+      "conclusion": "bun-and-deno-preserve-module-reachable-javascript-and-css",
+      "assertions": [
+        {
+          "name": "bun-output-set",
+          "passed": true
+        },
+        {
+          "name": "deno-output-set",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "html-module-graph-application",
+      "classification": "established",
+      "conclusion": "bun-and-deno-preserve-html-module-graph-applications",
+      "assertions": [
+        {
+          "name": "bun-html-references-resolve",
+          "passed": true
+        },
+        {
+          "name": "deno-html-references-resolve",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "rolled-up-declaration-file",
+      "classification": "falsified",
+      "conclusion": "deno-output-has-unresolved-local-type-import-while-rolldown-is-self-contained",
+      "assertions": [
+        {
+          "name": "deno-2.9.3-unresolved-import",
+          "passed": true
+        },
+        {
+          "name": "deno-2.9.5-unresolved-import",
+          "passed": true
+        },
+        {
+          "name": "rolldown-self-contained",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "browser": {
+      "browserModuleOutputSet": {
+        "bun": {
+          "files": [
+            {
+              "path": "app.css",
+              "extension": ".css",
+              "bytes": 17
+            },
+            {
+              "path": "app.js",
+              "extension": ".js",
+              "bytes": 45
+            }
+          ],
+          "hasJavaScript": true,
+          "hasCss": true,
+          "hasHtml": false,
+          "stderr": ""
+        },
+        "deno": {
+          "files": [
+            {
+              "path": "app.css",
+              "extension": ".css",
+              "bytes": 17
+            },
+            {
+              "path": "app.js",
+              "extension": ".js",
+              "bytes": 45
+            }
+          ],
+          "hasJavaScript": true,
+          "hasCss": true,
+          "hasHtml": false,
+          "stderr": "⚠️  \u001b[0m\u001b[36mdeno bundle\u001b[0m is experimental and subject to changes\n\u001b[0m\u001b[32mBundled\u001b[0m 2 modules in 3ms\n  \u001b[0m\u001b[36m../module-deno/app.js \u001b[0m \u001b[0m\u001b[38;5;245m45B\u001b[0m\n  \u001b[0m\u001b[35m../module-deno/app.css\u001b[0m \u001b[0m\u001b[38;5;245m17B\u001b[0m\n\n"
+        },
+        "conforms": true,
+        "conclusion": "narrow-browser-module-output-set-supported"
+      },
+      "htmlApplicationWithModuleOwnedCss": {
+        "bun": {
+          "files": [
+            {
+              "path": "index-3xv8c2x4.css",
+              "extension": ".css",
+              "bytes": 17
+            },
+            {
+              "path": "index-whqqmsfk.js",
+              "extension": ".js",
+              "bytes": 43
+            },
+            {
+              "path": "index.html",
+              "extension": ".html",
+              "bytes": 174
+            }
+          ],
+          "hasJavaScript": true,
+          "hasCss": true,
+          "hasHtml": true,
+          "referencesExist": true,
+          "stderr": ""
+        },
+        "deno": {
+          "files": [
+            {
+              "path": "index-T7U5YO73.js",
+              "extension": ".js",
+              "bytes": 43
+            },
+            {
+              "path": "index-TRCTXDTB.css",
+              "extension": ".css",
+              "bytes": 17
+            },
+            {
+              "path": "index.html",
+              "extension": ".html",
+              "bytes": 187
+            }
+          ],
+          "hasJavaScript": true,
+          "hasCss": true,
+          "hasHtml": true,
+          "referencesExist": true,
+          "stderr": "⚠️  \u001b[0m\u001b[36mdeno bundle\u001b[0m is experimental and subject to changes\n\u001b[0m\u001b[32mBundled\u001b[0m 3 modules in 3ms\n  \u001b[0m\u001b[36m../html-deno/index-T7U5YO73.js \u001b[0m \u001b[0m\u001b[38;5;245m43B\u001b[0m\n  \u001b[0m\u001b[35m../html-deno/index-TRCTXDTB.css\u001b[0m \u001b[0m\u001b[38;5;245m17B\u001b[0m\n  \u001b[0m\u001b[35m../html-deno/index.html        \u001b[0m \u001b[0m\u001b[38;5;245m187B\u001b[0m\n\n"
+        },
+        "conforms": true,
+        "conclusion": "narrow-html-module-graph-application-supported"
+      }
+    },
+    "declarations": {
+      "selectedDeno": {
+        "files": [
+          {
+            "path": "index.d.ts",
+            "extension": ".ts",
+            "bytes": 94
+          },
+          {
+            "path": "index.js",
+            "extension": ".js",
+            "bytes": 68
+          }
+        ],
+        "contents": {
+          "index.d.ts": "import type { Model } from \"./model.ts\";\nexport declare const make: (value: string) => Model;\n"
+        },
+        "unresolvedImports": [
+          {
+            "path": "index.d.ts",
+            "specifier": "./model.ts"
+          }
+        ]
+      },
+      "currentDeno": {
+        "files": [
+          {
+            "path": "index.d.ts",
+            "extension": ".ts",
+            "bytes": 94
+          },
+          {
+            "path": "index.js",
+            "extension": ".js",
+            "bytes": 68
+          }
+        ],
+        "contents": {
+          "index.d.ts": "import type { Model } from \"./model.ts\";\nexport declare const make: (value: string) => Model;\n"
+        },
+        "unresolvedImports": [
+          {
+            "path": "index.d.ts",
+            "specifier": "./model.ts"
+          }
+        ]
+      },
+      "rolldown": {
+        "files": [
+          {
+            "path": "index.d.ts",
+            "extension": ".ts",
+            "bytes": 356
+          },
+          {
+            "path": "index.d.ts.map",
+            "extension": ".map",
+            "bytes": 170
+          },
+          {
+            "path": "index.js",
+            "extension": ".js",
+            "bytes": 197
+          },
+          {
+            "path": "index.js.map",
+            "extension": ".map",
+            "bytes": 258
+          }
+        ],
+        "contents": {
+          "index.d.ts": "//#region ../../../../../tmp/effect-build-profile-refinement-GjlKWj/declaration-source/model.d.ts\ninterface Model {\n  readonly value: string;\n}\n//#endregion\n//#region ../../../../../tmp/effect-build-profile-refinement-GjlKWj/declaration-source/index.d.ts\nexport declare const make: (value: string) => Model;\n//#endregion\n//# sourceMappingURL=index.d.ts.map"
+        },
+        "unresolvedImports": []
+      },
+      "rolledUpDeclarationFile": {
+        "selectedDenoConforms": false,
+        "currentDenoConforms": false,
+        "rolldownConforms": false,
+        "conclusion": "rolled-up-declaration-file-not-yet-two-way-conformant"
+      }
+    }
+  }
+}

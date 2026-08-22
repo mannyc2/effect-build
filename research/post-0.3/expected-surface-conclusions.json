@@ -1,0 +1,23 @@
+{
+  "schema": "effect-build/expected-architecture-conclusions@2",
+  "claims": [
+    {
+      "receipt": "surface-freeze",
+      "id": "exact-public-surface",
+      "classification": "established",
+      "conclusion": "five-package-namespace-only-surface-with-five-admitted-and-two-derived-operations-is-frozen"
+    },
+    {
+      "receipt": "surface-freeze",
+      "id": "exhaustive-v03-hard-cut",
+      "classification": "established",
+      "conclusion": "all-155-v0.3-public-observations-have-one-resolved-exact-v0.4-disposition-with-zero-blockers"
+    },
+    {
+      "receipt": "surface-freeze",
+      "id": "instruction-and-plan-cutover",
+      "classification": "established",
+      "conclusion": "active-instructions-and-rewritten-plans-039-through-044-match-the-frozen-authority"
+    }
+  ]
+}

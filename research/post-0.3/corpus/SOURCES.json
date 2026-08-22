@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "status": "reference-corpus-not-canonical",
+  "importedFromBranchHead": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+  "sources": [
+    {
+      "name": "effect-build-architecture-recovery.zip",
+      "bytes": 318009,
+      "sha256": "486182ba32a027a70197f2de77df813093e8d8c9f20f61f47cc366292c51479c",
+      "importedPath": "recovery",
+      "importedFiles": 203,
+      "excluded": [
+        "evidence/recovered-part-00/part-00",
+        "evidence/recovered-part-00/partial-closure.patch.gz"
+      ],
+      "note": "The readable partial patch and its recovery notes are retained as historical evidence. The excluded payload bytes are incomplete or redundant and cannot reconstruct the claimed lost closure."
+    },
+    {
+      "name": "effect-build-browser-role-research.zip",
+      "bytes": 68358,
+      "sha256": "4223e559d59364dabd982d2b659e4e780afeeafd4f197699b108c2607fc85092",
+      "importedPath": "lanes/browser-role",
+      "importedFiles": 14,
+      "excluded": []
+    },
+    {
+      "name": "effect-build-lifecycle-observability-research.zip",
+      "bytes": 64845,
+      "sha256": "cb461ca4e598e76ebad09dc604ec29ff93ed166fdf7ba5bd8d12e4e5d13d358e",
+      "importedPath": "lanes/lifecycle-observability",
+      "importedFiles": 14,
+      "excluded": []
+    },
+    {
+      "name": "effect-build-node-canon-research.zip",
+      "bytes": 50556,
+      "sha256": "a09c5b2132e0dacf1d4e18b6b96ae23a75cc4604c9e547f19fa36edadb34319f",
+      "importedPath": "lanes/node-canon",
+      "importedFiles": 14,
+      "excluded": []
+    },
+    {
+      "name": "effect-build-provider-native-breadth-research.zip",
+      "bytes": 43274,
+      "sha256": "9fdcae9db28a655760a85e2848f68d95d346eb191b1d6b4b990dec9b191580da",
+      "importedPath": "lanes/provider-native-breadth",
+      "importedFiles": 19,
+      "excluded": [],
+      "limitation": "The report states that the required synthesis archive was unavailable."
+    },
+    {
+      "name": "effect-build-compatibility-dx-research.zip",
+      "bytes": 56923,
+      "sha256": "a531b8ad1f1c4b6ae730caae6ff1514190dd4f6bb939b92a0051dbd213570128",
+      "importedPath": "lanes/compatibility-dx",
+      "importedFiles": 22,
+      "excluded": [],
+      "limitation": "The report states that the required synthesis and provider-breadth archives were unavailable."
+    },
+    {
+      "name": "effect-build-research-synthesis-2026-08-17.zip",
+      "bytes": 543447,
+      "sha256": "4a1ae74576921f2fa87af52e566f0ae53da5ec6aa241ea13ddc1f3cb35bddd4c",
+      "importedPath": "synthesis",
+      "importedFiles": 15,
+      "excluded": [
+        "inputs/effect-build-architecture-recovery.zip",
+        "inputs/effect-build-browser-role-research.zip",
+        "inputs/effect-build-lifecycle-observability-research.zip",
+        "inputs/effect-build-node-canon-research.zip"
+      ],
+      "note": "Nested input ZIPs duplicate the separately imported readable reports."
+    },
+    {
+      "name": "effect-build-preserved-evidence-2026-08-17.zip",
+      "bytes": 3273147,
+      "sha256": "db6c73dfe42bd089ea04175cc15ed5bc50f01446e1a794fb7fb2b33117695759",
+      "importedPath": "preservation",
+      "importedFiles": 11,
+      "excludedClasses": [
+        "original GitHub Actions ZIP containers",
+        "source-export ZIP",
+        "Git bundle",
+        "duplicated API snapshots"
+      ],
+      "note": "Readable artifact and Git-object ledgers preserve their identities without adding opaque binaries to Git."
+    }
+  ],
+  "observedButNotImported": [
+    {
+      "name": "effect-build-architecture-recovery(1).zip",
+      "bytes": 318009,
+      "sha256": "486182ba32a027a70197f2de77df813093e8d8c9f20f61f47cc366292c51479c",
+      "reason": "Byte-identical duplicate of effect-build-architecture-recovery.zip."
+    },
+    {
+      "name": "effect-build-next-agent-prompts-2026-08-17.zip",
+      "bytes": 36129,
+      "sha256": "df71da691dacbff6dbbe5003096f78c69a4ac25eac2351a4bb5d6d782ba180e5",
+      "reason": "Stale task instructions rather than architectural evidence; archived instructions do not become repository authority."
+    }
+  ]
+}

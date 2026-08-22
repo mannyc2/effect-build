@@ -1,0 +1,260 @@
+{
+  "schema": "effect-build-preserved-evidence/git-object-ledger@1",
+  "repository": "mannyc2/effect-build",
+  "remote": "https://github.com/mannyc2/effect-build.git",
+  "bundle": {
+    "path": "git-bundle/effect-build-reachable-2026-08-17.bundle",
+    "size_in_bytes": 1454597,
+    "sha256": "7accd04b8d5c1dfd3339e340fc407c7b634682c2c3fe95d437759f08f8c35acb",
+    "self_contained": true,
+    "heads": [
+      {
+        "sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+        "ref": "refs/archive/anchors/incomplete-transport-head"
+      },
+      {
+        "sha": "49cd5e1be7917bf14e89068afb4fa47cf78488fb",
+        "ref": "refs/archive/anchors/last-substantive-research"
+      },
+      {
+        "sha": "15c811bb9904142a33d119766b62082f3c689f13",
+        "ref": "refs/archive/anchors/release-line-base"
+      },
+      {
+        "sha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "ref": "refs/archive/anchors/released-v0.3.0"
+      },
+      {
+        "sha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+        "ref": "refs/archive/anchors/reproduced-receipt-boundary"
+      },
+      {
+        "sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+        "ref": "refs/archive/pull/4/head"
+      },
+      {
+        "sha": "665049ffb67537ccb1f3f2dc79e1b874b00a956b",
+        "ref": "refs/archive/pull/4/merge"
+      },
+      {
+        "sha": "f0435d3b52c62ad8a0cdf3a468dc95dfcfdb5612",
+        "ref": "refs/heads/codex/016-bun-workspaces"
+      },
+      {
+        "sha": "559077606d547bebf95518c072e476fafe0d9155",
+        "ref": "refs/heads/codex/020-node-sea-bun-workspaces"
+      },
+      {
+        "sha": "f4aa76fbda183719aae79b32707b8359e1def483",
+        "ref": "refs/heads/codex/021-ts-release-0-2-2-qualification"
+      },
+      {
+        "sha": "95f90cdfe69d5765e64092be1f10f26e8c978f0d",
+        "ref": "refs/heads/codex/022-matrix-fixture-ready-signal"
+      },
+      {
+        "sha": "e4257ccc84db70a6966c163700c9423659f9a4fc",
+        "ref": "refs/heads/codex/effect-build-v0.2.0"
+      },
+      {
+        "sha": "15c811bb9904142a33d119766b62082f3c689f13",
+        "ref": "refs/heads/codex/granular-integration-program"
+      },
+      {
+        "sha": "4f26c02de66db3326932e610b7225fcd0eec8b69",
+        "ref": "refs/heads/codex/lifecycle-sea"
+      },
+      {
+        "sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+        "ref": "refs/heads/codex/post-0.3-native-capability-architecture"
+      },
+      {
+        "sha": "60259f98a460b3d9b25b95221ca71b56c17d9d78",
+        "ref": "refs/heads/main"
+      },
+      {
+        "sha": "559077606d547bebf95518c072e476fafe0d9155",
+        "ref": "refs/pull/1/head"
+      },
+      {
+        "sha": "f4aa76fbda183719aae79b32707b8359e1def483",
+        "ref": "refs/pull/2/head"
+      },
+      {
+        "sha": "95f90cdfe69d5765e64092be1f10f26e8c978f0d",
+        "ref": "refs/pull/3/head"
+      },
+      {
+        "sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+        "ref": "refs/pull/4/head"
+      },
+      {
+        "sha": "665049ffb67537ccb1f3f2dc79e1b874b00a956b",
+        "ref": "refs/pull/4/merge"
+      },
+      {
+        "sha": "945f3d3b485f2ea79312870990764b2bae8547c8",
+        "ref": "refs/tags/v0.1.0"
+      },
+      {
+        "sha": "27f55b30fe1db2c765e03fdf300a10417701fd29",
+        "ref": "refs/tags/v0.2.0"
+      },
+      {
+        "sha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "ref": "refs/tags/v0.3.0"
+      },
+      {
+        "sha": "60259f98a460b3d9b25b95221ca71b56c17d9d78",
+        "ref": "HEAD"
+      }
+    ]
+  },
+  "remote_snapshot": {
+    "ref_count": 17,
+    "comparison_with_bundle_original_refs": "match",
+    "path": "metadata/live-github/remote-refs.tsv"
+  },
+  "anchors": [
+    {
+      "label": "release-line-base",
+      "sha": "15c811bb9904142a33d119766b62082f3c689f13",
+      "object_type": "commit",
+      "tree": "4e3d1be2f2b7018920ae541e4bcf2b2f0f09f53c",
+      "parents": [
+        "b167440d96b081e344ae225fe497a05c052eb8a2"
+      ],
+      "author_date": "2026-08-15T17:05:12-04:00",
+      "committer_date": "2026-08-15T17:05:12-04:00",
+      "subject": "docs: record generic services not earned",
+      "refs_containing": [
+        "refs/archive/anchors/incomplete-transport-head",
+        "refs/archive/anchors/last-substantive-research",
+        "refs/archive/anchors/release-line-base",
+        "refs/archive/anchors/reproduced-receipt-boundary",
+        "refs/archive/pull/4/head",
+        "refs/archive/pull/4/merge",
+        "refs/heads/codex/granular-integration-program",
+        "refs/heads/codex/post-0.3-native-capability-architecture",
+        "refs/pull/4/head",
+        "refs/pull/4/merge"
+      ],
+      "ancestor_of_observed_head": true,
+      "observed_head_commits_ahead": 66,
+      "verified_in_mirror": true,
+      "verified_after_bundle_restore": true
+    },
+    {
+      "label": "released-v0.3.0",
+      "sha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+      "object_type": "commit",
+      "tree": "893643c9adf91cbf9720ccff18f9a6b5b0611ee8",
+      "parents": [
+        "a989fd12c377534b36fb468a2c4e8baf00330410"
+      ],
+      "author_date": "2026-08-15T05:42:40-04:00",
+      "committer_date": "2026-08-15T05:42:40-04:00",
+      "subject": "feat: add exact prepacked release protocol",
+      "refs_containing": [
+        "refs/archive/anchors/incomplete-transport-head",
+        "refs/archive/anchors/last-substantive-research",
+        "refs/archive/anchors/release-line-base",
+        "refs/archive/anchors/released-v0.3.0",
+        "refs/archive/anchors/reproduced-receipt-boundary",
+        "refs/archive/pull/4/head",
+        "refs/archive/pull/4/merge",
+        "refs/heads/codex/granular-integration-program",
+        "refs/heads/codex/post-0.3-native-capability-architecture",
+        "refs/pull/4/head",
+        "refs/pull/4/merge",
+        "refs/tags/v0.3.0"
+      ],
+      "ancestor_of_observed_head": true,
+      "observed_head_commits_ahead": 68,
+      "verified_in_mirror": true,
+      "verified_after_bundle_restore": true
+    },
+    {
+      "label": "reproduced-receipt-boundary",
+      "sha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "object_type": "commit",
+      "tree": "74ba52ff2d94b32e729842f01cba0c31544d49e2",
+      "parents": [
+        "6b56909018c42f90a67749662013ae0c360fc02f"
+      ],
+      "author_date": "2026-08-16T16:51:24-04:00",
+      "committer_date": "2026-08-16T16:51:24-04:00",
+      "subject": "research: assert compatibility decisions and override boundaries",
+      "refs_containing": [
+        "refs/archive/anchors/incomplete-transport-head",
+        "refs/archive/anchors/last-substantive-research",
+        "refs/archive/anchors/reproduced-receipt-boundary",
+        "refs/archive/pull/4/head",
+        "refs/archive/pull/4/merge",
+        "refs/heads/codex/post-0.3-native-capability-architecture",
+        "refs/pull/4/head",
+        "refs/pull/4/merge"
+      ],
+      "ancestor_of_observed_head": true,
+      "observed_head_commits_ahead": 35,
+      "verified_in_mirror": true,
+      "verified_after_bundle_restore": true
+    },
+    {
+      "label": "last-substantive-research",
+      "sha": "49cd5e1be7917bf14e89068afb4fa47cf78488fb",
+      "object_type": "commit",
+      "tree": "20dbc2985991d73dcbc9c0ccb7c74bcb68ffca97",
+      "parents": [
+        "dcc6458587135af3c623f7fc0990ae5a19a5a317"
+      ],
+      "author_date": "2026-08-16T17:26:47-04:00",
+      "committer_date": "2026-08-16T17:26:47-04:00",
+      "subject": "research: add Windows lifecycle conclusion to certification",
+      "refs_containing": [
+        "refs/archive/anchors/incomplete-transport-head",
+        "refs/archive/anchors/last-substantive-research",
+        "refs/archive/pull/4/head",
+        "refs/archive/pull/4/merge",
+        "refs/heads/codex/post-0.3-native-capability-architecture",
+        "refs/pull/4/head",
+        "refs/pull/4/merge"
+      ],
+      "ancestor_of_observed_head": true,
+      "observed_head_commits_ahead": 6,
+      "verified_in_mirror": true,
+      "verified_after_bundle_restore": true
+    },
+    {
+      "label": "incomplete-transport-head",
+      "sha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+      "object_type": "commit",
+      "tree": "88bd428556172ca4b5ec0673b18f57d4839b9431",
+      "parents": [
+        "11617dd64ce9e22f778fc915a35ce698c80bbe02"
+      ],
+      "author_date": "2026-08-16T23:17:17-04:00",
+      "committer_date": "2026-08-16T23:17:17-04:00",
+      "subject": "research: stage canonical closure payload 00",
+      "refs_containing": [
+        "refs/archive/anchors/incomplete-transport-head",
+        "refs/archive/pull/4/head",
+        "refs/archive/pull/4/merge",
+        "refs/heads/codex/post-0.3-native-capability-architecture",
+        "refs/pull/4/head",
+        "refs/pull/4/merge"
+      ],
+      "ancestor_of_observed_head": true,
+      "observed_head_commits_ahead": 0,
+      "verified_in_mirror": true,
+      "verified_after_bundle_restore": true
+    }
+  ],
+  "verification": {
+    "bundle_verify": true,
+    "mirror_fsck_full_strict": true,
+    "fresh_restore": true,
+    "fresh_restore_fsck_full_strict": true,
+    "every_anchor_present_after_restore": true
+  }
+}

@@ -1,0 +1,200 @@
+{
+  "schema": "effect-build/live-github-state@1",
+  "observedAt": "2026-08-17T21:34:58Z",
+  "repository": "mannyc2/effect-build",
+  "readOnly": true,
+  "branch": {
+    "name": "codex/post-0.3-native-capability-architecture",
+    "headSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "treeSha": "88bd428556172ca4b5ec0673b18f57d4839b9431",
+    "commitTimestamp": "2026-08-17T03:17:17Z",
+    "commitMessage": "research: stage canonical closure payload 00"
+  },
+  "pullRequest": {
+    "number": 4,
+    "state": "open",
+    "draft": true,
+    "merged": false,
+    "baseBranch": "codex/granular-integration-program",
+    "baseSha": "15c811bb9904142a33d119766b62082f3c689f13",
+    "headBranch": "codex/post-0.3-native-capability-architecture",
+    "headSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "bodyClaimedFinalResearchHead": "af4887c36753a82c3c97fafc54b3c368cd98b34d",
+    "bodyClaimStatus": "stale proposal text; not live head"
+  },
+  "coordinatesGivenByUser": {
+    "releasedV0_3_0": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+    "lastReproducedReceiptSource": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+    "lastSubstantiveResearchHead": "49cd5e1be7917bf14e89068afb4fa47cf78488fb",
+    "previouslyObservedIncompleteHead": "96e53a27be4ef96fb47f1a745480e0c5382640f2"
+  },
+  "workspace": {
+    "version": "0.3.0",
+    "packageManager": "bun@1.3.14",
+    "devDependencies": {
+      "effect": "4.0.0-rc.108",
+      "@effect/platform-bun": "4.0.0-rc.108",
+      "@effect/platform-deno": "4.0.0-rc.108",
+      "@effect/platform-node": "4.0.0-rc.108",
+      "esbuild": "0.28.2",
+      "typescript": "6.0.3",
+      "@types/node": "24.3.0"
+    }
+  },
+  "packages": {
+    "effect-build": {
+      "version": "0.3.0",
+      "effectPeer": ">=4.0.0-beta.104 <4.1.0-0"
+    },
+    "effect-build-bun": {
+      "version": "0.3.0",
+      "effectBuildDependency": "workspace:^",
+      "effectPeer": ">=4.0.0-beta.104 <4.1.0-0"
+    },
+    "effect-build-deno": {
+      "version": "0.3.0",
+      "effectBuildDependency": "workspace:^",
+      "effectPeer": ">=4.0.0-beta.104 <4.1.0-0"
+    },
+    "effect-build-esbuild": {
+      "version": "0.3.0",
+      "effectBuildDependency": "workspace:^",
+      "effectPeer": ">=4.0.0-beta.104 <4.1.0-0",
+      "esbuildDependency": "0.28.2"
+    },
+    "effect-build-node-sea": {
+      "version": "0.3.0",
+      "effectBuildDependency": "workspace:^",
+      "effectPeer": ">=4.0.0-beta.104 <4.1.0-0"
+    }
+  },
+  "implementationChecks": {
+    "esbuild": {
+      "acceptedApiVersion": "0.28.2",
+      "lane": "in-process-context"
+    },
+    "nodeSea": {
+      "acceptedNodeVersion": "26.7.0",
+      "acceptedTarget": "linux-x64-gnu",
+      "operation": "assemble-node-sea"
+    },
+    "toolDiscovery": {
+      "explicitPathMustBeAbsolute": true,
+      "pathDiscovery": "first matching executable in PATH",
+      "ambiguitySurfaced": false,
+      "observationFields": [
+        "name",
+        "version",
+        "path"
+      ],
+      "digestRecorded": false,
+      "replacementRecheck": false
+    }
+  },
+  "ciConfiguredExactCoordinates": {
+    "orchestratorNode": "24.14.1",
+    "hostBun": "1.3.14",
+    "selectedBun": "1.3.9+cf6cdbbba",
+    "selectedDeno": "2.9.3",
+    "selectedDenort": "2.9.3",
+    "esbuild": "0.28.2",
+    "nodeSeaProducers": [
+      "25.5.0",
+      "26.7.0"
+    ],
+    "effectEndpoints": [
+      "4.0.0-beta.104",
+      "4.0.0-rc.108"
+    ],
+    "publicationHosts": [
+      "ubuntu-24.04",
+      "macos-15",
+      "windows-2025"
+    ]
+  },
+  "workflowObservations": {
+    "liveHeadMainRun": {
+      "runId": 31990684160,
+      "conclusion": "failure",
+      "testedMergeCommit": "665049ffb67537ccb1f3f2dc79e1b874b00a956b",
+      "scope": "individual successful jobs are exact recorded executions; aggregate failed at formatting of research files",
+      "successfulNamedJobs": [
+        "Bun bundle",
+        "target-support Bun",
+        "target-support Deno",
+        "publication-hosts Ubuntu",
+        "publication-hosts macOS",
+        "publication-hosts Windows",
+        "real-tools",
+        "esbuild",
+        "Effect 4.0.0-beta.104",
+        "Effect 4.0.0-rc.108"
+      ],
+      "qualityBeforeFailure": [
+        "build",
+        "check",
+        "type tests",
+        "unit tests",
+        "packed consumers",
+        "architecture tests",
+        "lint"
+      ],
+      "failure": "dprint found five unformatted research files"
+    },
+    "liveHeadArchitectureRun": {
+      "runId": 31990684158,
+      "jobId": 95273543625,
+      "conclusion": "failure",
+      "failureStage": "Type-check current contract prototypes",
+      "receiptProducingStagesExecuted": false,
+      "artifactWithReceipts": false
+    },
+    "historicalReceiptRun": {
+      "runId": 31971767617,
+      "jobId": 95225202761,
+      "sourceSha": "9b0d2f59567a7684b62df932c67b7a96050b605f",
+      "conclusion": "success",
+      "artifactId": 9269991589,
+      "artifactSizeBytes": 8951,
+      "artifactSha256": "d783cfb14665c891f32e76aca095de08777c5b00e9fb517b26faa38eeb5582d9",
+      "receiptCount": 7,
+      "claimCount": 18
+    }
+  },
+  "missingInputs": [
+    "effect-build-research-synthesis-2026-08-17.zip",
+    "effect-build-provider-native-breadth-research.zip"
+  ],
+  "limitation": "Operation-specific future policy is provisional until the provider-native operation inventory is reconciled. No support range was inferred from endpoint successes.",
+  "sources": [
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05",
+    "S06",
+    "S07",
+    "S08",
+    "S09",
+    "S10",
+    "S11",
+    "S12",
+    "S13",
+    "S16",
+    "S17",
+    "S18",
+    "S19",
+    "S20",
+    "S21",
+    "S22",
+    "S23",
+    "S24",
+    "S25"
+  ],
+  "observedAtAmericaNewYork": "2026-08-17T17:34:58-04:00",
+  "finalHeadRecheck": {
+    "at": "2026-08-17T21:34:58Z",
+    "headSha": "96e53a27be4ef96fb47f1a745480e0c5382640f2",
+    "unchanged": true
+  }
+}

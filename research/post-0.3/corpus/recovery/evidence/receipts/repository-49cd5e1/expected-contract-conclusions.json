@@ -1,0 +1,11 @@
+{
+  "schema": "effect-build/expected-architecture-conclusions@2",
+  "claims": [
+    {
+      "receipt": "contract-declarations",
+      "id": "contract-declarations",
+      "classification": "established",
+      "conclusion": "canonical-profile-declarations-and-generated-markdown-are-synchronized"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "effect-build/expected-architecture-conclusions@2",
+  "claims": [
+    {
+      "receipt": "repository-scope",
+      "id": "research-only-repository-scope",
+      "classification": "established",
+      "conclusion": "exact-head-descends-from-release-and-approved-base-with-only-instruction-ci-research-workflow-plan-and-architecture-test-changes"
+    },
+    {
+      "receipt": "remote-head",
+      "id": "fresh-remote-head",
+      "classification": "established",
+      "conclusion": "fresh-pull-request-or-branch-head-equals-the-exact-certified-source"
+    }
+  ]
+}

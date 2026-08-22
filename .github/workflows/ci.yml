@@ -15,6 +15,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          fetch-depth: 0
       - name: Validate checked-out source
         shell: bash
         env:

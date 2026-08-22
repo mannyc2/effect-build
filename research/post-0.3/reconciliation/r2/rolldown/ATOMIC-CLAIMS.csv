@@ -1,0 +1,161 @@
+claim_id,kind,claim,operation_ref,semantic_ref,evidence_ref
+AC-ROL-001,op,acquire-reusable-build is a…,OP-ROL-001,OP-ROL-001,E-ROL-ACQUIRE
+AC-ROL-002,op,generate is a distinct…,OP-ROL-002,OP-ROL-002,E-ROL-HANDLE
+AC-ROL-003,op,write is a distinct…,OP-ROL-003,OP-ROL-003,E-ROL-HANDLE
+AC-ROL-004,op,close-reusable-build is a…,OP-ROL-004,OP-ROL-004,E-ROL-HANDLE
+AC-ROL-005,op,build-one-shot-generate is a…,OP-ROL-005,OP-ROL-005,E-ROL-BUILD
+AC-ROL-006,op,build-one-shot-write is a…,OP-ROL-006,OP-ROL-006,E-ROL-BUILD
+AC-ROL-007,op,watch-direct-write is a…,OP-ROL-007,OP-ROL-007,E-ROL-WATCH-API
+AC-ROL-008,op,watch-skip-write is a distinct…,OP-ROL-008,OP-ROL-008,E-ROL-WATCH-API
+AC-ROL-009,op,close-watch-session is a…,OP-ROL-009,OP-ROL-009,E-ROL-WATCH-IMPL
+AC-ROL-010,op,cli-bundle-stdout is a…,OP-ROL-010,OP-ROL-010,E-ROL-PKG
+AC-ROL-011,op,cli-bundle-write is a distinct…,OP-ROL-011,OP-ROL-011,E-ROL-CLI-BUNDLE
+AC-ROL-012,op,cli-watch is a distinct…,OP-ROL-012,OP-ROL-012,E-ROL-CLI-BUNDLE
+AC-ROL-013,op,transform-source is a distinct…,OP-ROL-013,OP-ROL-013,E-ROL-UTILS
+AC-ROL-014,op,parse-source is a distinct…,OP-ROL-014,OP-ROL-014,E-ROL-UTILS
+AC-ROL-015,op,minify-source is a distinct…,OP-ROL-015,OP-ROL-015,E-ROL-UTILS
+AC-ROL-016,op,resolve-module is a distinct…,OP-ROL-016,OP-ROL-016,E-ROL-EXPERIMENTAL
+AC-ROL-017,op,scan-graph is a distinct…,OP-ROL-017,OP-ROL-017,E-ROL-SCAN
+AC-ROL-018,op,acquire-dev-engine is a…,OP-ROL-018,OP-ROL-018,E-ROL-DEV
+AC-ROL-019,op,close-dev-engine is a distinct…,OP-ROL-019,OP-ROL-019,E-ROL-DEV
+AC-ROL-020,op,emit-isolated-declaration is a…,OP-ROL-020,OP-ROL-020,E-ROL-EXPERIMENTAL
+AC-ROL-021,op,module-runner-transform is a…,OP-ROL-021,OP-ROL-021,E-ROL-EXPERIMENTAL
+AC-ROL-022,op,load-config is a distinct…,OP-ROL-022,OP-ROL-022,E-ROL-CONFIG
+AC-ROL-023,mode,"Input accepts one entry, an…",OP-ROL-001,,E-ROL-INPUT
+AC-ROL-024,mode,Reusable acquisition is lazy…,OP-ROL-001,,E-ROL-ACQUIRE
+AC-ROL-025,mode,generate accepts output…,OP-ROL-002,,E-ROL-HANDLE
+AC-ROL-026,mode,write accepts output options…,OP-ROL-003,,E-ROL-HANDLE
+AC-ROL-027,mode,build selects memory mode only…,OP-ROL-005,,E-ROL-BUILD
+AC-ROL-028,mode,build defaults to direct-write…,OP-ROL-006,,E-ROL-BUILD
+AC-ROL-029,mod,"Plugins may be asynchronous,…",OP-ROL-001,,E-ROL-INPUT
+AC-ROL-030,mod,External selection supports…,OP-ROL-001,,E-ROL-INPUT
+AC-ROL-031,mod,Platform changes default…,OP-ROL-001,,E-ROL-INPUT
+AC-ROL-032,mod,Loader/module type selection…,OP-ROL-001,,E-ROL-INPUT
+AC-ROL-033,mod,"Aliases, conditions,…",OP-ROL-001,,E-ROL-INPUT
+AC-ROL-034,mod,"Define, inject, target and…",OP-ROL-002,,E-ROL-TRANSFORM-OPTIONS
+AC-ROL-035,mod,"Output format, naming and…",OP-ROL-002,,E-ROL-OUTPUT-OPTIONS
+AC-ROL-036,mod,Sourcemap mode changes…,OP-ROL-002,,E-ROL-OUTPUT-OPTIONS
+AC-ROL-037,result,RolldownOutput.output is an…,OP-ROL-002,,E-ROL-OUTPUT-TYPES
+AC-ROL-038,result,"OutputChunk exposes code, file…",OP-ROL-002,,E-ROL-OUTPUT-TYPES
+AC-ROL-039,result,OutputAsset exposes file…,OP-ROL-002,,E-ROL-OUTPUT-TYPES
+AC-ROL-040,result,"SourceMap exposes mappings,…",OP-ROL-002,,E-ROL-OUTPUT-TYPES
+AC-ROL-041,result,Rendered-module metadata…,OP-ROL-002,,E-ROL-OUTPUT-TYPES
+AC-ROL-042,result,Chunk imports distinguish…,OP-ROL-002,,E-ROL-OUTPUT-TYPES
+AC-ROL-043,result,Generated output may retain…,OP-ROL-002,,E-ROL-EXTMEM
+AC-ROL-044,result,keepData/freeExternalMemory…,OP-ROL-002,,E-ROL-EXTMEM
+AC-ROL-045,result,Transform results may include…,OP-ROL-013,,E-ROL-TRANSFORM
+AC-ROL-046,result,"Parse results may include AST,…",OP-ROL-014,,E-ROL-PARSE
+AC-ROL-047,result,Minify results may include…,OP-ROL-015,,E-ROL-MINIFY
+AC-ROL-048,result,Resolve results distinguish…,OP-ROL-016,,E-ROL-BINDING-DTS
+AC-ROL-049,result,Watch bundle events carry…,OP-ROL-007,,E-ROL-WATCH-EVENT
+AC-ROL-050,result,CLI stdout is human-oriented…,OP-ROL-010,,E-ROL-CLI-BUNDLE
+AC-ROL-051,result,loadConfig returns configured…,OP-ROL-022,,E-ROL-CONFIG
+AC-ROL-052,subop,options hook can replace…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-053,subop,buildStart brackets each graph…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-054,subop,resolveId participates in…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-055,subop,resolveDynamicImport…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-056,subop,load supplies source for a…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-057,subop,transform rewrites a loaded…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-058,subop,moduleParsed observes module…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-059,subop,buildEnd observes build…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-060,subop,renderStart begins output…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-061,subop,resolveFileUrl customizes…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-062,subop,resolveImportMeta customizes…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-063,subop,banner contributes output…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-064,subop,footer contributes output…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-065,subop,intro contributes chunk…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-066,subop,outro contributes chunk…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-067,subop,renderDynamicImport customizes…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-068,subop,augmentChunkHash contributes…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-069,subop,renderChunk rewrites generated…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-070,subop,generateBundle may mutate the…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-071,subop,writeBundle runs after…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-072,subop,closeBundle participates in…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-073,subop,watchChange and closeWatcher…,OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-074,relation,"The JavaScript package,…",,,E-ROL-PKG
+AC-ROL-075,relation,Package version alone does not…,,,E-ROL-PKG
+AC-ROL-076,relation,Native selection depends on…,,,E-ROL-BINDING-LOADER
+AC-ROL-077,relation,WASI loading is a distinct…,,,E-ROL-BINDING-LOADER
+AC-ROL-078,relation,The package engine declaration…,,,E-ROL-NODE-ENGINES
+AC-ROL-079,relation,"Root exports, experimental…",,,E-ROL-PKG
+AC-ROL-080,relation,Selected-command identity must…,,,E-ROL-PKG
+AC-ROL-081,relation,A replaceable selected command…,,,E-EB-COMPAT
+AC-ROL-082,relation,Exact evidence at 1.2.4 does…,,,E-ROL-TAG
+AC-ROL-083,relation,Experimental annotations are…,,,E-ROL-EXPERIMENTAL
+AC-ROL-084,relation,Deprecated Vite-only…,,,E-ROL-EXPERIMENTAL
+AC-ROL-085,relation,Isolated declaration output…,,,E-ROL-EXPERIMENTAL
+AC-ROL-086,relation,The archived narrow fixture…,,,E-EB-RECEIPT
+AC-ROL-087,relation,Published optional…,,,E-ROL-NATIVE-PACKAGES
+AC-ROL-088,relation,Bun-host applicability remains…,,,E-ROL-NODE-ENGINES
+AC-ROL-089,life,RolldownBuild is the owner of…,OP-ROL-001,,E-ROL-HANDLE
+AC-ROL-090,life,Effect Scope should own…,OP-ROL-001,,E-EB-LIFE
+AC-ROL-091,life,One-shot build wrappers…,OP-ROL-005,,E-ROL-BUILD
+AC-ROL-092,life,Watcher lifetime is distinct…,OP-ROL-007,,E-ROL-WATCH-EVENT
+AC-ROL-093,life,Every watcher result handle…,OP-ROL-007,,E-ROL-WATCH-EVENT
+AC-ROL-094,life,DevEngine is a separate state…,OP-ROL-018,,E-ROL-DEV
+AC-ROL-095,life,scan returns a borrowed…,OP-ROL-017,,E-ROL-SCAN
+AC-ROL-096,life,ResolverFactory is reusable…,OP-ROL-016,,E-ROL-EXPERIMENTAL
+AC-ROL-097,life,Concurrent generate calls…,OP-ROL-002,,E-ROL-HANDLE
+AC-ROL-098,life,Concurrent write calls require…,OP-ROL-003,,E-ROL-HANDLE
+AC-ROL-099,life,Close racing generate or write…,OP-ROL-002,,E-EB-PROBE
+AC-ROL-100,life,Post-close generate/write…,OP-ROL-002,,E-EB-RECEIPT
+AC-ROL-101,life,Direct provider writes are…,OP-ROL-003,,E-EB-LIFE
+AC-ROL-102,life,Cancellation cannot claim…,OP-ROL-003,,E-EB-LIFE
+AC-ROL-103,life,Memory generation publishes…,OP-ROL-002,,E-ROL-OUTPUT-TYPES
+AC-ROL-104,life,Plugin generateBundle can…,OP-ROL-002,,E-ROL-PLUGIN
+AC-ROL-105,life,Plugin writeBundle observes…,OP-ROL-003,,E-ROL-PLUGIN
+AC-ROL-106,life,Plugin filesystem access is an…,OP-ROL-001,,E-ROL-PLUGIN-CONTEXT
+AC-ROL-107,life,CLI watch is an owned…,OP-ROL-012,,E-ROL-CLI-BUNDLE
+AC-ROL-108,life,"Cleanup success, idempotency…",OP-ROL-004,,E-EB-PROBE
+AC-ROL-109,compat,Provider support must fail…,,,E-EB-COMPAT
+AC-ROL-110,compat,An untested-version override…,,,E-EB-COMPAT
+AC-ROL-111,compat,"Operation, lane, host and…",,,E-EB-COMPAT
+AC-ROL-112,compat,Capability probes must be…,,,E-EB-COMPAT
+AC-ROL-113,compat,Root stable APIs and…,,,E-ROL-INDEX
+AC-ROL-114,compat,CLI support requires a…,,,E-ROL-CLI-BUNDLE
+AC-ROL-115,compat,Config loading executes…,,,E-ROL-CONFIG
+AC-ROL-116,compat,"Transform, parse and minify…",,,E-ROL-UTILS
+AC-ROL-117,compat,Generate is the only Rolldown…,,,E-EB-RECEIPT
+AC-ROL-118,compat,The narrow seed does not…,,,E-EB-RECEIPT
+AC-ROL-119,compat,Declaration emission remains…,,,E-ROL-EXPERIMENTAL
+AC-ROL-120,compat,DevEngine remains rejected…,,,E-ROL-DEV
+AC-ROL-121,compat,Deprecated module-runner…,,,E-ROL-EXPERIMENTAL
+AC-ROL-122,compat,Provider direct-write…,,,E-EB-BREADTH
+AC-ROL-123,compat,No operation row constitutes…,,,E-EB-PROGRAM
+AC-ROL-124,arch,Only operation rows receive…,,,E-EB-GATES
+AC-ROL-125,arch,Lifecycle and publication…,,,E-EB-GATES
+AC-ROL-126,arch,Provider-native breadth is…,,,E-EB-BREADTH
+AC-ROL-127,arch,Provider-package priority is…,,,E-EB-GOV
+AC-ROL-128,arch,A thin Effect function may…,,,E-EB-BREADTH
+AC-ROL-129,arch,A Context service is earned…,,,E-EB-BREADTH
+AC-ROL-130,arch,A scoped handle should not…,,,E-EB-BREADTH
+AC-ROL-131,arch,Finite cross-provider roles…,,,E-EB-NODE-CANON
+AC-ROL-132,arch,Provider-specific result…,,,E-ROL-OUTPUT-TYPES
+AC-ROL-133,arch,Caller-owned output values are…,,,E-ROL-OUTPUT-TYPES
+AC-ROL-134,arch,Direct writes do not become…,,,E-EB-LIFE
+AC-ROL-135,arch,Receipts must bind exact…,,,E-EB-RECEIPT
+AC-ROL-136,arch,Documentation evidence…,,,E-ROL-TAG
+AC-ROL-137,arch,Source implementation evidence…,,,E-ROL-HANDLE
+AC-ROL-138,arch,Recorded execution establishes…,,,E-EB-RECEIPT
+AC-ROL-139,arch,Package gates and…,,,E-EB-GATES
+AC-ROL-140,arch,Rolldown provider work must…,,,E-EB-NODE-CANON
+AC-ROL-141,arch,This supplement is research…,,,E-EB-DEC
+AC-ROL-142,probe,Probe repeated generate on one…,OP-ROL-001,,E-EB-PROBE
+AC-ROL-143,probe,Probe concurrent generate…,OP-ROL-002,,E-EB-PROBE
+AC-ROL-144,probe,Probe concurrent write calls…,OP-ROL-003,,E-EB-PROBE
+AC-ROL-145,probe,Probe close racing generate…,OP-ROL-002,,E-EB-PROBE
+AC-ROL-146,probe,Probe close idempotency and…,OP-ROL-004,,E-EB-PROBE
+AC-ROL-147,probe,"Probe external-memory release,…",OP-ROL-002,,E-ROL-EXTMEM
+AC-ROL-148,probe,Probe one-shot build…,OP-ROL-005,,E-ROL-BUILD
+AC-ROL-149,probe,Probe direct-write…,OP-ROL-003,,E-EB-LIFE
+AC-ROL-150,probe,"Probe watch event order,…",OP-ROL-007,,E-ROL-WATCH-EVENT
+AC-ROL-151,probe,Probe watcher close during an…,OP-ROL-007,,E-ROL-WATCH-IMPL
+AC-ROL-152,probe,Probe CLI stdout for one and…,OP-ROL-010,,E-ROL-CLI-BUNDLE
+AC-ROL-153,probe,Probe CLI direct-write…,OP-ROL-011,,E-ROL-CLI-BUNDLE
+AC-ROL-154,probe,"Probe plugin hook ordering,…",OP-ROL-001,,E-ROL-PLUGIN
+AC-ROL-155,probe,Probe resolver factory reuse…,OP-ROL-016,,E-ROL-EXPERIMENTAL
+AC-ROL-156,probe,Probe scan cleanup…,OP-ROL-017,,E-ROL-SCAN
+AC-ROL-157,probe,Probe DevEngine callback…,OP-ROL-018,,E-ROL-DEV
+AC-ROL-158,probe,Probe package/loader/native…,,,E-ROL-BINDING-LOADER
+AC-ROL-159,probe,Probe selected-command…,OP-ROL-010,,E-EB-COMPAT
+AC-ROL-160,probe,Probe strict…,OP-ROL-001,,E-EB-NODE-CANON

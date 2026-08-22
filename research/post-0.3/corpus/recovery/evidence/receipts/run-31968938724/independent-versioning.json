@@ -1,0 +1,38 @@
+{
+  "schema": "effect-build/architecture-receipt@2",
+  "id": "independent-versioning",
+  "sourceSha": "4f718f37dc1182cd7aee8190ee647fba17dd2da4",
+  "status": "reproduced",
+  "claims": [
+    {
+      "id": "provider-core-skew",
+      "classification": "established",
+      "conclusion": "bounded-peer-range-allows-compatible-core-and-rejects-incompatible-core",
+      "assertions": [
+        {
+          "name": "compatible-peer-install",
+          "passed": true
+        },
+        {
+          "name": "incompatible-peer-rejection",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "compatible": {
+      "installed": true,
+      "observation": {
+        "providerVersion": "0.7.0",
+        "coreVersion": "0.4.0"
+      },
+      "lockCreated": true
+    },
+    "incompatible": {
+      "rejectedByPeerRange": true,
+      "stderr": "npm error code ERESOLVE\nnpm error ERESOLVE unable to resolve dependency tree\nnpm error\nnpm error While resolving: incompatible-app@undefined\nnpm error Found: effect-build@0.5.0\nnpm error node_modules/effect-build\nnpm error   effect-build@\"file:/tmp/effect-build-versioning-research-0vWk8h/packed/effect-build-0.5.0.tgz\" from the root project\nnpm error\nnpm error Could not resolve dependency:\nnpm error peer effect-build@\">=0.4.0 <0.5.0\" from effect-build-bun@0.7.0\nnpm error node_modules/effect-build-bun\nnpm error   effect-build-bun@\"file:/tmp/effect-build-versioning-research-0vWk8h/packed/effect-build-bun-0.7.0.tgz\" from the root project\nnpm error\nnpm error Fix the upstream dependency conflict, or retry\nnpm error this command with --no-strict-peer-deps, --force, or --legacy-peer-deps\nnpm error to accept an incorrect (and potentially broken) dependency resolution.\nnpm error\nnpm error\nnpm error For a full report see:\nnpm error /tmp/effect-build-versioning-research-0vWk8h/npm-cache/_logs/2026-08-16T19_55_29_157Z-eresolve-report.txt\nnpm error A complete log of this run can be found in: /tmp/effect-build-versioning-research-0vWk8h/npm-cache/_logs/2026-08-16T19_55_29_157Z-debug-0.log\n"
+    },
+    "conclusion": "coordinated-0.4-cut-independent-provider-releases-technically-coherent"
+  }
+}

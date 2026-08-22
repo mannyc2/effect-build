@@ -1,0 +1,1748 @@
+{
+  "schema": "effect-build/surface-adjudication@1",
+  "date": "2026-08-21",
+  "status": "frozen",
+  "source": {
+    "r1Candidates": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+    "r1StopCondition": "research/post-0.3/reconciliation/r1/STOP-CONDITION.json",
+    "policy": "research/post-0.3/freeze/SURFACE-ADJUDICATION-POLICY.json"
+  },
+  "rule": "A selected R1 candidate enters the surface only when committed executable evidence closes every conjunct in its exact pre-freeze gate. Partial, source-only, narrow, or uncommitted evidence does not close a gate.",
+  "counts": {
+    "total": 67,
+    "ship": 5,
+    "defer": 51,
+    "reject": 11,
+    "targetedProofAuditPending": 0
+  },
+  "candidates": [
+    {
+      "operationId": "CAN-BUN-001",
+      "semanticIdentity": "bun / create-transpiler / host-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "GC/native backing lifetime and concurrency",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: GC/native backing lifetime and concurrency.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./Transpiler",
+        "export": "make",
+        "rootNamespace": "Transpiler"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-002",
+      "semanticIdentity": "bun / transpile-source-async / host-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "provider work after Effect interruption",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: provider work after Effect interruption.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./Transpiler",
+        "export": "transform",
+        "rootNamespace": "Transpiler"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-003",
+      "semanticIdentity": "bun / transpile-source-sync / host-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "non-interruptible execution boundary",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: non-interruptible execution boundary.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./Transpiler",
+        "export": "transformSync",
+        "rootNamespace": "Transpiler"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-004",
+      "semanticIdentity": "bun / scan-source / host-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "latency and adversarial accuracy",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: latency and adversarial accuracy.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./Transpiler",
+        "export": "scan",
+        "rootNamespace": "Transpiler"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-005",
+      "semanticIdentity": "bun / scan-imports-fast / host-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "adversarial accuracy boundary",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: adversarial accuracy boundary.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./Transpiler",
+        "export": "scanImports",
+        "rootNamespace": "Transpiler"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-006",
+      "semanticIdentity": "bun / build-memory / host-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "cancellation and retained artifact lifetime",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: cancellation and retained artifact lifetime.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./Build",
+        "export": "build",
+        "rootNamespace": "Build"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-007",
+      "semanticIdentity": "bun / build-direct-write / host-api / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "partial writes; pre-existing outputs; interruption remnants",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: partial writes; pre-existing outputs; interruption remnants.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./BuildToDirectory",
+        "export": "buildToDirectory",
+        "rootNamespace": "BuildToDirectory"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-008",
+      "semanticIdentity": "bun / build-stdout / selected-command / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "collection bounds and signal outcome",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: collection bounds and signal outcome.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./BuildCommand",
+        "export": "build",
+        "rootNamespace": "BuildCommand"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-009",
+      "semanticIdentity": "bun / build-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "partial writes; replacement; signal remnants",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: partial writes; replacement; signal remnants.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./BuildCommandToDirectory",
+        "export": "buildToDirectory",
+        "rootNamespace": "BuildCommandToDirectory"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-010",
+      "semanticIdentity": "bun / build-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "readiness; recovery; subtree termination; remnants",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: readiness; recovery; subtree termination; remnants.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./BuildWatchCommand",
+        "export": "watch",
+        "rootNamespace": "BuildWatchCommand"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-011",
+      "semanticIdentity": "bun / compile-executable / host-api / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "target matrix; acquisition; interruption remnants",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: target matrix; acquisition; interruption remnants.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./CompileExecutableApi",
+        "export": "compileExecutableDirect",
+        "rootNamespace": "CompileExecutableApi"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-012",
+      "semanticIdentity": "bun / compile-executable / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "ship",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-closed-gate-override",
+      "preFreezeGate": "target matrix; acquisition; interruption and publication certification",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "git-tree:packages=9ad55683899ec7447b608cff7997ac5a2572a996",
+        "git-blob:tooling/public-api.json=c8c2169b0db1c522ffa1fec6b93db093fc21f1c6",
+        "git-diff:v0.3.0..adjudicated-head:packages,package.json,bun.lock,tooling/public-api.json=empty",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833693",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833767",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833745",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833768",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833773"
+      ],
+      "blocker": "The unchanged production operation is admitted from the exact green v0.3 source and target/publication jobs; the final freeze source must rerun the unchanged ordinary gates.",
+      "targetedProofAuditReason": null,
+      "support": {
+        "tool": "bun",
+        "exactVersion": "1.3.9",
+        "orchestrator": "node",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "targets": [
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-x64-musl",
+          "linux-aarch64-gnu",
+          "windows-x64"
+        ]
+      },
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-bun",
+        "subpath": "./CompileExecutable",
+        "export": "compileExecutable",
+        "rootNamespace": "CompileExecutable"
+      }
+    },
+    {
+      "operationId": "CAN-BUN-014",
+      "semanticIdentity": "bun / plugin-register-global / host-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection is architectural",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-bun",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-BUN-015",
+      "semanticIdentity": "bun / plugin-clear-global / host-api / one-shot / {none, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection is architectural",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-bun",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-DENO-001",
+      "semanticIdentity": "deno / bundle-memory / host-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "permission and interruption execution",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-deno",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-DENO-002",
+      "semanticIdentity": "deno / bundle-direct-write / host-api / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "permission matrix; partial writes; remnants",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-deno",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-DENO-003",
+      "semanticIdentity": "deno / bundle-stdout / selected-command / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "framing; stderr; bounds; interruption",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-deno",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-DENO-004",
+      "semanticIdentity": "deno / bundle-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "partial writes and project precedence execution",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-deno",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-DENO-005",
+      "semanticIdentity": "deno / bundle-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "rebuild recovery; termination; reaping; remnants",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-deno",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-DENO-006",
+      "semanticIdentity": "deno / bundle-declarations-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "closure and output topology",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-deno",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-DENO-007",
+      "semanticIdentity": "deno / transpile-stdout / selected-command / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "collection bounds and diagnostics execution",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: collection bounds and diagnostics execution.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-deno",
+        "subpath": "./TranspileCommand",
+        "export": "transpile",
+        "rootNamespace": "TranspileCommand"
+      }
+    },
+    {
+      "operationId": "CAN-DENO-008",
+      "semanticIdentity": "deno / transpile-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "interruption and map remnants",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: interruption and map remnants.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-deno",
+        "subpath": "./TranspileCommandToDirectory",
+        "export": "transpileToDirectory",
+        "rootNamespace": "TranspileCommandToDirectory"
+      }
+    },
+    {
+      "operationId": "CAN-DENO-009",
+      "semanticIdentity": "deno / transpile-declarations-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "declaration failure and topology",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: declaration failure and topology.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-deno",
+        "subpath": "./TranspileDeclarationsCommand",
+        "export": "emitDeclarations",
+        "rootNamespace": "TranspileDeclarationsCommand"
+      }
+    },
+    {
+      "operationId": "CAN-DENO-010",
+      "semanticIdentity": "deno / compile-executable / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "ship",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-closed-gate-override",
+      "preFreezeGate": "host-target; cache/offline; denort relation; runtime",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "git-tree:packages=9ad55683899ec7447b608cff7997ac5a2572a996",
+        "git-blob:tooling/public-api.json=c8c2169b0db1c522ffa1fec6b93db093fc21f1c6",
+        "git-diff:v0.3.0..adjudicated-head:packages,package.json,bun.lock,tooling/public-api.json=empty",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833693",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833671",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833745",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833768",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94995833773"
+      ],
+      "blocker": "The unchanged production operation is admitted from the exact green v0.3 source and target/publication jobs; the final freeze source must rerun the unchanged ordinary gates.",
+      "targetedProofAuditReason": null,
+      "support": {
+        "tool": "deno",
+        "exactVersion": "2.9.3",
+        "relatedRuntime": "denort@2.9.3",
+        "orchestrator": "node",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "targets": [
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-aarch64-gnu",
+          "windows-x64",
+          "windows-aarch64"
+        ]
+      },
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-deno",
+        "subpath": "./CompileExecutable",
+        "export": "compileExecutable",
+        "rootNamespace": "CompileExecutable"
+      }
+    },
+    {
+      "operationId": "CAN-DENO-011",
+      "semanticIdentity": "deno / compile-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "coalescing; termination; reaping; remnants",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-deno",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ESB-001",
+      "semanticIdentity": "esbuild / build-memory / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "ship",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-closed-gate-override",
+      "preFreezeGate": "one-shot provider continuation after interruption",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:973136e9679e6f0737067c5ec88016e1243eeed7",
+        "git-integration:5ebdc5f",
+        "research/post-0.3/reconciliation/r4/R1-GATE-MATRIX.md#CAN-ESB-001",
+        "research/post-0.3/reconciliation/r4/CLOSURE.md",
+        "receipt:r4-author-laws:esbuild-one-shot-interruption-law"
+      ],
+      "blocker": "None. The exact R1 conjunction is closed at esbuild 0.28.2: Effect interruption stopped waiting while the blocked provider/plugin continued through onEnd and produced memory output. The ordinary exact-head Linux x64 gate must reproduce this frozen support cell.",
+      "targetedProofAuditReason": null,
+      "support": {
+        "tool": "esbuild",
+        "exactVersion": "0.28.2",
+        "lane": "installed-library-api",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "unadmittedByInference": [
+          "windows",
+          "linux-arm64",
+          "macos-arm64",
+          "macos-x64"
+        ]
+      },
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./Build",
+        "export": "build",
+        "rootNamespace": "Build"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-002",
+      "semanticIdentity": "esbuild / build-direct-write / in-process-api / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "partial writes and interruption remnants",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: partial writes and interruption remnants.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./BuildToDirectory",
+        "export": "buildToDirectory",
+        "rootNamespace": "BuildToDirectory"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-003",
+      "semanticIdentity": "esbuild / transform / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "large-input temporary-file cleanup",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: large-input temporary-file cleanup.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./Transform",
+        "export": "transform",
+        "rootNamespace": "Transform"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-004",
+      "semanticIdentity": "esbuild / analyze-metafile / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "runtime rendering receipt",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: runtime rendering receipt.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./AnalyzeMetafile",
+        "export": "analyzeMetafile",
+        "rootNamespace": "AnalyzeMetafile"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-005",
+      "semanticIdentity": "esbuild / format-messages / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "runtime rendering receipt",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: runtime rendering receipt.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./FormatMessages",
+        "export": "formatMessages",
+        "rootNamespace": "FormatMessages"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-006",
+      "semanticIdentity": "esbuild / build-memory-sync / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection is architectural",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-esbuild",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ESB-007",
+      "semanticIdentity": "esbuild / build-direct-write-sync / in-process-api / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection is architectural",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-esbuild",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ESB-008",
+      "semanticIdentity": "esbuild / transform-sync / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection is architectural",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-esbuild",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ESB-009",
+      "semanticIdentity": "esbuild / analyze-metafile-sync / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection is architectural",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-esbuild",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ESB-010",
+      "semanticIdentity": "esbuild / format-messages-sync / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection is architectural",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-esbuild",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ESB-011",
+      "semanticIdentity": "esbuild / context-memory / in-process-api / scoped-context / {long-lived-handle, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "ship",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-closed-gate-override",
+      "preFreezeGate": "race matrix; post-dispose; delayed plugin cleanup",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:973136e9679e6f0737067c5ec88016e1243eeed7",
+        "git-integration:5ebdc5f",
+        "research/post-0.3/reconciliation/r4/R1-GATE-MATRIX.md#CAN-ESB-011",
+        "research/post-0.3/reconciliation/r4/CLOSURE.md",
+        "receipt:r4-author-laws:esbuild-context-lifecycle-matrix"
+      ],
+      "blocker": "None. The exact R1 conjunction is closed at esbuild 0.28.2: rebuild coalescing, cancel/dispose races, every post-dispose method, idempotent dispose, and delayed onDispose cleanup were executed. The ordinary exact-head Linux x64 gate must reproduce this frozen support cell.",
+      "targetedProofAuditReason": null,
+      "support": {
+        "tool": "esbuild",
+        "exactVersion": "0.28.2",
+        "lane": "installed-library-api",
+        "providerHost": "ubuntu-24.04/linux-x64",
+        "unadmittedByInference": [
+          "windows",
+          "linux-arm64",
+          "macos-arm64",
+          "macos-x64"
+        ]
+      },
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./Context",
+        "export": "make",
+        "rootNamespace": "Context"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-012",
+      "semanticIdentity": "esbuild / context-direct-write / in-process-api / scoped-context / {long-lived-handle, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "context races and mixed-generation remnants",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: context races and mixed-generation remnants.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./ContextToDirectory",
+        "export": "make",
+        "rootNamespace": "ContextToDirectory"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-013",
+      "semanticIdentity": "esbuild / stop-shared-service / in-process-api / one-shot / {none, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection is ownership law",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-esbuild",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ESB-014",
+      "semanticIdentity": "esbuild / initialize-shared-service / in-process-api / one-shot / {none, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection is ownership law",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-esbuild",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ESB-015",
+      "semanticIdentity": "esbuild / build-stdout / selected-command / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "bounds; bin form; signal and reaping",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: bounds; bin form; signal and reaping.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./BuildCommand",
+        "export": "build",
+        "rootNamespace": "BuildCommand"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-016",
+      "semanticIdentity": "esbuild / build-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "partial writes; bin form; signal and reaping",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: partial writes; bin form; signal and reaping.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./BuildCommandToDirectory",
+        "export": "buildToDirectory",
+        "rootNamespace": "BuildCommandToDirectory"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-017",
+      "semanticIdentity": "esbuild / build-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "termination choice; descendants; remnants",
+      "gateClosure": "not-closed",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "research/post-0.3/reconciliation/r1/STOP-CONDITION.json"
+      ],
+      "blocker": "No committed receipt at the adjudicated source closes the complete gate: termination choice; descendants; remnants.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-esbuild",
+        "subpath": "./BuildWatchCommand",
+        "export": "watch",
+        "rootNamespace": "BuildWatchCommand"
+      }
+    },
+    {
+      "operationId": "CAN-ESB-018",
+      "semanticIdentity": "esbuild / serve / selected-command / scoped-process / {long-lived-handle, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "machine-readable address or fixed-port decision; lifecycle",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-esbuild",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ESB-019",
+      "semanticIdentity": "esbuild / build-host-stdout / in-process-api / one-shot / {none, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "exact typed preflight set",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-esbuild",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-NODE-001",
+      "semanticIdentity": "node-sea / assemble-direct / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "ship",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-closed-gate-override",
+      "preFreezeGate": "exact binary capability; host-target and runtime matrix",
+      "gateClosure": "closed",
+      "evidence": [
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "git-tree:packages=9ad55683899ec7447b608cff7997ac5a2572a996",
+        "git-blob:tooling/public-api.json=c8c2169b0db1c522ffa1fec6b93db093fc21f1c6",
+        "git-diff:v0.3.0..adjudicated-head:packages,package.json,bun.lock,tooling/public-api.json=empty",
+        "git-research-correction:ad4a097",
+        "git-integration:8a383db",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94996031180",
+        "research/post-0.3/node-main-canon-probe.mjs",
+        "research/post-0.3/freeze/R5-PORTABLE-ROLE-VERDICTS.md"
+      ],
+      "blocker": "Admission is deliberately narrower than the deferred portable role: direct Node 26.7.0 --build-sea on Linux x64 GNU only; the final freeze source must rerun the unchanged ordinary gate.",
+      "targetedProofAuditReason": null,
+      "support": {
+        "tool": "node",
+        "exactVersion": "26.7.0",
+        "hostTarget": "linux-x64-gnu",
+        "artifactTarget": "linux-x64-gnu",
+        "assembly": "node --build-sea",
+        "mainFormats": [
+          "cjs",
+          "esm"
+        ]
+      },
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-node-sea",
+        "subpath": "./AssembleExecutable",
+        "export": "assembleExecutable",
+        "rootNamespace": "AssembleExecutable"
+      }
+    },
+    {
+      "operationId": "CAN-NODE-002",
+      "semanticIdentity": "node-sea / generate-preparation-blob / selected-command / one-shot / {scope-borrowed-value, none}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-explicit-disposition-override",
+      "preFreezeGate": "generator/base relations; cleanup and interruption",
+      "gateClosure": "not-applicable-deferred-legacy-only",
+      "evidence": [
+        "research/post-0.3/freeze/PRODUCT-DECISIONS.md#M3",
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94996031180"
+      ],
+      "blocker": "Deferred-legacy-only: M3 selects the direct Node --build-sea assembler. That operation does not generate a preparation blob and does not rent this stage publicly or internally.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "internal-stage-no-public-export",
+        "package": "effect-build-node-sea",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-NODE-003",
+      "semanticIdentity": "node-sea / inject-preparation-blob / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+      "originalDisposition": "ship",
+      "originalSelectionStatus": "selected-candidate-not-frozen",
+      "finalDisposition": "defer",
+      "revision": "ship-to-defer",
+      "adjudicationStatus": "final-explicit-disposition-override",
+      "preFreezeGate": "injector candidate; target matrix; lifecycle",
+      "gateClosure": "not-applicable-deferred-legacy-only",
+      "evidence": [
+        "research/post-0.3/freeze/PRODUCT-DECISIONS.md#M3",
+        "git:f06f96ca88b6278e5f23a898d758b99fa9322108",
+        "https://github.com/mannyc2/effect-build/actions/runs/31877736423/job/94996031180"
+      ],
+      "blocker": "Deferred-legacy-only: M3 selects direct Node --build-sea assembly and excludes an injector/postject lane from the 0.4 surface.",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "public-operation-export",
+        "package": "effect-build-node-sea",
+        "subpath": "./AssembleLegacy",
+        "export": "assembleLegacy",
+        "rootNamespace": "AssembleLegacy"
+      }
+    },
+    {
+      "operationId": "CAN-ROL-001",
+      "semanticIdentity": "rolldown / acquire-reusable-build / in-process-api / scoped-context / {long-lived-handle, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "concurrency and release law",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-002",
+      "semanticIdentity": "rolldown / generate / in-process-api / scoped-context / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "repeatability; concurrent use; external memory",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-003",
+      "semanticIdentity": "rolldown / write / in-process-api / scoped-context / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "collisions; interruption; remnants",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-005",
+      "semanticIdentity": "rolldown / build-one-shot-generate / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "interruption cleanup",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-006",
+      "semanticIdentity": "rolldown / build-one-shot-write / in-process-api / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "partial writes and interruption cleanup",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-007",
+      "semanticIdentity": "rolldown / watch-direct-write / in-process-api / scoped-context / {long-lived-handle, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "event order; result close; interruption",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-008",
+      "semanticIdentity": "rolldown / watch-skip-write / in-process-api / scoped-context / {long-lived-handle, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "event order; result close; interruption",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-010",
+      "semanticIdentity": "rolldown / cli-bundle-stdout / selected-command / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "multi-output framing and collection bounds",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-011",
+      "semanticIdentity": "rolldown / cli-bundle-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "partial writes and signal remnants",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-012",
+      "semanticIdentity": "rolldown / cli-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "termination; reaping; remnants",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-013",
+      "semanticIdentity": "rolldown / transform-source / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "runtime contract",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-014",
+      "semanticIdentity": "rolldown / parse-source / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "runtime contract",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-015",
+      "semanticIdentity": "rolldown / minify-source / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "runtime contract",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-016",
+      "semanticIdentity": "rolldown / resolve-module / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "retention and release discovery",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-017",
+      "semanticIdentity": "rolldown / scan-graph / in-process-api / one-shot / {scope-borrowed-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "cleanup and interruption",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-018A",
+      "semanticIdentity": "rolldown / acquire-dev-engine-memory / in-process-api / scoped-context / {long-lived-handle, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "complete ownership and callback backpressure",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-018B",
+      "semanticIdentity": "rolldown / acquire-dev-engine-direct-write / in-process-api / scoped-context / {long-lived-handle, provider-direct-durable}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "complete ownership; backpressure; remnants",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-020",
+      "semanticIdentity": "rolldown / emit-isolated-declaration / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "declaration correctness contract",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-021",
+      "semanticIdentity": "rolldown / module-runner-transform / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "reject",
+      "originalSelectionStatus": "not-selected-rejected",
+      "finalDisposition": "reject",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "none-rejection-established",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "none; rejection follows upstream scope",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-rejected",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    },
+    {
+      "operationId": "CAN-ROL-022",
+      "semanticIdentity": "rolldown / load-config / in-process-api / one-shot / {caller-owned-value, none}",
+      "originalDisposition": "defer",
+      "originalSelectionStatus": "not-selected-deferred",
+      "finalDisposition": "defer",
+      "revision": "unchanged",
+      "adjudicationStatus": "final-from-current-committed-evidence",
+      "preFreezeGate": "not-current-freeze-candidate",
+      "gateClosure": "not-applicable",
+      "evidence": [
+        "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv"
+      ],
+      "blocker": "trust boundary and runtime behavior",
+      "targetedProofAuditReason": null,
+      "support": null,
+      "proposedSurface": {
+        "kind": "no-export-deferred",
+        "package": "effect-build-rolldown",
+        "subpath": null,
+        "export": null,
+        "rootNamespace": null
+      }
+    }
+  ]
+}

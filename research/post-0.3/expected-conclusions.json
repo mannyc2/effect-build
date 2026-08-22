@@ -1,0 +1,191 @@
+{
+  "schema": "effect-build/expected-architecture-conclusions@2",
+  "claims": [
+    {
+      "receipt": "existing-provider-research",
+      "id": "node-main-role",
+      "classification": "established",
+      "conclusion": "node-main-entry-is-portable-importable-module-is-not"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "runtime-neutral-executable",
+      "classification": "falsified",
+      "conclusion": "bun-and-deno-embed-distinct-runtimes"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "broad-static-web",
+      "classification": "falsified",
+      "conclusion": "top-level-linked-resource-is-not-preserved-natively"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "declaration-output-set",
+      "classification": "falsified",
+      "conclusion": "deno-and-tsc-output-topologies-differ"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "portable-command-watch-events",
+      "classification": "falsified",
+      "conclusion": "bun-and-deno-expose-no-machine-readable-watch-protocol"
+    },
+    {
+      "receipt": "existing-provider-research",
+      "id": "compiled-deno-bundle-api",
+      "classification": "falsified",
+      "conclusion": "compiled-deno-does-not-expose-deno-bundle"
+    },
+    {
+      "receipt": "host-api-boundaries",
+      "id": "bun-host-boundaries",
+      "classification": "established",
+      "conclusion": "bun-host-api-shape-reproduced-at-1.3.9-and-1.3.14"
+    },
+    {
+      "receipt": "host-api-boundaries",
+      "id": "deno-host-boundaries",
+      "classification": "established",
+      "conclusion": "deno-host-api-shape-reproduced-at-2.9.3-and-2.9.5"
+    },
+    {
+      "receipt": "host-api-boundaries",
+      "id": "deno-permission-comments",
+      "classification": "falsified",
+      "conclusion": "local-read-and-write-succeeded-without-explicit-grants"
+    },
+    {
+      "receipt": "external-provider-research",
+      "id": "node-main-executable",
+      "classification": "established",
+      "conclusion": "node-sea-and-pkg-produced-equivalent-node-main-executables"
+    },
+    {
+      "receipt": "external-provider-research",
+      "id": "incremental-node-main",
+      "classification": "sequenced",
+      "conclusion": "esbuild-and-rolldown-conform-but-rolldown-is-not-a-0.4-product-package"
+    },
+    {
+      "receipt": "profile-refinement",
+      "id": "browser-module-output-set",
+      "classification": "established",
+      "conclusion": "bun-and-deno-preserve-module-reachable-javascript-and-css"
+    },
+    {
+      "receipt": "profile-refinement",
+      "id": "html-module-graph-application",
+      "classification": "established",
+      "conclusion": "bun-and-deno-preserve-html-module-graph-applications"
+    },
+    {
+      "receipt": "profile-refinement",
+      "id": "rolled-up-declaration-file",
+      "classification": "falsified",
+      "conclusion": "deno-output-has-unresolved-local-type-import-while-rolldown-is-self-contained"
+    },
+    {
+      "receipt": "version-boundaries",
+      "id": "provider-version-boundaries",
+      "classification": "established",
+      "conclusion": "advertised-command-and-api-capabilities-exist-at-each-exercised-boundary"
+    },
+    {
+      "receipt": "node-sea-relations",
+      "id": "same-version-node-sea",
+      "classification": "established",
+      "conclusion": "node-25.5.0-and-26.7.0-build-and-run-with-matching-base"
+    },
+    {
+      "receipt": "node-sea-relations",
+      "id": "mismatched-node-sea",
+      "classification": "falsified",
+      "conclusion": "node-26-builder-accepts-node-25-base-but-produced-executable-does-not-run"
+    },
+    {
+      "receipt": "independent-versioning",
+      "id": "provider-core-skew",
+      "classification": "established",
+      "conclusion": "bounded-peer-range-allows-compatible-core-and-rejects-incompatible-core"
+    },
+    {
+      "receipt": "compatibility-model",
+      "id": "operation-specific-compatibility",
+      "classification": "established",
+      "conclusion": "one-pure-evaluator-distinguishes-tested-policy-supported-override-and-non-overridable-failures"
+    },
+    {
+      "receipt": "effect-contract-endpoints",
+      "id": "effect-contract-endpoints",
+      "classification": "established",
+      "conclusion": "exact-profile-contracts-compile-at-both-supported-effect-endpoints"
+    },
+    {
+      "receipt": "r3-provider-compatibility",
+      "id": "provider-owned-total-evaluator",
+      "classification": "established",
+      "conclusion": "provider-owned-policies-evaluate-complete-identities-coordinate-holes-capabilities-relations-peers-and-profiles-with-one-refusal"
+    },
+    {
+      "receipt": "r3-provider-compatibility",
+      "id": "launch-reauthentication-and-cache-authority",
+      "classification": "established",
+      "conclusion": "selected-command-full-content-is-reauthenticated-at-launch-and-cache-keys-cover-every-authority-input"
+    },
+    {
+      "receipt": "r3-provider-compatibility",
+      "id": "exact-untested-override-eligibility",
+      "classification": "established",
+      "conclusion": "only-unknown-support-after-all-non-policy-gates-may-become-an-observable-untested-override"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "exact-author-rent",
+      "classification": "established",
+      "conclusion": "exactly-tool-borrowed-output-and-executable-reduce-author-state-space-without-a-generic-handle"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "borrowed-output-laws",
+      "classification": "established",
+      "conclusion": "close-drains-winning-acquisition-and-file-tree-observation-is-contained-mutation-sensitive-and-bounded"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "executable-publication-laws",
+      "classification": "established",
+      "conclusion": "private-partial-candidates-never-replace-the-old-destination-and-native-publication-is-streamed-then-same-parent-committed"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "scoped-process-and-remnant-laws",
+      "classification": "established",
+      "conclusion": "effect-scope-termination-reaps-the-direct-child-and-provider-direct-complete-and-partial-remnants-remain-observable"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "provider-handle-laws",
+      "classification": "established",
+      "conclusion": "esbuild-cancel-dispose-and-rolldown-concurrent-generate-close-semantics-remain-provider-specific"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "esbuild-one-shot-interruption-law",
+      "classification": "established",
+      "conclusion": "effect-interruption-stops-waiting-while-esbuild-one-shot-provider-and-delayed-plugin-complete"
+    },
+    {
+      "receipt": "r4-author-laws",
+      "id": "esbuild-context-lifecycle-matrix",
+      "classification": "established",
+      "conclusion": "esbuild-context-coalesces-rebuilds-drains-active-plugin-before-dispose-rejects-post-dispose-methods-and-does-not-await-delayed-plugin-cleanup"
+    },
+    {
+      "receipt": "r4-external-author-adapter",
+      "id": "packed-public-contract-only-adapter",
+      "classification": "established",
+      "conclusion": "an-independent-packed-adapter-typechecks-and-runs-across-compatible-core-copies-using-only-the-three-author-contracts"
+    }
+  ]
+}

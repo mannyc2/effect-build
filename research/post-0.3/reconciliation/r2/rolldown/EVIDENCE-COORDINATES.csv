@@ -1,0 +1,52 @@
+evidence_id,scope,host,phase,class,artifact,coordinate,establishes,limitation
+E-ROL-TAG,up@1.2.4,n/a,release-CI,upstream,Rolldown v1.2.4 commit,up:@commit,immutable source identity for this pass,support at other commits or versions
+E-ROL-PKG,up@1.2.4,node,installation-gr…,upstream,packages/rolldown/package.j…,up:packages/rolldown/package.json,"exports, bin, engines and native optional package…",successful installation or runtime…
+E-ROL-INDEX,up@1.2.4,node,release-CI,upstream,packages/rolldown/src/index…,up:packages/rolldown/src/index.ts,root public export surface,behavior of exported members
+E-ROL-ACQUIRE,up@1.2.4,node,operation-prefl…,upstream,api/rolldown/index.ts,up:packages/rolldown/src/api/rolldown/index.ts,reusable acquisition entry and lazy holder…,"cancellation, races or cleanup outcomes"
+E-ROL-HANDLE,up@1.2.4,node,operation-prefl…,upstream,api/rolldown/rolldown-build…,up:packages/rolldown/src/api/rolldown/rolldown-build.ts,"generate, write, close and async-dispose shape",runtime concurrency and interruption…
+E-ROL-BUILD,up@1.2.4,node,operation-prefl…,upstream,api/build.ts,up:packages/rolldown/src/api/build.ts,one-shot wrapper mode selection and finally-close…,provider cleanup success under forced…
+E-ROL-INPUT,up@1.2.4,node,operation-prefl…,upstream,types/input-options.ts,up:packages/rolldown/src/options/input-options.ts,"input forms, plugins, external, platform and…",behavior of every modifier combination
+E-ROL-OUTPUT-OPTIONS,up@1.2.4,node,operation-prefl…,upstream,types/output-options.ts,up:packages/rolldown/src/options/output-options.ts,"format, sourcemap, naming and write-affecting…",atomicity or failure remnants
+E-ROL-OUTPUT-TYPES,up@1.2.4,node,operation-prefl…,upstream,types/output.ts,up:packages/rolldown/src/types/output.ts,"chunk, asset, map and metadata result fields",lifetime of native-backed buffers
+E-ROL-OUTPUT-IMPL,up@1.2.4,node,operation-prefl…,upstream,output conversion…,up:packages/rolldown/src/utils/transform-to-rollup-output.ts,native-to-JS output conversion structure,behavior after explicit…
+E-ROL-EXTMEM,up@1.2.4,node,launch-boundary,upstream,binding declarations,up:packages/rolldown/src/binding.d.cts,external-memory methods and keepData semantics,safe use after release without a probe
+E-ROL-PLUGIN,up@1.2.4,node,operation-prefl…,upstream,plugin types,up:packages/rolldown/src/plugin/index.ts,plugin hook inventory and hook result shapes,ordering and cleanup under concurrency
+E-ROL-PLUGIN-CONTEXT,up@1.2.4,node,operation-prefl…,upstream,plugin context,up:packages/rolldown/src/plugin/plugin-context.ts,"emitFile, getFileName, resolve and watch-file…",filesystem and publication side…
+E-ROL-TRANSFORM-OPTIONS,up@1.2.4,node,operation-prefl…,upstream,transform options,up:packages/rolldown/src/types/transform-options.ts,"define, inject and transform modifiers",behavior at every syntax target
+E-ROL-WATCH-API,up@1.2.4,node,operation-prefl…,upstream,watch API,up:packages/rolldown/src/api/watch/index.ts,watch acquisition and skipWrite mode,event timing or close races
+E-ROL-WATCH-EVENT,up@1.2.4,node,operation-prefl…,upstream,watch event types,up:packages/rolldown/src/api/watch/watch-emitter.ts,event names and result-handle carriage,delivery guarantees or event loss
+E-ROL-WATCH-IMPL,up@1.2.4,node,operation-prefl…,upstream,watcher implementation,up:packages/rolldown/src/api/watch/rolldown-watcher.ts,close structure and native watcher ownership,post-close calls and concurrent close…
+E-ROL-CLI-BUNDLE,up@1.2.4,node,launch-boundary,upstream,CLI implementation,up:packages/rolldown/src/cli/index.ts,"CLI entry, config/entry dispatch and watch mode",machine-readable stdout contract
+E-ROL-CLI-ARGS,up@1.2.4,node,launch-boundary,upstream,CLI argument definitions,up:packages/rolldown/src/cli/arguments/index.ts,documented argv names and modifiers,runtime acceptance of every combination
+E-ROL-CONFIG,up@1.2.4,node,operation-prefl…,upstream,config loader,up:packages/rolldown/src/config/load-config.ts,config file loading and returned config shapes,security of arbitrary config execution
+E-ROL-UTILS,up@1.2.4,node,release-CI,upstream,utils index,up:packages/rolldown/src/utils/index.ts,"parse, transform and minify export inventory",runtime behavior
+E-ROL-TRANSFORM,up@1.2.4,node,operation-prefl…,upstream,transform utility,up:packages/rolldown/src/utils/transform.ts,transform request/result structure,Node-main compatibility or cancellation
+E-ROL-PARSE,up@1.2.4,node,operation-prefl…,upstream,parse utility,up:packages/rolldown/src/utils/parse.ts,parse request/result structure,AST stability across versions
+E-ROL-PARSE-AST,up@1.2.4,node,operation-prefl…,upstream,parseAst utility,up:packages/rolldown/src/utils/parse-ast.ts,AST convenience exports,ESTree compatibility beyond declared…
+E-ROL-MINIFY,up@1.2.4,node,operation-prefl…,upstream,minify utility,up:packages/rolldown/src/utils/minify.ts,minify request/result structure,semantic equivalence for arbitrary…
+E-ROL-EXPERIMENTAL,up@1.2.4,node,release-CI,upstream,experimental index,up:packages/rolldown/src/experimental-index.ts,"experimental resolver, scan, dev and declaration…",stability or release commitment
+E-ROL-SCAN,up@1.2.4,node,operation-prefl…,upstream,experimental scan API,up:packages/rolldown/src/api/experimental.ts,scan returns a cleanup capability,cleanup idempotency or interruption…
+E-ROL-DEV,up@1.2.4,node,operation-prefl…,upstream,dev engine,up:packages/rolldown/src/api/dev/dev-engine.ts,DevEngine ownership and methods,safe product support
+E-ROL-DEV-OPTIONS,up@1.2.4,node,operation-prefl…,upstream,dev options,up:packages/rolldown/src/api/dev/dev-options.ts,callbacks and configured publication modes,callback concurrency or backpressure
+E-ROL-BINDING-DTS,up@1.2.4,node,installation-gr…,upstream,binding.d.cts,up:packages/rolldown/src/binding.d.cts,"native method, result and platform-package…",loaded binary identity
+E-ROL-BINDING-LOADER,up@1.2.4,node,layer-acquisiti…,upstream,binding.cjs,up:packages/rolldown/src/binding.cjs,platform/libc/arch selection and WASI fallback…,availability on an untested host
+E-ROL-NATIVE-PACKAGES,up@1.2.4,n/a,installation-gr…,upstream,npm native package workspace,up:packages/rolldown/package.json,declared native package relation surface,published coherence for every package
+E-ROL-CHANGELOG,up@1.2.4,n/a,release-CI,upstream,CHANGELOG.md,up:CHANGELOG.md,version-scoped change notes,complete behavioral compatibility
+E-ROL-README,up@1.2.4,n/a,release-CI,upstream,package README,up:packages/rolldown/README.md,package identity and intended use,complete API contract
+E-ROL-NPM-METADATA,up@1.2.4,n/a,installation-gr…,upstream,npm registry version…,npm:rolldown/1.2.4,published package metadata at retrieval,consumer resolution or installed bytes
+E-ROL-NODE-ENGINES,up@1.2.4,node,installation-gr…,upstream,package engines field,up:packages/rolldown/package.json,declared Node engine floor and package graph,actual behavior at each admitted Node
+E-ROL-VERSION,up@1.2.4,node,layer-acquisiti…,upstream,root version export,up:packages/rolldown/src/index.ts,declared package/runtime version observation surface,loaded native byte coherence
+E-EB-GOV,base@c4cefd0a,n/a,research-govern…,repo,GOVERNANCE.md,base:research/post-0.3/corpus/GOVERNANCE.md,evidence ladder and research authority,implementation approval
+E-EB-DEC,base@c4cefd0a,n/a,architecture-re…,repo,DECISION-RECORD.md,base:research/post-0.3/corpus/DECISION-RECORD.md,maintainer decisions and authority baseline,provider certification
+E-EB-RECON,base@c4cefd0a,n/a,architecture-re…,repo,RECONCILIATION.md,base:research/post-0.3/corpus/RECONCILIATION.md,canonical operation/lifecycle distinctions,new provider proof
+E-EB-GATES,base@c4cefd0a,n/a,architecture-re…,repo,RECONCILIATION-GATES.md,base:research/post-0.3/corpus/RECONCILIATION-GATES.md,semantic-key and publication gates,operation implementation
+E-EB-PROGRAM,base@c4cefd0a,n/a,research-govern…,repo,RESEARCH-PROGRAM.md,base:research/post-0.3/corpus/RESEARCH-PROGRAM.md,bounded R2 deliverables and non-authority,support decision
+E-EB-BREADTH,base@c4cefd0a,n/a,architecture-re…,repo,provider-native-breadth…,base:research/post-0.3/corpus/lanes/provider-native-breadth/README.md,provider-native operation tests,Rolldown execution
+E-EB-LIFE,base@c4cefd0a,n/a,architecture-re…,repo,lifecycle-observability…,base:research/post-0.3/corpus/lanes/lifecycle-observability/README.md,"scope, ownership and publication laws",Rolldown runtime behavior
+E-EB-COMPAT,base@c4cefd0a,n/a,architecture-re…,repo,compatibility-dx README,base:research/post-0.3/corpus/lanes/compatibility-dx/README.md,"identity, relation and fail-closed requirements",supported Rolldown range
+E-EB-NODE-CANON,base@c4cefd0a,node,architecture-re…,repo,node-canon README,base:research/post-0.3/corpus/lanes/node-canon/README.md,strict Node-main role boundaries,Rolldown profile admission
+E-EB-RECEIPT,base@c4cefd0a,ubuntu-24.04 x64,certification-e…,execution,external-provider-research.…,base:research/post-0.3/corpus/recovery/evidence/receipts/run-31956373310/external-provider-research.json,one exact generate/close fixture and observed…,broad lifecycle or host support
+E-EB-PROBE,base@c4cefd0a,ubuntu-24.04 x64,certification-e…,repo,external-provider-probe.mjs,base:research/post-0.3/external-provider-probe.mjs,fixture logic used by archived receipt,unexecuted probe cells
+E-EB-ARTIFACT,base@c4cefd0a,ubuntu-24.04 x64,certification-e…,repo,_ARTIFACT.json,base:research/post-0.3/corpus/recovery/evidence/receipts/run-31956373310/_ARTIFACT.json,receipt provenance and run metadata,provider semantics
+E-EB-MANIFEST,base@c4cefd0a,n/a,research-govern…,repo,corpus README,base:research/post-0.3/corpus/README.md,durable evidence indexing rules,Rolldown support
+E-EB-EXTERNAL-PROBE,base@c4cefd0a,ubuntu-24.04 x64,certification-e…,execution,run 31956373310,base:research/post-0.3/corpus/recovery/evidence/receipts/run-31956373310/,one preserved CI execution family,current package state

@@ -1,0 +1,85 @@
+{
+  "schema": "effect-build/architecture-receipt@2",
+  "id": "node-sea-relations",
+  "sourceSha": "96d5123f54ef1258a6de6e10d17f2c1dadb2ec14",
+  "status": "reproduced",
+  "claims": [
+    {
+      "id": "same-version-node-sea",
+      "classification": "established",
+      "conclusion": "node-25.5.0-and-26.7.0-build-and-run-with-matching-base",
+      "assertions": [
+        {
+          "name": "node-25-match",
+          "passed": true
+        },
+        {
+          "name": "node-26-match",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "mismatched-node-sea",
+      "classification": "falsified",
+      "conclusion": "node-26-builder-accepts-node-25-base-but-produced-executable-does-not-run",
+      "assertions": [
+        {
+          "name": "builder-accepted-mismatch",
+          "passed": true
+        },
+        {
+          "name": "mismatched-output-execution-failed",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "oldest": {
+      "label": "oldest",
+      "builderVersion": "v25.5.0",
+      "targetVersion": "v25.5.0",
+      "buildSucceeded": true,
+      "execution": {
+        "succeeded": true,
+        "output": {
+          "runtime": "v25.5.0",
+          "role": "node-main"
+        },
+        "stdout": "{\"runtime\":\"v25.5.0\",\"role\":\"node-main\"}\n",
+        "stderr": ""
+      },
+      "diagnostics": "Generated single executable /opt/hostedtoolcache/node/25.5.0/x64/bin/node + /tmp/effect-build-node-sea-version-H1csw5/config-oldest.json -> /tmp/effect-build-node-sea-version-H1csw5/output-oldest\n"
+    },
+    "current": {
+      "label": "current",
+      "builderVersion": "v26.7.0",
+      "targetVersion": "v26.7.0",
+      "buildSucceeded": true,
+      "execution": {
+        "succeeded": true,
+        "output": {
+          "runtime": "v26.7.0",
+          "role": "node-main"
+        },
+        "stdout": "{\"runtime\":\"v26.7.0\",\"role\":\"node-main\"}\n",
+        "stderr": ""
+      },
+      "diagnostics": "Generated single executable /opt/hostedtoolcache/node/26.7.0/x64/bin/node + /tmp/effect-build-node-sea-version-H1csw5/config-current.json -> /tmp/effect-build-node-sea-version-H1csw5/output-current\n"
+    },
+    "mismatchedBuilderAndTarget": {
+      "label": "mismatch",
+      "builderVersion": "v26.7.0",
+      "targetVersion": "v25.5.0",
+      "buildSucceeded": true,
+      "execution": {
+        "succeeded": false,
+        "stdout": "",
+        "stderr": "",
+        "message": "Command failed: /tmp/effect-build-node-sea-version-H1csw5/output-mismatch\n"
+      },
+      "diagnostics": "Generated single executable /opt/hostedtoolcache/node/25.5.0/x64/bin/node + /tmp/effect-build-node-sea-version-H1csw5/config-mismatch.json -> /tmp/effect-build-node-sea-version-H1csw5/output-mismatch\n"
+    }
+  }
+}

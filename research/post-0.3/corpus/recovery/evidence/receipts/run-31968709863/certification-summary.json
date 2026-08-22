@@ -1,0 +1,15 @@
+{
+  "schema": "effect-build/architecture-certification-summary@2",
+  "sourceSha": "822312b2f0581bec831a957115d21fbdcfb36180",
+  "receipts": [
+    "existing-provider-research.json",
+    "external-provider-research.json",
+    "host-api-boundaries.json",
+    "independent-versioning.json",
+    "node-sea-relations.json",
+    "profile-refinement.json",
+    "version-boundaries.json"
+  ],
+  "claims": 18,
+  "result": "reproduced"
+}
