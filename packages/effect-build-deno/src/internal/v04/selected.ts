@@ -714,10 +714,9 @@ const probeSource = [
   "console.log(JSON.stringify({path:Deno.execPath(),version:Deno.version.deno,revision:'release:'+Deno.version.deno,os:Deno.build.os,architecture:Deno.build.arch,distribution,denort:Deno.env.get('DENORT_BIN')??null}));",
 ].join("");
 
+// Deno 2.9 `eval` has implicit permissions and rejects `--allow-*` flags.
 const probeArgv = [
   "eval",
-  "--allow-env=DENORT_BIN",
-  "--allow-read=/etc/os-release",
   probeSource,
 ] as const;
 

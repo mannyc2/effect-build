@@ -5,6 +5,9 @@ import { resolve } from "node:path";
 const argv = process.argv.slice(2);
 
 if (argv[0] === "eval") {
+  if (process.env.FAKE_DENO_PROBE_LOG !== undefined) {
+    await writeFile(process.env.FAKE_DENO_PROBE_LOG, JSON.stringify(argv));
+  }
   process.stdout.write(JSON.stringify({
     path: await realpath(process.argv[1]),
     version: process.env.FAKE_DENO_VERSION ?? "2.9.3",

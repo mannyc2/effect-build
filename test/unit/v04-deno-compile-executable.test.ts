@@ -177,6 +177,32 @@ const installCachedRuntime = async (target: DenoCompile.Target, contents = nativ
 };
 
 describe.sequential("staged 0.4 Deno CompileExecutable", () => {
+  it("uses Deno 2.9 eval's implicit-permission argv for layer acquisition", async () => {
+    const probeLog = join(root, "probe-argv.log");
+    const inheritedDenort = process.env.DENORT_BIN;
+    process.env.FAKE_DENO_PROBE_LOG = probeLog;
+    delete process.env.DENORT_BIN;
+    try {
+      const service = await Effect.runPromise(
+        DenoCompile.Compiler.pipe(
+          Effect.provide(DenoCompile.layer({ executable: executable as AbsolutePath })),
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+      expect(service.compileExecutable).toBeTypeOf("function");
+      const argv = JSON.parse(await readFile(probeLog, "utf8")) as readonly string[];
+      expect(argv).toEqual(["eval", expect.any(String)]);
+      expect(argv[1]).toContain("Deno.execPath()");
+      expect(argv[1]).toContain("Deno.env.get('DENORT_BIN')");
+      expect(argv).not.toContain("--allow-env=DENORT_BIN");
+      expect(argv).not.toContain("--allow-read=/etc/os-release");
+    } finally {
+      delete process.env.FAKE_DENO_PROBE_LOG;
+      if (inheritedDenort === undefined) delete process.env.DENORT_BIN;
+      else process.env.DENORT_BIN = inheritedDenort;
+    }
+  });
+
   it("refuses a missing default denort archive before destination or candidate mutation", async () => {
     const denoDir = join(root, "empty-deno-cache");
     const outputDirectory = join(root, "cold-output");
