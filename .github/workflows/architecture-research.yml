@@ -1,15 +1,16 @@
 name: plan-042-implementation-certification
 
 on:
-  push: {}
-  pull_request: {}
+  push:
+    branches:
+      - codex/plan042-deno-lane
 
 permissions:
   actions: read
   contents: read
 
 env:
-  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  SOURCE_SHA: ${{ github.sha }}
   CERTIFICATION_PROFILE: effect-build/plan042-implementation@1
 
 jobs:
@@ -55,11 +56,19 @@ jobs:
         run: node research/post-0.3/implementation/staged-external-author-adapter.mjs
       - name: Exercise the frozen Plan 040 Esbuild lane
         run: node research/post-0.3/implementation/staged-esbuild-adapter.mjs
-      - name: Provision the exact Bun provider coordinate
+      - id: plan041-bun
+        name: Provision the exact content-authenticated Bun provider coordinate
         shell: bash
+        run: node scripts/provision-tool-assets.mjs --only bun >> "$GITHUB_OUTPUT"
+        env:
+          EFFECT_BUILD_TOOL_DIR: ${{ runner.temp }}/effect-build-plan041-bun
+      - name: Verify exact content-authenticated Bun provider coordinate
+        shell: bash
+        env:
+          PLAN041_BUN_EXECUTABLE: ${{ steps.plan041-bun.outputs.bun }}
         run: |
-          npm install --prefix "$RUNNER_TEMP/plan041-bun" --no-save --package-lock=false bun@1.3.9
-          PLAN041_BUN_EXECUTABLE="$(realpath "$RUNNER_TEMP/plan041-bun/node_modules/.bin/bun")"
+          test "${PLAN041_BUN_EXECUTABLE#/}" != "$PLAN041_BUN_EXECUTABLE"
+          test -x "$PLAN041_BUN_EXECUTABLE"
           test "$("$PLAN041_BUN_EXECUTABLE" --version)" = "1.3.9"
           echo "PLAN041_BUN_EXECUTABLE=$PLAN041_BUN_EXECUTABLE" >> "$GITHUB_ENV"
       - name: Exercise real Bun scalar behavior

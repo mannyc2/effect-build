@@ -9,7 +9,10 @@ import {
   expectedReceiptClaims,
   historicalAuthoritySummary,
   loadProfileDocuments,
+  plan042CertificationRef,
   sha256,
+  sourcePolicyVerifierOrigin,
+  sourcePolicyVerifierPaths,
   validateActiveInstructions,
   validateCurrentImplementationState,
   validateCurrentReceipt,
@@ -99,6 +102,12 @@ const git = async (argv) => (await execute("git", argv, {
   maxBuffer: 64 * 1024 * 1024,
 })).stdout;
 
+const gitBytes = async (argv) => (await execute("git", argv, {
+  cwd: repository,
+  encoding: "buffer",
+  maxBuffer: 64 * 1024 * 1024,
+})).stdout;
+
 const ancestor = async (from, to) => {
   try {
     await git(["merge-base", "--is-ancestor", from, to]);
@@ -122,38 +131,39 @@ const changedPaths = async (from, to, paths, filter) => (await git([
 const authenticateRemoteHead = async ({ apiBase, origin, repositoryName, sourceSha, token }) => {
   const eventName = requiredEnvironment("GITHUB_EVENT_NAME");
   const event = JSON.parse(await readFile(requiredEnvironment("GITHUB_EVENT_PATH"), "utf8"));
-  let eventSourceSha;
-  let observedRef;
-  let observedSha;
-  if (eventName === "pull_request") {
-    const pull = await requestJson({ origin, repositoryName, token, url: event.pull_request.url });
-    eventSourceSha = event.pull_request.head.sha;
-    observedSha = pull.head.sha;
-    observedRef = `${pull.head.repo.full_name}:${pull.head.ref}`;
-  } else {
-    assert.equal(eventName, "push");
-    const ref = requiredEnvironment("GITHUB_REF");
-    assert.equal(event.ref, ref);
-    assert.match(ref, /^refs\/heads\/.+/);
-    eventSourceSha = event.after;
-    const encoded = ref.slice("refs/".length).split("/").map(encodeURIComponent).join("/");
-    const remote = await requestJson({
-      origin,
-      repositoryName,
-      token,
-      url: `${apiBase}/repos/${repositoryName}/git/ref/${encoded}`,
-    });
-    observedSha = remote.object.sha;
-    observedRef = remote.ref;
-  }
+  assert.equal(eventName, "push");
+  const ref = requiredEnvironment("GITHUB_REF");
+  const refType = requiredEnvironment("GITHUB_REF_TYPE");
+  assert.equal(event.ref, ref);
+  assert.equal(ref, plan042CertificationRef);
+  assert.equal(refType, "branch");
+  const encoded = ref.slice("refs/".length).split("/").map(encodeURIComponent).join("/");
+  const remote = await requestJson({
+    origin,
+    repositoryName,
+    token,
+    url: `${apiBase}/repos/${repositoryName}/git/ref/${encoded}`,
+  });
   return validateCurrentRemoteEvidence({
     eventName,
-    eventSourceSha,
-    observedRef,
-    observedSha,
+    eventSourceSha: event.after,
+    observedRef: remote.ref,
+    observedSha: remote.object.sha,
     repository: repositoryName,
+    ref,
+    refType,
     sourceSha,
   });
+};
+
+const authenticateSourcePolicyVerifierOrigin = async (sourceSha) => {
+  const documents = await Promise.all(sourcePolicyVerifierPaths.map(async (path) => {
+    const checkedOut = await readFile(resolve(repository, path));
+    const committed = await gitBytes(["show", `${sourceSha}:${path}`]);
+    assert.deepEqual(checkedOut, committed, `source policy/verifier bytes differ from ${sourceSha}: ${path}`);
+    return { path, digest: sha256(checkedOut) };
+  }));
+  return sourcePolicyVerifierOrigin({ documents, sourceSha });
 };
 
 const authenticatePlan041Artifact = async ({ apiBase, documents, origin, repositoryName, token }) => {
@@ -202,6 +212,7 @@ export const certifyCurrentHead = async () => {
   assert.equal(receiptRelative === ".." || receiptRelative.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`), true);
   assert.equal(await git(["status", "--porcelain=v1", "--untracked-files=all"]), "", "working tree is dirty");
   const head = (await git(["rev-parse", "HEAD"])).trim();
+  const policyVerifierOrigin = await authenticateSourcePolicyVerifierOrigin(sourceSha);
 
   const ancestry = {
     releaseIsFreezeAncestor: await ancestor(profile.productionBaseline.releaseSha, profile.productionBaseline.freezeSha),
@@ -260,6 +271,7 @@ export const certifyCurrentHead = async () => {
       historicalAuthority,
       plan041Artifact: { sourceSha: plan041.sourceSha, transport: plan041.transport },
       currentHead,
+      sourcePolicyVerifierOrigin: policyVerifierOrigin,
       repositoryScope: { ...implementationState, activeInstructions, workspaceManifest },
       profileSeparation: {
         historicalProfileIds: profile.historicalProfileIds,
@@ -299,8 +311,11 @@ export const certifyCurrentHead = async () => {
       runId: requiredEnvironment("GITHUB_RUN_ID"),
       runAttempt: requiredEnvironment("GITHUB_RUN_ATTEMPT"),
       eventName: requiredEnvironment("GITHUB_EVENT_NAME"),
+      ref: requiredEnvironment("GITHUB_REF"),
+      refType: requiredEnvironment("GITHUB_REF_TYPE"),
     },
     historicalInputs: historicalAuthority,
+    sourcePolicyVerifierOrigin: policyVerifierOrigin,
     currentReceipts: [{ id: receipt.id, file: receiptFile, digest: receiptDigest }],
     claims: receipt.claims.length,
     result: "certified",
@@ -315,6 +330,7 @@ export const certifyCurrentHead = async () => {
     plan040Anchor,
     plan041Anchor,
     profile,
+    sourcePolicyVerifierOrigin: policyVerifierOrigin,
     sourceSha,
   });
   const certificateBytes = Buffer.from(`${JSON.stringify(certificate, null, 2)}\n`);

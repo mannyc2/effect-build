@@ -469,12 +469,13 @@ describe("tooling pins and workflow contracts", () => {
     );
     const workflow = parse(workflowSource) as Workflow;
     expect(createHash("sha256").update(workflowSource).digest("hex")).toBe(
-      "07bafc286241f6645cbd5ab12220b6d0c51a2e5712bcacf328c30cdeee28a889",
+      "59e7bfdf0362309e9a50ff6171e2048d7b245c00464574568d3955d6cdbe8ae6",
     );
-    expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
+    expect(Object.keys(workflow.on).sort()).toEqual(["push"]);
+    expect(workflow.on.push).toEqual({ branches: ["codex/plan042-deno-lane"] });
     expect(workflow.permissions).toEqual({ actions: "read", contents: "read" });
     expect(workflow.env).toEqual({
-      SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
+      SOURCE_SHA: "${{ github.sha }}",
       CERTIFICATION_PROFILE: "effect-build/plan042-implementation@1",
     });
     expect(Object.keys(workflow.jobs)).toEqual(["plan042-implementation"]);
@@ -492,6 +493,25 @@ describe("tooling pins and workflow contracts", () => {
       step.uses === "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6"
     )!;
     expect(setupBun.with).toEqual({ "bun-version": "1.3.14" });
+    const plan041Bun = job.steps!.find((step) => step.id === "plan041-bun")!;
+    expect(plan041Bun).toMatchObject({
+      name: "Provision the exact content-authenticated Bun provider coordinate",
+      shell: "bash",
+      run: 'node scripts/provision-tool-assets.mjs --only bun >> "$GITHUB_OUTPUT"',
+      env: { EFFECT_BUILD_TOOL_DIR: "${{ runner.temp }}/effect-build-plan041-bun" },
+    });
+    const plan041BunVerification = job.steps!.find((step) =>
+      step.name === "Verify exact content-authenticated Bun provider coordinate"
+    )!;
+    expect(plan041BunVerification.env).toEqual({ PLAN041_BUN_EXECUTABLE: "${{ steps.plan041-bun.outputs.bun }}" });
+    expect(plan041BunVerification.run).toBe([
+      'test "${PLAN041_BUN_EXECUTABLE#/}" != "$PLAN041_BUN_EXECUTABLE"',
+      'test -x "$PLAN041_BUN_EXECUTABLE"',
+      'test "$("$PLAN041_BUN_EXECUTABLE" --version)" = "1.3.9"',
+      'echo "PLAN041_BUN_EXECUTABLE=$PLAN041_BUN_EXECUTABLE" >> "$GITHUB_ENV"',
+      "",
+    ].join("\n"));
+    expect(workflowSource).not.toContain("npm install --prefix");
     const runs = jobRuns(workflow, "plan042-implementation");
     const requiredRuns = [
       'test "$(bun --version)" = "1.3.14"',
@@ -661,6 +681,11 @@ describe("tooling pins and workflow contracts", () => {
       "utf8",
     );
     expect(certifierSource).toMatch(/process\.env\.GITHUB_ACTIONS[\s\S]*"true"/);
+    expect(certifierSource).toContain("authenticateSourcePolicyVerifierOrigin");
+    expect(certifierSource).toContain('gitBytes(["show", `${sourceSha}:${path}`])');
+    expect(certifierSource).toContain("sourcePolicyVerifierOrigin");
+    expect(certifierSource).toContain('assert.equal(eventName, "push")');
+    expect(certifierSource).toContain('requiredEnvironment("GITHUB_REF_TYPE")');
     for (
       const forbidden of [
         "surface-freeze",
@@ -881,10 +906,24 @@ describe("tooling pins and workflow contracts", () => {
       profileId: profile.profileId,
       receiptId: "plan042-implementation",
     });
-    expect(expected.claims).toHaveLength(4);
+    expect(expected.claims).toHaveLength(5);
     expect(expected.claims.flatMap((claim) => Object.values(claim)).join(" ")).toContain(
       "five-bun-files-are-byte-identical-to-plan041",
     );
+    expect(expected.claims.flatMap((claim) => Object.values(claim)).join(" ")).toContain(
+      "does-not-claim-independent-protection",
+    );
+    const pins = await readJson("tooling/tool-pins.json") as {
+      tools: Array<{ tool: string; version: string; url: string; sha256: string; member: string }>;
+    };
+    expect(pins.tools.find((pin) => pin.tool === "bun")).toEqual({
+      tool: "bun",
+      version: "1.3.9",
+      url: "https://github.com/oven-sh/bun/releases/download/bun-v1.3.9/bun-linux-x64.zip",
+      sha256: "4680e80e44e32aa718560ceae85d22ecfbf2efb8f3641782e35e4b7efd65a1aa",
+      member: "bun-linux-x64/bun",
+      target: { os: "linux", architecture: "x86_64", abi: "gnu" },
+    });
   });
 
   it("certifies the exact five-file Plan 042 boundary from the certified Plan 041 head to DONE", async () => {
@@ -1015,6 +1054,8 @@ describe("tooling pins and workflow contracts", () => {
     const plan = await readFile(resolve(root, "plans/042-add-deno-bundle-command-lanes.md"), "utf8");
     const index = await readFile(resolve(root, "plans/README.md"), "utf8");
     expect(plan.match(/^- Status: DONE$/gm) ?? []).toHaveLength(1);
+    expect(plan).toMatch(/ancestry-pinned accidental-drift protection, not an\s+independently protected/);
+    expect(plan).toMatch(/externally pinned verifier is required before claiming\s+independent/);
     expect(index).toContain(
       "| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | DONE |",
     );

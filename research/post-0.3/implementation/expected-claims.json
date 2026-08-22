@@ -53,6 +53,16 @@
         "current-workflow-does-not-invoke-freeze-producers-or-validators",
         "historical-inputs-are-separated-from-current-receipts"
       ]
+    },
+    {
+      "id": "candidate-policy-verifier-origin-disclosed",
+      "classification": "sequenced",
+      "conclusion": "plan042-records-the-content-addressed-source-origin-of-its-policy-and-verifier-and-does-not-claim-independent-protection",
+      "assertions": [
+        "candidate-policy-expected-claims-verifier-pinned-tool-provisioner-and-workflow-digests-are-bound-to-the-certified-source",
+        "candidate-policy-origin-is-not-misrepresented-as-an-independently-protected-certifier",
+        "independent-certification-requires-a-separately-reviewed-protected-workflow-or-app-with-an-externally-pinned-verifier"
+      ]
     }
   ]
 }

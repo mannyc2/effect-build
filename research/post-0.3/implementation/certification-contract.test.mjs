@@ -8,8 +8,11 @@ import {
   expectedReceiptClaims,
   historicalAuthoritySummary,
   loadProfileDocuments,
+  plan042CertificationRef,
   requiredImplementationCommands,
   sha256,
+  sourcePolicyVerifierOrigin,
+  sourcePolicyVerifierPaths,
   validateActiveInstructions,
   validateCurrentImplementationState,
   validateCurrentReceipt,
@@ -17,6 +20,7 @@ import {
   validateImplementationCertificate,
   validatePlan041Anchor,
   validatePlan041Api,
+  validateSourcePolicyVerifierOrigin,
   validateWorkspaceManifest,
 } from "./certification-contract.mjs";
 
@@ -56,6 +60,7 @@ test("Plan 042 profile binds the exact Plan 041 predecessor and frozen file sets
   assert.equal(profile.immutablePublicPaths.length, 12);
   assert.equal(requiredImplementationCommands.at(-1), "node research/post-0.3/implementation/certify-current-head.mjs");
   assert.equal(profile.forbiddenCurrentReceiptIds.includes(plan041Anchor.receipt.id), true);
+  assert.equal(expected.claims.length, 5);
 });
 
 test("Plan 041 trust anchor rejects source, artifact, certificate, receipt, and parent drift", () => {
@@ -113,6 +118,36 @@ test("Plan 041 GitHub API evidence requires the exact successful pull-request ar
   }
 });
 
+test("Plan 042 records candidate policy and verifier bytes without claiming independent protection", () => {
+  const sourceSha = "c".repeat(40);
+  const origin = sourcePolicyVerifierOrigin({
+    sourceSha,
+    documents: sourcePolicyVerifierPaths.map((path) => ({ path, digest: sha256(Buffer.from(path)) })),
+  });
+  assert.deepEqual(origin, {
+    schema: "effect-build/source-policy-verifier-origin@1",
+    sourceSha,
+    scope: "candidate-source-reproduction",
+    independentlyProtected: false,
+    independentAuthorityPrerequisite: "separately-reviewed-protected-workflow-or-app-with-an-externally-pinned-verifier",
+    documents: sourcePolicyVerifierPaths.map((path) => ({ path, digest: sha256(Buffer.from(path)) })),
+  });
+  mustReject(() => sourcePolicyVerifierOrigin({
+    sourceSha,
+    documents: [...origin.documents].reverse(),
+  }), /source policy\/verifier document paths/);
+  mustReject(() => sourcePolicyVerifierOrigin({
+    sourceSha,
+    documents: origin.documents.map((document, index) => index === 0
+      ? { ...document, digest: "sha256:not-a-digest" }
+      : document),
+  }), /invalid source policy\/verifier digest/);
+  mustReject(
+    () => validateSourcePolicyVerifierOrigin({ ...origin, independentlyProtected: true }),
+    /source policy\/verifier origin drifted/,
+  );
+});
+
 test("workspace and active instructions admit only the exact Plan 042 staging delta", () => {
   const workspace = validateWorkspaceManifest({ currentManifest, handoffManifest, profile });
   assert.deepEqual(workspace.scriptAdds, profile.workspaceManifest.scriptAdds);
@@ -162,17 +197,24 @@ test("remote evidence binds event, checkout, and fresh remote head", () => {
   const evidence = {
     eventName: "push",
     eventSourceSha: sourceSha,
-    observedRef: "refs/heads/codex/plans042-043",
+    observedRef: plan042CertificationRef,
     observedSha: sourceSha,
     repository: "mannyc2/effect-build",
+    ref: plan042CertificationRef,
+    refType: "branch",
     sourceSha,
   };
   assert.equal(validateCurrentRemoteEvidence(evidence).observedSha, sourceSha);
   mustReject(() => validateCurrentRemoteEvidence({ ...evidence, observedSha: "c".repeat(40) }), /Expected values/);
+  mustReject(() => validateCurrentRemoteEvidence({ ...evidence, refType: "tag" }), /Expected values/);
 });
 
 test("receipt and certificate contain Plan 041 only as historical input", () => {
   const sourceSha = "d".repeat(40);
+  const policyVerifierOrigin = sourcePolicyVerifierOrigin({
+    sourceSha,
+    documents: sourcePolicyVerifierPaths.map((path) => ({ path, digest: sha256(Buffer.from(path)) })),
+  });
   const historicalAuthority = historicalAuthoritySummary({
     freezeAnchor,
     handoffAnchor,
@@ -191,6 +233,7 @@ test("receipt and certificate contain Plan 041 only as historical input", () => 
       historicalAuthority,
       plan041Artifact: { sourceSha: plan041Anchor.sourceSha, transport: "github-api" },
       currentHead: { observedSha: sourceSha, repository: plan041Anchor.workflow.repository },
+      sourcePolicyVerifierOrigin: policyVerifierOrigin,
       repositoryScope: {
         planStatus: "DONE",
         implementationFiles: [...profile.denoImplementationFiles].sort(),
@@ -199,7 +242,7 @@ test("receipt and certificate contain Plan 041 only as historical input", () => 
         bunStagedDiff: [],
         immutablePublicDiff: [],
         requiredCommands: requiredImplementationCommands,
-        workflowDigest: "sha256:07bafc286241f6645cbd5ab12220b6d0c51a2e5712bcacf328c30cdeee28a889",
+        workflowDigest: "sha256:59e7bfdf0362309e9a50ff6171e2048d7b245c00464574568d3955d6cdbe8ae6",
         activeInstructions: {
           handoffSha: profile.productionBaseline.handoffSha,
           path: "AGENTS.md",
@@ -246,8 +289,11 @@ test("receipt and certificate contain Plan 041 only as historical input", () => 
       runId: "1",
       runAttempt: "1",
       eventName: "push",
+      ref: plan042CertificationRef,
+      refType: "branch",
     },
     historicalInputs: historicalAuthority,
+    sourcePolicyVerifierOrigin: policyVerifierOrigin,
     currentReceipts: [{ id: expected.receiptId, file: `${expected.receiptId}.json`, digest }],
     claims: expected.claims.length,
     result: "certified",
@@ -262,6 +308,7 @@ test("receipt and certificate contain Plan 041 only as historical input", () => 
     plan040Anchor,
     plan041Anchor,
     profile,
+    sourcePolicyVerifierOrigin: policyVerifierOrigin,
     sourceSha,
   });
   mustReject(() => validateCurrentReceipt({
@@ -275,4 +322,21 @@ test("receipt and certificate contain Plan 041 only as historical input", () => 
     receipt: { ...receipt, id: plan041Anchor.receipt.id },
     sourceSha,
   }), /Expected values/);
+  mustReject(() => validateCurrentReceipt({
+    expected,
+    freezeAnchor,
+    handoffAnchor,
+    plan039Anchor,
+    plan040Anchor,
+    plan041Anchor,
+    profile,
+    receipt: {
+      ...receipt,
+      evidence: {
+        ...receipt.evidence,
+        sourcePolicyVerifierOrigin: { ...policyVerifierOrigin, independentlyProtected: true },
+      },
+    },
+    sourceSha,
+  }), /source policy\/verifier origin drifted/);
 });

@@ -62,6 +62,12 @@ profiles are deferred. An experimental label does not authorize them.
 - Run `bun run verify`, Deno real-tool/target jobs, and a Plan 042
   implementation receipt on the exact implementation head. Authenticate the
   immutable freeze receipt separately; do not weaken its research-only scope.
+- The Plan 042 receipt and certificate record the content-addressed source
+  origin of their policy, expected claims, verifier, pinned tool provisioner,
+  and workflow. That is ancestry-pinned accidental-drift protection, not an
+  independently protected certifier. A separately reviewed protected workflow
+  or app with an externally pinned verifier is required before claiming
+  independent certification authority.
 
 ## Stop conditions
 

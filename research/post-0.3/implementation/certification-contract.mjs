@@ -7,6 +7,8 @@ import { parse as parseYaml } from "yaml";
 const profilePath = "research/post-0.3/implementation/profile.json";
 const shaPattern = /^[0-9a-f]{40}$/;
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
+export const plan042CertificationBranch = "codex/plan042-deno-lane";
+export const plan042CertificationRef = `refs/heads/${plan042CertificationBranch}`;
 
 const exact = {
   release: "f06f96ca88b6278e5f23a898d758b99fa9322108",
@@ -19,7 +21,7 @@ const exact = {
 
 const exactDocumentDigests = {
   profile: "sha256:e0047da788d57238cd8edce53fee6378ff2857805e6167e8c7122365380b80b7",
-  expected: "sha256:91e76f3b8c46e51c351e25186bf9fb4919c8ad4b36c3074eba118f031be8556f",
+  expected: "sha256:25b40c29c7b9f6e3dc17379303784954cde2edc3e56623ca186cb41e0c670c87",
   freezeAnchor: "sha256:bddbed308ae05697663b10a63234f52ee4e5b1baca919463da8edbf4aec16888",
   handoffAnchor: "sha256:601dc271d3deb50a6f0aeb69bc15e776ff9d8b1e05ccd9625bd3fd3108c0ab57",
   plan039Anchor: "sha256:bb954a00a206189b38b7e2b78fbe5178f6850a5f2191aa46387f39649b64265b",
@@ -28,7 +30,7 @@ const exactDocumentDigests = {
   migrationPlan: "sha256:6827f8f5c9198a5d7d9a175a3cd48b56b8f20e661a11c40ca9b3c5eaa4b5659c",
 };
 
-const exactImplementationWorkflowDigest = "sha256:07bafc286241f6645cbd5ab12220b6d0c51a2e5712bcacf328c30cdeee28a889";
+const exactImplementationWorkflowDigest = "sha256:59e7bfdf0362309e9a50ff6171e2048d7b245c00464574568d3955d6cdbe8ae6";
 
 const exactDenoImplementationFiles = [
   "packages/effect-build-deno/src/CompileExecutable.ts",
@@ -55,6 +57,17 @@ export const requiredImplementationCommands = [
   "node research/post-0.3/implementation/certify-current-head.mjs",
 ];
 
+export const sourcePolicyVerifierPaths = [
+  profilePath,
+  "research/post-0.3/implementation/expected-claims.json",
+  "research/post-0.3/implementation/certification-contract.mjs",
+  "research/post-0.3/implementation/certify-current-head.mjs",
+  "tooling/tool-pins.json",
+  "scripts/read-tooling.mjs",
+  "scripts/provision-tool-assets.mjs",
+  ".github/workflows/architecture-research.yml",
+];
+
 export const sha256 = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
 const sorted = (values) => [...values].sort();
@@ -72,6 +85,37 @@ export const expectedReceiptClaims = (expected) => expected.claims.map((claim) =
   conclusion: claim.conclusion,
   assertions: claim.assertions.map((name) => ({ name, passed: true })),
 }));
+
+export const sourcePolicyVerifierOrigin = ({ documents, sourceSha }) => {
+  assertSha(sourceSha, "invalid source policy/verifier SHA");
+  assert.ok(Array.isArray(documents), "source policy/verifier documents are invalid");
+  assert.deepEqual(
+    documents.map(({ path }) => path),
+    sourcePolicyVerifierPaths,
+    "source policy/verifier document paths drifted",
+  );
+  for (const document of documents) {
+    assert.deepEqual(Object.keys(document).sort(), ["digest", "path"]);
+    assertDigest(document.digest, `invalid source policy/verifier digest: ${document.path}`);
+  }
+  return {
+    schema: "effect-build/source-policy-verifier-origin@1",
+    sourceSha,
+    scope: "candidate-source-reproduction",
+    independentlyProtected: false,
+    independentAuthorityPrerequisite: "separately-reviewed-protected-workflow-or-app-with-an-externally-pinned-verifier",
+    documents,
+  };
+};
+
+export const validateSourcePolicyVerifierOrigin = (origin) => {
+  const expected = sourcePolicyVerifierOrigin({
+    documents: origin?.documents,
+    sourceSha: origin?.sourceSha,
+  });
+  assert.deepEqual(origin, expected, "source policy/verifier origin drifted");
+  return expected;
+};
 
 const validateHistoricalAnchors = ({ freezeAnchor, handoffAnchor, plan039Anchor }) => {
   assert.equal(freezeAnchor.sourceSha, exact.freeze);
@@ -249,7 +293,7 @@ export const validateProfileDocuments = (documents) => {
   assert.equal(expected.schema, "effect-build/expected-implementation-claims@1");
   assert.equal(expected.profileId, profile.profileId);
   assert.equal(expected.receiptId, profile.currentReceiptIds[0]);
-  assert.equal(expected.claims.length, 4);
+  assert.equal(expected.claims.length, 5);
   for (const claim of expected.claims) {
     assert.ok(["established", "sequenced"].includes(claim.classification));
     unique(claim.assertions, `claim ${claim.id} has invalid assertions`);
@@ -378,10 +422,11 @@ export const validateCurrentImplementationState = (input) => {
     "PLAN041_RECEIPTS_DIR",
   ]) assert.equal(workflowSource.includes(forbidden), false, `active workflow mixes historical authority: ${forbidden}`);
   const workflow = parseYaml(workflowSource);
-  assert.deepEqual(Object.keys(workflow.on ?? {}).sort(), ["pull_request", "push"]);
+  assert.deepEqual(Object.keys(workflow.on ?? {}).sort(), ["push"]);
+  assert.deepEqual(workflow.on.push, { branches: [plan042CertificationBranch] });
   assert.deepEqual(workflow.permissions, { actions: "read", contents: "read" });
   assert.deepEqual(workflow.env, {
-    SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
+    SOURCE_SHA: "${{ github.sha }}",
     CERTIFICATION_PROFILE: profile.profileId,
   });
   assert.equal(workflow.name, "plan-042-implementation-certification");
@@ -390,6 +435,29 @@ export const validateCurrentImplementationState = (input) => {
   assert.deepEqual(Object.keys(job).sort(), ["runs-on", "steps"], "implementation job can be skipped or altered");
   assert.equal(job["runs-on"], "ubuntu-24.04");
   assert.ok(Array.isArray(job.steps));
+  const bunProvision = job.steps.find((step) => step?.id === "plan041-bun");
+  assert.deepEqual(bunProvision, {
+    id: "plan041-bun",
+    name: "Provision the exact content-authenticated Bun provider coordinate",
+    shell: "bash",
+    run: 'node scripts/provision-tool-assets.mjs --only bun >> "$GITHUB_OUTPUT"',
+    env: { EFFECT_BUILD_TOOL_DIR: "${{ runner.temp }}/effect-build-plan041-bun" },
+  });
+  const bunVerification = job.steps.find((step) =>
+    step?.name === "Verify exact content-authenticated Bun provider coordinate"
+  );
+  assert.deepEqual(bunVerification?.env, { PLAN041_BUN_EXECUTABLE: "${{ steps.plan041-bun.outputs.bun }}" });
+  assert.equal(
+    bunVerification?.run,
+    [
+      'test "${PLAN041_BUN_EXECUTABLE#/}" != "$PLAN041_BUN_EXECUTABLE"',
+      'test -x "$PLAN041_BUN_EXECUTABLE"',
+      'test "$("$PLAN041_BUN_EXECUTABLE" --version)" = "1.3.9"',
+      'echo "PLAN041_BUN_EXECUTABLE=$PLAN041_BUN_EXECUTABLE" >> "$GITHUB_ENV"',
+      "",
+    ].join("\n"),
+  );
+  assert.equal(workflowSource.includes("npm install --prefix"), false, "Bun provider must not be provisioned from npm");
   const gateIndexes = requiredImplementationCommands.map((command) => {
     const matches = job.steps
       .map((step, index) => ({ index, step }))
@@ -435,13 +503,18 @@ export const validateCurrentRemoteEvidence = (evidence) => {
   assert.equal(evidence.eventSourceSha, evidence.sourceSha);
   assert.equal(evidence.observedSha, evidence.sourceSha);
   assert.equal(evidence.repository, "mannyc2/effect-build");
-  assert.ok(evidence.eventName === "push" || evidence.eventName === "pull_request");
+  assert.equal(evidence.eventName, "push");
+  assert.equal(evidence.ref, plan042CertificationRef);
+  assert.equal(evidence.refType, "branch");
+  assert.equal(evidence.observedRef, plan042CertificationRef);
   return {
     eventName: evidence.eventName,
     eventSourceSha: evidence.eventSourceSha,
     observedRef: evidence.observedRef,
     observedSha: evidence.observedSha,
     repository: evidence.repository,
+    ref: evidence.ref,
+    refType: evidence.refType,
   };
 };
 
@@ -515,6 +588,8 @@ export const validateCurrentReceipt = ({
   assert.deepEqual(receipt.evidence?.plan041Artifact, { sourceSha: plan041Anchor.sourceSha, transport: "github-api" });
   assert.equal(receipt.evidence?.currentHead?.observedSha, sourceSha);
   assert.equal(receipt.evidence?.currentHead?.repository, plan041Anchor.workflow.repository);
+  const policyVerifierOrigin = validateSourcePolicyVerifierOrigin(receipt.evidence?.sourcePolicyVerifierOrigin);
+  assert.equal(policyVerifierOrigin.sourceSha, sourceSha);
   assert.equal(receipt.evidence?.repositoryScope?.planStatus, "DONE");
   assert.deepEqual(receipt.evidence?.repositoryScope?.implementationFiles, sorted(profile.denoImplementationFiles));
   assert.deepEqual(receipt.evidence?.repositoryScope?.coreStagedDiff, []);
@@ -556,6 +631,7 @@ export const validateImplementationCertificate = ({
   plan040Anchor,
   plan041Anchor,
   profile,
+  sourcePolicyVerifierOrigin,
   sourceSha,
 }) => {
   assert.equal(certificate.schema, "effect-build/implementation-certification@1");
@@ -567,7 +643,9 @@ export const validateImplementationCertificate = ({
   assert.equal(certificate.workflow?.workflow, "plan-042-implementation-certification");
   assert.match(certificate.workflow?.runId, /^[1-9][0-9]*$/);
   assert.match(certificate.workflow?.runAttempt, /^[1-9][0-9]*$/);
-  assert.equal(certificate.workflow?.eventName === "push" || certificate.workflow?.eventName === "pull_request", true);
+  assert.equal(certificate.workflow?.eventName, "push");
+  assert.equal(certificate.workflow?.ref, plan042CertificationRef);
+  assert.equal(certificate.workflow?.refType, "branch");
   assert.deepEqual(
     certificate.historicalInputs,
     historicalAuthoritySummary({ freezeAnchor, handoffAnchor, plan039Anchor, plan040Anchor, plan041Anchor }),
@@ -578,6 +656,7 @@ export const validateImplementationCertificate = ({
     digest: currentReceiptDigest,
   }]);
   assert.equal(certificate.currentReceipts.some((receipt) => profile.forbiddenCurrentReceiptIds.includes(receipt.id)), false);
+  assert.deepEqual(validateSourcePolicyVerifierOrigin(certificate.sourcePolicyVerifierOrigin), sourcePolicyVerifierOrigin);
   assert.equal(certificate.claims, expected.claims.length);
   assert.equal(certificate.result, "certified");
   return certificate;
