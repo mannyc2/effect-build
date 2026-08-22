@@ -42,7 +42,7 @@
     "@effect/platform-node": "4.0.0-rc.108",
     "@types/node": "24.3.0",
     "dprint": "0.49.1",
-    "effect": "4.0.0-rc.108",
+    "effect": "4.0.0-rc.110",
     "effect-build": "workspace:*",
     "effect-build-bun": "workspace:*",
     "effect-build-deno": "workspace:*",
