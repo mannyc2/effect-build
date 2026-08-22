@@ -30,7 +30,7 @@ const exactDocumentDigests = {
   migrationPlan: "sha256:6827f8f5c9198a5d7d9a175a3cd48b56b8f20e661a11c40ca9b3c5eaa4b5659c",
 };
 
-const exactImplementationWorkflowDigest = "sha256:ace9d11e267e08c1e30f98010f1605803a6b52a5be41605fca13ca892dc12fc5";
+const exactImplementationWorkflowDigest = "sha256:163bb0a7f58fb4c190040528926d54e17c5eefc05ced3c0e3a57b9ed3ce3edfe";
 
 const exactDenoImplementationFiles = [
   "packages/effect-build-deno/src/CompileExecutable.ts",
@@ -471,7 +471,7 @@ export const validateCurrentImplementationState = (input) => {
       'test "${DENORT#/}" != "$DENORT"',
       'test -x "$DENO"',
       'test -x "$DENORT"',
-      'test "$("$DENO" --version | sed -n \'1p\')" = "deno 2.9.3"',
+      'test "$("$DENO" --version | sed -n \'1s/^deno \\([^[:space:]]*\\).*$/\\1/p\')" = "2.9.3"',
       "",
     ].join("\n"),
   });

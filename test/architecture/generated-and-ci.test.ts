@@ -469,7 +469,7 @@ describe("tooling pins and workflow contracts", () => {
     );
     const workflow = parse(workflowSource) as Workflow;
     expect(createHash("sha256").update(workflowSource).digest("hex")).toBe(
-      "ace9d11e267e08c1e30f98010f1605803a6b52a5be41605fca13ca892dc12fc5",
+      "163bb0a7f58fb4c190040528926d54e17c5eefc05ced3c0e3a57b9ed3ce3edfe",
     );
     expect(Object.keys(workflow.on).sort()).toEqual(["push"]);
     expect(workflow.on.push).toEqual({ branches: ["codex/plan042-deno-lane"] });
@@ -562,7 +562,7 @@ describe("tooling pins and workflow contracts", () => {
       'test "${DENORT#/}" != "$DENORT"',
       'test -x "$DENO"',
       'test -x "$DENORT"',
-      'test "$("$DENO" --version | sed -n \'1p\')" = "deno 2.9.3"',
+      'test "$("$DENO" --version | sed -n \'1s/^deno \\([^[:space:]]*\\).*$/\\1/p\')" = "2.9.3"',
       "",
     ].join("\n"));
     expect(job.steps!.find((step) => step.run === "bun run test:integration:v04-deno")?.env).toEqual({
