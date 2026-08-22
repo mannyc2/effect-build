@@ -618,8 +618,8 @@ describe("tooling pins and workflow contracts", () => {
       moveFile: async (from: string, to: string) => void moves.push({ from, to }),
       removeFile: async (path: string) => void removals.push(path),
     });
-    const fixtureDestination = "/tmp/effect-build-denort-fixture/dl/release/2.9.3/denort-x86_64-apple-darwin.zip";
-    expect(madeDirectories).toEqual(["/tmp/effect-build-denort-fixture/dl/release/2.9.3"]);
+    const fixtureDestination = "/tmp/effect-build-denort-fixture/dl/release/v2.9.3/denort-x86_64-apple-darwin.zip";
+    expect(madeDirectories).toEqual(["/tmp/effect-build-denort-fixture/dl/release/v2.9.3"]);
     expect(prewarmed.get(fixtureArchive.triple)).toBe(fixtureDestination);
     expect(writes).toEqual([{
       path: expect.stringMatching(/denort-x86_64-apple-darwin\.zip\.partial-[0-9]+-0$/),

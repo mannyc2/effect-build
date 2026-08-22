@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { verifyTargetSupport } from "./verify-target-support.mjs";
 
 const release = "v2.9.3";
-const releaseDirectory = "2.9.3";
+const releaseDirectory = "v2.9.3";
 const releaseBaseUrl = `https://github.com/denoland/deno/releases/download/${release}`;
 
 export const denortArchives = [
