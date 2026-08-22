@@ -42,8 +42,12 @@ interface ProbeReport {
   readonly os: "macos" | "linux" | "windows";
   readonly architecture: "x64" | "aarch64";
   readonly distribution: "ubuntu-24.04" | "not-applicable" | "unknown";
+  readonly buildSea: BuildConfigurationCapability;
+  readonly lief: BuildConfigurationCapability;
   readonly builtinSpecifiers: readonly string[];
 }
+
+type BuildConfigurationCapability = "present" | "missing" | "indeterminate";
 
 export interface LayerOptions {
   readonly builderExecutable?: AbsolutePath;
@@ -321,7 +325,17 @@ const parseProbe = (completion: CommandCompletion): Effect.Effect<ProbeReport, I
     if (
       Reflect.ownKeys(value).some((key) =>
         typeof key !== "string"
-        || !["path", "version", "revision", "os", "architecture", "distribution", "builtinSpecifiers"].includes(key)
+        || ![
+          "path",
+          "version",
+          "revision",
+          "os",
+          "architecture",
+          "distribution",
+          "buildSea",
+          "lief",
+          "builtinSpecifiers",
+        ].includes(key)
       )
       || typeof value.path !== "string"
       || value.path.length === 0
@@ -332,6 +346,8 @@ const parseProbe = (completion: CommandCompletion): Effect.Effect<ProbeReport, I
       || (os !== "macos" && os !== "linux" && os !== "windows")
       || (architecture !== "x64" && architecture !== "aarch64")
       || (distribution !== "ubuntu-24.04" && distribution !== "not-applicable" && distribution !== "unknown")
+      || (value.buildSea !== "present" && value.buildSea !== "missing" && value.buildSea !== "indeterminate")
+      || (value.lief !== "present" && value.lief !== "missing" && value.lief !== "indeterminate")
       || !Array.isArray(value.builtinSpecifiers)
       || value.builtinSpecifiers.some((specifier) => typeof specifier !== "string")
     ) return yield* Effect.fail(identityIncomplete("identity-probe-fields-are-incomplete"));
@@ -348,6 +364,8 @@ const parseProbe = (completion: CommandCompletion): Effect.Effect<ProbeReport, I
       os,
       architecture,
       distribution,
+      buildSea: value.buildSea,
+      lief: value.lief,
       builtinSpecifiers,
     };
   });
@@ -359,12 +377,31 @@ const probeSource = [
   'const id = /^ID=(?:"([^"]+)"|([^\\n]+))$/m.exec(release)?.slice(1).find(Boolean);',
   'const versionId = /^VERSION_ID=(?:"([^"]+)"|([^\\n]+))$/m.exec(release)?.slice(1).find(Boolean);',
   "const distribution = process.platform !== 'linux' ? 'not-applicable' : id === 'ubuntu' && versionId === '24.04' ? 'ubuntu-24.04' : 'unknown';",
+  "const configured = (value) => value === true || value === 'true' ? 'present' : value === false || value === 'false' ? 'missing' : 'indeterminate';",
   "const names = new Set();",
   "for (const listed of builtinModules) { const bare = listed.startsWith('node:') ? listed.slice(5) : listed; for (const candidate of [bare, `node:${bare}`]) if (isBuiltin(candidate)) names.add(candidate); }",
-  "process.stdout.write(JSON.stringify({ path: process.execPath, version: process.versions.node, revision: process.versions.v8, os: process.platform, architecture: process.arch, distribution, builtinSpecifiers: [...names].sort() }));",
+  "process.stdout.write(JSON.stringify({ path: process.execPath, version: process.versions.node, revision: process.versions.v8, os: process.platform, architecture: process.arch, distribution, buildSea: configured(process.config?.variables?.single_executable_application), lief: configured(process.config?.variables?.node_use_lief), builtinSpecifiers: [...names].sort() }));",
 ] as const;
 
-const parseCapabilities = (completion: CommandCompletion): readonly [CapabilityObservation, CapabilityObservation] => {
+const configuredCapability = (
+  id: "build-sea" | "lief",
+  configuration: BuildConfigurationCapability,
+  variable: "single_executable_application" | "node_use_lief",
+): CapabilityObservation => {
+  switch (configuration) {
+    case "present":
+      return { _tag: "Present", id, evidence: `node-process-config:${variable}=true` };
+    case "missing":
+      return { _tag: "Missing", id, reason: `node-process-config:${variable}=false` };
+    case "indeterminate":
+      return { _tag: "Indeterminate", id, reason: `node-process-config:${variable}=unavailable` };
+  }
+};
+
+const parseCapabilities = (
+  completion: CommandCompletion,
+  configuration: Pick<ProbeReport, "buildSea" | "lief">,
+): readonly [CapabilityObservation, CapabilityObservation] => {
   if (completion.exitCode !== 0 || completion.stdout.truncated || completion.stderr.truncated) {
     const reason = completion.exitCode !== 0
       ? `help-probe-exited:${completion.exitCode}`
@@ -382,12 +419,8 @@ const parseCapabilities = (completion: CommandCompletion): readonly [CapabilityO
     ];
   }
   return [
-    { _tag: "Present", id: "build-sea", evidence: "node-help-lists-build-sea" },
-    {
-      _tag: "Present",
-      id: "lief",
-      evidence: "node-help-lists-the-direct-build-sea-lief-backed-assembly-path",
-    },
+    configuredCapability("build-sea", configuration.buildSea, "single_executable_application"),
+    configuredCapability("lief", configuration.lief, "node_use_lief"),
   ];
 };
 
@@ -455,7 +488,7 @@ const participant = (
         host: { os: report.os, architecture: report.architecture, distribution: report.distribution },
         content: after,
       }),
-      capabilities: parseCapabilities(help),
+      capabilities: parseCapabilities(help, report),
       builtinSpecifiers: report.builtinSpecifiers,
     };
   });

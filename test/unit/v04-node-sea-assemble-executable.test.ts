@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
 import type { AbsolutePath } from "../../packages/effect-build/src/Artifact.js";
@@ -74,6 +74,8 @@ interface FakeNodeOptions {
   readonly architecture?: "x64" | "aarch64";
   readonly distribution?: "ubuntu-24.04" | "not-applicable" | "unknown";
   readonly capability?: "present" | "missing" | "indeterminate";
+  readonly buildSea?: "present" | "missing" | "indeterminate";
+  readonly lief?: "present" | "missing" | "indeterminate";
 }
 
 const makeSpawner = (
@@ -136,6 +138,8 @@ const makeSpawner = (
             os: options.os ?? "linux",
             architecture: options.architecture ?? "x64",
             distribution: options.distribution ?? "ubuntu-24.04",
+            buildSea: options.buildSea ?? "present",
+            lief: options.lief ?? "present",
             builtinSpecifiers: ["fs", "node:fs", "node:path", "path"],
           }),
           "",
@@ -275,8 +279,18 @@ describe("staged 0.4 Node SEA AssembleExecutable", () => {
     expect(config.executable).toBe(realpathSync(harness.node));
     expect(config.main).not.toBe(fileMain);
     expect((config.assets as Record<string, string>).message).not.toBe(assetPath);
+    expect(config.mainFormat).toBe("commonjs");
+    expect(config.useSnapshot).toBe(false);
+    expect(config.useCodeCache).toBe(false);
     expect(config.disableExperimentalSEAWarning).toBe(true);
-    expect(harness.control.invocations.some(({ args }) => args[0] === "--build-sea")).toBe(true);
+    const build = harness.control.invocations.find(({ args }) => args[0] === "--build-sea");
+    expect(build).toBeDefined();
+    expect(build!.args).toHaveLength(2);
+    expect(isAbsolute(build!.args[1]!)).toBe(true);
+    expect(config.output).not.toBe(join(harness.root, "file-app"));
+    expect(isAbsolute(String(config.output))).toBe(true);
+    expect(dirname(String(config.output))).not.toBe(dirname(join(harness.root, "file-app")));
+    expect(String(config.output)).toContain(`${join(harness.root, ".effect-build-")}`);
 
     const bytesExit = await harness.run(AssembleExecutable.assembleExecutable({
       main: {
@@ -343,6 +357,33 @@ describe("staged 0.4 Node SEA AssembleExecutable", () => {
       });
     expect(existsSync(join(missingCapability.root, "unsupported"))).toBe(false);
     expect(missingCapability.control.builds()).toBe(0);
+
+    const disabledSea = makeHarness({ allowUntestedVersion: true, fake: { buildSea: "missing" } });
+    expect(failure(await disabledSea.run(AssembleExecutable.assembleExecutable(input(disabledSea.root)))))
+      .toMatchObject({
+        _tag: "CapabilityMissing",
+        capability: "build-sea",
+      });
+    expect(existsSync(join(disabledSea.root, "unsupported"))).toBe(false);
+    expect(disabledSea.control.builds()).toBe(0);
+
+    const missingLief = makeHarness({ allowUntestedVersion: true, fake: { lief: "missing" } });
+    expect(failure(await missingLief.run(AssembleExecutable.assembleExecutable(input(missingLief.root)))))
+      .toMatchObject({
+        _tag: "CapabilityMissing",
+        capability: "lief",
+      });
+    expect(existsSync(join(missingLief.root, "unsupported"))).toBe(false);
+    expect(missingLief.control.builds()).toBe(0);
+
+    const indeterminateLief = makeHarness({ allowUntestedVersion: true, fake: { lief: "indeterminate" } });
+    expect(failure(await indeterminateLief.run(AssembleExecutable.assembleExecutable(input(indeterminateLief.root)))))
+      .toMatchObject({
+        _tag: "CapabilityIndeterminate",
+        capability: "lief",
+      });
+    expect(existsSync(join(indeterminateLief.root, "unsupported"))).toBe(false);
+    expect(indeterminateLief.control.builds()).toBe(0);
 
     const deniedHost = makeHarness({
       allowUntestedVersion: true,
@@ -412,6 +453,18 @@ describe("staged 0.4 Node SEA AssembleExecutable", () => {
         _tag: "ExecutableInspectionFailed",
       });
 
+    const preserved = makeHarness({ allowUntestedVersion: true, fake: { mode: "invalid-output" } });
+    const preservedDestination = join(preserved.root, "preserved");
+    writeFileSync(preservedDestination, "old-public-artifact");
+    expect(failure(
+      await preserved.run(AssembleExecutable.assembleExecutable({
+        ...input(preserved.root, "preserved"),
+        observation: "hashed",
+      })),
+    )).toMatchObject({ _tag: "ExecutableInspectionFailed" });
+    expect(readFileSync(preservedDestination, "utf8")).toBe("old-public-artifact");
+    expect(preserved.control.configs[0]!.output).not.toBe(preservedDestination);
+
     const replacement = makeHarness({ allowUntestedVersion: true });
     const destination = join(replacement.root, "replacement");
     writeFileSync(destination, "old-public-artifact");
@@ -421,7 +474,9 @@ describe("staged 0.4 Node SEA AssembleExecutable", () => {
     }));
     expect(Exit.isSuccess(replaced)).toBe(true);
     expect(readFileSync(destination, "utf8")).not.toBe("old-public-artifact");
-    for (const root of [syntax.root, spawn.root, build.root, missing.root, invalid.root, replacement.root]) {
+    for (
+      const root of [syntax.root, spawn.root, build.root, missing.root, invalid.root, preserved.root, replacement.root]
+    ) {
       expect(readdirSync(root).some((entry) => entry.startsWith(".effect-build-"))).toBe(false);
     }
   });
@@ -489,18 +544,21 @@ describe("staged 0.4 Node SEA AssembleExecutable", () => {
       provider,
       Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
     );
+    const existing = join(root, "existing-public-artifact");
+    writeFileSync(existing, "old-public-artifact");
     const identityExit = await Effect.runPromiseExit(
       Effect.scoped(Effect.gen(function*() {
         const context = yield* Layer.build(provided);
         yield* Effect.sync(() => appendFileSync(node, "changed"));
         return yield* AssembleExecutable.assembleExecutable({
           main: { _tag: "Bytes", contents: new TextEncoder().encode("console.log('x')"), format: "commonjs" },
-          outfile: join(root, "must-not-exist", "identity-app"),
+          outfile: existing,
           observation: "unhashed",
         }).pipe(Effect.provide(context));
       })),
     );
     expect(failure(identityExit)).toMatchObject({ _tag: "SelectedCommandChanged", selectedRole: "builder" });
-    expect(existsSync(join(root, "must-not-exist"))).toBe(false);
+    expect(readFileSync(existing, "utf8")).toBe("old-public-artifact");
+    expect(readdirSync(root).some((entry) => entry.startsWith(".effect-build-"))).toBe(false);
   });
 });
