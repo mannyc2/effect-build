@@ -14,6 +14,12 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
+    "paths": {
+      "effect-build/Artifact": ["./packages/effect-build/src/Artifact.ts"],
+      "effect-build/Author/Executable": ["./packages/effect-build/src/Author/Executable.ts"],
+      "effect-build/Author/Tool": ["./packages/effect-build/src/Author/Tool.ts"],
+      "effect-build/Matrix": ["./packages/effect-build/src/Matrix.ts"]
+    },
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

@@ -1,4 +1,4 @@
-name: plan-040-implementation-certification
+name: plan-041-implementation-certification
 
 on:
   push: {}
@@ -10,10 +10,10 @@ permissions:
 
 env:
   SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-  CERTIFICATION_PROFILE: effect-build/plan040-implementation@1
+  CERTIFICATION_PROFILE: effect-build/plan041-implementation@1
 
 jobs:
-  plan040-implementation:
+  plan041-implementation:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -33,18 +33,19 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
-      - name: Verify exact Bun selection
+      - name: Verify exact package-manager Bun selection
         run: test "$(bun --version)" = "1.3.14"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ runner.temp }}/bun-install-cache
-          key: plan040-implementation-${{ runner.os }}-${{ runner.arch }}-bun-1.3.14-${{ hashFiles('bun.lock') }}
-      - run: bun install --frozen-lockfile
+          key: plan041-implementation-${{ runner.os }}-${{ runner.arch }}-bun-1.3.14-${{ hashFiles('bun.lock') }}
+      - name: Install the frozen workspace
+        run: bun install --frozen-lockfile
         env:
           BUN_INSTALL_CACHE_DIR: ${{ runner.temp }}/bun-install-cache
       - name: Test the disjoint implementation certification profile
         run: node --test research/post-0.3/implementation/certification-contract.test.mjs
-      - name: Run the full Plan 040 verification suite
+      - name: Run the full Plan 041 verification suite
         run: bun run verify
       - name: Reproduce the R3 evaluator and portable R4 Author laws
         run: bun test research/post-0.3/r3-provider-compatibility.test.ts research/post-0.3/r4-author-laws.test.mjs
@@ -52,17 +53,30 @@ jobs:
         run: node --test research/post-0.3/r7-matrix-laws.test.mjs
       - name: Exercise the staged external Author adapter
         run: node research/post-0.3/implementation/staged-external-author-adapter.mjs
-      - name: Exercise the staged Esbuild lane against real esbuild
+      - name: Exercise the frozen Plan 040 Esbuild lane
         run: node research/post-0.3/implementation/staged-esbuild-adapter.mjs
-      - name: Certify the exact Plan 040 implementation head
+      - name: Provision the exact Bun provider coordinate
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/plan041-bun" --no-save --package-lock=false bun@1.3.9
+          PLAN041_BUN_EXECUTABLE="$(realpath "$RUNNER_TEMP/plan041-bun/node_modules/.bin/bun")"
+          test "$($PLAN041_BUN_EXECUTABLE --version)" = "1.3.9"
+          echo "PLAN041_BUN_EXECUTABLE=$PLAN041_BUN_EXECUTABLE" >> "$GITHUB_ENV"
+      - name: Exercise real Bun scalar behavior
+        run: bun run test:integration:v04-bun
+      - name: Verify all six Bun targets with independent binary oracles
+        run: node scripts/verify-v04-bun-target-support.mjs
+      - name: Exercise the nonpublished staged Bun consumer
+        run: node research/post-0.3/implementation/staged-bun-adapter.mjs
+      - name: Certify the exact Plan 041 implementation head
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          PLAN040_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-plan040-implementation
+          PLAN041_RECEIPTS_DIR: ${{ runner.temp }}/effect-build-plan041-implementation
         run: node research/post-0.3/implementation/certify-current-head.mjs
-      - name: Upload successful Plan 040 implementation certificate
+      - name: Upload successful Plan 041 implementation certificate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: plan040-implementation-certification-${{ env.SOURCE_SHA }}
-          path: ${{ runner.temp }}/effect-build-plan040-implementation
+          name: plan041-implementation-certification-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/effect-build-plan041-implementation
           if-no-files-found: error
           retention-days: 90

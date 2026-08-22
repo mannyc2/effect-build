@@ -53,7 +53,7 @@ describe("source ownership boundaries", () => {
     }
   });
 
-  it("keeps one core-owned process implementation and forbids shell or download escapes", async () => {
+  it("keeps process ownership explicit and forbids shell or download escapes", async () => {
     const processImporters: string[] = [];
     for (const file of await sourceFiles()) {
       const source = await readFile(file, "utf8");
@@ -61,6 +61,8 @@ describe("source ownership boundaries", () => {
       expect(source, file).not.toMatch(/\b(?:exec|spawn)Sync\b|\bexecFileSync\b/);
     }
     expect(processImporters.sort()).toEqual([
+      "packages/effect-build-bun/src/CompileExecutable.ts",
+      "packages/effect-build-bun/src/internal/v04/selected.ts",
       "packages/effect-build-node-sea/src/internal/NodeSea.ts",
       "packages/effect-build/src/Author/Tool.ts",
       "packages/effect-build/src/Integration.ts",
@@ -73,6 +75,11 @@ describe("source ownership boundaries", () => {
     expect(toolContract).not.toMatch(/ChildProcess\.(?:make|start|spawn)/);
     const integration = await readFile(resolve(root, "packages/effect-build/src/Integration.ts"), "utf8");
     expect(integration.match(/ChildProcess\.make\(/g)).toHaveLength(1);
+    const bunSelected = await readFile(
+      resolve(root, "packages/effect-build-bun/src/internal/v04/selected.ts"),
+      "utf8",
+    );
+    expect(bunSelected).not.toMatch(/shell:\s*true|download|npm|pnpm|yarn|bun add|https?:\/\//i);
     const nodeSea = await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/NodeSea.ts"), "utf8");
     expect(nodeSea).not.toMatch(/postject|download|npm|pnpm|yarn|bun add|https?:\/\//i);
   });

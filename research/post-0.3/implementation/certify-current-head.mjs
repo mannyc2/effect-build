@@ -11,48 +11,41 @@ import {
   loadProfileDocuments,
   sha256,
   validateActiveInstructions,
-  validateCoreMigrationPlan,
   validateCurrentImplementationState,
   validateCurrentReceipt,
   validateCurrentRemoteEvidence,
   validateImplementationCertificate,
-  validatePlan039Api,
-  validatePlan039Archive,
+  validatePlan040Api,
+  validatePlan040Archive,
   validateWorkspaceManifest,
 } from "./certification-contract.mjs";
 
-const execFileAsync = promisify(execFile);
+const execute = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(here, "../../..");
 
 const requiredEnvironment = (name) => {
   const value = process.env[name];
-  assert.equal(typeof value, "string", `${name} is missing`);
-  assert.ok(value.length > 0, `${name} is missing`);
+  assert.equal(typeof value === "string" && value.length > 0, true, `${name} is missing`);
   return value;
 };
 
 const githubHeaders = (token) => ({
   Accept: "application/vnd.github+json",
-  ...(token === undefined ? {} : { Authorization: `Bearer ${token}` }),
-  "User-Agent": "effect-build-plan040-certifier",
+  Authorization: `Bearer ${token}`,
+  "User-Agent": "effect-build-plan041-certifier",
   "X-GitHub-Api-Version": "2022-11-28",
 });
 
-const assertTrustedApiUrl = (value, apiOrigin, repositoryName) => {
+const trustedApiUrl = (value, origin, repositoryName) => {
   const url = new URL(value);
-  assert.equal(url.origin, apiOrigin, "GitHub API request escaped the configured origin");
-  assert.equal(
-    url.pathname.startsWith(`/repos/${repositoryName}/`),
-    true,
-    "GitHub API request escaped the configured repository",
-  );
+  assert.equal(url.origin, origin, "GitHub API request escaped its origin");
+  assert.equal(url.pathname.startsWith(`/repos/${repositoryName}/`), true, "GitHub API request escaped repository");
   return url;
 };
 
-const requestJson = async ({ apiOrigin, repositoryName, token, url }) => {
-  const trusted = assertTrustedApiUrl(url, apiOrigin, repositoryName);
-  const response = await fetch(trusted, {
+const requestJson = async ({ origin, repositoryName, token, url }) => {
+  const response = await fetch(trustedApiUrl(url, origin, repositoryName), {
     headers: githubHeaders(token),
     redirect: "error",
     signal: AbortSignal.timeout(30_000),
@@ -61,67 +54,54 @@ const requestJson = async ({ apiOrigin, repositoryName, token, url }) => {
   return await response.json();
 };
 
-const downloadArtifact = async ({ apiOrigin, artifact, plan039Anchor, repositoryName, token }) => {
-  const archiveUrl = assertTrustedApiUrl(artifact.archive_download_url, apiOrigin, repositoryName);
-  assert.equal(
-    archiveUrl.pathname,
-    `/repos/${repositoryName}/actions/artifacts/${plan039Anchor.aggregateArtifact.id}/zip`,
-    "plan039 artifact download URL drifted",
-  );
-  const redirect = await fetch(archiveUrl, {
+const downloadArtifact = async ({ artifact, origin, plan040Anchor, repositoryName, token }) => {
+  const url = trustedApiUrl(artifact.archive_download_url, origin, repositoryName);
+  assert.equal(url.pathname, `/repos/${repositoryName}/actions/artifacts/${plan040Anchor.aggregateArtifact.id}/zip`);
+  const redirect = await fetch(url, {
     headers: githubHeaders(token),
     redirect: "manual",
     signal: AbortSignal.timeout(30_000),
   });
-  assert.equal([301, 302, 303, 307, 308].includes(redirect.status), true, "artifact API did not return a redirect");
+  assert.equal([301, 302, 303, 307, 308].includes(redirect.status), true);
   const location = redirect.headers.get("location");
-  assert.equal(typeof location, "string", "artifact API redirect omitted its signed location");
-  const signedUrl = new URL(location);
-  assert.equal(signedUrl.protocol, "https:", "artifact redirect is not HTTPS");
-  const response = await fetch(signedUrl, { redirect: "error", signal: AbortSignal.timeout(30_000) });
+  assert.equal(typeof location, "string");
+  const signed = new URL(location);
+  assert.equal(signed.protocol, "https:");
+  const response = await fetch(signed, { redirect: "error", signal: AbortSignal.timeout(30_000) });
   assert.equal(response.ok, true, `artifact download failed with ${response.status}`);
   return Buffer.from(await response.arrayBuffer());
 };
 
-const readPlan039Archive = async (plan039Anchor, archiveBytes) => {
-  const directory = await mkdtemp(join(tmpdir(), "effect-build-plan040-plan039-"));
-  const archivePath = join(directory, "plan039-implementation.zip");
+const readArchive = async (anchor, archiveBytes) => {
+  const directory = await mkdtemp(join(tmpdir(), "effect-build-plan041-plan040-"));
+  const archive = join(directory, "plan040.zip");
   try {
-    await writeFile(archivePath, archiveBytes, { flag: "wx" });
-    const listing = await execFileAsync("unzip", ["-Z1", archivePath], {
-      encoding: "utf8",
-      maxBuffer: 1024 * 1024,
-    });
-    const entries = listing.stdout.split(/\r?\n/).filter((entry) => entry.length > 0);
-    const readEntry = async (entry) => {
-      const output = await execFileAsync("unzip", ["-p", archivePath, entry], {
-        encoding: "buffer",
-        maxBuffer: 16 * 1024 * 1024,
-      });
-      return output.stdout;
-    };
+    await writeFile(archive, archiveBytes, { flag: "wx" });
+    const listing = await execute("unzip", ["-Z1", archive], { encoding: "utf8", maxBuffer: 1024 * 1024 });
+    const entries = listing.stdout.split(/\r?\n/).filter(Boolean);
+    const entry = async (name) => (await execute("unzip", ["-p", archive, name], {
+      encoding: "buffer",
+      maxBuffer: 16 * 1024 * 1024,
+    })).stdout;
     return {
       entries,
-      certificateBytes: await readEntry(plan039Anchor.certification.file),
-      receiptBytes: await readEntry(plan039Anchor.receipt.file),
+      certificateBytes: await entry(anchor.certification.file),
+      receiptBytes: await entry(anchor.receipt.file),
     };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 };
 
-const git = async (args) => {
-  const result = await execFileAsync("git", args, {
-    cwd: repository,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return result.stdout;
-};
+const git = async (argv) => (await execute("git", argv, {
+  cwd: repository,
+  encoding: "utf8",
+  maxBuffer: 64 * 1024 * 1024,
+})).stdout;
 
-const gitIsAncestor = async (ancestor, descendant) => {
+const ancestor = async (from, to) => {
   try {
-    await git(["merge-base", "--is-ancestor", ancestor, descendant]);
+    await git(["merge-base", "--is-ancestor", from, to]);
     return true;
   } catch (error) {
     if (error?.code === 1) return false;
@@ -129,49 +109,43 @@ const gitIsAncestor = async (ancestor, descendant) => {
   }
 };
 
-const changedPaths = async (from, to, paths, diffFilter) => (await git([
+const changedPaths = async (from, to, paths, filter) => (await git([
   "diff",
   "--name-only",
   "-z",
-  ...(diffFilter === undefined ? [] : [`--diff-filter=${diffFilter}`]),
+  ...(filter === undefined ? [] : [`--diff-filter=${filter}`]),
   `${from}..${to}`,
   "--",
   ...paths,
-])).split("\0").filter((path) => path.length > 0).sort();
+])).split("\0").filter(Boolean).sort();
 
-const authenticateCiRemote = async ({ apiBase, apiOrigin, repositoryName, sourceSha, token }) => {
+const authenticateRemoteHead = async ({ apiBase, origin, repositoryName, sourceSha, token }) => {
   const eventName = requiredEnvironment("GITHUB_EVENT_NAME");
-  const eventPath = requiredEnvironment("GITHUB_EVENT_PATH");
-  const event = JSON.parse(await readFile(eventPath, "utf8"));
+  const event = JSON.parse(await readFile(requiredEnvironment("GITHUB_EVENT_PATH"), "utf8"));
   let eventSourceSha;
   let observedRef;
   let observedSha;
-
   if (eventName === "pull_request") {
-    const pullUrl = event.pull_request?.url;
-    assert.equal(typeof pullUrl, "string", "pull-request API URL is missing from the event");
-    const pull = await requestJson({ apiOrigin, repositoryName, token, url: pullUrl });
-    eventSourceSha = event.pull_request?.head?.sha;
-    observedSha = pull.head?.sha;
-    observedRef = `${pull.head?.repo?.full_name ?? "unknown"}:${pull.head?.ref ?? "unknown"}`;
+    const pull = await requestJson({ origin, repositoryName, token, url: event.pull_request.url });
+    eventSourceSha = event.pull_request.head.sha;
+    observedSha = pull.head.sha;
+    observedRef = `${pull.head.repo.full_name}:${pull.head.ref}`;
   } else {
-    assert.equal(eventName, "push", "unsupported certification event");
-    const ref = event.ref;
-    assert.equal(typeof ref, "string", "push ref is missing from the event");
-    assert.equal(ref, requiredEnvironment("GITHUB_REF"), "push event ref differs from GITHUB_REF");
-    assert.match(ref, /^refs\/heads\/.+$/, "push certification must name a branch head");
+    assert.equal(eventName, "push");
+    const ref = requiredEnvironment("GITHUB_REF");
+    assert.equal(event.ref, ref);
+    assert.match(ref, /^refs\/heads\/.+/);
     eventSourceSha = event.after;
-    const encodedRef = ref.slice("refs/".length).split("/").map(encodeURIComponent).join("/");
-    const remoteRef = await requestJson({
-      apiOrigin,
+    const encoded = ref.slice("refs/".length).split("/").map(encodeURIComponent).join("/");
+    const remote = await requestJson({
+      origin,
       repositoryName,
       token,
-      url: `${apiBase}/repos/${repositoryName}/git/ref/${encodedRef}`,
+      url: `${apiBase}/repos/${repositoryName}/git/ref/${encoded}`,
     });
-    observedSha = remoteRef.object?.sha;
-    observedRef = remoteRef.ref;
+    observedSha = remote.object.sha;
+    observedRef = remote.ref;
   }
-
   return validateCurrentRemoteEvidence({
     eventName,
     eventSourceSha,
@@ -182,147 +156,83 @@ const authenticateCiRemote = async ({ apiBase, apiOrigin, repositoryName, source
   });
 };
 
-const authenticatePlan039Artifact = async ({ documents, repositoryName }) => {
-  const { freezeAnchor, handoffAnchor, plan039Anchor } = documents;
-  const apiBase = requiredEnvironment("GITHUB_API_URL").replace(/\/$/, "");
-  const apiOrigin = new URL(apiBase).origin;
-  const token = requiredEnvironment("GITHUB_TOKEN");
+const authenticatePlan040Artifact = async ({ apiBase, documents, origin, repositoryName, token }) => {
+  const { plan040Anchor } = documents;
   const run = await requestJson({
-    apiOrigin,
+    origin,
     repositoryName,
     token,
-    url: `${apiBase}/repos/${repositoryName}/actions/runs/${plan039Anchor.workflow.runId}`,
+    url: `${apiBase}/repos/${repositoryName}/actions/runs/${plan040Anchor.workflow.runId}`,
   });
   const artifact = await requestJson({
-    apiOrigin,
+    origin,
     repositoryName,
     token,
-    url: `${apiBase}/repos/${repositoryName}/actions/artifacts/${plan039Anchor.aggregateArtifact.id}`,
+    url: `${apiBase}/repos/${repositoryName}/actions/artifacts/${plan040Anchor.aggregateArtifact.id}`,
   });
-  validatePlan039Api({ artifact, plan039Anchor, run });
-  const archiveBytes = await downloadArtifact({ apiOrigin, artifact, plan039Anchor, repositoryName, token });
-
-  const archive = await readPlan039Archive(plan039Anchor, archiveBytes);
-  const plan039 = validatePlan039Archive({
-    archiveBytes,
-    freezeAnchor,
-    handoffAnchor,
-    plan039Anchor,
-    ...archive,
-  });
-  return { plan039, transport: "github-api" };
+  validatePlan040Api({ artifact, plan040Anchor, run });
+  const archiveBytes = await downloadArtifact({ artifact, origin, plan040Anchor, repositoryName, token });
+  const archive = await readArchive(plan040Anchor, archiveBytes);
+  const authenticated = validatePlan040Archive({ archiveBytes, plan040Anchor, ...archive });
+  return { ...authenticated, transport: "github-api" };
 };
 
 export const certifyCurrentHead = async () => {
   const documents = await loadProfileDocuments(repository);
-  const { expected, freezeAnchor, handoffAnchor, migrationAuthority, migrationPlan, plan039Anchor, profile } = documents;
-  assert.equal(requiredEnvironment("CERTIFICATION_PROFILE"), profile.profileId, "workflow selected another profile");
+  const { expected, freezeAnchor, handoffAnchor, plan039Anchor, plan040Anchor, profile } = documents;
+  assert.equal(requiredEnvironment("CERTIFICATION_PROFILE"), profile.profileId);
+  assert.equal(process.env.GITHUB_ACTIONS, "true", "Plan 041 certification is authoritative only in GitHub Actions");
   const sourceSha = requiredEnvironment("SOURCE_SHA");
-  assert.equal(
-    process.env.GITHUB_ACTIONS,
-    "true",
-    "Plan 040 certification is authoritative only inside the exact GitHub Actions gate sequence",
-  );
   const repositoryName = requiredEnvironment("GITHUB_REPOSITORY");
-  assert.equal(repositoryName, plan039Anchor.workflow.repository, "certification repository differs from Plan 039");
-  const receiptDirectory = requiredEnvironment(profile.receiptDirectoryEnvironment);
-  assert.equal(isAbsolute(receiptDirectory), true, `${profile.receiptDirectoryEnvironment} must be absolute`);
-  const relativeReceiptDirectory = relative(repository, resolve(receiptDirectory));
-  assert.equal(
-    relativeReceiptDirectory === ".."
-      || relativeReceiptDirectory.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`),
-    true,
-    `${profile.receiptDirectoryEnvironment} must be outside the repository`,
-  );
-
-  const dirty = await git(["status", "--porcelain=v1", "--untracked-files=all"]);
-  assert.equal(dirty, "", "repository working tree is dirty");
-  const head = (await git(["rev-parse", "HEAD"])).trim();
-  const releaseIsFreezeAncestor = await gitIsAncestor(profile.productionBaseline.releaseSha, profile.productionBaseline.freezeSha);
-  const freezeIsHandoffAncestor = await gitIsAncestor(profile.productionBaseline.freezeSha, profile.productionBaseline.handoffSha);
-  const handoffIsPlan039Ancestor = await gitIsAncestor(
-    profile.productionBaseline.handoffSha,
-    profile.productionBaseline.plan039Sha,
-  );
-  const plan039IsCurrentAncestor = await gitIsAncestor(profile.productionBaseline.plan039Sha, sourceSha);
-  const postHandoffPaths = await changedPaths(profile.productionBaseline.handoffSha, sourceSha, ["."]);
-  const implementationAddedOrModifiedPaths = await changedPaths(
-    profile.productionBaseline.plan039Sha,
-    sourceSha,
-    profile.implementationFiles,
-    "AM",
-  );
-  const coreStagedDiff = await changedPaths(
-    profile.productionBaseline.plan039Sha,
-    sourceSha,
-    profile.coreStagedFiles,
-  );
-  const immutablePublicDiff = await changedPaths(
-    profile.productionBaseline.handoffSha,
-    sourceSha,
-    profile.immutablePublicPaths,
-  );
-  const handoffLegacySourceFiles = (await git([
-    "ls-tree",
-    "-r",
-    "--name-only",
-    profile.productionBaseline.handoffSha,
-    "--",
-    "packages/effect-build/src",
-  ])).split(/\r?\n/).filter((path) => path.length > 0 && path !== "packages/effect-build/src/index.ts").sort();
-  const coreMigration = validateCoreMigrationPlan({
-    handoffLegacySourceFiles,
-    migrationAuthority,
-    migrationPlan,
-  });
-  const currentWorkspaceManifest = JSON.parse(
-    await readFile(resolve(repository, profile.workspaceManifest.path), "utf8"),
-  );
-  const handoffWorkspaceManifest = JSON.parse(
-    await git(["show", `${profile.productionBaseline.handoffSha}:${profile.workspaceManifest.path}`]),
-  );
-  const workspaceManifest = validateWorkspaceManifest({
-    currentManifest: currentWorkspaceManifest,
-    handoffManifest: handoffWorkspaceManifest,
-    profile,
-  });
-  const currentInstructions = await readFile(resolve(repository, "AGENTS.md"), "utf8");
-  const handoffInstructions = await git(["show", `${profile.productionBaseline.handoffSha}:AGENTS.md`]);
-  const activeInstructions = validateActiveInstructions({ currentInstructions, handoffInstructions });
-  const planSource = await readFile(resolve(repository, "plans/040-expose-esbuild-api-lane.md"), "utf8");
-  const planIndexSource = await readFile(resolve(repository, "plans/README.md"), "utf8");
-  const workflowSource = await readFile(resolve(repository, ".github/workflows/architecture-research.yml"), "utf8");
-  const implementationState = validateCurrentImplementationState({
-    changedPaths: postHandoffPaths,
-    coreStagedDiff,
-    freezeIsHandoffAncestor,
-    handoffIsPlan039Ancestor,
-    head,
-    immutablePublicDiff,
-    implementationAddedOrModifiedPaths,
-    plan039IsCurrentAncestor,
-    planIndexSource,
-    planSource,
-    profile,
-    releaseIsFreezeAncestor,
-    sourceSha,
-    workflowSource,
-  });
-
+  assert.equal(repositoryName, plan040Anchor.workflow.repository);
+  const token = requiredEnvironment("GITHUB_TOKEN");
   const apiBase = requiredEnvironment("GITHUB_API_URL").replace(/\/$/, "");
-  const apiOrigin = new URL(apiBase).origin;
-  const currentRemote = await authenticateCiRemote({
-    apiBase,
-    apiOrigin,
-    repositoryName,
+  const origin = new URL(apiBase).origin;
+  const receiptDirectory = requiredEnvironment(profile.receiptDirectoryEnvironment);
+  assert.equal(isAbsolute(receiptDirectory), true);
+  const receiptRelative = relative(repository, resolve(receiptDirectory));
+  assert.equal(receiptRelative === ".." || receiptRelative.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`), true);
+  assert.equal(await git(["status", "--porcelain=v1", "--untracked-files=all"]), "", "working tree is dirty");
+  const head = (await git(["rev-parse", "HEAD"])).trim();
+
+  const ancestry = {
+    releaseIsFreezeAncestor: await ancestor(profile.productionBaseline.releaseSha, profile.productionBaseline.freezeSha),
+    freezeIsHandoffAncestor: await ancestor(profile.productionBaseline.freezeSha, profile.productionBaseline.handoffSha),
+    handoffIsPlan039Ancestor: await ancestor(profile.productionBaseline.handoffSha, profile.productionBaseline.plan039Sha),
+    plan039IsPlan040Ancestor: await ancestor(profile.productionBaseline.plan039Sha, profile.productionBaseline.plan040Sha),
+    plan040IsCurrentAncestor: await ancestor(profile.productionBaseline.plan040Sha, sourceSha),
+  };
+  const currentManifest = JSON.parse(await readFile(resolve(repository, profile.workspaceManifest.path), "utf8"));
+  const handoffManifest = JSON.parse(await git(["show", `${profile.productionBaseline.handoffSha}:${profile.workspaceManifest.path}`]));
+  const workspaceManifest = validateWorkspaceManifest({ currentManifest, handoffManifest, profile });
+  const currentInstructions = await readFile(resolve(repository, "AGENTS.md"), "utf8");
+  const handoffInstructions = await git(["show", `${profile.productionBaseline.handoffSha}:AGENTS.md"]);
+  const activeInstructions = validateActiveInstructions({ currentInstructions, handoffInstructions });
+  const implementationState = validateCurrentImplementationState({
+    ancestry,
+    changedPaths: await changedPaths(profile.productionBaseline.handoffSha, sourceSha, ["."]),
+    coreStagedDiff: await changedPaths(profile.productionBaseline.plan039Sha, sourceSha, profile.coreStagedFiles),
+    esbuildStagedDiff: await changedPaths(profile.productionBaseline.plan040Sha, sourceSha, profile.esbuildImplementationFiles),
+    head,
+    immutablePublicDiff: await changedPaths(profile.productionBaseline.handoffSha, sourceSha, profile.immutablePublicPaths),
+    implementationAddedOrModifiedPaths: await changedPaths(
+      profile.productionBaseline.plan040Sha,
+      sourceSha,
+      profile.bunImplementationFiles,
+      "AM",
+    ),
+    planIndexSource: await readFile(resolve(repository, "plans/README.md"), "utf8"),
+    planSource: await readFile(resolve(repository, "plans/041-add-bun-api-command-lanes.md"), "utf8"),
+    profile,
     sourceSha,
-    token: requiredEnvironment("GITHUB_TOKEN"),
+    workflowSource: await readFile(resolve(repository, ".github/workflows/architecture-research.yml"), "utf8"),
   });
-  const authenticatedPlan039 = await authenticatePlan039Artifact({ documents, repositoryName });
+  const currentHead = await authenticateRemoteHead({ apiBase, origin, repositoryName, sourceSha, token });
+  const plan040 = await authenticatePlan040Artifact({ apiBase, documents, origin, repositoryName, token });
 
   await mkdir(receiptDirectory, { recursive: true });
-  assert.deepEqual(await readdir(receiptDirectory), [], "Plan 040 receipt directory is not empty");
-  const historicalAuthority = historicalAuthoritySummary({ freezeAnchor, handoffAnchor, plan039Anchor });
+  assert.deepEqual(await readdir(receiptDirectory), [], "Plan 041 receipt directory is not empty");
+  const historicalAuthority = historicalAuthoritySummary({ freezeAnchor, handoffAnchor, plan039Anchor, plan040Anchor });
   const receipt = {
     schema: "effect-build/implementation-receipt@1",
     profileId: profile.profileId,
@@ -332,12 +242,9 @@ export const certifyCurrentHead = async () => {
     claims: expectedReceiptClaims(expected),
     evidence: {
       historicalAuthority,
-      plan039Artifact: {
-        sourceSha: authenticatedPlan039.plan039.sourceSha,
-        transport: authenticatedPlan039.transport,
-      },
-      currentHead: currentRemote,
-      repositoryScope: { ...implementationState, activeInstructions, coreMigration, workspaceManifest },
+      plan040Artifact: { sourceSha: plan040.sourceSha, transport: plan040.transport },
+      currentHead,
+      repositoryScope: { ...implementationState, activeInstructions, workspaceManifest },
       profileSeparation: {
         historicalProfileIds: profile.historicalProfileIds,
         currentProfileId: profile.profileId,
@@ -348,7 +255,16 @@ export const certifyCurrentHead = async () => {
       },
     },
   };
-  validateCurrentReceipt({ expected, freezeAnchor, handoffAnchor, plan039Anchor, profile, receipt, sourceSha });
+  validateCurrentReceipt({
+    expected,
+    freezeAnchor,
+    handoffAnchor,
+    plan039Anchor,
+    plan040Anchor,
+    profile,
+    receipt,
+    sourceSha,
+  });
   const receiptFile = `${receipt.id}.json`;
   const receiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
   const receiptDigest = sha256(receiptBytes);
@@ -379,20 +295,18 @@ export const certifyCurrentHead = async () => {
     freezeAnchor,
     handoffAnchor,
     plan039Anchor,
+    plan040Anchor,
     profile,
     sourceSha,
   });
   const certificateBytes = Buffer.from(`${JSON.stringify(certificate, null, 2)}\n`);
   await writeFile(join(receiptDirectory, profile.certificateFile), certificateBytes, { flag: "wx" });
-  assert.deepEqual(
-    (await readdir(receiptDirectory)).sort(),
-    [profile.certificateFile, receiptFile].sort(),
-    "Plan 040 receipt directory contains a historical profile",
-  );
-  process.stdout.write(`EFFECT_BUILD_PLAN040_CERTIFIED=${sourceSha}\n`);
-  process.stdout.write(`EFFECT_BUILD_PLAN040_CERTIFICATE_SHA256=${sha256(certificateBytes)}\n`);
+  assert.deepEqual(sorted(await readdir(receiptDirectory)), sorted([profile.certificateFile, receiptFile]));
+  process.stdout.write(`EFFECT_BUILD_PLAN041_CERTIFIED=${sourceSha}\n`);
+  process.stdout.write(`EFFECT_BUILD_PLAN041_CERTIFICATE_SHA256=${sha256(certificateBytes)}\n`);
   return certificate;
 };
 
+const sorted = (values) => [...values].sort();
 const isMain = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) await certifyCurrentHead();

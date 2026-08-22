@@ -85,6 +85,7 @@ const describeFailure = (error) => {
 
 export const verifyTargetSupport = async ({
   compiler,
+  stagedBun = false,
   platform = process.platform,
   architecture = process.arch,
   environment = process.env,
@@ -121,6 +122,7 @@ export const verifyTargetSupport = async ({
         ...environment,
         EFFECT_BUILD_TARGET_COMPILER: cell.compiler,
         EFFECT_BUILD_TARGET: cell.target,
+        ...(stagedBun ? { EFFECT_BUILD_V04_BUN: "1" } : {}),
       };
       delete cellEnvironment.DENORT_BIN;
       delete cellEnvironment.EFFECT_BUILD_BUN_BIN;

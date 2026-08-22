@@ -6,7 +6,7 @@
 - Effort: L
 - Risk: HIGH target identity, selected-tool authority, and publication
 - Depends on: Plan 039
-- Status: TODO
+- Status: DONE
 - Publication authority: NONE
 
 ## Authority and objective
