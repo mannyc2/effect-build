@@ -150,13 +150,75 @@ export const validatePublicApi = (api) => {
   return api;
 };
 
+const exactToolPins = {
+  bun: {
+    version: "1.3.9",
+    archiveFormat: "zip",
+    url: "https://github.com/oven-sh/bun/releases/download/bun-v1.3.9/bun-linux-x64.zip",
+    sha256: "4680e80e44e32aa718560ceae85d22ecfbf2efb8f3641782e35e4b7efd65a1aa",
+    member: "bun-linux-x64/bun",
+  },
+  deno: {
+    version: "2.9.3",
+    archiveFormat: "zip",
+    url: "https://github.com/denoland/deno/releases/download/v2.9.3/deno-x86_64-unknown-linux-gnu.zip",
+    sha256: "8101865641cbede56f08ad19c0a67a87df84bce127fee0d3e3e1f7467717ffa6",
+    member: "deno",
+  },
+  denort: {
+    version: "2.9.3",
+    archiveFormat: "zip",
+    url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-x86_64-unknown-linux-gnu.zip",
+    sha256: "9fd1ecebd84bfd99b406442f40176e32e948b00edb91221358ec44d25a2092bd",
+    member: "denort",
+  },
+  node: {
+    version: "26.7.0",
+    archiveFormat: "tar.xz",
+    url: "https://nodejs.org/dist/v26.7.0/node-v26.7.0-linux-x64.tar.xz",
+    sha256: "982aa24dd8be4c889c6a8ab337ddff3b0896645b20f4239356e80552c16277ee",
+    member: "node-v26.7.0-linux-x64/bin/node",
+  },
+};
+
+export const validateToolPins = (pins) => {
+  if (!exactKeys(pins, ["version", "tools"]) || pins.version !== 1 || !Array.isArray(pins.tools)) {
+    throw new Error("tool pins must have exactly version and tools");
+  }
+  const expectedTools = Object.keys(exactToolPins);
+  if (pins.tools.length !== expectedTools.length) throw new Error("tool pin count drifted");
+  if (pins.tools.map((pin) => pin?.tool).join("\0") !== expectedTools.join("\0")) {
+    throw new Error("tool pin order or membership drifted");
+  }
+  for (const pin of pins.tools) {
+    if (!exactKeys(pin, ["tool", "version", "archiveFormat", "url", "sha256", "member", "target"])) {
+      throw new Error(`tool pin shape drifted: ${String(pin?.tool)}`);
+    }
+    if (!exactKeys(pin.target, ["os", "architecture", "abi"])) {
+      throw new Error(`tool pin target shape drifted: ${pin.tool}`);
+    }
+    const expected = exactToolPins[pin.tool];
+    if (expected === undefined) throw new Error(`unknown tool pin: ${String(pin.tool)}`);
+    for (const [key, value] of Object.entries(expected)) {
+      if (pin[key] !== value) throw new Error(`tool pin drifted: ${pin.tool}/${key}`);
+    }
+    if (JSON.stringify(pin.target) !== JSON.stringify({ os: "linux", architecture: "x86_64", abi: "gnu" })) {
+      throw new Error(`tool pin target drifted: ${pin.tool}`);
+    }
+    if (!/^[0-9a-f]{64}$/.test(pin.sha256)) throw new Error(`tool pin digest is malformed: ${pin.tool}`);
+    const url = new URL(pin.url);
+    if (url.protocol !== "https:" || url.username !== "" || url.password !== "") {
+      throw new Error(`tool pin URL is unsafe: ${pin.tool}`);
+    }
+  }
+  return pins;
+};
+
 export const validateTooling = ({ pins, support, api }) => {
-  if (pins.version !== 1 || support.version !== 1 || api.version !== 2) {
+  if (support.version !== 1 || api.version !== 2) {
     throw new Error("unsupported tooling version");
   }
-  if (new Set(pins.tools.map((entry) => entry.tool)).size !== pins.tools.length) {
-    throw new Error("duplicate tool pin");
-  }
+  validateToolPins(pins);
   if (new Set(support.publicationHosts).size !== support.publicationHosts.length) {
     throw new Error("duplicate publication host");
   }

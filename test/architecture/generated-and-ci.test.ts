@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -1125,6 +1125,12 @@ describe("tooling pins and workflow contracts", () => {
   it("keeps provisioned compiler fixtures selected, checksummed, and closed", async () => {
     const provisioner = await loadScript<{
       selectedToolNames: (argv: readonly string[]) => readonly string[];
+      validateTarArchive: (input: {
+        entriesSource: string;
+        memberVerboseSource: string;
+        member: string;
+        tool: string;
+      }) => readonly string[];
       provisionToolAssets: (
         argv: readonly string[],
         dependencies: Record<string, unknown>,
@@ -1133,6 +1139,7 @@ describe("tooling pins and workflow contracts", () => {
     expect(provisioner.selectedToolNames([])).toEqual(["bun", "deno", "denort"]);
     expect(provisioner.selectedToolNames(["--only", "bun"])).toEqual(["bun"]);
     expect(provisioner.selectedToolNames(["--only", "deno"])).toEqual(["deno"]);
+    expect(provisioner.selectedToolNames(["--only", "node"])).toEqual(["node"]);
     for (const argv of [["--only"], ["--only", "node-sea"], ["--url", "x"]]) {
       expect(() => provisioner.selectedToolNames(argv)).toThrow(/usage/);
     }
@@ -1142,6 +1149,7 @@ describe("tooling pins and workflow contracts", () => {
     const pins = ["bun", "deno", "denort"].map((tool) => ({
       tool,
       version: "1.0.0",
+      archiveFormat: "zip",
       url: `https://fixtures.invalid/${tool}.zip`,
       sha256,
       member: tool,
@@ -1158,13 +1166,111 @@ describe("tooling pins and workflow contracts", () => {
       makeDirectory: async () => undefined,
       writeAsset: async (path: string, value: Uint8Array) => void stored.set(path, value),
       readAsset: async (path: string) => stored.get(path),
+      renameAsset: async (from: string, to: string) => {
+        const value = stored.get(from);
+        if (value === undefined) throw new Error("fixture archive is missing");
+        stored.delete(from);
+        stored.set(to, value);
+      },
+      removeAsset: async (path: string) => void stored.delete(path),
       makeExecutable: async () => undefined,
       output: () => undefined,
     });
     expect([...result.keys()]).toEqual(["bun"]);
     const authored = await readJson("tooling/tool-pins.json") as { tools: Array<Record<string, string>> };
-    expect(authored.tools.map((pin) => pin.tool)).toEqual(["bun", "deno", "denort"]);
+    expect(authored.tools.map((pin) => pin.tool)).toEqual(["bun", "deno", "denort", "node"]);
     for (const pin of authored.tools) expect(pin.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(() =>
+      provisioner.validateTarArchive({
+        entriesSource: "node-v26.7.0-linux-x64/bin/node\nnode-v26.7.0-linux-x64/bin/npx\n",
+        memberVerboseSource: "-rwxr-xr-x root/root 1 2026-01-01 node-v26.7.0-linux-x64/bin/node\n",
+        tool: "node",
+        member: "node-v26.7.0-linux-x64/bin/node",
+      })
+    ).not.toThrow();
+    expect(() =>
+      provisioner.validateTarArchive({
+        entriesSource: "node-v26.7.0-linux-x64/bin/node\n",
+        memberVerboseSource: "lrwxr-xr-x root/root 0 2026-01-01 node-v26.7.0-linux-x64/bin/node\n",
+        tool: "node",
+        member: "node-v26.7.0-linux-x64/bin/node",
+      })
+    ).toThrow(/nonregular|not a regular/);
+    expect(() =>
+      provisioner.validateTarArchive({
+        entriesSource: "safe/../node\n",
+        memberVerboseSource: "-rwxr-xr-x root/root 1 2026-01-01 safe/../node\n",
+        tool: "node",
+        member: "safe/../node",
+      })
+    ).toThrow(/unsafe archive entry/);
+  });
+
+  it("streams a checksummed Node tar.xz member atomically without network access", async () => {
+    const provisioner = await loadScript<{
+      provisionToolAssets: (
+        argv: readonly string[],
+        dependencies: Record<string, unknown>,
+      ) => Promise<Map<string, string>>;
+    }>("provision-tool-assets.mjs");
+    const temporary = await mkdtemp(join(tmpdir(), "effect-build-node-tar-fixture-"));
+    try {
+      const source = join(temporary, "source");
+      const member = "node-v26.7.0-linux-x64/bin/node";
+      await mkdir(join(source, "node-v26.7.0-linux-x64/bin"), { recursive: true });
+      await writeFile(join(source, member), "node-fixture\n");
+      const archive = join(temporary, "node-v26.7.0-linux-x64.tar.xz");
+      execFileSync("tar", ["-cJf", archive, "-C", source, "node-v26.7.0-linux-x64"]);
+      const bytes = await readFile(archive);
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const pin = {
+        tool: "node",
+        version: "26.7.0",
+        archiveFormat: "tar.xz",
+        url: "https://nodejs.org/dist/v26.7.0/node-v26.7.0-linux-x64.tar.xz",
+        sha256,
+        member,
+        target: { os: "linux", architecture: "x86_64", abi: "gnu" },
+      };
+      const toolRoot = join(temporary, "tools");
+      const result = await provisioner.provisionToolAssets(["--only", "node"], {
+        environment: { EFFECT_BUILD_TOOL_DIR: toolRoot },
+        loadTooling: async () => ({ pins: { tools: [pin] } }),
+        fetchAsset: async (url: string, options: RequestInit) => {
+          expect(url).toBe(pin.url);
+          expect(options.redirect).toBe("error");
+          return {
+            ok: true,
+            status: 200,
+            arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+          };
+        },
+        output: () => undefined,
+      });
+      const executable = join(toolRoot, "node-26.7.0", member);
+      const archiveDestination = join(toolRoot, "node-26.7.0", basename(archive));
+      expect(result.get("node")).toBe(executable);
+      expect(await readFile(executable, "utf8")).toBe("node-fixture\n");
+      expect(existsSync(archiveDestination)).toBe(true);
+      expect(existsSync(`${archiveDestination}.part-${process.pid}`)).toBe(false);
+      expect(existsSync(`${executable}.part-${process.pid}`)).toBe(false);
+
+      const rejectedRoot = join(temporary, "rejected-tools");
+      await expect(provisioner.provisionToolAssets(["--only", "node"], {
+        environment: { EFFECT_BUILD_TOOL_DIR: rejectedRoot },
+        loadTooling: async () => ({ pins: { tools: [{ ...pin, sha256: "0".repeat(64) }] } }),
+        fetchAsset: async () => ({
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+        }),
+        output: () => undefined,
+      })).rejects.toThrow(/checksum mismatch/);
+      expect(existsSync(join(rejectedRoot, "node-26.7.0", basename(archive)))).toBe(false);
+      expect(existsSync(join(rejectedRoot, "node-26.7.0", member))).toBe(false);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
   });
 
   it("runs all target cells through exact Bun 1.3.14 and cleans isolated tool state", async () => {
