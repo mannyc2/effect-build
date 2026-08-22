@@ -1,29 +1,32 @@
 {
-  "schema": "effect-build/implementation-certification-profile@1",
-  "profileId": "effect-build/plan039-implementation@1",
-  "plan": "039",
+  "schema": "effect-build/implementation-certification-profile@2",
+  "profileId": "effect-build/plan040-implementation@1",
+  "plan": "040",
   "phase": "implementation",
   "trustAnchor": "research/post-0.3/implementation/freeze-trust-anchor.json",
   "handoffTrustAnchor": "research/post-0.3/implementation/handoff-trust-anchor.json",
+  "plan039TrustAnchor": "research/post-0.3/implementation/plan039-trust-anchor.json",
   "expectedClaims": "research/post-0.3/implementation/expected-claims.json",
-  "receiptDirectoryEnvironment": "PLAN039_RECEIPTS_DIR",
-  "certificateFile": "plan039-certification.json",
+  "receiptDirectoryEnvironment": "PLAN040_RECEIPTS_DIR",
+  "certificateFile": "plan040-certification.json",
   "producers": [
     {
       "lane": "implementation",
       "script": "research/post-0.3/implementation/certify-current-head.mjs",
       "receipts": [
-        "plan039-implementation"
+        "plan040-implementation"
       ]
     }
   ],
   "currentReceiptIds": [
-    "plan039-implementation"
+    "plan040-implementation"
   ],
   "historicalProfileIds": [
+    "effect-build/plan039-implementation@1",
     "post-0.3-surface-freeze-v1"
   ],
   "forbiddenCurrentReceiptIds": [
+    "plan039-implementation",
     "plan039-phase-handoff",
     "surface-freeze"
   ],
@@ -35,6 +38,10 @@
     ".github/workflows/architecture-research.yml",
     "AGENTS.md",
     "package.json",
+    "packages/effect-build-esbuild/src/Build.ts",
+    "packages/effect-build-esbuild/src/Context.ts",
+    "packages/effect-build-esbuild/src/internal/v04/compatibility.ts",
+    "packages/effect-build-esbuild/src/internal/v04/installed.ts",
     "packages/effect-build/src/Artifact.ts",
     "packages/effect-build/src/Author/BorrowedOutput.ts",
     "packages/effect-build/src/Author/Executable.ts",
@@ -42,23 +49,36 @@
     "packages/effect-build/src/Matrix.ts",
     "packages/effect-build/src/SystemTarget.ts",
     "plans/039-establish-core-capability-boundaries.md",
+    "plans/040-expose-esbuild-api-lane.md",
     "plans/README.md",
+    "plans/RESEARCH-BRANCH-LANDING-PLAN.md",
     "research/post-0.3/implementation/",
     "test/architecture/docs-contract.test.ts",
     "test/architecture/generated-and-ci.test.ts",
     "test/architecture/import-boundaries.test.ts",
     "test/architecture/public-api.test.ts",
     "test/architecture/v04-staged-core-surface.test.ts",
+    "test/architecture/v04-staged-esbuild-surface.test.ts",
     "test/unit/v04-artifact.test.ts",
+    "test/unit/v04-esbuild-build.test.ts",
+    "test/unit/v04-esbuild-context.test.ts",
     "test/unit/v04-primitives.test.ts",
     "typetest/v04-artifact.tst.ts",
     "typetest/v04-author-borrowed-output.tst.ts",
     "typetest/v04-author-executable.tst.ts",
     "typetest/v04-author-tool.tst.ts",
+    "typetest/v04-esbuild-build.tst.ts",
+    "typetest/v04-esbuild-context.tst.ts",
     "typetest/v04-matrix.tst.ts",
     "typetest/v04-system-target.tst.ts"
   ],
   "implementationFiles": [
+    "packages/effect-build-esbuild/src/Build.ts",
+    "packages/effect-build-esbuild/src/Context.ts",
+    "packages/effect-build-esbuild/src/internal/v04/compatibility.ts",
+    "packages/effect-build-esbuild/src/internal/v04/installed.ts"
+  ],
+  "coreStagedFiles": [
     "packages/effect-build/src/Artifact.ts",
     "packages/effect-build/src/Author/BorrowedOutput.ts",
     "packages/effect-build/src/Author/Executable.ts",
@@ -83,13 +103,14 @@
   "productionBaseline": {
     "releaseSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
     "freezeSha": "a3017657e0851530892a9f3d2d55ac5736769881",
-    "handoffSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e"
+    "handoffSha": "7de4ffe68931f721317f6be92aac1e01dae6e21e",
+    "plan039Sha": "e12e930de5622be3f23814f3235293c93fcfd8bf"
   },
   "workspaceManifest": {
     "path": "package.json",
     "scriptAppends": {
-      "test:unit": " test/unit/v04-artifact.test.ts test/unit/v04-primitives.test.ts",
-      "test:architecture": " test/architecture/v04-staged-core-surface.test.ts"
+      "test:unit": " test/unit/v04-artifact.test.ts test/unit/v04-primitives.test.ts test/unit/v04-esbuild-build.test.ts test/unit/v04-esbuild-context.test.ts",
+      "test:architecture": " test/architecture/v04-staged-core-surface.test.ts test/architecture/v04-staged-esbuild-surface.test.ts"
     }
   },
   "migrationPlan": "research/post-0.3/implementation/core-migration-plan.json"
