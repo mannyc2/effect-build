@@ -1,5 +1,9 @@
 # effect-build implementation plans
 
+> Historical record. This plan program concluded with the 0.4 candidate and was
+> superseded by the 0.5 rewrite on 2026-08-23; nothing in plans/ or research/
+> is authoritative for current work. See AGENTS.md.
+
 ## Current 0.4 program
 
 The post-0.3 research-to-freeze program completed on 2026-08-21. Its exact

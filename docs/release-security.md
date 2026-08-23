@@ -1,15 +1,18 @@
-# Candidate evidence
+# Releases
 
-Plan 044 creates one unpublished 0.4.0 candidate. Each of the five packages is
-packed exactly once, recorded in a candidate manifest with its SHA-256 digest,
-and exercised from those same bytes by fresh npm and Bun consumers.
+Merging requires `bun run verify` (build, typecheck, typetests, unit
+suites, packed-consumer proof, public-surface gate, lint, format).
+Releasing requires the CI matrix: verify on ubuntu/macos/windows plus
+real-tool integration lanes (bun everywhere; deno and Node SEA where
+provisioned) and independent binary oracles for cross-target cells.
 
-Certification is fail-closed. It joins the exact source SHA, frozen surface and
-migration digests, the historical freeze anchor, package export/declaration
-conformance, once-packed manifest verification, and packed-consumer receipts.
-The external Author-adapter check installs the packed core candidate instead of
-a workspace copy and checks the duplicate-core rent/lifecycle behavior.
+Publication is automated: when main is green and the lockstep package
+version is not yet on npm, the release workflow publishes all five
+packages with `npm publish --provenance`, producing verifiable SLSA
+build attestation tied to the exact workflow run. There are no bespoke
+receipts, certificates, or trust anchors — npm provenance is the
+supply-chain story.
 
-This boundary grants no publication authority. It does not publish to npm,
-create a tag or GitHub release, merge a branch, activate a release branch, or
-mutate trusted-publisher configuration.
+Version policy is plain 0.x semver with honest release notes in
+[`CHANGELOG.md`](../CHANGELOG.md); breaking changes bump the minor
+version and say what broke.

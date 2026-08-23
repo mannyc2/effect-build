@@ -1,21 +1,17 @@
-# effect-build 0.4.0 candidate
+# effect-build
 
-`effect-build` is an Effect v4 RC library for compiling or assembling an
-executable and for using the portable contracts those operations return. This
-repository contains one unpublished, five-package 0.4.0 candidate.
+Turn an Effect application into deployable artifacts. effect-build wraps the
+native toolchains — Bun, Deno, esbuild, and Node SEA — as Effect programs:
+typed errors, scoped child processes, interruption that actually kills the
+compiler, and artifacts that carry their own digest.
 
-| Package                 | Public entry points                                                       |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `effect-build`          | root namespaces plus `Artifact`, `SystemTarget`, `Matrix`, and `Author/*` |
-| `effect-build-bun`      | `CompileExecutable`                                                       |
-| `effect-build-deno`     | `CompileExecutable`                                                       |
-| `effect-build-esbuild`  | `Build` and `Context`                                                     |
-| `effect-build-node-sea` | `AssembleExecutable`                                                      |
-
-The root entries expose namespaces only. Import operations from their exact
-subpath; the frozen map is recorded in
-[`research/post-0.3/freeze/SURFACE.json`](research/post-0.3/freeze/SURFACE.json).
-No old root operation or removed subpath is retained as an alias.
+| Package                 | Operations                                                       |
+| ----------------------- | ---------------------------------------------------------------- |
+| `effect-build`          | `Target`, `Artifact`, `BuildError`, and the `Toolchain` kernel   |
+| `effect-build-bun`      | `CompileExecutable` — `bun build --compile` native executables   |
+| `effect-build-deno`     | `CompileExecutable` — `deno compile` with typed permissions      |
+| `effect-build-esbuild`  | `Build` (in-memory) and scoped `Context` (rebuild/watch/serve)   |
+| `effect-build-node-sea` | `AssembleExecutable` — direct Node `--build-sea` single binaries |
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
@@ -26,18 +22,33 @@ const artifact = await Effect.runPromise(
   CompileExecutable.compileExecutable({
     entrypoint: "src/main.ts",
     outfile: "dist/app",
-    observation: "hashed",
+    minify: true,
   }).pipe(
-    Effect.provide(CompileExecutable.layer({ allowUntestedVersion: true })),
+    Effect.provide(CompileExecutable.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
+// { _tag: "Executable", path, bytes, target, tool: { name: "bun", version }, sha256 }
 ```
 
-Applications choose exactly one compiler layer and provide one official Effect
-platform layer. The compiler tool, Effect runtime, and artifact target remain
-independent. There is no compiler registry, fallback, automatic installation,
-or raw-argument escape hatch.
+Layers resolve the tool once (explicit path or one PATH walk — never an
+install, retry, or fallback), probe its version, and warn once if it is
+outside the CI-tested range; operations then run with the tool's native
+options and surface its native diagnostics as typed errors. Outputs are
+staged privately and committed with one atomic rename.
 
-The candidate is not published, tagged, merged, or released. See
-[`docs/`](docs/README.md) for the exact API and candidate-evidence boundary.
+Cross-compile by passing `target`; fan out with plain Effect combinators:
+
+```ts
+Effect.forEach(
+  targets,
+  (target) => Effect.exit(CompileExecutable.compileExecutable({ entrypoint, outfile: `dist/app-${target}`, target })),
+  {
+    concurrency: 2,
+  },
+);
+```
+
+Runnable programs live in [`examples/`](examples). The exact public surface
+is asserted against [`tooling/public-api.json`](tooling/public-api.json);
+docs are in [`docs/`](docs/README.md).

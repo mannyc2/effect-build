@@ -1,19 +1,29 @@
 # Architecture
 
-The core package defines portable artifacts, system targets, matrix reports,
-and Author contracts. Each provider owns its discovery, target mapping,
-arguments, probing, and diagnostics. Shared lifecycle code owns sibling
-staging, scoped children, artifact validation, optional hashing, and atomic
-replacement.
+Core owns the canonical vocabulary and the kernel; providers own only what
+is genuinely tool-specific.
 
-Applications compose one selected compiler or assembler layer with one
-official Effect platform layer. No integration selects an application runtime,
-and providers do not depend on provider siblings. Only Esbuild has its direct
-`esbuild` dependency; all providers depend one-way on `effect-build`.
+- `effect-build/Target` — one value-level table from target names to
+  os/architecture/abi/suffix/native-format projections.
+- `effect-build/Artifact` — one `Executable` artifact type with an
+  optional digest; no observation modes or type-level variants.
+- `effect-build/BuildError` — `ToolNotFound`, `ToolFailed`,
+  `UnsupportedTarget`, `PublishFailed`; every provider failure is one of
+  these or a provider-native wrapper (`EsbuildFailed`).
+- `effect-build/Toolchain` — resolve-once tool selection, scoped spawn
+  with bounded capture and force-kill, version probe, warn-only tested
+  ranges, and staged atomic publication with a native-magic sanity check.
 
-Interruption closes the scope and terminates compiler children. It is not
-rewritten into a build error. Staged bytes and artifact observations are not
-provenance, a hermeticity claim, or a general package manifest.
+A provider is a thin layer over the kernel: a target table, an argv
+renderer, a version parser, and a tested range. Bun and Deno spawn a
+selected command; esbuild runs in-process; Node SEA drives `--check` and
+`--build-sea`. Providers depend one way on core, never on a sibling, and
+only `effect-build-esbuild` carries a third-party dependency.
 
-The 0.4 cut intentionally has no compatibility facade: removed roots,
-subpaths, and names do not resolve at runtime or in declarations.
+Applications choose provider layers and provide one official Effect
+platform layer at composition time; library source imports no `node:*`
+modules. Interruption closes the Scope and terminates owned children — it
+is never rewritten into a typed build failure. Publication stages in a
+private same-parent temp directory and commits with one atomic rename, so
+a failed or interrupted build never leaves a partial artifact at the
+destination.

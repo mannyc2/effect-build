@@ -1,15 +1,25 @@
 # Errors and interruption
 
-Each public operation exposes its declared tagged error union at its exact
-subpath. Input decoding, unsupported targets, discovery/probe failures,
-compiler diagnostics, artifact inspection, and destination replacement remain
-separate typed conditions.
+The whole library fails with a small closed set of `Schema.TaggedError`
+classes from `effect-build/BuildError`, each with real fields and a
+readable `message`:
 
-Matrix results preserve input order. A failed cell is represented in the matrix
-report rather than being silently retried by another provider. Successfully
-committed cells remain observable; a matrix failure is not a matrix-wide
-rollback.
+| Error               | Meaning                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `ToolNotFound`      | Explicit executable unusable, or the PATH walk found nothing                                               |
+| `ToolFailed`        | The tool exited non-zero (`exitCode`, bounded `stdout`/`stderr`) or could not be launched (`exitCode: -1`) |
+| `UnsupportedTarget` | The requested target is outside the provider's set (`available`)                                           |
+| `PublishFailed`     | Staging, sanity check, or the atomic rename failed (`reason`)                                              |
 
-Interruption is a Cause-level event. Closing the scope terminates owned child
-processes and releases scoped resources; it must not be translated to a normal
-compile or assemble failure.
+esbuild operations fail with `EsbuildFailed`, which wraps the native
+rejection and exposes its `errors`/`warnings` message arrays by
+reference.
+
+Layer construction fails with `ToolNotFound | ToolFailed`; untested tool
+versions log one warning and proceed — version and host mismatches are
+never refusals.
+
+Interruption is a Cause-level event: interrupting a build closes the
+Scope, force-terminates owned child processes, and removes private
+staging. It is never translated into a typed build failure, and committed
+artifacts are never rolled back.
