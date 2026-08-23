@@ -1,3 +1,3 @@
 import { verifyTargetSupport } from "./verify-target-support.mjs";
 
-await verifyTargetSupport({ compiler: "bun", stagedBun: true });
+await verifyTargetSupport({ compiler: "bun" });

@@ -11,7 +11,9 @@ scope. Plans 039, 040, 041, 042, and 043 are complete at their export-inert
 stages: the six frozen core modules, the two admitted Esbuild operation
 modules, the Bun and Deno selected-command executable lanes, and the direct
 Node SEA assembly lane are implemented internally, while the released 0.3
-export map remains byte-identical. Plan 044 is the next implementation plan.
+export map remains byte-identical. Plan 044 is the active unpublished
+hard-cut candidate; its exact-head certification receipt is the completion
+gate.
 No merge, publication, tag, or release is authorized by Plan 039, Plan 040,
 Plan 041, Plan 042, or Plan 043 completion.
 
@@ -336,7 +338,7 @@ direction. Plans 016-020 remain factual implementation history.
 | 041 | Implement the frozen Bun executable lane | P1 | L | 039 | DONE |
 | 042 | Implement the frozen Deno executable lane | P1 | L | 039 | DONE |
 | 043 | Implement direct Node SEA assembly | P1 | L | 039 | DONE |
-| 044 | Hard-cut and certify the frozen 0.4 candidate | P0 | XL | 039-043 | TODO |
+| 044 | Hard-cut and certify the frozen 0.4 candidate | P0 | XL | 039-043 | CANDIDATE |
 
 Status values: `READY`, `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says

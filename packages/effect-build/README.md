@@ -1,21 +1,8 @@
 # effect-build
 
-Provider-neutral Effect-native file, executable, target, error, scoped bundle,
-and publication semantics.
+Portable artifact, target, matrix, and Author contracts for effect-build 0.4.
 
-The root runtime namespaces are `Artifact`, `BuildError`, `JavaScriptBundle`,
-`MatrixError`, and `Target`. `JavaScriptBundle.Artifact` is a nominal live
-capability usable only inside its continuation, not a durable serializable
-record.
-
-`effect-build/Integration` exposes only bounded command execution, live bundle
-inspection, owned bundle production, and executable production for integration
-authors. `effect-build/Provider` exposes only the command-provider `define`
-factory used by Bun and Deno. It constructs an integration-specific service
-from one selected bound command, but that command is type-only author context
-and never an end-user service. Neither subpath is a registry, generic builder,
-bundler, packager, executor, candidate, cache, or publication API.
-
-Applications import operations from `effect-build-bun`, `effect-build-deno`,
-`effect-build-esbuild`, or `effect-build-node-sea`. Stage observations are not
-receipts, provenance, or reproducibility claims.
+The package root is namespace-only. Import values and types from the exact
+`Artifact`, `SystemTarget`, `Matrix`, `Author/Tool`, `Author/BorrowedOutput`,
+or `Author/Executable` subpath. It has no compiler selection, provider
+registry, fallback, or application runtime dependency.

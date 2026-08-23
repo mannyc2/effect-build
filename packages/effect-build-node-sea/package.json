@@ -1,7 +1,7 @@
 {
   "name": "effect-build-node-sea",
-  "version": "0.3.0",
-  "description": "Granular Node SEA executable integration for effect-build.",
+  "version": "0.4.0",
+  "description": "Effect-native Node SEA executable assembler.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -16,7 +16,11 @@
   "files": ["dist", "README.md", "LICENSE"],
   "publishConfig": { "access": "public", "provenance": true },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./AssembleExecutable": {
+      "types": "./dist/AssembleExecutable.d.ts",
+      "import": "./dist/AssembleExecutable.js"
+    }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",

@@ -1,15 +1,14 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as Bun from "effect-build-bun";
+import * as CompileExecutable from "effect-build-bun/CompileExecutable";
 
-const executable = process.env.EFFECT_BUILD_BUN_BIN;
-const compiler = executable === undefined ? Bun.layer() : Bun.layer({ executable });
+const compiler = CompileExecutable.layer({ allowUntestedVersion: true });
 
 const artifact = await Effect.runPromise(
-  Bun.compileExecutable({
+  CompileExecutable.compileExecutable({
     entrypoint: "src/main.ts",
     outfile: "dist/app",
-    digest: true,
+    observation: "hashed",
     options: { minify: true, sourcemap: "linked" },
   }).pipe(
     Effect.provide(compiler),

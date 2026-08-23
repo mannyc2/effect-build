@@ -58,7 +58,7 @@ export interface AssembleExecutableInput<Mode extends CoreArtifact.ObservationMo
 }
 
 export type Artifact<Mode extends CoreArtifact.ObservationMode = CoreArtifact.ObservationMode> =
-  & CoreArtifact.Executable<Mode>
+  & Omit<CoreArtifact.Executable<Mode>, "runtime" | "target" | "nativeFormat">
   & {
     readonly provider: "node-sea";
     readonly runtime: { readonly name: "node"; readonly version: typeof nodeSeaVersion };

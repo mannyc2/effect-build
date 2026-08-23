@@ -1,19 +1,18 @@
 # effect-build documentation
 
-`effect-build` supplies provider-neutral lifecycle and narrow integration-author
-contracts. Bun and Deno expose `compileExecutable` and
-`compileExecutableMatrix`. Bun additionally exposes `withJavaScriptBundle`, as
-does Esbuild independently; Node SEA exposes `createExecutable`. Applications
-compose integrations explicitly.
+This documentation describes the unpublished 0.4.0 hard-cut candidate. The
+complete authority is the frozen surface and migration ledgers, not a legacy
+import path.
 
-| Document                                | Covers                                                                 |
-| --------------------------------------- | ---------------------------------------------------------------------- |
-| [API](api.md)                           | Exact package imports, operation shapes, scoped bundles, and Artifacts |
-| [Architecture](architecture.md)         | Ownership, lifetime, composition, and atomic publication               |
-| [Integrations](drivers.md)              | Bun, Deno, Esbuild, and Node SEA behavior                              |
-| [Errors](errors.md)                     | Separate tagged-error boundaries and interruption                      |
-| [Release security](release-security.md) | Exact-source workflows, locked consumers, and candidate evidence       |
-| [Changelog](../CHANGELOG.md)            | Unreleased package cut and release-visible behavior                    |
+| Document                                  | Covers                                                 |
+| ----------------------------------------- | ------------------------------------------------------ |
+| [API](api.md)                             | Exact package roots, subpaths, and namespace rule      |
+| [Architecture](architecture.md)           | Ownership, layers, artifacts, and no-fallback boundary |
+| [Integrations](drivers.md)                | Bun, Deno, Esbuild, and Node SEA operations            |
+| [Errors](errors.md)                       | Typed failure and interruption behavior                |
+| [Candidate evidence](release-security.md) | Once-packed tarballs and certification scope           |
 
-Runnable installed-consumer examples are under [`examples/`](../examples).
-Repository constraints are in [`AGENTS.md`](../AGENTS.md).
+Runnable examples are under [`examples/`](../examples). The normative public
+surface is [`SURFACE.json`](../research/post-0.3/freeze/SURFACE.json), and
+every removal or replacement is in
+[`MIGRATION.json`](../research/post-0.3/freeze/MIGRATION.json).

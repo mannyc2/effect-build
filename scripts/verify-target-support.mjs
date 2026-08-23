@@ -85,8 +85,6 @@ const describeFailure = (error) => {
 
 export const verifyTargetSupport = async ({
   compiler,
-  stagedBun = false,
-  stagedDeno = false,
   platform = process.platform,
   architecture = process.arch,
   environment = process.env,
@@ -123,14 +121,12 @@ export const verifyTargetSupport = async ({
         ...environment,
         EFFECT_BUILD_TARGET_COMPILER: cell.compiler,
         EFFECT_BUILD_TARGET: cell.target,
-        ...(stagedBun ? { EFFECT_BUILD_V04_BUN: "1" } : {}),
-        ...(stagedDeno ? { EFFECT_BUILD_V04_DENO: "1" } : {}),
       };
       delete cellEnvironment.DENORT_BIN;
       delete cellEnvironment.EFFECT_BUILD_BUN_BIN;
       delete cellEnvironment.EFFECT_BUILD_DENO_BIN;
       delete cellEnvironment.BUN_INSTALL_CACHE_DIR;
-      if (!stagedDeno) delete cellEnvironment.DENO_DIR;
+      if (cell.compiler !== "deno") delete cellEnvironment.DENO_DIR;
       if (cell.compiler === "bun") {
         cellEnvironment.EFFECT_BUILD_BUN_BIN = paths.get("bun");
         cellEnvironment.BUN_INSTALL_CACHE_DIR = join(toolRoot, "bun-install-cache");

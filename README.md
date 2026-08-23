@@ -1,195 +1,43 @@
-# effect-build
+# effect-build 0.4.0 candidate
 
-Experimental, community-maintained executable construction for Effect applications.
+`effect-build` is an Effect v4 RC library for compiling or assembling an
+executable and for using the portable contracts those operations return. This
+repository contains one unpublished, five-package 0.4.0 candidate.
 
-The workspace contains exactly five lockstep public packages:
+| Package                 | Public entry points                                                       |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `effect-build`          | root namespaces plus `Artifact`, `SystemTarget`, `Matrix`, and `Author/*` |
+| `effect-build-bun`      | `CompileExecutable`                                                       |
+| `effect-build-deno`     | `CompileExecutable`                                                       |
+| `effect-build-esbuild`  | `Build` and `Context`                                                     |
+| `effect-build-node-sea` | `AssembleExecutable`                                                      |
 
-```text
-effect-build-bun --------> effect-build
-effect-build-deno -------> effect-build
-effect-build-esbuild ----> effect-build
-effect-build-node-sea ---> effect-build
-```
-
-Only `effect-build-esbuild` also depends on raw `esbuild@0.28.2`. No integration
-depends on another integration. Applications compose integrations explicitly
-with Effect.
-
-## Install
-
-For Bun executable compilation under the Node Effect platform:
-
-```sh
-bun add effect-build effect-build-bun effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
-```
-
-For an Esbuild-to-Node-SEA application, install the three public packages it
-uses directly:
-
-```sh
-bun add effect-build effect-build-esbuild effect-build-node-sea effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
-```
-
-For Bun-to-Node-SEA composition, replace `effect-build-esbuild` with
-`effect-build-bun`; each application declares the producer it actually uses.
-
-All five packages accept Effect `>=4.0.0-beta.104 <4.1.0-0`; the repository
-reference is exactly `4.0.0-rc.108`.
-
-## Bun and Deno executables
-
-`effect-build-bun` and `effect-build-deno` retain the scalar
-`compileExecutable` and homogeneous-provider `compileExecutableMatrix`
-operations.
-
-Malformed untyped scalar inputs now fail deterministically instead of being
-forwarded to the compiler. Unknown fields, missing or invalid paths, explicitly
-undefined `cwd` or `digest`, and invalid provider options use
-`InvalidDriverOptions`; invalid targets retain `TargetUnsupported`. Valid
-TypeScript callers remain source-compatible. A freshly provided compiler Layer
-still selects and probes its command before scalar request preflight; after the
-service is acquired, rejection performs no staging or compile child work.
+The root entries expose namespaces only. Import operations from their exact
+subpath; the frozen map is recorded in
+[`research/post-0.3/freeze/SURFACE.json`](research/post-0.3/freeze/SURFACE.json).
+No old root operation or removed subpath is retained as an alias.
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as Bun from "effect-build-bun";
+import * as CompileExecutable from "effect-build-bun/CompileExecutable";
 
 const artifact = await Effect.runPromise(
-  Bun.compileExecutable({
+  CompileExecutable.compileExecutable({
     entrypoint: "src/main.ts",
     outfile: "dist/app",
+    observation: "hashed",
   }).pipe(
-    Effect.provide(Bun.layer()),
+    Effect.provide(CompileExecutable.layer({ allowUntestedVersion: true })),
     Effect.provide(NodeServices.layer),
   ),
 );
 ```
 
-Use the matrix operation when an entrypoint, options, and name stem are shared:
+Applications choose exactly one compiler layer and provide one official Effect
+platform layer. The compiler tool, Effect runtime, and artifact target remain
+independent. There is no compiler registry, fallback, automatic installation,
+or raw-argument escape hatch.
 
-```ts
-const artifacts = await Effect.runPromise(
-  Bun.compileExecutableMatrix({
-    entrypoint: "src/main.ts",
-    outdir: "dist",
-    name: "app",
-    targets: ["macos-aarch64", "linux-x64-gnu", "windows-x64"],
-    concurrency: 2,
-    digest: true,
-    options: { minify: true },
-  }).pipe(
-    Effect.provide(Bun.layer()),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-```
-
-Matrix total preflight checks the complete request before any filesystem or
-child-process work. Concurrency must be a positive safe integer. Execution is
-bounded and collect-all: results and failures stay in target input order,
-successful cells retain their already committed Artifacts, and there is no
-matrix-wide rollback. Interruption terminates active children, skips queued
-cells, and propagates the exact interruption Cause.
-
-## JavaScript bundles and Node SEA composition
-
-`effect-build-esbuild` and `effect-build-bun` independently produce the same
-continuation-scoped core JavaScript-bundle capability.
-`effect-build-node-sea` consumes that neutral core capability and creates one
-Linux x64 GNU executable with an already-installed exact Node 26.7.0 tool.
-
-```ts
-import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import * as Esbuild from "effect-build-esbuild";
-import * as NodeSea from "effect-build-node-sea";
-
-const program = Esbuild.withJavaScriptBundle(
-  { entrypoint: "src/main.ts", format: "esm" },
-  (main) => NodeSea.createExecutable({ main, outfile: "dist/app", digest: true }),
-).pipe(
-  Effect.provide(Esbuild.layer),
-  Effect.provide(NodeSea.layer()),
-  Effect.provide(NodeServices.layer),
-);
-```
-
-The Bun form is explicit application composition too:
-
-```ts
-const bunProgram = Bun.withJavaScriptBundle(
-  { entrypoint: "src/main.ts", format: "cjs" },
-  (main) => NodeSea.createExecutable({ main, outfile: "dist/bun-app" }),
-).pipe(
-  Effect.provide(Bun.layer()),
-  Effect.provide(NodeSea.layer()),
-  Effect.provide(NodeServices.layer),
-);
-```
-
-Bun `target=node` selects Node resolution and builtin handling; it does not
-select Node 26.7 or a syntax-lowering level. Bun emits with pinned producer
-defaults. The selected Node 26.7.0 tool privately stabilizes the main and owns
-syntax acceptance for both producers. Metafile-derived observed external
-imports are evidence Bun reported, not a complete dependency or hermeticity
-claim.
-
-Bundle handles are live only inside their continuation. Node SEA authenticates
-and privately copies the main, then runs selected Node `--check` against that
-copy before both Node reads. It never uses postject and never downloads or
-installs Node.
-
-## Independent axes and hard migration
-
-Package manager, Effect orchestrator runtime, build tool, and Artifact target
-are four separate choices. Bun 1.3.14 manages this workspace; the pinned Bun
-compiler fixture is 1.3.9. Importing an integration does not choose the runtime
-that hosts the Effect program.
-
-The v0.3 package cut deliberately replaces the v0.2 import paths:
-
-```text
-effect-build/bun  -> effect-build-bun
-effect-build/deno -> effect-build-deno
-```
-
-The operation/type behavior is preserved with no legacy subpath fallback.
-The earlier combined Node SEA candidate was unreleased and is superseded by
-explicit application composition.
-
-There is no registry, fallback compiler, retry, automatic installation, raw
-argv escape hatch, or generic build executor. Stage values and observed
-external imports are observations,
-not manifests, receipts, provenance, hermeticity, or reproducibility claims.
-
-## Release boundary
-
-The unreleased `0.3.0` cut is certified and released by two separately
-authorized workflow dispatches. Candidate mode checks one exact descendant
-source SHA, packs the five public packages once, exercises those exact tarball
-bytes in locked consumers, and asks the immutable qualified ts-release Action
-at `105b6b5cc39757f5284c30b082e7cfd71b9959b2` to prepare them. Publish mode
-checks out no source and performs no package dependency install, build, or
-pack. It authenticates the exact candidate run, raw artifact, and prepared
-reference before the same Action observes and resumes core, Bun, Deno,
-Esbuild, Node SEA, then GitHub.
-
-Only the checked bundled Action is qualified for this repository's Effect
-`4.0.0-rc.108` release. The npm-installed ts-release library and CLI are not a
-fallback. Publication uses the protected `npm` environment and trusted OIDC;
-manual publication, long-lived npm tokens, repacking, and blind retries are
-not accepted recovery paths. No release is claimed until registry, tag,
-GitHub Release, exact-byte, and public-consumer observations all converge.
-
-## Documentation
-
-- [API](docs/api.md)
-- [Architecture](docs/architecture.md)
-- [Integrations](docs/drivers.md)
-- [Errors](docs/errors.md)
-- [Candidate and workflow security](docs/release-security.md)
-- [Changelog](CHANGELOG.md)
-- [Runnable examples](examples/README.md)
-
-Run `bun run verify` for the deterministic local gate.
+The candidate is not published, tagged, merged, or released. See
+[`docs/`](docs/README.md) for the exact API and candidate-evidence boundary.

@@ -1,12 +1,9 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem } from "effect";
-import * as Esbuild from "effect-build-esbuild";
+import { Effect } from "effect";
+import * as Build from "effect-build-esbuild/Build";
 
-const program = Esbuild.withJavaScriptBundle(
-  { entrypoint: "src/main.ts", format: "esm" },
-  (bundle) => FileSystem.FileSystem.use((fileSystem) => fileSystem.stat(bundle.path)),
-).pipe(
-  Effect.provide(Esbuild.layer),
+const program = Build.build({ entryPoints: ["src/main.ts"], bundle: true, outdir: "dist", write: false }).pipe(
+  Effect.provide(Build.layer({ allowUntestedVersion: true })),
   Effect.provide(NodeServices.layer),
 );
 

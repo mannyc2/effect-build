@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,14 @@ const coreSource = join(repository, "packages", "effect-build", "src");
 const adapterFixture = join(here, "staged-external-author-adapter-fixture.ts");
 const effectSource = resolve(repository, "node_modules", "effect");
 const scratch = await mkdtemp(join(tmpdir(), "effect-build-plan039-adapter-"));
+const candidateDirectory = (() => {
+  const argv = process.argv.slice(2);
+  if (argv.length === 0) return undefined;
+  if (argv.length !== 2 || argv[0] !== "--candidate-dir" || !resolve(argv[1]).startsWith("/")) {
+    throw new Error("usage: staged-external-author-adapter.mjs [--candidate-dir <absolute-directory>]");
+  }
+  return resolve(argv[1]);
+})();
 
 const exactContracts = [
   "effect-build/Author/BorrowedOutput",
@@ -83,6 +91,20 @@ const makeCore = async (directory, version) => {
     ])),
     files: ["Artifact.d.ts", "Artifact.js", "SystemTarget.d.ts", "SystemTarget.js", "Author"],
   });
+};
+
+const unpackCandidateCore = async (directory) => {
+  if (candidateDirectory === undefined) return false;
+  const tarball = join(candidateDirectory, "effect-build-0.4.0.tgz");
+  await access(tarball);
+  const result = await run("tar", ["-xOf", tarball, "package/package.json"]);
+  const manifest = JSON.parse(result.stdout);
+  assert(manifest.name === "effect-build" && manifest.version === "0.4.0", "candidate core tarball identity changed");
+  const extracted = join(scratch, "candidate-core-extracted");
+  await mkdir(extracted, { recursive: true });
+  await run("tar", ["-xzf", tarball, "-C", extracted]);
+  await cp(join(extracted, "package"), directory, { recursive: true });
+  return tarball;
 };
 
 const makeAdapter = async (directory, core) => {
@@ -157,7 +179,8 @@ try {
 
   const core040 = join(scratch, "core-0.4.0");
   const core041 = join(scratch, "core-0.4.1");
-  await makeCore(core040, "0.4.0");
+  const candidateCoreTarball = await unpackCandidateCore(core040);
+  if (candidateCoreTarball === false) await makeCore(core040, "0.4.0");
   await cp(core040, core041, { recursive: true });
   const core041Manifest = JSON.parse(await readFile(join(core041, "package.json"), "utf8"));
   await writeJson(join(core041, "package.json"), { ...core041Manifest, version: "0.4.1" });
@@ -167,7 +190,9 @@ try {
 
   const packed = join(scratch, "packed");
   await mkdir(packed);
-  const core040Packed = await pack(core040, packed);
+  const core040Packed = candidateCoreTarball === false
+    ? await pack(core040, packed)
+    : { path: candidateCoreTarball, receipt: undefined };
   const core041Packed = await pack(core041, packed);
   const adapterPacked = await pack(adapter, packed);
   assert(
@@ -201,6 +226,7 @@ try {
     private: true,
     type: "module",
     dependencies: {
+      effect: `file:${effectSource}`,
       "effect-build": `file:${core040Packed.path}`,
       "@fixture/author-adapter-wrapper": `file:${wrapperPacked.path}`,
     },
@@ -250,7 +276,6 @@ try {
     "--no-audit",
     "--no-fund",
   ], { cwd: consumer, env: { npm_config_cache: join(scratch, "npm-cache") } });
-  await symlink(effectSource, join(consumer, "node_modules", "effect"));
   const effectManifest = JSON.parse(await readFile(join(consumer, "node_modules", "effect", "package.json"), "utf8"));
   assert(effectManifest.version === "4.0.0-rc.108", "adapter did not run against the pinned real Effect version");
 
@@ -284,7 +309,8 @@ try {
     join(consumer, "typecheck.mts"),
   ], { cwd: consumer });
 
-  console.log(`EFFECT_BUILD_PLAN039_EXTERNAL_ADAPTER=${JSON.stringify({
+  console.log(`EFFECT_BUILD_PLAN044_EXTERNAL_ADAPTER=${JSON.stringify({
+    candidateCore: candidateCoreTarball !== false,
     coreCopies: copies.map(({ version }) => version),
     effect: effectManifest.version,
     imports: exactContracts,

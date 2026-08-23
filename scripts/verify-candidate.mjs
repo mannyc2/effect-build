@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const packageVersion = "0.3.0";
+const packageVersion = "0.4.0";
 const effectPeer = ">=4.0.0-beta.104 <4.1.0-0";
 const packageNames = [
   "effect-build",
@@ -18,11 +18,7 @@ const packageNames = [
 const filenames = packageNames.map((name) => `${name}-${packageVersion}.tgz`);
 const consumerFixtures = [
   ...packageNames.map((name) => `npm-${name}`),
-  "npm-esbuild-node-sea",
-  "npm-bun-node-sea",
   ...packageNames.map((name) => `bun-${name}`),
-  "bun-esbuild-node-sea",
-  "bun-bun-node-sea",
 ];
 const exactManifestKeys = ["version", "source", "packages", "consumers"];
 const exactPackageKeys = [
@@ -49,7 +45,21 @@ const expectedDependencies = (name) => name === "effect-build"
   ? { "effect-build": `^${packageVersion}`, esbuild: "0.28.2" }
   : { "effect-build": `^${packageVersion}` };
 
-const expectedSubpaths = (name) => name === "effect-build" ? [".", "./Integration", "./Provider"] : ["."];
+const expectedSubpaths = (name) => {
+  switch (name) {
+    case "effect-build":
+      return [".", "./Artifact", "./SystemTarget", "./Matrix", "./Author/Tool", "./Author/BorrowedOutput", "./Author/Executable"];
+    case "effect-build-bun":
+    case "effect-build-deno":
+      return [".", "./CompileExecutable"];
+    case "effect-build-esbuild":
+      return [".", "./Build", "./Context"];
+    case "effect-build-node-sea":
+      return [".", "./AssembleExecutable"];
+    default:
+      throw new Error(`unknown candidate package ${name}`);
+  }
+};
 
 export const parseArguments = (argv) => {
   if (
@@ -148,7 +158,7 @@ export const verifyCandidate = async ({ directory, source }, dependencies = {}) 
     throw new Error("candidate manifest must contain exactly five package records");
   }
   if (!Array.isArray(manifest.consumers) || manifest.consumers.length !== consumerFixtures.length) {
-    throw new Error("candidate consumer observations must contain exactly fourteen records");
+    throw new Error("candidate consumer observations must contain exactly ten records");
   }
   for (const [index, fixture] of consumerFixtures.entries()) {
     const record = manifest.consumers[index];

@@ -1,24 +1,15 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## 0.4.0 (unpublished candidate)
 
-The `0.3.0` candidate is a hard package-boundary cut from the published `0.2`
-surface. It has not been published yet.
+- Replace the entire 0.3 public surface with the frozen namespace-only roots
+  and exact subpaths in `research/post-0.3/freeze/SURFACE.json`.
+- Apply every remove, replace, rename, and retain row in the frozen migration
+  ledger with no compatibility aliases or legacy export fallback.
+- Keep five lockstep packages at 0.4.0, with one-way provider-to-core
+  dependencies and no provider-sibling dependency.
+- Pack the five candidate packages once and verify the same tarballs through
+  fresh npm and Bun consumers and an external Author adapter.
 
-- Replace `effect-build/bun` and `effect-build/deno` with the separate
-  `effect-build-bun` and `effect-build-deno` packages. There is no compatibility
-  subpath fallback.
-- Reject malformed untyped scalar compiler requests deterministically while
-  preserving the source contract for valid TypeScript callers.
-- Add continuation-scoped Bun and Esbuild JavaScript-bundle producers and
-  explicit application composition with `effect-build-node-sea`.
-- Preserve caller failure, interruption, and defect Cause structure across
-  owned bundle cleanup, and make native executable inspection total over
-  malformed input.
-- Certify one five-package candidate once, verify its exact tarball bytes in
-  locked npm and Bun consumers, and hand those same bytes to the qualified
-  ordered release coordinator.
-
-`JavaScriptBundler`, `ExecutableBuilder`, and `ExecutableAssembler` are not
-promoted by this release. Provider-specific direct operations and explicit
-application composition remain the public model.
+The candidate remains unpublished. Publication, tags, releases, and merges are
+outside this change.

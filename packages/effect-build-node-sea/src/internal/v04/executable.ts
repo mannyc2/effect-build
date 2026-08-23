@@ -2,8 +2,8 @@ import { Cause, Crypto, Effect, FileSystem, Path, Semaphore } from "effect";
 import type { AbsolutePath, Digest, ObservationMode } from "effect-build/Artifact";
 import type * as CoreExecutable from "effect-build/Author/Executable";
 import type { DecimalBytes } from "effect-build/Author/Tool";
-import { inspectSelectedNodeExecutable } from "../SelectedNodeExecutable.js";
 import { nodeSeaTarget } from "./compatibility.js";
+import { inspectSelectedNodeExecutable } from "./selectedNodeExecutable.js";
 
 export interface ExecutableCandidateMissing {
   readonly _tag: "ExecutableCandidateMissing";

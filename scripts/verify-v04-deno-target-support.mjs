@@ -103,7 +103,7 @@ export const verifyPrewarmedDenoTargetSupport = async (environment = process.env
   delete targetEnvironment.DENORT_BIN;
   try {
     await prewarmDenortArchives({ denoDir });
-    return await verifyTargetSupport({ compiler: "deno", stagedDeno: true, environment: targetEnvironment });
+    return await verifyTargetSupport({ compiler: "deno", environment: targetEnvironment });
   } finally {
     await rm(denoDir, { recursive: true, force: true });
   }

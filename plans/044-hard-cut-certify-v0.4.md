@@ -6,7 +6,7 @@
 - Effort: XL
 - Risk: CRITICAL export maps, declarations, consumers, and candidate bytes
 - Depends on: completed Plans 039-043
-- Status: TODO
+- Status: DONE — certified unpublished exact-head candidate
 - Publication authority: NONE
 
 ## Objective and authority

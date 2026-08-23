@@ -1,26 +1,25 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as Bun from "effect-build-bun";
+import * as CompileExecutable from "effect-build-bun/CompileExecutable";
 
-const executable = process.env.EFFECT_BUILD_BUN_BIN;
-const compiler = executable === undefined ? Bun.layer() : Bun.layer({ executable });
+const compiler = CompileExecutable.layer({ allowUntestedVersion: true });
 
 const artifacts = await Effect.runPromise(
-  Bun.compileExecutableMatrix({
-    entrypoint: "src/main.ts",
-    outdir: "dist",
-    name: "app",
-    targets: ["macos-aarch64", "linux-x64-gnu", "windows-x64"],
+  CompileExecutable.compileExecutableMatrix({
+    inputs: [{
+      entrypoint: "src/main.ts",
+      outfile: "dist/app-linux",
+      target: "linux-x64-gnu",
+      observation: "hashed",
+      options: { minify: true },
+    }],
     concurrency: 2,
-    digest: true,
-    options: { minify: true },
   }).pipe(
     Effect.provide(compiler),
     Effect.provide(NodeServices.layer),
   ),
 );
 
-// dist/app-macos-aarch64, dist/app-linux-x64-gnu, dist/app-windows-x64.exe
-for (const artifact of artifacts) {
-  console.log(`${artifact.path} ${artifact.digest}`);
+for (const cell of artifacts.cells) {
+  console.log(cell.identity.index, cell._tag);
 }
