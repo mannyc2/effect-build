@@ -462,24 +462,25 @@ describe("tooling pins and workflow contracts", () => {
     }
   });
 
-  it("keeps Plan 041 implementation certification exact-head, complete, disjoint, and fail-closed", async () => {
+  it("keeps Plan 042 implementation certification exact-head, complete, disjoint, and fail-closed", async () => {
     const workflowSource = await readFile(
       resolve(root, ".github/workflows/architecture-research.yml"),
       "utf8",
     );
     const workflow = parse(workflowSource) as Workflow;
     expect(createHash("sha256").update(workflowSource).digest("hex")).toBe(
-      "fb7a8ec475a2a9bad2c6c0854fb534850c514718142a92014e4a02a4d31677cc",
+      "163bb0a7f58fb4c190040528926d54e17c5eefc05ced3c0e3a57b9ed3ce3edfe",
     );
-    expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
+    expect(Object.keys(workflow.on).sort()).toEqual(["push"]);
+    expect(workflow.on.push).toEqual({ branches: ["codex/plan042-deno-lane"] });
     expect(workflow.permissions).toEqual({ actions: "read", contents: "read" });
     expect(workflow.env).toEqual({
-      SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
-      CERTIFICATION_PROFILE: "effect-build/plan041-implementation@1",
+      SOURCE_SHA: "${{ github.sha }}",
+      CERTIFICATION_PROFILE: "effect-build/plan042-implementation@1",
     });
-    expect(Object.keys(workflow.jobs)).toEqual(["plan041-implementation"]);
+    expect(Object.keys(workflow.jobs)).toEqual(["plan042-implementation"]);
 
-    const job = workflow.jobs["plan041-implementation"]!;
+    const job = workflow.jobs["plan042-implementation"]!;
     expect(Object.keys(job).sort()).toEqual(["runs-on", "steps"]);
     expect(job["runs-on"]).toBe("ubuntu-24.04");
     const checkout = job.steps!.find((step) => step.uses === checkoutAction)!;
@@ -492,7 +493,26 @@ describe("tooling pins and workflow contracts", () => {
       step.uses === "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6"
     )!;
     expect(setupBun.with).toEqual({ "bun-version": "1.3.14" });
-    const runs = jobRuns(workflow, "plan041-implementation");
+    const plan041Bun = job.steps!.find((step) => step.id === "plan041-bun")!;
+    expect(plan041Bun).toMatchObject({
+      name: "Provision the exact content-authenticated Bun provider coordinate",
+      shell: "bash",
+      run: 'node scripts/provision-tool-assets.mjs --only bun >> "$GITHUB_OUTPUT"',
+      env: { EFFECT_BUILD_TOOL_DIR: "${{ runner.temp }}/effect-build-plan041-bun" },
+    });
+    const plan041BunVerification = job.steps!.find((step) =>
+      step.name === "Verify exact content-authenticated Bun provider coordinate"
+    )!;
+    expect(plan041BunVerification.env).toEqual({ PLAN041_BUN_EXECUTABLE: "${{ steps.plan041-bun.outputs.bun }}" });
+    expect(plan041BunVerification.run).toBe([
+      'test "${PLAN041_BUN_EXECUTABLE#/}" != "$PLAN041_BUN_EXECUTABLE"',
+      'test -x "$PLAN041_BUN_EXECUTABLE"',
+      'test "$("$PLAN041_BUN_EXECUTABLE" --version)" = "1.3.9"',
+      'echo "PLAN041_BUN_EXECUTABLE=$PLAN041_BUN_EXECUTABLE" >> "$GITHUB_ENV"',
+      "",
+    ].join("\n"));
+    expect(workflowSource).not.toContain("npm install --prefix");
+    const runs = jobRuns(workflow, "plan042-implementation");
     const requiredRuns = [
       'test "$(bun --version)" = "1.3.14"',
       "bun install --frozen-lockfile",
@@ -505,6 +525,9 @@ describe("tooling pins and workflow contracts", () => {
       "bun run test:integration:v04-bun",
       "node scripts/verify-v04-bun-target-support.mjs",
       "node research/post-0.3/implementation/staged-bun-adapter.mjs",
+      "bun run test:integration:v04-deno",
+      "node scripts/verify-v04-deno-target-support.mjs",
+      "node research/post-0.3/implementation/staged-deno-adapter.mjs",
       "node research/post-0.3/implementation/certify-current-head.mjs",
     ];
     for (const run of requiredRuns) expect(runs).toContain(run);
@@ -522,12 +545,142 @@ describe("tooling pins and workflow contracts", () => {
     const certifier = job.steps!.find((step) => step.run?.includes("certify-current-head.mjs"))!;
     expect(certifier.env).toEqual({
       GITHUB_TOKEN: "${{ github.token }}",
-      PLAN041_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan041-implementation",
+      PLAN042_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan042-implementation",
     });
+    const denoTools = job.steps!.find((step) => step.id === "deno-tools")!;
+    expect(denoTools.run).toBe('node scripts/provision-tool-assets.mjs >> "$GITHUB_OUTPUT"');
+    expect(denoTools.env).toEqual({ EFFECT_BUILD_TOOL_DIR: "${{ runner.temp }}/effect-build-plan042-tools" });
+    const denoVerification = job.steps!.find((step) =>
+      step.name === "Verify exact Deno and denort participant selection"
+    )!;
+    expect(denoVerification.env).toEqual({
+      DENO: "${{ steps.deno-tools.outputs.deno }}",
+      DENORT: "${{ steps.deno-tools.outputs.denort }}",
+    });
+    expect(denoVerification.run).toBe([
+      'test "${DENO#/}" != "$DENO"',
+      'test "${DENORT#/}" != "$DENORT"',
+      'test -x "$DENO"',
+      'test -x "$DENORT"',
+      'test "$("$DENO" --version | sed -n \'1s/^deno \\([^[:space:]]*\\).*$/\\1/p\')" = "2.9.3"',
+      "",
+    ].join("\n"));
+    expect(job.steps!.find((step) => step.run === "bun run test:integration:v04-deno")?.env).toEqual({
+      PLAN042_DENO_EXECUTABLE: "${{ steps.deno-tools.outputs.deno }}",
+      DENORT_BIN: "${{ steps.deno-tools.outputs.denort }}",
+      DENO_DIR: "${{ runner.temp }}/effect-build-plan042-deno-cache",
+    });
+    expect(job.steps!.find((step) => step.run === "node scripts/verify-v04-deno-target-support.mjs")?.env)
+      .toBeUndefined();
+    expect(job.steps!.find((step) => step.run === "node research/post-0.3/implementation/staged-deno-adapter.mjs")?.env)
+      .toEqual({
+        PLAN042_DENO_EXECUTABLE: "${{ steps.deno-tools.outputs.deno }}",
+        DENORT_BIN: "${{ steps.deno-tools.outputs.denort }}",
+        DENO_DIR: "${{ runner.temp }}/effect-build-plan042-deno-consumer-cache",
+      });
+    const targetSupport = await loadScript<{
+      denortArchives: Array<{ triple: string; file: string; size: number; sha256: string; url: string }>;
+      prewarmDenortArchives: (input: Record<string, unknown>) => Promise<Map<string, string>>;
+    }>("verify-v04-deno-target-support.mjs");
+    expect(targetSupport.denortArchives).toEqual([
+      {
+        triple: "x86_64-apple-darwin",
+        file: "denort-x86_64-apple-darwin.zip",
+        size: 31_455_927,
+        sha256: "19c5b64ea27524fb33380cb2b676e07b972f8c023514f9e8297119ffbaec1ab8",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-x86_64-apple-darwin.zip",
+      },
+      {
+        triple: "aarch64-apple-darwin",
+        file: "denort-aarch64-apple-darwin.zip",
+        size: 28_693_550,
+        sha256: "75146eb2630ac07976120d2a7d2e2f950c7a31bf4505ba985ac7b1484e7907e1",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-aarch64-apple-darwin.zip",
+      },
+      {
+        triple: "x86_64-unknown-linux-gnu",
+        file: "denort-x86_64-unknown-linux-gnu.zip",
+        size: 36_531_946,
+        sha256: "9fd1ecebd84bfd99b406442f40176e32e948b00edb91221358ec44d25a2092bd",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-x86_64-unknown-linux-gnu.zip",
+      },
+      {
+        triple: "aarch64-unknown-linux-gnu",
+        file: "denort-aarch64-unknown-linux-gnu.zip",
+        size: 36_436_977,
+        sha256: "38ea978dc575538f0779c62c2f1b7ab0306af2f918a449d1bf1af909d041a857",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-aarch64-unknown-linux-gnu.zip",
+      },
+      {
+        triple: "x86_64-pc-windows-msvc",
+        file: "denort-x86_64-pc-windows-msvc.zip",
+        size: 32_603_181,
+        sha256: "c044e54b2cfa6f39e87b5cb98745d9cc5088273d3672a339a062b6a10b432653",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-x86_64-pc-windows-msvc.zip",
+      },
+      {
+        triple: "aarch64-pc-windows-msvc",
+        file: "denort-aarch64-pc-windows-msvc.zip",
+        size: 31_117_493,
+        sha256: "a48da86ee7f74c6aeca2eafe55e8bd7d72d56d187f3d7d6cb15dfe1954c0590f",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.3/denort-aarch64-pc-windows-msvc.zip",
+      },
+    ]);
+    const fixtureArchive = { ...targetSupport.denortArchives[0]!, size: 1, sha256: "fixture" };
+    const madeDirectories: string[] = [];
+    const writes: Array<{ path: string; options: unknown }> = [];
+    const moves: Array<{ from: string; to: string }> = [];
+    const removals: string[] = [];
+    const prewarmed = await targetSupport.prewarmDenortArchives({
+      denoDir: "/tmp/effect-build-denort-fixture",
+      archives: [fixtureArchive],
+      digest: () => "fixture",
+      fetchAsset: async (url: string) => ({
+        ok: true,
+        status: 200,
+        url,
+        arrayBuffer: async () => new Uint8Array([1]).buffer,
+      }),
+      makeDirectory: async (path: string) => void madeDirectories.push(path),
+      writeAsset: async (path: string, _bytes: Uint8Array, options: unknown) => void writes.push({ path, options }),
+      moveFile: async (from: string, to: string) => void moves.push({ from, to }),
+      removeFile: async (path: string) => void removals.push(path),
+    });
+    const fixtureDestination = "/tmp/effect-build-denort-fixture/dl/release/v2.9.3/denort-x86_64-apple-darwin.zip";
+    expect(madeDirectories).toEqual(["/tmp/effect-build-denort-fixture/dl/release/v2.9.3"]);
+    expect(prewarmed.get(fixtureArchive.triple)).toBe(fixtureDestination);
+    expect(writes).toEqual([{
+      path: expect.stringMatching(/denort-x86_64-apple-darwin\.zip\.partial-[0-9]+-0$/),
+      options: { flag: "wx" },
+    }]);
+    expect(moves).toEqual([{ from: writes[0]!.path, to: fixtureDestination }]);
+    expect(removals).toEqual([writes[0]!.path]);
+    const rejectedWrites: string[] = [];
+    const rejectedMoves: string[] = [];
+    const rejectPrewarm = (archive: typeof fixtureArchive) =>
+      targetSupport.prewarmDenortArchives({
+        denoDir: "/tmp/effect-build-denort-rejected",
+        archives: [archive],
+        digest: () => "fixture",
+        fetchAsset: async (url: string) => ({
+          ok: true,
+          status: 200,
+          url,
+          arrayBuffer: async () => new Uint8Array([1]).buffer,
+        }),
+        makeDirectory: async () => undefined,
+        writeAsset: async (path: string) => void rejectedWrites.push(path),
+        moveFile: async (from: string) => void rejectedMoves.push(from),
+        removeFile: async () => undefined,
+      });
+    await expect(rejectPrewarm({ ...fixtureArchive, sha256: "wrong-digest" })).rejects.toThrow(/checksum mismatch/);
+    await expect(rejectPrewarm({ ...fixtureArchive, size: 2 })).rejects.toThrow(/size mismatch/);
+    expect(rejectedWrites).toEqual([]);
+    expect(rejectedMoves).toEqual([]);
     const upload = job.steps!.find((step) => step.uses === uploadArtifactAction)!;
     expect(upload.with).toEqual({
-      name: "plan041-implementation-certification-${{ env.SOURCE_SHA }}",
-      path: "${{ runner.temp }}/effect-build-plan041-implementation",
+      name: "plan042-implementation-certification-${{ env.SOURCE_SHA }}",
+      path: "${{ runner.temp }}/effect-build-plan042-implementation",
       "if-no-files-found": "error",
       "retention-days": 90,
     });
@@ -536,11 +689,18 @@ describe("tooling pins and workflow contracts", () => {
       "utf8",
     );
     expect(certifierSource).toMatch(/process\.env\.GITHUB_ACTIONS[\s\S]*"true"/);
+    expect(certifierSource).toContain("authenticateSourcePolicyVerifierOrigin");
+    expect(certifierSource).toContain('gitBytes(["show", `${sourceSha}:${path}`])');
+    expect(certifierSource).toContain("sourcePolicyVerifierOrigin");
+    expect(certifierSource).toContain('assert.equal(eventName, "push")');
+    expect(certifierSource).toContain('requiredEnvironment("GITHUB_REF_TYPE")');
     for (
       const forbidden of [
         "surface-freeze",
         "plan039-phase-handoff",
         "PLAN039_RECEIPTS_DIR",
+        "PLAN040_RECEIPTS_DIR",
+        "PLAN041_RECEIPTS_DIR",
         "RESEARCH_RECEIPTS_DIR",
         "run-receipt-producers.mjs",
         "validate-receipts.mjs",
@@ -554,6 +714,7 @@ describe("tooling pins and workflow contracts", () => {
       handoffTrustAnchor: string;
       plan039TrustAnchor: string;
       plan040TrustAnchor: string;
+      plan041TrustAnchor: string;
       expectedClaims: string;
       migrationPlan: string;
       receiptDirectoryEnvironment: string;
@@ -562,6 +723,7 @@ describe("tooling pins and workflow contracts", () => {
       historicalProfileIds: string[];
       forbiddenCurrentReceiptIds: string[];
       bunImplementationFiles: string[];
+      denoImplementationFiles: string[];
       esbuildImplementationFiles: string[];
       coreStagedFiles: string[];
       immutablePublicPaths: string[];
@@ -571,6 +733,7 @@ describe("tooling pins and workflow contracts", () => {
         handoffSha: string;
         plan039Sha: string;
         plan040Sha: string;
+        plan041Sha: string;
       };
       producers: Array<{ script: string; receipts: string[] }>;
     };
@@ -606,23 +769,34 @@ describe("tooling pins and workflow contracts", () => {
       receipt: { id: string; file: string; digest: string };
       plan039Input: { sourceSha: string; aggregateArtifactId: string };
     };
+    const plan041Anchor = await readJson(profile.plan041TrustAnchor) as {
+      profileId: string;
+      sourceSha: string;
+      workflow: { runId: string; runAttempt: string; eventName: string; conclusion: string };
+      aggregateArtifact: { id: string; name: string; sizeInBytes: number; digest: string };
+      certification: { digest: string; phase: string };
+      receipt: { id: string; file: string; digest: string };
+      plan040Input: { sourceSha: string; aggregateArtifactId: string };
+    };
     const expected = await readJson(profile.expectedClaims) as {
       profileId: string;
       receiptId: string;
       claims: Array<{ id: string }>;
     };
     expect(profile).toMatchObject({
-      profileId: "effect-build/plan041-implementation@1",
+      profileId: "effect-build/plan042-implementation@1",
       phase: "implementation",
-      receiptDirectoryEnvironment: "PLAN041_RECEIPTS_DIR",
-      certificateFile: "plan041-certification.json",
-      currentReceiptIds: ["plan041-implementation"],
+      receiptDirectoryEnvironment: "PLAN042_RECEIPTS_DIR",
+      certificateFile: "plan042-certification.json",
+      currentReceiptIds: ["plan042-implementation"],
       historicalProfileIds: [
+        "effect-build/plan041-implementation@1",
         "effect-build/plan040-implementation@1",
         "effect-build/plan039-implementation@1",
         "post-0.3-surface-freeze-v1",
       ],
       forbiddenCurrentReceiptIds: [
+        "plan041-implementation",
         "plan040-implementation",
         "plan039-implementation",
         "plan039-phase-handoff",
@@ -634,12 +808,13 @@ describe("tooling pins and workflow contracts", () => {
         handoffSha: "7de4ffe68931f721317f6be92aac1e01dae6e21e",
         plan039Sha: "e12e930de5622be3f23814f3235293c93fcfd8bf",
         plan040Sha: "3ced06d29fe8644eae5465fed4878a6faea322f3",
+        plan041Sha: "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
       },
     });
     expect(profile.producers).toEqual([{
       lane: "implementation",
       script: "research/post-0.3/implementation/certify-current-head.mjs",
-      receipts: ["plan041-implementation"],
+      receipts: ["plan042-implementation"],
     }]);
     expect(profile.bunImplementationFiles).toEqual([
       "packages/effect-build-bun/src/CompileExecutable.ts",
@@ -647,6 +822,13 @@ describe("tooling pins and workflow contracts", () => {
       "packages/effect-build-bun/src/internal/v04/executable.ts",
       "packages/effect-build-bun/src/internal/v04/matrix.ts",
       "packages/effect-build-bun/src/internal/v04/selected.ts",
+    ]);
+    expect(profile.denoImplementationFiles).toEqual([
+      "packages/effect-build-deno/src/CompileExecutable.ts",
+      "packages/effect-build-deno/src/internal/v04/compatibility.ts",
+      "packages/effect-build-deno/src/internal/v04/executable.ts",
+      "packages/effect-build-deno/src/internal/v04/matrix.ts",
+      "packages/effect-build-deno/src/internal/v04/selected.ts",
     ]);
     expect(profile.esbuildImplementationFiles).toHaveLength(4);
     expect(profile.coreStagedFiles).toEqual([
@@ -706,20 +888,57 @@ describe("tooling pins and workflow contracts", () => {
         aggregateArtifactId: plan039Anchor.aggregateArtifact.id,
       },
     });
+    expect(plan041Anchor).toMatchObject({
+      profileId: "effect-build/plan041-implementation@1",
+      sourceSha: "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
+      workflow: {
+        runId: "32598492666",
+        runAttempt: "1",
+        eventName: "pull_request",
+        conclusion: "success",
+      },
+      aggregateArtifact: {
+        id: "9482238619",
+        name: "plan041-implementation-certification-2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
+        sizeInBytes: 5885,
+        digest: "sha256:4c54dc0458a5811ce5008795b3988427c8b98b5a902caae2ff968862dd27c545",
+      },
+      certification: { phase: "implementation" },
+      receipt: { id: "plan041-implementation", file: "plan041-implementation.json" },
+      plan040Input: {
+        sourceSha: plan040Anchor.sourceSha,
+        aggregateArtifactId: plan040Anchor.aggregateArtifact.id,
+      },
+    });
     expect(expected).toMatchObject({
       profileId: profile.profileId,
-      receiptId: "plan041-implementation",
+      receiptId: "plan042-implementation",
     });
-    expect(expected.claims).toHaveLength(4);
+    expect(expected.claims).toHaveLength(5);
     expect(expected.claims.flatMap((claim) => Object.values(claim)).join(" ")).toContain(
-      "six-core-staged-files-are-byte-identical-to-plan039",
+      "five-bun-files-are-byte-identical-to-plan041",
     );
+    expect(expected.claims.flatMap((claim) => Object.values(claim)).join(" ")).toContain(
+      "does-not-claim-independent-protection",
+    );
+    const pins = await readJson("tooling/tool-pins.json") as {
+      tools: Array<{ tool: string; version: string; url: string; sha256: string; member: string }>;
+    };
+    expect(pins.tools.find((pin) => pin.tool === "bun")).toEqual({
+      tool: "bun",
+      version: "1.3.9",
+      url: "https://github.com/oven-sh/bun/releases/download/bun-v1.3.9/bun-linux-x64.zip",
+      sha256: "4680e80e44e32aa718560ceae85d22ecfbf2efb8f3641782e35e4b7efd65a1aa",
+      member: "bun-linux-x64/bun",
+      target: { os: "linux", architecture: "x86_64", abi: "gnu" },
+    });
   });
 
-  it("certifies the exact five-file Plan 041 boundary from the certified Plan 040 head to DONE", async () => {
+  it("certifies the exact five-file Plan 042 boundary from the certified Plan 041 head to DONE", async () => {
     const profile = await readJson("research/post-0.3/implementation/profile.json") as {
       implementationAllowedPaths: string[];
       bunImplementationFiles: string[];
+      denoImplementationFiles: string[];
       esbuildImplementationFiles: string[];
       coreStagedFiles: string[];
       immutablePublicPaths: string[];
@@ -729,16 +948,18 @@ describe("tooling pins and workflow contracts", () => {
         handoffSha: string;
         plan039Sha: string;
         plan040Sha: string;
+        plan041Sha: string;
       };
     };
-    const { handoffSha, plan039Sha, plan040Sha, releaseSha, freezeSha } = profile.productionBaseline;
+    const { handoffSha, plan039Sha, plan040Sha, plan041Sha, releaseSha, freezeSha } = profile.productionBaseline;
     for (
       const [ancestor, descendant] of [
         [releaseSha, freezeSha],
         [freezeSha, handoffSha],
         [handoffSha, plan039Sha],
         [plan039Sha, plan040Sha],
-        [plan040Sha, "HEAD"],
+        [plan040Sha, plan041Sha],
+        [plan041Sha, "HEAD"],
       ] as const
     ) {
       expect(() =>
@@ -764,16 +985,16 @@ describe("tooling pins and workflow contracts", () => {
 
     const trackedImplementation = nulPaths(execFileSync(
       "git",
-      ["diff", "--name-only", "-z", "--diff-filter=AM", plan040Sha, "--", ...profile.bunImplementationFiles],
+      ["diff", "--name-only", "-z", "--diff-filter=AM", plan041Sha, "--", ...profile.denoImplementationFiles],
       { cwd: root },
     ));
     const implementationFiles = [
       ...new Set([
         ...trackedImplementation,
-        ...untracked.filter((path) => profile.bunImplementationFiles.includes(path)),
+        ...untracked.filter((path) => profile.denoImplementationFiles.includes(path)),
       ]),
     ].sort();
-    expect(implementationFiles).toEqual([...profile.bunImplementationFiles].sort());
+    expect(implementationFiles).toEqual([...profile.denoImplementationFiles].sort());
     expect(implementationFiles.every((path) => existsSync(resolve(root, path)))).toBe(true);
 
     const coreStagedDiff = nulPaths(execFileSync(
@@ -794,6 +1015,13 @@ describe("tooling pins and workflow contracts", () => {
       { cwd: root },
     ));
     expect(esbuildStagedDiff).toEqual([]);
+
+    const bunStagedDiff = nulPaths(execFileSync(
+      "git",
+      ["diff", "--name-only", "-z", plan041Sha, "--", ...profile.bunImplementationFiles],
+      { cwd: root },
+    ));
+    expect(bunStagedDiff).toEqual([]);
 
     const immutableDiff = nulPaths(execFileSync(
       "git",
@@ -831,9 +1059,11 @@ describe("tooling pins and workflow contracts", () => {
       )
     ).not.toThrow();
 
-    const plan = await readFile(resolve(root, "plans/041-add-bun-api-command-lanes.md"), "utf8");
+    const plan = await readFile(resolve(root, "plans/042-add-deno-bundle-command-lanes.md"), "utf8");
     const index = await readFile(resolve(root, "plans/README.md"), "utf8");
     expect(plan.match(/^- Status: DONE$/gm) ?? []).toHaveLength(1);
+    expect(plan).toMatch(/ancestry-pinned accidental-drift protection, not an\s+independently protected/);
+    expect(plan).toMatch(/externally pinned verifier is required before claiming\s+independent/);
     expect(index).toContain(
       "| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | DONE |",
     );
@@ -842,6 +1072,12 @@ describe("tooling pins and workflow contracts", () => {
     );
     expect(index).toContain(
       "| 041 | Implement the frozen Bun executable lane | P1 | L | 039 | DONE |",
+    );
+    expect(index).toContain(
+      "| 042 | Implement the frozen Deno executable lane | P1 | L | 039 | DONE |",
+    );
+    expect(index).toContain(
+      "| 043 | Implement direct Node SEA assembly | P1 | L | 039 | TODO |",
     );
   });
 

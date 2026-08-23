@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
 import * as BunV04 from "../../packages/effect-build-bun/src/CompileExecutable.js";
+import * as DenoV04 from "../../packages/effect-build-deno/src/CompileExecutable.js";
 
 const execFileAsync = promisify(execFile);
 const root = mkdtempSync(join(tmpdir(), "effect-build-target-support-"));
@@ -104,7 +105,7 @@ describe("required provider target support", () => {
     const executable = requiredEnvironment(compiler === "bun" ? "EFFECT_BUILD_BUN_BIN" : "EFFECT_BUILD_DENO_BIN");
     if (!isAbsolute(executable)) throw new Error(`the provisioned ${compiler} executable must be absolute`);
     accessSync(executable, constants.X_OK);
-    if (process.env.DENORT_BIN !== undefined) {
+    if (process.env.DENORT_BIN !== undefined && process.env.EFFECT_BUILD_V04_DENO !== "1") {
       throw new Error("DENORT_BIN must not be inherited by target-support cells");
     }
 
@@ -138,12 +139,22 @@ describe("required provider target support", () => {
       }
       target = requested;
       const outfile = join(root, `${compiler}-${target}${target.startsWith("windows-") ? ".exe" : ""}`);
-      artifact = await Effect.runPromise(
-        Deno.compileExecutable({ entrypoint, outfile, target, digest: true }).pipe(
-          Effect.provide(Deno.layer({ executable })),
-          Effect.provide(NodeServices.layer),
-        ),
-      );
+      artifact = process.env.EFFECT_BUILD_V04_DENO === "1"
+        ? await Effect.runPromise(
+          DenoV04.compileExecutable({ entrypoint, outfile, target, observation: "hashed" }).pipe(
+            Effect.provide(DenoV04.layer({
+              executable: executable as import("../../packages/effect-build/src/Artifact.js").AbsolutePath,
+              allowUntestedVersion: true,
+            })),
+            Effect.provide(NodeServices.layer),
+          ),
+        ) as unknown as Deno.Artifact
+        : await Effect.runPromise(
+          Deno.compileExecutable({ entrypoint, outfile, target, digest: true }).pipe(
+            Effect.provide(Deno.layer({ executable })),
+            Effect.provide(NodeServices.layer),
+          ),
+        );
     }
     const windows = target.startsWith("windows-");
     const outfile = join(root, `${compiler}-${target}${windows ? ".exe" : ""}`);
@@ -151,15 +162,18 @@ describe("required provider target support", () => {
     const bytes = readFileSync(artifact.path);
     const expectedVersion = support.compilerFixtures.find((fixture) => fixture.tool === compiler)?.version;
     expect(expectedVersion).toBeDefined();
-    if (compiler === "bun" && process.env.EFFECT_BUILD_V04_BUN === "1") {
-      const staged = artifact as unknown as BunV04.Artifact<"hashed">;
+    if (
+      (compiler === "bun" && process.env.EFFECT_BUILD_V04_BUN === "1")
+      || (compiler === "deno" && process.env.EFFECT_BUILD_V04_DENO === "1")
+    ) {
+      const staged = artifact as unknown as BunV04.Artifact<"hashed"> | DenoV04.Artifact<"hashed">;
       expect(staged).toMatchObject({
         _tag: "HashedExecutable",
         path: outfile,
         bytes: String(bytes.byteLength),
         target,
-        provider: "bun",
-        runtime: { name: "bun", version: expectedVersion },
+        provider: compiler,
+        runtime: { name: compiler, version: expectedVersion },
         publication: { commit: "same-parent-rename", committed: true },
       });
       expect(staged.digest.value).toBe(createHash("sha256").update(bytes).digest("hex"));
