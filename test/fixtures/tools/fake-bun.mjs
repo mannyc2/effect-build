@@ -1,24 +1,11 @@
 #!/usr/bin/env node
-import { appendFile, chmod, realpath, writeFile } from "node:fs/promises";
+import { appendFile, chmod, writeFile } from "node:fs/promises";
 
 const argv = process.argv.slice(2);
 
-if (argv[0] === "-e") {
-  process.stdout.write(JSON.stringify({
-    path: await realpath(process.argv[1]),
-    version: process.env.FAKE_BUN_VERSION ?? "1.3.9",
-    revision: process.env.FAKE_BUN_REVISION ?? "fake-bun-r1",
-    os: process.env.FAKE_BUN_OS ?? "linux",
-    architecture: process.env.FAKE_BUN_ARCH ?? "x64",
-    distribution: process.env.FAKE_BUN_DISTRIBUTION ?? "ubuntu-24.04",
-  }));
+if (argv[0] === "--version") {
+  process.stdout.write(`${process.env.FAKE_BUN_VERSION ?? "1.3.14"}\n`);
   process.exit(0);
-}
-
-if (argv[0] === "build" && argv[1] === "--help") {
-  if (process.env.FAKE_BUN_CAPABILITY === "missing") process.stdout.write("bun build --outfile\n");
-  else process.stdout.write("bun build --compile --outfile\n");
-  process.exit(process.env.FAKE_BUN_HELP_EXIT === "1" ? 1 : 0);
 }
 
 const log = process.env.FAKE_BUN_LOG;
@@ -44,8 +31,14 @@ if (process.env.FAKE_BUN_MODE === "missing") process.exit(0);
 const outfileArgument = argv.find((value) => value.startsWith("--outfile="));
 if (outfileArgument === undefined) process.exit(22);
 let outfile = outfileArgument.slice("--outfile=".length);
-const target = argv.find((value) => value.startsWith("--target="))?.slice("--target=".length)
-  ?? "bun-linux-x64";
+const hostTarget = process.platform === "darwin"
+  ? (process.arch === "arm64" ? "bun-darwin-arm64" : "bun-darwin-x64")
+  : process.platform === "win32"
+  ? "bun-windows-x64"
+  : process.arch === "arm64"
+  ? "bun-linux-arm64"
+  : "bun-linux-x64";
+const target = argv.find((value) => value.startsWith("--target="))?.slice("--target=".length) ?? hostTarget;
 if (target === "bun-windows-x64" && !outfile.toLowerCase().endsWith(".exe")) outfile += ".exe";
 
 const invalid = process.env.FAKE_BUN_MODE === "invalid";

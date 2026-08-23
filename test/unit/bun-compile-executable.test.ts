@@ -1,23 +1,11 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import {
-  appendFile,
-  chmod,
-  copyFile,
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  realpath,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as BunCompile from "../../packages/effect-build-bun/src/CompileExecutable.js";
-import type { AbsolutePath } from "../../packages/effect-build/src/Artifact.js";
+import * as Target from "../../packages/effect-build/src/Target.js";
 
 const fixture = resolve(new URL("../fixtures/tools/fake-bun.mjs", import.meta.url).pathname);
 let root = "";
@@ -34,13 +22,10 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const layer = (allowUntestedVersion = false) =>
-  BunCompile.layer({ executable: executable as AbsolutePath, allowUntestedVersion });
-
-const run = <A, E>(effect: Effect.Effect<A, E, BunCompile.Compiler>, allowUntestedVersion = false) =>
+const run = <A, E>(effect: Effect.Effect<A, E, BunCompile.Compiler>, layerOptions?: BunCompile.LayerOptions) =>
   Effect.runPromiseExit(
     effect.pipe(
-      Effect.provide(layer(allowUntestedVersion)),
+      Effect.provide(BunCompile.layer(layerOptions ?? { executable })),
       Effect.provide(NodeServices.layer),
     ) as Effect.Effect<A, E>,
   );
@@ -52,10 +37,9 @@ const failureOf = <A, E>(exit: Exit.Exit<A, E>): E => {
   return (found as { readonly value: E }).value;
 };
 
-const input = (name: string, overrides: Partial<BunCompile.CompileExecutableInput<"hashed">> = {}) => ({
+const input = (name: string, overrides: Partial<BunCompile.CompileExecutableInput> = {}) => ({
   entrypoint: "main.ts",
   outfile: join(root, name),
-  observation: "hashed" as const,
   ...overrides,
 });
 
@@ -68,6 +52,9 @@ const absent = async (path: string): Promise<boolean> => {
   }
 };
 
+const noStagingLeftovers = async (): Promise<boolean> =>
+  !(await readdir(root)).some((name) => name.startsWith(".effect-build-"));
+
 const waitForFile = async (path: string): Promise<void> => {
   const deadline = Date.now() + 5_000;
   while (await absent(path)) {
@@ -76,103 +63,64 @@ const waitForFile = async (path: string): Promise<void> => {
   }
 };
 
-describe.sequential("staged 0.4 Bun CompileExecutable", () => {
-  it("turns invalid runtime Layer options into an acquisition failure", async () => {
-    const exit = await Effect.runPromiseExit(
-      BunCompile.compileExecutable(input("invalid-layer-options")).pipe(
-        Effect.provide(BunCompile.layer({ executable: 42 } as unknown as BunCompile.LayerOptions)),
-        Effect.provide(NodeServices.layer),
-      ),
+describe.sequential("Bun CompileExecutable", () => {
+  it("fails layer construction with ToolNotFound for a missing explicit executable", async () => {
+    const exit = await run(
+      BunCompile.compileExecutable(input("missing-tool")),
+      { executable: join(root, "not-a-bun") },
     );
-    expect((failureOf(exit) as { readonly _tag: string })._tag).toBe("ToolProbeFailed");
-    expect(await absent(join(root, "invalid-layer-options"))).toBe(true);
+    const failure = failureOf(exit) as { readonly _tag: string; readonly tool: string };
+    expect(failure._tag).toBe("ToolNotFound");
+    expect(failure.tool).toBe("bun");
+    expect(await absent(join(root, "missing-tool"))).toBe(true);
   });
 
-  it("refuses the exact observed coordinate with SupportUnknown before output mutation", async () => {
-    const outfile = join(root, "support-unknown");
-    const exit = await run(BunCompile.compileExecutable(input("support-unknown")));
-    const failure = failureOf(exit) as BunCompile.CompileExecutableError;
-    expect(failure._tag).toBe("SupportUnknown");
-    if (failure._tag === "SupportUnknown") {
-      expect(failure.overrideAvailable).toBe(true);
-      expect(failure.admissionKey).toContain('"builder"');
-      expect(failure.admissionKey).toContain('"target-runtime"');
-      expect(failure.operation.operation).toBe("compile-executable");
-    }
-    expect(await absent(outfile)).toBe(true);
-  });
-
-  it("blocks denied hosts and missing capabilities even when the untested-version override is enabled", async () => {
-    process.env.FAKE_BUN_DISTRIBUTION = "unknown";
-    try {
-      const denied = await run(BunCompile.compileExecutable(input("denied-host")), true);
-      expect((failureOf(denied) as BunCompile.CompileExecutableError)._tag).toBe("KnownDenyHole");
-      expect(await absent(join(root, "denied-host"))).toBe(true);
-    } finally {
-      delete process.env.FAKE_BUN_DISTRIBUTION;
-    }
-    process.env.FAKE_BUN_CAPABILITY = "missing";
-    try {
-      const missing = await run(BunCompile.compileExecutable(input("missing-capability")), true);
-      expect((failureOf(missing) as BunCompile.CompileExecutableError)._tag).toBe("CapabilityMissing");
-      expect(await absent(join(root, "missing-capability"))).toBe(true);
-    } finally {
-      delete process.env.FAKE_BUN_CAPABILITY;
+  it("compiles for the host by default and records a hashed artifact", async () => {
+    const exit = await run(BunCompile.compileExecutable(input("hashed")));
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value._tag).toBe("Executable");
+      expect(exit.value.target).toBe(Target.host());
+      expect(exit.value.tool).toEqual({ name: "bun", version: "1.3.14" });
+      expect(exit.value.path).toBe(join(root, "hashed"));
+      expect(exit.value.bytes).toBeGreaterThan(0);
+      expect(exit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 
-  it("keeps unreviewed versions at SupportUnknown without the explicit override", async () => {
+  it("omits the digest when hashing is disabled", async () => {
+    const exit = await run(BunCompile.compileExecutable(input("unhashed", { hash: false })));
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) {
+      expect("sha256" in exit.value).toBe(false);
+      expect(exit.value.bytes).toBeGreaterThan(0);
+    }
+  });
+
+  it("compiles every supported target and appends .exe for windows outputs", async () => {
+    for (const target of BunCompile.Target.literals) {
+      const exit = await run(BunCompile.compileExecutable(input(`target-${target}`, { target })));
+      expect(Exit.isSuccess(exit), target).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value.target).toBe(target);
+        if (target === "windows-x64") expect(exit.value.path.endsWith(".exe")).toBe(true);
+        else expect(exit.value.path).toBe(join(root, `target-${target}`));
+      }
+    }
+  });
+
+  it("proceeds with a warning instead of refusing untested bun versions", async () => {
     process.env.FAKE_BUN_VERSION = "9.9.9";
     try {
-      const exit = await run(BunCompile.compileExecutable(input("unreviewed-version")));
-      expect((failureOf(exit) as BunCompile.CompileExecutableError)._tag).toBe("SupportUnknown");
-      expect(await absent(join(root, "unreviewed-version"))).toBe(true);
+      const exit = await run(BunCompile.compileExecutable(input("untested-version")));
+      expect(Exit.isSuccess(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) expect(exit.value.tool.version).toBe("9.9.9");
     } finally {
       delete process.env.FAKE_BUN_VERSION;
     }
   });
 
-  it("publishes hashed and unhashed artifacts through same-parent rename", async () => {
-    const hashed = await run(BunCompile.compileExecutable(input("hashed")), true);
-    expect(Exit.isSuccess(hashed)).toBe(true);
-    if (Exit.isSuccess(hashed)) {
-      expect(hashed.value).toMatchObject({
-        _tag: "HashedExecutable",
-        provider: "bun",
-        nativeFormat: "elf",
-        target: "linux-x64-gnu",
-        runtime: { name: "bun", version: "1.3.9" },
-        publication: { commit: "same-parent-rename", committed: true },
-      });
-      expect(hashed.value.digest.value).toMatch(/^[0-9a-f]{64}$/);
-      expect(BigInt(hashed.value.bytes)).toBeGreaterThan(0n);
-    }
-    const unhashed = await run(
-      BunCompile.compileExecutable({ ...input("unhashed"), observation: "unhashed" }),
-      true,
-    );
-    expect(Exit.isSuccess(unhashed)).toBe(true);
-    if (Exit.isSuccess(unhashed)) {
-      expect(unhashed.value._tag).toBe("UnhashedExecutable");
-      expect("digest" in unhashed.value).toBe(false);
-    }
-  });
-
-  it("maps and independently inspects the exact six-target table", async () => {
-    const targets = BunCompile.Target.literals;
-    for (const target of targets) {
-      const exit = await run(BunCompile.compileExecutable(input(`target-${target}`, { target })), true);
-      expect(Exit.isSuccess(exit), target).toBe(true);
-      if (Exit.isSuccess(exit)) {
-        expect(exit.value.target).toBe(target);
-        expect(exit.value.nativeFormat).toBe(
-          target.startsWith("macos") ? "mach-o" : target.startsWith("windows") ? "pe" : "elf",
-        );
-      }
-    }
-  });
-
-  it("preserves cwd, environment, project defaults, and the closed Bun argv", async () => {
+  it("preserves cwd, environment, and the closed bun argv", async () => {
     const project = join(root, "project");
     const log = join(root, "project.log");
     await mkdir(project);
@@ -184,11 +132,13 @@ describe.sequential("staged 0.4 Bun CompileExecutable", () => {
         BunCompile.compileExecutable(input("ignored", {
           cwd: project,
           outfile: "dist/app",
-          options: { minify: true, sourcemap: "linked", bytecode: true },
+          minify: true,
+          sourcemap: "linked",
+          bytecode: true,
         })),
-        true,
       );
       expect(Exit.isSuccess(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) expect(exit.value.path).toBe(join(project, "dist/app"));
       const invocation = JSON.parse((await readFile(log, "utf8")).trim()) as {
         readonly argv: readonly string[];
         readonly cwd: string;
@@ -196,6 +146,7 @@ describe.sequential("staged 0.4 Bun CompileExecutable", () => {
       };
       expect(invocation.cwd).toBe(await realpath(project));
       expect(invocation.marker).toBe("preserved");
+      expect(invocation.argv.slice(0, 2)).toEqual(["build", "--compile"]);
       expect(invocation.argv).toContain("--minify");
       expect(invocation.argv).toContain("--sourcemap=linked");
       expect(invocation.argv).toContain("--bytecode");
@@ -207,76 +158,57 @@ describe.sequential("staged 0.4 Bun CompileExecutable", () => {
     }
   });
 
-  it("rejects closed-input violations and unsupported targets before spawning Bun", async () => {
-    const log = join(root, "invalid.log");
+  it("rejects targets bun does not support before spawning", async () => {
+    const log = join(root, "unsupported.log");
     process.env.FAKE_BUN_LOG = log;
     try {
-      const invalid = await run(
-        BunCompile.compileExecutable({
-          ...input("invalid-input"),
-          options: { splitting: true },
-        } as unknown as BunCompile.CompileExecutableInput<"hashed">),
-        true,
+      const exit = await run(
+        BunCompile.compileExecutable(
+          input("unsupported", { target: "linux-aarch64-musl" as unknown as BunCompile.Target }),
+        ),
       );
-      expect((failureOf(invalid) as BunCompile.CompileExecutableError)._tag).toBe("InvalidDriverOptions");
-      const unsupported = await run(
-        BunCompile.compileExecutable({
-          ...input("unsupported"),
-          target: "linux-aarch64-musl",
-        } as unknown as BunCompile.CompileExecutableInput<"hashed">),
-        true,
-      );
-      const targetFailure = failureOf(unsupported) as BunCompile.CompileExecutableError;
-      expect(targetFailure._tag).toBe("TargetUnsupported");
+      const failure = failureOf(exit) as { readonly _tag: string; readonly requested: string };
+      expect(failure._tag).toBe("UnsupportedTarget");
+      expect(failure.requested).toBe("linux-aarch64-musl");
       expect(await absent(log)).toBe(true);
     } finally {
       delete process.env.FAKE_BUN_LOG;
     }
   });
 
-  it("preserves bounded stdout and stderr diagnostics on provider failure", async () => {
+  it("surfaces bounded stdout and stderr when bun fails", async () => {
     process.env.FAKE_BUN_MODE = "fail";
     try {
-      const exit = await run(BunCompile.compileExecutable(input("failed")), true);
-      const failure = failureOf(exit) as BunCompile.CompileExecutableError;
+      const exit = await run(BunCompile.compileExecutable(input("failed")));
+      const failure = failureOf(exit) as {
+        readonly _tag: string;
+        readonly exitCode: number;
+        readonly stdout: string;
+        readonly stderr: string;
+      };
       expect(failure._tag).toBe("ToolFailed");
-      if (failure._tag === "ToolFailed") {
-        expect(failure.exitCode).toBe(17);
-        expect(failure.diagnostics).toEqual([
-          { channel: "stdout", text: "fake stdout diagnostic", truncated: false },
-          { channel: "stderr", text: "fake stderr diagnostic", truncated: false },
-        ]);
-      }
+      expect(failure.exitCode).toBe(17);
+      expect(failure.stdout).toBe("fake stdout diagnostic");
+      expect(failure.stderr).toBe("fake stderr diagnostic");
       expect(await absent(join(root, "failed"))).toBe(true);
     } finally {
       delete process.env.FAKE_BUN_MODE;
     }
   });
 
-  it("classifies missing and malformed candidates at the authoring boundary", async () => {
+  it("fails publication when bun produces no output or a non-executable", async () => {
     process.env.FAKE_BUN_MODE = "missing";
-    const missing = await run(BunCompile.compileExecutable(input("missing")), true);
-    expect((failureOf(missing) as BunCompile.CompileExecutableError)._tag).toBe("ExecutableCandidateMissing");
+    const missing = await run(BunCompile.compileExecutable(input("missing")));
+    const missingFailure = failureOf(missing) as { readonly _tag: string; readonly reason: string };
+    expect(missingFailure._tag).toBe("PublishFailed");
+    expect(missingFailure.reason).toContain("did not produce");
     process.env.FAKE_BUN_MODE = "invalid";
-    const invalid = await run(BunCompile.compileExecutable(input("malformed")), true);
-    const failure = failureOf(invalid) as BunCompile.CompileExecutableError;
-    expect(failure._tag).toBe("ExecutableInspectionFailed");
+    const invalid = await run(BunCompile.compileExecutable(input("malformed")));
+    const invalidFailure = failureOf(invalid) as { readonly _tag: string; readonly reason: string };
+    expect(invalidFailure._tag).toBe("PublishFailed");
     delete process.env.FAKE_BUN_MODE;
-    expect((await readdir(root)).some((name) => name.startsWith(".effect-build-"))).toBe(false);
-  });
-
-  it("reauthenticates all selected-command content at launch", async () => {
-    const program = Effect.gen(function*() {
-      yield* Effect.promise(() => appendFile(executable, "\n// same selected path, changed content\n"));
-      return yield* BunCompile.compileExecutable(input("replacement"));
-    }).pipe(
-      Effect.provide(layer(true)),
-      Effect.provide(NodeServices.layer),
-    );
-    const exit = await Effect.runPromiseExit(program);
-    expect((failureOf(exit) as BunCompile.CompileExecutableError)._tag).toBe("SelectedCommandChanged");
-    await copyFile(fixture, executable);
-    await chmod(executable, 0o755);
+    expect(await absent(join(root, "malformed"))).toBe(true);
+    expect(await noStagingLeftovers()).toBe(true);
   });
 
   it("preserves interruption Cause, terminates the child, and removes private staging", async () => {
@@ -290,7 +222,7 @@ describe.sequential("staged 0.4 Bun CompileExecutable", () => {
         yield* Fiber.interrupt(fiber);
         return yield* Fiber.await(fiber);
       }).pipe(
-        Effect.provide(layer(true)),
+        Effect.provide(BunCompile.layer({ executable })),
         Effect.provide(NodeServices.layer),
       );
       const outer = await Effect.runPromiseExit(program);
@@ -300,7 +232,7 @@ describe.sequential("staged 0.4 Bun CompileExecutable", () => {
         if (Exit.isFailure(outer.value)) expect(Cause.hasInterrupts(outer.value.cause)).toBe(true);
       }
       expect(await absent(join(root, "interrupted"))).toBe(true);
-      expect((await readdir(root)).some((name) => name.startsWith(".effect-build-"))).toBe(false);
+      expect(await noStagingLeftovers()).toBe(true);
     } finally {
       delete process.env.FAKE_BUN_MODE;
       delete process.env.FAKE_BUN_STARTED;
