@@ -42,6 +42,7 @@ export interface CertificateObservation {
   readonly sha256Fingerprint: string;
   readonly teamId: string;
   readonly classOid: "1.2.840.113635.100.6.1.14";
+  readonly trustedTimestamp: string;
   readonly lookup: Artifact.ToolInvocation;
   readonly trust: Artifact.ToolInvocation;
   readonly packageSignature: Artifact.ToolInvocation;
@@ -215,15 +216,37 @@ const validateTrustedCertificate = (
   return Effect.void;
 };
 
-const packageLeafSha256 = (
+interface PackageSignatureObservation {
+  readonly sha256Fingerprint: string;
+  readonly trustedTimestamp: string;
+}
+
+const trustedPackageStatuses = new Set([
+  "signed by a developer certificate issued by Apple for distribution",
+  "signed by a certificate trusted by macOS",
+  "signed by a certificate trusted by Mac OS X",
+]);
+
+const observePackageSignature = (
   invocation: Artifact.ToolInvocation,
-): Effect.Effect<string, Artifact.AppleIdentityInvalid> => {
+): Effect.Effect<PackageSignatureObservation, Artifact.AppleIdentityInvalid> => {
   if (invocation.stdout.truncated || invocation.stderr.truncated) {
     return Effect.fail(invalidIdentity("pkgutil signature output was truncated"));
   }
   const output = invocationOutput(invocation);
-  if (!/^\s*Status:\s*signed by a certificate trusted by .+$/imu.test(output)) {
+  const statuses = output
+    .split(/\r?\n/u)
+    .map((line) => /^\s*Status:\s*(.+?)\s*$/u.exec(line)?.[1])
+    .filter((status): status is string => status !== undefined);
+  if (statuses.length !== 1 || !trustedPackageStatuses.has(statuses[0]!)) {
     return Effect.fail(invalidIdentity("pkgutil did not report a trusted package signature"));
+  }
+  const timestamps = output
+    .split(/\r?\n/u)
+    .map((line) => /^\s*Signed with a trusted timestamp(?: on)?:\s*(\S.*?)\s*$/u.exec(line)?.[1])
+    .filter((timestamp): timestamp is string => timestamp !== undefined);
+  if (timestamps.length !== 1) {
+    return Effect.fail(invalidIdentity("pkgutil did not report exactly one trusted package timestamp"));
   }
   const chain = output.indexOf("Certificate Chain:");
   const first = chain === -1 ? undefined : /^\s*1\.\s.*$/mu.exec(output.slice(chain));
@@ -249,7 +272,7 @@ const packageLeafSha256 = (
   }
   const normalized = fingerprint.toUpperCase();
   return sha256FingerprintPattern.test(normalized)
-    ? Effect.succeed(normalized)
+    ? Effect.succeed({ sha256Fingerprint: normalized, trustedTimestamp: timestamps[0]! })
     : Effect.fail(invalidIdentity("pkgutil leaf SHA-256 fingerprint was malformed"));
 };
 
@@ -340,8 +363,8 @@ const makeService = (
               tool: pkgutil,
               args: ["--check-signature", stagedPath],
             });
-            const packageFingerprint = yield* packageLeafSha256(checked);
-            if (packageFingerprint !== selected.sha256Fingerprint) {
+            const packageSignature = yield* observePackageSignature(checked);
+            if (packageSignature.sha256Fingerprint !== selected.sha256Fingerprint) {
               return yield* invalidIdentity(
                 "pkgutil leaf certificate does not match the exact certificate selected for signing",
               );
@@ -353,6 +376,7 @@ const makeService = (
               sha256Fingerprint: selected.sha256Fingerprint,
               teamId: input.identity.teamId,
               classOid: installerCertificateOid,
+              trustedTimestamp: packageSignature.trustedTimestamp,
               lookup,
               trust,
               packageSignature: checked,

@@ -4,10 +4,13 @@ import {
   AppleIdentityInvalid,
   AppleInputInvalid,
   type ArtifactError,
+  ArtifactPublishFailed,
   type ArtifactServices,
   type FileArtifact,
   isFileArtifact,
   type MutationProvenance,
+  observeFile,
+  observeTree,
   revalidate,
   type ToolError,
   type ToolInvocation,
@@ -388,8 +391,8 @@ const makeService = (
         const mutate = ({ staged, supportingInputs }: Lifecycle.MutationContext<SignableArtifact>) =>
           Effect.gen(function*() {
             const invocations: ToolInvocation[] = [];
-            const targetPath = (item: NormalizedPlanItem): string =>
-              item.path === "." ? staged.path : path.join(staged.path, ...item.path.split("/"));
+            const targetPath = (root: string, item: NormalizedPlanItem): string =>
+              item.path === "." ? root : path.join(root, ...item.path.split("/"));
             const signs: { readonly item: NormalizedPlanItem; readonly invocation: ToolInvocation }[] = [];
             for (const item of plan) {
               const args = ["--force", "--sign", supplied.identity.fingerprint, "--timestamp"];
@@ -398,96 +401,143 @@ const makeService = (
                 args.push("--entitlements", supportingInputs[item.entitlementIndex]!.path);
               }
               if (item.identifier !== undefined) args.push("--identifier", item.identifier);
-              args.push(targetPath(item));
+              args.push(targetPath(staged.path, item));
               const invocation = yield* Tool.runOrFail({ tool: codesign, args });
               invocations.push(invocation);
               signs.push({ item, invocation });
             }
-            for (const { item, invocation: signed } of signs) {
-              const signedPath = targetPath(item);
-              const verified = yield* Tool.runOrFail({
-                tool: codesign,
-                args: ["--verify", "--strict", "--verbose=2", "-R", identity.designatedRequirement, signedPath],
-              });
-              invocations.push(verified);
-              const displayed = yield* Tool.runOrFail({
-                tool: codesign,
-                args: ["--display", "--verbose=4", signedPath],
-              });
-              invocations.push(displayed);
-              const display = yield* parseDisplay(displayed, item.path);
-              if (display.teamId !== identity.teamId) {
-                return yield* signatureInvalid(
-                  item.path,
-                  "displayed TeamIdentifier does not match the selected identity",
-                );
-              }
-              if (display.hardenedRuntime !== item.hardenedRuntime) {
-                return yield* signatureInvalid(
-                  item.path,
-                  `displayed hardened-runtime flag was ${String(display.hardenedRuntime)}`,
-                );
-              }
-              if (item.identifier !== undefined && display.identifier !== item.identifier) {
-                return yield* signatureInvalid(
-                  item.path,
-                  "displayed identifier does not match the explicit identifier",
-                );
-              }
-              const entitlementDisplay = yield* Tool.runOrFail({
-                tool: codesign,
-                args: ["--display", "--entitlements", "-", "--xml", signedPath],
-              });
-              invocations.push(entitlementDisplay);
-              if (entitlementDisplay.stdout.truncated || entitlementDisplay.stderr.truncated) {
-                return yield* signatureInvalid(item.path, "codesign entitlement output was truncated");
-              }
-              const actualXml = entitlementDisplay.stdout.text.trim();
-              let entitlementNormalization: ToolInvocation | undefined;
-              if (item.entitlementIndex === undefined) {
-                if (actualXml.length > 0) {
-                  return yield* signatureInvalid(item.path, "signature unexpectedly carries entitlements");
-                }
-              } else {
-                if (actualXml.length === 0) {
-                  return yield* signatureInvalid(item.path, "signature is missing the requested entitlements");
-                }
-                entitlementNormalization = yield* Tool.runOrFail({
-                  tool: plutil,
-                  args: ["-convert", "xml1", "-o", "-", supportingInputs[item.entitlementIndex]!.path],
+            yield* Effect.scoped(
+              Effect.gen(function*() {
+                const signedArtifact = staged._tag === "FileArtifact"
+                  ? yield* observeFile(staged.kind, staged.path)
+                  : yield* observeTree(staged.kind, staged.path);
+                const normalized = yield* Lifecycle.copyAuthenticatedScoped({
+                  input: signedArtifact,
+                  copyTool: ditto,
+                  directory: path.dirname(staged.path),
                 });
-                invocations.push(entitlementNormalization);
-                if (entitlementNormalization.stdout.truncated || entitlementNormalization.stderr.truncated) {
-                  return yield* signatureInvalid(item.path, "plutil entitlement output was truncated");
+                invocations.push(...normalized.tools);
+                for (const { item, invocation: signed } of signs) {
+                  const normalizedPath = targetPath(normalized.artifact.path, item);
+                  const verified = yield* Tool.runOrFail({
+                    tool: codesign,
+                    args: [
+                      "--verify",
+                      "--strict",
+                      "--verbose=2",
+                      "-R",
+                      identity.designatedRequirement,
+                      normalizedPath,
+                    ],
+                  });
+                  invocations.push(verified);
+                  const displayed = yield* Tool.runOrFail({
+                    tool: codesign,
+                    args: ["--display", "--verbose=4", normalizedPath],
+                  });
+                  invocations.push(displayed);
+                  const display = yield* parseDisplay(displayed, item.path);
+                  if (display.teamId !== identity.teamId) {
+                    return yield* signatureInvalid(
+                      item.path,
+                      "displayed TeamIdentifier does not match the selected identity",
+                    );
+                  }
+                  if (display.hardenedRuntime !== item.hardenedRuntime) {
+                    return yield* signatureInvalid(
+                      item.path,
+                      `displayed hardened-runtime flag was ${String(display.hardenedRuntime)}`,
+                    );
+                  }
+                  if (item.identifier !== undefined && display.identifier !== item.identifier) {
+                    return yield* signatureInvalid(
+                      item.path,
+                      "displayed identifier does not match the explicit identifier",
+                    );
+                  }
+                  const entitlementDisplay = yield* Tool.runOrFail({
+                    tool: codesign,
+                    args: ["--display", "--entitlements", "-", "--xml", normalizedPath],
+                  });
+                  invocations.push(entitlementDisplay);
+                  if (entitlementDisplay.stdout.truncated || entitlementDisplay.stderr.truncated) {
+                    return yield* signatureInvalid(item.path, "codesign entitlement output was truncated");
+                  }
+                  const actualXml = entitlementDisplay.stdout.text.trim();
+                  let entitlementNormalization: ToolInvocation | undefined;
+                  if (item.entitlementIndex === undefined) {
+                    if (actualXml.length > 0) {
+                      return yield* signatureInvalid(item.path, "signature unexpectedly carries entitlements");
+                    }
+                  } else {
+                    if (actualXml.length === 0) {
+                      return yield* signatureInvalid(item.path, "signature is missing the requested entitlements");
+                    }
+                    entitlementNormalization = yield* Tool.runOrFail({
+                      tool: plutil,
+                      args: ["-convert", "xml1", "-o", "-", supportingInputs[item.entitlementIndex]!.path],
+                    });
+                    invocations.push(entitlementNormalization);
+                    if (entitlementNormalization.stdout.truncated || entitlementNormalization.stderr.truncated) {
+                      return yield* signatureInvalid(item.path, "plutil entitlement output was truncated");
+                    }
+                    const expected = yield* canonicalEntitlements(
+                      entitlementNormalization.stdout.text,
+                      item.path,
+                      "requested",
+                    );
+                    const actual = yield* canonicalEntitlements(actualXml, item.path, "embedded");
+                    if (actual !== expected) {
+                      return yield* signatureInvalid(
+                        item.path,
+                        "embedded entitlements differ from the authenticated request",
+                      );
+                    }
+                  }
+                  signatures.push(Object.freeze({
+                    _tag: "CodeSignature",
+                    path: item.path,
+                    identifier: display.identifier,
+                    teamId: display.teamId,
+                    secureTimestamp: display.secureTimestamp,
+                    hardenedRuntime: display.hardenedRuntime,
+                    entitlements: actualXml.length > 0,
+                    sign: signed,
+                    verify: verified,
+                    display: displayed,
+                    entitlementDisplay,
+                    ...(entitlementNormalization === undefined ? {} : { entitlementNormalization }),
+                  }));
                 }
-                const expected = yield* canonicalEntitlements(
-                  entitlementNormalization.stdout.text,
-                  item.path,
-                  "requested",
+                if (staged._tag === "TreeArtifact") {
+                  const deepVerification = yield* Tool.runOrFail({
+                    tool: codesign,
+                    args: [
+                      "--verify",
+                      "--strict",
+                      "--verbose=2",
+                      "--deep",
+                      "-R",
+                      identity.designatedRequirement,
+                      normalized.artifact.path,
+                    ],
+                  });
+                  invocations.push(deepVerification);
+                }
+                yield* Effect.uninterruptible(
+                  fileSystem.remove(staged.path, { recursive: staged._tag === "TreeArtifact" }).pipe(
+                    Effect.andThen(fileSystem.rename(normalized.artifact.path, staged.path)),
+                  ),
+                ).pipe(
+                  Effect.mapError((error) =>
+                    new ArtifactPublishFailed({
+                      destination: supplied.destination,
+                      reason: `publish normalized signed artifact: ${String(error)}`,
+                    })
+                  ),
                 );
-                const actual = yield* canonicalEntitlements(actualXml, item.path, "embedded");
-                if (actual !== expected) {
-                  return yield* signatureInvalid(
-                    item.path,
-                    "embedded entitlements differ from the authenticated request",
-                  );
-                }
-              }
-              signatures.push(Object.freeze({
-                _tag: "CodeSignature",
-                path: item.path,
-                identifier: display.identifier,
-                teamId: display.teamId,
-                secureTimestamp: display.secureTimestamp,
-                hardenedRuntime: display.hardenedRuntime,
-                entitlements: actualXml.length > 0,
-                sign: signed,
-                verify: verified,
-                display: displayed,
-                entitlementDisplay,
-                ...(entitlementNormalization === undefined ? {} : { entitlementNormalization }),
-              }));
-            }
+              }),
+            );
             return invocations;
           });
         const publishFile = <K extends "mach-o" | "disk-image">(file: FileArtifact<K>) =>

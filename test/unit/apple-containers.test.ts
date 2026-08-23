@@ -743,6 +743,7 @@ describe("Apple container construction", () => {
       sha256Fingerprint: installerSha256,
       teamId: "TEAMID1234",
       classOid: "1.2.840.113635.100.6.1.14",
+      trustedTimestamp: "2026-08-23 12:00:00 +0000",
     });
     expect(exit.value.certificate.lookup.args).toEqual(["find-certificate", "-a", "-Z", "-p"]);
     expect(exit.value.certificate.lookup.stdout.text).toContain(installerSha1);
@@ -869,6 +870,15 @@ describe("Apple container construction", () => {
     expect(failure(await runPackage(untrustedPackageTools, identity))).toMatchObject({
       _tag: "AppleIdentityInvalid",
       reason: expect.stringContaining("trusted package signature"),
+    });
+    expect(existsSync(join(root, "Rejected-0.pkg"))).toBe(false);
+
+    const missingTimestampTools = makeTools(root, {
+      packageSignature: packageSignature.replace(/^\s*Signed with a trusted timestamp.*\n/mu, ""),
+    });
+    expect(failure(await runPackage(missingTimestampTools, identity))).toMatchObject({
+      _tag: "AppleIdentityInvalid",
+      reason: expect.stringContaining("trusted package timestamp"),
     });
     expect(existsSync(join(root, "Rejected-0.pkg"))).toBe(false);
   });

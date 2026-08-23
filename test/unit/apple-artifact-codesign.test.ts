@@ -77,6 +77,7 @@ interface HarnessOptions {
   readonly delayCodesign?: boolean;
   readonly replaceCodesignDuringSign?: boolean;
   readonly verifyFailure?: boolean;
+  readonly xattrBackedNestedSignature?: boolean;
   readonly displayedIdentifier?: string;
   readonly displayedTeamId?: string;
   readonly displayedHardenedRuntime?: boolean;
@@ -108,6 +109,7 @@ const makeHarness = (options: HarnessOptions = {}) => {
     readonly hardenedRuntime: boolean;
     readonly entitlements: string;
   }>();
+  const xattrBackedSignatures = new Set<string>();
   const handle = (stdout: string, stderr: string, exitCode: number, delayed = false) =>
     ChildProcessSpawner.makeHandle({
       pid: ChildProcessSpawner.ProcessId(50505),
@@ -137,6 +139,16 @@ const makeHarness = (options: HarnessOptions = {}) => {
         const source = command.args.at(-2)!;
         const destination = command.args.at(-1)!;
         cpSync(source, destination, { recursive: true, dereference: false, preserveTimestamps: true });
+        for (const [signedPath, observation] of Array.from(signed.entries())) {
+          const relative = signedPath === source
+            ? ""
+            : signedPath.startsWith(`${source}/`)
+            ? signedPath.slice(source.length + 1)
+            : undefined;
+          if (relative !== undefined && !xattrBackedSignatures.has(signedPath)) {
+            signed.set(relative === "" ? destination : join(destination, relative), observation);
+          }
+        }
         return handle("", "", 0);
       }
       if (command.command === tools.plutil) {
@@ -167,7 +179,9 @@ const makeHarness = (options: HarnessOptions = {}) => {
           hardenedRuntime: command.args.includes("runtime"),
           entitlements: entitlementIndex === -1 ? "" : readFileSync(command.args[entitlementIndex + 1]!, "utf8"),
         });
-        if (options.codesignNoMutation !== true) {
+        const xattrBacked = options.xattrBackedNestedSignature === true && target.includes("/Contents/");
+        if (xattrBacked) xattrBackedSignatures.add(target);
+        if (options.codesignNoMutation !== true && !xattrBacked) {
           signature += 1;
           if (existsSync(target)) {
             if (statSync(target).isDirectory()) writeFileSync(join(target, `.signature-${signature}`), "signed\n");
@@ -178,7 +192,8 @@ const makeHarness = (options: HarnessOptions = {}) => {
         return handle("", "", 0);
       }
       if (command.args[0] === "--verify") {
-        return options.verifyFailure === true
+        const target = command.args.at(-1)!;
+        return options.verifyFailure === true || !signed.has(target)
           ? handle("verify stdout", "verify stderr", 3)
           : handle("", "", 0);
       }
@@ -453,6 +468,7 @@ describe("Apple CodeSign", () => {
       "ditto",
       "ditto",
       "codesign",
+      "ditto",
       "codesign",
       "codesign",
       "codesign",
@@ -601,12 +617,69 @@ describe("Apple CodeSign", () => {
       "--verify",
       "--display",
       "--display",
+      "--verify",
     ]);
     expect(codesign[0]!.args.at(-1)).toMatch(/Signed\.app\/Contents\/Frameworks\/Helper$/);
     expect(codesign[1]!.args.at(-1)).toMatch(/Signed\.app$/);
-    expect(codesign.every(({ args }) => !args.includes("--deep"))).toBe(true);
+    expect(codesign.slice(0, 2).every(({ args }) => !args.includes("--deep"))).toBe(true);
+    const explicitVerifications = codesign.filter(({ args }) => args[0] === "--verify" && !args.includes("--deep"));
+    expect(explicitVerifications).toHaveLength(2);
+    expect(explicitVerifications[0]!.args.at(-1)).toMatch(/Contents\/Frameworks\/Helper$/);
+    expect(explicitVerifications[1]!.args.at(-1)).not.toMatch(/Contents\/Frameworks\/Helper$/);
+    const deepVerification = codesign.filter(({ args }) => args[0] === "--verify" && args.includes("--deep"));
+    expect(deepVerification).toHaveLength(1);
+    expect(deepVerification[0]!.args.at(-1)).toBe(explicitVerifications[1]!.args.at(-1));
     expect(exit.value.signatures.map(({ path }) => path)).toEqual(["Contents/Frameworks/Helper", "."]);
+    expect(exit.value.signatures.map(({ verify }) => verify.args.at(-1))).toEqual(
+      explicitVerifications.map(({ args }) => args.at(-1)),
+    );
     expect(Exit.isSuccess(await runArtifact(Artifact.revalidate(input)))).toBe(true);
+  });
+
+  it("rejects xattr-backed nested signatures after metadata normalization", async () => {
+    const harness = makeHarness({ xattrBackedNestedSignature: true });
+    const appPath = join(harness.root, "Input.app");
+    const destination = join(harness.root, "Signed.app");
+    const helper = join(appPath, "Contents", "Frameworks", "Helper");
+    mkdirSync(join(appPath, "Contents", "MacOS"), { recursive: true });
+    mkdirSync(join(appPath, "Contents", "Frameworks"), { recursive: true });
+    writeFileSync(join(appPath, "Contents", "Info.plist"), "<plist/>\n");
+    writeMachO(join(appPath, "Contents", "MacOS", "Main"), "main\n");
+    writeMachO(helper, "helper\n");
+    const input = await Effect.runPromise(
+      Artifact.observeTree("app-bundle", appPath).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    const exit = await harness.run(CodeSign.sign({
+      input,
+      destination,
+      identity: identity(),
+      plan: [
+        { path: "Contents/Frameworks/Helper", hardenedRuntime: false },
+        { path: ".", hardenedRuntime: true },
+      ],
+    }));
+
+    expect(failure(exit)).toMatchObject({ _tag: "AppleToolFailed", tool: "codesign" });
+    expect(existsSync(destination)).toBe(false);
+    expect(Exit.isSuccess(await runArtifact(Artifact.revalidate(input)))).toBe(true);
+    const dittos = harness.invocations.filter(({ command }) => command === harness.tools.ditto);
+    expect(dittos).toHaveLength(2);
+    expect(dittos.every(({ args }) => args.slice(0, 3).join(" ") === "--norsrc --noextattr --noacl")).toBe(true);
+    const postNormalizationVerify = harness.invocations.find(({ command, args }) =>
+      command === harness.tools.codesign
+      && args[0] === "--verify"
+      && args.at(-1)?.endsWith("/Contents/Frameworks/Helper") === true
+    );
+    expect(postNormalizationVerify?.args.slice(0, 5)).toEqual([
+      "--verify",
+      "--strict",
+      "--verbose=2",
+      "-R",
+      '=anchor apple generic and certificate leaf = H"0123456789ABCDEF0123456789ABCDEF01234567"'
+      + ' and certificate leaf[subject.OU] = "TEAMID1234"'
+      + " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists",
+    ]);
   });
 
   it("rejects unsupported, changed, and forged inputs before process work", async () => {
