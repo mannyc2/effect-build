@@ -1,9 +1,8 @@
-import { Context, Effect, FileSystem, Layer, Path } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
   AppleIdentityInvalid,
   AppleInputInvalid,
-  type Artifact,
   type ArtifactError,
   type ArtifactServices,
   type FileArtifact,
@@ -16,6 +15,7 @@ import {
   UnsupportedArtifactKind,
 } from "./Artifact.js";
 import * as Lifecycle from "./internal/Lifecycle.js";
+import * as Plist from "./internal/Plist.js";
 import * as Tool from "./internal/Tool.js";
 
 declare const DeveloperIdApplicationTypeId: unique symbol;
@@ -44,41 +44,51 @@ export interface SigningPlanItem {
   readonly entitlements?: FileArtifact<"entitlements"> | undefined;
 }
 
-export interface SignInput {
-  readonly input: Artifact;
+export interface SignInput<A extends SignableArtifact = SignableArtifact> {
+  readonly input: A;
   readonly destination: string;
   readonly identity: DeveloperIdApplication;
   /** Exact caller-supplied inside-out order. The app-bundle root must be last. */
   readonly plan: readonly SigningPlanItem[];
 }
 
-export type SignedArtifact =
-  | FileArtifact<"mach-o">
-  | TreeArtifact<"app-bundle">
-  | FileArtifact<"disk-image">;
+export type SignableArtifact =
+  | FileArtifact<"mach-o" | "disk-image">
+  | TreeArtifact<"app-bundle">;
 
 export interface IdentityObservation {
   readonly _tag: "DeveloperIdApplicationIdentity";
   readonly fingerprint: string;
   readonly teamId: string;
-  readonly invocation: ToolInvocation;
+  readonly designatedRequirement: string;
 }
 
 export interface SignatureObservation {
   readonly _tag: "CodeSignature";
   readonly path: string;
+  readonly identifier: string;
+  readonly teamId: string;
+  readonly secureTimestamp: string;
   readonly hardenedRuntime: boolean;
   readonly entitlements: boolean;
   readonly sign: ToolInvocation;
   readonly verify: ToolInvocation;
+  readonly display: ToolInvocation;
+  readonly entitlementDisplay: ToolInvocation;
+  readonly entitlementNormalization?: ToolInvocation | undefined;
 }
 
-export interface SignResult {
-  readonly artifact: SignedArtifact;
+export interface SignResult<A extends SignableArtifact = SignableArtifact> {
+  readonly artifact: A;
   readonly provenance: MutationProvenance;
   readonly identity: IdentityObservation;
   readonly signatures: readonly SignatureObservation[];
 }
+
+export class CodeSignatureInvalid extends Schema.TaggedError<CodeSignatureInvalid>()(
+  "CodeSignatureInvalid",
+  { path: Schema.String, reason: Schema.String },
+) {}
 
 export type CodeSignError =
   | ArtifactError
@@ -86,16 +96,17 @@ export type CodeSignError =
   | ToolError
   | AppleIdentityInvalid
   | AppleInputInvalid
+  | CodeSignatureInvalid
   | UnsupportedArtifactKind;
 
 export interface LayerOptions {
   readonly codesignPath?: string | undefined;
-  readonly securityPath?: string | undefined;
   readonly dittoPath?: string | undefined;
+  readonly plutilPath?: string | undefined;
 }
 
 interface Service {
-  readonly sign: (input: SignInput) => Effect.Effect<SignResult, CodeSignError>;
+  readonly sign: <A extends SignableArtifact>(input: SignInput<A>) => Effect.Effect<SignResult<A>, CodeSignError>;
 }
 
 export class Signer extends Context.Service<Signer, Service>()("effect-build-apple/CodeSign/Signer") {}
@@ -104,6 +115,7 @@ const identities = new WeakSet<object>();
 const fingerprintPattern = /^[0-9A-F]{40}$/;
 const teamIdPattern = /^[A-Z0-9]{10}$/;
 const identifierPattern = /^[A-Za-z0-9][A-Za-z0-9.-]*$/;
+const developerIdApplicationOid = "1.2.840.113635.100.6.1.13";
 
 const invalidIdentity = (reason: string): AppleIdentityInvalid =>
   new AppleIdentityInvalid({
@@ -161,7 +173,7 @@ const isAncestor = (parent: string, child: string): boolean =>
   parent === "." ? child !== "." : child.startsWith(`${parent}/`);
 
 const normalizePlan = (
-  input: Artifact,
+  input: SignableArtifact,
   supplied: readonly SigningPlanItem[],
 ): Effect.Effect<readonly NormalizedPlanItem[], AppleInputInvalid> =>
   Effect.gen(function*() {
@@ -245,42 +257,94 @@ const normalizePlan = (
     return Object.freeze(normalized);
   });
 
+const designatedRequirement = (identity: DeveloperIdApplication): string =>
+  `=anchor apple generic and certificate leaf = H"${identity.fingerprint}"`
+  + ` and certificate leaf[subject.OU] = "${identity.teamId}"`
+  + ` and certificate leaf[field.${developerIdApplicationOid}] exists`;
+
 const validateIdentity = (
   identity: DeveloperIdApplication,
-  security: Tool.SelectedTool,
-): Effect.Effect<IdentityObservation, ToolError | AppleIdentityInvalid, Tool.ToolServices> =>
+): Effect.Effect<IdentityObservation, AppleIdentityInvalid> => {
+  if (!identities.has(identity)) return Effect.fail(invalidIdentity("unauthenticated identity descriptor"));
+  if (!fingerprintPattern.test(identity.fingerprint) || !teamIdPattern.test(identity.teamId)) {
+    return Effect.fail(invalidIdentity("identity fields changed after construction"));
+  }
+  return Effect.succeed(Object.freeze({
+    _tag: "DeveloperIdApplicationIdentity" as const,
+    fingerprint: identity.fingerprint,
+    teamId: identity.teamId,
+    designatedRequirement: designatedRequirement(identity),
+  }));
+};
+
+const signatureInvalid = (path: string, reason: string): CodeSignatureInvalid =>
+  new CodeSignatureInvalid({ path, reason });
+
+const combinedOutput = (invocation: ToolInvocation): string =>
+  [invocation.stdout.text, invocation.stderr.text].filter((output) => output.length > 0).join("\n");
+
+const oneField = (
+  output: string,
+  name: string,
+  path: string,
+): Effect.Effect<string, CodeSignatureInvalid> => {
+  const values = output
+    .split(/\r?\n/u)
+    .filter((line) => line.startsWith(`${name}=`))
+    .map((line) => line.slice(name.length + 1).trim());
+  return values.length === 1 && values[0]!.length > 0
+    ? Effect.succeed(values[0]!)
+    : Effect.fail(signatureInvalid(path, `expected exactly one nonempty ${name} field`));
+};
+
+interface ParsedDisplay {
+  readonly identifier: string;
+  readonly teamId: string;
+  readonly secureTimestamp: string;
+  readonly hardenedRuntime: boolean;
+}
+
+const parseDisplay = (
+  invocation: ToolInvocation,
+  path: string,
+): Effect.Effect<ParsedDisplay, CodeSignatureInvalid> =>
   Effect.gen(function*() {
-    if (!identities.has(identity)) return yield* invalidIdentity("unauthenticated identity descriptor");
-    if (!fingerprintPattern.test(identity.fingerprint) || !teamIdPattern.test(identity.teamId)) {
-      return yield* invalidIdentity("identity fields changed after construction");
+    if (invocation.stdout.truncated || invocation.stderr.truncated) {
+      return yield* signatureInvalid(path, "codesign display output was truncated");
     }
-    const invocation = yield* Tool.runOrFail({
-      tool: security,
-      args: ["find-identity", "-v", "-p", "codesigning"],
-    });
-    const lines = invocation.stdout.text.split(/\r?\n/);
-    let label: string | undefined;
-    for (const line of lines) {
-      const match = /^\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"([^"]+)"\s*$/.exec(line);
-      if (match?.[1]?.toUpperCase() === identity.fingerprint) {
-        label = match[2];
-        break;
-      }
+    const output = combinedOutput(invocation);
+    const identifier = yield* oneField(output, "Identifier", path);
+    if (!identifierPattern.test(identifier)) {
+      return yield* signatureInvalid(path, "displayed identifier was invalid");
     }
-    if (label === undefined) return yield* invalidIdentity("fingerprint is not a valid codesigning identity");
-    if (!label.startsWith("Developer ID Application: ")) {
-      return yield* invalidIdentity("fingerprint is not a Developer ID Application identity");
+    const teamId = yield* oneField(output, "TeamIdentifier", path);
+    const secureTimestamp = yield* oneField(output, "Timestamp", path);
+    if (/^(?:none|not set)$/iu.test(secureTimestamp)) {
+      return yield* signatureInvalid(path, "signature does not carry a secure timestamp");
     }
-    const team = /\(([A-Z0-9]{10})\)$/.exec(label)?.[1];
-    if (team !== identity.teamId) {
-      return yield* invalidIdentity("identity Team ID does not match the requested Team ID");
+    const directories = output.split(/\r?\n/u).filter((line) => line.startsWith("CodeDirectory "));
+    if (directories.length !== 1) {
+      return yield* signatureInvalid(path, "expected exactly one CodeDirectory display record");
     }
-    return Object.freeze({
-      _tag: "DeveloperIdApplicationIdentity" as const,
-      fingerprint: identity.fingerprint,
-      teamId: identity.teamId,
-      invocation,
-    });
+    const flags = /\bflags=0x[0-9A-Fa-f]+\(([^)]*)\)/u.exec(directories[0]!)?.[1];
+    if (flags === undefined) return yield* signatureInvalid(path, "CodeDirectory flags were not parseable");
+    return {
+      identifier,
+      teamId,
+      secureTimestamp,
+      hardenedRuntime: flags.split(",").map((flag) => flag.trim()).includes("runtime"),
+    };
+  });
+
+const canonicalEntitlements = (
+  xml: string,
+  path: string,
+  source: string,
+): Effect.Effect<string, CodeSignatureInvalid> =>
+  Effect.try({
+    try: () => Plist.canonicalXml(xml),
+    catch: (error) =>
+      signatureInvalid(path, `${source} entitlements were not a canonical XML property list: ${String(error)}`),
   });
 
 const makeService = (
@@ -295,20 +359,23 @@ const makeService = (
     const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const codesign = yield* Tool.select({ name: "codesign", path: options.codesignPath ?? "/usr/bin/codesign" });
-    const security = yield* Tool.select({ name: "security", path: options.securityPath ?? "/usr/bin/security" });
     const ditto = yield* Tool.select({ name: "ditto", path: options.dittoPath ?? "/usr/bin/ditto" });
+    const plutil = yield* Tool.select({ name: "plutil", path: options.plutilPath ?? "/usr/bin/plutil" });
     const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
       Context.add(Path.Path, path),
       Context.add(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
 
-    const sign = (supplied: SignInput): Effect.Effect<SignResult, CodeSignError> =>
+    const sign = <A extends SignableArtifact>(
+      supplied: SignInput<A>,
+    ): Effect.Effect<SignResult<A>, CodeSignError> =>
       Effect.gen(function*() {
         const input = supplied.input;
-        if (input.kind !== "mach-o" && input.kind !== "app-bundle" && input.kind !== "disk-image") {
+        const kind: string = input.kind;
+        if (kind !== "mach-o" && kind !== "app-bundle" && kind !== "disk-image") {
           return yield* new UnsupportedArtifactKind({
             operation: "CodeSign.sign",
-            actual: input.kind,
+            actual: kind,
             expected: ["mach-o", "app-bundle", "disk-image"],
           });
         }
@@ -316,9 +383,9 @@ const makeService = (
         const plan = yield* normalizePlan(input, [...supplied.plan]);
         const supporting = plan.flatMap((item) => item.entitlements === undefined ? [] : [item.entitlements]);
         for (const entitlements of supporting) yield* revalidate(entitlements);
-        const identity = yield* validateIdentity(supplied.identity, security);
+        const identity = yield* validateIdentity(supplied.identity);
         const signatures: SignatureObservation[] = [];
-        const mutate = ({ staged, supportingInputs }: Lifecycle.MutationContext<typeof input>) =>
+        const mutate = ({ staged, supportingInputs }: Lifecycle.MutationContext<SignableArtifact>) =>
           Effect.gen(function*() {
             const invocations: ToolInvocation[] = [];
             const targetPath = (item: NormalizedPlanItem): string =>
@@ -337,45 +404,116 @@ const makeService = (
               signs.push({ item, invocation });
             }
             for (const { item, invocation: signed } of signs) {
+              const signedPath = targetPath(item);
               const verified = yield* Tool.runOrFail({
                 tool: codesign,
-                args: ["--verify", "--strict", "--verbose=2", targetPath(item)],
+                args: ["--verify", "--strict", "--verbose=2", "-R", identity.designatedRequirement, signedPath],
               });
               invocations.push(verified);
+              const displayed = yield* Tool.runOrFail({
+                tool: codesign,
+                args: ["--display", "--verbose=4", signedPath],
+              });
+              invocations.push(displayed);
+              const display = yield* parseDisplay(displayed, item.path);
+              if (display.teamId !== identity.teamId) {
+                return yield* signatureInvalid(
+                  item.path,
+                  "displayed TeamIdentifier does not match the selected identity",
+                );
+              }
+              if (display.hardenedRuntime !== item.hardenedRuntime) {
+                return yield* signatureInvalid(
+                  item.path,
+                  `displayed hardened-runtime flag was ${String(display.hardenedRuntime)}`,
+                );
+              }
+              if (item.identifier !== undefined && display.identifier !== item.identifier) {
+                return yield* signatureInvalid(
+                  item.path,
+                  "displayed identifier does not match the explicit identifier",
+                );
+              }
+              const entitlementDisplay = yield* Tool.runOrFail({
+                tool: codesign,
+                args: ["--display", "--entitlements", "-", "--xml", signedPath],
+              });
+              invocations.push(entitlementDisplay);
+              if (entitlementDisplay.stdout.truncated || entitlementDisplay.stderr.truncated) {
+                return yield* signatureInvalid(item.path, "codesign entitlement output was truncated");
+              }
+              const actualXml = entitlementDisplay.stdout.text.trim();
+              let entitlementNormalization: ToolInvocation | undefined;
+              if (item.entitlementIndex === undefined) {
+                if (actualXml.length > 0) {
+                  return yield* signatureInvalid(item.path, "signature unexpectedly carries entitlements");
+                }
+              } else {
+                if (actualXml.length === 0) {
+                  return yield* signatureInvalid(item.path, "signature is missing the requested entitlements");
+                }
+                entitlementNormalization = yield* Tool.runOrFail({
+                  tool: plutil,
+                  args: ["-convert", "xml1", "-o", "-", supportingInputs[item.entitlementIndex]!.path],
+                });
+                invocations.push(entitlementNormalization);
+                if (entitlementNormalization.stdout.truncated || entitlementNormalization.stderr.truncated) {
+                  return yield* signatureInvalid(item.path, "plutil entitlement output was truncated");
+                }
+                const expected = yield* canonicalEntitlements(
+                  entitlementNormalization.stdout.text,
+                  item.path,
+                  "requested",
+                );
+                const actual = yield* canonicalEntitlements(actualXml, item.path, "embedded");
+                if (actual !== expected) {
+                  return yield* signatureInvalid(
+                    item.path,
+                    "embedded entitlements differ from the authenticated request",
+                  );
+                }
+              }
               signatures.push(Object.freeze({
                 _tag: "CodeSignature",
                 path: item.path,
-                hardenedRuntime: item.hardenedRuntime,
-                entitlements: item.entitlements !== undefined,
+                identifier: display.identifier,
+                teamId: display.teamId,
+                secureTimestamp: display.secureTimestamp,
+                hardenedRuntime: display.hardenedRuntime,
+                entitlements: actualXml.length > 0,
                 sign: signed,
                 verify: verified,
+                display: displayed,
+                entitlementDisplay,
+                ...(entitlementNormalization === undefined ? {} : { entitlementNormalization }),
               }));
             }
             return invocations;
           });
-        const mutation = input._tag === "FileArtifact"
-          ? yield* Lifecycle.publishFileMutation({
+        const publishFile = <K extends "mach-o" | "disk-image">(file: FileArtifact<K>) =>
+          Lifecycle.publishFileMutation({
             operation: "CodeSign.sign",
-            input,
+            input: file,
             supportingInputs: supporting,
             destination: supplied.destination,
             copyTool: ditto,
-            mutate,
-          })
-          : yield* Lifecycle.publishTreeMutation({
-            operation: "CodeSign.sign",
-            input,
-            supportingInputs: supporting,
-            destination: supplied.destination,
-            copyTool: ditto,
-            mutate,
+            mutate: (context) => mutate(context),
           });
+        const publishTree = (tree: TreeArtifact<"app-bundle">) =>
+          Lifecycle.publishTreeMutation({
+            operation: "CodeSign.sign",
+            input: tree,
+            supportingInputs: supporting,
+            destination: supplied.destination,
+            copyTool: ditto,
+            mutate: (context) => mutate(context),
+          });
+        const mutation = input._tag === "FileArtifact"
+          ? yield* publishFile(input)
+          : yield* publishTree(input);
         return {
-          artifact: mutation.artifact as SignedArtifact,
-          provenance: {
-            ...mutation.provenance,
-            tools: [identity.invocation, ...mutation.provenance.tools],
-          },
+          artifact: mutation.artifact as A,
+          provenance: mutation.provenance,
           identity,
           signatures: Object.freeze(signatures),
         };
@@ -383,8 +521,9 @@ const makeService = (
     return { sign };
   });
 
-export const sign = (input: SignInput): Effect.Effect<SignResult, CodeSignError, Signer> =>
-  Signer.use((service) => service.sign(input));
+export const sign = <A extends SignableArtifact>(
+  input: SignInput<A>,
+): Effect.Effect<SignResult<A>, CodeSignError, Signer> => Signer.use((service) => service.sign(input));
 
 export const layer = (
   options?: LayerOptions,

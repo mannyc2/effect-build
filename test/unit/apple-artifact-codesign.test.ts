@@ -53,15 +53,22 @@ interface HarnessOptions {
   readonly codesignFailure?: boolean;
   readonly codesignNoMutation?: boolean;
   readonly delayCodesign?: boolean;
-  readonly replaceCodesignAfterSecurity?: boolean;
+  readonly replaceCodesignDuringSign?: boolean;
+  readonly verifyFailure?: boolean;
+  readonly displayedIdentifier?: string;
+  readonly displayedTeamId?: string;
+  readonly displayedHardenedRuntime?: boolean;
+  readonly displayedTimestamp?: string | null;
+  readonly embeddedEntitlements?: string;
+  readonly normalizedEntitlements?: string;
 }
 
 const makeHarness = (options: HarnessOptions = {}) => {
   const root = realpathSync(makeRoot());
   const tools = {
     codesign: join(root, "codesign"),
-    security: join(root, "security"),
     ditto: join(root, "ditto"),
+    plutil: join(root, "plutil"),
   };
   for (const executable of Object.values(tools)) {
     writeFileSync(executable, `fake ${basename(executable)}\n`);
@@ -74,6 +81,11 @@ const makeHarness = (options: HarnessOptions = {}) => {
     startedResolve = resolve;
   });
   let signature = 0;
+  const signed = new Map<string, {
+    readonly identifier: string;
+    readonly hardenedRuntime: boolean;
+    readonly entitlements: string;
+  }>();
   const handle = (stdout: string, stderr: string, exitCode: number, delayed = false) =>
     ChildProcessSpawner.makeHandle({
       pid: ChildProcessSpawner.ProcessId(50505),
@@ -96,15 +108,6 @@ const makeHarness = (options: HarnessOptions = {}) => {
     return Effect.sync(() => {
       if (!ChildProcess.isStandardCommand(command)) throw new Error("expected standard command");
       invocations.push({ command: command.command, args: command.args });
-      if (command.command === tools.security) {
-        if (options.replaceCodesignAfterSecurity === true) appendFileSync(tools.codesign, "replaced\n");
-        return handle(
-          '  1) 0123456789ABCDEF0123456789ABCDEF01234567 "Developer ID Application: Example (TEAMID1234)"\n'
-            + "     1 valid identities found\n",
-          "",
-          0,
-        );
-      }
       if (command.command === tools.ditto) {
         if (command.args.slice(0, 3).join(" ") !== "--norsrc --noextattr --noacl") {
           throw new Error(`unexpected private ditto policy ${command.args.slice(0, 3).join(" ")}`);
@@ -114,6 +117,16 @@ const makeHarness = (options: HarnessOptions = {}) => {
         cpSync(source, destination, { recursive: true, dereference: false, preserveTimestamps: true });
         return handle("", "", 0);
       }
+      if (command.command === tools.plutil) {
+        if (command.args.slice(0, 4).join(" ") !== "-convert xml1 -o -") {
+          throw new Error(`unexpected plutil argv ${command.args.join(" ")}`);
+        }
+        return handle(
+          options.normalizedEntitlements ?? readFileSync(command.args.at(-1)!, "utf8"),
+          "",
+          0,
+        );
+      }
       if (command.command !== tools.codesign) throw new Error(`unexpected command ${command.command}`);
       if (command.args[0] === "--force") {
         if (options.codesignFailure === true) return handle("sign stdout", "sign stderr", 19);
@@ -122,16 +135,55 @@ const makeHarness = (options: HarnessOptions = {}) => {
           startedResolve();
           return handle("", "", 0, true);
         }
+        const target = command.args.at(-1)!;
+        const identifierIndex = command.args.indexOf("--identifier");
+        const entitlementIndex = command.args.indexOf("--entitlements");
+        signed.set(target, {
+          identifier: identifierIndex === -1
+            ? `com.example.${basename(target).replaceAll(/[^A-Za-z0-9.-]/gu, "-")}`
+            : command.args[identifierIndex + 1]!,
+          hardenedRuntime: command.args.includes("runtime"),
+          entitlements: entitlementIndex === -1 ? "" : readFileSync(command.args[entitlementIndex + 1]!, "utf8"),
+        });
         if (options.codesignNoMutation !== true) {
-          const target = command.args.at(-1)!;
           signature += 1;
           if (existsSync(target)) {
             if (statSync(target).isDirectory()) writeFileSync(join(target, `.signature-${signature}`), "signed\n");
             else appendFileSync(target, `signature-${signature}\n`);
           }
         }
+        if (options.replaceCodesignDuringSign === true) appendFileSync(tools.codesign, "replaced\n");
+        return handle("", "", 0);
       }
-      return handle("", "", 0);
+      if (command.args[0] === "--verify") {
+        return options.verifyFailure === true
+          ? handle("verify stdout", "verify stderr", 3)
+          : handle("", "", 0);
+      }
+      const target = command.args.at(-1)!;
+      const observation = signed.get(target);
+      if (observation === undefined) throw new Error(`displayed unsigned target ${target}`);
+      if (command.args.slice(0, 2).join(" ") === "--display --verbose=4") {
+        const timestamp = options.displayedTimestamp === null
+          ? ""
+          : `Timestamp=${options.displayedTimestamp ?? "Aug 23, 2026 at 12:00:00 PM"}\n`;
+        const runtime = options.displayedHardenedRuntime ?? observation.hardenedRuntime;
+        return handle(
+          "",
+          `Executable=${target}\n`
+            + `Identifier=${options.displayedIdentifier ?? observation.identifier}\n`
+            + `CodeDirectory v=20500 size=123 flags=${
+              runtime ? "0x10000(runtime)" : "0x0(none)"
+            } hashes=1+0 location=embedded\n`
+            + `TeamIdentifier=${options.displayedTeamId ?? "TEAMID1234"}\n`
+            + timestamp,
+          0,
+        );
+      }
+      if (command.args.slice(0, 4).join(" ") === "--display --entitlements - --xml") {
+        return handle(options.embeddedEntitlements ?? observation.entitlements, `Executable=${target}\n`, 0);
+      }
+      throw new Error(`unexpected codesign argv ${command.args.join(" ")}`);
     }).pipe(
       Effect.flatMap((child) =>
         delayed
@@ -142,8 +194,8 @@ const makeHarness = (options: HarnessOptions = {}) => {
   });
   const signer = CodeSign.layer({
     codesignPath: tools.codesign,
-    securityPath: tools.security,
     dittoPath: tools.ditto,
+    plutilPath: tools.plutil,
   });
   const services = Layer.merge(
     NodeServices.layer,
@@ -168,6 +220,27 @@ const identity = () =>
     fingerprint: "0123456789abcdef0123456789abcdef01234567",
     teamId: "TEAMID1234",
   });
+
+const requestedEntitlements = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <key>com.example.label</key>
+  <string>A &amp; B</string>
+</dict>
+</plist>
+`;
+
+const equivalentEmbeddedEntitlements = `<?xml version='1.0' encoding='UTF-8'?>
+<plist version='1.0'>
+<dict>
+  <key>com.example.label</key><string>A &#38; B</string>
+  <key>com.apple.security.network.client</key><true></true>
+</dict>
+</plist>
+`;
 
 describe("Apple Artifact", () => {
   it("observes mandatory algorithm-qualified file identities and rejects mutation or forgery", async () => {
@@ -219,13 +292,13 @@ describe("Apple Artifact", () => {
 
 describe("Apple CodeSign", () => {
   it("signs a copied Mach-O with exact fingerprint argv, snapshotted entitlements, and strict verification", async () => {
-    const harness = makeHarness();
+    const harness = makeHarness({ embeddedEntitlements: equivalentEmbeddedEntitlements });
     const inputPath = join(harness.root, "input");
     const entitlementsPath = join(harness.root, "entitlements.plist");
     const destination = join(harness.root, "signed");
     writeFileSync(inputPath, "unsigned\n");
     chmodSync(inputPath, 0o755);
-    writeFileSync(entitlementsPath, "<plist/>\n");
+    writeFileSync(entitlementsPath, requestedEntitlements);
     const before = readFileSync(inputPath);
     const input = await Effect.runPromise(
       Artifact.observeFile("mach-o", inputPath).pipe(Effect.provide(NodeServices.layer)),
@@ -255,8 +328,6 @@ describe("Apple CodeSign", () => {
     expect(exit.value.provenance.output.digest).toEqual(exit.value.artifact.identity.digest);
     expect(Exit.isSuccess(await runArtifact(Artifact.revalidate(exit.value.artifact)))).toBe(true);
 
-    const security = harness.invocations.find(({ command }) => command === harness.tools.security)!;
-    expect(security.args).toEqual(["find-identity", "-v", "-p", "codesigning"]);
     const sign = harness.invocations.find(({ args }) => args[0] === "--force")!;
     expect(sign.args.slice(0, 8)).toEqual([
       "--force",
@@ -272,13 +343,137 @@ describe("Apple CodeSign", () => {
     expect(sign.args).not.toContain("--deep");
     expect(sign.args.at(-1)).not.toBe(inputPath);
     const verify = harness.invocations.find(({ args }) => args[0] === "--verify")!;
-    expect(verify.args.slice(0, 3)).toEqual(["--verify", "--strict", "--verbose=2"]);
+    expect(verify.args.slice(0, 6)).toEqual([
+      "--verify",
+      "--strict",
+      "--verbose=2",
+      "-R",
+      '=anchor apple generic and certificate leaf = H"0123456789ABCDEF0123456789ABCDEF01234567"'
+      + ' and certificate leaf[subject.OU] = "TEAMID1234"'
+      + " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists",
+      expect.any(String),
+    ]);
     expect(verify.args).not.toContain("--deep");
+    expect(exit.value.identity).toMatchObject({
+      fingerprint: "0123456789ABCDEF0123456789ABCDEF01234567",
+      teamId: "TEAMID1234",
+      designatedRequirement: verify.args[4],
+    });
+    expect(exit.value.signatures).toHaveLength(1);
+    expect(exit.value.signatures[0]).toMatchObject({
+      path: ".",
+      identifier: "com.example.tool",
+      teamId: "TEAMID1234",
+      secureTimestamp: "Aug 23, 2026 at 12:00:00 PM",
+      hardenedRuntime: true,
+      entitlements: true,
+    });
+    expect(exit.value.signatures[0]!.display.args.slice(0, 2)).toEqual(["--display", "--verbose=4"]);
+    expect(exit.value.signatures[0]!.entitlementDisplay.args.slice(0, 4)).toEqual([
+      "--display",
+      "--entitlements",
+      "-",
+      "--xml",
+    ]);
+    expect(exit.value.signatures[0]!.entitlementNormalization?.args.slice(0, 4)).toEqual([
+      "-convert",
+      "xml1",
+      "-o",
+      "-",
+    ]);
+    expect(exit.value.provenance.tools.map(({ tool }) => tool.name)).toEqual([
+      "ditto",
+      "ditto",
+      "codesign",
+      "codesign",
+      "codesign",
+      "codesign",
+      "plutil",
+    ]);
     expect(
       harness.invocations
         .filter(({ command }) => command === harness.tools.ditto)
         .every(({ args }) => args.slice(0, 3).join(" ") === "--norsrc --noextattr --noacl"),
     ).toBe(true);
+  });
+
+  it("fails closed when post-sign observations contradict timestamp, team, runtime, identifier, or entitlements", async () => {
+    const cases: readonly {
+      readonly name: string;
+      readonly options: HarnessOptions;
+      readonly requestedEntitlements?: boolean;
+      readonly reason: string;
+    }[] = [
+      {
+        name: "missing secure timestamp",
+        options: { displayedTimestamp: "none" },
+        reason: "secure timestamp",
+      },
+      {
+        name: "wrong Team ID",
+        options: { displayedTeamId: "OTHERTEAM1" },
+        reason: "TeamIdentifier",
+      },
+      {
+        name: "missing runtime flag",
+        options: { displayedHardenedRuntime: false },
+        reason: "hardened-runtime",
+      },
+      {
+        name: "wrong identifier",
+        options: { displayedIdentifier: "com.example.other" },
+        reason: "identifier",
+      },
+      {
+        name: "different embedded entitlements",
+        options: { embeddedEntitlements: requestedEntitlements.replace("<true/>", "<false/>") },
+        requestedEntitlements: true,
+        reason: "differ",
+      },
+      {
+        name: "unexpected embedded entitlements",
+        options: { embeddedEntitlements: requestedEntitlements },
+        reason: "unexpectedly carries entitlements",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const harness = makeHarness(testCase.options);
+      const inputPath = join(harness.root, `${testCase.name.replaceAll(" ", "-")}-input`);
+      const destination = join(harness.root, `${testCase.name.replaceAll(" ", "-")}-signed`);
+      writeFileSync(inputPath, "unsigned\n");
+      chmodSync(inputPath, 0o755);
+      const input = await Effect.runPromise(
+        Artifact.observeFile("mach-o", inputPath).pipe(Effect.provide(NodeServices.layer)),
+      );
+      let entitlements: Artifact.FileArtifact<"entitlements"> | undefined;
+      if (testCase.requestedEntitlements === true) {
+        const entitlementsPath = join(harness.root, "entitlements.plist");
+        writeFileSync(entitlementsPath, requestedEntitlements);
+        entitlements = await Effect.runPromise(
+          Artifact.observeFile("entitlements", entitlementsPath).pipe(Effect.provide(NodeServices.layer)),
+        );
+      }
+      const exit = await harness.run(CodeSign.sign({
+        input,
+        destination,
+        identity: identity(),
+        plan: [{
+          path: ".",
+          identifier: "com.example.tool",
+          hardenedRuntime: true,
+          ...(entitlements === undefined ? {} : { entitlements }),
+        }],
+      }));
+
+      expect(failure(exit)).toMatchObject({
+        _tag: "CodeSignatureInvalid",
+        path: ".",
+        reason: expect.stringContaining(testCase.reason),
+      });
+      expect(existsSync(destination)).toBe(false);
+      expect(Exit.isSuccess(await runArtifact(Artifact.revalidate(input)))).toBe(true);
+    }
   });
 
   it("rejects a successful signing tool that leaves the authenticated identity unchanged", async () => {
@@ -332,7 +527,16 @@ describe("Apple CodeSign", () => {
     expect(Exit.isSuccess(exit)).toBe(true);
     if (!Exit.isSuccess(exit)) return;
     const codesign = harness.invocations.filter(({ command }) => command === harness.tools.codesign);
-    expect(codesign.map(({ args }) => args[0])).toEqual(["--force", "--force", "--verify", "--verify"]);
+    expect(codesign.map(({ args }) => args[0])).toEqual([
+      "--force",
+      "--force",
+      "--verify",
+      "--display",
+      "--display",
+      "--verify",
+      "--display",
+      "--display",
+    ]);
     expect(codesign[0]!.args.at(-1)).toMatch(/Signed\.app\/Contents\/Frameworks\/Helper$/);
     expect(codesign[1]!.args.at(-1)).toMatch(/Signed\.app$/);
     expect(codesign.every(({ args }) => !args.includes("--deep"))).toBe(true);
@@ -348,7 +552,7 @@ describe("Apple CodeSign", () => {
       Artifact.observeFile("zip", path).pipe(Effect.provide(NodeServices.layer)),
     );
     const unsupported = await harness.run(CodeSign.sign({
-      input: zip,
+      input: zip as unknown as CodeSign.SignableArtifact,
       destination: join(harness.root, "out.zip"),
       identity: identity(),
       plan: [{ path: ".", hardenedRuntime: false }],
@@ -465,7 +669,7 @@ describe("Apple CodeSign", () => {
   });
 
   it("detects selected-tool replacement and preserves interruption Cause", async () => {
-    const changedToolHarness = makeHarness({ replaceCodesignAfterSecurity: true });
+    const changedToolHarness = makeHarness({ replaceCodesignDuringSign: true });
     const changedInputPath = join(changedToolHarness.root, "tool");
     writeFileSync(changedInputPath, "unsigned\n");
     chmodSync(changedInputPath, 0o755);

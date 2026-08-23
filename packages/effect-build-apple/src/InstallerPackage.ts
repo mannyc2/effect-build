@@ -36,7 +36,20 @@ export interface LayerOptions {
   readonly pkgutilPath?: string;
 }
 
-export type CreateResult = Artifact.MutationResult<Artifact.FileArtifact<"installer-package">>;
+export interface CertificateObservation {
+  readonly _tag: "DeveloperIdInstallerCertificate";
+  readonly sha1Fingerprint: string;
+  readonly sha256Fingerprint: string;
+  readonly teamId: string;
+  readonly classOid: "1.2.840.113635.100.6.1.14";
+  readonly lookup: Artifact.ToolInvocation;
+  readonly trust: Artifact.ToolInvocation;
+  readonly packageSignature: Artifact.ToolInvocation;
+}
+
+export interface CreateResult extends Artifact.MutationResult<Artifact.FileArtifact<"installer-package">> {
+  readonly certificate: CertificateObservation;
+}
 export type CreateError =
   | Artifact.UnsupportedArtifactKind
   | Artifact.AppleInputInvalid
@@ -54,8 +67,9 @@ export class Creator extends Context.Service<Creator, Service>()("effect-build-a
 const operation = "installer-package.create";
 const identities = new WeakSet<object>();
 const fingerprintPattern = /^[0-9A-F]{40}$/u;
+const sha256FingerprintPattern = /^[0-9A-F]{64}$/u;
 const teamIdPattern = /^[A-Z0-9]{10}$/u;
-const identityLine = /^\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"([^"]+)"\s*$/u;
+const installerCertificateOid = "1.2.840.113635.100.6.1.14" as const;
 const containsControlCharacter = (value: string): boolean =>
   [...value].some((character) => {
     const codePoint = character.codePointAt(0)!;
@@ -69,6 +83,7 @@ const invalidInput = (field: string, reason: string): Artifact.AppleInputInvalid
   new Artifact.AppleInputInvalid({ operation, field, reason });
 const invalidIdentity = (reason: string): Artifact.AppleIdentityInvalid =>
   new Artifact.AppleIdentityInvalid({ operation, identity: "DeveloperIdInstaller", reason });
+const describe = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
 /** Constructs the only identity authority accepted by InstallerPackage.create. */
 export const developerIdInstaller = (input: DeveloperIdInstallerInput): DeveloperIdInstaller => {
@@ -130,32 +145,126 @@ const validateInput = (
     }
   });
 
-const validateIdentityInventory = (
+interface SelectedCertificate {
+  readonly sha1Fingerprint: string;
+  readonly sha256Fingerprint: string;
+  readonly pem: string;
+}
+
+const certificateRecord =
+  /SHA-256 hash:\s*([0-9A-Fa-f]{64})\s*\r?\nSHA-1 hash:\s*([0-9A-Fa-f]{40})\s*\r?\n(-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----)/gu;
+
+const selectCertificate = (
   identity: DeveloperIdInstaller,
-  stdout: string,
+  inventory: Artifact.ToolInvocation,
+): Effect.Effect<SelectedCertificate, Artifact.AppleIdentityInvalid> => {
+  if (inventory.stdout.truncated || inventory.stderr.truncated) {
+    return Effect.fail(invalidIdentity("security certificate inventory output was truncated"));
+  }
+  const matches = [...inventory.stdout.text.matchAll(certificateRecord)]
+    .filter((match) => match[2]!.toUpperCase() === identity.fingerprint);
+  if (matches.length !== 1) {
+    return Effect.fail(invalidIdentity(
+      matches.length === 0
+        ? "fingerprint was not found in the security certificate inventory"
+        : "fingerprint was not unambiguous in the security certificate inventory",
+    ));
+  }
+  return Effect.succeed({
+    sha1Fingerprint: matches[0]![2]!.toUpperCase(),
+    sha256Fingerprint: matches[0]![1]!.toUpperCase(),
+    pem: `${matches[0]![3]!}\n`,
+  });
+};
+
+const invocationOutput = (invocation: Artifact.ToolInvocation): string =>
+  [invocation.stdout.text, invocation.stderr.text].filter((output) => output.length > 0).join("\n");
+
+const validateTrustedCertificate = (
+  identity: DeveloperIdInstaller,
+  selected: SelectedCertificate,
+  trust: Artifact.ToolInvocation,
 ): Effect.Effect<void, Artifact.AppleIdentityInvalid> => {
-  const matches = stdout
-    .split(/\r?\n/u)
-    .map((line) => identityLine.exec(line))
-    .filter((match): match is RegExpExecArray => match !== null && match[1]!.toUpperCase() === identity.fingerprint);
-  if (matches.length === 0) {
-    return Effect.fail(invalidIdentity("fingerprint was not found in the security identity inventory"));
+  if (trust.stdout.truncated || trust.stderr.truncated) {
+    return Effect.fail(invalidIdentity("security trust output was truncated"));
   }
-  if (matches.length !== 1 || !matches[0]![2]!.startsWith("Developer ID Installer: ")) {
-    return Effect.fail(
-      invalidIdentity(
-        matches.length !== 1
-          ? "the fingerprint is not unambiguous in the security identity inventory"
-          : `identity is not a Developer ID Installer certificate: ${matches[0]![2]}`,
-      ),
-    );
+  const output = invocationOutput(trust);
+  if (!/certificate verification successful/iu.test(output)) {
+    return Effect.fail(invalidIdentity("security did not report successful package-signing trust evaluation"));
   }
-  const teamId = /\(([A-Z0-9]{10})\)$/u.exec(matches[0]![2]!)?.[1];
-  if (teamId !== identity.teamId) {
-    return Effect.fail(invalidIdentity("identity Team ID does not match the requested Team ID"));
+  const subjectStart = output.indexOf("Subject Name:");
+  const issuerStart = output.indexOf("Issuer Name:", subjectStart);
+  if (subjectStart === -1 || issuerStart === -1) {
+    return Effect.fail(invalidIdentity("security trust output did not contain a leaf subject"));
+  }
+  const subject = output.slice(subjectStart, issuerStart);
+  const teamIds = [...subject.matchAll(/^\s*Organizational Unit:\s*([A-Z0-9]+)\s*$/gmu)].map((match) => match[1]!);
+  if (teamIds.length !== 1 || teamIds[0] !== identity.teamId) {
+    return Effect.fail(invalidIdentity("trusted certificate subject.OU does not match the requested Team ID"));
+  }
+  const nextSubject = output.indexOf("Subject Name:", subjectStart + "Subject Name:".length);
+  const leaf = output.slice(subjectStart, nextSubject === -1 ? output.length : nextSubject);
+  if (!new RegExp(`\\(\\s*${installerCertificateOid.replaceAll(".", "\\.")}\\s*\\)`, "u").test(leaf)) {
+    return Effect.fail(invalidIdentity("trusted certificate is not a Developer ID Installer certificate"));
+  }
+  const sha1 = /SHA-1:\s*([0-9A-Fa-f]{40})/u.exec(leaf)?.[1]?.toUpperCase();
+  const sha256 = /SHA-256:\s*([0-9A-Fa-f]{64})/u.exec(leaf)?.[1]?.toUpperCase();
+  if (sha1 !== selected.sha1Fingerprint || sha256 !== selected.sha256Fingerprint) {
+    return Effect.fail(invalidIdentity("security trust output fingerprints do not match the selected certificate"));
   }
   return Effect.void;
 };
+
+const packageLeafSha256 = (
+  invocation: Artifact.ToolInvocation,
+): Effect.Effect<string, Artifact.AppleIdentityInvalid> => {
+  if (invocation.stdout.truncated || invocation.stderr.truncated) {
+    return Effect.fail(invalidIdentity("pkgutil signature output was truncated"));
+  }
+  const output = invocationOutput(invocation);
+  if (!/^\s*Status:\s*signed by a certificate trusted by .+$/imu.test(output)) {
+    return Effect.fail(invalidIdentity("pkgutil did not report a trusted package signature"));
+  }
+  const chain = output.indexOf("Certificate Chain:");
+  const first = chain === -1 ? undefined : /^\s*1\.\s.*$/mu.exec(output.slice(chain));
+  if (chain === -1 || first?.index === undefined) {
+    return Effect.fail(invalidIdentity("pkgutil output did not contain a leaf certificate"));
+  }
+  const leafStart = chain + first.index;
+  const remainder = output.slice(leafStart);
+  const second = /^\s*2\.\s.*$/mu.exec(remainder);
+  const leaf = remainder.slice(0, second?.index ?? remainder.length);
+  const label = /SHA-?256 Fingerprint:\s*/iu.exec(leaf);
+  if (label?.index === undefined) {
+    return Effect.fail(invalidIdentity("pkgutil leaf certificate did not contain a SHA-256 fingerprint"));
+  }
+  const lines = leaf.slice(label.index + label[0].length).split(/\r?\n/u);
+  let fingerprint = "";
+  for (const line of lines) {
+    const compact = line.replaceAll(/[\s:]/gu, "");
+    if (compact.length === 0) continue;
+    if (!/^[0-9A-Fa-f]+$/u.test(compact)) break;
+    fingerprint += compact;
+    if (fingerprint.length >= 64) break;
+  }
+  const normalized = fingerprint.toUpperCase();
+  return sha256FingerprintPattern.test(normalized)
+    ? Effect.succeed(normalized)
+    : Effect.fail(invalidIdentity("pkgutil leaf SHA-256 fingerprint was malformed"));
+};
+
+const redactedLookup = (
+  inventory: Artifact.ToolInvocation,
+  selected: SelectedCertificate,
+): Artifact.ToolInvocation =>
+  Object.freeze({
+    ...inventory,
+    stdout: Object.freeze({
+      text: `selected certificate SHA-1 ${selected.sha1Fingerprint}; SHA-256 ${selected.sha256Fingerprint}\n`,
+      truncated: false,
+    }),
+    stderr: Object.freeze({ text: "", truncated: false }),
+  });
 
 const makeService = (
   options: LayerOptions = {},
@@ -179,7 +288,8 @@ const makeService = (
 
     const create = Effect.fn("effect-build-apple/InstallerPackage.create")(function*(input: CreateInput) {
       yield* validateInput(input);
-      return yield* Lifecycle.publishConstructedFile({
+      let certificate: CertificateObservation | undefined;
+      const mutation = yield* Lifecycle.publishConstructedFile({
         operation,
         inputs: [input.app],
         destination: input.outfile,
@@ -189,9 +299,26 @@ const makeService = (
           Effect.gen(function*() {
             const inventory = yield* Tool.runOrFail({
               tool: security,
-              args: ["find-identity", "-v", "-p", "basic"],
+              args: ["find-certificate", "-a", "-Z", "-p"],
             });
-            yield* validateIdentityInventory(input.identity, inventory.stdout.text);
+            const selected = yield* selectCertificate(input.identity, inventory);
+            const certificatePath = path.join(
+              path.dirname(stagedPath),
+              ".effect-build-apple-installer-certificate.pem",
+            );
+            yield* fileSystem.writeFileString(certificatePath, selected.pem, { flag: "wx", mode: 0o600 }).pipe(
+              Effect.mapError((error) =>
+                new Artifact.ArtifactPublishFailed({
+                  destination: stagedPath,
+                  reason: `write selected certificate: ${describe(error)}`,
+                })
+              ),
+            );
+            const trust = yield* Tool.runOrFail({
+              tool: security,
+              args: ["verify-cert", "-c", certificatePath, "-p", "pkgSign", "-L", "-t", "-v"],
+            });
+            yield* validateTrustedCertificate(input.identity, selected, trust);
             const built = yield* Tool.runOrFail({
               tool: pkgbuild,
               args: [
@@ -205,6 +332,7 @@ const makeService = (
                 input.version,
                 "--sign",
                 input.identity.fingerprint,
+                "--timestamp",
                 stagedPath,
               ],
             });
@@ -212,9 +340,27 @@ const makeService = (
               tool: pkgutil,
               args: ["--check-signature", stagedPath],
             });
-            return [inventory, built, checked];
+            const packageFingerprint = yield* packageLeafSha256(checked);
+            if (packageFingerprint !== selected.sha256Fingerprint) {
+              return yield* invalidIdentity(
+                "pkgutil leaf certificate does not match the exact certificate selected for signing",
+              );
+            }
+            const lookup = redactedLookup(inventory, selected);
+            certificate = Object.freeze({
+              _tag: "DeveloperIdInstallerCertificate" as const,
+              sha1Fingerprint: selected.sha1Fingerprint,
+              sha256Fingerprint: selected.sha256Fingerprint,
+              teamId: input.identity.teamId,
+              classOid: installerCertificateOid,
+              lookup,
+              trust,
+              packageSignature: checked,
+            });
+            return [lookup, trust, built, checked];
           }),
       });
+      return { ...mutation, certificate: certificate! };
     });
 
     return { create: (input) => create(input).pipe(Effect.provide(services)) };

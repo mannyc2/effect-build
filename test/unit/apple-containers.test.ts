@@ -43,9 +43,55 @@ interface Invocation {
 
 type ToolName = "ditto" | "plutil" | "hdiutil" | "security" | "pkgbuild" | "pkgutil";
 
+const installerSha1 = "A".repeat(40);
+const installerSha256 = "B".repeat(64);
+const unrelatedSha1 = "C".repeat(40);
+const unrelatedSha256 = "D".repeat(64);
+const certificateInventory = `SHA-256 hash: ${unrelatedSha256}
+SHA-1 hash: ${unrelatedSha1}
+-----BEGIN CERTIFICATE-----
+VU5SRUxBVEVE
+-----END CERTIFICATE-----
+SHA-256 hash: ${installerSha256}
+SHA-1 hash: ${installerSha1}
+-----BEGIN CERTIFICATE-----
+U0VMRUNURUQ=
+-----END CERTIFICATE-----
+`;
+const certificateTrust = `certificate verification successful.
+Subject Name:
+    Common Name: Developer ID Installer: Example Org (TEAMID1234)
+    Organizational Unit: TEAMID1234
+Issuer Name:
+    Common Name: Developer ID Certification Authority
+Extension: Developer ID Installer ( 1.2.840.113635.100.6.1.14 )
+Fingerprints:
+    SHA-256: ${installerSha256}
+    SHA-1: ${installerSha1}
+Subject Name:
+    Common Name: Developer ID Certification Authority
+Issuer Name:
+    Common Name: Apple Root CA
+`;
+const packageSignature = `Package "Example.pkg":
+   Status: signed by a certificate trusted by macOS
+   Certificate Chain:
+    1. Developer ID Installer: Example Org (TEAMID1234)
+       Expires: 2030-01-01 00:00:00 +0000
+       SHA256 Fingerprint:
+           ${installerSha256.match(/.{1,2}/gu)!.slice(0, 16).join(" ")}
+           ${installerSha256.match(/.{1,2}/gu)!.slice(16).join(" ")}
+       ------------------------------------------------------------------------
+    2. Developer ID Certification Authority
+       SHA256 Fingerprint:
+           ${unrelatedSha256.match(/.{1,2}/gu)!.join(" ")}
+`;
+
 interface FakeToolsOptions {
   readonly fail?: ToolName | "zip-extraction-mismatch";
-  readonly identities?: string;
+  readonly certificateInventory?: string;
+  readonly certificateTrust?: string;
+  readonly packageSignature?: string;
   readonly destinationRace?: {
     readonly kind: "file" | "tree";
     readonly path: string;
@@ -171,14 +217,17 @@ const makeTools = (root: string, options: FakeToolsOptions = {}): FakeTools => {
         } else if (tool === "hdiutil" && command.args[0] === "create") {
           writeFileSync(command.args.at(-1)!, "fake UDZO image\n");
         } else if (tool === "security") {
-          return handle(
-            options.identities
-              ?? '  1) AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "Developer ID Installer: Example Org (TEAMID1234)"\n     1 valid identities found\n',
-            "",
-            0,
-          );
+          if (command.args[0] === "find-certificate") {
+            return handle(options.certificateInventory ?? certificateInventory, "", 0);
+          }
+          if (command.args[0] === "verify-cert") {
+            return handle(options.certificateTrust ?? certificateTrust, "", 0);
+          }
+          throw new Error(`unexpected security argv ${command.args.join(" ")}`);
         } else if (tool === "pkgbuild") {
           writeFileSync(command.args.at(-1)!, "fake signed installer package\n");
+        } else if (tool === "pkgutil") {
+          return handle(options.packageSignature ?? packageSignature, "", 0);
         }
         return handle("", "", 0);
       },
@@ -633,11 +682,24 @@ describe("Apple container construction", () => {
     expect(exit.value.provenance.tools.map(({ tool }) => tool.name)).toEqual([
       "ditto",
       "security",
+      "security",
       "pkgbuild",
       "pkgutil",
     ]);
-    const security = tools.invocations.find(({ tool }) => tool === "security");
-    expect(security?.args).toEqual(["find-identity", "-v", "-p", "basic"]);
+    const security = tools.invocations.filter(({ tool }) => tool === "security");
+    expect(security.map(({ args }) => args)).toEqual([
+      ["find-certificate", "-a", "-Z", "-p"],
+      [
+        "verify-cert",
+        "-c",
+        expect.stringMatching(/\.effect-build-apple-installer-certificate\.pem$/u),
+        "-p",
+        "pkgSign",
+        "-L",
+        "-t",
+        "-v",
+      ],
+    ]);
     const pkgbuild = tools.invocations.find(({ tool }) => tool === "pkgbuild");
     expect(pkgbuild?.args).toEqual([
       "--component",
@@ -650,15 +712,29 @@ describe("Apple container construction", () => {
       "1.2.3",
       "--sign",
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "--timestamp",
       expect.not.stringMatching(/^Example\.pkg$/),
     ]);
     expect(pkgbuild?.args[1]).not.toBe(app.outfile);
     const pkgutil = tools.invocations.find(({ tool }) => tool === "pkgutil");
     expect(pkgutil?.args).toEqual(["--check-signature", pkgbuild?.args.at(-1)]);
+    expect(exit.value.certificate).toMatchObject({
+      _tag: "DeveloperIdInstallerCertificate",
+      sha1Fingerprint: installerSha1,
+      sha256Fingerprint: installerSha256,
+      teamId: "TEAMID1234",
+      classOid: "1.2.840.113635.100.6.1.14",
+    });
+    expect(exit.value.certificate.lookup.args).toEqual(["find-certificate", "-a", "-Z", "-p"]);
+    expect(exit.value.certificate.lookup.stdout.text).toContain(installerSha1);
+    expect(exit.value.certificate.lookup.stdout.text).toContain(installerSha256);
+    expect(exit.value.certificate.lookup.stdout.text).not.toContain(unrelatedSha1);
+    expect(exit.value.certificate.lookup.stdout.text).not.toContain(unrelatedSha256);
+    expect(exit.value.certificate.lookup.stdout.text).not.toContain("BEGIN CERTIFICATE");
     expect(stagingEntries(root)).toEqual([]);
   });
 
-  it("rejects malformed, missing, and Application identities before pkgbuild", async () => {
+  it("fails closed for malformed, missing, ambiguous, wrong-class, wrong-team, or untrusted certificates", async () => {
     const root = makeRoot();
     const setupTools = makeTools(root);
     const app = await createApp(root, setupTools);
@@ -695,7 +771,7 @@ describe("Apple container construction", () => {
     expect(failure(malformed)).toMatchObject({ _tag: "AppleIdentityInvalid" });
     expect(malformedTools.invocations).toEqual([]);
 
-    const missingTools = makeTools(root, { identities: "     0 valid identities found\n" });
+    const missingTools = makeTools(root, { certificateInventory: "" });
     const identity = InstallerPackage.developerIdInstaller({
       fingerprint: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       teamId: "TEAMID1234",
@@ -706,25 +782,76 @@ describe("Apple container construction", () => {
     });
     expect(missingTools.invocations.some(({ tool }) => tool === "pkgbuild")).toBe(false);
 
+    const ambiguousTools = makeTools(root, {
+      certificateInventory: `${certificateInventory}${
+        certificateInventory.slice(
+          certificateInventory.indexOf(`SHA-256 hash: ${installerSha256}`),
+        )
+      }`,
+    });
+    expect(failure(await runPackage(ambiguousTools, identity))).toMatchObject({
+      _tag: "AppleIdentityInvalid",
+      reason: expect.stringContaining("unambiguous"),
+    });
+    expect(ambiguousTools.invocations.some(({ tool }) => tool === "pkgbuild")).toBe(false);
+
     const applicationTools = makeTools(root, {
-      identities:
-        '  1) AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "Developer ID Application: Example Org (TEAMID1234)"\n     1 valid identities found\n',
+      certificateTrust: certificateTrust.replace("1.2.840.113635.100.6.1.14", "1.2.840.113635.100.6.1.13"),
     });
     expect(failure(await runPackage(applicationTools, identity))).toMatchObject({
       _tag: "AppleIdentityInvalid",
-      identity: "DeveloperIdInstaller",
+      reason: expect.stringContaining("Developer ID Installer"),
     });
     expect(applicationTools.invocations.some(({ tool }) => tool === "pkgbuild")).toBe(false);
 
     const wrongTeamTools = makeTools(root, {
-      identities:
-        '  1) AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "Developer ID Installer: Example Org (TEAMID9999)"\n     1 valid identities found\n',
+      certificateTrust: certificateTrust.replaceAll("TEAMID1234", "TEAMID9999"),
     });
     expect(failure(await runPackage(wrongTeamTools, identity))).toMatchObject({
       _tag: "AppleIdentityInvalid",
       reason: expect.stringContaining("Team ID"),
     });
     expect(wrongTeamTools.invocations.some(({ tool }) => tool === "pkgbuild")).toBe(false);
+
+    const untrustedTools = makeTools(root, {
+      certificateTrust: certificateTrust.replace(
+        "certificate verification successful",
+        "certificate verification failed",
+      ),
+    });
+    expect(failure(await runPackage(untrustedTools, identity))).toMatchObject({
+      _tag: "AppleIdentityInvalid",
+      reason: expect.stringContaining("trust evaluation"),
+    });
+    expect(untrustedTools.invocations.some(({ tool }) => tool === "pkgbuild")).toBe(false);
+
+    const wrongTrustFingerprintTools = makeTools(root, {
+      certificateTrust: certificateTrust.replace(installerSha256, unrelatedSha256),
+    });
+    expect(failure(await runPackage(wrongTrustFingerprintTools, identity))).toMatchObject({
+      _tag: "AppleIdentityInvalid",
+      reason: expect.stringContaining("fingerprints"),
+    });
+    expect(wrongTrustFingerprintTools.invocations.some(({ tool }) => tool === "pkgbuild")).toBe(false);
+
+    const wrongPackageLeafTools = makeTools(root, {
+      packageSignature: packageSignature.replaceAll(/B{2}/gu, "DD"),
+    });
+    expect(failure(await runPackage(wrongPackageLeafTools, identity))).toMatchObject({
+      _tag: "AppleIdentityInvalid",
+      reason: expect.stringContaining("exact certificate"),
+    });
+    expect(wrongPackageLeafTools.invocations.some(({ tool }) => tool === "pkgbuild")).toBe(true);
+    expect(existsSync(join(root, "Rejected-0.pkg"))).toBe(false);
+
+    const untrustedPackageTools = makeTools(root, {
+      packageSignature: packageSignature.replace("signed by a certificate trusted by macOS", "signed but untrusted"),
+    });
+    expect(failure(await runPackage(untrustedPackageTools, identity))).toMatchObject({
+      _tag: "AppleIdentityInvalid",
+      reason: expect.stringContaining("trusted package signature"),
+    });
+    expect(existsSync(join(root, "Rejected-0.pkg"))).toBe(false);
   });
 
   it("rejects non-app artifacts for ZIP, disk image, and installer package", async () => {
