@@ -281,15 +281,17 @@ describe("Node SEA AssembleExecutable", () => {
     expect(failure(await invalid.run(AssembleExecutable.assembleExecutable(input(invalid.root, "invalid")))))
       .toMatchObject({ _tag: "PublishFailed" });
 
+    // The committed path gains the host's executable suffix on windows.
+    const suffix = process.platform === "win32" ? ".exe" : "";
     const preserved = makeHarness({ fake: { mode: "invalid-output" } });
-    const preservedDestination = join(preserved.root, "preserved");
+    const preservedDestination = join(preserved.root, "preserved") + suffix;
     writeFileSync(preservedDestination, "old-public-artifact");
     expect(failure(await preserved.run(AssembleExecutable.assembleExecutable(input(preserved.root, "preserved")))))
       .toMatchObject({ _tag: "PublishFailed" });
     expect(readFileSync(preservedDestination, "utf8")).toBe("old-public-artifact");
 
     const replacement = makeHarness();
-    const destination = join(replacement.root, "replacement");
+    const destination = join(replacement.root, "replacement") + suffix;
     writeFileSync(destination, "old-public-artifact");
     const replaced = await replacement.run(
       AssembleExecutable.assembleExecutable(input(replacement.root, "replacement")),
