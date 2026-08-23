@@ -173,18 +173,18 @@ console.log(JSON.stringify({
 `,
   );
 
+  // Windows ships npm as npm.cmd, which node can only spawn through a shell.
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const npmEnvironment = { ...process.env, npm_config_audit: "false", npm_config_fund: "false" };
-  await execute("npm", ["install", "--no-audit", "--no-fund"], { cwd: consumerRoot, env: npmEnvironment });
+  const npmOptions = { cwd: consumerRoot, env: npmEnvironment, shell: process.platform === "win32" };
+  await execute(npm, ["install", "--no-audit", "--no-fund"], npmOptions);
 
   for (const name of packageNames) {
     const installed = JSON.parse(await readFile(join(consumerRoot, "node_modules", name, "package.json"), "utf8"));
     if (installed.name !== name) throw new Error(`consumer resolved ${name} to ${installed.name}`);
   }
 
-  await execute("npm", ["exec", "--no", "tsc", "--", "-p", "tsconfig.json"], {
-    cwd: consumerRoot,
-    env: npmEnvironment,
-  });
+  await execute(npm, ["exec", "--no", "tsc", "--", "-p", "tsconfig.json"], npmOptions);
 
   const runArguments = [join(consumerRoot, "dist-consumer", "main.js")];
   if (process.platform !== "win32") {

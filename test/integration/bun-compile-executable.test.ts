@@ -5,13 +5,14 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as BunCompile from "../../packages/effect-build-bun/src/CompileExecutable.js";
 import * as Target from "../../packages/effect-build/src/Target.js";
 
 const execute = promisify(execFile);
-const entrypoint = new URL("../fixtures/app/hello.ts", import.meta.url).pathname;
+const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 let root = "";
 
 beforeAll(async () => {
@@ -38,22 +39,22 @@ describe("real Bun CompileExecutable", () => {
   it("compiles for the host, hashes, atomically publishes, and executes the output", async () => {
     const outfile = join(root, "app");
     const artifact = await run(BunCompile.compileExecutable({ entrypoint, outfile }));
-    const bytes = await readFile(outfile);
+    const bytes = await readFile(artifact.path);
     expect(artifact).toMatchObject({
       _tag: "Executable",
-      path: outfile,
+      path: process.platform === "win32" ? `${outfile}.exe` : outfile,
       bytes: bytes.byteLength,
       target: Target.host(),
     });
     expect(artifact.tool.name).toBe("bun");
     expect(artifact.tool.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(artifact.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
-    const completion = await execute(outfile, []);
+    const completion = await execute(artifact.path, []);
     expect(completion.stdout).toBe("effect-build-ok\n");
   }, 120_000);
 
   it("inherits Bun project configuration and preserves native diagnostics", async () => {
-    const project = new URL("../fixtures/app/bun-config/", import.meta.url).pathname;
+    const project = fileURLToPath(new URL("../fixtures/app/bun-config/", import.meta.url));
     const artifact = await run(BunCompile.compileExecutable({
       entrypoint: "entry.ts",
       outfile: join(root, "configured"),

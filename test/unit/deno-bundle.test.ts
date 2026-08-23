@@ -3,10 +3,11 @@ import { Cause, Effect, Exit } from "effect";
 import { chmod, copyFile, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as DenoBundle from "../../packages/effect-build-deno/src/Bundle.js";
 
-const fixture = resolve(new URL("../fixtures/tools/fake-deno.mjs", import.meta.url).pathname);
+const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-deno.mjs", import.meta.url)));
 let root = "";
 let executable = "";
 

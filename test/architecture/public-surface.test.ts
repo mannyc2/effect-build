@@ -1,9 +1,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-const root = resolve(new URL("../..", import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
 interface SurfaceSubpath {
   readonly runtime: readonly string[];

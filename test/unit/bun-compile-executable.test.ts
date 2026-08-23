@@ -3,11 +3,12 @@ import { Cause, Effect, Exit, Fiber } from "effect";
 import { chmod, copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as BunCompile from "../../packages/effect-build-bun/src/CompileExecutable.js";
 import * as Target from "../../packages/effect-build/src/Target.js";
 
-const fixture = resolve(new URL("../fixtures/tools/fake-bun.mjs", import.meta.url).pathname);
+const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-bun.mjs", import.meta.url)));
 let root = "";
 let executable = "";
 

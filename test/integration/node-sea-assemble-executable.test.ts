@@ -5,13 +5,14 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
 import * as Target from "../../packages/effect-build/src/Target.js";
 
 const execute = promisify(execFile);
-const fixture = new URL("../fixtures/tools/node-sea/", import.meta.url).pathname;
+const fixture = fileURLToPath(new URL("../fixtures/tools/node-sea/", import.meta.url));
 
 const builder = process.env.EFFECT_BUILD_NODE ?? "node";
 const seaCapable = (): boolean => {
@@ -51,16 +52,16 @@ describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
       main: { _tag: "File", path: join(fixture, "main.cjs"), format: "commonjs" },
       outfile,
     }));
-    const bytes = await readFile(outfile);
+    const bytes = await readFile(artifact.path);
     expect(artifact).toMatchObject({
       _tag: "Executable",
-      path: outfile,
+      path: process.platform === "win32" ? `${outfile}.exe` : outfile,
       bytes: bytes.byteLength,
       target: Target.host(),
     });
     expect(artifact.tool.name).toBe("node");
     expect(artifact.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
-    expect((await execute(outfile, [])).stdout).toBe("node-sea-cjs-ok\n");
+    expect((await execute(artifact.path, [])).stdout).toBe("node-sea-cjs-ok\n");
   }, 300_000);
 
   it("assembles an ESM main with embedded assets", async () => {
@@ -73,8 +74,9 @@ describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
       disableExperimentalSEAWarning: true,
     }));
     expect("sha256" in artifact).toBe(false);
-    const completion = await execute(outfile, []);
+    const completion = await execute(artifact.path, []);
     expect(completion.stdout).toContain("node-sea-esm-ok");
+    expect(completion.stdout).toContain("node-sea-asset-ok");
   }, 300_000);
 
   it("surfaces node diagnostics as ToolFailed for a broken main", async () => {

@@ -5,12 +5,13 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as DenoBundle from "../../packages/effect-build-deno/src/Bundle.js";
 
 const execute = promisify(execFile);
-const entrypoint = new URL("../fixtures/app/bundle-entry.ts", import.meta.url).pathname;
+const entrypoint = fileURLToPath(new URL("../fixtures/app/bundle-entry.ts", import.meta.url));
 
 /** `deno bundle` exists from Deno 2.4. */
 const denoBundleAvailable = (): boolean => {

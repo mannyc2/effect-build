@@ -5,12 +5,13 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as BunBundle from "../../packages/effect-build-bun/src/Bundle.js";
 
 const execute = promisify(execFile);
-const entrypoint = new URL("../fixtures/app/bundle-entry.ts", import.meta.url).pathname;
+const entrypoint = fileURLToPath(new URL("../fixtures/app/bundle-entry.ts", import.meta.url));
 let root = "";
 
 beforeAll(async () => {
@@ -55,7 +56,7 @@ describe("real Bun Bundle", () => {
   }, 120_000);
 
   it("keeps requested externals unresolved and fails natively without them", async () => {
-    const external = new URL("../fixtures/app/bundle-external.ts", import.meta.url).pathname;
+    const external = fileURLToPath(new URL("../fixtures/app/bundle-external.ts", import.meta.url));
     await expect(run(BunBundle.bundle({ entrypoints: [external], outdir: join(root, "dist-unresolved") })))
       .rejects.toMatchObject({ _tag: "ToolFailed", tool: "bun" });
     const artifact = await run(
