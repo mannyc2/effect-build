@@ -15,10 +15,10 @@ import {
   toolFailed,
   type ToolNotFound,
   type ToolProbeFailed,
-} from "./internal/v04/compatibility.js";
-import { publishExecutable } from "./internal/v04/executable.js";
-import { runMatrix } from "./internal/v04/matrix.js";
-import { type AdmissionRequest, selectTool } from "./internal/v04/selected.js";
+} from "./internal/compatibility.js";
+import { publishExecutable } from "./internal/executable.js";
+import { runMatrix } from "./internal/matrix.js";
+import { type AdmissionRequest, selectTool } from "./internal/selected.js";
 
 export const Target = Schema.Literals(
   [

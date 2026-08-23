@@ -15,8 +15,8 @@ import {
   type ProviderContextFailure,
   providerContextFailure,
   type ToolProbeFailed,
-} from "./internal/v04/compatibility.js";
-import { observeInstalled } from "./internal/v04/installed.js";
+} from "./internal/compatibility.js";
+import { observeInstalled } from "./internal/installed.js";
 
 export interface LayerOptions {
   readonly allowUntestedVersion?: boolean;

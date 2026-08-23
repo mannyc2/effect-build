@@ -9,20 +9,20 @@ import {
   type NodeSeaToolNotFound,
   nodeSeaVersion,
   type PreflightRefusal,
-} from "./internal/v04/compatibility.js";
+} from "./internal/compatibility.js";
 import {
   type ExecutableFailure,
   type PrivateCandidate,
   publishExecutable,
   resolveDestination,
-} from "./internal/v04/executable.js";
+} from "./internal/executable.js";
 import {
   type CommandCompletion,
   type CommandSpawnFailed,
   type LayerOptions as InternalLayerOptions,
   type SelectedNode,
   selectNode,
-} from "./internal/v04/selected.js";
+} from "./internal/selected.js";
 
 type Main =
   | {

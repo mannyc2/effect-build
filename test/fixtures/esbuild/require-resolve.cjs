@@ -1,1 +1,0 @@
-require.resolve("./local.cjs");

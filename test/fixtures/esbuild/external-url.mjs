@@ -1,1 +1,0 @@
-import "https://example.invalid/dependency.js";
