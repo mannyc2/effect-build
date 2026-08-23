@@ -18,11 +18,10 @@ afterAll(async () => {
 
 const runScoped = <A, E>(
   effect: Effect.Effect<A, E, EsbuildContext.Esbuild | Scope.Scope>,
-  options?: EsbuildContext.LayerOptions,
 ): Promise<Exit.Exit<A, E>> =>
   Effect.runPromiseExit(
     Effect.scoped(effect).pipe(
-      Effect.provide(EsbuildContext.layer(options)),
+      Effect.provide(EsbuildContext.layer),
       Effect.provide(NodeServices.layer),
     ) as Effect.Effect<A, E>,
   );
@@ -52,32 +51,7 @@ const memoryInput = (entry: string, plugins: readonly import("esbuild").Plugin[]
   plugins: [...plugins],
 });
 
-describe("staged 0.4 esbuild Context", () => {
-  it("refuses make with SupportUnknown until a reviewed key exists", async () => {
-    const entry = join(root, "support-unknown-entry.ts");
-    await writeFile(entry, "export const x = 1;\n");
-    const exit = await runScoped(EsbuildContext.make(memoryInput(entry)));
-    const failure = failureOf(exit) as EsbuildContext.ContextError;
-    expect(failure._tag).toBe("SupportUnknown");
-    if (failure._tag === "SupportUnknown") {
-      expect(failure.overrideAvailable).toBe(true);
-      expect(failure.operation.operation).toBe("context-memory");
-    }
-  });
-
-  it("fails typed preflight when write is missing", async () => {
-    const exit = await runScoped(
-      EsbuildContext.make({ bundle: true } as unknown as EsbuildContext.Options),
-      { allowUntestedVersion: true },
-    );
-    const failure = failureOf(exit) as EsbuildContext.ContextError;
-    expect(failure._tag).toBe("InvalidOptions");
-    if (failure._tag === "InvalidOptions") {
-      expect(failure.operation).toBe("make");
-      expect(failure.reason).toBe("write-must-be-explicitly-false");
-    }
-  });
-
+describe("esbuild Context", () => {
   it("coalesces concurrent rebuilds exactly as esbuild 0.28.2", async () => {
     const entry = join(root, "coalesce-entry.ts");
     await writeFile(entry, 'export const race = "v1";\n');
@@ -111,7 +85,6 @@ describe("staged 0.4 esbuild Context", () => {
         const results = [yield* Fiber.join(first), yield* Fiber.join(second)];
         return results.map((result) => result.outputFiles.length);
       }),
-      { allowUntestedVersion: true },
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) expect(exit.value).toEqual([1, 1]);
@@ -153,13 +126,12 @@ describe("staged 0.4 esbuild Context", () => {
         const canceled = yield* Fiber.join(active);
         expect(Exit.isFailure(canceled)).toBe(true);
         const failure = failureOf(canceled) as EsbuildContext.ContextError;
-        expect(failure._tag).toBe("ProviderBuildFailure");
-        if (failure._tag === "ProviderBuildFailure") expect(failure.operation).toBe("rebuild");
+        expect(failure._tag).toBe("EsbuildFailed");
+        expect(failure.operation).toBe("rebuild");
         delay = false;
         const recovered = yield* context.rebuild;
         return recovered.outputFiles.length;
       }),
-      { allowUntestedVersion: true },
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) expect(exit.value).toBe(1);
@@ -185,7 +157,6 @@ describe("staged 0.4 esbuild Context", () => {
         const result = yield* context.rebuild;
         return result.outputFiles.length;
       }),
-      { allowUntestedVersion: true },
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     await waitFor(() => disposeObserved === 1, "Scope close did not dispose the native context exactly once");
@@ -193,15 +164,15 @@ describe("staged 0.4 esbuild Context", () => {
     expect(Exit.isSuccess(postDispose)).toBe(true);
     if (Exit.isSuccess(postDispose)) {
       const failure = failureOf(postDispose.value) as EsbuildContext.ContextError;
-      expect(failure._tag).toBe("ProviderBuildFailure");
-      if (failure._tag === "ProviderBuildFailure") expect(failure.operation).toBe("rebuild");
+      expect(failure._tag).toBe("EsbuildFailed");
+      expect(failure.operation).toBe("rebuild");
     }
     const postWatch = await Effect.runPromiseExit(leaked!.watch());
     const postServe = await Effect.runPromiseExit(leaked!.serve({ port: 0 }));
     expect(Exit.isFailure(postWatch)).toBe(true);
     expect(Exit.isFailure(postServe)).toBe(true);
-    expect((failureOf(postWatch) as EsbuildContext.ContextError)._tag).toBe("ProviderContextFailure");
-    expect((failureOf(postServe) as EsbuildContext.ContextError)._tag).toBe("ProviderContextFailure");
+    expect((failureOf(postWatch) as EsbuildContext.ContextError)._tag).toBe("EsbuildFailed");
+    expect((failureOf(postServe) as EsbuildContext.ContextError)._tag).toBe("EsbuildFailed");
   });
 
   it("finalization does not await delayed async onDispose work, which still completes later", async () => {
@@ -228,7 +199,6 @@ describe("staged 0.4 esbuild Context", () => {
         const result = yield* context.rebuild;
         return result.outputFiles.length;
       }),
-      { allowUntestedVersion: true },
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     await waitFor(() => cleanupStarted, "native dispose did not schedule the delayed plugin cleanup");

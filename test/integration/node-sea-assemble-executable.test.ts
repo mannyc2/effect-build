@@ -1,118 +1,87 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit } from "effect";
-import { execFile } from "node:child_process";
+import { Effect } from "effect";
+import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
-import type { AbsolutePath } from "../../packages/effect-build/src/Artifact.js";
+import * as Target from "../../packages/effect-build/src/Target.js";
 
 const execute = promisify(execFile);
 const fixture = new URL("../fixtures/tools/node-sea/", import.meta.url).pathname;
-let root = "";
-let executable = "";
 
-const osReleaseValue = (source: string, key: string): string | undefined => {
-  const line = source.split("\n").find((entry) => entry.startsWith(`${key}=`));
-  if (line === undefined) return undefined;
-  const value = line.slice(key.length + 1);
-  return value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+const builder = process.env.EFFECT_BUILD_NODE ?? "node";
+const seaCapable = (): boolean => {
+  try {
+    const version = execFileSync(builder, ["--version"], { encoding: "utf8" }).trim().replace(/^v/, "");
+    const [major, minor] = version.split(".").map((part) => Number.parseInt(part, 10));
+    return (major ?? 0) > 26 || ((major ?? 0) === 26 && (minor ?? 0) >= 7);
+  } catch {
+    return false;
+  }
 };
+const enabled = seaCapable();
+let root = "";
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-node-sea-real-"));
-  executable = process.env.PLAN043_NODE_EXECUTABLE ?? "";
-  if (!isAbsolute(executable)) throw new Error("PLAN043_NODE_EXECUTABLE must be absolute");
-  await access(executable, constants.X_OK);
-  if (process.platform !== "linux" || process.arch !== "x64") {
-    throw new Error("Plan 043 integration requires a Linux x64 runner");
-  }
-  const release = await readFile("/etc/os-release", "utf8");
-  if (osReleaseValue(release, "ID") !== "ubuntu" || osReleaseValue(release, "VERSION_ID") !== "24.04") {
-    throw new Error("Plan 043 integration requires Ubuntu 24.04");
-  }
-  const version = (await execute(executable, ["--version"])).stdout.trim().replace(/^v/, "");
-  if (version !== "26.7.0") throw new Error(`Plan 043 requires Node 26.7.0, received ${version}`);
 });
 
 afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const run = <A, E>(effect: Effect.Effect<A, E, AssembleExecutable.Assembler>, allowUntestedVersion = true) =>
+const run = <A, E>(effect: Effect.Effect<A, E, AssembleExecutable.Assembler>) =>
   Effect.runPromise(
     effect.pipe(
-      Effect.provide(AssembleExecutable.layer({
-        builderExecutable: executable as AbsolutePath,
-        allowUntestedVersion,
-      })),
+      Effect.provide(AssembleExecutable.layer(
+        process.env.EFFECT_BUILD_NODE === undefined ? {} : { builderExecutable: process.env.EFFECT_BUILD_NODE },
+      )),
       Effect.provide(NodeServices.layer),
     ),
   );
 
-describe.sequential("real staged 0.4 Node SEA AssembleExecutable", () => {
-  it("remains fail-closed by default on the admitted exact coordinate", async () => {
-    const exit = await Effect.runPromiseExit(
-      AssembleExecutable.assembleExecutable({
-        main: { _tag: "File", path: join(fixture, "main.cjs"), format: "commonjs" },
-        outfile: join(root, "default-app"),
-        observation: "unhashed",
-      }).pipe(
-        Effect.provide(AssembleExecutable.layer({ builderExecutable: executable as AbsolutePath })),
-        Effect.provide(NodeServices.layer),
-      ),
-    );
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      const error = Cause.findErrorOption(exit.cause);
-      expect(error._tag).toBe("Some");
-      if (error._tag === "Some") expect(error.value).toMatchObject({ _tag: "SupportUnknown" });
-    }
-  }, 120_000);
-
-  it("assembles, validates, hashes, publishes, and executes CJS and ESM asset mains", async () => {
-    const cjsOutfile = join(root, "cjs-app");
-    const cjs = await run(AssembleExecutable.assembleExecutable({
+describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
+  it("assembles, hashes, publishes, and executes a CJS file main", async () => {
+    const outfile = join(root, "cjs-app");
+    const artifact = await run(AssembleExecutable.assembleExecutable({
       main: { _tag: "File", path: join(fixture, "main.cjs"), format: "commonjs" },
-      outfile: cjsOutfile,
-      observation: "hashed",
+      outfile,
     }));
-    const cjsBytes = await readFile(cjsOutfile);
-    expect(cjs).toMatchObject({
-      _tag: "HashedExecutable",
-      path: cjsOutfile,
-      bytes: String(cjsBytes.byteLength),
-      digest: { value: createHash("sha256").update(cjsBytes).digest("hex") },
-      provider: "node-sea",
-      runtime: { name: "node", version: "26.7.0" },
-      target: "linux-x64-gnu",
-      nativeFormat: "elf",
-      publication: { commit: "same-parent-rename", committed: true },
+    const bytes = await readFile(outfile);
+    expect(artifact).toMatchObject({
+      _tag: "Executable",
+      path: outfile,
+      bytes: bytes.byteLength,
+      target: Target.host(),
     });
-    expect((await execute(cjsOutfile, [])).stdout).toBe("node-sea-cjs-ok\n");
+    expect(artifact.tool.name).toBe("node");
+    expect(artifact.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+    expect((await execute(outfile, [])).stdout).toBe("node-sea-cjs-ok\n");
+  }, 300_000);
 
-    const esmOutfile = join(root, "esm-app");
-    const esm = await run(AssembleExecutable.assembleExecutable({
+  it("assembles an ESM main with embedded assets", async () => {
+    const outfile = join(root, "esm-app");
+    const artifact = await run(AssembleExecutable.assembleExecutable({
       main: { _tag: "File", path: join(fixture, "main.mjs"), format: "module" },
-      outfile: esmOutfile,
-      observation: "unhashed",
-      assets: [{ key: "message", path: join(fixture, "message.txt") }],
+      outfile,
+      hash: false,
+      assets: { message: join(fixture, "message.txt") },
       disableExperimentalSEAWarning: true,
     }));
-    expect(esm).toMatchObject({
-      _tag: "UnhashedExecutable",
-      path: esmOutfile,
-      provider: "node-sea",
-      runtime: { name: "node", version: "26.7.0" },
-      target: "linux-x64-gnu",
-      nativeFormat: "elf",
-      publication: { commit: "same-parent-rename", committed: true },
-    });
-    expect("digest" in esm).toBe(false);
-    expect((await execute(esmOutfile, [])).stdout).toBe("node-sea-asset-ok\n");
-  }, 180_000);
+    expect("sha256" in artifact).toBe(false);
+    const completion = await execute(outfile, []);
+    expect(completion.stdout).toContain("node-sea-esm-ok");
+  }, 300_000);
+
+  it("surfaces node diagnostics as ToolFailed for a broken main", async () => {
+    await expect(run(AssembleExecutable.assembleExecutable({
+      main: { _tag: "Bytes", contents: new TextEncoder().encode("this is not (javascript"), format: "commonjs" },
+      outfile: join(root, "broken"),
+      hash: false,
+    }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "node" });
+  }, 300_000);
 });

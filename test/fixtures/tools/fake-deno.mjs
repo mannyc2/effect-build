@@ -1,38 +1,12 @@
 #!/usr/bin/env node
-import { appendFile, chmod, realpath, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { appendFile, chmod, writeFile } from "node:fs/promises";
 
 const argv = process.argv.slice(2);
 
-if (argv[0] === "eval") {
-  if (process.env.FAKE_DENO_PROBE_LOG !== undefined) {
-    await writeFile(process.env.FAKE_DENO_PROBE_LOG, JSON.stringify(argv));
-  }
-  process.stdout.write(JSON.stringify({
-    path: await realpath(process.argv[1]),
-    version: process.env.FAKE_DENO_VERSION ?? "2.9.3",
-    revision: process.env.FAKE_DENO_REVISION ?? "release:2.9.3",
-    os: process.env.FAKE_DENO_OS ?? "linux",
-    architecture: process.env.FAKE_DENO_ARCH ?? "x64",
-    distribution: process.env.FAKE_DENO_DISTRIBUTION ?? "ubuntu-24.04",
-    denort: process.env.DENORT_BIN ?? null,
-  }));
+if (argv[0] === "--version") {
+  const version = process.env.FAKE_DENO_VERSION ?? "2.9.3";
+  process.stdout.write(`deno ${version} (stable, release, x86_64-unknown-linux-gnu)\nv8 13.0\ntypescript 5.8\n`);
   process.exit(0);
-}
-
-if (argv[0] === "info" && argv[1] === "--json") {
-  process.stdout.write(JSON.stringify({
-    version: 1,
-    denoVersion: process.env.FAKE_DENO_VERSION ?? "2.9.3",
-    denoDir: process.env.FAKE_DENO_DIR ?? process.env.DENO_DIR ?? resolve(".fake-deno-dir"),
-  }));
-  process.exit(0);
-}
-
-if (argv[0] === "compile" && argv[1] === "--help") {
-  if (process.env.FAKE_DENO_CAPABILITY === "missing") process.stdout.write("deno compile --output\n");
-  else process.stdout.write("deno compile --target --output\n");
-  process.exit(process.env.FAKE_DENO_HELP_EXIT === "1" ? 1 : 0);
 }
 
 const log = process.env.FAKE_DENO_LOG;
@@ -64,8 +38,15 @@ if (process.env.FAKE_DENO_MODE === "missing") process.exit(0);
 const outputIndex = argv.indexOf("--output");
 if (outputIndex < 0 || argv[outputIndex + 1] === undefined) process.exit(22);
 let outfile = argv[outputIndex + 1];
+const hostTriple = process.platform === "darwin"
+  ? (process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin")
+  : process.platform === "win32"
+  ? (process.arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc")
+  : process.arch === "arm64"
+  ? "aarch64-unknown-linux-gnu"
+  : "x86_64-unknown-linux-gnu";
 const targetIndex = argv.indexOf("--target");
-const target = targetIndex < 0 ? "x86_64-unknown-linux-gnu" : argv[targetIndex + 1];
+const target = targetIndex < 0 ? hostTriple : argv[targetIndex + 1];
 if (target === "x86_64-pc-windows-msvc" || target === "aarch64-pc-windows-msvc") {
   if (!outfile.toLowerCase().endsWith(".exe")) outfile += ".exe";
 }
