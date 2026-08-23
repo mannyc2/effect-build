@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { appendFile, chmod, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const argv = process.argv.slice(2);
 
@@ -34,6 +35,30 @@ if (process.env.FAKE_DENO_MODE === "delay") {
 }
 
 if (process.env.FAKE_DENO_MODE === "missing") process.exit(0);
+
+if (argv[0] === "bundle") {
+  const outdirIndex = argv.indexOf("--outdir");
+  if (outdirIndex < 0 || argv[outdirIndex + 1] === undefined) process.exit(23);
+  const outdir = argv[outdirIndex + 1];
+  const entrypoints = [];
+  for (let index = 1; index < argv.length; index++) {
+    const value = argv[index];
+    if (value === "--outdir" || value === "--platform" || value === "--external") index++;
+    else if (!value.startsWith("--")) entrypoints.push(value);
+  }
+  if (entrypoints.length === 0) process.exit(23);
+  const sourcemap = argv.find((value) => value.startsWith("--sourcemap="))?.slice("--sourcemap=".length);
+  for (const entrypoint of entrypoints) {
+    const base = entrypoint.split("/").at(-1).replace(/\.(ts|tsx|jsx|mjs|cjs|js)$/, "");
+    await writeFile(join(outdir, `${base}.js`), `// bundled ${base}\nexport {};\n`);
+    if (sourcemap === "linked" || sourcemap === "external") await writeFile(join(outdir, `${base}.js.map`), "{}\n");
+  }
+  if (argv.includes("--code-splitting")) {
+    await mkdir(join(outdir, "chunks"), { recursive: true });
+    await writeFile(join(outdir, "chunks", "chunk-fake.js"), "export const shared = 1;\n");
+  }
+  process.exit(0);
+}
 
 const outputIndex = argv.indexOf("--output");
 if (outputIndex < 0 || argv[outputIndex + 1] === undefined) process.exit(22);
