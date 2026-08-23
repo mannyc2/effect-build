@@ -203,6 +203,7 @@ jobs:
           DENO_RESULT: ${{ needs.real-deno.result }}
           NODE_SEA_RESULT: ${{ needs.real-node-sea.result }}
           WINDOWS_RESULT: ${{ needs.windows-lifecycle.result }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gates="$(node -e 'process.stdout.write(JSON.stringify({"ordinary-ci": process.env.CANDIDATE_RESULT, "migration-ledger": process.env.CANDIDATE_RESULT, "packed-consumers": process.env.CANDIDATE_RESULT, "external-author-adapter": process.env.CANDIDATE_RESULT, "real-bun": process.env.BUN_RESULT, "real-deno": process.env.DENO_RESULT, "real-node-sea": process.env.NODE_SEA_RESULT, "windows-lifecycle": process.env.WINDOWS_RESULT}))')"
