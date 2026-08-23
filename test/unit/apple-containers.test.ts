@@ -1,5 +1,5 @@
-import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit, Layer, PlatformError, Sink, Stream } from "effect";
+import { NodeFileSystem, NodePath, NodeServices } from "@effect/platform-node";
+import { Cause, Effect, Exit, FileSystem, Layer, Path, PlatformError, Sink, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import {
   chmodSync,
@@ -46,16 +46,63 @@ type ToolName = "ditto" | "plutil" | "hdiutil" | "security" | "pkgbuild" | "pkgu
 interface FakeToolsOptions {
   readonly fail?: ToolName | "zip-extraction-mismatch";
   readonly identities?: string;
+  readonly destinationRace?: {
+    readonly kind: "file" | "tree";
+    readonly path: string;
+  };
 }
 
 interface FakeTools {
   readonly paths: Readonly<Record<ToolName, string>>;
   readonly invocations: readonly Invocation[];
   readonly platform: Layer.Layer<
-    | NodeServices.NodeServices
+    | FileSystem.FileSystem
+    | Path.Path
     | ChildProcessSpawner.ChildProcessSpawner
   >;
 }
+
+const fileSystemLayer = (
+  race: FakeToolsOptions["destinationRace"],
+): Layer.Layer<FileSystem.FileSystem> => {
+  if (race === undefined) return NodeFileSystem.layer;
+  return Layer.effect(
+    FileSystem.FileSystem,
+    Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      let destinationChecks = 0;
+      let raced = false;
+      const winRace = Effect.sync(() => {
+        if (raced) return;
+        raced = true;
+        if (race.kind === "file") writeFileSync(race.path, "concurrent destination\n");
+        else mkdirSync(race.path);
+      });
+      return {
+        ...fileSystem,
+        exists: (path) =>
+          fileSystem.exists(path).pipe(
+            Effect.flatMap((exists) => {
+              if (path !== race.path) return Effect.succeed(exists);
+              destinationChecks += 1;
+              if (!exists && destinationChecks === 2) {
+                return winRace.pipe(Effect.as(false));
+              }
+              return Effect.succeed(exists);
+            }),
+          ),
+        link: (fromPath, toPath) =>
+          toPath === race.path
+            ? winRace.pipe(Effect.andThen(fileSystem.link(fromPath, toPath)))
+            : fileSystem.link(fromPath, toPath),
+        makeDirectory: (path, options) =>
+          path === race.path
+            ? winRace.pipe(Effect.andThen(fileSystem.makeDirectory(path, options)))
+            : fileSystem.makeDirectory(path, options),
+      } satisfies FileSystem.FileSystem;
+    }),
+  ).pipe(Layer.provide(NodeFileSystem.layer));
+};
 
 const makeTools = (root: string, options: FakeToolsOptions = {}): FakeTools => {
   const toolRoot = mkdtempSync(join(root, "tools-"));
@@ -96,7 +143,10 @@ const makeTools = (root: string, options: FakeToolsOptions = {}): FakeTools => {
         if (options.fail === tool) return handle(`${tool} stdout`, `${tool} stderr`, 23);
 
         if (tool === "ditto") {
-          if (command.args[0] === "--rsrc") {
+          if (command.args[0] === "--norsrc") {
+            if (command.args.slice(0, 3).join(" ") !== "--norsrc --noextattr --noacl") {
+              throw new Error(`unexpected private ditto policy ${command.args.slice(0, 3).join(" ")}`);
+            }
             const source = command.args.at(-2)!;
             const destination = command.args.at(-1)!;
             cpSync(source, destination, { recursive: statSync(source).isDirectory(), preserveTimestamps: true });
@@ -145,8 +195,9 @@ const makeTools = (root: string, options: FakeToolsOptions = {}): FakeTools => {
   return {
     paths,
     invocations,
-    platform: Layer.merge(
-      NodeServices.layer,
+    platform: Layer.mergeAll(
+      fileSystemLayer(options.destinationRace),
+      NodePath.layer,
       Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
     ),
   };
@@ -258,6 +309,18 @@ describe("Apple container construction", () => {
       "ditto",
       "plutil",
     ]);
+    const privateCopies = tools.invocations.filter(({ tool, args }) => tool === "ditto" && args[0] === "--norsrc");
+    expect(privateCopies.length).toBeGreaterThan(0);
+    expect(privateCopies.map(({ args }) => args.slice(0, 3))).toEqual(
+      privateCopies.map(() => ["--norsrc", "--noextattr", "--noacl"]),
+    );
+    expect(
+      Exit.isSuccess(
+        await Effect.runPromiseExit(
+          Artifact.revalidate(first.result.artifact).pipe(Effect.provide(NodeServices.layer)),
+        ),
+      ),
+    ).toBe(true);
     expect(readFileSync(plist, "utf8")).toBe(expectedPlist);
     expect(readFileSync(executableCopy)).toEqual(readFileSync(first.executablePath));
     expect(statSync(executableCopy).mode & 0o777).toBe(0o751);
@@ -309,6 +372,27 @@ describe("Apple container construction", () => {
       tools,
     );
     expect(failure(traversal)).toMatchObject({ _tag: "AppleInputInvalid" });
+
+    const invalidMetadata = [
+      {
+        field: "bundleIdentifier",
+        request: { ...base, executable: inputs.executable, bundleIdentifier: "not a bundle id" },
+      },
+      { field: "version", request: { ...base, executable: inputs.executable, version: "1.2.3.4" } },
+      { field: "shortVersion", request: { ...base, executable: inputs.executable, shortVersion: "1.2" } },
+      {
+        field: "minimumSystemVersion",
+        request: { ...base, executable: inputs.executable, minimumSystemVersion: "macOS 13" },
+      },
+    ] as const;
+    for (const invalid of invalidMetadata) {
+      const exit = await run(
+        AppBundle.create(invalid.request),
+        AppBundle.layer({ dittoPath: tools.paths.ditto, plutilPath: tools.paths.plutil }),
+        tools,
+      );
+      expect(failure(exit)).toMatchObject({ _tag: "AppleInputInvalid", field: invalid.field });
+    }
     expect(tools.invocations).toEqual([]);
   });
 
@@ -405,6 +489,50 @@ describe("Apple container construction", () => {
     expect(stagingEntries(root)).toEqual([]);
   });
 
+  it("atomically refuses file and tree destinations won by a concurrent publisher", async () => {
+    const treeRoot = makeRoot();
+    const treeDestination = join(treeRoot, "Raced.app");
+    const treeTools = makeTools(treeRoot, {
+      destinationRace: { kind: "tree", path: treeDestination },
+    });
+    const treeInputs = await makeInputs(treeRoot);
+    const treeExit = await run(
+      AppBundle.create({
+        executable: treeInputs.executable,
+        outfile: treeDestination,
+        bundleIdentifier: "com.example.raced",
+        bundleName: "Raced",
+        executableName: "raced",
+        version: "1",
+        shortVersion: "1.0.0",
+        minimumSystemVersion: "13.0",
+      }),
+      AppBundle.layer({ dittoPath: treeTools.paths.ditto, plutilPath: treeTools.paths.plutil }),
+      treeTools,
+    );
+    expect(failure(treeExit)).toMatchObject({ _tag: "ArtifactPublishFailed" });
+    expect(readdirSync(treeDestination)).toEqual([]);
+    expect(treeTools.invocations.length).toBeGreaterThan(0);
+    expect(stagingEntries(treeRoot)).toEqual([]);
+
+    const fileRoot = makeRoot();
+    const appTools = makeTools(fileRoot);
+    const app = await createApp(fileRoot, appTools);
+    const fileDestination = join(fileRoot, "Raced.zip");
+    const fileTools = makeTools(fileRoot, {
+      destinationRace: { kind: "file", path: fileDestination },
+    });
+    const fileExit = await run(
+      Zip.create({ app: app.result.artifact, outfile: fileDestination }),
+      Zip.layer({ dittoPath: fileTools.paths.ditto }),
+      fileTools,
+    );
+    expect(failure(fileExit)).toMatchObject({ _tag: "ArtifactPublishFailed" });
+    expect(readFileSync(fileDestination, "utf8")).toBe("concurrent destination\n");
+    expect(fileTools.invocations.length).toBeGreaterThan(0);
+    expect(stagingEntries(fileRoot)).toEqual([]);
+  });
+
   it("creates a ZIP with ditto and proves its extracted app digest", async () => {
     const root = makeRoot();
     const tools = makeTools(root);
@@ -421,7 +549,7 @@ describe("Apple container construction", () => {
     expect(exit.value.provenance.inputs).toEqual([Artifact.reference(app.result.artifact)]);
     expect(exit.value.provenance.output).toEqual(Artifact.reference(exit.value.artifact));
     expect(exit.value.provenance.tools.map(({ tool }) => tool.name)).toEqual(["ditto", "ditto", "ditto"]);
-    const zipInvocations = tools.invocations.filter(({ tool, args }) => tool === "ditto" && args[0] !== "--rsrc");
+    const zipInvocations = tools.invocations.filter(({ tool, args }) => tool === "ditto" && args[0] !== "--norsrc");
     expect(zipInvocations).toHaveLength(2);
     expect(zipInvocations[0]?.args.slice(0, 3)).toEqual(["-c", "-k", "--keepParent"]);
     expect(zipInvocations[0]?.args.at(-2)).not.toBe(app.outfile);

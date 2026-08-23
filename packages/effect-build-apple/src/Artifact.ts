@@ -1,4 +1,5 @@
 import { Cause, Effect, FileSystem, Path, Schema } from "effect";
+import * as ArtifactBinding from "./internal/ArtifactBinding.js";
 import * as Sha256 from "./internal/Sha256.js";
 
 export type ArtifactKind =
@@ -164,7 +165,6 @@ export class AppleToolFailed extends Schema.TaggedError<AppleToolFailed>()("Appl
 export type ArtifactError = ArtifactObservationFailed | UnauthenticatedArtifact | ArtifactChanged;
 export type ToolError = AppleToolUnavailable | AppleToolChanged | AppleToolFailed;
 
-const authenticated = new WeakSet<object>();
 const fileKinds = new Set<FileArtifactKind>([
   "mach-o",
   "entitlements",
@@ -187,18 +187,6 @@ const mapFailureCause = <A, E, R>(
     (cause) =>
       Effect.failCause(Cause.map(cause, (error) => new ArtifactObservationFailed({ path, reason: describe(error) }))),
   );
-
-const mintFile = <K extends FileArtifactKind>(kind: K, path: string, identity: FileIdentity): FileArtifact<K> => {
-  const artifact = Object.freeze({ _tag: "FileArtifact" as const, kind, path, identity }) as FileArtifact<K>;
-  authenticated.add(artifact);
-  return artifact;
-};
-
-const mintTree = <K extends TreeArtifactKind>(kind: K, path: string, identity: TreeIdentity): TreeArtifact<K> => {
-  const artifact = Object.freeze({ _tag: "TreeArtifact" as const, kind, path, identity }) as TreeArtifact<K>;
-  authenticated.add(artifact);
-  return artifact;
-};
 
 const observeFileIdentity = (
   canonical: string,
@@ -312,7 +300,7 @@ export const observeFile = <K extends FileArtifactKind>(
       return yield* new AppleInputInvalid({ operation: "Artifact.observeFile", field: "kind", reason: kind });
     }
     const canonical = yield* canonicalPath(input);
-    return mintFile(kind, canonical, yield* observeFileIdentity(canonical));
+    return ArtifactBinding.file(kind, canonical, yield* observeFileIdentity(canonical));
   });
 
 export const observeTree = <K extends TreeArtifactKind>(
@@ -324,7 +312,7 @@ export const observeTree = <K extends TreeArtifactKind>(
       return yield* new AppleInputInvalid({ operation: "Artifact.observeTree", field: "kind", reason: kind });
     }
     const canonical = yield* canonicalPath(input);
-    return mintTree(kind, canonical, yield* observeTreeIdentity(canonical));
+    return ArtifactBinding.tree(kind, canonical, yield* observeTreeIdentity(canonical));
   });
 
 export const isFileArtifact = (artifact: Artifact): artifact is FileArtifact => artifact._tag === "FileArtifact";
@@ -345,7 +333,7 @@ export const revalidate = (
   artifact: Artifact,
 ): Effect.Effect<void, ArtifactError | AppleInputInvalid, ArtifactServices> =>
   Effect.gen(function*() {
-    if (!authenticated.has(artifact)) return yield* new UnauthenticatedArtifact({ path: artifact.path });
+    if (!ArtifactBinding.has(artifact)) return yield* new UnauthenticatedArtifact({ path: artifact.path });
     const observed = artifact._tag === "FileArtifact"
       ? yield* observeFile(artifact.kind, artifact.path)
       : yield* observeTree(artifact.kind, artifact.path);

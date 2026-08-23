@@ -51,6 +51,7 @@ interface Invocation {
 
 interface HarnessOptions {
   readonly codesignFailure?: boolean;
+  readonly codesignNoMutation?: boolean;
   readonly delayCodesign?: boolean;
   readonly replaceCodesignAfterSecurity?: boolean;
 }
@@ -105,6 +106,9 @@ const makeHarness = (options: HarnessOptions = {}) => {
         );
       }
       if (command.command === tools.ditto) {
+        if (command.args.slice(0, 3).join(" ") !== "--norsrc --noextattr --noacl") {
+          throw new Error(`unexpected private ditto policy ${command.args.slice(0, 3).join(" ")}`);
+        }
         const source = command.args.at(-2)!;
         const destination = command.args.at(-1)!;
         cpSync(source, destination, { recursive: true, dereference: false, preserveTimestamps: true });
@@ -118,11 +122,13 @@ const makeHarness = (options: HarnessOptions = {}) => {
           startedResolve();
           return handle("", "", 0, true);
         }
-        const target = command.args.at(-1)!;
-        signature += 1;
-        if (existsSync(target)) {
-          if (statSync(target).isDirectory()) writeFileSync(join(target, `.signature-${signature}`), "signed\n");
-          else appendFileSync(target, `signature-${signature}\n`);
+        if (options.codesignNoMutation !== true) {
+          const target = command.args.at(-1)!;
+          signature += 1;
+          if (existsSync(target)) {
+            if (statSync(target).isDirectory()) writeFileSync(join(target, `.signature-${signature}`), "signed\n");
+            else appendFileSync(target, `signature-${signature}\n`);
+          }
         }
       }
       return handle("", "", 0);
@@ -247,6 +253,7 @@ describe("Apple CodeSign", () => {
     expect(exit.value.artifact.identity.digest.value).not.toBe(input.identity.digest.value);
     expect(exit.value.provenance.inputs).toHaveLength(2);
     expect(exit.value.provenance.output.digest).toEqual(exit.value.artifact.identity.digest);
+    expect(Exit.isSuccess(await runArtifact(Artifact.revalidate(exit.value.artifact)))).toBe(true);
 
     const security = harness.invocations.find(({ command }) => command === harness.tools.security)!;
     expect(security.args).toEqual(["find-identity", "-v", "-p", "codesigning"]);
@@ -267,6 +274,37 @@ describe("Apple CodeSign", () => {
     const verify = harness.invocations.find(({ args }) => args[0] === "--verify")!;
     expect(verify.args.slice(0, 3)).toEqual(["--verify", "--strict", "--verbose=2"]);
     expect(verify.args).not.toContain("--deep");
+    expect(
+      harness.invocations
+        .filter(({ command }) => command === harness.tools.ditto)
+        .every(({ args }) => args.slice(0, 3).join(" ") === "--norsrc --noextattr --noacl"),
+    ).toBe(true);
+  });
+
+  it("rejects a successful signing tool that leaves the authenticated identity unchanged", async () => {
+    const harness = makeHarness({ codesignNoMutation: true });
+    const inputPath = join(harness.root, "input");
+    const destination = join(harness.root, "signed");
+    writeFileSync(inputPath, "unsigned\n");
+    chmodSync(inputPath, 0o755);
+    const input = await Effect.runPromise(
+      Artifact.observeFile("mach-o", inputPath).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    const exit = await harness.run(CodeSign.sign({
+      input,
+      destination,
+      identity: identity(),
+      plan: [{ path: ".", identifier: "com.example.tool", hardenedRuntime: false }],
+    }));
+
+    expect(failure(exit)).toMatchObject({
+      _tag: "ArtifactPublishFailed",
+      destination,
+      reason: expect.stringContaining("unchanged authenticated output identity"),
+    });
+    expect(existsSync(destination)).toBe(false);
+    expect(Exit.isSuccess(await runArtifact(Artifact.revalidate(input)))).toBe(true);
   });
 
   it("executes an app-bundle plan in exact inside-out order and verifies only after signing", async () => {

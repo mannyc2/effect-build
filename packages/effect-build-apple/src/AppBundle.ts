@@ -44,6 +44,10 @@ interface Service {
 export class Creator extends Context.Service<Creator, Service>()("effect-build-apple/AppBundle/Creator") {}
 
 const operation = "app-bundle.create";
+const bundleIdentifierPattern = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u;
+const bundleVersionPattern = /^(?:0|[1-9]\d{0,3})(?:\.(?:0|[1-9]\d?)){0,2}$/u;
+const shortVersionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
+const systemVersionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/u;
 const containsXmlControl = (value: string): boolean =>
   [...value].some((character) => {
     const codePoint = character.codePointAt(0)!;
@@ -112,6 +116,11 @@ const validateInput = (
     }
     if (!input.outfile.endsWith(".app")) yield* Effect.fail(failInput("outfile", "must end in .app"));
     yield* validateText("bundleIdentifier", input.bundleIdentifier);
+    if (!bundleIdentifierPattern.test(input.bundleIdentifier)) {
+      yield* Effect.fail(
+        failInput("bundleIdentifier", "must be a period-separated identifier using letters, digits, or hyphens"),
+      );
+    }
     yield* validateText("bundleName", input.bundleName);
     yield* validateText("executableName", input.executableName);
     if (
@@ -121,8 +130,19 @@ const validateInput = (
       yield* Effect.fail(failInput("executableName", "must be one file name"));
     }
     yield* validateText("version", input.version);
+    if (!bundleVersionPattern.test(input.version)) {
+      yield* Effect.fail(failInput("version", "must be one to three release integers in Apple CFBundleVersion form"));
+    }
     yield* validateText("shortVersion", input.shortVersion);
+    if (!shortVersionPattern.test(input.shortVersion)) {
+      yield* Effect.fail(failInput("shortVersion", "must be exactly three period-separated release integers"));
+    }
     yield* validateText("minimumSystemVersion", input.minimumSystemVersion);
+    if (!systemVersionPattern.test(input.minimumSystemVersion)) {
+      yield* Effect.fail(
+        failInput("minimumSystemVersion", "must be a two- or three-component macOS release version"),
+      );
+    }
     for (const resource of input.resources ?? []) {
       if (
         (!Artifact.isFileArtifact(resource.artifact) && !Artifact.isTreeArtifact(resource.artifact))
@@ -222,7 +242,7 @@ const makeService = (
             toolInvocations.push(
               yield* Tool.runOrFail({
                 tool: ditto,
-                args: ["--rsrc", "--extattr", "--acl", executableSnapshot.path, executableDestination],
+                args: ["--norsrc", "--noextattr", "--noacl", executableSnapshot.path, executableDestination],
               }),
             );
             const executableStat = yield* fileSystem.stat(executableDestination).pipe(
@@ -249,7 +269,7 @@ const makeService = (
               toolInvocations.push(
                 yield* Tool.runOrFail({
                   tool: ditto,
-                  args: ["--rsrc", "--extattr", "--acl", snapshot.path, destination],
+                  args: ["--norsrc", "--noextattr", "--noacl", snapshot.path, destination],
                 }),
               );
             }

@@ -1,4 +1,4 @@
-import { Cause, Effect, FileSystem, Path, Scope } from "effect";
+import { Cause, Effect, FileSystem, Option, Path, Scope } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
   AppleInputInvalid,
@@ -20,6 +20,7 @@ import {
   type TreeArtifact,
   type TreeArtifactKind,
 } from "../Artifact.js";
+import * as ArtifactBinding from "./ArtifactBinding.js";
 import * as Tool from "./Tool.js";
 
 export type LifecycleError =
@@ -126,7 +127,7 @@ const copyTo = <A extends Artifact>(
     yield* revalidate(input);
     const invocation = yield* Tool.runOrFail({
       tool: copyTool,
-      args: ["--rsrc", "--extattr", "--acl", input.path, target],
+      args: ["--norsrc", "--noextattr", "--noacl", input.path, target],
     });
     const copied = yield* observeLike(input, target);
     if (!sameIdentity(input, copied)) {
@@ -179,26 +180,81 @@ const copyInputs = (
     return { artifacts, tools };
   });
 
+interface DirectoryReservation {
+  readonly device: number;
+  readonly inode: number;
+}
+
+const directoryReservation = (
+  target: string,
+): Effect.Effect<DirectoryReservation, ArtifactPublishFailed, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const information = yield* mapPublishFailure(fileSystem.stat(target), target, "inspect tree reservation");
+    if (information.type !== "Directory" || Option.isNone(information.ino)) {
+      return yield* new ArtifactPublishFailed({
+        destination: target,
+        reason: "tree reservation did not resolve to an identifiable directory",
+      });
+    }
+    return { device: information.dev, inode: information.ino.value };
+  });
+
+const isReservation = (
+  target: string,
+  reservation: DirectoryReservation,
+): Effect.Effect<boolean, never, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const information = yield* Effect.option(fileSystem.stat(target));
+    return information._tag === "Some"
+      && information.value.type === "Directory"
+      && Option.isSome(information.value.ino)
+      && information.value.dev === reservation.device
+      && information.value.ino.value === reservation.inode;
+  });
+
+const commitFile = <A extends FileArtifact>(
+  staged: A,
+  target: string,
+): Effect.Effect<A, ArtifactPublishFailed, FileSystem.FileSystem> =>
+  Effect.uninterruptible(
+    Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      yield* mapPublishFailure(fileSystem.link(staged.path, target), target, "commit file link");
+      return ArtifactBinding.relocate(staged, target);
+    }),
+  );
+
+const commitTree = <A extends TreeArtifact>(
+  staged: A,
+  target: string,
+): Effect.Effect<A, ArtifactPublishFailed, FileSystem.FileSystem> =>
+  Effect.uninterruptible(
+    Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      yield* mapPublishFailure(fileSystem.makeDirectory(target), target, "reserve tree destination");
+      const reservation = yield* directoryReservation(target);
+      const committed = yield* Effect.exit(
+        mapPublishFailure(fileSystem.rename(staged.path, target), target, "commit tree rename"),
+      );
+      if (committed._tag === "Failure") {
+        if (yield* isReservation(target, reservation)) {
+          yield* Effect.ignore(fileSystem.remove(target));
+        }
+        return yield* Effect.failCause(committed.cause);
+      }
+      return ArtifactBinding.relocate(staged, target);
+    }),
+  );
+
 const commit = <A extends Artifact>(
   staged: A,
   target: string,
-): Effect.Effect<A, LifecycleError, ArtifactServices> =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem;
-    if (yield* mapPublishFailure(fileSystem.exists(target), target, "inspect commit destination")) {
-      return yield* new ArtifactPublishFailed({ destination: target, reason: "destination appeared before commit" });
-    }
-    yield* mapPublishFailure(fileSystem.rename(staged.path, target), target, "commit rename");
-    const committed = yield* observeLike(staged, target);
-    if (!sameIdentity(staged, committed)) {
-      return yield* new ArtifactChanged({
-        path: target,
-        expected: JSON.stringify(staged.identity),
-        observed: JSON.stringify(committed.identity),
-      });
-    }
-    return committed;
-  });
+): Effect.Effect<A, ArtifactPublishFailed, FileSystem.FileSystem> =>
+  staged._tag === "FileArtifact"
+    ? commitFile(staged, target) as Effect.Effect<A, ArtifactPublishFailed, FileSystem.FileSystem>
+    : commitTree(staged, target) as Effect.Effect<A, ArtifactPublishFailed, FileSystem.FileSystem>;
 
 const publishConstructed = <A extends Artifact, E, R>(
   options: ConstructedOptions<ArtifactKindForStorage, E, R>,
@@ -272,6 +328,12 @@ const publishMutation = <A extends Artifact, E, R>(
       yield* revalidate(options.input);
       for (const input of support) yield* revalidate(input);
       const observed = yield* observeLike(options.input, stagedCopy.artifact.path);
+      if (sameIdentity(options.input, observed)) {
+        return yield* new ArtifactPublishFailed({
+          destination: target,
+          reason: `${options.operation} produced an unchanged authenticated output identity`,
+        });
+      }
       const committed = yield* commit(observed, target);
       return {
         artifact: committed,
