@@ -5,20 +5,47 @@
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
-  "keywords": ["effect", "esbuild", "bundle", "javascript"],
+  "keywords": [
+    "effect",
+    "esbuild",
+    "bundle",
+    "javascript"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mannyc2/effect-build.git",
     "directory": "packages/effect-build-esbuild"
   },
-  "bugs": { "url": "https://github.com/mannyc2/effect-build/issues" },
+  "bugs": {
+    "url": "https://github.com/mannyc2/effect-build/issues"
+  },
   "homepage": "https://github.com/mannyc2/effect-build#readme",
-  "files": ["dist", "README.md", "LICENSE"],
-  "publishConfig": { "access": "public", "provenance": true },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./Build": { "types": "./dist/Build.d.ts", "import": "./dist/Build.js" },
-    "./Context": { "types": "./dist/Context.d.ts", "import": "./dist/Context.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./Build": {
+      "types": "./dist/Build.d.ts",
+      "import": "./dist/Build.js"
+    },
+    "./Context": {
+      "types": "./dist/Context.d.ts",
+      "import": "./dist/Context.js"
+    },
+    "./Watch": {
+      "types": "./dist/Watch.d.ts",
+      "import": "./dist/Watch.js"
+    }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",
@@ -28,6 +55,10 @@
     "effect-build": "workspace:^",
     "esbuild": "0.28.2"
   },
-  "peerDependencies": { "effect": ">=4.0.0-beta.104 <4.1.0-0" },
-  "devDependencies": { "effect": "4.0.0-rc.108" }
+  "peerDependencies": {
+    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+  },
+  "devDependencies": {
+    "effect": "4.0.0-rc.108"
+  }
 }

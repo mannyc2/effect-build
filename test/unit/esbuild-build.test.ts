@@ -69,6 +69,34 @@ describe("esbuild Build", () => {
     expect(failure.message).toContain("esbuild build failed");
   });
 
+  it("transforms one file in memory and keeps typed access to the native result", async () => {
+    const exit = await runWith(
+      Build.transform("const answer: number = 42; export { answer };", { loader: "ts", minify: true }),
+    );
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value.code).toContain("42");
+      expect(exit.value.code).not.toContain(": number");
+      expect(exit.value.warnings).toEqual([]);
+    }
+    const failed = await runWith(Build.transform("const const =", { loader: "ts", logLevel: "silent" }));
+    const failure = failureOf(failed) as Build.EsbuildFailed;
+    expect(failure._tag).toBe("EsbuildFailed");
+    expect(failure.operation).toBe("transform");
+    expect(failure.errors.length).toBeGreaterThan(0);
+  });
+
+  it("renders a metafile report through esbuild's own analyzer", async () => {
+    const exit = await runWith(
+      Effect.gen(function*() {
+        const result = yield* Build.build({ ...memoryInput("export const analyzed = 1;"), metafile: true });
+        return yield* Build.analyzeMetafile(result.metafile, { verbose: false });
+      }),
+    );
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) expect(exit.value).toContain("stdin");
+  });
+
   it("stops only the Effect waiter on interruption while the provider and delayed plugin complete", async () => {
     const entry = join(root, "one-shot-interruption-entry.ts");
     await writeFile(entry, 'export const oneShot = "continued";\n');

@@ -17,6 +17,18 @@ Build.build({ bundle: true, write: true });
 // @ts-expect-error!
 Build.build({ bundle: true });
 
+const transformed = Build.transform("let a = 1", { loader: "ts" });
+export type _Transform = Assert<
+  Same<
+    typeof transformed,
+    Effect.Effect<esbuild.TransformResult<{ readonly loader: "ts" }>, Build.EsbuildFailed, Build.Esbuild>
+  >
+>;
+
+declare const metafile: esbuild.Metafile;
+const analyzed = Build.analyzeMetafile(metafile, { verbose: true });
+export type _Analyze = Assert<Same<typeof analyzed, Effect.Effect<string, Build.EsbuildFailed, Build.Esbuild>>>;
+
 // The layer is a constant with no requirements and no failures.
 export type _Layer = Assert<Same<typeof Build.layer, Layer.Layer<Build.Esbuild>>>;
 
