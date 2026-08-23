@@ -1,6 +1,6 @@
 import { Cause, Config, Crypto, Effect, FileSystem, Option, Path, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import type { Executable, Tool } from "./Artifact.js";
+import type { Bundle, BundleFile, Executable, Tool } from "./Artifact.js";
 import { PublishFailed, ToolFailed, ToolNotFound } from "./BuildError.js";
 import * as Target from "./Target.js";
 
@@ -319,5 +319,87 @@ export const publishExecutable = <E, R>(
         tool: options.tool,
         ...(sha256 === undefined ? {} : { sha256 }),
       };
+    }),
+  );
+
+export interface PublishBundleOptions<E, R> {
+  readonly tool: Tool;
+  readonly outdir: string;
+  readonly cwd?: string | undefined;
+  /** Record a SHA-256 digest on every artifact file. */
+  readonly hash: boolean;
+  /** Writes the bundle files into the private staged directory. */
+  readonly produce: (stagedDirectory: string) => Effect.Effect<void, E, R>;
+}
+
+/**
+ * Stages in a private same-parent temp directory, lets `produce` fill it, and
+ * commits every produced file into `outdir` with per-file renames — matching
+ * the native tools, which overwrite the files they emit and leave the rest of
+ * the directory alone.
+ */
+export const publishBundle = <E, R>(
+  options: PublishBundleOptions<E, R>,
+): Effect.Effect<
+  Bundle,
+  PublishFailed | E,
+  FileSystem.FileSystem | Path.Path | Crypto.Crypto | R
+> =>
+  Effect.scoped(
+    Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const crypto = yield* Crypto.Crypto;
+      const outdir = path.normalize(path.resolve(options.cwd ?? "", options.outdir));
+      const failWith = (reason: string) => new PublishFailed({ destination: outdir, reason });
+      yield* mapFailureCause(
+        fileSystem.makeDirectory(outdir, { recursive: true }),
+        (error) => failWith(`make-directory: ${describe(error)}`),
+      );
+      const staging = yield* mapFailureCause(
+        fileSystem.makeTempDirectoryScoped({ directory: path.dirname(outdir), prefix: ".effect-build-" }),
+        (error) => failWith(`make-staging: ${describe(error)}`),
+      );
+      yield* options.produce(staging);
+      const entries = yield* mapFailureCause(
+        fileSystem.readDirectory(staging, { recursive: true }),
+        (error) => failWith(`read-staging: ${describe(error)}`),
+      );
+      const produced: { readonly entry: string; readonly bytes: number }[] = [];
+      for (const entry of [...entries].sort()) {
+        const information = yield* mapFailureCause(
+          fileSystem.stat(path.join(staging, entry)),
+          (error) => failWith(`stat: ${describe(error)}`),
+        );
+        if (information.type === "File") produced.push({ entry, bytes: Number(information.size) });
+      }
+      if (produced.length === 0) {
+        return yield* Effect.fail(failWith("the tool did not produce any files in the staged directory"));
+      }
+      const files: BundleFile[] = [];
+      for (const { bytes, entry } of produced) {
+        const staged = path.join(staging, entry);
+        const destination = path.join(outdir, entry);
+        let sha256: string | undefined;
+        if (options.hash) {
+          const contents = yield* fileSystem.readFile(staged).pipe(
+            Effect.mapError((error) => failWith(`read: ${describe(error)}`)),
+          );
+          const digest = yield* crypto.digest("SHA-256", contents).pipe(
+            Effect.mapError(() => failWith("sha-256 digest unavailable")),
+          );
+          sha256 = hex(new Uint8Array(digest));
+        }
+        yield* mapFailureCause(
+          fileSystem.makeDirectory(path.dirname(destination), { recursive: true }),
+          (error) => failWith(`make-directory: ${describe(error)}`),
+        );
+        yield* mapFailureCause(
+          fileSystem.rename(staged, destination),
+          (error) => failWith(`rename: ${describe(error)}`),
+        );
+        files.push({ path: destination, bytes, ...(sha256 === undefined ? {} : { sha256 }) });
+      }
+      return { _tag: "Bundle" as const, outdir, files, tool: options.tool };
     }),
   );

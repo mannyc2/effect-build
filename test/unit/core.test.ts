@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Exit } from "effect";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -127,6 +127,64 @@ describe.skipIf(process.platform === "win32")("Toolchain", () => {
       expect("sha256" in artifact.value).toBe(false);
       expect(artifact.value.bytes).toBe(8);
     }
+  });
+
+  it("publishes a nested bundle into an existing outdir, hashing and sorting the files", async () => {
+    const outdir = join(root, "bundle-out");
+    await mkdir(outdir, { recursive: true });
+    await writeFile(join(outdir, "keep.txt"), "untouched");
+    await writeFile(join(outdir, "entry.js"), "stale");
+    const artifact = await runEffect(
+      Toolchain.publishBundle({
+        tool: { name: "tool", version: "1.0.0" },
+        outdir,
+        hash: true,
+        produce: (staged) =>
+          Effect.promise(async () => {
+            await mkdir(join(staged, "chunks"), { recursive: true });
+            await writeFile(join(staged, "entry.js"), "export {};");
+            await writeFile(join(staged, "chunks", "lib.js"), "export const lib = 1;");
+          }),
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(Exit.isSuccess(artifact)).toBe(true);
+    if (Exit.isSuccess(artifact)) {
+      expect(artifact.value.outdir).toBe(outdir);
+      expect(artifact.value.files.map((file) => file.path)).toEqual([
+        join(outdir, "chunks", "lib.js"),
+        join(outdir, "entry.js"),
+      ]);
+      for (const file of artifact.value.files) {
+        expect(file.bytes).toBeGreaterThan(0);
+        expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
+      }
+    }
+    expect(await readFile(join(outdir, "keep.txt"), "utf8")).toBe("untouched");
+    expect(await readFile(join(outdir, "entry.js"), "utf8")).toBe("export {};");
+  });
+
+  it("publishes a bundle without hashing and fails when nothing was produced", async () => {
+    const outdir = join(root, "bundle-plain");
+    const artifact = await runEffect(
+      Toolchain.publishBundle({
+        tool: { name: "tool", version: "1.0.0" },
+        outdir,
+        hash: false,
+        produce: (staged) => Effect.promise(() => writeFile(join(staged, "only.js"), "export {};")),
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(Exit.isSuccess(artifact)).toBe(true);
+    if (Exit.isSuccess(artifact)) expect(artifact.value.files.some((file) => "sha256" in file)).toBe(false);
+    const empty = await runEffect(
+      Toolchain.publishBundle({
+        tool: { name: "tool", version: "1.0.0" },
+        outdir: join(root, "bundle-empty"),
+        hash: true,
+        produce: () => Effect.void,
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(Exit.isFailure(empty)).toBe(true);
+    if (Exit.isFailure(empty)) expect(String(empty.cause)).toContain("did not produce any files");
   });
 
   it("rejects a produced binary whose format contradicts the target", async () => {

@@ -29,6 +29,25 @@ export type _Publish = Assert<
   >
 >;
 
+const publishedBundle = Toolchain.publishBundle({
+  tool: { name: "bun", version: "1.3.14" },
+  outdir: "dist",
+  hash: false,
+  produce,
+});
+
+// Bundle publication carries the same producer failures and requirements.
+export type _PublishBundle = Assert<
+  Same<
+    typeof publishedBundle,
+    Effect.Effect<
+      Artifact.Bundle,
+      BuildError.PublishFailed | BuildError.ToolFailed,
+      FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner
+    >
+  >
+>;
+
 const resolved = Toolchain.resolveExecutable({ name: "bun" });
 export type _Resolve = Assert<
   Same<typeof resolved, Effect.Effect<string, BuildError.ToolNotFound, FileSystem.FileSystem | Path.Path>>
