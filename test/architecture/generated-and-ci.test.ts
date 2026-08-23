@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -462,25 +462,25 @@ describe("tooling pins and workflow contracts", () => {
     }
   });
 
-  it("keeps Plan 042 implementation certification exact-head, complete, disjoint, and fail-closed", async () => {
+  it("keeps Plan 043 implementation certification exact-head, chained, complete, disjoint, and fail-closed", async () => {
     const workflowSource = await readFile(
       resolve(root, ".github/workflows/architecture-research.yml"),
       "utf8",
     );
     const workflow = parse(workflowSource) as Workflow;
     expect(createHash("sha256").update(workflowSource).digest("hex")).toBe(
-      "163bb0a7f58fb4c190040528926d54e17c5eefc05ced3c0e3a57b9ed3ce3edfe",
+      "c446f5f2f3156982a6deda6adf24939d73a8c703ecbac9ccb65982d03933d91a",
     );
     expect(Object.keys(workflow.on).sort()).toEqual(["push"]);
-    expect(workflow.on.push).toEqual({ branches: ["codex/plan042-deno-lane"] });
+    expect(workflow.on.push).toEqual({ branches: ["codex/plan043-node-sea-lane"] });
     expect(workflow.permissions).toEqual({ actions: "read", contents: "read" });
     expect(workflow.env).toEqual({
       SOURCE_SHA: "${{ github.sha }}",
-      CERTIFICATION_PROFILE: "effect-build/plan042-implementation@1",
+      CERTIFICATION_PROFILE: "effect-build/plan043-implementation@1",
     });
-    expect(Object.keys(workflow.jobs)).toEqual(["plan042-implementation"]);
+    expect(Object.keys(workflow.jobs)).toEqual(["plan043-implementation"]);
 
-    const job = workflow.jobs["plan042-implementation"]!;
+    const job = workflow.jobs["plan043-implementation"]!;
     expect(Object.keys(job).sort()).toEqual(["runs-on", "steps"]);
     expect(job["runs-on"]).toBe("ubuntu-24.04");
     const checkout = job.steps!.find((step) => step.uses === checkoutAction)!;
@@ -512,7 +512,7 @@ describe("tooling pins and workflow contracts", () => {
       "",
     ].join("\n"));
     expect(workflowSource).not.toContain("npm install --prefix");
-    const runs = jobRuns(workflow, "plan042-implementation");
+    const runs = jobRuns(workflow, "plan043-implementation");
     const requiredRuns = [
       'test "$(bun --version)" = "1.3.14"',
       "bun install --frozen-lockfile",
@@ -528,6 +528,8 @@ describe("tooling pins and workflow contracts", () => {
       "bun run test:integration:v04-deno",
       "node scripts/verify-v04-deno-target-support.mjs",
       "node research/post-0.3/implementation/staged-deno-adapter.mjs",
+      "bun run test:integration:v04-node-sea",
+      "node research/post-0.3/implementation/staged-node-sea-adapter.mjs",
       "node research/post-0.3/implementation/certify-current-head.mjs",
     ];
     for (const run of requiredRuns) expect(runs).toContain(run);
@@ -545,7 +547,7 @@ describe("tooling pins and workflow contracts", () => {
     const certifier = job.steps!.find((step) => step.run?.includes("certify-current-head.mjs"))!;
     expect(certifier.env).toEqual({
       GITHUB_TOKEN: "${{ github.token }}",
-      PLAN042_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan042-implementation",
+      PLAN043_RECEIPTS_DIR: "${{ runner.temp }}/effect-build-plan043-implementation",
     });
     const denoTools = job.steps!.find((step) => step.id === "deno-tools")!;
     expect(denoTools.run).toBe('node scripts/provision-tool-assets.mjs >> "$GITHUB_OUTPUT"');
@@ -578,6 +580,42 @@ describe("tooling pins and workflow contracts", () => {
         DENORT_BIN: "${{ steps.deno-tools.outputs.denort }}",
         DENO_DIR: "${{ runner.temp }}/effect-build-plan042-deno-consumer-cache",
       });
+    const plan043Node = job.steps!.find((step) => step.id === "plan043-node")!;
+    expect(plan043Node).toMatchObject({
+      name: "Provision the exact content-authenticated Node SEA provider coordinate",
+      shell: "bash",
+      run: 'node scripts/provision-tool-assets.mjs --only node >> "$GITHUB_OUTPUT"',
+      env: { EFFECT_BUILD_TOOL_DIR: "${{ runner.temp }}/effect-build-plan043-node" },
+    });
+    const plan043NodeVerification = job.steps!.find((step) =>
+      step.name === "Verify exact content-authenticated Node SEA provider coordinate"
+    )!;
+    expect(plan043NodeVerification.env).toEqual({
+      PLAN043_NODE_EXECUTABLE: "${{ steps.plan043-node.outputs.node }}",
+    });
+    expect(plan043NodeVerification.run).toBe([
+      'test "${PLAN043_NODE_EXECUTABLE#/}" != "$PLAN043_NODE_EXECUTABLE"',
+      'test -x "$PLAN043_NODE_EXECUTABLE"',
+      'test "$("$PLAN043_NODE_EXECUTABLE" --version)" = "v26.7.0"',
+      "grep -qx 'ID=ubuntu' /etc/os-release",
+      "grep -Eq '^VERSION_ID=\"?24\\.04\"?$' /etc/os-release",
+      "file \"$PLAN043_NODE_EXECUTABLE\" | grep -F 'ELF 64-bit LSB' >/dev/null",
+      "file \"$PLAN043_NODE_EXECUTABLE\" | grep -F 'x86-64' >/dev/null",
+      "readelf -h \"$PLAN043_NODE_EXECUTABLE\" | grep -Eq 'Class:[[:space:]]+ELF64'",
+      "readelf -h \"$PLAN043_NODE_EXECUTABLE\" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'",
+      "readelf -l \"$PLAN043_NODE_EXECUTABLE\" | grep -F 'Requesting program interpreter: /lib64/ld-linux-x86-64.so.2' >/dev/null",
+      "\"$PLAN043_NODE_EXECUTABLE\" --help | grep -Eq '(^|[[:space:]])--build-sea([=[:space:]]|$)'",
+      'test "$("$PLAN043_NODE_EXECUTABLE" -p \'process.config.variables.single_executable_application\')" = "true"',
+      'test "$("$PLAN043_NODE_EXECUTABLE" -p \'process.config.variables.node_use_lief\')" = "true"',
+      "",
+    ].join("\n"));
+    expect(job.steps!.find((step) => step.run === "bun run test:integration:v04-node-sea")?.env).toEqual({
+      PLAN043_NODE_EXECUTABLE: "${{ steps.plan043-node.outputs.node }}",
+    });
+    expect(
+      job.steps!.find((step) => step.run === "node research/post-0.3/implementation/staged-node-sea-adapter.mjs")?.env,
+    )
+      .toEqual({ PLAN043_NODE_EXECUTABLE: "${{ steps.plan043-node.outputs.node }}" });
     const targetSupport = await loadScript<{
       denortArchives: Array<{ triple: string; file: string; size: number; sha256: string; url: string }>;
       prewarmDenortArchives: (input: Record<string, unknown>) => Promise<Map<string, string>>;
@@ -679,8 +717,8 @@ describe("tooling pins and workflow contracts", () => {
     expect(rejectedMoves).toEqual([]);
     const upload = job.steps!.find((step) => step.uses === uploadArtifactAction)!;
     expect(upload.with).toEqual({
-      name: "plan042-implementation-certification-${{ env.SOURCE_SHA }}",
-      path: "${{ runner.temp }}/effect-build-plan042-implementation",
+      name: "plan043-implementation-certification-${{ env.SOURCE_SHA }}",
+      path: "${{ runner.temp }}/effect-build-plan043-implementation",
       "if-no-files-found": "error",
       "retention-days": 90,
     });
@@ -715,6 +753,7 @@ describe("tooling pins and workflow contracts", () => {
       plan039TrustAnchor: string;
       plan040TrustAnchor: string;
       plan041TrustAnchor: string;
+      plan042TrustAnchor: string;
       expectedClaims: string;
       migrationPlan: string;
       receiptDirectoryEnvironment: string;
@@ -724,6 +763,9 @@ describe("tooling pins and workflow contracts", () => {
       forbiddenCurrentReceiptIds: string[];
       bunImplementationFiles: string[];
       denoImplementationFiles: string[];
+      nodeSeaImplementationFiles: string[];
+      nodeSeaScopedPaths: string[];
+      nodeSeaCompanionPaths: string[];
       esbuildImplementationFiles: string[];
       coreStagedFiles: string[];
       immutablePublicPaths: string[];
@@ -734,6 +776,7 @@ describe("tooling pins and workflow contracts", () => {
         plan039Sha: string;
         plan040Sha: string;
         plan041Sha: string;
+        plan042Sha: string;
       };
       producers: Array<{ script: string; receipts: string[] }>;
     };
@@ -778,24 +821,35 @@ describe("tooling pins and workflow contracts", () => {
       receipt: { id: string; file: string; digest: string };
       plan040Input: { sourceSha: string; aggregateArtifactId: string };
     };
+    const plan042Anchor = await readJson(profile.plan042TrustAnchor) as {
+      profileId: string;
+      sourceSha: string;
+      workflow: { runId: string; runAttempt: string; eventName: string; conclusion: string; ref: string };
+      aggregateArtifact: { id: string; name: string; sizeInBytes: number; digest: string };
+      certification: { digest: string; phase: string };
+      receipt: { id: string; file: string; digest: string };
+      plan041Input: { sourceSha: string; aggregateArtifactId: string };
+    };
     const expected = await readJson(profile.expectedClaims) as {
       profileId: string;
       receiptId: string;
       claims: Array<{ id: string }>;
     };
     expect(profile).toMatchObject({
-      profileId: "effect-build/plan042-implementation@1",
+      profileId: "effect-build/plan043-implementation@1",
       phase: "implementation",
-      receiptDirectoryEnvironment: "PLAN042_RECEIPTS_DIR",
-      certificateFile: "plan042-certification.json",
-      currentReceiptIds: ["plan042-implementation"],
+      receiptDirectoryEnvironment: "PLAN043_RECEIPTS_DIR",
+      certificateFile: "plan043-certification.json",
+      currentReceiptIds: ["plan043-implementation"],
       historicalProfileIds: [
+        "effect-build/plan042-implementation@1",
         "effect-build/plan041-implementation@1",
         "effect-build/plan040-implementation@1",
         "effect-build/plan039-implementation@1",
         "post-0.3-surface-freeze-v1",
       ],
       forbiddenCurrentReceiptIds: [
+        "plan042-implementation",
         "plan041-implementation",
         "plan040-implementation",
         "plan039-implementation",
@@ -809,12 +863,13 @@ describe("tooling pins and workflow contracts", () => {
         plan039Sha: "e12e930de5622be3f23814f3235293c93fcfd8bf",
         plan040Sha: "3ced06d29fe8644eae5465fed4878a6faea322f3",
         plan041Sha: "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
+        plan042Sha: "9d15d17ccf7d74f14cf95c06162d95be8ed7d27f",
       },
     });
     expect(profile.producers).toEqual([{
       lane: "implementation",
       script: "research/post-0.3/implementation/certify-current-head.mjs",
-      receipts: ["plan042-implementation"],
+      receipts: ["plan043-implementation"],
     }]);
     expect(profile.bunImplementationFiles).toEqual([
       "packages/effect-build-bun/src/CompileExecutable.ts",
@@ -829,6 +884,27 @@ describe("tooling pins and workflow contracts", () => {
       "packages/effect-build-deno/src/internal/v04/executable.ts",
       "packages/effect-build-deno/src/internal/v04/matrix.ts",
       "packages/effect-build-deno/src/internal/v04/selected.ts",
+    ]);
+    expect(profile.nodeSeaImplementationFiles).toEqual([
+      "packages/effect-build-node-sea/src/AssembleExecutable.ts",
+      "packages/effect-build-node-sea/src/internal/v04/compatibility.ts",
+      "packages/effect-build-node-sea/src/internal/v04/executable.ts",
+      "packages/effect-build-node-sea/src/internal/v04/selected.ts",
+    ]);
+    expect(profile.nodeSeaScopedPaths).toEqual([
+      ...profile.nodeSeaImplementationFiles,
+      "test/architecture/v04-staged-node-sea-surface.test.ts",
+      "test/fixtures/v04/node-sea/main.cjs",
+      "test/fixtures/v04/node-sea/main.mjs",
+      "test/fixtures/v04/node-sea/message.txt",
+      "test/integration/v04-node-sea-assemble-executable.test.ts",
+      "test/unit/v04-node-sea-assemble-executable.test.ts",
+      "typetest/v04-node-sea-assemble-executable.tst.ts",
+    ]);
+    expect(profile.nodeSeaCompanionPaths).toEqual([
+      "package.json",
+      "research/post-0.3/implementation/staged-node-sea-adapter.mjs",
+      "test/architecture/import-boundaries.test.ts",
     ]);
     expect(profile.esbuildImplementationFiles).toHaveLength(4);
     expect(profile.coreStagedFiles).toEqual([
@@ -910,13 +986,43 @@ describe("tooling pins and workflow contracts", () => {
         aggregateArtifactId: plan040Anchor.aggregateArtifact.id,
       },
     });
+    expect(plan042Anchor).toMatchObject({
+      profileId: "effect-build/plan042-implementation@1",
+      sourceSha: profile.productionBaseline.plan042Sha,
+      workflow: {
+        runId: "32603983985",
+        runAttempt: "1",
+        eventName: "push",
+        conclusion: "success",
+        ref: "refs/heads/codex/plan042-deno-lane",
+      },
+      aggregateArtifact: {
+        id: "9483687179",
+        name: "plan042-implementation-certification-9d15d17ccf7d74f14cf95c06162d95be8ed7d27f",
+        sizeInBytes: 7798,
+        digest: "sha256:c06530be389696e96ed7996e0e80eee9fb2ece23cccb06b5ceadb1499b1c62fe",
+      },
+      certification: {
+        phase: "implementation",
+        digest: "sha256:6ee3b724c2ff73a229dcad59da7f5d9c3f80d9a2140d9f115f83e350b217a779",
+      },
+      receipt: {
+        id: "plan042-implementation",
+        file: "plan042-implementation.json",
+        digest: "sha256:545275dfc5d081887882dd02f9cb54843994cab538141c2229e66db3f0c72ddc",
+      },
+      plan041Input: {
+        sourceSha: plan041Anchor.sourceSha,
+        aggregateArtifactId: plan041Anchor.aggregateArtifact.id,
+      },
+    });
     expect(expected).toMatchObject({
       profileId: profile.profileId,
-      receiptId: "plan042-implementation",
+      receiptId: "plan043-implementation",
     });
     expect(expected.claims).toHaveLength(5);
     expect(expected.claims.flatMap((claim) => Object.values(claim)).join(" ")).toContain(
-      "five-bun-files-are-byte-identical-to-plan041",
+      "exactly-the-eleven-node-sea-scoped-paths-are-added-after-plan042",
     );
     expect(expected.claims.flatMap((claim) => Object.values(claim)).join(" ")).toContain(
       "does-not-claim-independent-protection",
@@ -927,18 +1033,30 @@ describe("tooling pins and workflow contracts", () => {
     expect(pins.tools.find((pin) => pin.tool === "bun")).toEqual({
       tool: "bun",
       version: "1.3.9",
+      archiveFormat: "zip",
       url: "https://github.com/oven-sh/bun/releases/download/bun-v1.3.9/bun-linux-x64.zip",
       sha256: "4680e80e44e32aa718560ceae85d22ecfbf2efb8f3641782e35e4b7efd65a1aa",
       member: "bun-linux-x64/bun",
       target: { os: "linux", architecture: "x86_64", abi: "gnu" },
     });
+    expect(pins.tools.find((pin) => pin.tool === "node")).toEqual({
+      tool: "node",
+      version: "26.7.0",
+      archiveFormat: "tar.xz",
+      url: "https://nodejs.org/dist/v26.7.0/node-v26.7.0-linux-x64.tar.xz",
+      sha256: "982aa24dd8be4c889c6a8ab337ddff3b0896645b20f4239356e80552c16277ee",
+      member: "node-v26.7.0-linux-x64/bin/node",
+      target: { os: "linux", architecture: "x86_64", abi: "gnu" },
+    });
   });
 
-  it("certifies the exact five-file Plan 042 boundary from the certified Plan 041 head to DONE", async () => {
+  it("certifies the exact Node SEA scope and companion registrations from the authenticated Plan 042 head to DONE", async () => {
     const profile = await readJson("research/post-0.3/implementation/profile.json") as {
       implementationAllowedPaths: string[];
       bunImplementationFiles: string[];
       denoImplementationFiles: string[];
+      nodeSeaScopedPaths: string[];
+      nodeSeaCompanionPaths: string[];
       esbuildImplementationFiles: string[];
       coreStagedFiles: string[];
       immutablePublicPaths: string[];
@@ -949,9 +1067,11 @@ describe("tooling pins and workflow contracts", () => {
         plan039Sha: string;
         plan040Sha: string;
         plan041Sha: string;
+        plan042Sha: string;
       };
     };
-    const { handoffSha, plan039Sha, plan040Sha, plan041Sha, releaseSha, freezeSha } = profile.productionBaseline;
+    const { handoffSha, plan039Sha, plan040Sha, plan041Sha, plan042Sha, releaseSha, freezeSha } =
+      profile.productionBaseline;
     for (
       const [ancestor, descendant] of [
         [releaseSha, freezeSha],
@@ -959,7 +1079,8 @@ describe("tooling pins and workflow contracts", () => {
         [handoffSha, plan039Sha],
         [plan039Sha, plan040Sha],
         [plan040Sha, plan041Sha],
-        [plan041Sha, "HEAD"],
+        [plan041Sha, plan042Sha],
+        [plan042Sha, "HEAD"],
       ] as const
     ) {
       expect(() =>
@@ -985,17 +1106,30 @@ describe("tooling pins and workflow contracts", () => {
 
     const trackedImplementation = nulPaths(execFileSync(
       "git",
-      ["diff", "--name-only", "-z", "--diff-filter=AM", plan041Sha, "--", ...profile.denoImplementationFiles],
+      ["diff", "--name-only", "-z", "--diff-filter=AM", plan042Sha, "--", ...profile.nodeSeaScopedPaths],
       { cwd: root },
     ));
     const implementationFiles = [
       ...new Set([
         ...trackedImplementation,
-        ...untracked.filter((path) => profile.denoImplementationFiles.includes(path)),
+        ...untracked.filter((path) => profile.nodeSeaScopedPaths.includes(path)),
       ]),
     ].sort();
-    expect(implementationFiles).toEqual([...profile.denoImplementationFiles].sort());
+    expect(implementationFiles).toEqual([...profile.nodeSeaScopedPaths].sort());
     expect(implementationFiles.every((path) => existsSync(resolve(root, path)))).toBe(true);
+
+    const trackedCompanions = nulPaths(execFileSync(
+      "git",
+      ["diff", "--name-only", "-z", "--diff-filter=AM", plan042Sha, "--", ...profile.nodeSeaCompanionPaths],
+      { cwd: root },
+    ));
+    const companionFiles = [
+      ...new Set([
+        ...trackedCompanions,
+        ...untracked.filter((path) => profile.nodeSeaCompanionPaths.includes(path)),
+      ]),
+    ].sort();
+    expect(companionFiles).toEqual([...profile.nodeSeaCompanionPaths].sort());
 
     const coreStagedDiff = nulPaths(execFileSync(
       "git",
@@ -1022,6 +1156,13 @@ describe("tooling pins and workflow contracts", () => {
       { cwd: root },
     ));
     expect(bunStagedDiff).toEqual([]);
+
+    const denoStagedDiff = nulPaths(execFileSync(
+      "git",
+      ["diff", "--name-only", "-z", plan042Sha, "--", ...profile.denoImplementationFiles],
+      { cwd: root },
+    ));
+    expect(denoStagedDiff).toEqual([]);
 
     const immutableDiff = nulPaths(execFileSync(
       "git",
@@ -1059,11 +1200,14 @@ describe("tooling pins and workflow contracts", () => {
       )
     ).not.toThrow();
 
-    const plan = await readFile(resolve(root, "plans/042-add-deno-bundle-command-lanes.md"), "utf8");
+    const plan042 = await readFile(resolve(root, "plans/042-add-deno-bundle-command-lanes.md"), "utf8");
+    const plan043 = await readFile(resolve(root, "plans/043-publish-single-node-program-profile.md"), "utf8");
     const index = await readFile(resolve(root, "plans/README.md"), "utf8");
-    expect(plan.match(/^- Status: DONE$/gm) ?? []).toHaveLength(1);
-    expect(plan).toMatch(/ancestry-pinned accidental-drift protection, not an\s+independently protected/);
-    expect(plan).toMatch(/externally pinned verifier is required before claiming\s+independent/);
+    expect(plan042.match(/^- Status: DONE$/gm) ?? []).toHaveLength(1);
+    expect(plan043.match(/^- Status: DONE$/gm) ?? []).toHaveLength(1);
+    expect(plan043).toMatch(/Plan 042 artifact anchor/);
+    expect(plan043).toMatch(/ancestry-pinned\s+accidental-drift protection, not an\s+independently protected/);
+    expect(plan043).toMatch(/externally pinned\s+verifier is required before claiming\s+independent/);
     expect(index).toContain(
       "| 039 | Implement the frozen core capability laws | P0 | XL | exact 0.4 surface freeze | DONE |",
     );
@@ -1077,7 +1221,10 @@ describe("tooling pins and workflow contracts", () => {
       "| 042 | Implement the frozen Deno executable lane | P1 | L | 039 | DONE |",
     );
     expect(index).toContain(
-      "| 043 | Implement direct Node SEA assembly | P1 | L | 039 | TODO |",
+      "| 043 | Implement direct Node SEA assembly | P1 | L | 039 | DONE |",
+    );
+    expect(index).toContain(
+      "| 044 | Hard-cut and certify the frozen 0.4 candidate | P0 | XL | 039-043 | TODO |",
     );
   });
 
@@ -1125,6 +1272,12 @@ describe("tooling pins and workflow contracts", () => {
   it("keeps provisioned compiler fixtures selected, checksummed, and closed", async () => {
     const provisioner = await loadScript<{
       selectedToolNames: (argv: readonly string[]) => readonly string[];
+      validateTarArchive: (input: {
+        entriesSource: string;
+        memberVerboseSource: string;
+        member: string;
+        tool: string;
+      }) => readonly string[];
       provisionToolAssets: (
         argv: readonly string[],
         dependencies: Record<string, unknown>,
@@ -1133,6 +1286,7 @@ describe("tooling pins and workflow contracts", () => {
     expect(provisioner.selectedToolNames([])).toEqual(["bun", "deno", "denort"]);
     expect(provisioner.selectedToolNames(["--only", "bun"])).toEqual(["bun"]);
     expect(provisioner.selectedToolNames(["--only", "deno"])).toEqual(["deno"]);
+    expect(provisioner.selectedToolNames(["--only", "node"])).toEqual(["node"]);
     for (const argv of [["--only"], ["--only", "node-sea"], ["--url", "x"]]) {
       expect(() => provisioner.selectedToolNames(argv)).toThrow(/usage/);
     }
@@ -1142,6 +1296,7 @@ describe("tooling pins and workflow contracts", () => {
     const pins = ["bun", "deno", "denort"].map((tool) => ({
       tool,
       version: "1.0.0",
+      archiveFormat: "zip",
       url: `https://fixtures.invalid/${tool}.zip`,
       sha256,
       member: tool,
@@ -1158,13 +1313,111 @@ describe("tooling pins and workflow contracts", () => {
       makeDirectory: async () => undefined,
       writeAsset: async (path: string, value: Uint8Array) => void stored.set(path, value),
       readAsset: async (path: string) => stored.get(path),
+      renameAsset: async (from: string, to: string) => {
+        const value = stored.get(from);
+        if (value === undefined) throw new Error("fixture archive is missing");
+        stored.delete(from);
+        stored.set(to, value);
+      },
+      removeAsset: async (path: string) => void stored.delete(path),
       makeExecutable: async () => undefined,
       output: () => undefined,
     });
     expect([...result.keys()]).toEqual(["bun"]);
     const authored = await readJson("tooling/tool-pins.json") as { tools: Array<Record<string, string>> };
-    expect(authored.tools.map((pin) => pin.tool)).toEqual(["bun", "deno", "denort"]);
+    expect(authored.tools.map((pin) => pin.tool)).toEqual(["bun", "deno", "denort", "node"]);
     for (const pin of authored.tools) expect(pin.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(() =>
+      provisioner.validateTarArchive({
+        entriesSource: "node-v26.7.0-linux-x64/bin/node\nnode-v26.7.0-linux-x64/bin/npx\n",
+        memberVerboseSource: "-rwxr-xr-x root/root 1 2026-01-01 node-v26.7.0-linux-x64/bin/node\n",
+        tool: "node",
+        member: "node-v26.7.0-linux-x64/bin/node",
+      })
+    ).not.toThrow();
+    expect(() =>
+      provisioner.validateTarArchive({
+        entriesSource: "node-v26.7.0-linux-x64/bin/node\n",
+        memberVerboseSource: "lrwxr-xr-x root/root 0 2026-01-01 node-v26.7.0-linux-x64/bin/node\n",
+        tool: "node",
+        member: "node-v26.7.0-linux-x64/bin/node",
+      })
+    ).toThrow(/nonregular|not a regular/);
+    expect(() =>
+      provisioner.validateTarArchive({
+        entriesSource: "safe/../node\n",
+        memberVerboseSource: "-rwxr-xr-x root/root 1 2026-01-01 safe/../node\n",
+        tool: "node",
+        member: "safe/../node",
+      })
+    ).toThrow(/unsafe archive entry/);
+  });
+
+  it("streams a checksummed Node tar.xz member atomically without network access", async () => {
+    const provisioner = await loadScript<{
+      provisionToolAssets: (
+        argv: readonly string[],
+        dependencies: Record<string, unknown>,
+      ) => Promise<Map<string, string>>;
+    }>("provision-tool-assets.mjs");
+    const temporary = await mkdtemp(join(tmpdir(), "effect-build-node-tar-fixture-"));
+    try {
+      const source = join(temporary, "source");
+      const member = "node-v26.7.0-linux-x64/bin/node";
+      await mkdir(join(source, "node-v26.7.0-linux-x64/bin"), { recursive: true });
+      await writeFile(join(source, member), "node-fixture\n");
+      const archive = join(temporary, "node-v26.7.0-linux-x64.tar.xz");
+      execFileSync("tar", ["-cJf", archive, "-C", source, "node-v26.7.0-linux-x64"]);
+      const bytes = await readFile(archive);
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const pin = {
+        tool: "node",
+        version: "26.7.0",
+        archiveFormat: "tar.xz",
+        url: "https://nodejs.org/dist/v26.7.0/node-v26.7.0-linux-x64.tar.xz",
+        sha256,
+        member,
+        target: { os: "linux", architecture: "x86_64", abi: "gnu" },
+      };
+      const toolRoot = join(temporary, "tools");
+      const result = await provisioner.provisionToolAssets(["--only", "node"], {
+        environment: { EFFECT_BUILD_TOOL_DIR: toolRoot },
+        loadTooling: async () => ({ pins: { tools: [pin] } }),
+        fetchAsset: async (url: string, options: RequestInit) => {
+          expect(url).toBe(pin.url);
+          expect(options.redirect).toBe("error");
+          return {
+            ok: true,
+            status: 200,
+            arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+          };
+        },
+        output: () => undefined,
+      });
+      const executable = join(toolRoot, "node-26.7.0", member);
+      const archiveDestination = join(toolRoot, "node-26.7.0", basename(archive));
+      expect(result.get("node")).toBe(executable);
+      expect(await readFile(executable, "utf8")).toBe("node-fixture\n");
+      expect(existsSync(archiveDestination)).toBe(true);
+      expect(existsSync(`${archiveDestination}.part-${process.pid}`)).toBe(false);
+      expect(existsSync(`${executable}.part-${process.pid}`)).toBe(false);
+
+      const rejectedRoot = join(temporary, "rejected-tools");
+      await expect(provisioner.provisionToolAssets(["--only", "node"], {
+        environment: { EFFECT_BUILD_TOOL_DIR: rejectedRoot },
+        loadTooling: async () => ({ pins: { tools: [{ ...pin, sha256: "0".repeat(64) }] } }),
+        fetchAsset: async () => ({
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+        }),
+        output: () => undefined,
+      })).rejects.toThrow(/checksum mismatch/);
+      expect(existsSync(join(rejectedRoot, "node-26.7.0", basename(archive)))).toBe(false);
+      expect(existsSync(join(rejectedRoot, "node-26.7.0", member))).toBe(false);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
   });
 
   it("runs all target cells through exact Bun 1.3.14 and cleans isolated tool state", async () => {

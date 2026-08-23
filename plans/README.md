@@ -7,12 +7,13 @@ machine-readable authority is
 `research/post-0.3/freeze/SURFACE.json` together with
 `research/post-0.3/freeze/MIGRATION.json`; `AGENTS.md` is the matching active
 execution instruction. Plans 039-044 have been rewritten from that frozen
-scope. Plans 039, 040, 041, and 042 are complete at their export-inert stages:
-the six frozen core modules, the two admitted Esbuild operation modules, and
-the Bun and Deno selected-command executable lanes are implemented internally,
-while the released 0.3 export map remains byte-identical. Plan 043 is the next
-implementation plan. No merge, publication, tag, or release is authorized by
-Plan 039, Plan 040, Plan 041, or Plan 042 completion.
+scope. Plans 039, 040, 041, 042, and 043 are complete at their export-inert
+stages: the six frozen core modules, the two admitted Esbuild operation
+modules, the Bun and Deno selected-command executable lanes, and the direct
+Node SEA assembly lane are implemented internally, while the released 0.3
+export map remains byte-identical. Plan 044 is the next implementation plan.
+No merge, publication, tag, or release is authorized by Plan 039, Plan 040,
+Plan 041, Plan 042, or Plan 043 completion.
 
 Plans 001-038 remain historical execution and decision records. Where their
 prose conflicts with the 0.4 freeze, the exact surface/migration artifacts and
@@ -334,7 +335,7 @@ direction. Plans 016-020 remain factual implementation history.
 | 040 | Implement the admitted Esbuild operations | P1 | L | 039 | DONE |
 | 041 | Implement the frozen Bun executable lane | P1 | L | 039 | DONE |
 | 042 | Implement the frozen Deno executable lane | P1 | L | 039 | DONE |
-| 043 | Implement direct Node SEA assembly | P1 | L | 039 | TODO |
+| 043 | Implement direct Node SEA assembly | P1 | L | 039 | DONE |
 | 044 | Hard-cut and certify the frozen 0.4 candidate | P0 | XL | 039-043 | TODO |
 
 Status values: `READY`, `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
