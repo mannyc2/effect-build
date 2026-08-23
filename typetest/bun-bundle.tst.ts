@@ -1,0 +1,34 @@
+import type { Crypto, Effect, FileSystem, Layer, Path } from "effect";
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import * as Bundle from "../packages/effect-build-bun/src/Bundle.js";
+import type * as Artifact from "../packages/effect-build/src/Artifact.js";
+import type * as BuildError from "../packages/effect-build/src/BuildError.js";
+
+type Assert<T extends true> = T;
+type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type LayerError<L> = L extends Layer.Layer<infer _A, infer E, infer _R> ? E : never;
+type LayerServices<L> = L extends Layer.Layer<infer _A, infer _E, infer R> ? R : never;
+
+export type _Target = Assert<Same<Bundle.Target, "browser" | "bun" | "node">>;
+
+export type _Error = Assert<Same<Bundle.BundleError, BuildError.ToolFailed | BuildError.PublishFailed>>;
+
+const bundled = Bundle.bundle({ entrypoints: ["src/main.ts"], outdir: "dist" });
+
+export type _Bundle = Assert<
+  Same<typeof bundled, Effect.Effect<Artifact.Bundle, Bundle.BundleError, Bundle.Bundler>>
+>;
+
+// Entrypoints are a non-empty tuple; an empty list is unrepresentable.
+// @ts-expect-error!
+Bundle.bundle({ entrypoints: [], outdir: "dist" });
+
+const built = Bundle.layer();
+
+export type _LayerError = Assert<Same<LayerError<typeof built>, BuildError.ToolNotFound | BuildError.ToolFailed>>;
+export type _LayerServices = Assert<
+  Same<
+    LayerServices<typeof built>,
+    Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner
+  >
+>;

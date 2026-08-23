@@ -31,7 +31,14 @@
     "provenance": true
   },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./Bundle": {
+      "types": "./dist/Bundle.d.ts",
+      "import": "./dist/Bundle.js"
+    },
     "./CompileExecutable": {
       "types": "./dist/CompileExecutable.d.ts",
       "import": "./dist/CompileExecutable.js"
