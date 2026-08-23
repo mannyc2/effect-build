@@ -35,6 +35,20 @@ const makeRoot = (): string => {
   return root;
 };
 
+const writeZip = (path: string, payload = "archive\n"): void => {
+  writeFileSync(path, Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from(payload)]));
+};
+
+const writeDiskImage = (path: string, payload = "disk image\n"): void => {
+  const trailer = Buffer.alloc(512);
+  trailer.write("koly", 0, "ascii");
+  writeFileSync(path, Buffer.concat([Buffer.from(payload), trailer]));
+};
+
+const writeInstallerPackage = (path: string, payload = "installer package\n"): void => {
+  writeFileSync(path, Buffer.concat([Buffer.from("xar!", "ascii"), Buffer.from(payload)]));
+};
+
 interface Invocation {
   readonly tool: ToolName;
   readonly args: readonly string[];
@@ -75,6 +89,7 @@ Issuer Name:
 `;
 const packageSignature = `Package "Example.pkg":
    Status: signed by a certificate trusted by macOS
+   Signed with a trusted timestamp on: 2026-08-23 12:00:00 +0000
    Certificate Chain:
     1. Developer ID Installer: Example Org (TEAMID1234)
        Expires: 2030-01-01 00:00:00 +0000
@@ -200,7 +215,7 @@ const makeTools = (root: string, options: FakeToolsOptions = {}): FakeTools => {
             const source = command.args.at(-2)!;
             const destination = command.args.at(-1)!;
             zipSources.set(destination, source);
-            writeFileSync(destination, `zip:${basename(source)}\n`);
+            writeZip(destination, `zip:${basename(source)}\n`);
           } else if (command.args[0] === "-x") {
             const archive = command.args.at(-2)!;
             const destination = command.args.at(-1)!;
@@ -215,7 +230,7 @@ const makeTools = (root: string, options: FakeToolsOptions = {}): FakeTools => {
             throw new Error(`unexpected ditto argv ${command.args.join(" ")}`);
           }
         } else if (tool === "hdiutil" && command.args[0] === "create") {
-          writeFileSync(command.args.at(-1)!, "fake UDZO image\n");
+          writeDiskImage(command.args.at(-1)!, "fake UDZO image\n");
         } else if (tool === "security") {
           if (command.args[0] === "find-certificate") {
             return handle(options.certificateInventory ?? certificateInventory, "", 0);
@@ -225,7 +240,7 @@ const makeTools = (root: string, options: FakeToolsOptions = {}): FakeTools => {
           }
           throw new Error(`unexpected security argv ${command.args.join(" ")}`);
         } else if (tool === "pkgbuild") {
-          writeFileSync(command.args.at(-1)!, "fake signed installer package\n");
+          writeInstallerPackage(command.args.at(-1)!, "fake signed installer package\n");
         } else if (tool === "pkgutil") {
           return handle(options.packageSignature ?? packageSignature, "", 0);
         }
@@ -266,7 +281,7 @@ const run = <A, E, R, R2>(effect: Effect.Effect<A, E, R>, provider: Layer.Layer<
     ) as Effect.Effect<A, E>,
   );
 
-const observeFile = (kind: Artifact.FileArtifactKind, path: string) =>
+const observeFile = <K extends Artifact.FileArtifactKind>(kind: K, path: string) =>
   Effect.runPromise(Artifact.observeFile(kind, path).pipe(Effect.provide(NodeServices.layer)));
 
 const makeInputs = async (root: string) => {
@@ -449,7 +464,11 @@ describe("Apple container construction", () => {
     const root = makeRoot();
     const tools = makeTools(root);
     const inputs = await makeInputs(root);
-    writeFileSync(inputs.executablePath, "changed after authentication\n");
+    writeFileSync(
+      inputs.executablePath,
+      Buffer.concat([Buffer.from([0xcf, 0xfa, 0xed, 0xfe]), Buffer.from("changed after authentication\n")]),
+    );
+    chmodSync(inputs.executablePath, 0o751);
     const outfile = join(root, "Changed.app");
     const exit = await run(
       AppBundle.create({

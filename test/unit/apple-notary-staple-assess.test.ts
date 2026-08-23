@@ -12,6 +12,7 @@ import {
   realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,6 +33,25 @@ const makeRoot = (): string => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "effect-build-apple-trust-")));
   roots.push(root);
   return root;
+};
+
+const writeMachO = (path: string, payload = "signed executable\n"): void => {
+  writeFileSync(path, Buffer.concat([Buffer.from([0xcf, 0xfa, 0xed, 0xfe]), Buffer.from(payload)]));
+  chmodSync(path, 0o755);
+};
+
+const writeZip = (path: string, payload = "signed app archive\n"): void => {
+  writeFileSync(path, Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from(payload)]));
+};
+
+const writeDiskImage = (path: string, payload = "signed disk image\n"): void => {
+  const trailer = Buffer.alloc(512);
+  trailer.write("koly", 0, "ascii");
+  writeFileSync(path, Buffer.concat([Buffer.from(payload), trailer]));
+};
+
+const writeInstallerPackage = (path: string, payload = "signed package\n"): void => {
+  writeFileSync(path, Buffer.concat([Buffer.from("xar!", "ascii"), Buffer.from(payload)]));
 };
 
 interface SyncEvent {
@@ -141,7 +161,7 @@ const makeHarness = (options: HarnessOptions = {}) => {
           const source = command.args.at(-2)!;
           const destination = command.args.at(-1)!;
           if (command.args.includes("-c")) {
-            writeFileSync(destination, `zip transport:${basename(source)}\n`);
+            writeZip(destination, `zip transport:${basename(source)}\n`);
             archives.set(destination, source);
           } else if (command.args.includes("-x")) {
             const archived = archives.get(source);
@@ -201,7 +221,22 @@ const makeHarness = (options: HarnessOptions = {}) => {
         }
 
         if (tool === "stapler") {
-          if (command.args[0] === "staple") appendFileSync(command.args[1]!, "stapled\n");
+          if (command.args[0] === "staple") {
+            const target = command.args[1]!;
+            if (target.endsWith(".dmg")) {
+              const contents = readFileSync(target);
+              writeFileSync(
+                target,
+                Buffer.concat([
+                  contents.subarray(0, -512),
+                  Buffer.from("stapled\n"),
+                  contents.subarray(-512),
+                ]),
+              );
+            } else {
+              appendFileSync(target, "stapled\n");
+            }
+          }
           return handle("", "", 0);
         }
 
@@ -241,14 +276,14 @@ const makeHarness = (options: HarnessOptions = {}) => {
   return { root, paths, invocations, interrupted: () => interrupted, started: () => started, platform };
 };
 
-const observeFile = (kind: Artifact.FileArtifactKind, path: string) =>
+const observeFile = <K extends Artifact.FileArtifactKind>(kind: K, path: string) =>
   Effect.runPromise(Artifact.observeFile(kind, path).pipe(Effect.provide(NodeServices.layer)));
 
 const observeApp = async (root: string) => {
   const app = join(root, "Example.app");
   mkdirSync(join(app, "Contents", "MacOS"), { recursive: true });
   writeFileSync(join(app, "Contents", "Info.plist"), "<plist/>\n");
-  writeFileSync(join(app, "Contents", "MacOS", "Example"), "signed executable\n");
+  writeMachO(join(app, "Contents", "MacOS", "Example"));
   return Artifact.observeTree("app-bundle", app).pipe(Effect.provide(NodeServices.layer), Effect.runPromise);
 };
 
@@ -259,6 +294,149 @@ const notaryLayer = (harness: ReturnType<typeof makeHarness>) =>
     credentials: { _tag: "KeychainProfile", profile: "effect-build-ci" },
     s3Acceleration: "disabled",
   }).pipe(Layer.provide(harness.platform));
+
+describe("Apple artifact format authentication", () => {
+  it("accepts recognized file formats and leaves resource and entitlements bytes opaque", async () => {
+    const root = makeRoot();
+    const macho = join(root, "tool");
+    const zip = join(root, "Example.zip");
+    const image = join(root, "Example.dmg");
+    const pkg = join(root, "Example.pkg");
+    const resource = join(root, "resource.bin");
+    const entitlements = join(root, "Example.entitlements");
+    writeMachO(macho);
+    writeZip(zip);
+    writeDiskImage(image);
+    writeInstallerPackage(pkg);
+    writeFileSync(resource, "opaque resource\n");
+    writeFileSync(entitlements, "opaque entitlements\n");
+    const observed = await Effect.runPromise(
+      Effect.all([
+        Artifact.observeFile("mach-o", macho),
+        Artifact.observeFile("zip", zip),
+        Artifact.observeFile("disk-image", image),
+        Artifact.observeFile("installer-package", pkg),
+        Artifact.observeFile("resource", resource),
+        Artifact.observeFile("entitlements", entitlements),
+      ]).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(observed.map(({ kind }) => kind)).toEqual([
+      "mach-o",
+      "zip",
+      "disk-image",
+      "installer-package",
+      "resource",
+      "entitlements",
+    ]);
+  });
+
+  it("rejects caller-asserted cross-kinds and a non-executable Mach-O before process work", async () => {
+    const harness = makeHarness();
+    const machoAsZip = join(harness.root, "macho-as.zip");
+    const zipAsMacho = join(harness.root, "zip-as-macho");
+    const zipAsImage = join(harness.root, "zip-as.dmg");
+    const zipAsPackage = join(harness.root, "zip-as.pkg");
+    const nonExecutableMacho = join(harness.root, "non-executable");
+    const fatMacho = join(harness.root, "universal");
+    writeMachO(machoAsZip);
+    writeZip(zipAsMacho);
+    chmodSync(zipAsMacho, 0o755);
+    writeZip(zipAsImage);
+    writeZip(zipAsPackage);
+    writeMachO(nonExecutableMacho);
+    chmodSync(nonExecutableMacho, 0o644);
+    writeFileSync(fatMacho, Buffer.from([0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 0]));
+    chmodSync(fatMacho, 0o755);
+    const exits = await Effect.runPromise(
+      Effect.all([
+        Effect.exit(Artifact.observeFile("zip", machoAsZip)),
+        Effect.exit(Artifact.observeFile("mach-o", zipAsMacho)),
+        Effect.exit(Artifact.observeFile("disk-image", zipAsImage)),
+        Effect.exit(Artifact.observeFile("installer-package", zipAsPackage)),
+        Effect.exit(Artifact.observeFile("mach-o", nonExecutableMacho)),
+        Effect.exit(Artifact.observeFile("mach-o", fatMacho)),
+      ]).pipe(Effect.provide(NodeServices.layer)),
+    );
+    for (const exit of exits) {
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag === "Failure") {
+        const found = Cause.findErrorOption(exit.cause);
+        expect(found._tag === "Some" ? found.value : undefined).toMatchObject({
+          _tag: "ArtifactObservationFailed",
+        });
+      }
+    }
+    expect(harness.invocations).toEqual([]);
+  });
+
+  it("requires a regular Info.plist and an executable in Contents/MacOS under a named .app", async () => {
+    const root = makeRoot();
+    const makeCandidate = (name: string): string => {
+      const app = join(root, name);
+      mkdirSync(join(app, "Contents", "MacOS"), { recursive: true });
+      writeFileSync(join(app, "Contents", "Info.plist"), "<plist/>\n");
+      return app;
+    };
+
+    const wrongSuffix = makeCandidate("Wrong.bundle");
+    writeMachO(join(wrongSuffix, "Contents", "MacOS", "Wrong"));
+    const empty = makeCandidate("Empty.app");
+    const nonExecutable = makeCandidate("NonExecutable.app");
+    writeMachO(join(nonExecutable, "Contents", "MacOS", "NonExecutable"));
+    chmodSync(join(nonExecutable, "Contents", "MacOS", "NonExecutable"), 0o644);
+    const linkedPlist = makeCandidate("Linked.app");
+    rmSync(join(linkedPlist, "Contents", "Info.plist"));
+    symlinkSync(join(root, "outside.plist"), join(linkedPlist, "Contents", "Info.plist"));
+    writeFileSync(join(root, "outside.plist"), "<plist/>\n");
+    writeMachO(join(linkedPlist, "Contents", "MacOS", "Linked"));
+    const emptyPlist = makeCandidate("EmptyPlist.app");
+    writeFileSync(join(emptyPlist, "Contents", "Info.plist"), "");
+    writeMachO(join(emptyPlist, "Contents", "MacOS", "EmptyPlist"));
+    const valid = makeCandidate("Valid.app");
+    writeMachO(join(valid, "Contents", "MacOS", "Valid"));
+
+    for (const app of [wrongSuffix, empty, nonExecutable, linkedPlist, emptyPlist]) {
+      const exit = await Effect.runPromiseExit(
+        Artifact.observeTree("app-bundle", app).pipe(Effect.provide(NodeServices.layer)),
+      );
+      expect(failure(exit)).toMatchObject({ _tag: "ArtifactObservationFailed" });
+    }
+    const observed = await Effect.runPromise(
+      Artifact.observeTree("app-bundle", valid).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(observed.kind).toBe("app-bundle");
+  });
+
+  it("rejects a same-size mutation between format validation and identity confirmation", async () => {
+    const root = makeRoot();
+    const executable = join(root, "raced-tool");
+    writeMachO(executable, "before");
+    let hashStreams = 0;
+    const racedFileSystem = Layer.effect(
+      FileSystem.FileSystem,
+      Effect.gen(function*() {
+        const fileSystem = yield* FileSystem.FileSystem;
+        return {
+          ...fileSystem,
+          stream: (path, options) => {
+            if (path === executable && ++hashStreams === 2) writeMachO(executable, "after!");
+            return fileSystem.stream(path, options);
+          },
+        } satisfies FileSystem.FileSystem;
+      }),
+    ).pipe(Layer.provide(NodeFileSystem.layer));
+    const exit = await Effect.runPromiseExit(
+      Artifact.observeFile("mach-o", executable).pipe(
+        Effect.provide(Layer.merge(racedFileSystem, NodePath.layer)),
+      ),
+    );
+    expect(failure(exit)).toMatchObject({
+      _tag: "ArtifactObservationFailed",
+      path: executable,
+      reason: "file changed during observation",
+    });
+  });
+});
 
 describe("Apple Notary", () => {
   it("submits an authenticated app through a private ZIP and persists its recoverable submission id", async () => {
@@ -313,7 +491,7 @@ describe("Apple Notary", () => {
     const harness = makeHarness({ fileSystemLayer: recordingFileSystemLayer(syncs) });
     const archivePath = join(harness.root, "Durable.zip");
     const receiptPath = join(harness.root, "durable.json");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     const submission = await Effect.runPromise(
       Notary.submit({ artifact: archive, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
@@ -328,7 +506,7 @@ describe("Apple Notary", () => {
     const harness = makeHarness();
     const archivePath = join(harness.root, "Concurrent.zip");
     const receiptPath = join(harness.root, "concurrent.json");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     const exits = await Effect.runPromise(
       Effect.all([
@@ -375,7 +553,7 @@ describe("Apple Notary", () => {
     });
     const archivePath = join(harness.root, "Raced.zip");
     receiptPath = join(harness.root, "raced.json");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     const exit = await Effect.runPromiseExit(
       Notary.submit({ artifact: archive, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
@@ -392,9 +570,9 @@ describe("Apple Notary", () => {
   it("records unknown outcome before upload and never converts interruption into a typed failure", async () => {
     const harness = makeHarness({ submit: "delay" });
     const executablePath = join(harness.root, "tool");
-    writeFileSync(executablePath, "signed executable\n");
-    chmodSync(executablePath, 0o755);
+    writeMachO(executablePath);
     const executable = await observeFile("mach-o", executablePath);
+    const before = readFileSync(executablePath);
     const receiptPath = join(harness.root, "unknown.json");
     const fiber = Effect.runFork(
       Notary.submit({ artifact: executable, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
@@ -404,7 +582,7 @@ describe("Apple Notary", () => {
     const exit = await Effect.runPromise(Fiber.await(fiber));
     expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
     expect(harness.interrupted()).toBe(true);
-    expect(readFileSync(executablePath, "utf8")).toBe("signed executable\n");
+    expect(readFileSync(executablePath)).toEqual(before);
     expect(JSON.parse(readFileSync(receiptPath, "utf8"))).toMatchObject({
       schema: "effect-build-apple/notary-receipt@1",
       state: "SubmissionAttemptStarted",
@@ -415,7 +593,7 @@ describe("Apple Notary", () => {
     for (const submit of ["nonzero", "malformed"] as const) {
       const harness = makeHarness({ submit });
       const archivePath = join(harness.root, "Example.zip");
-      writeFileSync(archivePath, "signed app archive\n");
+      writeZip(archivePath);
       const archive = await observeFile("zip", archivePath);
       const receiptPath = join(harness.root, `${submit}.json`);
       const first = await Effect.runPromiseExit(
@@ -434,7 +612,7 @@ describe("Apple Notary", () => {
   it("resumes info, wait, log, and history by durable id without treating rejection as execution failure", async () => {
     const harness = makeHarness();
     const archivePath = join(harness.root, "Example.zip");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     const submission = await Effect.runPromise(
       Notary.submit({ artifact: archive, receiptPath: join(harness.root, "receipt.json") }).pipe(
@@ -460,7 +638,7 @@ describe("Apple Notary", () => {
   it("rejects non-integer wait durations before invoking Apple", async () => {
     const harness = makeHarness();
     const archivePath = join(harness.root, "Example.zip");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     const submission = await Effect.runPromise(
       Notary.submit({ artifact: archive, receiptPath: join(harness.root, "receipt.json") }).pipe(
@@ -479,7 +657,7 @@ describe("Apple Notary", () => {
     const harness = makeHarness();
     const archivePath = join(harness.root, "Restarted.zip");
     const receiptPath = join(harness.root, "restart.json");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     await Effect.runPromise(
       Notary.submit({ artifact: archive, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
@@ -520,7 +698,7 @@ describe("Apple Notary", () => {
     const harness = makeHarness();
     const archivePath = join(harness.root, "Tamper.zip");
     const receiptPath = join(harness.root, "tamper.json");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     const submission = await Effect.runPromise(
       Notary.submit({ artifact: archive, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
@@ -552,7 +730,7 @@ describe("Apple Notary", () => {
     const harness = makeHarness({ mutateSubmittedTransport: true });
     const archivePath = join(harness.root, "Transport.zip");
     const receiptPath = join(harness.root, "transport.json");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     const exit = await Effect.runPromiseExit(
       Notary.submit({ artifact: archive, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
@@ -567,7 +745,7 @@ describe("Apple Notary", () => {
     const harness = makeHarness({ submit: "nonzero" });
     const archivePath = join(harness.root, "Recovered.zip");
     const receiptPath = join(harness.root, "recovered.json");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     const attempted = await Effect.runPromiseExit(
       Notary.submit({ artifact: archive, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
@@ -598,7 +776,7 @@ describe("Apple Notary", () => {
     const harness = makeHarness({ submit: "nonzero" });
     const archivePath = join(harness.root, "ForgedEvidence.zip");
     const receiptPath = join(harness.root, "forged-evidence.json");
-    writeFileSync(archivePath, "signed app archive\n");
+    writeZip(archivePath);
     const archive = await observeFile("zip", archivePath);
     await Effect.runPromiseExit(
       Notary.submit({ artifact: archive, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
@@ -627,7 +805,7 @@ describe("Apple Staple", () => {
     const harness = makeHarness();
     const imagePath = join(harness.root, "Example.dmg");
     const destination = join(harness.root, "Example-stapled.dmg");
-    writeFileSync(imagePath, "signed disk image\n");
+    writeDiskImage(imagePath);
     const image = await observeFile("disk-image", imagePath);
     const before = readFileSync(imagePath);
     const submission = await Effect.runPromise(
@@ -639,18 +817,19 @@ describe("Apple Staple", () => {
       Notary.info(submission).pipe(Effect.provide(notaryLayer(harness))),
     );
     if (notarization.status !== "Accepted") throw new Error("fake Notary did not accept the disk image");
+    const accepted = notarization as Notary.AcceptedSubmissionObservation;
     const layer = Staple.layer({ staplerPath: harness.paths.stapler, dittoPath: harness.paths.ditto }).pipe(
       Layer.provide(harness.platform),
     );
     const exit = await Effect.runPromiseExit(
-      Staple.staple({ input: image, destination, notarization }).pipe(Effect.provide(layer)),
+      Staple.staple({ input: image, destination, notarization: accepted }).pipe(Effect.provide(layer)),
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (!Exit.isSuccess(exit)) return;
     expect(readFileSync(imagePath)).toEqual(before);
     expect(readFileSync(destination, "utf8")).toContain("stapled");
     expect(exit.value.artifact.identity.digest.value).not.toBe(image.identity.digest.value);
-    expect(exit.value.notarization).toBe(notarization);
+    expect(exit.value.notarization).toBe(accepted);
     const stapler = harness.invocations.filter(({ tool }) => tool === "stapler");
     expect(stapler.map(({ args }) => args[0])).toEqual(["staple", "validate"]);
     expect(stapler.every(({ args }) => args.length === 2)).toBe(true);
@@ -661,7 +840,8 @@ describe("Apple Staple", () => {
     for (const kind of ["zip", "mach-o"] as const) {
       const harness = makeHarness();
       const path = join(harness.root, kind === "zip" ? "Example.zip" : "tool");
-      writeFileSync(path, "artifact\n");
+      if (kind === "zip") writeZip(path);
+      else writeMachO(path);
       const artifact = await observeFile(kind, path);
       const layer = Staple.layer({ staplerPath: harness.paths.stapler, dittoPath: harness.paths.ditto }).pipe(
         Layer.provide(harness.platform),
@@ -679,7 +859,7 @@ describe("Apple Staple", () => {
   it("rejects forged Accepted observations before stapler work", async () => {
     const harness = makeHarness();
     const imagePath = join(harness.root, "Example.dmg");
-    writeFileSync(imagePath, "signed disk image\n");
+    writeDiskImage(imagePath);
     const image = await observeFile("disk-image", imagePath);
     const layer = Staple.layer({ staplerPath: harness.paths.stapler, dittoPath: harness.paths.ditto }).pipe(
       Layer.provide(harness.platform),
@@ -700,8 +880,7 @@ describe("Apple Assess", () => {
   it("returns Gatekeeper denial as a digest-bound observation and leaves the caller input unchanged", async () => {
     const harness = makeHarness({ assessment: "denied" });
     const executablePath = join(harness.root, "tool");
-    writeFileSync(executablePath, "signed executable\n");
-    chmodSync(executablePath, 0o755);
+    writeMachO(executablePath);
     const executable = await observeFile("mach-o", executablePath);
     const before = readFileSync(executablePath);
     const layer = Assess.layer({
@@ -733,8 +912,7 @@ describe("Apple Assess", () => {
   it("rejects a private assessment snapshot changed by an observer while preserving caller bytes", async () => {
     const harness = makeHarness({ mutateAssessmentSnapshot: true });
     const executablePath = join(harness.root, "changed-observation-tool");
-    writeFileSync(executablePath, "signed executable\n");
-    chmodSync(executablePath, 0o755);
+    writeMachO(executablePath);
     const executable = await observeFile("mach-o", executablePath);
     const before = readFileSync(executablePath);
     const layer = Assess.layer({
@@ -751,7 +929,7 @@ describe("Apple Assess", () => {
   it("maps package assessment to install and distinguishes operational spctl failure", async () => {
     const harness = makeHarness({ assessment: "operational-failure" });
     const packagePath = join(harness.root, "Example.pkg");
-    writeFileSync(packagePath, "signed package\n");
+    writeInstallerPackage(packagePath);
     const pkg = await observeFile("installer-package", packagePath);
     const layer = Assess.layer({
       codesignPath: harness.paths.codesign,
@@ -772,7 +950,7 @@ describe("Apple Assess", () => {
   it("rejects ZIP assessment before spawning", async () => {
     const harness = makeHarness();
     const archivePath = join(harness.root, "Example.zip");
-    writeFileSync(archivePath, "archive\n");
+    writeZip(archivePath, "archive\n");
     const archive = await observeFile("zip", archivePath);
     const layer = Assess.layer({
       codesignPath: harness.paths.codesign,

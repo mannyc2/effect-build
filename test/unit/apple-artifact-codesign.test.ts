@@ -34,6 +34,28 @@ const makeRoot = (): string => {
   return root;
 };
 
+const writeMachO = (
+  path: string,
+  payload = "unsigned\n",
+  architecture: "arm64" | "x86_64" = "arm64",
+): void => {
+  const cpuType = architecture === "arm64"
+    ? Buffer.from([0x0c, 0x00, 0x00, 0x01])
+    : Buffer.from([0x07, 0x00, 0x00, 0x01]);
+  writeFileSync(path, Buffer.concat([Buffer.from([0xcf, 0xfa, 0xed, 0xfe]), cpuType, Buffer.from(payload)]));
+  chmodSync(path, 0o755);
+};
+
+const writeZip = (path: string, payload = "archive\n"): void => {
+  writeFileSync(path, Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from(payload)]));
+};
+
+const writeDiskImage = (path: string, payload = "disk image\n"): void => {
+  const trailer = Buffer.alloc(512);
+  trailer.write("koly", 0, "ascii");
+  writeFileSync(path, Buffer.concat([Buffer.from(payload), trailer]));
+};
+
 const failure = <A, E>(exit: Exit.Exit<A, E>): E => {
   if (!Exit.isFailure(exit)) throw new Error("expected failure");
   const found = Cause.findErrorOption(exit.cause);
@@ -246,8 +268,7 @@ describe("Apple Artifact", () => {
   it("observes mandatory algorithm-qualified file identities and rejects mutation or forgery", async () => {
     const root = makeRoot();
     const file = join(root, "tool");
-    writeFileSync(file, "before\n");
-    chmodSync(file, 0o755);
+    writeMachO(file, "before\n");
 
     const observed = await runArtifact(Artifact.observeFile("mach-o", file));
     expect(Exit.isSuccess(observed)).toBe(true);
@@ -258,7 +279,7 @@ describe("Apple Artifact", () => {
     const forged = { ...observed.value } as Artifact.FileArtifact;
     expect(failure(await runArtifact(Artifact.revalidate(forged)))._tag).toBe("UnauthenticatedArtifact");
 
-    writeFileSync(file, "after\n");
+    writeMachO(file, "after\n");
     expect(failure(await runArtifact(Artifact.revalidate(observed.value)))._tag).toBe("ArtifactChanged");
   });
 
@@ -267,8 +288,8 @@ describe("Apple Artifact", () => {
     const app = join(root, "Example.app");
     const outside = join(root, "outside");
     mkdirSync(join(app, "Contents", "MacOS"), { recursive: true });
-    writeFileSync(join(app, "Contents", "MacOS", "Example"), "binary\n");
-    chmodSync(join(app, "Contents", "MacOS", "Example"), 0o755);
+    writeFileSync(join(app, "Contents", "Info.plist"), "<plist/>\n");
+    writeMachO(join(app, "Contents", "MacOS", "Example"), "binary\n");
     writeFileSync(outside, "one\n");
     symlinkSync(outside, join(app, "Contents", "external"));
 
@@ -288,6 +309,54 @@ describe("Apple Artifact", () => {
     symlinkSync("elsewhere", join(app, "Contents", "external"));
     expect(failure(await runArtifact(Artifact.revalidate(observed.value)))._tag).toBe("ArtifactChanged");
   });
+
+  it("independently authenticates only hashed macOS provider executables", async () => {
+    const root = makeRoot();
+    const file = join(root, "provider-output");
+    writeMachO(file, "provider executable\n");
+    const source = await Effect.runPromise(
+      Artifact.observeFile("mach-o", file).pipe(Effect.provide(NodeServices.layer)),
+    );
+    const executable = {
+      _tag: "Executable" as const,
+      path: file,
+      bytes: source.identity.bytes,
+      target: "macos-aarch64" as const,
+      tool: { name: "fake", version: "1" },
+      sha256: source.identity.digest.value,
+    };
+    const observed = await runArtifact(Artifact.observeExecutable(executable));
+    expect(Exit.isSuccess(observed)).toBe(true);
+    if (Exit.isSuccess(observed)) expect(observed.value.identity).toEqual(source.identity);
+
+    const { sha256: removedSha256, ...unhashedExecutable } = executable;
+    void removedSha256;
+    const unhashed = await runArtifact(Artifact.observeExecutable(unhashedExecutable));
+    expect(failure(unhashed)).toMatchObject({ _tag: "AppleInputInvalid", field: "sha256" });
+    const linux = await runArtifact(Artifact.observeExecutable({ ...executable, target: "linux-x64-gnu" }));
+    expect(failure(linux)).toMatchObject({ _tag: "AppleInputInvalid", field: "target" });
+    const armAsX64 = await runArtifact(Artifact.observeExecutable({ ...executable, target: "macos-x64" }));
+    expect(failure(armAsX64)).toMatchObject({ _tag: "AppleInputInvalid", field: "target" });
+
+    const x64Path = join(root, "provider-output-x64");
+    writeMachO(x64Path, "provider executable x64\n", "x86_64");
+    const x64Source = await Effect.runPromise(
+      Artifact.observeFile("mach-o", x64Path).pipe(Effect.provide(NodeServices.layer)),
+    );
+    const x64Executable = {
+      ...executable,
+      path: x64Path,
+      bytes: x64Source.identity.bytes,
+      target: "macos-x64" as const,
+      sha256: x64Source.identity.digest.value,
+    };
+    expect(Exit.isSuccess(await runArtifact(Artifact.observeExecutable(x64Executable)))).toBe(true);
+    const x64AsArm = await runArtifact(Artifact.observeExecutable({ ...x64Executable, target: "macos-aarch64" }));
+    expect(failure(x64AsArm)).toMatchObject({ _tag: "AppleInputInvalid", field: "target" });
+
+    const changed = await runArtifact(Artifact.observeExecutable({ ...executable, sha256: "0".repeat(64) }));
+    expect(failure(changed)).toMatchObject({ _tag: "ArtifactChanged" });
+  });
 });
 
 describe("Apple CodeSign", () => {
@@ -296,8 +365,7 @@ describe("Apple CodeSign", () => {
     const inputPath = join(harness.root, "input");
     const entitlementsPath = join(harness.root, "entitlements.plist");
     const destination = join(harness.root, "signed");
-    writeFileSync(inputPath, "unsigned\n");
-    chmodSync(inputPath, 0o755);
+    writeMachO(inputPath);
     writeFileSync(entitlementsPath, requestedEntitlements);
     const before = readFileSync(inputPath);
     const input = await Effect.runPromise(
@@ -441,8 +509,7 @@ describe("Apple CodeSign", () => {
       const harness = makeHarness(testCase.options);
       const inputPath = join(harness.root, `${testCase.name.replaceAll(" ", "-")}-input`);
       const destination = join(harness.root, `${testCase.name.replaceAll(" ", "-")}-signed`);
-      writeFileSync(inputPath, "unsigned\n");
-      chmodSync(inputPath, 0o755);
+      writeMachO(inputPath);
       const input = await Effect.runPromise(
         Artifact.observeFile("mach-o", inputPath).pipe(Effect.provide(NodeServices.layer)),
       );
@@ -480,8 +547,7 @@ describe("Apple CodeSign", () => {
     const harness = makeHarness({ codesignNoMutation: true });
     const inputPath = join(harness.root, "input");
     const destination = join(harness.root, "signed");
-    writeFileSync(inputPath, "unsigned\n");
-    chmodSync(inputPath, 0o755);
+    writeMachO(inputPath);
     const input = await Effect.runPromise(
       Artifact.observeFile("mach-o", inputPath).pipe(Effect.provide(NodeServices.layer)),
     );
@@ -508,10 +574,9 @@ describe("Apple CodeSign", () => {
     const helper = join(appPath, "Contents", "Frameworks", "Helper");
     mkdirSync(join(appPath, "Contents", "MacOS"), { recursive: true });
     mkdirSync(join(appPath, "Contents", "Frameworks"), { recursive: true });
-    writeFileSync(join(appPath, "Contents", "MacOS", "Main"), "main\n");
-    writeFileSync(helper, "helper\n");
-    chmodSync(join(appPath, "Contents", "MacOS", "Main"), 0o755);
-    chmodSync(helper, 0o755);
+    writeFileSync(join(appPath, "Contents", "Info.plist"), "<plist/>\n");
+    writeMachO(join(appPath, "Contents", "MacOS", "Main"), "main\n");
+    writeMachO(helper, "helper\n");
     const input = await Effect.runPromise(
       Artifact.observeTree("app-bundle", appPath).pipe(Effect.provide(NodeServices.layer)),
     );
@@ -547,7 +612,7 @@ describe("Apple CodeSign", () => {
   it("rejects unsupported, changed, and forged inputs before process work", async () => {
     const harness = makeHarness();
     const path = join(harness.root, "archive.zip");
-    writeFileSync(path, "zip\n");
+    writeZip(path);
     const zip = await Effect.runPromise(
       Artifact.observeFile("zip", path).pipe(Effect.provide(NodeServices.layer)),
     );
@@ -561,12 +626,11 @@ describe("Apple CodeSign", () => {
     expect(harness.invocations).toEqual([]);
 
     const executablePath = join(harness.root, "tool");
-    writeFileSync(executablePath, "before\n");
-    chmodSync(executablePath, 0o755);
+    writeMachO(executablePath, "before\n");
     const executable = await Effect.runPromise(
       Artifact.observeFile("mach-o", executablePath).pipe(Effect.provide(NodeServices.layer)),
     );
-    writeFileSync(executablePath, "changed\n");
+    writeMachO(executablePath, "changed\n");
     const changed = await harness.run(CodeSign.sign({
       input: executable,
       destination: join(harness.root, "changed-out"),
@@ -580,8 +644,7 @@ describe("Apple CodeSign", () => {
   it("rejects parent-first plans, missing raw identifiers, and forged identities before process work", async () => {
     const harness = makeHarness();
     const executablePath = join(harness.root, "tool");
-    writeFileSync(executablePath, "unsigned\n");
-    chmodSync(executablePath, 0o755);
+    writeMachO(executablePath);
     const executable = await Effect.runPromise(
       Artifact.observeFile("mach-o", executablePath).pipe(Effect.provide(NodeServices.layer)),
     );
@@ -612,7 +675,7 @@ describe("Apple CodeSign", () => {
     const harness = makeHarness();
     const diskImagePath = join(harness.root, "Input.dmg");
     const entitlementsPath = join(harness.root, "entitlements.plist");
-    writeFileSync(diskImagePath, "disk image\n");
+    writeDiskImage(diskImagePath);
     writeFileSync(entitlementsPath, "<plist/>\n");
     const diskImage = await Effect.runPromise(
       Artifact.observeFile("disk-image", diskImagePath).pipe(Effect.provide(NodeServices.layer)),
@@ -641,8 +704,7 @@ describe("Apple CodeSign", () => {
     const harness = makeHarness({ codesignFailure: true });
     const inputPath = join(harness.root, "tool");
     const destination = join(harness.root, "signed");
-    writeFileSync(inputPath, "unsigned\n");
-    chmodSync(inputPath, 0o755);
+    writeMachO(inputPath);
     const input = await Effect.runPromise(
       Artifact.observeFile("mach-o", inputPath).pipe(Effect.provide(NodeServices.layer)),
     );
@@ -671,8 +733,7 @@ describe("Apple CodeSign", () => {
   it("detects selected-tool replacement and preserves interruption Cause", async () => {
     const changedToolHarness = makeHarness({ replaceCodesignDuringSign: true });
     const changedInputPath = join(changedToolHarness.root, "tool");
-    writeFileSync(changedInputPath, "unsigned\n");
-    chmodSync(changedInputPath, 0o755);
+    writeMachO(changedInputPath);
     const changedInput = await Effect.runPromise(
       Artifact.observeFile("mach-o", changedInputPath).pipe(Effect.provide(NodeServices.layer)),
     );
@@ -686,8 +747,7 @@ describe("Apple CodeSign", () => {
 
     const interruptedHarness = makeHarness({ delayCodesign: true });
     const inputPath = join(interruptedHarness.root, "input");
-    writeFileSync(inputPath, "unsigned\n");
-    chmodSync(inputPath, 0o755);
+    writeMachO(inputPath);
     const input = await Effect.runPromise(
       Artifact.observeFile("mach-o", inputPath).pipe(Effect.provide(NodeServices.layer)),
     );
