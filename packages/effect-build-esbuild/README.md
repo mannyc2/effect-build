@@ -23,5 +23,6 @@ returns a scoped context whose native `dispose` is owned by the Scope
 (cancel-then-dispose), and `Watch.changes` emits every completed build —
 broken rebuilds arrive as values on `result.errors`, and ending the
 stream stops the watcher. Failures are `EsbuildFailed`, exposing the
-native `errors`/`warnings` by reference. See the
+native `errors`/`warnings` by reference. This native cancel/dispose behavior is
+not the portable OS process-tree cancellation guarantee. See the
 [repository](https://github.com/mannyc2/effect-build) for the full toolkit.

@@ -1,8 +1,14 @@
 # API
 
-Six packages; every root is a namespace facade and operations live at
-subpaths. The exact export lists are asserted against
-[`tooling/public-api.json`](../tooling/public-api.json).
+The approved target is `effect-build/v0.5-contract@1` in
+[`tooling/v05-contract.json`](../tooling/v05-contract.json). The exact current
+candidate exports remain asserted against
+[`tooling/public-api.json`](../tooling/public-api.json). Current and target
+surfaces are intentionally separate until the source hard cut.
+
+## Current candidate surface
+
+Operations live at package subpaths:
 
 ```ts
 import * as BunBundle from "effect-build-bun/Bundle";
@@ -16,76 +22,69 @@ import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
 import * as Rolldown from "effect-build-rolldown/Build";
 import * as RolldownWatch from "effect-build-rolldown/Watch";
 import * as Target from "effect-build/Target";
-import * as Toolchain from "effect-build/Toolchain";
 ```
 
-**Compile executables.** `BunCompile.compileExecutable` and
-`DenoCompile.compileExecutable` take a flat input — `entrypoint`, `outfile`,
-optional `cwd`, `target` (defaults to the host), `hash` (defaults to `true`),
-and tool-native options (`minify`/`sourcemap`/`bytecode` for Bun;
-`bundle`/`minify`/`permissions` for Deno, where `minify` requires `bundle`
-at the type level). Both return one `Artifact.Executable`:
+`BunCompile.compileExecutable` and `DenoCompile.compileExecutable` take an
+entrypoint, output file, optional working directory, provider-supported target,
+hash option, and native options. They return the current
+`Artifact.Executable` observation.
 
-```ts
-interface Executable {
-  readonly _tag: "Executable";
-  readonly path: string; // absolute, .exe appended for windows targets
-  readonly bytes: number;
-  readonly target: Target.Target;
-  readonly tool: { readonly name: string; readonly version: string };
-  readonly sha256?: string; // present unless hash: false
-}
-```
+`BunBundle.bundle` and `DenoBundle.bundle` take non-empty entrypoints plus an
+output directory and return the current `Artifact.Bundle`. Publication is
+incremental: files are renamed into the destination one at a time, so a failed
+operation can leave a mixed directory. Native Bun `target: "browser"` and Deno
+`platform: "browser"` are provider selectors, not portable application
+closure.
 
-**Bundle to a directory.** `BunBundle.bundle` (`bun build`, with `target`
-browser/bun/node, `format`, `minify`, `sourcemap`, `splitting`, `packages`,
-`external`) and `DenoBundle.bundle` (`deno bundle`, with `platform`
-browser/deno, `minify`, `codeSplitting`, `sourcemap`, `external`) take
-non-empty `entrypoints` plus an `outdir` and return one `Artifact.Bundle`:
+esbuild `Build`, `Context`, and `Watch` expose its native in-memory and scoped
+context semantics. Rolldown `Build` and `Watch` expose native handles and events.
+These are provider-native operations; they do not inherit the portable OS
+process-tree guarantee. Rolldown Watch promotion additionally requires bounded
+delivery and awaited exactly-once result ownership.
 
-```ts
-interface Bundle {
-  readonly _tag: "Bundle";
-  readonly outdir: string; // absolute
-  readonly files: readonly { path: string; bytes: number; sha256?: string }[]; // sorted by path
-  readonly tool: { readonly name: string; readonly version: string };
-}
-```
+The current Node `AssembleExecutable` accepts file or byte mains and assets and
+targets an inferred host through `node --build-sea`. This is a raw host-native
+lane. Caller assets, bytes, separate builder/base selection, and target
+inference cannot mint portable SEA evidence.
 
-**Bundle with esbuild.** `Build.build` runs one in-memory build (`write`
-must be the literal `false`) and returns esbuild's native `BuildResult`;
-`Build.transform` transpiles one file in memory and `Build.analyzeMetafile`
-renders esbuild's size report. `Context.make` returns a scoped incremental
-context whose `rebuild`, `watch`, `serve`, and `cancel` are Effects;
-closing the Scope cancels and disposes the native context. `Watch.changes`
-turns watch mode into a `Stream` of build results — broken rebuilds arrive
-as values on `result.errors`, and ending the stream stops the watcher.
+The candidate still exports `effect-build/Toolchain`. It is legacy transition
+surface, not an earned third-party SPI. The Stage 2 hard cut deletes its root
+namespace and subpath without a compatibility alias.
 
-**Bundle with Rolldown.** `Rolldown.make` is a scoped handle over a native
-`RolldownBuild` whose `generate` (in-memory) and `write` (on-disk) return
-rolldown's native `RolldownOutput`; `Rolldown.generate`/`Rolldown.write`
-are the one-shot forms, and native `close` is owned by the Scope.
-`RolldownWatch.events` streams sanitized watcher events (`START`,
-`BUNDLE_START`, `BUNDLE_END`, `END`, `ERROR`) with the native result
-handles closed for you.
+## Frozen target subpaths
 
-**Assemble Node SEA executables.** `AssembleExecutable.assembleExecutable`
-takes a `main` (`File` or `Bytes`, commonjs or module), optional `assets`
-as a keyed record, and produces a host-target executable via `node --check`
-and `node --build-sea`.
+Stage 0 freezes root namespace and subpath names only. It intentionally does not
+freeze every runtime/declaration symbol; each owning implementation stage must
+do that before its first source export, and unresolved symbol lists block
+release.
 
-**Targets.** `Target.Target` is the eight-target vocabulary
-(`macos|linux|windows` × `x64|aarch64`, with `gnu|musl` on linux);
-`Target.info` projects os/architecture/abi/executable-suffix/native-format
-from a target, and `Target.host()` best-effort detects the host. Each
-provider exposes its own supported subset as `Target`.
+Core keeps `Artifact`, `BuildError`, and `Target`, and adds the role-specific
+`Author/Tool`, `Author/BorrowedContent`, `Author/TreeSnapshot`,
+`Author/Generation`, `Author/NodeMain`, and
+`Profile/StaticBrowserApplication` subpaths. Bun, esbuild, and Rolldown add one
+`Profile` subpath. Node SEA replaces `AssembleExecutable` with `Raw` and
+`NodeMainExecutable`. Deno has no portable Profile subpath unless a later
+explicit contract revision admits one.
 
-**Toolchain.** `effect-build/Toolchain` is the kernel providers are built
-on — `resolveExecutable` (resolve-once), `run`/`runOrFail` (scoped spawn
-with bounded output capture), `probeVersion`, `warnIfUntested`, and
-`publishExecutable` (staged atomic publication). It is public so
-third-party provider authors build on working code, not type-only
-contracts.
+The target-only seventh package `effect-build-apple` freezes root namespaces
+and matching subpaths for `Artifact`, `CodeSign`, `AppBundle`, `Zip`, `DiskImage`,
+`InstallerPackage`, `Notary`, `Staple`, and `Assess`. It is absent from the
+current generated public-surface snapshot; its owning parallel implementation
+must freeze exact runtime/declaration symbols before first export. This family
+is direct Developer ID distribution only, not Mac App Store support or a
+generic deployment API; universal-binary construction is also outside v0.5.
+Exact operation function names, full option types, Notary JSON/status decoding,
+and detailed receipt/evidence shapes remain release-blocking rather than being
+guessed ahead of the parallel red/green implementation and credential-backed A7
+fixtures.
 
-Fan-out is plain Effect: `Effect.forEach(inputs, compileExecutable, { concurrency })` with `Effect.exit` per cell when independent settlement is
-wanted.
+The same cut removes current `Artifact.Bundle`, `Artifact.BundleFile`,
+caller-authored `Artifact.Tool`, and `Target.host`. Durable directory results use
+`TreeSnapshot`, `DirectoryGeneration`, and `CurrentGeneration`; portable Node
+results progress through sealed, assembled, target-supported, and exact-artifact
+executed evidence states. Native Bun and Deno bundle result ownership moves to
+their respective `Bundle` subpaths as provider-local `Bundle` and `BundleFile`
+declarations before the core declarations disappear.
+
+Portable fan-out remains plain Effect composition. One unchanged consumer uses
+an explicit provider Layer and contains zero provider-name branches.

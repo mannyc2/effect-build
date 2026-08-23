@@ -1,27 +1,33 @@
 # Errors and interruption
 
-The whole library fails with a small closed set of `Schema.TaggedError`
-classes from `effect-build/BuildError`, each with real fields and a
-readable `message`:
+## Current candidate
 
-| Error               | Meaning                                                                                                    |
-| ------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `ToolNotFound`      | Explicit executable unusable, or the PATH walk found nothing                                               |
-| `ToolFailed`        | The tool exited non-zero (`exitCode`, bounded `stdout`/`stderr`) or could not be launched (`exitCode: -1`) |
-| `UnsupportedTarget` | The requested target is outside the provider's set (`available`)                                           |
-| `PublishFailed`     | Staging, sanity check, or the atomic rename failed (`reason`)                                              |
+The current source exposes a small set of `Schema.TaggedError` classes from
+`effect-build/BuildError`:
 
-esbuild operations fail with `EsbuildFailed`, which wraps the native
-rejection and exposes its `errors`/`warnings` message arrays by
-reference; rolldown operations fail with `RolldownFailed`, which does the
-same for rolldown's `errors` diagnostics. Watch streams never fail on
-broken rebuilds — those arrive as values — only on failing to start.
+| Error               | Meaning                                                             |
+| ------------------- | ------------------------------------------------------------------- |
+| `ToolNotFound`      | Explicit executable unusable, or the one PATH search found nothing  |
+| `ToolFailed`        | Launch failure or non-zero tool exit with bounded stdout and stderr |
+| `UnsupportedTarget` | Requested target is outside the provider's current set              |
+| `PublishFailed`     | Staging, sanity checking, or a rename failed                        |
 
-Layer construction fails with `ToolNotFound | ToolFailed`; untested tool
-versions log one warning and proceed — version and host mismatches are
-never refusals.
+esbuild uses `EsbuildFailed`; Rolldown uses `RolldownFailed`. The current
+provider layers warn and proceed outside their inferred version intervals.
+Those intervals are candidate behavior, not v0.5 compatibility evidence. A
+current bundle `PublishFailed` can occur after earlier files were committed.
 
-Interruption is a Cause-level event: interrupting a build closes the
-Scope, force-terminates owned child processes, and removes private
-staging. It is never translated into a typed build failure, and committed
-artifacts are never rolled back.
+## v0.5 boundary
+
+Provider-native operations may preserve permissive native behavior when it is
+truthfully documented. Portable profiles are fail-closed: version, tool
+identity, base identity, agreement, target evidence, request-shape, graph, or
+metadata mismatch is a refusal at the owning boundary. Exact executed points
+come from the compatibility evidence manifest, not an inferred interval.
+
+Interruption remains a Cause-level event and is never translated into a typed
+build failure. Closing a current scope can terminate an owned direct child or
+native handle, but that alone is not proof of descendant-tree containment. The
+portable hard guarantee is earned only by a schema-serializable job inside its
+owned process group or Job Object, after confirmed tree exit and staging
+cleanup. Cleanup failure is preserved in Cause with the primary failure.

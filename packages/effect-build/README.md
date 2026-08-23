@@ -1,21 +1,19 @@
 # effect-build
 
-The core of the effect-build toolkit: the target vocabulary, artifact
-types, the closed build-error set, and the external-tool kernel the
-providers (`effect-build-bun`, `effect-build-deno`, `effect-build-esbuild`,
-`effect-build-node-sea`, `effect-build-rolldown`) are built on.
-
-The package root is a namespace facade; import from the exact subpath:
+Core currently exports the target vocabulary, artifact observations, closed
+build errors, and the legacy external-tool kernel used by the built-in
+providers.
 
 ```ts
-import type * as Artifact from "effect-build/Artifact"; // Executable, Bundle, Tool
-import * as BuildError from "effect-build/BuildError"; // ToolNotFound, ToolFailed, UnsupportedTarget, PublishFailed
-import * as Target from "effect-build/Target"; // the eight-target table, info(), host()
-import * as Toolchain from "effect-build/Toolchain"; // resolve, run, probe, publish
+import type * as Artifact from "effect-build/Artifact";
+import * as BuildError from "effect-build/BuildError";
+import * as Target from "effect-build/Target";
 ```
 
-`Toolchain` owns resolve-once tool selection, scoped child processes with
-bounded output capture, version probing with warn-only tested ranges, and
-staged publication (atomic rename for executables, per-file renames for
-bundles). See the [repository](https://github.com/mannyc2/effect-build)
-for the full toolkit.
+The current `effect-build/Toolchain` export is transition surface scheduled for
+deletion in the v0.5 hard cut. It is not a stable third-party provider SPI and
+will receive no compatibility alias. The replacement consists of law-tested,
+role-specific `Author/*` capabilities, immutable generation primitives, and
+closed portable profiles. See the
+[`effect-build/v0.5-contract@1`](https://github.com/mannyc2/effect-build/blob/main/docs/v0.5-contract.md)
+target decision.

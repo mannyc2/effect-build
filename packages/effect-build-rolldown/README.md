@@ -17,9 +17,11 @@ const output = await Effect.runPromise(
 for (const chunk of output.output) console.log(chunk.fileName);
 ```
 
-`Build.make` returns a scoped handle whose native `close` is owned by the
-Scope; `generate` bundles in memory and `write` bundles onto disk. Failures
-surface as `RolldownFailed` with rolldown's own diagnostics on `.errors`.
+`Build.make` returns a scoped handle; `generate` bundles in memory and `write`
+bundles onto disk. Failures surface as `RolldownFailed` with rolldown's own
+diagnostics on `.errors`. Stable v0.5 Watch promotion is blocked until delivery
+is bounded and every build, watcher, and result close is awaited exactly once
+with cleanup failures preserved in Effect Cause.
 
 See the [repository](https://github.com/mannyc2/effect-build) for the full
 toolkit.

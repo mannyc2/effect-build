@@ -6,10 +6,12 @@ const repository = fileURLToPath(new URL("..", import.meta.url));
 const targets = [
   "dist",
   "packages/effect-build/dist",
+  "packages/effect-build-apple/dist",
   "packages/effect-build-bun/dist",
   "packages/effect-build-deno/dist",
   "packages/effect-build-esbuild/dist",
   "packages/effect-build-node-sea/dist",
+  "packages/effect-build-rolldown/dist",
 ];
 
 for (const targetPath of targets) {
