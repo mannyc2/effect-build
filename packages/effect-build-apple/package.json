@@ -1,0 +1,40 @@
+{
+  "name": "effect-build-apple",
+  "version": "0.5.0",
+  "description": "Effect-native direct Developer ID distribution for macOS artifacts.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "keywords": ["effect", "apple", "macos", "codesign", "notarization"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mannyc2/effect-build.git",
+    "directory": "packages/effect-build-apple"
+  },
+  "bugs": { "url": "https://github.com/mannyc2/effect-build/issues" },
+  "homepage": "https://github.com/mannyc2/effect-build#readme",
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": { "access": "public", "provenance": true },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./Artifact": { "types": "./dist/Artifact.d.ts", "import": "./dist/Artifact.js" },
+    "./CodeSign": { "types": "./dist/CodeSign.d.ts", "import": "./dist/CodeSign.js" },
+    "./AppBundle": { "types": "./dist/AppBundle.d.ts", "import": "./dist/AppBundle.js" },
+    "./Zip": { "types": "./dist/Zip.d.ts", "import": "./dist/Zip.js" },
+    "./DiskImage": { "types": "./dist/DiskImage.d.ts", "import": "./dist/DiskImage.js" },
+    "./InstallerPackage": {
+      "types": "./dist/InstallerPackage.d.ts",
+      "import": "./dist/InstallerPackage.js"
+    },
+    "./Notary": { "types": "./dist/Notary.d.ts", "import": "./dist/Notary.js" },
+    "./Staple": { "types": "./dist/Staple.d.ts", "import": "./dist/Staple.js" },
+    "./Assess": { "types": "./dist/Assess.d.ts", "import": "./dist/Assess.js" }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json --force",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": { "effect-build": "workspace:^" },
+  "peerDependencies": { "effect": ">=4.0.0-beta.104 <4.1.0-0" },
+  "devDependencies": { "effect": "4.0.0-rc.108" }
+}

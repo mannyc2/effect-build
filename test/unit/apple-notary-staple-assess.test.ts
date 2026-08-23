@@ -86,6 +86,34 @@ const recordingFileSystemLayer = (syncs: SyncEvent[]): Layer.Layer<FileSystem.Fi
     }),
   ).pipe(Layer.provide(NodeFileSystem.layer));
 
+const blockingSubmittedLinkFileSystem = () => {
+  let startedResolve: () => void = () => {};
+  let releaseResolve: () => void = () => {};
+  const started = new Promise<void>((resolve) => {
+    startedResolve = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    releaseResolve = resolve;
+  });
+  const layer = Layer.effect(
+    FileSystem.FileSystem,
+    Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      return {
+        ...fileSystem,
+        link: (existingPath, newPath) =>
+          newPath.endsWith(".submitted.json")
+            ? Effect.promise(() => {
+              startedResolve();
+              return released;
+            }).pipe(Effect.andThen(fileSystem.link(existingPath, newPath)))
+            : fileSystem.link(existingPath, newPath),
+      } satisfies FileSystem.FileSystem;
+    }),
+  ).pipe(Layer.provide(NodeFileSystem.layer));
+  return { layer, started: () => started, release: releaseResolve };
+};
+
 const failure = <A, E>(exit: Exit.Exit<A, E>): E => {
   if (!Exit.isFailure(exit)) throw new Error("expected a typed failure");
   const found = Cause.findErrorOption(exit.cause);
@@ -104,6 +132,7 @@ interface HarnessOptions {
   readonly submit?: "accepted" | "delay" | "malformed" | "nonzero";
   readonly assessment?: "accepted" | "denied" | "operational-failure";
   readonly mutateSubmittedTransport?: boolean;
+  readonly replaceNotarytoolDuringSubmit?: boolean;
   readonly mutateAssessmentSnapshot?: boolean;
   readonly onSubmit?: (transportPath: string) => void;
   readonly fileSystemLayer?: Layer.Layer<FileSystem.FileSystem>;
@@ -186,6 +215,7 @@ const makeHarness = (options: HarnessOptions = {}) => {
           if (operation === "submit") {
             options.onSubmit?.(command.args[1]!);
             if (options.mutateSubmittedTransport) appendFileSync(command.args[1]!, "tampered in flight\n");
+            if (options.replaceNotarytoolDuringSubmit) appendFileSync(paths.notarytool, "replaced after launch\n");
             if (options.submit === "delay") {
               delayed = true;
               startedResolve();
@@ -194,7 +224,7 @@ const makeHarness = (options: HarnessOptions = {}) => {
             if (options.submit === "nonzero") return handle("upload stdout", "network uncertainty", 69);
             if (options.submit === "malformed") return handle('{"message":"no id"}\n', "", 0);
             return handle(
-              '{"id":"11111111-2222-3333-4444-555555555555","message":"Successfully uploaded file","status":"In Progress"}\n',
+              '{"id":"11111111-2222-3333-4444-555555555555","message":"Successfully uploaded file","path":"/private/Example.zip"}\n',
               "",
               0,
             );
@@ -295,7 +325,8 @@ const notaryLayer = (harness: ReturnType<typeof makeHarness>) =>
     s3Acceleration: "disabled",
   }).pipe(Layer.provide(harness.platform));
 
-describe("Apple artifact format authentication", () => {
+// These lifecycle fixtures intentionally exercise POSIX modes, symlinks, and directory fsync.
+describe.runIf(process.platform !== "win32")("Apple artifact format authentication", () => {
   it("accepts recognized file formats and leaves resource and entitlements bytes opaque", async () => {
     const root = makeRoot();
     const macho = join(root, "tool");
@@ -438,7 +469,7 @@ describe("Apple artifact format authentication", () => {
   });
 });
 
-describe("Apple Notary", () => {
+describe.runIf(process.platform !== "win32")("Apple Notary", () => {
   it("submits an authenticated app through a private ZIP and persists its recoverable submission id", async () => {
     const harness = makeHarness();
     const app = await observeApp(harness.root);
@@ -482,8 +513,38 @@ describe("Apple Notary", () => {
       schema: "effect-build-apple/notary-receipt@1",
       state: "Submitted",
       submissionId: exit.value.submissionId,
+      submittedStatus: "Not Queried",
     });
     expect(harness.invocations.filter(({ tool, args }) => tool === "ditto" && args[0] === "-x")).toHaveLength(1);
+  });
+
+  it("rejects a receipt below an authenticated app before creating parents or contacting Apple", async () => {
+    const harness = makeHarness();
+    const app = await observeApp(harness.root);
+    const receiptPath = join(app.path, "Contents", "Receipts", "notary.json");
+    const exit = await Effect.runPromiseExit(
+      Notary.submit({ artifact: app, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
+    );
+    expect(failure(exit)).toMatchObject({ _tag: "NotaryReceiptFailed" });
+    expect(existsSync(join(app.path, "Contents", "Receipts"))).toBe(false);
+    expect(harness.invocations.some(({ tool }) => tool === "notarytool")).toBe(false);
+    const revalidated = await Effect.runPromiseExit(
+      Artifact.revalidate(app).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(Exit.isSuccess(revalidated)).toBe(true);
+  });
+
+  it("requires an explicit valid S3 acceleration policy before selecting or invoking tools", async () => {
+    const harness = makeHarness();
+    const layer = Notary.layer({
+      notarytoolPath: harness.paths.notarytool,
+      dittoPath: harness.paths.ditto,
+      credentials: { _tag: "KeychainProfile", profile: "effect-build-ci" },
+      s3Acceleration: "typo" as never,
+    }).pipe(Layer.provide(harness.platform));
+    const exit = await Effect.runPromiseExit(Notary.history().pipe(Effect.provide(layer)));
+    expect(failure(exit)).toMatchObject({ _tag: "NotaryConfigurationInvalid", field: "s3Acceleration" });
+    expect(harness.invocations).toEqual([]);
   });
 
   it("fsyncs each complete immutable record and its parent directory", async () => {
@@ -541,7 +602,7 @@ describe("Apple Notary", () => {
                 ...attempt,
                 state: "Submitted",
                 submissionId: forgedId,
-                submittedStatus: "In Progress",
+                submittedStatus: "Not Queried",
                 source: "submit-response",
               },
               null,
@@ -589,6 +650,55 @@ describe("Apple Notary", () => {
     });
   });
 
+  it("commits a returned submission id before honoring post-child interruption", async () => {
+    const publication = blockingSubmittedLinkFileSystem();
+    const harness = makeHarness({ fileSystemLayer: publication.layer });
+    const archivePath = join(harness.root, "InterruptedAfterResponse.zip");
+    const receiptPath = join(harness.root, "interrupted-after-response.json");
+    writeZip(archivePath);
+    const archive = await observeFile("zip", archivePath);
+    const fiber = Effect.runFork(
+      Notary.submit({ artifact: archive, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
+    );
+    await publication.started();
+    fiber.interruptUnsafe();
+    publication.release();
+    const exit = await Effect.runPromise(Fiber.await(fiber));
+    expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+    const attempt = JSON.parse(readFileSync(receiptPath, "utf8")) as Record<string, unknown>;
+    expect(JSON.parse(readFileSync(
+      Notary.submittedReceiptPath(receiptPath, String(attempt.attemptId)),
+      "utf8",
+    ))).toMatchObject({
+      state: "Submitted",
+      submissionId: "11111111-2222-3333-4444-555555555555",
+      submittedStatus: "Not Queried",
+    });
+  });
+
+  it("commits a returned submission id before reporting post-run tool replacement", async () => {
+    const harness = makeHarness({ replaceNotarytoolDuringSubmit: true });
+    const archivePath = join(harness.root, "ReplacedTool.zip");
+    const receiptPath = join(harness.root, "replaced-tool.json");
+    writeZip(archivePath);
+    const archive = await observeFile("zip", archivePath);
+    const exit = await Effect.runPromiseExit(
+      Notary.submit({ artifact: archive, receiptPath }).pipe(Effect.provide(notaryLayer(harness))),
+    );
+    expect(failure(exit)).toMatchObject({
+      _tag: "UnknownSubmissionOutcome",
+      reason: expect.stringContaining("changed after returning submission response"),
+    });
+    const attempt = JSON.parse(readFileSync(receiptPath, "utf8")) as Record<string, unknown>;
+    expect(JSON.parse(readFileSync(
+      Notary.submittedReceiptPath(receiptPath, String(attempt.attemptId)),
+      "utf8",
+    ))).toMatchObject({
+      state: "Submitted",
+      submissionId: "11111111-2222-3333-4444-555555555555",
+    });
+  });
+
   it("classifies launched nonzero and malformed submit output as unknown outcomes without blind retry", async () => {
     for (const submit of ["nonzero", "malformed"] as const) {
       const harness = makeHarness({ submit });
@@ -631,6 +741,11 @@ describe("Apple Notary", () => {
     expect(waited.status).toBe("Invalid");
     expect(waited.submissionId).toBe(submission.submissionId);
     expect(log.rawJson).toContain(submission.submissionId);
+    expect(log).toMatchObject({
+      submissionId: submission.submissionId,
+      subject: submission.subject,
+      transport: submission.transport,
+    });
     expect(history.rawJson).toContain("history");
     expect(harness.invocations.find(({ args }) => args[0] === "wait")?.args).toContain("5m");
   });
@@ -673,7 +788,8 @@ describe("Apple Notary", () => {
 
     const before = harness.invocations.length;
     const unauthenticated = await Effect.runPromiseExit(
-      Notary.info(stored).pipe(Effect.provide(notaryLayer(harness))),
+      // Deliberately bypass the public nominal type to prove the runtime boundary also fails closed.
+      Notary.info(stored as unknown as Notary.Submission).pipe(Effect.provide(notaryLayer(harness))),
     );
     expect(failure(unauthenticated)).toMatchObject({ _tag: "NotaryBindingInvalid" });
     expect(harness.invocations).toHaveLength(before);
@@ -726,7 +842,7 @@ describe("Apple Notary", () => {
     expect(harness.invocations).toHaveLength(before);
   });
 
-  it("fails closed if the authenticated transport changes during submit and leaves only the base attempt", async () => {
+  it("fails closed if the authenticated transport changes after submit while retaining the durable submission id", async () => {
     const harness = makeHarness({ mutateSubmittedTransport: true });
     const archivePath = join(harness.root, "Transport.zip");
     const receiptPath = join(harness.root, "transport.json");
@@ -738,7 +854,13 @@ describe("Apple Notary", () => {
     expect(failure(exit)).toMatchObject({ _tag: "ArtifactChanged" });
     const attempt = JSON.parse(readFileSync(receiptPath, "utf8")) as Record<string, unknown>;
     expect(attempt.state).toBe("SubmissionAttemptStarted");
-    expect(existsSync(Notary.submittedReceiptPath(receiptPath, String(attempt.attemptId)))).toBe(false);
+    const submittedPath = Notary.submittedReceiptPath(receiptPath, String(attempt.attemptId));
+    expect(existsSync(submittedPath)).toBe(true);
+    const stored = await Effect.runPromise(Notary.readReceipt(receiptPath).pipe(Effect.provide(NodeServices.layer)));
+    expect(stored).toMatchObject({
+      state: "Submitted",
+      submissionId: "11111111-2222-3333-4444-555555555555",
+    });
   });
 
   it("reattaches an independently recovered id to the exact durable unknown-outcome receipt", async () => {
@@ -800,7 +922,7 @@ describe("Apple Notary", () => {
   });
 });
 
-describe("Apple Staple", () => {
+describe.runIf(process.platform !== "win32")("Apple Staple", () => {
   it("staples and validates a private copy before publishing a new authenticated artifact", async () => {
     const harness = makeHarness();
     const imagePath = join(harness.root, "Example.dmg");
@@ -876,7 +998,22 @@ describe("Apple Staple", () => {
   });
 });
 
-describe("Apple Assess", () => {
+describe.runIf(process.platform !== "win32")("Apple Assess", () => {
+  it("recursively verifies app signatures before recording the local policy observation", async () => {
+    const harness = makeHarness();
+    const app = await observeApp(harness.root);
+    const layer = Assess.layer({
+      codesignPath: harness.paths.codesign,
+      dittoPath: harness.paths.ditto,
+      pkgutilPath: harness.paths.pkgutil,
+      spctlPath: harness.paths.spctl,
+    }).pipe(Layer.provide(harness.platform));
+    const exit = await Effect.runPromiseExit(Assess.assess(app).pipe(Effect.provide(layer)));
+    expect(Exit.isSuccess(exit)).toBe(true);
+    const verification = harness.invocations.find(({ tool }) => tool === "codesign");
+    expect(verification?.args.slice(0, 4)).toEqual(["--verify", "--deep", "--strict", "--verbose=2"]);
+  });
+
   it("returns Gatekeeper denial as a digest-bound observation and leaves the caller input unchanged", async () => {
     const harness = makeHarness({ assessment: "denied" });
     const executablePath = join(harness.root, "tool");

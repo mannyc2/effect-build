@@ -21,7 +21,7 @@ export type CreateError =
   | Artifact.UnsupportedArtifactKind
   | Artifact.AppleInputInvalid
   | Artifact.ArtifactError
-  | Lifecycle.LifecycleError
+  | Artifact.LifecycleError
   | Artifact.ToolError;
 
 interface Service {

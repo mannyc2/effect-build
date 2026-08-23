@@ -349,7 +349,8 @@ const expectedPlist = `<?xml version="1.0" encoding="UTF-8"?>
 const stagingEntries = (root: string): readonly string[] =>
   readdirSync(root).filter((entry) => entry.startsWith(".effect-build-"));
 
-describe("Apple container construction", () => {
+// These lifecycle fixtures intentionally exercise POSIX modes and publication semantics.
+describe.runIf(process.platform !== "win32")("Apple container construction", () => {
   it("creates a deterministic authenticated app bundle without mutating inputs", async () => {
     const root = makeRoot();
     const tools = makeTools(root);
@@ -366,6 +367,10 @@ describe("Apple container construction", () => {
       first.resource.identity.digest.value,
     ]);
     expect(first.result.provenance.output).toEqual(Artifact.reference(first.result.artifact));
+    expect(Object.isFrozen(first.result)).toBe(true);
+    expect(Object.isFrozen(first.result.provenance)).toBe(true);
+    expect(Object.isFrozen(first.result.provenance.inputs)).toBe(true);
+    expect(Object.isFrozen(first.result.provenance.tools)).toBe(true);
     expect(first.result.provenance.tools.map(({ tool }) => tool.name)).toEqual([
       "ditto",
       "ditto",
@@ -436,6 +441,26 @@ describe("Apple container construction", () => {
       tools,
     );
     expect(failure(traversal)).toMatchObject({ _tag: "AppleInputInvalid" });
+
+    for (const destination of ["Cafe\u0301.txt", "line\nbreak.txt"]) {
+      const noncanonical = await run(
+        AppBundle.create({
+          ...base,
+          executable: inputs.executable,
+          resources: [{ artifact: inputs.resource, destination }],
+        }),
+        AppBundle.layer({ dittoPath: tools.paths.ditto, plutilPath: tools.paths.plutil }),
+        tools,
+      );
+      expect(failure(noncanonical)).toMatchObject({ _tag: "AppleInputInvalid", field: "resources.destination" });
+    }
+
+    const unsafeExecutableName = await run(
+      AppBundle.create({ ...base, executable: inputs.executable, executableName: "line\nbreak" }),
+      AppBundle.layer({ dittoPath: tools.paths.ditto, plutilPath: tools.paths.plutil }),
+      tools,
+    );
+    expect(failure(unsafeExecutableName)).toMatchObject({ _tag: "AppleInputInvalid", field: "executableName" });
 
     const invalidMetadata = [
       {
@@ -555,6 +580,34 @@ describe("Apple container construction", () => {
     expect(readdirSync(outfile)).toEqual(["sentinel"]);
     expect(tools.invocations).toEqual([]);
     expect(stagingEntries(root)).toEqual([]);
+  });
+
+  it("rejects existing-parent and missing-parent destinations inside an authenticated tree", async () => {
+    const root = makeRoot();
+    const tools = makeTools(root);
+    const app = await createApp(root, tools);
+    const invocationsBefore = tools.invocations.length;
+    const digestBefore = app.result.artifact.identity.digest.value;
+    const destinations = [
+      join(app.outfile, "Contents", "nested.zip"),
+      join(app.outfile, "Contents", "Generated", "nested.zip"),
+    ];
+    for (const outfile of destinations) {
+      const exit = await run(
+        Zip.create({ app: app.result.artifact, outfile }),
+        Zip.layer({ dittoPath: tools.paths.ditto }),
+        tools,
+      );
+      expect(failure(exit)).toMatchObject({ _tag: "ArtifactPublishFailed" });
+      expect(existsSync(outfile)).toBe(false);
+    }
+    expect(existsSync(join(app.outfile, "Contents", "Generated"))).toBe(false);
+    expect(tools.invocations).toHaveLength(invocationsBefore);
+    const revalidated = await Effect.runPromiseExit(
+      Artifact.revalidate(app.result.artifact).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(Exit.isSuccess(revalidated)).toBe(true);
+    expect(app.result.artifact.identity.digest.value).toBe(digestBefore);
   });
 
   it("atomically refuses file and tree destinations won by a concurrent publisher", async () => {

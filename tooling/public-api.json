@@ -79,6 +79,291 @@
         }
       }
     },
+    "effect-build-apple": {
+      "namespaces": [
+        "AppBundle",
+        "Artifact",
+        "Assess",
+        "CodeSign",
+        "DiskImage",
+        "InstallerPackage",
+        "Notary",
+        "Staple",
+        "Zip"
+      ],
+      "subpaths": {
+        "./Artifact": {
+          "runtime": [
+            "AppleIdentityInvalid",
+            "AppleInputInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
+            "ArtifactChanged",
+            "ArtifactObservationFailed",
+            "ArtifactPublishFailed",
+            "UnauthenticatedArtifact",
+            "UnsupportedArtifactKind",
+            "isFileArtifact",
+            "isKind",
+            "isTreeArtifact",
+            "observeExecutable",
+            "observeFile",
+            "observeTree",
+            "reference",
+            "revalidate",
+            "sameIdentity"
+          ],
+          "declarations": [
+            "AppleIdentityInvalid",
+            "AppleInputInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
+            "Artifact",
+            "ArtifactChanged",
+            "ArtifactError",
+            "ArtifactKind",
+            "ArtifactObservationFailed",
+            "ArtifactPublishFailed",
+            "ArtifactReference",
+            "ArtifactServices",
+            "Digest",
+            "FileArtifact",
+            "FileArtifactKind",
+            "FileIdentity",
+            "LifecycleError",
+            "MutationProvenance",
+            "MutationResult",
+            "OutputObservation",
+            "ToolError",
+            "ToolInvocation",
+            "ToolReference",
+            "TreeArtifact",
+            "TreeArtifactKind",
+            "TreeEntry",
+            "TreeIdentity",
+            "UnauthenticatedArtifact",
+            "UnsupportedArtifactKind",
+            "isFileArtifact",
+            "isKind",
+            "isTreeArtifact",
+            "observeExecutable",
+            "observeFile",
+            "observeTree",
+            "reference",
+            "revalidate",
+            "sameIdentity"
+          ]
+        },
+        "./CodeSign": {
+          "runtime": [
+            "CodeSignatureInvalid",
+            "Signer",
+            "developerIdApplication",
+            "layer",
+            "sign"
+          ],
+          "declarations": [
+            "CodeSignError",
+            "CodeSignatureInvalid",
+            "DeveloperIdApplication",
+            "DeveloperIdApplicationInput",
+            "IdentityObservation",
+            "LayerOptions",
+            "SignInput",
+            "SignResult",
+            "SignableArtifact",
+            "SignatureObservation",
+            "Signer",
+            "SigningPlanItem",
+            "developerIdApplication",
+            "layer",
+            "sign"
+          ]
+        },
+        "./AppBundle": {
+          "runtime": [
+            "Creator",
+            "create",
+            "layer"
+          ],
+          "declarations": [
+            "CreateError",
+            "CreateInput",
+            "CreateResult",
+            "Creator",
+            "LayerOptions",
+            "Resource",
+            "create",
+            "layer"
+          ]
+        },
+        "./Zip": {
+          "runtime": [
+            "Creator",
+            "create",
+            "layer"
+          ],
+          "declarations": [
+            "CreateError",
+            "CreateInput",
+            "CreateResult",
+            "Creator",
+            "LayerOptions",
+            "create",
+            "layer"
+          ]
+        },
+        "./DiskImage": {
+          "runtime": [
+            "Creator",
+            "create",
+            "layer"
+          ],
+          "declarations": [
+            "CreateError",
+            "CreateInput",
+            "CreateResult",
+            "Creator",
+            "LayerOptions",
+            "create",
+            "layer"
+          ]
+        },
+        "./InstallerPackage": {
+          "runtime": [
+            "Creator",
+            "create",
+            "developerIdInstaller",
+            "layer"
+          ],
+          "declarations": [
+            "CertificateObservation",
+            "CreateError",
+            "CreateInput",
+            "CreateResult",
+            "Creator",
+            "DeveloperIdInstaller",
+            "DeveloperIdInstallerInput",
+            "LayerOptions",
+            "create",
+            "developerIdInstaller",
+            "layer"
+          ]
+        },
+        "./Notary": {
+          "runtime": [
+            "InvalidNotaryResponse",
+            "Notarizer",
+            "NotaryBindingInvalid",
+            "NotaryConfigurationInvalid",
+            "NotaryReceiptExists",
+            "NotaryReceiptFailed",
+            "NotaryReceiptInvalid",
+            "SubmissionReceiptCommitFailed",
+            "UnknownSubmissionOutcome",
+            "history",
+            "info",
+            "layer",
+            "log",
+            "operatorReconciliationEvidence",
+            "readReceipt",
+            "reconcile",
+            "submit",
+            "submittedReceiptPath",
+            "wait"
+          ],
+          "declarations": [
+            "AcceptedSubmissionObservation",
+            "InvalidNotaryResponse",
+            "KeychainProfile",
+            "LayerOptions",
+            "NotarizableArtifact",
+            "Notarizer",
+            "NotaryBindingInvalid",
+            "NotaryConfigurationInvalid",
+            "NotaryReceipt",
+            "NotaryReceiptExists",
+            "NotaryReceiptFailed",
+            "NotaryReceiptInvalid",
+            "OperatorReconciledSubmission",
+            "OperatorReconciliationEvidence",
+            "OperatorReconciliationEvidenceInput",
+            "OperatorReconciliationRecord",
+            "QueryError",
+            "RawJsonObservation",
+            "ReadReceiptError",
+            "ReconcileError",
+            "ReconcileInput",
+            "S3Acceleration",
+            "Submission",
+            "SubmissionAttemptStarted",
+            "SubmissionLogObservation",
+            "SubmissionObservation",
+            "SubmissionReceiptCommitFailed",
+            "SubmissionReference",
+            "SubmissionStatus",
+            "SubmitError",
+            "SubmitInput",
+            "SubmitResponseSubmission",
+            "SubmittedReceipt",
+            "TransportPreparationProvenance",
+            "TransportReference",
+            "UnknownSubmissionOutcome",
+            "WaitOptions",
+            "history",
+            "info",
+            "layer",
+            "log",
+            "operatorReconciliationEvidence",
+            "readReceipt",
+            "reconcile",
+            "submit",
+            "submittedReceiptPath",
+            "wait"
+          ]
+        },
+        "./Staple": {
+          "runtime": [
+            "Stapler",
+            "layer",
+            "staple"
+          ],
+          "declarations": [
+            "LayerOptions",
+            "StapleArtifact",
+            "StapleError",
+            "StapleInput",
+            "StapleResult",
+            "Stapler",
+            "layer",
+            "staple"
+          ]
+        },
+        "./Assess": {
+          "runtime": [
+            "AssessmentToolFailed",
+            "Assessor",
+            "assess",
+            "layer"
+          ],
+          "declarations": [
+            "AssessError",
+            "AssessableArtifact",
+            "Assessment",
+            "AssessmentToolFailed",
+            "AssessmentType",
+            "Assessor",
+            "GatekeeperObservation",
+            "LayerOptions",
+            "SignatureObservation",
+            "assess",
+            "layer"
+          ]
+        }
+      }
+    },
     "effect-build-bun": {
       "namespaces": [
         "Bundle",

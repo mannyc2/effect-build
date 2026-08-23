@@ -22,6 +22,11 @@ New surface on the rebuilt kernel:
   (`Build.make`/`generate`/`write` over the native `RolldownBuild`, with
   `close` owned by the Scope) and `Watch.events` streaming sanitized
   watcher events.
+- New package `effect-build-apple`: authenticated direct Developer ID
+  product construction, Application and Installer signing boundaries,
+  no-wait Notary receipts and reconciliation, stapling, and local
+  assessment across nine explicit public subpaths. Mac App Store and
+  universal/fat artifacts are excluded.
 
 - One artifact type: `Artifact.Executable` with `path`, numeric `bytes`,
   `target`, `tool { name, version }`, and an optional `sha256` (hashing is

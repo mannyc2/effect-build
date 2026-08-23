@@ -1,4 +1,4 @@
-// Packs the six built packages and proves a fresh npm consumer can install,
+// Packs the seven built packages and proves a fresh npm consumer can install,
 // typecheck, and run them: a real fake-bun compile plus in-memory esbuild and
 // rolldown builds, with type-level use of every public module.
 import { execFile } from "node:child_process";
@@ -13,6 +13,7 @@ const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const packageNames = [
   "effect-build",
+  "effect-build-apple",
   "effect-build-bun",
   "effect-build-deno",
   "effect-build-esbuild",
@@ -107,6 +108,16 @@ try {
     join(consumerRoot, "main.ts"),
     `import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import * as Apple from "effect-build-apple";
+import * as AppleAppBundle from "effect-build-apple/AppBundle";
+import * as AppleArtifact from "effect-build-apple/Artifact";
+import * as AppleAssess from "effect-build-apple/Assess";
+import * as AppleCodeSign from "effect-build-apple/CodeSign";
+import * as AppleDiskImage from "effect-build-apple/DiskImage";
+import * as AppleInstallerPackage from "effect-build-apple/InstallerPackage";
+import * as AppleNotary from "effect-build-apple/Notary";
+import * as AppleStaple from "effect-build-apple/Staple";
+import * as AppleZip from "effect-build-apple/Zip";
 import * as BunBundle from "effect-build-bun/Bundle";
 import * as BunCompile from "effect-build-bun/CompileExecutable";
 import * as DenoBundle from "effect-build-deno/Bundle";
@@ -127,6 +138,29 @@ const bunBundleInput: BunBundle.BundleInput = { entrypoints: ["main.ts"], outdir
 const denoPlatform: DenoBundle.Platform = "browser";
 const watching: typeof Watch.changes = Watch.changes;
 const watcherEvent: RolldownWatch.Event = { code: "START" };
+const appleNamespaces = [
+  Apple.Artifact,
+  Apple.CodeSign,
+  Apple.AppBundle,
+  Apple.Zip,
+  Apple.DiskImage,
+  Apple.InstallerPackage,
+  Apple.Notary,
+  Apple.Staple,
+  Apple.Assess,
+] as const;
+const appleOperations = [
+  AppleArtifact.observeExecutable,
+  AppleCodeSign.sign,
+  AppleAppBundle.create,
+  AppleZip.create,
+  AppleDiskImage.create,
+  AppleInstallerPackage.create,
+  AppleNotary.submit,
+  AppleNotary.reconcile,
+  AppleStaple.staple,
+  AppleAssess.assess,
+] as const;
 void marker;
 void main;
 void assembler;
@@ -134,6 +168,8 @@ void bunBundleInput;
 void denoPlatform;
 void watching;
 void watcherEvent;
+void appleNamespaces;
+void appleOperations;
 
 const rolled = await Effect.runPromise(
   Rolldown.generate({ input: "rolldown-entry.js", cwd: process.cwd() }, { format: "esm" }).pipe(

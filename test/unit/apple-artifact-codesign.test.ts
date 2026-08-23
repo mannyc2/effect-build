@@ -279,7 +279,9 @@ const equivalentEmbeddedEntitlements = `<?xml version='1.0' encoding='UTF-8'?>
 </plist>
 `;
 
-describe("Apple Artifact", () => {
+// These lifecycle fixtures intentionally exercise POSIX modes and symlinks. Windows still
+// builds, typechecks, and consumes the package, while the behavioral suite runs on Unix hosts.
+describe.runIf(process.platform !== "win32")("Apple Artifact", () => {
   it("observes mandatory algorithm-qualified file identities and rejects mutation or forgery", async () => {
     const root = makeRoot();
     const file = join(root, "tool");
@@ -374,7 +376,7 @@ describe("Apple Artifact", () => {
   });
 });
 
-describe("Apple CodeSign", () => {
+describe.runIf(process.platform !== "win32")("Apple CodeSign", () => {
   it("signs a copied Mach-O with exact fingerprint argv, snapshotted entitlements, and strict verification", async () => {
     const harness = makeHarness({ embeddedEntitlements: equivalentEmbeddedEntitlements });
     const inputPath = join(harness.root, "input");

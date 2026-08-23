@@ -86,6 +86,8 @@ export interface ToolInvocation {
   readonly tool: ToolReference;
   readonly args: readonly string[];
   readonly cwd?: string | undefined;
+  readonly startedAtEpochMillis: number;
+  readonly completedAtEpochMillis: number;
   readonly exitCode: number;
   readonly stdout: OutputObservation;
   readonly stderr: OutputObservation;
@@ -93,6 +95,8 @@ export interface ToolInvocation {
 
 export interface MutationProvenance {
   readonly operation: string;
+  readonly startedAtEpochMillis: number;
+  readonly completedAtEpochMillis: number;
   readonly inputs: readonly ArtifactReference[];
   readonly output: ArtifactReference;
   readonly tools: readonly ToolInvocation[];
@@ -165,6 +169,8 @@ export class AppleToolFailed extends Schema.TaggedError<AppleToolFailed>()("Appl
 
 export type ArtifactError = ArtifactObservationFailed | UnauthenticatedArtifact | ArtifactChanged;
 export type ToolError = AppleToolUnavailable | AppleToolChanged | AppleToolFailed;
+/** Shared public failure set for authenticated staging and publication. */
+export type LifecycleError = ArtifactError | AppleInputInvalid | ArtifactPublishFailed | ToolError;
 
 const fileKinds = new Set<FileArtifactKind>([
   "mach-o",

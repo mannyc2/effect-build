@@ -1,4 +1,4 @@
-import { Cause, Effect, FileSystem, Option, Path, Stream } from "effect";
+import { Cause, Clock, Effect, Exit, FileSystem, Option, Path, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import {
   AppleToolChanged,
@@ -32,6 +32,11 @@ export interface RunOptions {
 }
 
 export type ToolServices = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
+
+export interface RunCompletion {
+  readonly invocation: ToolInvocation;
+  readonly postAuthentication: Exit.Exit<void, AppleToolChanged>;
+}
 
 const selected = new WeakSet<object>();
 const outputLimit = 1024 * 1024;
@@ -144,38 +149,59 @@ const processFailure = (
     stderrTruncated: false,
   });
 
+export const runWithCompletion = <A, E, R>(
+  options: RunOptions,
+  onComplete: (completion: RunCompletion) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, ToolError | E, ToolServices | R> =>
+  Effect.gen(function*() {
+    yield* reauthenticate(options.tool);
+    const startedAtEpochMillis = yield* Clock.currentTimeMillis;
+    return yield* Effect.uninterruptible(
+      Effect.gen(function*() {
+        const completion = yield* Effect.interruptible(
+          Effect.catchCause(
+            Effect.scoped(
+              Effect.gen(function*() {
+                const handle = yield* ChildProcess.make(options.tool.path, options.args, {
+                  shell: false,
+                  forceKillAfter: "2 seconds",
+                  ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+                });
+                const [stdout, stderr, exitCode] = yield* Effect.all(
+                  [collect(handle.stdout), collect(handle.stderr), handle.exitCode] as const,
+                  { concurrency: "unbounded" },
+                );
+                return { stdout, stderr, exitCode: Number(exitCode) };
+              }),
+            ),
+            (cause) => Effect.failCause(Cause.map(cause, (error) => processFailure(options.tool, error))),
+          ),
+        );
+        const completedAtEpochMillis = yield* Clock.currentTimeMillis;
+        const invocation = Object.freeze({
+          tool: options.tool,
+          args: Object.freeze([...options.args]),
+          ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+          startedAtEpochMillis,
+          completedAtEpochMillis,
+          exitCode: completion.exitCode,
+          stdout: completion.stdout,
+          stderr: completion.stderr,
+        });
+        const postAuthentication = yield* Effect.exit(reauthenticate(options.tool));
+        return yield* onComplete({ invocation, postAuthentication });
+      }),
+    );
+  });
+
 export const run = (
   options: RunOptions,
 ): Effect.Effect<ToolInvocation, ToolError, ToolServices> =>
-  Effect.gen(function*() {
-    yield* reauthenticate(options.tool);
-    const completion = yield* Effect.catchCause(
-      Effect.scoped(
-        Effect.gen(function*() {
-          const handle = yield* ChildProcess.make(options.tool.path, options.args, {
-            shell: false,
-            forceKillAfter: "2 seconds",
-            ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-          });
-          const [stdout, stderr, exitCode] = yield* Effect.all(
-            [collect(handle.stdout), collect(handle.stderr), handle.exitCode] as const,
-            { concurrency: "unbounded" },
-          );
-          return { stdout, stderr, exitCode: Number(exitCode) };
-        }),
-      ),
-      (cause) => Effect.failCause(Cause.map(cause, (error) => processFailure(options.tool, error))),
-    );
-    yield* reauthenticate(options.tool);
-    return Object.freeze({
-      tool: options.tool,
-      args: Object.freeze([...options.args]),
-      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-      exitCode: completion.exitCode,
-      stdout: completion.stdout,
-      stderr: completion.stderr,
-    });
-  });
+  runWithCompletion(
+    options,
+    ({ invocation, postAuthentication }) =>
+      Exit.isSuccess(postAuthentication) ? Effect.succeed(invocation) : Effect.failCause(postAuthentication.cause),
+  );
 
 export const runOrFail = (
   options: RunOptions,

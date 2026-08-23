@@ -1,4 +1,4 @@
-import { Cause, Effect, FileSystem, Option, Path, Scope } from "effect";
+import { Cause, Clock, Effect, FileSystem, Option, Path, Scope } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
   AppleInputInvalid,
@@ -89,17 +89,74 @@ const mapPublishFailure = <A, E, R>(
       ),
   );
 
-const destination = (
+export const resolveProspectivePath = (
   requested: string,
 ): Effect.Effect<string, ArtifactPublishFailed, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const absolute = path.normalize(path.resolve(requested));
-    const parent = path.dirname(absolute);
-    yield* mapPublishFailure(fileSystem.makeDirectory(parent, { recursive: true }), absolute, "make parent");
-    const canonicalParent = yield* mapPublishFailure(fileSystem.realPath(parent), absolute, "resolve parent");
-    const resolved = path.join(path.normalize(canonicalParent), path.basename(absolute));
+    const requestedParent = path.dirname(absolute);
+    const missing: string[] = [];
+    let existing = requestedParent;
+    while (!(yield* mapPublishFailure(fileSystem.exists(existing), absolute, "inspect prospective parent"))) {
+      const parent = path.dirname(existing);
+      if (parent === existing) {
+        return yield* new ArtifactPublishFailed({
+          destination: absolute,
+          reason: "prospective destination has no existing ancestor",
+        });
+      }
+      missing.unshift(path.basename(existing));
+      existing = parent;
+    }
+    const canonicalExisting = path.normalize(
+      yield* mapPublishFailure(fileSystem.realPath(existing), absolute, "resolve prospective parent"),
+    );
+    const canonicalParent = missing.reduce((parent, component) => path.join(parent, component), canonicalExisting);
+    return path.join(canonicalParent, path.basename(absolute));
+  });
+
+const withinTree = (candidate: string, tree: TreeArtifact, separator: string): boolean =>
+  candidate === tree.path || candidate.startsWith(`${tree.path}${separator}`);
+
+export const rejectTreeOverlap = (
+  candidate: string,
+  inputs: readonly Artifact[],
+): Effect.Effect<void, ArtifactPublishFailed, Path.Path> =>
+  Effect.gen(function*() {
+    const path = yield* Path.Path;
+    const overlap = inputs.find((input): input is TreeArtifact =>
+      input._tag === "TreeArtifact" && withinTree(candidate, input, path.sep)
+    );
+    if (overlap !== undefined) {
+      return yield* new ArtifactPublishFailed({
+        destination: candidate,
+        reason: `destination must not be inside authenticated ${overlap.kind} input ${overlap.path}`,
+      });
+    }
+  });
+
+const destination = (
+  requested: string,
+  inputs: readonly Artifact[],
+): Effect.Effect<string, ArtifactPublishFailed, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const resolved = yield* resolveProspectivePath(requested);
+    yield* rejectTreeOverlap(resolved, inputs);
+    const parent = path.dirname(resolved);
+    yield* mapPublishFailure(fileSystem.makeDirectory(parent, { recursive: true }), resolved, "make parent");
+    const canonicalParent = path.normalize(
+      yield* mapPublishFailure(fileSystem.realPath(parent), resolved, "resolve created parent"),
+    );
+    if (canonicalParent !== parent) {
+      return yield* new ArtifactPublishFailed({
+        destination: resolved,
+        reason: "destination parent changed while it was being created",
+      });
+    }
     if (yield* mapPublishFailure(fileSystem.exists(resolved), resolved, "inspect destination")) {
       return yield* new ArtifactPublishFailed({ destination: resolved, reason: "destination already exists" });
     }
@@ -264,8 +321,9 @@ const publishConstructed = <A extends Artifact, E, R>(
     Effect.gen(function*() {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+      const startedAtEpochMillis = yield* Clock.currentTimeMillis;
       for (const input of options.inputs) yield* revalidate(input);
-      const target = yield* destination(options.destination);
+      const target = yield* destination(options.destination, options.inputs);
       const staging = yield* mapPublishFailure(
         fileSystem.makeTempDirectoryScoped({ directory: path.dirname(target), prefix: ".effect-build-apple-" }),
         target,
@@ -277,15 +335,18 @@ const publishConstructed = <A extends Artifact, E, R>(
       for (const input of options.inputs) yield* revalidate(input);
       const staged = yield* observe(stagedPath);
       const committed = yield* commit(staged, target);
-      return {
+      const completedAtEpochMillis = yield* Clock.currentTimeMillis;
+      return Object.freeze({
         artifact: committed,
-        provenance: {
+        provenance: Object.freeze({
           operation: options.operation,
-          inputs: options.inputs.map(reference),
+          startedAtEpochMillis,
+          completedAtEpochMillis,
+          inputs: Object.freeze(options.inputs.map(reference)),
           output: reference(committed),
-          tools: [...copied.tools, ...producedTools],
-        },
-      };
+          tools: Object.freeze([...copied.tools, ...producedTools]),
+        }),
+      });
     }),
   );
 
@@ -306,10 +367,11 @@ const publishMutation = <A extends Artifact, E, R>(
     Effect.gen(function*() {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+      const startedAtEpochMillis = yield* Clock.currentTimeMillis;
       const support = options.supportingInputs ?? [];
       yield* revalidate(options.input);
       for (const input of support) yield* revalidate(input);
-      const target = yield* destination(options.destination);
+      const target = yield* destination(options.destination, [options.input, ...support]);
       const staging = yield* mapPublishFailure(
         fileSystem.makeTempDirectoryScoped({ directory: path.dirname(target), prefix: ".effect-build-apple-" }),
         target,
@@ -335,15 +397,18 @@ const publishMutation = <A extends Artifact, E, R>(
         });
       }
       const committed = yield* commit(observed, target);
-      return {
+      const completedAtEpochMillis = yield* Clock.currentTimeMillis;
+      return Object.freeze({
         artifact: committed,
-        provenance: {
+        provenance: Object.freeze({
           operation: options.operation,
-          inputs: [options.input, ...support].map(reference),
+          startedAtEpochMillis,
+          completedAtEpochMillis,
+          inputs: Object.freeze([options.input, ...support].map(reference)),
           output: reference(committed),
-          tools: [...stagedCopy.tools, ...copiedSupport.tools, ...operationTools],
-        },
-      };
+          tools: Object.freeze([...stagedCopy.tools, ...copiedSupport.tools, ...operationTools]),
+        }),
+      });
     }),
   );
 

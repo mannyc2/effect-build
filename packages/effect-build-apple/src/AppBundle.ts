@@ -34,7 +34,7 @@ export type CreateError =
   | Artifact.AppleInputInvalid
   | Artifact.ArtifactPublishFailed
   | Artifact.ArtifactError
-  | Lifecycle.LifecycleError
+  | Artifact.LifecycleError
   | Artifact.ToolError;
 
 interface Service {
@@ -52,6 +52,11 @@ const containsXmlControl = (value: string): boolean =>
   [...value].some((character) => {
     const codePoint = character.codePointAt(0)!;
     return codePoint <= 0x1f && codePoint !== 0x09 && codePoint !== 0x0a && codePoint !== 0x0d;
+  });
+const containsPathControl = (value: string): boolean =>
+  [...value].some((character) => {
+    const codePoint = character.codePointAt(0)!;
+    return codePoint <= 0x1f || codePoint === 0x7f;
   });
 
 const failInput = (field: string, reason: string): Artifact.AppleInputInvalid =>
@@ -78,8 +83,11 @@ const validateRelativeResourcePath = (
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
     return Effect.fail(failInput("resources.destination", "must not contain empty, . or .. path segments"));
   }
-  if (containsXmlControl(destination)) {
+  if (containsPathControl(destination)) {
     return Effect.fail(failInput("resources.destination", "contains an unsupported control character"));
+  }
+  if (destination.normalize("NFC") !== destination) {
+    return Effect.fail(failInput("resources.destination", "must use NFC-normalized Unicode"));
   }
   return Effect.void;
 };
@@ -89,7 +97,7 @@ const validateResources = (resources: readonly Resource[]): Effect.Effect<void, 
     const destinations: string[] = [];
     for (const resource of resources) {
       yield* validateRelativeResourcePath(resource.destination);
-      const folded = resource.destination.toLocaleLowerCase("en-US");
+      const folded = resource.destination.normalize("NFC").toLocaleLowerCase("en-US");
       for (const existing of destinations) {
         if (folded === existing || folded.startsWith(`${existing}/`) || existing.startsWith(`${folded}/`)) {
           return yield* Effect.fail(
@@ -125,9 +133,12 @@ const validateInput = (
     yield* validateText("executableName", input.executableName);
     if (
       input.executableName === "." || input.executableName === ".." || input.executableName.includes("/")
-      || input.executableName.includes("\\")
+      || input.executableName.includes("\\") || containsPathControl(input.executableName)
+      || input.executableName.normalize("NFC") !== input.executableName
     ) {
-      yield* Effect.fail(failInput("executableName", "must be one file name"));
+      yield* Effect.fail(
+        failInput("executableName", "must be one NFC-normalized file name without control characters"),
+      );
     }
     yield* validateText("version", input.version);
     if (!bundleVersionPattern.test(input.version)) {
@@ -258,6 +269,14 @@ const makeService = (
                 }),
               );
             }
+            const copiedExecutable = yield* Artifact.observeFile("mach-o", executableDestination);
+            if (!Artifact.sameIdentity(executableSnapshot, copiedExecutable)) {
+              return yield* new Artifact.ArtifactChanged({
+                path: executableDestination,
+                expected: JSON.stringify(executableSnapshot.identity),
+                observed: JSON.stringify(copiedExecutable.identity),
+              });
+            }
 
             for (let index = 0; index < resources.length; index += 1) {
               const resource = resources[index]!;
@@ -266,12 +285,31 @@ const makeService = (
               yield* fileSystem.makeDirectory(path.dirname(destination), { recursive: true }).pipe(
                 Effect.mapError((error) => fsFailure(stagedPath, "create resource parent directory", error)),
               );
+              const destinationExists = yield* fileSystem.exists(destination).pipe(
+                Effect.mapError((error) => fsFailure(stagedPath, "inspect resource destination", error)),
+              );
+              if (destinationExists) {
+                return yield* new Artifact.ArtifactPublishFailed({
+                  destination,
+                  reason: "resource destination already exists after filesystem normalization",
+                });
+              }
               toolInvocations.push(
                 yield* Tool.runOrFail({
                   tool: ditto,
                   args: ["--norsrc", "--noextattr", "--noacl", snapshot.path, destination],
                 }),
               );
+              const copiedResource = snapshot._tag === "FileArtifact"
+                ? yield* Artifact.observeFile("resource", destination)
+                : yield* Artifact.observeTree("resource", destination);
+              if (!Artifact.sameIdentity(snapshot, copiedResource)) {
+                return yield* new Artifact.ArtifactChanged({
+                  path: destination,
+                  expected: JSON.stringify(snapshot.identity),
+                  observed: JSON.stringify(copiedResource.identity),
+                });
+              }
             }
 
             const plist = path.join(contents, "Info.plist");

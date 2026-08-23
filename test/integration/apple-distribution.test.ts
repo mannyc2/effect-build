@@ -79,6 +79,8 @@ describe.runIf(process.platform === "darwin")("Apple distribution local tools", 
     );
     const original = readFileSync(executable.path);
 
+    const assessment = await Effect.runPromise(provide(Assess.assess(executable), Assess.layer()));
+
     const app = await Effect.runPromise(
       provide(
         AppBundle.create({
@@ -115,6 +117,13 @@ describe.runIf(process.platform === "darwin")("Apple distribution local tools", 
     expect(app.artifact.identity.digest.value).toMatch(/^[0-9a-f]{64}$/u);
     expect(archive.artifact.identity.digest.value).toMatch(/^[0-9a-f]{64}$/u);
     expect(image.artifact.identity.digest.value).toMatch(/^[0-9a-f]{64}$/u);
+    expect(assessment).toMatchObject({
+      subject: { kind: "mach-o", digest: executable.identity.digest },
+      snapshot: { kind: "mach-o", digest: executable.identity.digest },
+      signature: { valid: expect.any(Boolean) },
+      gatekeeper: { accepted: expect.any(Boolean), type: "execute" },
+      scope: "local-static-observation",
+    });
     expect(readFileSync(executable.path)).toEqual(original);
     expect(existsSync(app.artifact.path)).toBe(true);
     expect(existsSync(archive.artifact.path)).toBe(true);

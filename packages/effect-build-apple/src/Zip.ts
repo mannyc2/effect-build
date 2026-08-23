@@ -21,7 +21,7 @@ export type CreateError =
   | Artifact.ArtifactChanged
   | Artifact.ArtifactPublishFailed
   | Artifact.ArtifactError
-  | Lifecycle.LifecycleError
+  | Artifact.LifecycleError
   | Artifact.ToolError;
 
 interface Service {

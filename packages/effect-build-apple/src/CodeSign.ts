@@ -8,6 +8,7 @@ import {
   type ArtifactServices,
   type FileArtifact,
   isFileArtifact,
+  type LifecycleError,
   type MutationProvenance,
   observeFile,
   observeTree,
@@ -95,7 +96,7 @@ export class CodeSignatureInvalid extends Schema.TaggedError<CodeSignatureInvali
 
 export type CodeSignError =
   | ArtifactError
-  | Lifecycle.LifecycleError
+  | LifecycleError
   | ToolError
   | AppleIdentityInvalid
   | AppleInputInvalid
@@ -561,12 +562,12 @@ const makeService = (
         const mutation = input._tag === "FileArtifact"
           ? yield* publishFile(input)
           : yield* publishTree(input);
-        return {
+        return Object.freeze({
           artifact: mutation.artifact as A,
           provenance: mutation.provenance,
           identity,
           signatures: Object.freeze(signatures),
-        };
+        });
       }).pipe(Effect.provide(services));
     return { sign };
   });

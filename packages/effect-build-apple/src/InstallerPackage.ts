@@ -56,7 +56,7 @@ export type CreateError =
   | Artifact.AppleInputInvalid
   | Artifact.AppleIdentityInvalid
   | Artifact.ArtifactError
-  | Lifecycle.LifecycleError
+  | Artifact.LifecycleError
   | Artifact.ToolError;
 
 interface Service {
@@ -70,6 +70,7 @@ const identities = new WeakSet<object>();
 const fingerprintPattern = /^[0-9A-F]{40}$/u;
 const sha256FingerprintPattern = /^[0-9A-F]{64}$/u;
 const teamIdPattern = /^[A-Z0-9]{10}$/u;
+const packageIdentifierPattern = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u;
 const installerCertificateOid = "1.2.840.113635.100.6.1.14" as const;
 const containsControlCharacter = (value: string): boolean =>
   [...value].some((character) => {
@@ -136,13 +137,23 @@ const validateInput = (
       return yield* Effect.fail(invalidIdentity("identity fields changed after construction"));
     }
     yield* validateText("packageIdentifier", input.packageIdentifier);
-    if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/u.test(input.packageIdentifier)) {
-      yield* Effect.fail(invalidInput("packageIdentifier", "must contain only letters, digits, dots, and hyphens"));
+    if (!packageIdentifierPattern.test(input.packageIdentifier)) {
+      yield* Effect.fail(
+        invalidInput("packageIdentifier", "must be a period-separated identifier using letters, digits, or hyphens"),
+      );
     }
     yield* validateText("version", input.version);
     yield* validateText("installLocation", input.installLocation);
     if (!input.installLocation.startsWith("/")) {
       yield* Effect.fail(invalidInput("installLocation", "must be an absolute installation path"));
+    }
+    const installSegments = input.installLocation.split("/").slice(1);
+    if (
+      input.installLocation.normalize("NFC") !== input.installLocation
+      || (input.installLocation !== "/"
+        && installSegments.some((segment) => segment === "" || segment === "." || segment === ".."))
+    ) {
+      yield* Effect.fail(invalidInput("installLocation", "must be an NFC-normalized absolute path without . or .."));
     }
   });
 
@@ -384,7 +395,7 @@ const makeService = (
             return [lookup, trust, built, checked];
           }),
       });
-      return { ...mutation, certificate: certificate! };
+      return Object.freeze({ ...mutation, certificate: certificate! });
     });
 
     return { create: (input) => create(input).pipe(Effect.provide(services)) };

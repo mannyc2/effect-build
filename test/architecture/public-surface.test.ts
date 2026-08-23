@@ -79,11 +79,12 @@ describe("public surface", () => {
     }
   }, 30_000);
 
-  it("keeps six lockstep packages with one-way provider-to-core dependencies", async () => {
+  it("keeps seven lockstep packages with one-way provider-to-core dependencies", async () => {
     const surface = await readSurface();
     const names = Object.keys(surface.packages);
     expect(names).toEqual([
       "effect-build",
+      "effect-build-apple",
       "effect-build-bun",
       "effect-build-deno",
       "effect-build-esbuild",
@@ -104,6 +105,24 @@ describe("public surface", () => {
     expect(versions.size).toBe(1);
   });
 
+  it("preflights and publishes the seven-package release set in deterministic order", async () => {
+    const workflow = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
+    expect(workflow).toContain(
+      "packages=(effect-build effect-build-apple effect-build-bun effect-build-deno effect-build-esbuild effect-build-node-sea effect-build-rolldown)",
+    );
+    expect(workflow).toContain("mixed lockstep registry state");
+    expect(workflow).toContain('[[ "${registry_output}" == *"code E404"* ]]');
+    expect(workflow).toContain("registry preflight failed");
+    expect(workflow).toContain('for name in "${packages[@]}"; do');
+    expect(workflow).toContain("environment: npm");
+    expect(workflow).toContain("APPLE_RELEASE_CERTIFIED_SHA");
+    expect(workflow).toContain("APPLE_RELEASE_CERTIFICATION_RECEIPT_SHA256");
+    expect(workflow).toContain('[[ "${CERTIFIED_SHA:-}" != "${exact_sha}" ]]');
+    expect(workflow).toContain('npm view "${name}" name');
+    expect(workflow).toContain("unreserved npm package namespace");
+    expect(workflow).toContain("bootstrap the package and verify its trusted-publisher record");
+  });
+
   it("ships only declared modules in every package dist", async () => {
     const surface = await readSurface();
     for (const [name, contract] of Object.entries(surface.packages)) {
@@ -121,6 +140,17 @@ describe("public surface", () => {
         && !declared.has(entry.replaceAll("\\", "/"))
       );
       expect(undeclared, name).toEqual([]);
+    }
+  });
+
+  it("keeps Apple library source platform-neutral and runtime-owned", async () => {
+    const sourceRoot = resolve(root, "packages/effect-build-apple/src");
+    const entries = await readdir(sourceRoot, { recursive: true });
+    for (const entry of entries) {
+      if (typeof entry !== "string" || !entry.endsWith(".ts")) continue;
+      const source = await readFile(resolve(sourceRoot, entry), "utf8");
+      expect(source, entry).not.toMatch(/from\s+["']node:/u);
+      expect(source, entry).not.toMatch(/Effect\.run(?:Promise|Sync|Fork|Callback)/u);
     }
   });
 });

@@ -12,6 +12,7 @@
         "dprint": "0.49.1",
         "effect": "4.0.0-rc.108",
         "effect-build": "workspace:*",
+        "effect-build-apple": "workspace:*",
         "effect-build-bun": "workspace:*",
         "effect-build-deno": "workspace:*",
         "effect-build-esbuild": "workspace:*",
@@ -69,6 +70,19 @@
     "packages/effect-build": {
       "name": "effect-build",
       "version": "0.5.0",
+      "devDependencies": {
+        "effect": "4.0.0-rc.108",
+      },
+      "peerDependencies": {
+        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+      },
+    },
+    "packages/effect-build-apple": {
+      "name": "effect-build-apple",
+      "version": "0.5.0",
+      "dependencies": {
+        "effect-build": "workspace:^",
+      },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
       },
@@ -422,6 +436,8 @@
     "effect": ["effect@4.0.0-rc.108", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "fast-check": "^4.9.0", "kubernetes-types": "^1.30.0", "msgpackr": "^2.0.4", "uuid": "^14.0.1" } }, "sha512-KmI3DlKZWPvCL4QQ2FMaPOuxMt/7DrKMENCY/gQ+MkDR5QYw25wgU5Zmh/wVLboNjIci1gNOgNCFe4xqgxli3A=="],
 
     "effect-build": ["effect-build@workspace:packages/effect-build"],
+
+    "effect-build-apple": ["effect-build-apple@workspace:packages/effect-build-apple"],
 
     "effect-build-bun": ["effect-build-bun@workspace:packages/effect-build-bun"],
 
