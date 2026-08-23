@@ -28,7 +28,7 @@
     "test:integration:v04-bun": "vitest run test/integration/v04-bun-compile-executable.test.ts",
     "test:integration:v04-deno": "vitest run test/integration/v04-deno-compile-executable.test.ts",
     "test:integration:v04-node-sea": "vitest run test/integration/v04-node-sea-assemble-executable.test.ts",
-    "test:integration:target": "vitest run test/integration/standalone-target-support.test.ts",
+    "test:integration:target": "vitest run test/integration/v04-target-support.test.ts",
     "test:host:standalone": "vitest run test/host/standalone-node.smoke.ts",
     "audit:dependencies": "bun audit --audit-level=high",
     "lint": "oxlint packages test typetest examples",
