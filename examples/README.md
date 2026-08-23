@@ -1,16 +1,11 @@
 # Examples
 
-- [`bun/src/compile.ts`](bun/src/compile.ts) demonstrates scalar Bun compilation.
-- [`bun/src/matrix.ts`](bun/src/matrix.ts) demonstrates bounded homogeneous Bun targets.
-- [`deno/src/compile.ts`](deno/src/compile.ts) demonstrates Deno bundle, minify, and permissions.
-- [`esbuild/src/bundle.ts`](esbuild/src/bundle.ts) uses the independent scoped Esbuild producer.
-- [`node-sea/src/compile.ts`](node-sea/src/compile.ts) composes public Esbuild and Node SEA operations.
+Each example imports the 0.4 candidate from its exact public subpath:
 
-Each workspace declares every public integration it imports directly and
-provides one official Node platform Layer. The Node SEA example uses exact
-Esbuild 0.28.2 bundle production and an already-installed exact Node 26.7.0
-Linux x64 GNU producer. It does not use an integration sibling dependency.
+- `bun` uses `effect-build-bun/CompileExecutable`.
+- `deno` uses `effect-build-deno/CompileExecutable`.
+- `esbuild` uses `effect-build-esbuild/Build`.
+- `node-sea` uses `effect-build-node-sea/AssembleExecutable`.
 
-`bun run test:consumer` packs all five packages once and checks fourteen cases:
-ten isolated npm/Bun consumers, two explicit Esbuild-to-Node-SEA applications,
-and two explicit Bun-to-Node-SEA applications.
+They demonstrate application composition with an official Effect platform
+layer. They do not use removed root operations or legacy subpaths.

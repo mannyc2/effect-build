@@ -1,4 +1,4 @@
 {
   "$schema": "https://tstyche.org/config.json",
-  "testFileMatch": ["typetest/**/*.tst.ts"]
+  "testFileMatch": ["typetest/v04-*.tst.ts"]
 }

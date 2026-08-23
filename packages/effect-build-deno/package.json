@@ -1,7 +1,7 @@
 {
   "name": "effect-build-deno",
-  "version": "0.3.0",
-  "description": "Deno compiler provider for effect-build.",
+  "version": "0.4.0",
+  "description": "Deno executable compiler for effect-build.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -30,9 +30,10 @@
     "provenance": true
   },
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./CompileExecutable": {
+      "types": "./dist/CompileExecutable.d.ts",
+      "import": "./dist/CompileExecutable.js"
     }
   },
   "scripts": {

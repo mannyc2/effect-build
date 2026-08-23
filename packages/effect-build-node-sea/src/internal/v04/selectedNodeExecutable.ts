@@ -31,30 +31,20 @@ type SelectedNodeExecutableInvalidReason =
 const invalid = (reason: SelectedNodeExecutableInvalidReason): SelectedNodeExecutableInvalid =>
   new SelectedNodeExecutableInvalid({ reason });
 
-const checkedAdd = (
-  left: number,
-  right: number,
-): Result.Result<number, SelectedNodeExecutableInvalid> => {
+const checkedAdd = (left: number, right: number): Result.Result<number, SelectedNodeExecutableInvalid> => {
   if (!Number.isSafeInteger(left) || !Number.isSafeInteger(right) || left < 0 || right < 0) {
     return Result.fail(invalid("elf-offset-overflow"));
   }
   const value = left + right;
-  return Number.isSafeInteger(value)
-    ? Result.succeed(value)
-    : Result.fail(invalid("elf-offset-overflow"));
+  return Number.isSafeInteger(value) ? Result.succeed(value) : Result.fail(invalid("elf-offset-overflow"));
 };
 
-const checkedMultiply = (
-  left: number,
-  right: number,
-): Result.Result<number, SelectedNodeExecutableInvalid> => {
+const checkedMultiply = (left: number, right: number): Result.Result<number, SelectedNodeExecutableInvalid> => {
   if (!Number.isSafeInteger(left) || !Number.isSafeInteger(right) || left < 0 || right < 0) {
     return Result.fail(invalid("elf-offset-overflow"));
   }
   const value = left * right;
-  return Number.isSafeInteger(value)
-    ? Result.succeed(value)
-    : Result.fail(invalid("elf-offset-overflow"));
+  return Number.isSafeInteger(value) ? Result.succeed(value) : Result.fail(invalid("elf-offset-overflow"));
 };
 
 const checkedRange = (
@@ -64,9 +54,7 @@ const checkedRange = (
 ): Result.Result<void, SelectedNodeExecutableInvalid> => {
   const end = checkedAdd(offset, length);
   if (Result.isFailure(end)) return Result.fail(end.failure);
-  return end.success > size
-    ? Result.fail(invalid("truncated-elf-range"))
-    : Result.succeed(undefined);
+  return end.success > size ? Result.fail(invalid("truncated-elf-range")) : Result.succeed(undefined);
 };
 
 const uint16 = (bytes: Uint8Array, offset: number): number => bytes[offset]! | bytes[offset + 1]! << 8;
@@ -74,16 +62,11 @@ const uint16 = (bytes: Uint8Array, offset: number): number => bytes[offset]! | b
 const uint32 = (bytes: Uint8Array, offset: number): number =>
   (bytes[offset]! | bytes[offset + 1]! << 8 | bytes[offset + 2]! << 16 | bytes[offset + 3]! << 24) >>> 0;
 
-const uint64 = (
-  bytes: Uint8Array,
-  offset: number,
-): Result.Result<number, SelectedNodeExecutableInvalid> => {
+const uint64 = (bytes: Uint8Array, offset: number): Result.Result<number, SelectedNodeExecutableInvalid> => {
   const low = uint32(bytes, offset);
   const high = uint32(bytes, offset + 4);
   const value = high * 0x1_0000_0000 + low;
-  return Number.isSafeInteger(value)
-    ? Result.succeed(value)
-    : Result.fail(invalid("elf-offset-overflow"));
+  return Number.isSafeInteger(value) ? Result.succeed(value) : Result.fail(invalid("elf-offset-overflow"));
 };
 
 const mapFailureCause = <A, E, R>(
@@ -97,23 +80,17 @@ const readExactly = (
   size: number,
   offset: number,
   length: number,
-): Effect.Effect<Uint8Array, SelectedNodeExecutableInvalid> => {
-  return Effect.fromResult(checkedRange(size, offset, length)).pipe(
+): Effect.Effect<Uint8Array, SelectedNodeExecutableInvalid> =>
+  Effect.fromResult(checkedRange(size, offset, length)).pipe(
     Effect.andThen(() =>
-      mapFailureCause(
-        file.seek(offset, "start").pipe(Effect.andThen(() => file.readAlloc(length))),
-        "read-failed",
-      )
+      mapFailureCause(file.seek(offset, "start").pipe(Effect.andThen(() => file.readAlloc(length))), "read-failed")
     ),
     Effect.flatMap(Option.match({
       onNone: () => Effect.fail(invalid("truncated-elf-range")),
       onSome: (bytes) =>
-        bytes.byteLength === length
-          ? Effect.succeed(bytes)
-          : Effect.fail(invalid("truncated-elf-range")),
+        bytes.byteLength === length ? Effect.succeed(bytes) : Effect.fail(invalid("truncated-elf-range")),
     })),
   );
-};
 
 const decodeGnuInterpreter = (bytes: Uint8Array): Effect.Effect<string, SelectedNodeExecutableInvalid> =>
   Effect.try({
@@ -127,10 +104,7 @@ const decodeGnuInterpreter = (bytes: Uint8Array): Effect.Effect<string, Selected
       }
       return interpreter;
     },
-    catch: (error) =>
-      error instanceof SelectedNodeExecutableInvalid
-        ? error
-        : invalid("invalid-elf-interpreter"),
+    catch: (error) => error instanceof SelectedNodeExecutableInvalid ? error : invalid("invalid-elf-interpreter"),
   });
 
 export const inspectSelectedNodeExecutable = (
@@ -146,17 +120,13 @@ export const inspectSelectedNodeExecutable = (
       const size = Number(byteSize);
       const file = yield* mapFailureCause(fileSystem.open(path, { flag: "r" }), "open-failed");
       const header = yield* readExactly(file, size, 0, 64);
-      if (
-        header[0] !== 0x7f
-        || header[1] !== 0x45
-        || header[2] !== 0x4c
-        || header[3] !== 0x46
-      ) return yield* invalid("selected executable is not ELF");
+      if (header[0] !== 0x7f || header[1] !== 0x45 || header[2] !== 0x4c || header[3] !== 0x46) {
+        return yield* invalid("selected executable is not ELF");
+      }
       if (header[4] !== 2 || header[5] !== 1 || header[6] !== 1) {
         return yield* invalid("selected executable is not ELF64 little-endian version 1");
       }
       if (uint16(header, 18) !== 62) return yield* invalid("selected executable is not ELF x86-64");
-
       const programHeaderOffset = yield* Effect.fromResult(uint64(header, 32));
       const programHeaderEntrySize = uint16(header, 54);
       const programHeaderCount = uint16(header, 56);
@@ -166,12 +136,7 @@ export const inspectSelectedNodeExecutable = (
       const programHeadersLength = yield* Effect.fromResult(
         checkedMultiply(programHeaderEntrySize, programHeaderCount),
       );
-      const programHeaders = yield* readExactly(
-        file,
-        size,
-        programHeaderOffset,
-        programHeadersLength,
-      );
+      const programHeaders = yield* readExactly(file, size, programHeaderOffset, programHeadersLength);
       let interpreterRange: { readonly offset: number; readonly length: number } | undefined;
       for (let index = 0; index < programHeaderCount; index++) {
         const entry = yield* Effect.fromResult(checkedMultiply(index, programHeaderEntrySize));

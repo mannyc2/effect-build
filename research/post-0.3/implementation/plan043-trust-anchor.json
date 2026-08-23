@@ -1,0 +1,40 @@
+{
+  "schema": "effect-build/plan043-implementation-trust-anchor@1",
+  "profileId": "effect-build/plan043-implementation@1",
+  "sourceSha": "75659cb0d05d11a8e4395aa8585d36da9ee2c95a",
+  "releaseSha": "f06f96ca88b6278e5f23a898d758b99fa9322108",
+  "freezeSha": "a3017657e0851530892a9f3d2d55ac5736769881",
+  "plan039Sha": "e12e930de5622be3f23814f3235293c93fcfd8bf",
+  "plan040Sha": "3ced06d29fe8644eae5465fed4878a6faea322f3",
+  "plan041Sha": "2048fcd4c49bc6e5b76cabceee33b36d9d5efb40",
+  "plan042Sha": "9d15d17ccf7d74f14cf95c06162d95be8ed7d27f",
+  "workflow": {
+    "repository": "mannyc2/effect-build",
+    "name": "plan-043-implementation-certification",
+    "path": ".github/workflows/architecture-research.yml",
+    "runId": "32605909676",
+    "runAttempt": "1",
+    "eventName": "push",
+    "ref": "refs/heads/codex/plan043-node-sea-lane",
+    "conclusion": "success",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32605909676"
+  },
+  "aggregateArtifact": {
+    "id": "9484166746",
+    "name": "plan043-implementation-certification-75659cb0d05d11a8e4395aa8585d36da9ee2c95a",
+    "sizeInBytes": 8657,
+    "digest": "sha256:46c5de46c923d96f44408a285ada05a7dcd3463202f6c6a24f87742f17b3526a",
+    "url": "https://github.com/mannyc2/effect-build/actions/runs/32605909676/artifacts/9484166746"
+  },
+  "certification": {
+    "file": "plan043-certification.json",
+    "schema": "effect-build/implementation-certification@1",
+    "phase": "implementation",
+    "claims": 4,
+    "result": "certified"
+  },
+  "receipt": {
+    "id": "plan043-implementation",
+    "file": "plan043-implementation.json"
+  }
+}

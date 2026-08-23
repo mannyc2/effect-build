@@ -1,23 +1,18 @@
 # effect-build-deno
 
-Deno compiler provider for `effect-build`.
+The Deno compiler is available only from
+`effect-build-deno/CompileExecutable`.
 
 ```ts
-import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import * as Deno from "effect-build-deno";
+import * as CompileExecutable from "effect-build-deno/CompileExecutable";
 
-const program = Deno.compileExecutable({
+const program = CompileExecutable.compileExecutable({
   entrypoint: "src/main.ts",
   outfile: "dist/app",
+  observation: "unhashed",
   options: { bundle: true },
-}).pipe(
-  Effect.provide(Deno.layer()),
-  Effect.provide(NodeServices.layer),
-);
-
-await Effect.runPromise(program);
+});
 ```
 
-Applications provide an official Effect platform Layer at composition time.
-The provider selects the Deno compiler, not the orchestrator runtime.
+Provide `CompileExecutable.layer(...)` and an official Effect platform layer in
+the application. The layer owns Deno discovery and probing only.

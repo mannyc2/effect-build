@@ -1,15 +1,14 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
-import * as Esbuild from "effect-build-esbuild";
-import * as NodeSea from "effect-build-node-sea";
+import { Effect } from "effect";
+import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
 
-const buildToolsLayer = Layer.mergeAll(Esbuild.layer, NodeSea.layer()).pipe(
-  Layer.provide(NodeServices.layer),
+const program = AssembleExecutable.assembleExecutable({
+  main: { _tag: "File", path: "src/main.cjs", format: "commonjs" },
+  outfile: "dist/app",
+  observation: "hashed",
+}).pipe(
+  Effect.provide(AssembleExecutable.layer({ allowUntestedVersion: true })),
+  Effect.provide(NodeServices.layer),
 );
-
-const program = Esbuild.withJavaScriptBundle(
-  { entrypoint: "src/main.ts", format: "esm" },
-  (main) => NodeSea.createExecutable({ main, outfile: "dist/app" }),
-).pipe(Effect.provide(buildToolsLayer));
 
 await Effect.runPromise(program);

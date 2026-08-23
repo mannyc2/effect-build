@@ -2,7 +2,6 @@ import { Cause, Config, Crypto, Effect, FileSystem, Option, Path, Stream } from 
 import type { AbsolutePath } from "effect-build/Artifact";
 import type { ContentIdentity, Definition } from "effect-build/Author/Tool";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { inspectSelectedNodeExecutable } from "../SelectedNodeExecutable.js";
 import {
   type CapabilityObservation,
   evaluateLaunch,
@@ -17,6 +16,7 @@ import {
   selectedCommandIndeterminate,
   type SelectedEvidence,
 } from "./compatibility.js";
+import { inspectSelectedNodeExecutable } from "./selectedNodeExecutable.js";
 
 export interface CommandOutput {
   readonly text: string;

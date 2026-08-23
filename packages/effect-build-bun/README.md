@@ -1,42 +1,18 @@
 # effect-build-bun
 
-Bun compiler and scoped JavaScript-bundle provider for `effect-build`. One
-`Compiler` Layer selects one Bun command for all three operations.
+The Bun compiler is available only from
+`effect-build-bun/CompileExecutable`.
 
 ```ts
-import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import * as Bun from "effect-build-bun";
+import * as CompileExecutable from "effect-build-bun/CompileExecutable";
 
-const program = Bun.compileExecutable({
+const program = CompileExecutable.compileExecutable({
   entrypoint: "src/main.ts",
   outfile: "dist/app",
-}).pipe(
-  Effect.provide(Bun.layer()),
-  Effect.provide(NodeServices.layer),
-);
-
-await Effect.runPromise(program);
+  observation: "hashed",
+});
 ```
 
-`withJavaScriptBundle` produces one ESM or CJS Node-resolution bundle and keeps
-it live only for the callback:
-
-```ts
-const bundleProgram = Bun.withJavaScriptBundle(
-  { entrypoint: "src/main.ts", format: "esm" },
-  (main) => Effect.succeed(main.stages),
-).pipe(
-  Effect.provide(Bun.layer()),
-  Effect.provide(NodeServices.layer),
-);
-```
-
-The bundle operation requires selected Bun 1.3.9. Direct executable compile
-retains its existing version-observation behavior. Bun `target=node` controls
-resolution and builtin treatment, not a Node release or syntax target. The
-pinned producer's default syntax behavior is not encoded in the neutral
-Artifact, and `observedExternalImports` is not a closed dependency graph.
-
-Applications provide an official Effect platform Layer at composition time.
-The provider selects the Bun compiler, not the orchestrator runtime.
+Provide `CompileExecutable.layer(...)` and an official Effect platform layer in
+the application. The layer selects and probes Bun; it does not install it or
+fall back to a different compiler.

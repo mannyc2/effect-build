@@ -24,7 +24,7 @@ const execute = async (...arguments_) => {
 
 const repository = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporaryPrefix = "effect-build-consumers-";
-const packageVersion = "0.3.0";
+const packageVersion = "0.4.0";
 const effectPeer = ">=4.0.0-beta.104 <4.1.0-0";
 const packageNames = [
   "effect-build",
@@ -455,7 +455,13 @@ export const inspectPackedPackage = async (tarball, expectedName) => {
   if (exports === null || typeof exports !== "object" || Array.isArray(exports)) {
     throw new Error(`${expectedName} has no packed export map`);
   }
-  const expectedSubpaths = expectedName === "effect-build" ? [".", "./Integration", "./Provider"] : ["."];
+  const expectedSubpaths = expectedName === "effect-build"
+    ? [".", "./Artifact", "./SystemTarget", "./Matrix", "./Author/Tool", "./Author/BorrowedOutput", "./Author/Executable"]
+    : expectedName === "effect-build-esbuild"
+    ? [".", "./Build", "./Context"]
+    : expectedName === "effect-build-node-sea"
+    ? [".", "./AssembleExecutable"]
+    : [".", "./CompileExecutable"];
   if (JSON.stringify(Object.keys(exports)) !== JSON.stringify(expectedSubpaths)) {
     throw new Error(`${expectedName} packed export graph drifted`);
   }
@@ -498,22 +504,13 @@ const packPackages = async (bun, destination) => {
 };
 
 const compilerTypeScriptSource = (name) => {
-  const alias = name === "effect-build-bun" ? "Bun" : "Deno";
-  const target = name === "effect-build-bun" ? "linux-x64-musl" : "windows-aarch64";
-  const options = name === "effect-build-bun" ? "{ minify: true }" : "{ bundle: true, minify: true }";
   return [
-    'import { Effect } from "effect";',
-    `import * as ${alias} from ${JSON.stringify(name)};`,
-    `export const scalar = ${alias}.compileExecutable({ entrypoint: "src/main.ts", outfile: "dist/app", target: ${JSON.stringify(target)}, options: ${options} });`,
-    `export const matrix = ${alias}.compileExecutableMatrix({ entrypoint: "src/main.ts", outdir: "dist", name: "app", targets: [${JSON.stringify(target)}] });`,
-    ...(name === "effect-build-bun"
-      ? [
-        'export const bundle = Bun.withJavaScriptBundle({ entrypoint: "src/main.ts", format: "esm" }, (main) => Effect.succeed(main.stages));',
-        "export type BundleContext = typeof bundle extends Effect.Effect<unknown, unknown, infer R> ? R : never;",
-      ]
-      : []),
-    `export type ScalarContext = typeof scalar extends Effect.Effect<unknown, unknown, infer R> ? R : never;`,
-    `export const targetSchema: typeof ${alias}.Target = ${alias}.Target;`,
+    `import * as CompileExecutable from ${JSON.stringify(`${name}/CompileExecutable`)};`,
+    "export const scalar = CompileExecutable.compileExecutable;",
+    "export const matrix = CompileExecutable.compileExecutableMatrix;",
+    "export const target = CompileExecutable.Target;",
+    "export const compiler = CompileExecutable.Compiler;",
+    "export const compilerLayer = CompileExecutable.layer;",
   ].join("\n");
 };
 
@@ -521,73 +518,87 @@ const typeScriptSource = (name) => {
   if (name === "effect-build") {
     return [
       'import * as Core from "effect-build";',
-      'import * as Integration from "effect-build/Integration";',
-      'import * as Provider from "effect-build/Provider";',
-      "export type Executable = Core.Artifact.ExecutableArtifact;",
-      "export const executeCommand = Integration.executeCommand;",
-      "export const defineProvider = Provider.define;",
+      'import * as Artifact from "effect-build/Artifact";',
+      'import * as SystemTarget from "effect-build/SystemTarget";',
+      'import * as Matrix from "effect-build/Matrix";',
+      'import * as Tool from "effect-build/Author/Tool";',
+      'import type * as BorrowedOutput from "effect-build/Author/BorrowedOutput";',
+      'import type * as Executable from "effect-build/Author/Executable";',
+      "export const absolutePath = Artifact.AbsolutePath;",
+      "export const target = SystemTarget.SystemTarget;",
+      "export const invalidMatrixInput = Matrix.InvalidInput;",
+      "export const defineTool = Tool.define;",
+      "export const core = Core;",
+      "export type Borrowed = BorrowedOutput.File<\"hashed\">;",
+      "export type AuthoredExecutable = Executable.Artifact<\"hashed\">;",
     ].join("\n");
   }
   if (name === "effect-build-bun" || name === "effect-build-deno") return compilerTypeScriptSource(name);
   if (name === "effect-build-esbuild") {
     return [
-      'import { Effect } from "effect";',
       'import * as Esbuild from "effect-build-esbuild";',
-      "export const bundle = Esbuild.withJavaScriptBundle(",
-      '  { entrypoint: "src/main.ts", format: "esm" },',
-      "  (artifact) => Effect.succeed({ path: artifact.path, stages: artifact.stages }),",
-      ");",
-      "export type BundleContext = typeof bundle extends Effect.Effect<unknown, unknown, infer R> ? R : never;",
+      'import * as Build from "effect-build-esbuild/Build";',
+      'import * as Context from "effect-build-esbuild/Context";',
+      "export const root = Esbuild;",
+      "export const build = Build.build;",
+      "export const buildLayer = Build.layer;",
+      "export const makeContext = Context.make;",
+      "export const contextLayer = Context.layer;",
     ].join("\n");
   }
   return [
-    'import { JavaScriptBundle } from "effect-build";',
     'import * as NodeSea from "effect-build-node-sea";',
-    "declare const main: JavaScriptBundle.Artifact<readonly []>;",
-    'export const executable = NodeSea.createExecutable({ main, outfile: "dist/app", digest: true });',
+    'import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";',
+    "export const root = NodeSea;",
+    "export const assembleExecutable = AssembleExecutable.assembleExecutable;",
+    "export const assembler = AssembleExecutable.Assembler;",
+    "export const layer = AssembleExecutable.layer;",
   ].join("\n");
 };
 
 const runtimeKeys = {
-  "effect-build-bun": [
-    "BunBundleFailed", "BunBundleInvalid", "BunBundleMaterializationFailed", "BunBundleMaterializationOperation",
-    "BunBundleSpawnFailed", "BunBundleVersionMismatch", "Compiler", "InvalidBundleInput", "Target",
-    "compileExecutable", "compileExecutableMatrix", "layer", "withJavaScriptBundle",
-  ],
-  "effect-build-deno": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
-  "effect-build-esbuild": [
-    "BundleMaterializationFailed", "BundleMaterializationOperation", "Esbuild", "EsbuildDiagnostic",
-    "EsbuildFailed", "EsbuildVersionMismatch", "InvalidBundleInput", "JavaScriptBundleInvalid", "layer",
-    "withJavaScriptBundle",
-  ],
-  "effect-build-node-sea": [
-    "InvalidNodeSeaInput", "NodeSea", "NodeSeaFailed", "NodeSeaPreparationFailed", "NodeSeaPreparationOperation",
-    "NodeSeaProbeFailed", "NodeSeaSpawnFailed", "NodeSeaSyntaxCheckFailed", "NodeSeaToolNotFound", "createExecutable",
-    "layer",
-  ],
+  "effect-build": {
+    ".": ["Artifact", "BorrowedOutput", "Executable", "Matrix", "SystemTarget", "Tool"],
+    "/Artifact": ["AbsolutePath"],
+    "/SystemTarget": ["Abi", "Architecture", "OperatingSystem", "SystemTarget"],
+    "/Matrix": ["InvalidInput"],
+    "/Author/Tool": ["decimalBytes", "define", "sha256Digest"],
+    "/Author/BorrowedOutput": [],
+    "/Author/Executable": [],
+  },
+  "effect-build-bun": {
+    ".": ["CompileExecutable"],
+    "/CompileExecutable": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+  },
+  "effect-build-deno": {
+    ".": ["CompileExecutable"],
+    "/CompileExecutable": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"],
+  },
+  "effect-build-esbuild": {
+    ".": ["Build", "Context"],
+    "/Build": ["Esbuild", "build", "layer"],
+    "/Context": ["Esbuild", "layer", "make"],
+  },
+  "effect-build-node-sea": {
+    ".": ["AssembleExecutable"],
+    "/AssembleExecutable": ["Assembler", "assembleExecutable", "layer"],
+  },
 };
 
 const runtimeSource = (name) => {
-  const lines = [
-    'import assert from "node:assert/strict";',
-    'const core = await import("effect-build");',
-    'assert.deepEqual(Object.keys(core), ["Artifact", "BuildError", "JavaScriptBundle", "MatrixError", "Target"]);',
-    'assert.deepEqual(Object.keys(core.JavaScriptBundle), ["Format", "InvalidReason", "InvalidJavaScriptBundle", "JavaScriptBundleAccessOperation", "JavaScriptBundleAccessFailed", "JavaScriptBundleTemporaryDirectoryFailed", "withFile"]);',
-    'const integration = await import("effect-build/Integration");',
-    'assert.deepEqual(Object.keys(integration), ["executeCommand", "inspectLiveJavaScriptBundle", "produceExecutable", "withOwnedJavaScriptBundle"]);',
-    'const author = await import("effect-build/Provider");',
-    'assert.deepEqual(Object.keys(author), ["define"]);',
-    'for (const path of [["effect-build", "bun"].join("/"), ["effect-build", "deno"].join("/"), "effect-build/internal", "effect-build/standalone/internal/Process.js"]) {',
-    '  await import(path).then(() => { throw new Error(`private or legacy path resolved: ${path}`); }, () => undefined);',
-    '}',
-  ];
-  if (name !== "effect-build") {
+  const lines = ['import assert from "node:assert/strict";'];
+  for (const [suffix, keys] of Object.entries(runtimeKeys[name])) {
+    const variable = `module${lines.length}`;
     lines.push(
-      `const selected = await import(${JSON.stringify(name)});`,
-      `assert.deepEqual(Object.keys(selected), ${JSON.stringify(runtimeKeys[name])});`,
-      `await import(${JSON.stringify(`${name}/internal`)}).then(() => { throw new Error("integration private path resolved"); }, () => undefined);`,
+      `const ${variable} = await import(${JSON.stringify(`${name}${suffix === "." ? "" : suffix}`)});`,
+      `assert.deepEqual(Object.keys(${variable}).sort(), ${JSON.stringify([...keys].sort())});`,
     );
   }
+  lines.push(
+    'for (const path of ["effect-build/Integration", "effect-build/Provider", "effect-build/JavaScriptBundle", "effect-build/standalone/Driver", "effect-build-bun/Adapter", "effect-build-deno/Adapter", "effect-build-esbuild/internal/Esbuild", "effect-build-node-sea/internal/NodeSea"]) {',
+    '  await import(path).then(() => { throw new Error(`legacy path resolved: ${path}`); }, () => undefined);',
+    '}',
+  );
   return lines.join("\n");
 };
 
@@ -871,73 +882,6 @@ const installIsolatedFixture = async ({ installer, name, tarballs, root, bun, ve
   return receipt;
 };
 
-const compositionTypeScriptSource = (producer) => {
-  const alias = producer === "esbuild" ? "Esbuild" : "Bun";
-  const packageName = `effect-build-${producer}`;
-  return [
-    'import { NodeServices } from "@effect/platform-node";',
-    'import { Effect } from "effect";',
-    `import * as ${alias} from ${JSON.stringify(packageName)};`,
-    'import * as NodeSea from "effect-build-node-sea";',
-    `export const program = ${alias}.withJavaScriptBundle(`,
-    '  { entrypoint: "src/main.ts", format: "esm" },',
-    '  (main) => NodeSea.createExecutable({ main, outfile: "dist/app", digest: true }),',
-    ").pipe(",
-    `  Effect.provide(${alias}.layer${producer === "bun" ? "()" : ""}),`,
-    "  Effect.provide(NodeSea.layer()),",
-    "  Effect.provide(NodeServices.layer),",
-    ");",
-  ].join("\n");
-};
-
-const installComposedFixture = async ({ installer, producer, tarballs, root, bun, versions, candidates }) => {
-  const producerPackage = `effect-build-${producer}`;
-  const label = `${installer}-${producer}-node-sea`;
-  const fixture = join(root, "fixtures", label);
-  const cache = join(root, "caches", label);
-  await mkdir(fixture, { recursive: true });
-  const receipt = await install({
-    installer,
-    fixture,
-    label,
-    cache,
-    bun,
-    candidates,
-    manifest: {
-      name: `fixture-${label}`,
-      private: true,
-      type: "module",
-      dependencies: {
-        ...commonDependencies(versions, tarballs),
-        "@effect/platform-node": versions["@effect/platform-node"],
-        [producerPackage]: `file:${tarballs.get(producerPackage)}`,
-        "effect-build-node-sea": `file:${tarballs.get("effect-build-node-sea")}`,
-      },
-      overrides: commonOverrides(versions, installer, tarballs),
-    },
-  });
-  await verifyDevelopmentDependencies(fixture, versions, true);
-  for (const name of ["effect-build", producerPackage, "effect-build-node-sea"]) {
-    if (await readInstalledVersion(fixture, name) !== packageVersion) {
-      throw new Error(`${label} did not resolve ${name}@${packageVersion}`);
-    }
-  }
-  await assertCannotResolve(fixture, producer === "bun" ? "effect-build-esbuild" : "effect-build-bun", label);
-  await assertCannotResolve(fixture, "effect-build-deno", label);
-  if (producer !== "esbuild") await assertCannotResolve(fixture, "esbuild", label);
-  await writeFile(join(fixture, "main.ts"), compositionTypeScriptSource(producer));
-  await writeFile(join(fixture, "runtime.mjs"), [
-    'import assert from "node:assert/strict";',
-    `const Producer = await import(${JSON.stringify(producerPackage)});`,
-    'const NodeSea = await import("effect-build-node-sea");',
-    'assert.equal(typeof Producer.withJavaScriptBundle, "function");',
-    'assert.equal(typeof NodeSea.createExecutable, "function");',
-  ].join("\n"));
-  await runTypeAndRuntimeChecks(fixture);
-  console.log(`PASS packed consumer ${label}`);
-  return receipt;
-};
-
 const sourceCommit = async () => {
   const { stdout } = await execute("git", ["rev-parse", "HEAD"], { cwd: repository });
   const source = stdout.trim();
@@ -1009,20 +953,9 @@ export const verifyPackedConsumers = async ({ candidateDirectory, build = true }
           candidates,
         }));
       }
-      for (const producer of ["esbuild", "bun"]) {
-        consumers.push(await installComposedFixture({
-          installer,
-          producer,
-          tarballs,
-          root: temporaryRoot,
-          bun,
-          versions,
-          candidates,
-        }));
-      }
     }
     if (candidateDirectory !== undefined) await writeCandidateManifest(candidateDirectory, candidates, consumers);
-    console.log("packed consumers verified: 14/14");
+    console.log("packed consumers verified: 10/10");
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }

@@ -1,15 +1,15 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as Deno from "effect-build-deno";
+import * as CompileExecutable from "effect-build-deno/CompileExecutable";
 
-const executable = process.env.EFFECT_BUILD_DENO_BIN;
-const compiler = executable === undefined ? Deno.layer() : Deno.layer({ executable });
+const compiler = CompileExecutable.layer({ allowUntestedVersion: true });
 
 const artifact = await Effect.runPromise(
-  Deno.compileExecutable({
+  CompileExecutable.compileExecutable({
     entrypoint: "src/main.ts",
     outfile: "dist/app",
     target: "linux-x64-gnu",
+    observation: "unhashed",
     options: {
       bundle: true,
       minify: true,
@@ -21,4 +21,4 @@ const artifact = await Effect.runPromise(
   ),
 );
 
-console.log(`${artifact.path} ${artifact.stages[0].tool.name}@${artifact.stages[0].tool.version}`);
+console.log(`${artifact.path} ${artifact.runtime.name}@${artifact.runtime.version}`);

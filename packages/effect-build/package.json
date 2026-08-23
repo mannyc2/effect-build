@@ -1,7 +1,7 @@
 {
   "name": "effect-build",
-  "version": "0.3.0",
-  "description": "Portable Effect-native executable compilation contracts and lifecycle.",
+  "version": "0.4.0",
+  "description": "Portable Effect-native artifact, target, matrix, and Author contracts.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -31,17 +31,18 @@
     "provenance": true
   },
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./Artifact": { "types": "./dist/Artifact.d.ts", "import": "./dist/Artifact.js" },
+    "./SystemTarget": { "types": "./dist/SystemTarget.d.ts", "import": "./dist/SystemTarget.js" },
+    "./Matrix": { "types": "./dist/Matrix.d.ts", "import": "./dist/Matrix.js" },
+    "./Author/Tool": { "types": "./dist/Author/Tool.d.ts", "import": "./dist/Author/Tool.js" },
+    "./Author/BorrowedOutput": {
+      "types": "./dist/Author/BorrowedOutput.d.ts",
+      "import": "./dist/Author/BorrowedOutput.js"
     },
-    "./Integration": {
-      "types": "./dist/Integration.d.ts",
-      "import": "./dist/Integration.js"
-    },
-    "./Provider": {
-      "types": "./dist/Provider.d.ts",
-      "import": "./dist/Provider.js"
+    "./Author/Executable": {
+      "types": "./dist/Author/Executable.d.ts",
+      "import": "./dist/Author/Executable.js"
     }
   },
   "scripts": {

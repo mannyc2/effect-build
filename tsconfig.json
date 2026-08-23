@@ -9,7 +9,8 @@
     ]
   },
   "include": [
-    "test/**/*.ts",
+    "test/unit/v04-*.test.ts",
+    "test/architecture/v04-*.test.ts",
     "vitest.config.ts"
   ],
   "exclude": [
