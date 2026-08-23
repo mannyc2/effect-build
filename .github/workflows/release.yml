@@ -43,7 +43,7 @@ jobs:
             echo "effect-build@${version} is already published; nothing to do"
             exit 0
           fi
-          for name in effect-build effect-build-bun effect-build-deno effect-build-esbuild effect-build-node-sea; do
+          for name in effect-build effect-build-bun effect-build-deno effect-build-esbuild effect-build-node-sea effect-build-rolldown; do
             echo "publishing ${name}@${version}"
             (cd "packages/${name}" && npm publish --provenance --access public)
             sleep 10

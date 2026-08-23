@@ -12,6 +12,8 @@
         "./Artifact": {
           "runtime": [],
           "declarations": [
+            "Bundle",
+            "BundleFile",
             "Executable",
             "Tool"
           ]
@@ -50,6 +52,7 @@
         "./Toolchain": {
           "runtime": [
             "probeVersion",
+            "publishBundle",
             "publishExecutable",
             "resolveExecutable",
             "run",
@@ -60,11 +63,13 @@
             "Completion",
             "Output",
             "ProbeOptions",
+            "PublishBundleOptions",
             "PublishOptions",
             "ResolveOptions",
             "RunOptions",
             "TestedRange",
             "probeVersion",
+            "publishBundle",
             "publishExecutable",
             "resolveExecutable",
             "run",
@@ -76,9 +81,28 @@
     },
     "effect-build-bun": {
       "namespaces": [
+        "Bundle",
         "CompileExecutable"
       ],
       "subpaths": {
+        "./Bundle": {
+          "runtime": [
+            "Bundler",
+            "bundle",
+            "layer"
+          ],
+          "declarations": [
+            "BundleError",
+            "BundleInput",
+            "Bundler",
+            "Format",
+            "LayerOptions",
+            "Sourcemap",
+            "Target",
+            "bundle",
+            "layer"
+          ]
+        },
         "./CompileExecutable": {
           "runtime": [
             "Compiler",
@@ -100,9 +124,27 @@
     },
     "effect-build-deno": {
       "namespaces": [
+        "Bundle",
         "CompileExecutable"
       ],
       "subpaths": {
+        "./Bundle": {
+          "runtime": [
+            "Bundler",
+            "bundle",
+            "layer"
+          ],
+          "declarations": [
+            "BundleError",
+            "BundleInput",
+            "Bundler",
+            "LayerOptions",
+            "Platform",
+            "Sourcemap",
+            "bundle",
+            "layer"
+          ]
+        },
         "./CompileExecutable": {
           "runtime": [
             "Compiler",
@@ -127,15 +169,18 @@
     "effect-build-esbuild": {
       "namespaces": [
         "Build",
-        "Context"
+        "Context",
+        "Watch"
       ],
       "subpaths": {
         "./Build": {
           "runtime": [
             "Esbuild",
             "EsbuildFailed",
+            "analyzeMetafile",
             "build",
-            "layer"
+            "layer",
+            "transform"
           ],
           "declarations": [
             "Artifact",
@@ -143,8 +188,10 @@
             "Esbuild",
             "EsbuildFailed",
             "Options",
+            "analyzeMetafile",
             "build",
-            "layer"
+            "layer",
+            "transform"
           ]
         },
         "./Context": {
@@ -162,6 +209,17 @@
             "Options",
             "layer",
             "make"
+          ]
+        },
+        "./Watch": {
+          "runtime": [
+            "EsbuildFailed",
+            "changes"
+          ],
+          "declarations": [
+            "EsbuildFailed",
+            "Options",
+            "changes"
           ]
         }
       }
@@ -186,6 +244,44 @@
             "MainFormat",
             "assembleExecutable",
             "layer"
+          ]
+        }
+      }
+    },
+    "effect-build-rolldown": {
+      "namespaces": [
+        "Build",
+        "Watch"
+      ],
+      "subpaths": {
+        "./Build": {
+          "runtime": [
+            "Rolldown",
+            "RolldownFailed",
+            "generate",
+            "layer",
+            "make",
+            "write"
+          ],
+          "declarations": [
+            "Build",
+            "Rolldown",
+            "RolldownFailed",
+            "generate",
+            "layer",
+            "make",
+            "write"
+          ]
+        },
+        "./Watch": {
+          "runtime": [
+            "RolldownFailed",
+            "events"
+          ],
+          "declarations": [
+            "Event",
+            "RolldownFailed",
+            "events"
           ]
         }
       }

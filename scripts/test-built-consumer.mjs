@@ -1,6 +1,6 @@
-// Packs the five built packages and proves a fresh npm consumer can install,
-// typecheck, and run them: a real fake-bun compile plus an in-memory esbuild
-// build, with type-level use of every public module.
+// Packs the six built packages and proves a fresh npm consumer can install,
+// typecheck, and run them: a real fake-bun compile plus in-memory esbuild and
+// rolldown builds, with type-level use of every public module.
 import { execFile } from "node:child_process";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,6 +17,7 @@ const packageNames = [
   "effect-build-deno",
   "effect-build-esbuild",
   "effect-build-node-sea",
+  "effect-build-rolldown",
 ];
 
 const workspaceManifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -101,14 +102,20 @@ try {
       2,
     ),
   );
+  await writeFile(join(consumerRoot, "rolldown-entry.js"), "export const consumed = 1;\n");
   await writeFile(
     join(consumerRoot, "main.ts"),
     `import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import * as BunBundle from "effect-build-bun/Bundle";
 import * as BunCompile from "effect-build-bun/CompileExecutable";
+import * as DenoBundle from "effect-build-deno/Bundle";
 import * as DenoCompile from "effect-build-deno/CompileExecutable";
 import * as Build from "effect-build-esbuild/Build";
+import * as Watch from "effect-build-esbuild/Watch";
 import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
+import * as Rolldown from "effect-build-rolldown/Build";
+import type * as RolldownWatch from "effect-build-rolldown/Watch";
 import type * as Artifact from "effect-build/Artifact";
 import type * as BuildError from "effect-build/BuildError";
 import * as Target from "effect-build/Target";
@@ -116,9 +123,23 @@ import * as Target from "effect-build/Target";
 const marker: DenoCompile.Permissions = { read: true };
 const main: AssembleExecutable.Main = { _tag: "Bytes", contents: new Uint8Array(), format: "commonjs" };
 const assembler: typeof AssembleExecutable.assembleExecutable = AssembleExecutable.assembleExecutable;
+const bunBundleInput: BunBundle.BundleInput = { entrypoints: ["main.ts"], outdir: "dist" };
+const denoPlatform: DenoBundle.Platform = "browser";
+const watching: typeof Watch.changes = Watch.changes;
+const watcherEvent: RolldownWatch.Event = { code: "START" };
 void marker;
 void main;
 void assembler;
+void bunBundleInput;
+void denoPlatform;
+void watching;
+void watcherEvent;
+
+const rolled = await Effect.runPromise(
+  Rolldown.generate({ input: "rolldown-entry.js", cwd: process.cwd() }, { format: "esm" }).pipe(
+    Effect.provide(Rolldown.layer),
+  ),
+);
 
 const bundle = await Effect.runPromise(
   Build.build({
@@ -144,6 +165,7 @@ if (fakeBun !== undefined) {
 
 console.log(JSON.stringify({
   outputs: bundle.outputFiles.length,
+  rolldownChunks: rolled.output.length,
   target: artifact?.target ?? null,
   digestLength: artifact?.sha256?.length ?? null,
   nativeFormat: artifact === undefined ? null : Target.info(artifact.target).nativeFormat,
@@ -174,6 +196,7 @@ console.log(JSON.stringify({
   const { stdout } = await execute("node", runArguments, { cwd: consumerRoot });
   const report = JSON.parse(stdout.trim());
   if (report.outputs !== 1) throw new Error(`consumer esbuild build produced ${report.outputs} outputs`);
+  if (report.rolldownChunks !== 1) throw new Error(`consumer rolldown build produced ${report.rolldownChunks} chunks`);
   if (process.platform !== "win32") {
     if (report.digestLength !== 64) throw new Error(`consumer artifact digest length ${report.digestLength}`);
     if (typeof report.target !== "string" || report.nativeFormat === null) {

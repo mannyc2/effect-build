@@ -78,7 +78,7 @@ describe("public surface", () => {
     }
   }, 30_000);
 
-  it("keeps five lockstep packages with one-way provider-to-core dependencies", async () => {
+  it("keeps six lockstep packages with one-way provider-to-core dependencies", async () => {
     const surface = await readSurface();
     const names = Object.keys(surface.packages);
     expect(names).toEqual([
@@ -87,6 +87,7 @@ describe("public surface", () => {
       "effect-build-deno",
       "effect-build-esbuild",
       "effect-build-node-sea",
+      "effect-build-rolldown",
     ]);
     const versions = new Set<string>();
     for (const name of names) {
