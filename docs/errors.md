@@ -13,7 +13,9 @@ readable `message`:
 
 esbuild operations fail with `EsbuildFailed`, which wraps the native
 rejection and exposes its `errors`/`warnings` message arrays by
-reference.
+reference; rolldown operations fail with `RolldownFailed`, which does the
+same for rolldown's `errors` diagnostics. Watch streams never fail on
+broken rebuilds — those arrive as values — only on failing to start.
 
 Layer construction fails with `ToolNotFound | ToolFailed`; untested tool
 versions log one warning and proceed — version and host mismatches are

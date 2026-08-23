@@ -5,6 +5,24 @@
 A ground-up simplification and broadening of the 0.4 candidate. Breaking
 throughout; 0.4.0 was never published.
 
+New surface on the rebuilt kernel:
+
+- `Artifact.Bundle` — multi-file artifacts with per-file `bytes` and
+  optional `sha256`, published through the same staged pipeline
+  (`Toolchain.publishBundle`, per-file renames into `outdir`).
+- `effect-build-bun/Bundle` — `bun build` with `target`
+  (browser/bun/node), `format`, `minify`, `sourcemap`, `splitting`,
+  `packages`, and `external`.
+- `effect-build-deno/Bundle` — `deno bundle` (Deno ≥ 2.4) with `platform`
+  (browser/deno), `minify`, `codeSplitting`, `sourcemap`, and `external`.
+- `effect-build-esbuild` gains `Build.transform`,
+  `Build.analyzeMetafile`, and `Watch.changes` — watch mode as a `Stream`
+  of build results whose end stops the watcher.
+- New package `effect-build-rolldown`: scoped in-process bundles
+  (`Build.make`/`generate`/`write` over the native `RolldownBuild`, with
+  `close` owned by the Scope) and `Watch.events` streaming sanitized
+  watcher events.
+
 - One artifact type: `Artifact.Executable` with `path`, numeric `bytes`,
   `target`, `tool { name, version }`, and an optional `sha256` (hashing is
   on by default; pass `hash: false` to skip). The `observation` modes,

@@ -4,7 +4,7 @@
 | ------------------------------- | ----------------------------------------------------- |
 | [API](api.md)                   | Packages, subpaths, inputs, and artifacts             |
 | [Architecture](architecture.md) | The core kernel, provider ownership, and layer wiring |
-| [Integrations](drivers.md)      | Bun, Deno, esbuild, and Node SEA specifics            |
+| [Integrations](drivers.md)      | Bun, Deno, esbuild, Node SEA, and Rolldown specifics  |
 | [Errors](errors.md)             | The error set and interruption behavior               |
 | [Releases](release-security.md) | CI matrix, npm provenance, and version policy         |
 
