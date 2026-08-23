@@ -1,53 +1,193 @@
 {
-  "version": 2,
+  "schema": "effect-build/public-surface@3",
   "packages": {
     "effect-build": {
-      "subpaths": [
-        ".",
-        "./Artifact",
-        "./SystemTarget",
-        "./Matrix",
-        "./Author/Tool",
-        "./Author/BorrowedOutput",
-        "./Author/Executable"
+      "namespaces": [
+        "Artifact",
+        "BuildError",
+        "Target",
+        "Toolchain"
       ],
-      "runtimeKeys": {
-        ".": ["Artifact", "BorrowedOutput", "Executable", "Matrix", "SystemTarget", "Tool"],
-        "./Artifact": ["AbsolutePath"],
-        "./SystemTarget": ["Abi", "Architecture", "OperatingSystem", "SystemTarget"],
-        "./Matrix": ["InvalidInput"],
-        "./Author/Tool": ["decimalBytes", "define", "sha256Digest"],
-        "./Author/BorrowedOutput": [],
-        "./Author/Executable": []
+      "subpaths": {
+        "./Artifact": {
+          "runtime": [],
+          "declarations": [
+            "Executable",
+            "Tool"
+          ]
+        },
+        "./BuildError": {
+          "runtime": [
+            "PublishFailed",
+            "ToolFailed",
+            "ToolNotFound",
+            "UnsupportedTarget"
+          ],
+          "declarations": [
+            "PublishFailed",
+            "ToolFailed",
+            "ToolNotFound",
+            "UnsupportedTarget"
+          ]
+        },
+        "./Target": {
+          "runtime": [
+            "Target",
+            "host",
+            "info"
+          ],
+          "declarations": [
+            "Abi",
+            "Architecture",
+            "Info",
+            "NativeFormat",
+            "OperatingSystem",
+            "Target",
+            "host",
+            "info"
+          ]
+        },
+        "./Toolchain": {
+          "runtime": [
+            "probeVersion",
+            "publishExecutable",
+            "resolveExecutable",
+            "run",
+            "runOrFail",
+            "warnIfUntested"
+          ],
+          "declarations": [
+            "Completion",
+            "Output",
+            "ProbeOptions",
+            "PublishOptions",
+            "ResolveOptions",
+            "RunOptions",
+            "TestedRange",
+            "probeVersion",
+            "publishExecutable",
+            "resolveExecutable",
+            "run",
+            "runOrFail",
+            "warnIfUntested"
+          ]
+        }
       }
     },
     "effect-build-bun": {
-      "subpaths": [".", "./CompileExecutable"],
-      "runtimeKeys": {
-        ".": ["CompileExecutable"],
-        "./CompileExecutable": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"]
+      "namespaces": [
+        "CompileExecutable"
+      ],
+      "subpaths": {
+        "./CompileExecutable": {
+          "runtime": [
+            "Compiler",
+            "Target",
+            "compileExecutable",
+            "layer"
+          ],
+          "declarations": [
+            "CompileExecutableError",
+            "CompileExecutableInput",
+            "Compiler",
+            "LayerOptions",
+            "Target",
+            "compileExecutable",
+            "layer"
+          ]
+        }
       }
     },
     "effect-build-deno": {
-      "subpaths": [".", "./CompileExecutable"],
-      "runtimeKeys": {
-        ".": ["CompileExecutable"],
-        "./CompileExecutable": ["Compiler", "Target", "compileExecutable", "compileExecutableMatrix", "layer"]
+      "namespaces": [
+        "CompileExecutable"
+      ],
+      "subpaths": {
+        "./CompileExecutable": {
+          "runtime": [
+            "Compiler",
+            "Target",
+            "compileExecutable",
+            "layer"
+          ],
+          "declarations": [
+            "CompileExecutableError",
+            "CompileExecutableInput",
+            "Compiler",
+            "LayerOptions",
+            "PermissionValue",
+            "Permissions",
+            "Target",
+            "compileExecutable",
+            "layer"
+          ]
+        }
       }
     },
     "effect-build-esbuild": {
-      "subpaths": [".", "./Build", "./Context"],
-      "runtimeKeys": {
-        ".": ["Build", "Context"],
-        "./Build": ["Esbuild", "build", "layer"],
-        "./Context": ["Esbuild", "layer", "make"]
+      "namespaces": [
+        "Build",
+        "Context"
+      ],
+      "subpaths": {
+        "./Build": {
+          "runtime": [
+            "Esbuild",
+            "EsbuildFailed",
+            "build",
+            "layer"
+          ],
+          "declarations": [
+            "Artifact",
+            "BuildError",
+            "Esbuild",
+            "EsbuildFailed",
+            "Options",
+            "build",
+            "layer"
+          ]
+        },
+        "./Context": {
+          "runtime": [
+            "Esbuild",
+            "EsbuildFailed",
+            "layer",
+            "make"
+          ],
+          "declarations": [
+            "Context",
+            "ContextError",
+            "Esbuild",
+            "EsbuildFailed",
+            "Options",
+            "layer",
+            "make"
+          ]
+        }
       }
     },
     "effect-build-node-sea": {
-      "subpaths": [".", "./AssembleExecutable"],
-      "runtimeKeys": {
-        ".": ["AssembleExecutable"],
-        "./AssembleExecutable": ["Assembler", "assembleExecutable", "layer"]
+      "namespaces": [
+        "AssembleExecutable"
+      ],
+      "subpaths": {
+        "./AssembleExecutable": {
+          "runtime": [
+            "Assembler",
+            "assembleExecutable",
+            "layer"
+          ],
+          "declarations": [
+            "AssembleExecutableError",
+            "AssembleExecutableInput",
+            "Assembler",
+            "LayerOptions",
+            "Main",
+            "MainFormat",
+            "assembleExecutable",
+            "layer"
+          ]
+        }
       }
     }
   }
