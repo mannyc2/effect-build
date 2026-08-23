@@ -63,7 +63,8 @@ const waitForFile = async (path: string): Promise<void> => {
   }
 };
 
-describe.sequential("Bun CompileExecutable", () => {
+const describeUnix = process.platform === "win32" ? describe.skip : describe.sequential;
+describeUnix("Bun CompileExecutable", () => {
   it("fails layer construction with ToolNotFound for a missing explicit executable", async () => {
     const exit = await run(
       BunCompile.compileExecutable(input("missing-tool")),

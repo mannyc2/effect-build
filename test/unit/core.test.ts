@@ -60,7 +60,7 @@ describe("BuildError", () => {
   });
 });
 
-describe("Toolchain", () => {
+describe.skipIf(process.platform === "win32")("Toolchain", () => {
   it("resolves an explicit executable and fails ToolNotFound otherwise", async () => {
     const tool = join(root, "tool-resolve");
     await writeFile(tool, "#!/bin/sh\nexit 0\n");

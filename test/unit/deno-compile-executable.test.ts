@@ -61,7 +61,8 @@ const waitForFile = async (path: string): Promise<void> => {
   }
 };
 
-describe.sequential("Deno CompileExecutable", () => {
+const describeUnix = process.platform === "win32" ? describe.skip : describe.sequential;
+describeUnix("Deno CompileExecutable", () => {
   it("parses the deno version banner and records it on the artifact", async () => {
     const exit = await run(DenoCompile.compileExecutable(input("hashed")));
     expect(Exit.isSuccess(exit)).toBe(true);
