@@ -61,9 +61,9 @@ const mediaTypeOf = (relativePath: string): string | undefined => {
 };
 
 const platformMetadataPath = (path: Path.Path, metadataPath: string): string => {
-  const localPath = path.sep === "\\" && /^\/[A-Za-z]:[\\/]/u.test(metadataPath)
-    ? metadataPath.slice(1)
-    : metadataPath;
+  const windowsDrivePath = /^\/?[A-Za-z]:[\\/]/u.test(metadataPath);
+  const localPath = windowsDrivePath && metadataPath.startsWith("/") ? metadataPath.slice(1) : metadataPath;
+  if (windowsDrivePath) return localPath;
   return path.isAbsolute(localPath) ? localPath : path.resolve(localPath);
 };
 
