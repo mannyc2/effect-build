@@ -24,9 +24,9 @@ interface Surface {
 const readSurface = async (): Promise<Surface> =>
   JSON.parse(await readFile(resolve(root, "tooling/public-api.json"), "utf8")) as Surface;
 
-const declarationExports = (file: string): readonly string[] => {
+const declarationExports = (files: readonly string[]): (file: string) => readonly string[] => {
   const program = ts.createProgram({
-    rootNames: [file],
+    rootNames: [...files],
     options: {
       target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.NodeNext,
@@ -34,10 +34,13 @@ const declarationExports = (file: string): readonly string[] => {
       skipLibCheck: true,
     },
   });
-  const source = program.getSourceFile(file);
-  const symbol = source === undefined ? undefined : program.getTypeChecker().getSymbolAtLocation(source);
-  if (symbol === undefined) throw new Error(`declaration entry point has no module symbol: ${file}`);
-  return program.getTypeChecker().getExportsOfModule(symbol).map((entry) => entry.getName()).sort();
+  const checker = program.getTypeChecker();
+  return (file) => {
+    const source = program.getSourceFile(file);
+    const symbol = source === undefined ? undefined : checker.getSymbolAtLocation(source);
+    if (symbol === undefined) throw new Error(`declaration entry point has no module symbol: ${file}`);
+    return checker.getExportsOfModule(symbol).map((entry) => entry.getName()).sort();
+  };
 };
 
 const sorted = (values: readonly string[]): readonly string[] => [...values].sort();
@@ -56,14 +59,25 @@ describe("public surface", () => {
   it("matches tooling/public-api.json exactly at runtime and in declarations", async () => {
     const surface = await readSurface();
     expect(surface.schema).toBe("effect-build/public-surface@3");
+    const manifests = new Map(
+      await Promise.all(
+        Object.keys(surface.packages).map(async (name) => [name, await readManifest(name)] as const),
+      ),
+    );
+    const declarationFiles = Object.entries(surface.packages).flatMap(([name, contract]) => {
+      const manifest = manifests.get(name)!;
+      return [manifest.exports["."]!, ...Object.keys(contract.subpaths).map((subpath) => manifest.exports[subpath]!)]
+        .map((entry) => resolve(root, `packages/${name}`, entry.types));
+    });
+    const readDeclarationExports = declarationExports(declarationFiles);
     for (const [name, contract] of Object.entries(surface.packages)) {
-      const manifest = await readManifest(name);
+      const manifest = manifests.get(name)!;
       expect(Object.keys(manifest.exports), name).toEqual([".", ...Object.keys(contract.subpaths)]);
 
       const rootEntry = manifest.exports["."]!;
       const rootRuntime = await import(resolve(root, `packages/${name}`, rootEntry.import));
       expect(Object.keys(rootRuntime).sort(), `${name} root`).toEqual(sorted(contract.namespaces));
-      expect(declarationExports(resolve(root, `packages/${name}`, rootEntry.types)), `${name} root types`).toEqual(
+      expect(readDeclarationExports(resolve(root, `packages/${name}`, rootEntry.types)), `${name} root types`).toEqual(
         sorted(contract.namespaces),
       );
 
@@ -72,7 +86,7 @@ describe("public surface", () => {
         const runtime = await import(resolve(root, `packages/${name}`, entry.import));
         expect(Object.keys(runtime).sort(), `${name}${subpath}`).toEqual(sorted(expected.runtime));
         expect(
-          declarationExports(resolve(root, `packages/${name}`, entry.types)),
+          readDeclarationExports(resolve(root, `packages/${name}`, entry.types)),
           `${name}${subpath} types`,
         ).toEqual(sorted(expected.declarations));
       }
