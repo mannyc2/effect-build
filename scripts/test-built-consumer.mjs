@@ -28,6 +28,11 @@ const typescriptVersion = workspaceManifest.devDependencies.typescript;
 
 const consumerRoot = await mkdtemp(join(tmpdir(), "effect-build-consumer-"));
 const cleanup = async () => rm(consumerRoot, { recursive: true, force: true });
+const tarballDirectoryIndex = process.argv.indexOf("--tarball-directory");
+const suppliedTarballDirectory = tarballDirectoryIndex < 0 ? undefined : process.argv[tarballDirectoryIndex + 1];
+if (tarballDirectoryIndex >= 0 && suppliedTarballDirectory === undefined) {
+  throw new Error("--tarball-directory requires a path");
+}
 
 const disallowedSpecifier = /^(?:workspace:|catalog:|file:|link:|portal:)/;
 
@@ -48,14 +53,19 @@ const packedManifest = async (tarball) => {
 try {
   const tarballs = {};
   for (const name of packageNames) {
-    const packDirectory = join(consumerRoot, "tarballs");
-    await mkdir(packDirectory, { recursive: true });
-    const { stdout } = await execute("bun", ["pm", "pack", "--destination", packDirectory], {
-      cwd: join(root, "packages", name),
-    });
-    const line = stdout.split("\n").find((candidate) => candidate.trim().endsWith(".tgz"));
-    if (line === undefined) throw new Error(`bun pm pack produced no tarball for ${name}:\n${stdout}`);
-    const tarball = join(packDirectory, line.trim().split("/").at(-1));
+    let tarball;
+    if (suppliedTarballDirectory === undefined) {
+      const packDirectory = join(consumerRoot, "tarballs");
+      await mkdir(packDirectory, { recursive: true });
+      const { stdout } = await execute("bun", ["pm", "pack", "--destination", packDirectory], {
+        cwd: join(root, "packages", name),
+      });
+      const line = stdout.split("\n").find((candidate) => candidate.trim().endsWith(".tgz"));
+      if (line === undefined) throw new Error(`bun pm pack produced no tarball for ${name}:\n${stdout}`);
+      tarball = join(packDirectory, line.trim().split("/").at(-1));
+    } else {
+      tarball = resolve(suppliedTarballDirectory, `${name}-0.5.0.tgz`);
+    }
     const manifest = await packedManifest(tarball);
     for (const [dependency, specifier] of Object.entries(manifest.dependencies ?? {})) {
       if (disallowedSpecifier.test(specifier)) {
@@ -90,6 +100,7 @@ try {
     ),
   );
   const packDirectory = join(consumerRoot, "tarballs");
+  await mkdir(packDirectory, { recursive: true });
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const pack = await execute(npm, ["pack", adapterRoot, "--pack-destination", packDirectory], {
     cwd: consumerRoot,
