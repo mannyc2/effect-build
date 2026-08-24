@@ -45,10 +45,19 @@ describe("rolldown Build", () => {
   });
 
   it("reuses one graph for several outputs inside a single scope", async () => {
+    let closes = 0;
     const exit = await runWith(
       Effect.scoped(
         Effect.gen(function*() {
-          const build = yield* Build.make({ input: join(root, "main.js") });
+          const build = yield* Build.make({
+            input: join(root, "main.js"),
+            plugins: [{
+              name: "build-close-observer",
+              closeBundle() {
+                closes += 1;
+              },
+            }],
+          });
           const esm = yield* build.generate({ format: "esm" });
           const cjs = yield* build.generate({ format: "cjs" });
           return { cjs, esm };
@@ -60,6 +69,28 @@ describe("rolldown Build", () => {
       expect(exit.value.esm.output[0].code).toContain("export");
       expect(exit.value.cjs.output[0].code).toContain("exports");
     }
+    expect(closes).toBe(1);
+  });
+
+  it("preserves scoped build cleanup failure in Cause", async () => {
+    const exit = await runWith(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const build = yield* Build.make({
+            input: join(root, "main.js"),
+            plugins: [{
+              name: "build-cleanup-failure",
+              closeBundle() {
+                throw new Error("deliberate build cleanup failure");
+              },
+            }],
+          });
+          yield* build.generate({ format: "esm" });
+        }),
+      ),
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("deliberate build cleanup failure");
   });
 
   it("surfaces native diagnostics as RolldownFailed by reference", async () => {
@@ -78,29 +109,105 @@ describe("rolldown Build", () => {
 });
 
 describe("rolldown Watch", () => {
-  it("emits a full build cycle and a rebuild cycle, closing results itself", async () => {
+  it("emits completed builds and rebuilds after closing their native results", async () => {
     const project = join(root, "watched");
     await mkdir(project, { recursive: true });
     const entry = join(project, "entry.js");
     await writeFile(entry, 'export const generation = "gen-one";\n');
+    let resultCloses = 0;
+    let watcherCloses = 0;
     const events = await Effect.runPromise(
-      Watch.events({ input: entry, cwd: project, output: { dir: join(project, "dist") } }).pipe(
+      Watch.events({
+        input: entry,
+        cwd: project,
+        output: { dir: join(project, "dist") },
+        plugins: [{
+          name: "watch-close-observer",
+          closeBundle() {
+            resultCloses += 1;
+          },
+          closeWatcher() {
+            watcherCloses += 1;
+          },
+        }],
+      }).pipe(
         Stream.tap((event) =>
-          event.code === "END"
+          event.code === "BUNDLE_END"
             ? Effect.promise(() => writeFile(entry, 'export const generation = "gen-two";\n'))
             : Effect.void
         ),
-        Stream.takeUntil((event) => event.code === "ERROR"),
-        Stream.take(8),
+        Stream.take(2),
         Stream.runCollect,
       ) as Effect.Effect<Watch.Event[]>,
     );
     const codes = events.map((event) => event.code);
-    expect(codes.filter((code) => code === "BUNDLE_END").length).toBeGreaterThanOrEqual(2);
+    expect(codes.filter((code) => code === "BUNDLE_END")).toHaveLength(2);
     expect(codes).not.toContain("ERROR");
     const bundleEnd = events.find((event) => event.code === "BUNDLE_END");
     if (bundleEnd !== undefined && bundleEnd.code === "BUNDLE_END") {
       expect(bundleEnd.output.length).toBeGreaterThan(0);
     }
+    for (const event of events) expect(event.superseded).toBeGreaterThanOrEqual(0);
+    expect(resultCloses).toBe(2);
+    expect(watcherCloses).toBe(1);
+  }, 60_000);
+
+  it("keeps only the latest pending completion and reports superseded completions", async () => {
+    const project = join(root, "coalesced-watch");
+    await mkdir(project, { recursive: true });
+    const entry = join(project, "entry.js");
+    await writeFile(entry, 'export const generation = "gen-0";\n');
+    let closes = 0;
+    const events = await Effect.runPromise(
+      Watch.events({
+        input: entry,
+        cwd: project,
+        output: { dir: join(project, "dist") },
+        plugins: [{
+          name: "drive-coalesced-watch",
+          async closeBundle() {
+            closes += 1;
+            if (closes < 5) {
+              await writeFile(entry, `export const generation = "gen-${closes}";\n`);
+            }
+          },
+        }],
+      }).pipe(
+        Stream.mapEffect((event) => Effect.sleep("150 millis").pipe(Effect.as(event))),
+        Stream.take(2),
+        Stream.runCollect,
+      ) as Effect.Effect<Watch.Event[]>,
+    );
+    expect(events).toHaveLength(2);
+    expect(events.every((event) => event.code === "BUNDLE_END")).toBe(true);
+    expect(events[1]!.superseded).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("preserves result cleanup failure in Cause and still closes the watcher", async () => {
+    const project = join(root, "cleanup-failure-watch");
+    await mkdir(project, { recursive: true });
+    const entry = join(project, "entry.js");
+    await writeFile(entry, 'export const cleanup = "failure";\n');
+    let watcherCloses = 0;
+    const cleanupFailure = new Error("deliberate result cleanup failure");
+    const exit = await Effect.runPromiseExit(
+      Watch.events({
+        input: entry,
+        cwd: project,
+        output: { dir: join(project, "dist") },
+        plugins: [{
+          name: "watch-cleanup-failure",
+          closeBundle() {
+            throw cleanupFailure;
+          },
+          closeWatcher() {
+            watcherCloses += 1;
+          },
+        }],
+      }).pipe(Stream.runCollect),
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("watch-cleanup-failure");
+    expect(watcherCloses).toBe(1);
   }, 60_000);
 });

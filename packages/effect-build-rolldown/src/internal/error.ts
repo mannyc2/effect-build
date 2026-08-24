@@ -20,12 +20,3 @@ export class RolldownFailed extends Schema.TaggedError<RolldownFailed>()("Rolldo
     return `rolldown ${this.operation} failed${first === undefined || first.length === 0 ? "" : `: ${first}`}`;
   }
 }
-
-export class WatchOverflow extends Schema.TaggedError<WatchOverflow>()("WatchOverflow", {
-  resource: Schema.Literals(["result", "event"] as const),
-  limit: Schema.Number,
-}) {
-  override get message(): string {
-    return `rolldown watch exceeded the ${this.resource} ownership limit of ${this.limit}`;
-  }
-}

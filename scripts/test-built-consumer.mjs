@@ -144,7 +144,7 @@ const explicitTarget: BunCompile.Target = process.platform === "darwin"
   : "linux-x64-gnu";
 const denoPlatform: DenoBundle.Platform = "browser";
 const watching: typeof Watch.changes = Watch.changes;
-const watcherEvent: RolldownWatch.Event = { code: "START" };
+const watcherEvent: RolldownWatch.Event = { code: "BUNDLE_END", duration: 0, output: [], superseded: 0 };
 const appleNamespaces = [
   Apple.Artifact,
   Apple.CodeSign,

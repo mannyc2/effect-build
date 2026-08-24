@@ -602,6 +602,7 @@
             "changes"
           ],
           "declarations": [
+            "Change",
             "EsbuildFailed",
             "Options",
             "changes"
@@ -661,13 +662,11 @@
         "./Watch": {
           "runtime": [
             "RolldownFailed",
-            "WatchOverflow",
             "events"
           ],
           "declarations": [
             "Event",
             "RolldownFailed",
-            "WatchOverflow",
             "events"
           ]
         }

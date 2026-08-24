@@ -34,11 +34,13 @@ const events = Watch.events(watchOptions);
 
 // Watcher events are sanitized values with no native result handle to close.
 export type _Events = Assert<
-  Same<typeof events, Stream.Stream<Watch.Event, Watch.RolldownFailed | Watch.WatchOverflow>>
+  Same<typeof events, Stream.Stream<Watch.Event, Watch.RolldownFailed>>
 >;
 export type _NoResult = Assert<
   Same<Extract<Watch.Event, { code: "BUNDLE_END" }> extends { result: unknown } ? true : false, false>
 >;
+export type _OnlyCompleted = Assert<Same<Watch.Event["code"], "BUNDLE_END" | "ERROR">>;
+export type _Superseded = Assert<Same<Watch.Event["superseded"], number>>;
 
 declare const failure: Build.RolldownFailed;
 export type _Diagnostics = Assert<Same<typeof failure.errors, readonly rolldown.RolldownError[]>>;

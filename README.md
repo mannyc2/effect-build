@@ -21,7 +21,7 @@ still transitional.
 | `effect-build-deno`     | executable compile and native directory bundle         | exact 2.9.5 native evidence; no portable Profile until metadata proves it               |
 | `effect-build-esbuild`  | native build, context, and watch                       | native operations plus Node-main and browser profile adapters                           |
 | `effect-build-node-sea` | host-inferred assembly with file/byte mains and assets | honest `Raw` lane plus evidence-bearing `NodeMainExecutable`; ad-hoc Mach-O repair only |
-| `effect-build-rolldown` | native build and watch                                 | profile adapters; stable watch only after bounded, awaited lifecycle proof              |
+| `effect-build-rolldown` | bounded native build and watch lifecycle               | native operations plus profile adapters                                                 |
 
 The current executable API remains usable while the cut is implemented:
 

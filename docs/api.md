@@ -47,10 +47,12 @@ directly, so a failed operation can leave a mixed directory. Native Bun `target:
 closure.
 
 esbuild `Build`, `Context`, and `Watch` expose its native in-memory and scoped
-context semantics. Rolldown `Build` and `Watch` expose native handles and events.
-These are provider-native operations; they do not inherit the portable OS
-process-tree guarantee. Rolldown Watch promotion additionally requires bounded
-delivery and awaited exactly-once result ownership.
+context semantics. Rolldown `Build` and `Watch` expose native handles and
+completed-result events. Both watch streams retain one pending completion,
+coalesce to the latest with an explicit superseded count, and keep cleanup
+failure in Effect Cause. Rolldown closes each native result before delivery and
+awaits one watcher close during stream shutdown. These are provider-native
+operations; they do not inherit the portable OS process-tree guarantee.
 
 The current Node `AssembleExecutable` accepts file or byte mains and assets and
 targets an inferred host through `node --build-sea`. This is a raw host-native

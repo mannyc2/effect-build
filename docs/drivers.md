@@ -26,9 +26,11 @@ finalizer performs only ad-hoc, no-timestamp runnable-Mach-O repair. Developer
 ID identity, entitlements, hardened runtime, containers, notarization, stapling,
 and distribution assessment are expressly outside Node SEA.
 
-**Rolldown** keeps scoped native Build operations. Stable Watch promotion is
-blocked until pending work is bounded, result handles are owned and awaited
-exactly once, and every cleanup failure survives in Effect Cause.
+**Rolldown** keeps scoped native Build operations. Watch delivery retains one
+pending completed result and coalesces to the latest with an explicit
+superseded count. The adapter closes each native result before delivery, awaits
+the watcher close during stream shutdown, and preserves cleanup failures in
+Effect Cause.
 
 **Apple distribution** is the separate target-only `effect-build-apple`
 package. Its closed direct-distribution subpaths are `Artifact`, `CodeSign`,

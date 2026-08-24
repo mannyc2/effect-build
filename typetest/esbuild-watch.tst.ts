@@ -9,10 +9,14 @@ type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ?
 declare const options: esbuild.BuildOptions & { readonly write: false };
 const stream = Watch.changes(options);
 
-// The stream carries native results, EsbuildFailed, and the Context service.
+// The stream carries bounded deliveries, EsbuildFailed, and the Context service.
 export type _Changes = Assert<
-  Same<typeof stream, Stream.Stream<esbuild.BuildResult<typeof options>, Watch.EsbuildFailed, Context.Esbuild>>
+  Same<typeof stream, Stream.Stream<Watch.Change<typeof options>, Watch.EsbuildFailed, Context.Esbuild>>
 >;
+
+declare const change: Watch.Change<typeof options>;
+export type _NativeResult = Assert<Same<typeof change.result, esbuild.BuildResult<typeof options>>>;
+export type _Superseded = Assert<Same<typeof change.superseded, number>>;
 
 // Watching writes nothing to disk; `write: false` is required.
 // @ts-expect-error!
