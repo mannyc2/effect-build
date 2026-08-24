@@ -60,6 +60,13 @@ const mediaTypeOf = (relativePath: string): string | undefined => {
   return undefined;
 };
 
+const platformMetadataPath = (path: Path.Path, metadataPath: string): string => {
+  const localPath = path.sep === "\\" && /^\/[A-Za-z]:[\\/]/u.test(metadataPath)
+    ? metadataPath.slice(1)
+    : metadataPath;
+  return path.isAbsolute(localPath) ? localPath : path.resolve(localPath);
+};
+
 const makeServices = (options?: LayerOptions) =>
   Effect.gen(function*() {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -211,7 +218,7 @@ const makeServices = (options?: LayerOptions) =>
             }
             files.push(Object.freeze({ path: relativePath, mediaType, imports: Object.freeze(imports) }));
             if (output.entryPoint !== undefined) {
-              const observedEntrypoint = yield* fileSystem.realPath(path.resolve(output.entryPoint)).pipe(
+              const observedEntrypoint = yield* fileSystem.realPath(platformMetadataPath(path, output.entryPoint)).pipe(
                 Effect.mapError((cause) => failed("resolve-browser-metadata-entrypoint", cause)),
               );
               if (path.normalize(observedEntrypoint) === path.normalize(requestedEntrypoint)) {

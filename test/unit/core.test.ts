@@ -60,20 +60,24 @@ describe("BuildError", () => {
     expect(new UnsupportedTarget({ tool: "bun", requested: "plan9", available: ["linux-x64-gnu"] }).message)
       .toContain("plan9");
     expect(new PublishFailed({ destination: "/tmp/app", reason: "rename: busy" }).message).toContain("/tmp/app");
-    expect(new ProviderFailed({
-      provider: "effect-build-bun",
-      operation: "bundle",
-      cause: new ToolFailed({ tool: "bun", exitCode: 2, stdout: "", stderr: "invalid argument" }),
-    }).message).toContain("invalid argument");
+    expect(
+      new ProviderFailed({
+        provider: "effect-build-bun",
+        operation: "bundle",
+        cause: new ToolFailed({ tool: "bun", exitCode: 2, stdout: "", stderr: "invalid argument" }),
+      }).message,
+    ).toContain("invalid argument");
     const hostileCause = Object.create(null) as { [Symbol.toPrimitive]: () => never };
     hostileCause[Symbol.toPrimitive] = () => {
       throw new Error("must not escape");
     };
-    expect(new ProviderFailed({
-      provider: "effect-build-bun",
-      operation: "bundle",
-      cause: hostileCause,
-    }).message).toBe("effect-build-bun bundle failed: unknown cause");
+    expect(
+      new ProviderFailed({
+        provider: "effect-build-bun",
+        operation: "bundle",
+        cause: hostileCause,
+      }).message,
+    ).toBe("effect-build-bun bundle failed: unknown cause");
   });
 });
 
