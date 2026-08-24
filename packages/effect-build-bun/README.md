@@ -2,7 +2,8 @@
 
 Effect-native Bun operations: native executables from
 `effect-build-bun/CompileExecutable` and directory bundles from
-`effect-build-bun/Bundle`.
+`effect-build-bun/Bundle`, plus one `effect-build-bun/Profile` Layer providing
+both closed portable authoring services.
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
@@ -31,6 +32,7 @@ caller destination. `target: "browser"` is not the portable browser profile.
 
 Each layer resolves Bun once, authenticates its executable bytes before and
 after the version probe, and revalidates them around every invocation. Bun
-1.3.14 is the required v0.5 evidence point; promotion evidence is incomplete.
+profiles hard-require exact 1.3.14 and reject any other selected version before
+authoring. Full cross-host promotion evidence is incomplete.
 See the
 [repository](https://github.com/mannyc2/effect-build) for the full toolkit.

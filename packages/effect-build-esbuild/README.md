@@ -3,7 +3,9 @@
 Effect-native esbuild operations, in-process and in-memory: one-shot
 builds from `effect-build-esbuild/Build`, scoped incremental contexts from
 `effect-build-esbuild/Context`, and watch mode as a `Stream` from
-`effect-build-esbuild/Watch`.
+`effect-build-esbuild/Watch`. `effect-build-esbuild/Profile` is one explicit
+Layer providing both closed portable authoring services with exact esbuild
+0.28.2 identity and complete metafile analysis.
 
 ```ts
 import { Effect } from "effect";

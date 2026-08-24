@@ -34,22 +34,42 @@ if (argv[0] === "build" && !argv.includes("--compile") && outdirArgument !== und
   const outdir = outdirArgument.slice("--outdir=".length);
   const entrypoints = argv.slice(1).filter((value) => !value.startsWith("--"));
   if (entrypoints.length === 0) process.exit(23);
+  const metafile = argv.find((value) => value.startsWith("--metafile="))?.slice("--metafile=".length);
   const sourcemap = argv.find((value) => value.startsWith("--sourcemap="))?.slice("--sourcemap=".length);
+  const outputs = {};
+  const inputs = {};
   for (const entrypoint of entrypoints) {
     const base = entrypoint.split("/").at(-1).replace(/\.(ts|tsx|jsx|mjs|cjs|js)$/, "");
-    await writeFile(join(outdir, `${base}.js`), `// bundled ${base}\nexport {};\n`);
-    if (sourcemap === "linked" || sourcemap === "external") await writeFile(join(outdir, `${base}.js.map`), "{}\n");
+    const relative = metafile === undefined ? `${base}.js` : `assets/${base}-fake.js`;
+    await mkdir(join(outdir, ...relative.split("/").slice(0, -1)), { recursive: true });
+    const output = join(outdir, ...relative.split("/"));
+    await writeFile(output, `// bundled ${base}\nexport {};\n`);
+    inputs[entrypoint] = { bytes: 1, imports: [], format: "esm" };
+    outputs[output] = { bytes: 35, inputs: { [entrypoint]: { bytesInOutput: 1 } }, imports: [], exports: [], entryPoint: entrypoint };
+    if (sourcemap === "linked" || sourcemap === "external") await writeFile(`${output}.map`, "{}\n");
   }
-  if (argv.includes("--splitting")) {
+  if (argv.includes("--splitting") && metafile === undefined) {
     await mkdir(join(outdir, "chunks"), { recursive: true });
     await writeFile(join(outdir, "chunks", "chunk-fake.js"), "export const shared = 1;\n");
   }
+  if (metafile !== undefined) await writeFile(metafile, JSON.stringify({ inputs, outputs }));
   process.exit(0);
 }
 
 const outfileArgument = argv.find((value) => value.startsWith("--outfile="));
 if (outfileArgument === undefined) process.exit(22);
 let outfile = outfileArgument.slice("--outfile=".length);
+const metafile = argv.find((value) => value.startsWith("--metafile="))?.slice("--metafile=".length);
+if (argv[0] === "build" && !argv.includes("--compile") && metafile !== undefined) {
+  const entrypoints = argv.slice(1).filter((value) => !value.startsWith("--"));
+  const entrypoint = entrypoints[0];
+  await writeFile(outfile, 'require("node:assert").strictEqual(1, 1);\n');
+  await writeFile(metafile, JSON.stringify({
+    inputs: { [entrypoint]: { bytes: 1, imports: [{ path: "node:assert", kind: "import-statement", external: true }], format: "esm" } },
+    outputs: { [outfile]: { bytes: 45, inputs: { [entrypoint]: { bytesInOutput: 1 } }, imports: [{ path: "node:assert", kind: "require-call", external: true }], exports: [], entryPoint: entrypoint } },
+  }));
+  process.exit(0);
+}
 const hostTarget = process.platform === "darwin"
   ? (process.arch === "arm64" ? "bun-darwin-arm64" : "bun-darwin-x64")
   : process.platform === "win32"

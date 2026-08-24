@@ -3,6 +3,9 @@
 Effect-native [Rolldown](https://rolldown.rs) operations: scoped in-process
 bundles from `effect-build-rolldown/Build` and completed watcher results as a `Stream`
 from `effect-build-rolldown/Watch`.
+`effect-build-rolldown/Profile` is one explicit Layer for both closed portable
+authoring services. Rolldown 1.2.5 does not bundle CSS, so stylesheet bytes must
+be supplied as explicit authenticated browser resources.
 
 ```ts
 import { Effect } from "effect";

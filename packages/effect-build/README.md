@@ -14,7 +14,11 @@ import * as Target from "effect-build/Target";
 The v0.5 hard cut removed `effect-build/Toolchain`, mutable core bundle
 declarations, and ambient host-target inference without compatibility aliases.
 `Author/Generation` publishes immutable content-addressed trees and advances a
-single current reference. Provider profile and Node SEA target APIs remain
-release-blocking work. See the
+single current reference. `Author/NodeMain` and
+`Profile/StaticBrowserApplication` own the two closed portable products, with
+provider work behind explicit Context services and core-owned validation,
+staging, authentication, and publication. Their external-author promotion gate
+is exercised from a fresh packed consumer with a duplicate core runtime graph.
+The Node SEA target API remains release-blocking work. See the
 [`effect-build/v0.5-contract@1`](https://github.com/mannyc2/effect-build/blob/main/docs/v0.5-contract.md)
 target decision.

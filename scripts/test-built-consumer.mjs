@@ -65,6 +65,40 @@ try {
     tarballs[name] = tarball;
   }
 
+  // Pack a real out-of-tree author adapter. Its exact core tarball dependency,
+  // combined with npm's nested install strategy below, intentionally creates a
+  // second effect-build runtime graph. The adapter and consumer must still
+  // interoperate through public Context service identifiers alone.
+  const adapterRoot = join(consumerRoot, "external-author");
+  await mkdir(adapterRoot, { recursive: true });
+  await copyFile(join(root, "test/fixtures/external-author-v05/index.js"), join(adapterRoot, "index.js"));
+  await copyFile(join(root, "test/fixtures/external-author-v05/index.d.ts"), join(adapterRoot, "index.d.ts"));
+  await writeFile(
+    join(adapterRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "@fixture/effect-build-author",
+        version: "1.0.0",
+        type: "module",
+        files: ["index.js", "index.d.ts"],
+        exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
+        dependencies: { "effect-build": tarballs["effect-build"] },
+        peerDependencies: { effect: effectVersion },
+      },
+      null,
+      2,
+    ),
+  );
+  const packDirectory = join(consumerRoot, "tarballs");
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  const pack = await execute(npm, ["pack", adapterRoot, "--pack-destination", packDirectory], {
+    cwd: consumerRoot,
+    shell: process.platform === "win32",
+  });
+  const adapterFilename = pack.stdout.split("\n").find((candidate) => candidate.trim().endsWith(".tgz"));
+  if (adapterFilename === undefined) throw new Error(`npm pack produced no external author tarball:\n${pack.stdout}`);
+  const adapterTarball = join(packDirectory, adapterFilename.trim().split(/[\\/]/u).at(-1));
+
   await writeFile(
     join(consumerRoot, "package.json"),
     JSON.stringify(
@@ -73,11 +107,13 @@ try {
         private: true,
         type: "module",
         dependencies: {
+          "@fixture/effect-build-author": adapterTarball,
           "@effect/platform-node": platformNodeVersion,
           effect: effectVersion,
           ...Object.fromEntries(packageNames.map((name) => [name, tarballs[name]])),
         },
         devDependencies: { typescript: typescriptVersion },
+        overrides: { "@effect/platform-node-shared": platformNodeVersion },
       },
       null,
       2,
@@ -104,10 +140,12 @@ try {
     ),
   );
   await writeFile(join(consumerRoot, "rolldown-entry.js"), "export const consumed = 1;\n");
+  await writeFile(join(consumerRoot, "external-entry.js"), "export const external = 1;\n");
   await writeFile(
     join(consumerRoot, "main.ts"),
     `import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import { adapterProducerTag, getCalls, layer as externalAuthorLayer } from "@fixture/effect-build-author";
 import * as Apple from "effect-build-apple";
 import * as AppleAppBundle from "effect-build-apple/AppBundle";
 import * as AppleArtifact from "effect-build-apple/Artifact";
@@ -129,6 +167,7 @@ import * as Rolldown from "effect-build-rolldown/Build";
 import type * as RolldownWatch from "effect-build-rolldown/Watch";
 import type * as Artifact from "effect-build/Artifact";
 import type * as BuildError from "effect-build/BuildError";
+import * as NodeMain from "effect-build/Author/NodeMain";
 import * as Target from "effect-build/Target";
 
 const marker: DenoCompile.Permissions = { read: true };
@@ -178,6 +217,33 @@ void watcherEvent;
 void appleNamespaces;
 void appleOperations;
 
+if (adapterProducerTag === NodeMain.Producer) {
+  throw new Error("external author did not exercise a duplicate effect-build runtime graph");
+}
+
+const callsBeforeRejectedRequest = getCalls();
+const rejected = await Effect.runPromiseExit(
+  Effect.scoped(NodeMain.seal({
+    protocol: "effect-build/profile/node-main@2" as typeof NodeMain.profile,
+    entrypoint: "external-entry.js",
+    format: "module",
+  })).pipe(Effect.provide(externalAuthorLayer), Effect.provide(NodeServices.layer)),
+);
+if (rejected._tag !== "Failure" || getCalls() !== callsBeforeRejectedRequest) {
+  throw new Error("unknown portable protocol reached the external provider");
+}
+
+const externalMain = await Effect.runPromise(
+  Effect.scoped(NodeMain.seal({
+    protocol: NodeMain.profile,
+    entrypoint: "external-entry.js",
+    format: "module",
+  })).pipe(Effect.provide(externalAuthorLayer), Effect.provide(NodeServices.layer)),
+);
+if (getCalls() !== callsBeforeRejectedRequest + 1) {
+  throw new Error("external portable provider call count mismatch");
+}
+
 const rolled = await Effect.runPromise(
   Rolldown.generate({ input: "rolldown-entry.js", cwd: process.cwd() }, { format: "esm" }).pipe(
     Effect.provide(Rolldown.layer),
@@ -209,6 +275,8 @@ if (fakeBun !== undefined) {
 console.log(JSON.stringify({
   outputs: bundle.outputFiles.length,
   rolldownChunks: rolled.output.length,
+  externalDigestLength: externalMain.digest.value.length,
+  externalProducer: externalMain.producer.package,
   target: artifact?.target ?? null,
   digestLength: artifact?.sha256?.length ?? null,
   nativeFormat: artifact === undefined ? null : Target.info(artifact.target).nativeFormat,
@@ -217,15 +285,32 @@ console.log(JSON.stringify({
   );
 
   // Windows ships npm as npm.cmd, which node can only spawn through a shell.
-  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const npmEnvironment = { ...process.env, npm_config_audit: "false", npm_config_fund: "false" };
   const npmOptions = { cwd: consumerRoot, env: npmEnvironment, shell: process.platform === "win32" };
-  await execute(npm, ["install", "--no-audit", "--no-fund"], npmOptions);
+  await execute(
+    npm,
+    ["install", "--no-audit", "--no-fund", "--strict-peer-deps", "--install-strategy=nested"],
+    npmOptions,
+  );
 
   for (const name of packageNames) {
     const installed = JSON.parse(await readFile(join(consumerRoot, "node_modules", name, "package.json"), "utf8"));
     if (installed.name !== name) throw new Error(`consumer resolved ${name} to ${installed.name}`);
   }
+  const installedAdapterRoot = join(consumerRoot, "node_modules", "@fixture", "effect-build-author");
+  await execute(
+    npm,
+    ["install", tarballs["effect-build"], "--no-save", "--no-audit", "--no-fund", "--strict-peer-deps"],
+    { ...npmOptions, cwd: installedAdapterRoot },
+  );
+  const nestedCore = join(
+    installedAdapterRoot,
+    "node_modules",
+    "effect-build",
+    "package.json",
+  );
+  const nestedManifest = JSON.parse(await readFile(nestedCore, "utf8"));
+  if (nestedManifest.name !== "effect-build") throw new Error("external author nested core graph was not installed");
 
   await execute(npm, ["exec", "--no", "tsc", "--", "-p", "tsconfig.json"], npmOptions);
 
@@ -240,6 +325,9 @@ console.log(JSON.stringify({
   const report = JSON.parse(stdout.trim());
   if (report.outputs !== 1) throw new Error(`consumer esbuild build produced ${report.outputs} outputs`);
   if (report.rolldownChunks !== 1) throw new Error(`consumer rolldown build produced ${report.rolldownChunks} chunks`);
+  if (report.externalDigestLength !== 64 || report.externalProducer !== "@fixture/effect-build-author") {
+    throw new Error(`external author boundary failed: ${stdout}`);
+  }
   if (process.platform !== "win32") {
     if (report.digestLength !== 64) throw new Error(`consumer artifact digest length ${report.digestLength}`);
     if (typeof report.target !== "string" || report.nativeFormat === null) {

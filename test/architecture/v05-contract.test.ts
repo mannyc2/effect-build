@@ -1663,7 +1663,7 @@ describe("v0.5 hard-cut contract", () => {
     const contract = await readJson<V05Contract>("tooling/v05-contract.json");
     const current = await readJson<Surface>(contract.publicSurface.currentSnapshot);
     expect(contract.publicSurface.currentSnapshotMeaning).toBe(
-      "stage-2-core-hard-cut-applied-provider-profiles-and-node-sea-target-pending",
+      "stage-3-provider-profiles-and-external-author-gate-applied-node-sea-target-pending",
     );
     const packages = current.packages;
 
@@ -1713,10 +1713,10 @@ describe("v0.5 hard-cut contract", () => {
     );
     expect(contract.publicSurface.compatibilityAliases).toEqual([]);
     expect(contract.publicSurface.stage0FreezeScope).toBe(
-      "exact-roots-and-subpaths-globally-with-apple-symbols-frozen-by-its-owning-stage-and-other-target-symbols-pending",
+      "exact-roots-and-subpaths-globally-with-apple-core-and-provider-profile-symbols-frozen-and-node-sea-target-symbols-pending",
     );
     expect(contract.publicSurface.exactTargetSymbolsStatus).toBe(
-      "apple-and-core-stage-2-frozen-provider-profile-and-node-sea-target-symbols-unfrozen-and-release-blocking",
+      "apple-core-and-provider-profile-symbols-frozen-node-sea-target-symbols-unfrozen-and-release-blocking",
     );
     expect(contract.publicSurface.targetRootNamespaces).toEqual({
       "effect-build": ["Artifact", "BuildError", "Target"],
@@ -1790,14 +1790,9 @@ describe("v0.5 hard-cut contract", () => {
       },
       freezeStage: "stage-2-before-core-deletion-and-provider-source-export",
     });
-    expect(contract.publicSurface.remainingSymbolFreezeStops).toEqual([
-      "stage-1-generation-author-and-profile-symbols",
-      "stage-2-core-hard-cut-and-native-bundle-symbols",
-      "stage-3-provider-profile-symbols",
-      "stage-4-node-sea-symbols",
-    ]);
+    expect(contract.publicSurface.remainingSymbolFreezeStops).toEqual(["stage-4-node-sea-symbols"]);
     expect(contract.publicSurface.authorPromotionGate).toEqual({
-      status: "release-blocking",
+      status: "passed-by-packed-external-adapter",
       adapter: "real-out-of-tree-non-monorepo-package",
       installation: "fresh-exact-packed-tarballs-with-strict-peer-dependencies",
       imports: "public-subpaths-only",

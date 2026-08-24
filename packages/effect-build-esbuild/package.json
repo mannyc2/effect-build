@@ -42,6 +42,10 @@
       "types": "./dist/Context.d.ts",
       "import": "./dist/Context.js"
     },
+    "./Profile": {
+      "types": "./dist/Profile.d.ts",
+      "import": "./dist/Profile.js"
+    },
     "./Watch": {
       "types": "./dist/Watch.d.ts",
       "import": "./dist/Watch.js"

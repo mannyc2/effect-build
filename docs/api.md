@@ -4,8 +4,8 @@ The approved target is `effect-build/v0.5-contract@1` in
 [`tooling/v05-contract.json`](../tooling/v05-contract.json). The exact current
 candidate exports remain asserted against
 [`tooling/public-api.json`](../tooling/public-api.json). Current and target
-surfaces remain separate until the remaining provider-profile and Node SEA hard
-cuts. The Apple and core Stage 2 surfaces are now frozen.
+surfaces remain separate until the remaining Node SEA hard cut. The Apple,
+core Stage 2, and provider-profile Stage 3 surfaces are frozen.
 
 ## Current implemented surface
 
@@ -23,13 +23,16 @@ import * as AppleStaple from "effect-build-apple/Staple";
 import * as AppleZip from "effect-build-apple/Zip";
 import * as BunBundle from "effect-build-bun/Bundle";
 import * as BunCompile from "effect-build-bun/CompileExecutable";
+import * as BunProfile from "effect-build-bun/Profile";
 import * as DenoBundle from "effect-build-deno/Bundle";
 import * as DenoCompile from "effect-build-deno/CompileExecutable";
 import * as Build from "effect-build-esbuild/Build";
 import * as Context from "effect-build-esbuild/Context";
+import * as EsbuildProfile from "effect-build-esbuild/Profile";
 import * as Watch from "effect-build-esbuild/Watch";
 import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
 import * as Rolldown from "effect-build-rolldown/Build";
+import * as RolldownProfile from "effect-build-rolldown/Profile";
 import * as RolldownWatch from "effect-build-rolldown/Watch";
 import * as Target from "effect-build/Target";
 ```
@@ -53,6 +56,16 @@ coalesce to the latest with an explicit superseded count, and keep cleanup
 failure in Effect Cause. Rolldown closes each native result before delivery and
 awaits one watcher close during stream shutdown. These are provider-native
 operations; they do not inherit the portable OS process-tree guarantee.
+
+`Author/NodeMain.seal` and `Profile/StaticBrowserApplication.build` are the two
+closed portable products. Bun, esbuild, and Rolldown each expose one explicit
+`Profile.layer` that provides both authoring services. The core validates the
+request before provider work, owns private staging and immutable publication,
+requires complete provider metadata, and rejects local runtime dependencies or
+external browser graph edges. The packed consumer gate installs a real
+out-of-tree adapter with a duplicate core graph and contains no provider branch.
+Rolldown 1.2.5 has no CSS bundling; CSS is therefore admitted only as an
+explicit authenticated browser resource for that provider.
 
 The current Node `AssembleExecutable` accepts file or byte mains and assets and
 targets an inferred host through `node --build-sea`. This is a raw host-native
@@ -89,9 +102,9 @@ digest and detects replacement around invocation.
 ## Frozen target subpaths
 
 Stage 0 froze root namespace and subpath names. Each owning implementation stage
-must freeze its runtime/declaration symbols before first export. The Apple stage
-and core Stage 2 have done so in `tooling/public-api.json`; unresolved provider
-profile and Node SEA symbols still block release.
+must freeze its runtime/declaration symbols before first export. The Apple,
+core Stage 2, and provider-profile Stage 3 symbols are frozen in
+`tooling/public-api.json`; unresolved Node SEA symbols still block release.
 
 Core keeps `Artifact`, `BuildError`, and `Target`, and adds the role-specific
 `Author/Tool`, `Author/BorrowedContent`, `Author/TreeSnapshot`,

@@ -47,4 +47,21 @@ describe("v0.5 target surface", () => {
     expect(targetSource).not.toMatch(/export const host\b/);
     expect(targetSource).not.toContain("globalThis");
   });
+
+  it("exercises the packed external-author boundary through public subpaths", async () => {
+    const fixture = await readFile(resolve(root, "test/fixtures/external-author-v05/index.js"), "utf8");
+    const imports = [...fixture.matchAll(/from\s+"([^"]+)"/gu)].map((match) => match[1]!);
+    expect(imports.filter((specifier) => specifier.startsWith("effect-build"))).toEqual([
+      "effect-build/Author/NodeMain",
+      "effect-build/Profile/StaticBrowserApplication",
+    ]);
+    expect(fixture).not.toContain("/src/");
+    expect(fixture).not.toContain("/internal/");
+
+    const consumer = await readFile(resolve(root, "scripts/test-built-consumer.mjs"), "utf8");
+    expect(consumer).toContain('"--strict-peer-deps"');
+    expect(consumer).toContain('"--install-strategy=nested"');
+    expect(consumer).toContain("adapterProducerTag === NodeMain.Producer");
+    expect(consumer).toContain("unknown portable protocol reached the external provider");
+  });
 });

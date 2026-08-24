@@ -90,3 +90,34 @@ export class CurrentUnknown extends Schema.TaggedError<CurrentUnknown>()("Curren
     return `current generation outcome unknown at ${this.root}: ${this.reason}`;
   }
 }
+
+export class PortableRejected extends Schema.TaggedError<PortableRejected>()("PortableRejected", {
+  profile: Schema.String,
+  phase: Schema.Literals(["request", "analysis"] as const),
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return `${this.profile} rejected during ${this.phase}: ${this.reason}`;
+  }
+}
+
+export class PortableUnsupported extends Schema.TaggedError<PortableUnsupported>()("PortableUnsupported", {
+  profile: Schema.String,
+  provider: Schema.String,
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return `${this.profile} is unsupported by ${this.provider}: ${this.reason}`;
+  }
+}
+
+export class ProviderFailed extends Schema.TaggedError<ProviderFailed>()("ProviderFailed", {
+  provider: Schema.String,
+  operation: Schema.String,
+  cause: Schema.Unknown,
+}) {
+  override get message(): string {
+    const detail = this.cause instanceof Error ? this.cause.message : String(this.cause);
+    return `${this.provider} ${this.operation} failed${detail.length === 0 ? "" : `: ${detail}`}`;
+  }
+}

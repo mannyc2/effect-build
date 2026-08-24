@@ -59,12 +59,25 @@
         },
         "./Author/NodeMain": {
           "runtime": [
-            "protocol"
+            "Producer",
+            "producedProtocol",
+            "profile",
+            "protocol",
+            "seal"
           ],
           "declarations": [
             "Format",
+            "ProduceError",
+            "ProducedNodeMain",
+            "Producer",
+            "ProviderIdentity",
+            "Request",
+            "SealError",
             "SealedNodeMain",
-            "protocol"
+            "producedProtocol",
+            "profile",
+            "protocol",
+            "seal"
           ]
         },
         "./Author/Tool": {
@@ -126,6 +139,9 @@
             "CurrentConflict",
             "CurrentUnknown",
             "GenerationConflict",
+            "PortableRejected",
+            "PortableUnsupported",
+            "ProviderFailed",
             "PublishFailed",
             "SelectedToolChanged",
             "ToolFailed",
@@ -137,6 +153,9 @@
             "CurrentConflict",
             "CurrentUnknown",
             "GenerationConflict",
+            "PortableRejected",
+            "PortableUnsupported",
+            "ProviderFailed",
             "PublishFailed",
             "SelectedToolChanged",
             "ToolFailed",
@@ -146,15 +165,26 @@
         },
         "./Profile/StaticBrowserApplication": {
           "runtime": [
+            "Provider",
+            "build",
             "hostProtocol",
+            "producedProtocol",
             "protocol"
           ],
           "declarations": [
+            "BuildError",
+            "BuildInput",
+            "ProduceError",
+            "ProducedApplication",
+            "ProducedFile",
+            "Provider",
             "Request",
             "Resource",
             "StaticBrowserApplication",
             "Subject",
+            "build",
             "hostProtocol",
+            "producedProtocol",
             "protocol"
           ]
         },
@@ -463,7 +493,8 @@
     "effect-build-bun": {
       "namespaces": [
         "Bundle",
-        "CompileExecutable"
+        "CompileExecutable",
+        "Profile"
       ],
       "subpaths": {
         "./Bundle": {
@@ -500,6 +531,15 @@
             "LayerOptions",
             "Target",
             "compileExecutable",
+            "layer"
+          ]
+        },
+        "./Profile": {
+          "runtime": [
+            "layer"
+          ],
+          "declarations": [
+            "LayerOptions",
             "layer"
           ]
         }
@@ -555,6 +595,7 @@
       "namespaces": [
         "Build",
         "Context",
+        "Profile",
         "Watch"
       ],
       "subpaths": {
@@ -594,6 +635,16 @@
             "Options",
             "layer",
             "make"
+          ]
+        },
+        "./Profile": {
+          "runtime": [
+            "identity",
+            "layer"
+          ],
+          "declarations": [
+            "identity",
+            "layer"
           ]
         },
         "./Watch": {
@@ -637,6 +688,7 @@
     "effect-build-rolldown": {
       "namespaces": [
         "Build",
+        "Profile",
         "Watch"
       ],
       "subpaths": {
@@ -657,6 +709,16 @@
             "layer",
             "make",
             "write"
+          ]
+        },
+        "./Profile": {
+          "runtime": [
+            "identity",
+            "layer"
+          ],
+          "declarations": [
+            "identity",
+            "layer"
           ]
         },
         "./Watch": {

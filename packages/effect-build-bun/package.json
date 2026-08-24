@@ -42,6 +42,10 @@
     "./CompileExecutable": {
       "types": "./dist/CompileExecutable.d.ts",
       "import": "./dist/CompileExecutable.js"
+    },
+    "./Profile": {
+      "types": "./dist/Profile.d.ts",
+      "import": "./dist/Profile.js"
     }
   },
   "scripts": {
