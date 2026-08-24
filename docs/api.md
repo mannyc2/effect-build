@@ -4,8 +4,8 @@ The approved target is `effect-build/v0.5-contract@1` in
 [`tooling/v05-contract.json`](../tooling/v05-contract.json). The exact current
 candidate exports remain asserted against
 [`tooling/public-api.json`](../tooling/public-api.json). Current and target
-surfaces remain separate until the remaining core/profile hard cut; the Apple
-owning stage has now frozen its selected source surface.
+surfaces remain separate until the remaining provider-profile and Node SEA hard
+cuts. The Apple and core Stage 2 surfaces are now frozen.
 
 ## Current implemented surface
 
@@ -35,14 +35,14 @@ import * as Target from "effect-build/Target";
 ```
 
 `BunCompile.compileExecutable` and `DenoCompile.compileExecutable` take an
-entrypoint, output file, optional working directory, provider-supported target,
-hash option, and native options. They return the current
+entrypoint, output file, explicit provider-supported target, optional working
+directory, and native options. Hashing is mandatory. They return the current
 `Artifact.Executable` observation.
 
-`BunBundle.bundle` and `DenoBundle.bundle` take non-empty entrypoints plus an
-output directory and return the current `Artifact.Bundle`. Publication is
-incremental: files are renamed into the destination one at a time, so a failed
-operation can leave a mixed directory. Native Bun `target: "browser"` and Deno
+`BunBundle.directWrite` and `DenoBundle.directWrite` take non-empty entrypoints
+plus an output directory and return provider-local `DirectWriteOutcome` values
+with mandatory file digests. The provider writes the caller destination
+directly, so a failed operation can leave a mixed directory. Native Bun `target: "browser"` and Deno
 `platform: "browser"` are provider selectors, not portable application
 closure.
 
@@ -80,16 +80,16 @@ reconciliation before `info`, `wait`, or `log`. Exact Notary JSON/status decodin
 and detailed receipt/reconciliation-evidence shapes remain provisional through
 credential-backed A7.
 
-The candidate still exports `effect-build/Toolchain`. It is legacy transition
-surface, not an earned third-party SPI. The Stage 2 hard cut deletes its root
-namespace and subpath without a compatibility alias.
+The Stage 2 hard cut removed `effect-build/Toolchain` without a compatibility
+alias. `Author/Tool` now binds a canonical executable path, version, and byte
+digest and detects replacement around invocation.
 
 ## Frozen target subpaths
 
 Stage 0 froze root namespace and subpath names. Each owning implementation stage
 must freeze its runtime/declaration symbols before first export. The Apple stage
-has done so in `tooling/public-api.json`; unresolved future core/profile symbols
-still block release.
+and core Stage 2 have done so in `tooling/public-api.json`; unresolved provider
+profile and Node SEA symbols still block release.
 
 Core keeps `Artifact`, `BuildError`, and `Target`, and adds the role-specific
 `Author/Tool`, `Author/BorrowedContent`, `Author/TreeSnapshot`,

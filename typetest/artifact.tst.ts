@@ -1,4 +1,5 @@
 import type * as Artifact from "../packages/effect-build/src/Artifact.js";
+import type * as Tool from "../packages/effect-build/src/Author/Tool.js";
 import type * as Target from "../packages/effect-build/src/Target.js";
 
 type Assert<T extends true> = T;
@@ -12,10 +13,22 @@ export type _Executable = Assert<
       readonly path: string;
       readonly bytes: number;
       readonly target: Target.Target;
-      readonly tool: Artifact.Tool;
-      readonly sha256?: string;
+      readonly tool: Tool.SelectedTool;
+      readonly digest: Artifact.Digest;
+      readonly sha256: string;
     }
   >
 >;
 
-export type _Tool = Assert<Same<Artifact.Tool, { readonly name: string; readonly version: string }>>;
+export type _Tool = Assert<
+  Same<
+    Tool.SelectedTool,
+    {
+      readonly protocol: "effect-build/selected-tool@1";
+      readonly name: string;
+      readonly version: string;
+      readonly executablePath: string;
+      readonly digest: Artifact.Digest;
+    }
+  >
+>;

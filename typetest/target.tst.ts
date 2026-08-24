@@ -32,6 +32,3 @@ export type _Info = Assert<
 
 const information = Target.info("linux-x64-musl");
 export type _InfoResult = Assert<Same<typeof information, Target.Info>>;
-
-const host = Target.host();
-export type _Host = Assert<Same<typeof host, Target.Target | undefined>>;

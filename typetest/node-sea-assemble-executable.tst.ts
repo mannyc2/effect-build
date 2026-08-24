@@ -9,7 +9,11 @@ type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ?
 export type _Error = Assert<
   Same<
     AssembleExecutable.AssembleExecutableError,
-    BuildError.ToolFailed | BuildError.UnsupportedTarget | BuildError.PublishFailed
+    | BuildError.ToolFailed
+    | BuildError.UnsupportedTarget
+    | BuildError.PublishFailed
+    | BuildError.ArtifactInvalid
+    | BuildError.SelectedToolChanged
   >
 >;
 
@@ -39,5 +43,6 @@ export type _Assemble = Assert<
 AssembleExecutable.assembleExecutable({
   main: { _tag: "File", path: "main.cjs", format: "commonjs" },
   outfile: "dist/app",
+  target: "linux-x64-gnu",
   assets: { message: "assets/message.txt" },
 });

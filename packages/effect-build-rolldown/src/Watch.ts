@@ -1,9 +1,9 @@
-import { Effect, Queue, Stream } from "effect";
-import * as Toolchain from "effect-build/Toolchain";
+import { Cause, Effect, Queue, Stream } from "effect";
+import * as Toolchain from "effect-build/Author/Tool";
 import * as rolldown from "rolldown";
-import { RolldownFailed } from "./internal/error.js";
+import { RolldownFailed, WatchOverflow } from "./internal/error.js";
 
-export { RolldownFailed } from "./internal/error.js";
+export { RolldownFailed, WatchOverflow } from "./internal/error.js";
 
 /**
  * Rolldown's watcher events without the native `result` handle — it is closed
@@ -33,26 +33,58 @@ const sanitize = (event: rolldown.RolldownWatcherEvent): Event =>
  * broken intermediate states. Only starting the watcher can fail the stream.
  * Ending or interrupting the stream closes the watcher.
  */
-export const events = (options: rolldown.WatchOptions): Stream.Stream<Event, RolldownFailed> =>
-  Stream.callback<Event, RolldownFailed>((queue) =>
+export const events = (options: rolldown.WatchOptions): Stream.Stream<Event, RolldownFailed | WatchOverflow> =>
+  Stream.callback<Event, RolldownFailed | WatchOverflow>((queue) =>
     Effect.gen(function*() {
       yield* Toolchain.warnIfUntested({ tool: "rolldown", version: rolldown.VERSION, tested });
       yield* Effect.acquireRelease(
         Effect.try({
           try: () => {
             const watcher = rolldown.watch(options);
-            watcher.on("event", (event) => {
+            let resultClose: Promise<void> | undefined;
+            let stopping: Promise<void> | undefined;
+            const listener = (event: rolldown.RolldownWatcherEvent): void => {
               Queue.offerUnsafe(queue, sanitize(event));
               if (event.code === "BUNDLE_END" || event.code === "ERROR") {
-                return event.result.close().catch(() => undefined);
+                const triggerClose = event.result.close();
+                if (resultClose !== undefined) {
+                  watcher.off("event", listener);
+                  stopping ??= Promise.allSettled([resultClose, triggerClose])
+                    .then(() => watcher.close())
+                    .then(
+                      () => {
+                        Queue.failCauseUnsafe(queue, Cause.fail(new WatchOverflow({ resource: "result", limit: 1 })));
+                      },
+                      (error) => {
+                        Queue.failCauseUnsafe(queue, Cause.die(error));
+                      },
+                    );
+                  return;
+                }
+                resultClose = triggerClose;
+                triggerClose.then(
+                  () => {
+                    if (resultClose === triggerClose) resultClose = undefined;
+                  },
+                  (error) => Queue.failCauseUnsafe(queue, Cause.die(error)),
+                );
               }
-              return undefined;
-            });
-            return watcher;
+            };
+            watcher.on("event", listener);
+            return {
+              release: async () => {
+                watcher.off("event", listener);
+                if (stopping !== undefined) await stopping;
+                else {
+                  await resultClose;
+                  await watcher.close();
+                }
+              },
+            };
           },
           catch: (error) => new RolldownFailed({ operation: "watch", cause: error }),
         }),
-        (watcher) => Effect.uninterruptible(Effect.promise(() => watcher.close().catch(() => undefined))),
+        ({ release }) => Effect.uninterruptible(Effect.promise(release)),
       );
     }).pipe(
       // Stream.callback ignores its effect's failure channel; route it into the queue.

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as BunCompile from "../../packages/effect-build-bun/src/CompileExecutable.js";
-import * as Target from "../../packages/effect-build/src/Target.js";
+import { hostTarget } from "../host-target.js";
 
 const execute = promisify(execFile);
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
@@ -38,13 +38,14 @@ const run = <A, E>(effect: Effect.Effect<A, E, BunCompile.Compiler>) =>
 describe("real Bun CompileExecutable", () => {
   it("compiles for the host, hashes, atomically publishes, and executes the output", async () => {
     const outfile = join(root, "app");
-    const artifact = await run(BunCompile.compileExecutable({ entrypoint, outfile }));
+    const target = hostTarget() as BunCompile.Target;
+    const artifact = await run(BunCompile.compileExecutable({ entrypoint, outfile, target }));
     const bytes = await readFile(artifact.path);
     expect(artifact).toMatchObject({
       _tag: "Executable",
       path: process.platform === "win32" ? `${outfile}.exe` : outfile,
       bytes: bytes.byteLength,
-      target: Target.host(),
+      target,
     });
     expect(artifact.tool.name).toBe("bun");
     expect(artifact.tool.version).toMatch(/^\d+\.\d+\.\d+/);
@@ -59,13 +60,14 @@ describe("real Bun CompileExecutable", () => {
       entrypoint: "entry.ts",
       outfile: join(root, "configured"),
       cwd: project,
-      hash: false,
+      target: hostTarget() as BunCompile.Target,
     }));
-    expect("sha256" in artifact).toBe(false);
+    expect(artifact.sha256).toHaveLength(64);
     expect((await execute(artifact.path, [])).stdout).toBe("bun-config-ok\n");
     await expect(run(BunCompile.compileExecutable({
       entrypoint: join(project, "missing.ts"),
       outfile: join(root, "failure"),
+      target: hostTarget() as BunCompile.Target,
     }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "bun" });
   }, 120_000);
 });

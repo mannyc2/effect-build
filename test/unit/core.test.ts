@@ -1,9 +1,10 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Exit } from "effect";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as Tool from "../../packages/effect-build/src/Author/Tool.js";
 import {
   PublishFailed,
   ToolFailed,
@@ -11,7 +12,14 @@ import {
   UnsupportedTarget,
 } from "../../packages/effect-build/src/BuildError.js";
 import * as Target from "../../packages/effect-build/src/Target.js";
-import * as Toolchain from "../../packages/effect-build/src/Toolchain.js";
+
+const selectedTool = (executablePath: string): Tool.SelectedTool => ({
+  protocol: "effect-build/selected-tool@1",
+  name: "tool",
+  version: "1.0.0",
+  executablePath,
+  digest: { algorithm: "sha256", value: "0".repeat(64) },
+});
 
 let root = "";
 
@@ -38,12 +46,6 @@ describe("Target", () => {
       else expect(information.abi).toBeUndefined();
     }
   });
-
-  it("derives a valid host target on supported platforms", () => {
-    const host = Target.host();
-    expect(host).toBeDefined();
-    expect(Target.Target.literals).toContain(host);
-  });
 });
 
 describe("BuildError", () => {
@@ -60,17 +62,17 @@ describe("BuildError", () => {
   });
 });
 
-describe.skipIf(process.platform === "win32")("Toolchain", () => {
+describe.skipIf(process.platform === "win32")("Author Tool", () => {
   it("resolves an explicit executable and fails ToolNotFound otherwise", async () => {
     const tool = join(root, "tool-resolve");
     await writeFile(tool, "#!/bin/sh\nexit 0\n");
     await chmod(tool, 0o755);
     const resolved = await runEffect(
-      Toolchain.resolveExecutable({ name: "tool", executable: tool }).pipe(Effect.provide(NodeServices.layer)),
+      Tool.resolveExecutable({ name: "tool", executable: tool }).pipe(Effect.provide(NodeServices.layer)),
     );
     expect(Exit.isSuccess(resolved)).toBe(true);
     const missing = await runEffect(
-      Toolchain.resolveExecutable({ name: "tool", executable: join(root, "nope") }).pipe(
+      Tool.resolveExecutable({ name: "tool", executable: join(root, "nope") }).pipe(
         Effect.provide(NodeServices.layer),
       ),
     );
@@ -85,7 +87,7 @@ describe.skipIf(process.platform === "win32")("Toolchain", () => {
     );
     await chmod(tool, 0o755);
     const completion = await runEffect(
-      Toolchain.run({ tool: "tool", executable: tool, args: [] }).pipe(Effect.provide(NodeServices.layer)),
+      Tool.run({ tool: "tool", executable: tool, args: [] }).pipe(Effect.provide(NodeServices.layer)),
     );
     expect(Exit.isSuccess(completion)).toBe(true);
     if (Exit.isSuccess(completion)) {
@@ -94,25 +96,24 @@ describe.skipIf(process.platform === "win32")("Toolchain", () => {
       expect(completion.value.stderr.text.trim()).toBe("err");
     }
     const version = await runEffect(
-      Toolchain.probeVersion({ tool: "tool", executable: tool, args: ["--version"] }).pipe(
+      Tool.probeVersion({ tool: "tool", executable: tool, args: ["--version"] }).pipe(
         Effect.provide(NodeServices.layer),
       ),
     );
     expect(Exit.isSuccess(version)).toBe(true);
     if (Exit.isSuccess(version)) expect(version.value).toBe("2.5.0");
     const failure = await runEffect(
-      Toolchain.runOrFail({ tool: "tool", executable: tool, args: [] }).pipe(Effect.provide(NodeServices.layer)),
+      Tool.runOrFail({ tool: "tool", executable: tool, args: [] }).pipe(Effect.provide(NodeServices.layer)),
     );
     expect(Exit.isFailure(failure)).toBe(true);
   });
 
-  it("publishes without hashing via the magic sanity check alone", async () => {
+  it("always authenticates published executables", async () => {
     const artifact = await runEffect(
-      Toolchain.publishExecutable({
-        tool: { name: "tool", version: "1.0.0" },
+      Tool.publishExecutable({
+        tool: selectedTool(join(root, "tool")),
         outfile: join(root, "published"),
         target: "linux-x64-gnu",
-        hash: false,
         produce: (stagedPath) =>
           Effect.promise(async () => {
             const bytes = new Uint8Array(8);
@@ -124,76 +125,18 @@ describe.skipIf(process.platform === "win32")("Toolchain", () => {
     );
     expect(Exit.isSuccess(artifact)).toBe(true);
     if (Exit.isSuccess(artifact)) {
-      expect("sha256" in artifact.value).toBe(false);
+      expect(artifact.value.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(artifact.value.digest).toEqual({ algorithm: "sha256", value: artifact.value.sha256 });
       expect(artifact.value.bytes).toBe(8);
     }
   });
 
-  it("publishes a nested bundle into an existing outdir, hashing and sorting the files", async () => {
-    const outdir = join(root, "bundle-out");
-    await mkdir(outdir, { recursive: true });
-    await writeFile(join(outdir, "keep.txt"), "untouched");
-    await writeFile(join(outdir, "entry.js"), "stale");
-    const artifact = await runEffect(
-      Toolchain.publishBundle({
-        tool: { name: "tool", version: "1.0.0" },
-        outdir,
-        hash: true,
-        produce: (staged) =>
-          Effect.promise(async () => {
-            await mkdir(join(staged, "chunks"), { recursive: true });
-            await writeFile(join(staged, "entry.js"), "export {};");
-            await writeFile(join(staged, "chunks", "lib.js"), "export const lib = 1;");
-          }),
-      }).pipe(Effect.provide(NodeServices.layer)),
-    );
-    expect(Exit.isSuccess(artifact)).toBe(true);
-    if (Exit.isSuccess(artifact)) {
-      expect(artifact.value.outdir).toBe(outdir);
-      expect(artifact.value.files.map((file) => file.path)).toEqual([
-        join(outdir, "chunks", "lib.js"),
-        join(outdir, "entry.js"),
-      ]);
-      for (const file of artifact.value.files) {
-        expect(file.bytes).toBeGreaterThan(0);
-        expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
-      }
-    }
-    expect(await readFile(join(outdir, "keep.txt"), "utf8")).toBe("untouched");
-    expect(await readFile(join(outdir, "entry.js"), "utf8")).toBe("export {};");
-  });
-
-  it("publishes a bundle without hashing and fails when nothing was produced", async () => {
-    const outdir = join(root, "bundle-plain");
-    const artifact = await runEffect(
-      Toolchain.publishBundle({
-        tool: { name: "tool", version: "1.0.0" },
-        outdir,
-        hash: false,
-        produce: (staged) => Effect.promise(() => writeFile(join(staged, "only.js"), "export {};")),
-      }).pipe(Effect.provide(NodeServices.layer)),
-    );
-    expect(Exit.isSuccess(artifact)).toBe(true);
-    if (Exit.isSuccess(artifact)) expect(artifact.value.files.some((file) => "sha256" in file)).toBe(false);
-    const empty = await runEffect(
-      Toolchain.publishBundle({
-        tool: { name: "tool", version: "1.0.0" },
-        outdir: join(root, "bundle-empty"),
-        hash: true,
-        produce: () => Effect.void,
-      }).pipe(Effect.provide(NodeServices.layer)),
-    );
-    expect(Exit.isFailure(empty)).toBe(true);
-    if (Exit.isFailure(empty)) expect(String(empty.cause)).toContain("did not produce any files");
-  });
-
   it("rejects a produced binary whose format contradicts the target", async () => {
     const exit = await runEffect(
-      Toolchain.publishExecutable({
-        tool: { name: "tool", version: "1.0.0" },
+      Tool.publishExecutable({
+        tool: selectedTool(join(root, "tool")),
         outfile: join(root, "mismatch"),
         target: "windows-x64",
-        hash: true,
         produce: (stagedPath) =>
           Effect.promise(async () => {
             const bytes = new Uint8Array(8);

@@ -1,8 +1,18 @@
 import { Cause, Config, Crypto, Effect, FileSystem, Option, Path, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import type { Bundle, BundleFile, Executable, Tool } from "./Artifact.js";
-import { PublishFailed, ToolFailed, ToolNotFound } from "./BuildError.js";
-import * as Target from "./Target.js";
+import type { Executable } from "../Artifact.js";
+import type { Digest } from "../Artifact.js";
+import { ArtifactInvalid, PublishFailed, SelectedToolChanged, ToolFailed, ToolNotFound } from "../BuildError.js";
+import * as Target from "../Target.js";
+import * as BorrowedContent from "./BorrowedContent.js";
+
+export interface SelectedTool {
+  readonly protocol: "effect-build/selected-tool@1";
+  readonly name: string;
+  readonly version: string;
+  readonly executablePath: string;
+  readonly digest: Digest;
+}
 
 export interface Output {
   readonly text: string;
@@ -173,6 +183,97 @@ export const probeVersion = (
       : Effect.succeed(version);
   });
 
+export interface SelectOptions extends ResolveOptions {
+  readonly versionArgs: readonly string[];
+  readonly parseVersion?: ((stdout: string) => string | undefined) | undefined;
+}
+
+/** Selects one canonical executable and binds its version to its exact bytes. */
+export const select = (
+  options: SelectOptions,
+): Effect.Effect<
+  SelectedTool,
+  ToolNotFound | ToolFailed | ArtifactInvalid | SelectedToolChanged,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+> =>
+  Effect.gen(function*() {
+    const executablePath = yield* resolveExecutable(options);
+    const before = yield* BorrowedContent.observeFile(executablePath);
+    const version = yield* probeVersion({
+      tool: options.name,
+      executable: executablePath,
+      args: options.versionArgs,
+      parse: options.parseVersion,
+    });
+    const after = yield* BorrowedContent.observeFile(executablePath);
+    if (before.bytes !== after.bytes || before.digest.value !== after.digest.value) {
+      return yield* new SelectedToolChanged({
+        tool: options.name,
+        path: executablePath,
+        expected: before.digest.value,
+        observed: after.digest.value,
+      });
+    }
+    return Object.freeze({
+      protocol: "effect-build/selected-tool@1" as const,
+      name: options.name,
+      version,
+      executablePath,
+      digest: before.digest,
+    });
+  });
+
+export const revalidateSelected = (
+  selected: SelectedTool,
+): Effect.Effect<void, ArtifactInvalid | SelectedToolChanged, Crypto.Crypto | FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const observed = yield* BorrowedContent.observeFile(selected.executablePath);
+    if (observed.digest.value !== selected.digest.value) {
+      return yield* new SelectedToolChanged({
+        tool: selected.name,
+        path: selected.executablePath,
+        expected: selected.digest.value,
+        observed: observed.digest.value,
+      });
+    }
+  });
+
+export const runSelected = (
+  options: { readonly selected: SelectedTool; readonly args: readonly string[]; readonly cwd?: string | undefined },
+): Effect.Effect<
+  Completion,
+  ToolFailed | ArtifactInvalid | SelectedToolChanged,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+> =>
+  revalidateSelected(options.selected).pipe(
+    Effect.andThen(run({
+      tool: options.selected.name,
+      executable: options.selected.executablePath,
+      args: options.args,
+      cwd: options.cwd,
+    })),
+    Effect.onExit(() => revalidateSelected(options.selected)),
+  );
+
+export const runOrFailSelected = (
+  options: { readonly selected: SelectedTool; readonly args: readonly string[]; readonly cwd?: string | undefined },
+): Effect.Effect<
+  Completion,
+  ToolFailed | ArtifactInvalid | SelectedToolChanged,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+> =>
+  Effect.flatMap(runSelected(options), (completion) =>
+    completion.exitCode === 0
+      ? Effect.succeed(completion)
+      : Effect.fail(
+        new ToolFailed({
+          tool: options.selected.name,
+          exitCode: completion.exitCode,
+          stdout: completion.stdout.text,
+          stderr: completion.stderr.text,
+        }),
+      ));
+
 export interface TestedRange {
   readonly minimum: string;
   readonly before: string;
@@ -222,12 +323,10 @@ const sniffFormat = (bytes: Uint8Array): Target.NativeFormat | undefined => {
 const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
 export interface PublishOptions<E, R> {
-  readonly tool: Tool;
+  readonly tool: SelectedTool;
   readonly outfile: string;
   readonly cwd?: string | undefined;
   readonly target: Target.Target;
-  /** Record a SHA-256 digest on the artifact. */
-  readonly hash: boolean;
   /** Writes the executable at the private staged path. */
   readonly produce: (stagedPath: string) => Effect.Effect<void, E, R>;
 }
@@ -280,26 +379,14 @@ export const publishExecutable = <E, R>(
         return yield* Effect.fail(failWith("the staged output is not executable"));
       }
       const bytes = Number(information.size);
-      let sha256: string | undefined;
-      let magic: Uint8Array;
-      if (options.hash) {
-        const contents = yield* fileSystem.readFile(staged).pipe(
-          Effect.mapError((error) => failWith(`read: ${describe(error)}`)),
-        );
-        magic = contents.subarray(0, 4);
-        const digest = yield* crypto.digest("SHA-256", contents).pipe(
-          Effect.mapError(() => failWith("sha-256 digest unavailable")),
-        );
-        sha256 = hex(new Uint8Array(digest));
-      } else {
-        magic = yield* Effect.scoped(
-          Effect.gen(function*() {
-            const file = yield* fileSystem.open(staged);
-            const chunk = yield* file.readAlloc(FileSystem.Size(4));
-            return Option.getOrElse(chunk, () => new Uint8Array());
-          }),
-        ).pipe(Effect.mapError((error) => failWith(`read: ${describe(error)}`)));
-      }
+      const contents = yield* fileSystem.readFile(staged).pipe(
+        Effect.mapError((error) => failWith(`read: ${describe(error)}`)),
+      );
+      const magic = contents.subarray(0, 4);
+      const digestBytes = yield* crypto.digest("SHA-256", contents).pipe(
+        Effect.mapError(() => failWith("sha-256 digest unavailable")),
+      );
+      const sha256 = hex(new Uint8Array(digestBytes));
       const format = sniffFormat(magic);
       const expected = Target.info(options.target).nativeFormat;
       if (format !== expected) {
@@ -317,89 +404,8 @@ export const publishExecutable = <E, R>(
         bytes,
         target: options.target,
         tool: options.tool,
-        ...(sha256 === undefined ? {} : { sha256 }),
+        sha256,
+        digest: { algorithm: "sha256", value: sha256 },
       };
-    }),
-  );
-
-export interface PublishBundleOptions<E, R> {
-  readonly tool: Tool;
-  readonly outdir: string;
-  readonly cwd?: string | undefined;
-  /** Record a SHA-256 digest on every artifact file. */
-  readonly hash: boolean;
-  /** Writes the bundle files into the private staged directory. */
-  readonly produce: (stagedDirectory: string) => Effect.Effect<void, E, R>;
-}
-
-/**
- * Stages in a private same-parent temp directory, lets `produce` fill it, and
- * commits every produced file into `outdir` with per-file renames — matching
- * the native tools, which overwrite the files they emit and leave the rest of
- * the directory alone.
- */
-export const publishBundle = <E, R>(
-  options: PublishBundleOptions<E, R>,
-): Effect.Effect<
-  Bundle,
-  PublishFailed | E,
-  FileSystem.FileSystem | Path.Path | Crypto.Crypto | R
-> =>
-  Effect.scoped(
-    Effect.gen(function*() {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const crypto = yield* Crypto.Crypto;
-      const outdir = path.normalize(path.resolve(options.cwd ?? "", options.outdir));
-      const failWith = (reason: string) => new PublishFailed({ destination: outdir, reason });
-      yield* mapFailureCause(
-        fileSystem.makeDirectory(outdir, { recursive: true }),
-        (error) => failWith(`make-directory: ${describe(error)}`),
-      );
-      const staging = yield* mapFailureCause(
-        fileSystem.makeTempDirectoryScoped({ directory: path.dirname(outdir), prefix: ".effect-build-" }),
-        (error) => failWith(`make-staging: ${describe(error)}`),
-      );
-      yield* options.produce(staging);
-      const entries = yield* mapFailureCause(
-        fileSystem.readDirectory(staging, { recursive: true }),
-        (error) => failWith(`read-staging: ${describe(error)}`),
-      );
-      const produced: { readonly entry: string; readonly bytes: number }[] = [];
-      for (const entry of [...entries].sort()) {
-        const information = yield* mapFailureCause(
-          fileSystem.stat(path.join(staging, entry)),
-          (error) => failWith(`stat: ${describe(error)}`),
-        );
-        if (information.type === "File") produced.push({ entry, bytes: Number(information.size) });
-      }
-      if (produced.length === 0) {
-        return yield* Effect.fail(failWith("the tool did not produce any files in the staged directory"));
-      }
-      const files: BundleFile[] = [];
-      for (const { bytes, entry } of produced) {
-        const staged = path.join(staging, entry);
-        const destination = path.join(outdir, entry);
-        let sha256: string | undefined;
-        if (options.hash) {
-          const contents = yield* fileSystem.readFile(staged).pipe(
-            Effect.mapError((error) => failWith(`read: ${describe(error)}`)),
-          );
-          const digest = yield* crypto.digest("SHA-256", contents).pipe(
-            Effect.mapError(() => failWith("sha-256 digest unavailable")),
-          );
-          sha256 = hex(new Uint8Array(digest));
-        }
-        yield* mapFailureCause(
-          fileSystem.makeDirectory(path.dirname(destination), { recursive: true }),
-          (error) => failWith(`make-directory: ${describe(error)}`),
-        );
-        yield* mapFailureCause(
-          fileSystem.rename(staged, destination),
-          (error) => failWith(`rename: ${describe(error)}`),
-        );
-        files.push({ path: destination, bytes, ...(sha256 === undefined ? {} : { sha256 }) });
-      }
-      return { _tag: "Bundle" as const, outdir, files, tool: options.tool };
     }),
   );

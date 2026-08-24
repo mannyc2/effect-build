@@ -1424,9 +1424,9 @@
   },
   "publicSurface": {
     "currentSnapshot": "tooling/public-api.json",
-    "currentSnapshotMeaning": "integrated-source-including-apple-not-complete-v0.5-target",
+    "currentSnapshotMeaning": "stage-2-core-hard-cut-applied-provider-profiles-and-node-sea-target-pending",
     "stage0FreezeScope": "exact-roots-and-subpaths-globally-with-apple-symbols-frozen-by-its-owning-stage-and-other-target-symbols-pending",
-    "exactTargetSymbolsStatus": "apple-frozen-remaining-core-profile-and-node-sea-target-symbols-unfrozen-and-release-blocking",
+    "exactTargetSymbolsStatus": "apple-and-core-stage-2-frozen-provider-profile-and-node-sea-target-symbols-unfrozen-and-release-blocking",
     "scheduledDeletions": [
       {
         "kind": "rootNamespace",

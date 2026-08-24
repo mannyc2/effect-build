@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import * as Toolchain from "effect-build/Toolchain";
+import * as Toolchain from "effect-build/Author/Tool";
 import * as esbuild from "esbuild";
 import { EsbuildFailed } from "./internal/error.js";
 

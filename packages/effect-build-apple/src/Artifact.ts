@@ -499,7 +499,7 @@ export const observeTree = <K extends TreeArtifactKind>(
 
 /**
  * Authenticates a macOS executable emitted by an effect-build provider.
- * Provider hashing must be enabled; this bridge independently re-observes the committed bytes.
+ * The provider digest is mandatory; this bridge independently re-observes the committed bytes.
  */
 export const observeExecutable = (
   executable: CoreArtifact.Executable,
@@ -519,18 +519,25 @@ export const observeExecutable = (
         reason: `expected a macOS target, received ${executable.target}`,
       });
     }
-    if (executable.sha256 === undefined || !/^[0-9a-f]{64}$/u.test(executable.sha256)) {
+    if (executable.digest?.algorithm !== "sha256" || !/^[0-9a-f]{64}$/u.test(executable.digest.value)) {
+      return yield* new AppleInputInvalid({
+        operation: "Artifact.observeExecutable",
+        field: "digest",
+        reason: "provider SHA-256 authentication is required",
+      });
+    }
+    if (executable.sha256 !== executable.digest.value) {
       return yield* new AppleInputInvalid({
         operation: "Artifact.observeExecutable",
         field: "sha256",
-        reason: "provider hashing must be enabled",
+        reason: "legacy SHA-256 projection does not match the authenticated digest",
       });
     }
     const observed = yield* observeFile("mach-o", executable.path);
-    if (observed.identity.bytes !== executable.bytes || observed.identity.digest.value !== executable.sha256) {
+    if (observed.identity.bytes !== executable.bytes || observed.identity.digest.value !== executable.digest.value) {
       return yield* new ArtifactChanged({
         path: executable.path,
-        expected: JSON.stringify({ bytes: executable.bytes, sha256: executable.sha256 }),
+        expected: JSON.stringify({ bytes: executable.bytes, sha256: executable.digest.value }),
         observed: JSON.stringify({ bytes: observed.identity.bytes, sha256: observed.identity.digest.value }),
       });
     }

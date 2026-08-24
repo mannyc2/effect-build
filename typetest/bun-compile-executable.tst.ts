@@ -24,7 +24,11 @@ export type _Target = Assert<
 export type _Error = Assert<
   Same<
     CompileExecutable.CompileExecutableError,
-    BuildError.ToolFailed | BuildError.UnsupportedTarget | BuildError.PublishFailed
+    | BuildError.ToolFailed
+    | BuildError.UnsupportedTarget
+    | BuildError.PublishFailed
+    | BuildError.ArtifactInvalid
+    | BuildError.SelectedToolChanged
   >
 >;
 
@@ -40,7 +44,12 @@ export type _Compile = Assert<
 
 const built = CompileExecutable.layer({ executable: "/usr/local/bin/bun" });
 
-export type _LayerError = Assert<Same<LayerError<typeof built>, BuildError.ToolNotFound | BuildError.ToolFailed>>;
+export type _LayerError = Assert<
+  Same<
+    LayerError<typeof built>,
+    BuildError.ToolNotFound | BuildError.ToolFailed | BuildError.ArtifactInvalid | BuildError.SelectedToolChanged
+  >
+>;
 export type _LayerServices = Assert<
   Same<
     LayerServices<typeof built>,
@@ -56,8 +65,7 @@ export type _Input = Assert<
       readonly entrypoint: string;
       readonly outfile: string;
       readonly cwd?: string;
-      readonly target?: CompileExecutable.Target;
-      readonly hash?: boolean;
+      readonly target: CompileExecutable.Target;
       readonly minify?: boolean;
       readonly sourcemap?: "linked" | "inline";
       readonly bytecode?: boolean;

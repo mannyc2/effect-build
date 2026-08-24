@@ -16,6 +16,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
 import * as Target from "../../packages/effect-build/src/Target.js";
+import { hostTarget } from "../host-target.js";
 
 const roots: string[] = [];
 
@@ -30,7 +31,7 @@ const makeRoot = (): string => {
 };
 
 const hostBinary = (): Uint8Array => {
-  const format = Target.info(Target.host() ?? "linux-x64-gnu").nativeFormat;
+  const format = Target.info(hostTarget()).nativeFormat;
   const bytes = new Uint8Array(8);
   if (format === "elf") bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
   else if (format === "pe") bytes.set([0x4d, 0x5a], 0);
@@ -193,14 +194,15 @@ describe("Node SEA AssembleExecutable", () => {
     const fileExit = await harness.run(AssembleExecutable.assembleExecutable({
       main: { _tag: "File", path: fileMain, format: "commonjs" },
       outfile: join(harness.root, "file-app"),
+      target: hostTarget(),
       assets: { message: assetPath },
       disableExperimentalSEAWarning: true,
     }));
     expect(Exit.isSuccess(fileExit)).toBe(true);
     if (Exit.isSuccess(fileExit)) {
       expect(fileExit.value._tag).toBe("Executable");
-      expect(fileExit.value.tool).toEqual({ name: "node", version: "26.7.0" });
-      expect(fileExit.value.target).toBe(Target.host());
+      expect(fileExit.value.tool).toMatchObject({ name: "node", version: "26.7.0" });
+      expect(fileExit.value.target).toBe(hostTarget());
       expect(fileExit.value.sha256).toHaveLength(64);
     }
     const config = harness.control.configs[0]!;
@@ -226,10 +228,10 @@ describe("Node SEA AssembleExecutable", () => {
         format: "module",
       },
       outfile: join(harness.root, "bytes-app"),
-      hash: false,
+      target: hostTarget(),
     }));
     expect(Exit.isSuccess(bytesExit)).toBe(true);
-    if (Exit.isSuccess(bytesExit)) expect("sha256" in bytesExit.value).toBe(false);
+    if (Exit.isSuccess(bytesExit)) expect(bytesExit.value.sha256).toHaveLength(64);
     const bytesConfig = harness.control.configs[1]!;
     expect(String(bytesConfig.main).endsWith("main.mjs")).toBe(true);
     expect(bytesConfig.mainFormat).toBe("module");
@@ -241,6 +243,7 @@ describe("Node SEA AssembleExecutable", () => {
     const exit = await harness.run(AssembleExecutable.assembleExecutable({
       main: { _tag: "Bytes", contents: new TextEncoder().encode("console.log('x')"), format: "commonjs" },
       outfile: join(harness.root, "untested-app"),
+      target: hostTarget(),
     }));
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) expect(exit.value.tool.version).toBe("27.1.0");
@@ -255,6 +258,7 @@ describe("Node SEA AssembleExecutable", () => {
           format: "commonjs" as const,
         },
         outfile: join(root, name),
+        target: hostTarget(),
       }) satisfies AssembleExecutable.AssembleExecutableInput;
 
     const syntax = makeHarness({ fake: { mode: "syntax-failure" } });
@@ -324,6 +328,7 @@ describe("Node SEA AssembleExecutable", () => {
           AssembleExecutable.assembleExecutable({
             main: { _tag: "Bytes", contents: new TextEncoder().encode("console.log('x')"), format: "commonjs" },
             outfile,
+            target: hostTarget(),
           }).pipe(Effect.provide(context)),
         );
         yield* Effect.promise(control.started);

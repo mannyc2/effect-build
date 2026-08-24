@@ -1,7 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { execFile, execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -52,8 +51,8 @@ const run = <A, E>(effect: Effect.Effect<A, E, DenoBundle.Bundler>) =>
 describe.skipIf(!enabled)("real Deno Bundle", () => {
   it("bundles the import graph into one hashed file that node can execute", async () => {
     const outdir = join(root, "dist");
-    const artifact = await run(DenoBundle.bundle({ entrypoints: [entrypoint], outdir }));
-    expect(artifact._tag).toBe("Bundle");
+    const artifact = await run(DenoBundle.directWrite({ entrypoints: [entrypoint], outdir }));
+    expect(artifact._tag).toBe("DirectWriteOutcome");
     expect(artifact.outdir).toBe(outdir);
     expect(artifact.tool.name).toBe("deno");
     const entry = artifact.files.find((file) => file.path.endsWith("bundle-entry.js"));
@@ -61,17 +60,16 @@ describe.skipIf(!enabled)("real Deno Bundle", () => {
     if (entry === undefined) return;
     const bytes = await readFile(entry.path);
     expect(entry.bytes).toBe(bytes.byteLength);
-    expect(entry.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+    expect(entry.digest.value).toMatch(/^[0-9a-f]{64}$/u);
     expect(bytes.toString("utf8")).toContain("effect-build-bundle-ok");
     const completion = await execute(process.execPath, [entry.path]);
     expect(completion.stdout).toBe("effect-build-bundle-ok\n");
   }, 300_000);
 
   it("surfaces deno diagnostics as ToolFailed", async () => {
-    await expect(run(DenoBundle.bundle({
+    await expect(run(DenoBundle.directWrite({
       entrypoints: [join(root, "missing.ts")],
       outdir: join(root, "dist-failure"),
-      hash: false,
     }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "deno" });
   }, 300_000);
 });

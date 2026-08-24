@@ -1,8 +1,9 @@
+import type { SelectedTool } from "./Author/Tool.js";
 import type { Target } from "./Target.js";
 
-export interface Tool {
-  readonly name: string;
-  readonly version: string;
+export interface Digest {
+  readonly algorithm: "sha256";
+  readonly value: string;
 }
 
 export interface Executable {
@@ -11,24 +12,9 @@ export interface Executable {
   readonly path: string;
   readonly bytes: number;
   readonly target: Target;
-  readonly tool: Tool;
-  /** Lowercase hex SHA-256 of the committed contents; absent when hashing was disabled. */
-  readonly sha256?: string;
-}
-
-export interface BundleFile {
-  /** Absolute path of the committed file. */
-  readonly path: string;
-  readonly bytes: number;
-  /** Lowercase hex SHA-256 of the committed contents; absent when hashing was disabled. */
-  readonly sha256?: string;
-}
-
-export interface Bundle {
-  readonly _tag: "Bundle";
-  /** Absolute path of the directory holding the committed files. */
-  readonly outdir: string;
-  /** Every committed file, sorted by path. */
-  readonly files: readonly BundleFile[];
-  readonly tool: Tool;
+  readonly tool: SelectedTool;
+  /** Authenticates the exact committed contents. */
+  readonly digest: Digest;
+  /** Lowercase SHA-256 projection retained for the Apple bridge. */
+  readonly sha256: string;
 }

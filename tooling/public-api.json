@@ -5,37 +5,162 @@
       "namespaces": [
         "Artifact",
         "BuildError",
-        "Target",
-        "Toolchain"
+        "Target"
       ],
       "subpaths": {
         "./Artifact": {
           "runtime": [],
           "declarations": [
-            "Bundle",
-            "BundleFile",
-            "Executable",
-            "Tool"
+            "Digest",
+            "Executable"
+          ]
+        },
+        "./Author/BorrowedContent": {
+          "runtime": [
+            "digestBytes",
+            "observeFile",
+            "protocol",
+            "revalidate"
+          ],
+          "declarations": [
+            "BorrowedFile",
+            "digestBytes",
+            "observeFile",
+            "protocol",
+            "revalidate"
+          ]
+        },
+        "./Author/Generation": {
+          "runtime": [
+            "activate",
+            "currentProtocol",
+            "generationProtocol",
+            "manifestProtocol",
+            "publish",
+            "resolveCurrent",
+            "rollback"
+          ],
+          "declarations": [
+            "ActivateInput",
+            "CurrentGeneration",
+            "DirectoryGeneration",
+            "GenerationManifest",
+            "ManifestFile",
+            "PublishInput",
+            "RollbackInput",
+            "activate",
+            "currentProtocol",
+            "generationProtocol",
+            "manifestProtocol",
+            "publish",
+            "resolveCurrent",
+            "rollback"
+          ]
+        },
+        "./Author/NodeMain": {
+          "runtime": [
+            "protocol"
+          ],
+          "declarations": [
+            "Format",
+            "SealedNodeMain",
+            "protocol"
+          ]
+        },
+        "./Author/Tool": {
+          "runtime": [
+            "probeVersion",
+            "publishExecutable",
+            "resolveExecutable",
+            "revalidateSelected",
+            "run",
+            "runOrFail",
+            "runOrFailSelected",
+            "runSelected",
+            "select",
+            "warnIfUntested"
+          ],
+          "declarations": [
+            "Completion",
+            "Output",
+            "ProbeOptions",
+            "PublishOptions",
+            "ResolveOptions",
+            "RunOptions",
+            "SelectOptions",
+            "SelectedTool",
+            "TestedRange",
+            "probeVersion",
+            "publishExecutable",
+            "resolveExecutable",
+            "revalidateSelected",
+            "run",
+            "runOrFail",
+            "runOrFailSelected",
+            "runSelected",
+            "select",
+            "warnIfUntested"
+          ]
+        },
+        "./Author/TreeSnapshot": {
+          "runtime": [
+            "comparePortablePaths",
+            "observe",
+            "protocol",
+            "revalidate",
+            "validatePortablePath"
+          ],
+          "declarations": [
+            "SnapshotFile",
+            "TreeSnapshot",
+            "comparePortablePaths",
+            "observe",
+            "protocol",
+            "revalidate",
+            "validatePortablePath"
           ]
         },
         "./BuildError": {
           "runtime": [
+            "ArtifactInvalid",
+            "CurrentConflict",
+            "CurrentUnknown",
+            "GenerationConflict",
             "PublishFailed",
+            "SelectedToolChanged",
             "ToolFailed",
             "ToolNotFound",
             "UnsupportedTarget"
           ],
           "declarations": [
+            "ArtifactInvalid",
+            "CurrentConflict",
+            "CurrentUnknown",
+            "GenerationConflict",
             "PublishFailed",
+            "SelectedToolChanged",
             "ToolFailed",
             "ToolNotFound",
             "UnsupportedTarget"
           ]
         },
+        "./Profile/StaticBrowserApplication": {
+          "runtime": [
+            "hostProtocol",
+            "protocol"
+          ],
+          "declarations": [
+            "Request",
+            "Resource",
+            "StaticBrowserApplication",
+            "Subject",
+            "hostProtocol",
+            "protocol"
+          ]
+        },
         "./Target": {
           "runtime": [
             "Target",
-            "host",
             "info"
           ],
           "declarations": [
@@ -45,36 +170,7 @@
             "NativeFormat",
             "OperatingSystem",
             "Target",
-            "host",
             "info"
-          ]
-        },
-        "./Toolchain": {
-          "runtime": [
-            "probeVersion",
-            "publishBundle",
-            "publishExecutable",
-            "resolveExecutable",
-            "run",
-            "runOrFail",
-            "warnIfUntested"
-          ],
-          "declarations": [
-            "Completion",
-            "Output",
-            "ProbeOptions",
-            "PublishBundleOptions",
-            "PublishOptions",
-            "ResolveOptions",
-            "RunOptions",
-            "TestedRange",
-            "probeVersion",
-            "publishBundle",
-            "publishExecutable",
-            "resolveExecutable",
-            "run",
-            "runOrFail",
-            "warnIfUntested"
           ]
         }
       }
@@ -373,18 +469,20 @@
         "./Bundle": {
           "runtime": [
             "Bundler",
-            "bundle",
+            "directWrite",
             "layer"
           ],
           "declarations": [
-            "BundleError",
-            "BundleInput",
+            "Bundle",
+            "BundleFile",
             "Bundler",
+            "DirectWriteError",
+            "DirectWriteInput",
             "Format",
             "LayerOptions",
             "Sourcemap",
             "Target",
-            "bundle",
+            "directWrite",
             "layer"
           ]
         },
@@ -416,17 +514,19 @@
         "./Bundle": {
           "runtime": [
             "Bundler",
-            "bundle",
+            "directWrite",
             "layer"
           ],
           "declarations": [
-            "BundleError",
-            "BundleInput",
+            "Bundle",
+            "BundleFile",
             "Bundler",
+            "DirectWriteError",
+            "DirectWriteInput",
             "LayerOptions",
             "Platform",
             "Sourcemap",
-            "bundle",
+            "directWrite",
             "layer"
           ]
         },
@@ -561,11 +661,13 @@
         "./Watch": {
           "runtime": [
             "RolldownFailed",
+            "WatchOverflow",
             "events"
           ],
           "declarations": [
             "Event",
             "RolldownFailed",
+            "WatchOverflow",
             "events"
           ]
         }

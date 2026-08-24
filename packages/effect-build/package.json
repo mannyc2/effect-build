@@ -33,9 +33,20 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./Artifact": { "types": "./dist/Artifact.d.ts", "import": "./dist/Artifact.js" },
+    "./Author/BorrowedContent": {
+      "types": "./dist/Author/BorrowedContent.d.ts",
+      "import": "./dist/Author/BorrowedContent.js"
+    },
+    "./Author/Generation": { "types": "./dist/Author/Generation.d.ts", "import": "./dist/Author/Generation.js" },
+    "./Author/NodeMain": { "types": "./dist/Author/NodeMain.d.ts", "import": "./dist/Author/NodeMain.js" },
+    "./Author/Tool": { "types": "./dist/Author/Tool.d.ts", "import": "./dist/Author/Tool.js" },
+    "./Author/TreeSnapshot": { "types": "./dist/Author/TreeSnapshot.d.ts", "import": "./dist/Author/TreeSnapshot.js" },
     "./BuildError": { "types": "./dist/BuildError.d.ts", "import": "./dist/BuildError.js" },
-    "./Target": { "types": "./dist/Target.d.ts", "import": "./dist/Target.js" },
-    "./Toolchain": { "types": "./dist/Toolchain.d.ts", "import": "./dist/Toolchain.js" }
+    "./Profile/StaticBrowserApplication": {
+      "types": "./dist/Profile/StaticBrowserApplication.d.ts",
+      "import": "./dist/Profile/StaticBrowserApplication.js"
+    },
+    "./Target": { "types": "./dist/Target.d.ts", "import": "./dist/Target.js" }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",

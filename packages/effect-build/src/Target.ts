@@ -47,20 +47,3 @@ const table: Record<Target, Info> = {
 };
 
 export const info = (target: Target): Info => table[target];
-
-/** Best-effort host target; linux assumes the glibc ABI. */
-export const host = (): Target | undefined => {
-  const processGlobal = (globalThis as { process?: { platform?: string; arch?: string } }).process;
-  const architecture = processGlobal?.arch === "x64" ? "x64" : processGlobal?.arch === "arm64" ? "aarch64" : undefined;
-  if (architecture === undefined) return undefined;
-  switch (processGlobal?.platform) {
-    case "darwin":
-      return architecture === "x64" ? "macos-x64" : "macos-aarch64";
-    case "linux":
-      return architecture === "x64" ? "linux-x64-gnu" : "linux-aarch64-gnu";
-    case "win32":
-      return architecture === "x64" ? "windows-x64" : "windows-aarch64";
-    default:
-      return undefined;
-  }
-};

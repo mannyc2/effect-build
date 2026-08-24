@@ -134,7 +134,14 @@ import * as Target from "effect-build/Target";
 const marker: DenoCompile.Permissions = { read: true };
 const main: AssembleExecutable.Main = { _tag: "Bytes", contents: new Uint8Array(), format: "commonjs" };
 const assembler: typeof AssembleExecutable.assembleExecutable = AssembleExecutable.assembleExecutable;
-const bunBundleInput: BunBundle.BundleInput = { entrypoints: ["main.ts"], outdir: "dist" };
+const bunBundleInput: BunBundle.DirectWriteInput = { entrypoints: ["main.ts"], outdir: "dist" };
+const explicitTarget: BunCompile.Target = process.platform === "darwin"
+  ? (process.arch === "arm64" ? "macos-aarch64" : "macos-x64")
+  : process.platform === "win32"
+  ? "windows-x64"
+  : process.arch === "arm64"
+  ? "linux-aarch64-gnu"
+  : "linux-x64-gnu";
 const denoPlatform: DenoBundle.Platform = "browser";
 const watching: typeof Watch.changes = Watch.changes;
 const watcherEvent: RolldownWatch.Event = { code: "START" };
@@ -190,7 +197,7 @@ let artifact: Artifact.Executable | undefined;
 const fakeBun = process.argv[2];
 if (fakeBun !== undefined) {
   artifact = await Effect.runPromise(
-    BunCompile.compileExecutable({ entrypoint: "main.ts", outfile: "dist/consumer-app" }).pipe(
+    BunCompile.compileExecutable({ entrypoint: "main.ts", outfile: "dist/consumer-app", target: explicitTarget }).pipe(
       Effect.provide(BunCompile.layer({ executable: fakeBun })),
       Effect.provide(NodeServices.layer),
     ),

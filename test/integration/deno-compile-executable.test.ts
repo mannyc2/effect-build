@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as DenoCompile from "../../packages/effect-build-deno/src/CompileExecutable.js";
-import * as Target from "../../packages/effect-build/src/Target.js";
+import { hostTarget } from "../host-target.js";
 
 const execute = promisify(execFile);
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
@@ -49,13 +49,14 @@ const run = <A, E>(effect: Effect.Effect<A, E, DenoCompile.Compiler>) =>
 describe.skipIf(!enabled)("real Deno CompileExecutable", () => {
   it("compiles for the host, hashes, atomically publishes, and executes the output", async () => {
     const outfile = join(root, "app");
-    const artifact = await run(DenoCompile.compileExecutable({ entrypoint, outfile }));
+    const target = hostTarget() as DenoCompile.Target;
+    const artifact = await run(DenoCompile.compileExecutable({ entrypoint, outfile, target }));
     const bytes = await readFile(artifact.path);
     expect(artifact).toMatchObject({
       _tag: "Executable",
       path: process.platform === "win32" ? `${outfile}.exe` : outfile,
       bytes: bytes.byteLength,
-      target: Target.host(),
+      target,
     });
     expect(artifact.tool.name).toBe("deno");
     expect(artifact.tool.version).toMatch(/^\d+\.\d+\.\d+/);
@@ -68,7 +69,7 @@ describe.skipIf(!enabled)("real Deno CompileExecutable", () => {
     await expect(run(DenoCompile.compileExecutable({
       entrypoint: join(root, "missing.ts"),
       outfile: join(root, "failure"),
-      hash: false,
+      target: hostTarget() as DenoCompile.Target,
     }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "deno" });
   }, 300_000);
 });

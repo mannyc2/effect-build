@@ -1663,7 +1663,7 @@ describe("v0.5 hard-cut contract", () => {
     const contract = await readJson<V05Contract>("tooling/v05-contract.json");
     const current = await readJson<Surface>(contract.publicSurface.currentSnapshot);
     expect(contract.publicSurface.currentSnapshotMeaning).toBe(
-      "integrated-source-including-apple-not-complete-v0.5-target",
+      "stage-2-core-hard-cut-applied-provider-profiles-and-node-sea-target-pending",
     );
     const packages = current.packages;
 
@@ -1716,7 +1716,7 @@ describe("v0.5 hard-cut contract", () => {
       "exact-roots-and-subpaths-globally-with-apple-symbols-frozen-by-its-owning-stage-and-other-target-symbols-pending",
     );
     expect(contract.publicSurface.exactTargetSymbolsStatus).toBe(
-      "apple-frozen-remaining-core-profile-and-node-sea-target-symbols-unfrozen-and-release-blocking",
+      "apple-and-core-stage-2-frozen-provider-profile-and-node-sea-target-symbols-unfrozen-and-release-blocking",
     );
     expect(contract.publicSurface.targetRootNamespaces).toEqual({
       "effect-build": ["Artifact", "BuildError", "Target"],
@@ -1826,28 +1826,40 @@ describe("v0.5 hard-cut contract", () => {
       const pkg = packages[deletion.package];
       expect(pkg, `${deletion.package} exists`).toBeDefined();
       if (pkg === undefined) throw new Error(`scheduled deletion names missing package: ${deletion.package}`);
+      const applied = deletion.package === "effect-build";
       switch (deletion.kind) {
         case "rootNamespace":
-          expect(pkg.namespaces, `${deletion.package} root ${deletion.name}`).toContain(deletion.name);
+          if (applied) expect(pkg.namespaces, `${deletion.package} root ${deletion.name}`).not.toContain(deletion.name);
+          else expect(pkg.namespaces, `${deletion.package} root ${deletion.name}`).toContain(deletion.name);
           break;
         case "subpath":
-          expect(pkg.subpaths, `${deletion.package}${deletion.name}`).toHaveProperty(deletion.name);
+          if (applied) expect(pkg.subpaths, `${deletion.package}${deletion.name}`).not.toHaveProperty(deletion.name);
+          else expect(pkg.subpaths, `${deletion.package}${deletion.name}`).toHaveProperty(deletion.name);
           break;
         case "declaration":
           {
             const subpath = pkg.subpaths[deletion.subpath];
             if (subpath === undefined) throw new Error(`scheduled deletion names missing subpath: ${deletion.subpath}`);
-            expect(subpath.declarations, `${deletion.package}${deletion.subpath}`).toContain(deletion.name);
+            if (applied) {
+              expect(subpath.declarations, `${deletion.package}${deletion.subpath}`).not.toContain(deletion.name);
+            } else expect(subpath.declarations, `${deletion.package}${deletion.subpath}`).toContain(deletion.name);
           }
           break;
         case "runtimeAndDeclaration":
           {
             const subpath = pkg.subpaths[deletion.subpath];
             if (subpath === undefined) throw new Error(`scheduled deletion names missing subpath: ${deletion.subpath}`);
-            expect(subpath.runtime, `${deletion.package}${deletion.subpath} runtime`).toContain(deletion.name);
-            expect(subpath.declarations, `${deletion.package}${deletion.subpath} declarations`).toContain(
-              deletion.name,
-            );
+            if (applied) {
+              expect(subpath.runtime, `${deletion.package}${deletion.subpath} runtime`).not.toContain(deletion.name);
+              expect(subpath.declarations, `${deletion.package}${deletion.subpath} declarations`).not.toContain(
+                deletion.name,
+              );
+            } else {
+              expect(subpath.runtime, `${deletion.package}${deletion.subpath} runtime`).toContain(deletion.name);
+              expect(subpath.declarations, `${deletion.package}${deletion.subpath} declarations`).toContain(
+                deletion.name,
+              );
+            }
           }
           break;
       }

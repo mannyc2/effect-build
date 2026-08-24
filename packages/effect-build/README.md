@@ -1,19 +1,20 @@
 # effect-build
 
-Core currently exports the target vocabulary, artifact observations, closed
-build errors, and the legacy external-tool kernel used by the built-in
-providers.
+Core exports the target vocabulary, authenticated executable observations,
+closed build errors, and role-specific authoring capabilities.
 
 ```ts
 import type * as Artifact from "effect-build/Artifact";
+import * as Generation from "effect-build/Author/Generation";
+import * as Tool from "effect-build/Author/Tool";
 import * as BuildError from "effect-build/BuildError";
 import * as Target from "effect-build/Target";
 ```
 
-The current `effect-build/Toolchain` export is transition surface scheduled for
-deletion in the v0.5 hard cut. It is not a stable third-party provider SPI and
-will receive no compatibility alias. The replacement consists of law-tested,
-role-specific `Author/*` capabilities, immutable generation primitives, and
-closed portable profiles. See the
+The v0.5 hard cut removed `effect-build/Toolchain`, mutable core bundle
+declarations, and ambient host-target inference without compatibility aliases.
+`Author/Generation` publishes immutable content-addressed trees and advances a
+single current reference. Provider profile and Node SEA target APIs remain
+release-blocking work. See the
 [`effect-build/v0.5-contract@1`](https://github.com/mannyc2/effect-build/blob/main/docs/v0.5-contract.md)
 target decision.

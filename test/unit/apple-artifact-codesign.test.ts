@@ -21,6 +21,7 @@ import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import * as Artifact from "../../packages/effect-build-apple/src/Artifact.js";
 import * as CodeSign from "../../packages/effect-build-apple/src/CodeSign.js";
+import type * as CoreArtifact from "../../packages/effect-build/src/Artifact.js";
 
 const roots: string[] = [];
 
@@ -339,17 +340,27 @@ describe.runIf(process.platform !== "win32")("Apple Artifact", () => {
       path: file,
       bytes: source.identity.bytes,
       target: "macos-aarch64" as const,
-      tool: { name: "fake", version: "1" },
+      tool: {
+        protocol: "effect-build/selected-tool@1" as const,
+        name: "fake",
+        version: "1",
+        executablePath: file,
+        digest: { algorithm: "sha256" as const, value: source.identity.digest.value },
+      },
       sha256: source.identity.digest.value,
+      digest: { algorithm: "sha256" as const, value: source.identity.digest.value },
     };
     const observed = await runArtifact(Artifact.observeExecutable(executable));
     expect(Exit.isSuccess(observed)).toBe(true);
     if (Exit.isSuccess(observed)) expect(observed.value.identity).toEqual(source.identity);
 
-    const { sha256: removedSha256, ...unhashedExecutable } = executable;
+    const { sha256: removedSha256, digest: removedDigest, ...unhashedExecutable } = executable;
     void removedSha256;
-    const unhashed = await runArtifact(Artifact.observeExecutable(unhashedExecutable));
-    expect(failure(unhashed)).toMatchObject({ _tag: "AppleInputInvalid", field: "sha256" });
+    void removedDigest;
+    const unhashed = await runArtifact(
+      Artifact.observeExecutable(unhashedExecutable as unknown as CoreArtifact.Executable),
+    );
+    expect(failure(unhashed)).toMatchObject({ _tag: "AppleInputInvalid", field: "digest" });
     const linux = await runArtifact(Artifact.observeExecutable({ ...executable, target: "linux-x64-gnu" }));
     expect(failure(linux)).toMatchObject({ _tag: "AppleInputInvalid", field: "target" });
     const armAsX64 = await runArtifact(Artifact.observeExecutable({ ...executable, target: "macos-x64" }));
@@ -366,12 +377,17 @@ describe.runIf(process.platform !== "win32")("Apple Artifact", () => {
       bytes: x64Source.identity.bytes,
       target: "macos-x64" as const,
       sha256: x64Source.identity.digest.value,
+      digest: { algorithm: "sha256" as const, value: x64Source.identity.digest.value },
     };
     expect(Exit.isSuccess(await runArtifact(Artifact.observeExecutable(x64Executable)))).toBe(true);
     const x64AsArm = await runArtifact(Artifact.observeExecutable({ ...x64Executable, target: "macos-aarch64" }));
     expect(failure(x64AsArm)).toMatchObject({ _tag: "AppleInputInvalid", field: "target" });
 
-    const changed = await runArtifact(Artifact.observeExecutable({ ...executable, sha256: "0".repeat(64) }));
+    const changed = await runArtifact(Artifact.observeExecutable({
+      ...executable,
+      sha256: "0".repeat(64),
+      digest: { algorithm: "sha256", value: "0".repeat(64) },
+    }));
     expect(failure(changed)).toMatchObject({ _tag: "ArtifactChanged" });
   });
 });

@@ -42,3 +42,51 @@ export class PublishFailed extends Schema.TaggedError<PublishFailed>()("PublishF
     return `failed to publish ${this.destination}: ${this.reason}`;
   }
 }
+
+export class ArtifactInvalid extends Schema.TaggedError<ArtifactInvalid>()("ArtifactInvalid", {
+  path: Schema.String,
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return `invalid artifact at ${this.path}: ${this.reason}`;
+  }
+}
+
+export class SelectedToolChanged extends Schema.TaggedError<SelectedToolChanged>()("SelectedToolChanged", {
+  tool: Schema.String,
+  path: Schema.String,
+  expected: Schema.String,
+  observed: Schema.String,
+}) {
+  override get message(): string {
+    return `${this.tool} executable changed at ${this.path}: expected ${this.expected}, observed ${this.observed}`;
+  }
+}
+
+export class GenerationConflict extends Schema.TaggedError<GenerationConflict>()("GenerationConflict", {
+  generation: Schema.String,
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return `generation conflict at ${this.generation}: ${this.reason}`;
+  }
+}
+
+export class CurrentConflict extends Schema.TaggedError<CurrentConflict>()("CurrentConflict", {
+  root: Schema.String,
+  expected: Schema.String,
+  observed: Schema.String,
+}) {
+  override get message(): string {
+    return `current generation conflict at ${this.root}: expected ${this.expected}, observed ${this.observed}`;
+  }
+}
+
+export class CurrentUnknown extends Schema.TaggedError<CurrentUnknown>()("CurrentUnknown", {
+  root: Schema.String,
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return `current generation outcome unknown at ${this.root}: ${this.reason}`;
+  }
+}

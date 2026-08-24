@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import * as Bundle from "effect-build-bun/Bundle";
 
 const artifact = await Effect.runPromise(
-  Bundle.bundle({
+  Bundle.directWrite({
     entrypoints: ["src/main.ts", "src/worker.ts"],
     outdir: "dist",
     target: "browser",
@@ -16,4 +16,4 @@ const artifact = await Effect.runPromise(
   ),
 );
 
-for (const file of artifact.files) console.log(`${file.path} ${file.bytes} sha256=${file.sha256}`);
+for (const file of artifact.files) console.log(`${file.path} ${file.bytes} sha256=${file.digest.value}`);

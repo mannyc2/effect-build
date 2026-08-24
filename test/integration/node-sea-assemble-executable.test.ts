@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
-import * as Target from "../../packages/effect-build/src/Target.js";
+import { hostTarget } from "../host-target.js";
 
 const execute = promisify(execFile);
 const fixture = fileURLToPath(new URL("../fixtures/tools/node-sea/", import.meta.url));
@@ -48,16 +48,18 @@ const run = <A, E>(effect: Effect.Effect<A, E, AssembleExecutable.Assembler>) =>
 describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
   it("assembles, hashes, publishes, and executes a CJS file main", async () => {
     const outfile = join(root, "cjs-app");
+    const target = hostTarget();
     const artifact = await run(AssembleExecutable.assembleExecutable({
       main: { _tag: "File", path: join(fixture, "main.cjs"), format: "commonjs" },
       outfile,
+      target,
     }));
     const bytes = await readFile(artifact.path);
     expect(artifact).toMatchObject({
       _tag: "Executable",
       path: process.platform === "win32" ? `${outfile}.exe` : outfile,
       bytes: bytes.byteLength,
-      target: Target.host(),
+      target,
     });
     expect(artifact.tool.name).toBe("node");
     expect(artifact.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
@@ -69,11 +71,11 @@ describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
     const artifact = await run(AssembleExecutable.assembleExecutable({
       main: { _tag: "File", path: join(fixture, "main.mjs"), format: "module" },
       outfile,
-      hash: false,
+      target: hostTarget(),
       assets: { message: join(fixture, "message.txt") },
       disableExperimentalSEAWarning: true,
     }));
-    expect("sha256" in artifact).toBe(false);
+    expect(artifact.sha256).toHaveLength(64);
     const completion = await execute(artifact.path, []);
     expect(completion.stdout).toContain("node-sea-esm-ok");
     expect(completion.stdout).toContain("node-sea-asset-ok");
@@ -83,7 +85,7 @@ describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
     await expect(run(AssembleExecutable.assembleExecutable({
       main: { _tag: "Bytes", contents: new TextEncoder().encode("this is not (javascript"), format: "commonjs" },
       outfile: join(root, "broken"),
-      hash: false,
+      target: hostTarget(),
     }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "node" });
   }, 300_000);
 });

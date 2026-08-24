@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, type Scope } from "effect";
-import * as Toolchain from "effect-build/Toolchain";
+import * as Toolchain from "effect-build/Author/Tool";
 import * as rolldown from "rolldown";
 import { RolldownFailed } from "./internal/error.js";
 
@@ -27,7 +27,7 @@ export class Rolldown extends Context.Service<Rolldown, Service>()("effect-build
 const tested: Toolchain.TestedRange = { minimum: "1.0.0", before: "2.0.0" };
 
 const releaseNativeBuild = (native: rolldown.RolldownBuild): Effect.Effect<void> =>
-  Effect.uninterruptible(Effect.promise(() => native.close().catch(() => undefined)));
+  Effect.uninterruptible(Effect.promise(() => native.close()));
 
 const wrapNativeBuild = (native: rolldown.RolldownBuild): Build => ({
   generate: (output?: rolldown.OutputOptions) =>

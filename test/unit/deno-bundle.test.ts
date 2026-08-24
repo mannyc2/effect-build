@@ -42,37 +42,36 @@ describeUnix("Deno Bundle", () => {
   it("bundles multiple entrypoints with hashed, sorted files", async () => {
     const outdir = join(root, "dist-hashed");
     const exit = await run(
-      DenoBundle.bundle({ entrypoints: ["src/main.ts", "src/worker.ts"], outdir }),
+      DenoBundle.directWrite({ entrypoints: ["src/main.ts", "src/worker.ts"], outdir }),
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value._tag).toBe("Bundle");
-      expect(exit.value.outdir).toBe(outdir);
-      expect(exit.value.tool).toEqual({ name: "deno", version: "2.9.3" });
-      expect(exit.value.files.map((file) => file.path)).toEqual([join(outdir, "main.js"), join(outdir, "worker.js")]);
-      for (const file of exit.value.files) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(exit.value._tag).toBe("DirectWriteOutcome");
+      expect(exit.value.outdir).toBe(await realpath(outdir));
+      expect(exit.value.tool).toMatchObject({ name: "deno", version: "2.9.3" });
+      expect(exit.value.files.map((file) => file.relativePath)).toEqual(["main.js", "worker.js"]);
+      for (const file of exit.value.files) expect(file.digest.value).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 
-  it("records split chunks and sourcemaps, without digests when hashing is disabled", async () => {
+  it("records split chunks and sourcemaps with mandatory digests", async () => {
     const outdir = join(root, "dist-split");
     const exit = await run(
-      DenoBundle.bundle({
+      DenoBundle.directWrite({
         entrypoints: ["src/main.ts"],
         outdir,
-        hash: false,
         codeSplitting: true,
         sourcemap: "external",
       }),
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value.files.map((file) => file.path)).toEqual([
-        join(outdir, "chunks", "chunk-fake.js"),
-        join(outdir, "main.js"),
-        join(outdir, "main.js.map"),
+      expect(exit.value.files.map((file) => file.relativePath)).toEqual([
+        "chunks/chunk-fake.js",
+        "main.js",
+        "main.js.map",
       ]);
-      expect(exit.value.files.some((file) => "sha256" in file)).toBe(false);
+      expect(exit.value.files.every((file) => file.digest.value.length === 64)).toBe(true);
     }
   });
 
@@ -82,7 +81,7 @@ describeUnix("Deno Bundle", () => {
     process.env.FAKE_DENO_LOG = log;
     try {
       const exit = await run(
-        DenoBundle.bundle({
+        DenoBundle.directWrite({
           entrypoints: ["main.ts"],
           outdir: "dist",
           cwd: root,
@@ -93,7 +92,7 @@ describeUnix("Deno Bundle", () => {
         }),
       );
       expect(Exit.isSuccess(exit)).toBe(true);
-      if (Exit.isSuccess(exit)) expect(exit.value.outdir).toBe(join(root, "dist"));
+      if (Exit.isSuccess(exit)) expect(exit.value.outdir).toBe(await realpath(join(root, "dist")));
       const lines = (await readFile(log, "utf8")).trim().split("\n");
       const invocation = JSON.parse(lines.at(-1) ?? "") as { readonly argv: readonly string[]; readonly cwd: string };
       expect(invocation.cwd).toBe(await realpath(root));
@@ -112,15 +111,14 @@ describeUnix("Deno Bundle", () => {
 
   it("surfaces tool failures and empty production as typed errors", async () => {
     process.env.FAKE_DENO_MODE = "fail";
-    const failed = await run(DenoBundle.bundle({ entrypoints: ["main.ts"], outdir: join(root, "dist-fail") }));
+    const failed = await run(DenoBundle.directWrite({ entrypoints: ["main.ts"], outdir: join(root, "dist-fail") }));
     const failure = failureOf(failed) as { readonly _tag: string; readonly exitCode: number };
     expect(failure._tag).toBe("ToolFailed");
     expect(failure.exitCode).toBe(17);
     process.env.FAKE_DENO_MODE = "missing";
-    const missing = await run(DenoBundle.bundle({ entrypoints: ["main.ts"], outdir: join(root, "dist-missing") }));
+    const missing = await run(DenoBundle.directWrite({ entrypoints: ["main.ts"], outdir: join(root, "dist-missing") }));
     const missingFailure = failureOf(missing) as { readonly _tag: string; readonly reason: string };
-    expect(missingFailure._tag).toBe("PublishFailed");
-    expect(missingFailure.reason).toContain("did not produce any files");
+    expect(missingFailure._tag).toBe("ArtifactInvalid");
     delete process.env.FAKE_DENO_MODE;
   });
 });

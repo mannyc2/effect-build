@@ -1,9 +1,15 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import type * as Artifact from "effect-build/Artifact";
-import type { PublishFailed, ToolFailed, ToolNotFound } from "effect-build/BuildError";
+import type * as Tool from "effect-build/Author/Tool";
+import * as Toolchain from "effect-build/Author/Tool";
+import type {
+  ArtifactInvalid,
+  PublishFailed,
+  SelectedToolChanged,
+  ToolFailed,
+  ToolNotFound,
+} from "effect-build/BuildError";
 import { UnsupportedTarget } from "effect-build/BuildError";
-import * as CoreTarget from "effect-build/Target";
-import * as Toolchain from "effect-build/Toolchain";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 export const Target = Schema.Literals(
@@ -22,10 +28,8 @@ export interface CompileExecutableInput {
   readonly entrypoint: string;
   readonly outfile: string;
   readonly cwd?: string;
-  /** Defaults to the host target. */
-  readonly target?: Target;
-  /** Record a SHA-256 digest on the artifact (default true). */
-  readonly hash?: boolean;
+  /** Required; the orchestrator host never mints target identity. */
+  readonly target: Target;
   readonly minify?: boolean;
   readonly sourcemap?: "linked" | "inline";
   readonly bytecode?: boolean;
@@ -36,7 +40,12 @@ export interface LayerOptions {
   readonly executable?: string;
 }
 
-export type CompileExecutableError = ToolFailed | UnsupportedTarget | PublishFailed;
+export type CompileExecutableError =
+  | ToolFailed
+  | UnsupportedTarget
+  | PublishFailed
+  | ArtifactInvalid
+  | SelectedToolChanged;
 
 interface Service {
   readonly compileExecutable: (
@@ -63,7 +72,7 @@ const targetArg: Record<Target, string> = {
 const renderArgv = (input: CompileExecutableInput, stagedPath: string): readonly string[] => [
   "build",
   "--compile",
-  ...(input.target === undefined ? [] : [`--target=${targetArg[input.target]}`]),
+  `--target=${targetArg[input.target]}`,
   ...(input.minify === true ? ["--minify"] : []),
   ...(input.sourcemap === undefined ? [] : [`--sourcemap=${input.sourcemap}`]),
   ...(input.bytecode === true ? ["--bytecode"] : []),
@@ -73,7 +82,7 @@ const renderArgv = (input: CompileExecutableInput, stagedPath: string): readonly
 
 const supported = (value: string): value is Target => (Target.literals as readonly string[]).includes(value);
 
-type LayerError = ToolNotFound | ToolFailed;
+type LayerError = ToolNotFound | ToolFailed | ArtifactInvalid | SelectedToolChanged;
 
 const makeService = (
   options?: LayerOptions,
@@ -87,10 +96,12 @@ const makeService = (
     const path = yield* Path.Path;
     const crypto = yield* Crypto.Crypto;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const executable = yield* Toolchain.resolveExecutable({ name: "bun", executable: options?.executable });
-    const version = yield* Toolchain.probeVersion({ tool: "bun", executable, args: ["--version"] });
-    yield* Toolchain.warnIfUntested({ tool: "bun", version, tested });
-    const tool: Artifact.Tool = { name: "bun", version };
+    const tool: Tool.SelectedTool = yield* Toolchain.select({
+      name: "bun",
+      executable: options?.executable,
+      versionArgs: ["--version"],
+    });
+    yield* Toolchain.warnIfUntested({ tool: "bun", version: tool.version, tested });
     const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
       Context.add(Path.Path, path),
       Context.add(Crypto.Crypto, crypto),
@@ -101,12 +112,12 @@ const makeService = (
       input: CompileExecutableInput,
     ): Effect.Effect<Artifact.Executable, CompileExecutableError> =>
       Effect.gen(function*() {
-        const requested = input.target ?? CoreTarget.host();
-        if (requested === undefined || !supported(requested)) {
+        const requested = input.target;
+        if (!supported(requested)) {
           return yield* Effect.fail(
             new UnsupportedTarget({
               tool: "bun",
-              requested: requested ?? "<undetermined host>",
+              requested: String(requested),
               available: Target.literals,
             }),
           );
@@ -116,12 +127,10 @@ const makeService = (
           outfile: input.outfile,
           cwd: input.cwd,
           target: requested,
-          hash: input.hash ?? true,
           produce: (stagedPath) =>
             Effect.asVoid(
-              Toolchain.runOrFail({
-                tool: "bun",
-                executable,
+              Toolchain.runOrFailSelected({
+                selected: tool,
                 args: renderArgv(input, stagedPath),
                 cwd: input.cwd,
               }),
