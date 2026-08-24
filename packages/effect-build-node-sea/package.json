@@ -17,9 +17,13 @@
   "publishConfig": { "access": "public", "provenance": true },
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./AssembleExecutable": {
-      "types": "./dist/AssembleExecutable.d.ts",
-      "import": "./dist/AssembleExecutable.js"
+    "./NodeMainExecutable": {
+      "types": "./dist/NodeMainExecutable.d.ts",
+      "import": "./dist/NodeMainExecutable.js"
+    },
+    "./Raw": {
+      "types": "./dist/Raw.d.ts",
+      "import": "./dist/Raw.js"
     }
   },
   "scripts": {

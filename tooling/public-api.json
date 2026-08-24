@@ -663,10 +663,28 @@
     },
     "effect-build-node-sea": {
       "namespaces": [
-        "AssembleExecutable"
+        "NodeMainExecutable",
+        "Raw"
       ],
       "subpaths": {
-        "./AssembleExecutable": {
+        "./NodeMainExecutable": {
+          "runtime": [
+            "nodeVersion",
+            "profile"
+          ],
+          "declarations": [
+            "Architecture",
+            "AssembledExecutable",
+            "AuthenticatedBase",
+            "ExecutedExecutable",
+            "FinalizedMode",
+            "NativeFormat",
+            "TargetSupportEvidence",
+            "nodeVersion",
+            "profile"
+          ]
+        },
+        "./Raw": {
           "runtime": [
             "Assembler",
             "assembleExecutable",

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
+import * as Raw from "../../packages/effect-build-node-sea/src/Raw.js";
 import { hostTarget } from "../host-target.js";
 
 const execute = promisify(execFile);
@@ -35,21 +35,21 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const run = <A, E>(effect: Effect.Effect<A, E, AssembleExecutable.Assembler>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, Raw.Assembler>) =>
   Effect.runPromise(
     effect.pipe(
-      Effect.provide(AssembleExecutable.layer(
+      Effect.provide(Raw.layer(
         process.env.EFFECT_BUILD_NODE === undefined ? {} : { builderExecutable: process.env.EFFECT_BUILD_NODE },
       )),
       Effect.provide(NodeServices.layer),
     ),
   );
 
-describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
+describe.skipIf(!enabled).sequential("real Node SEA Raw", () => {
   it("assembles, hashes, publishes, and executes a CJS file main", async () => {
     const outfile = join(root, "cjs-app");
     const target = hostTarget();
-    const artifact = await run(AssembleExecutable.assembleExecutable({
+    const artifact = await run(Raw.assembleExecutable({
       main: { _tag: "File", path: join(fixture, "main.cjs"), format: "commonjs" },
       outfile,
       target,
@@ -68,7 +68,7 @@ describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
 
   it("assembles an ESM main with embedded assets", async () => {
     const outfile = join(root, "esm-app");
-    const artifact = await run(AssembleExecutable.assembleExecutable({
+    const artifact = await run(Raw.assembleExecutable({
       main: { _tag: "File", path: join(fixture, "main.mjs"), format: "module" },
       outfile,
       target: hostTarget(),
@@ -82,7 +82,7 @@ describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
   }, 300_000);
 
   it("surfaces node diagnostics as ToolFailed for a broken main", async () => {
-    await expect(run(AssembleExecutable.assembleExecutable({
+    await expect(run(Raw.assembleExecutable({
       main: { _tag: "Bytes", contents: new TextEncoder().encode("this is not (javascript"), format: "commonjs" },
       outfile: join(root, "broken"),
       target: hostTarget(),

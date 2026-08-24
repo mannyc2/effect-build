@@ -64,4 +64,21 @@ describe("v0.5 target surface", () => {
     expect(consumer).toContain("adapterProducerTag === NodeMain.Producer");
     expect(consumer).toContain("unknown portable protocol reached the external provider");
   });
+
+  it("hard-cuts Node SEA into truthful Raw and evidence-only portable modules", async () => {
+    const manifest = JSON.parse(
+      await readFile(resolve(root, "packages/effect-build-node-sea/package.json"), "utf8"),
+    ) as { readonly exports: Readonly<Record<string, unknown>> };
+    expect(Object.keys(manifest.exports).sort()).toEqual([".", "./NodeMainExecutable", "./Raw"]);
+    expect(await readFile(resolve(root, "packages/effect-build-node-sea/src/index.ts"), "utf8")).not.toContain(
+      "AssembleExecutable",
+    );
+    const portable = await readFile(
+      resolve(root, "packages/effect-build-node-sea/src/NodeMainExecutable.ts"),
+      "utf8",
+    );
+    expect(portable).not.toContain("Context.Service");
+    expect(portable).not.toContain("Layer.Layer");
+    expect(portable).not.toContain("finalize:");
+  });
 });

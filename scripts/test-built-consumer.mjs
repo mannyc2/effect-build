@@ -162,7 +162,8 @@ import * as DenoBundle from "effect-build-deno/Bundle";
 import * as DenoCompile from "effect-build-deno/CompileExecutable";
 import * as Build from "effect-build-esbuild/Build";
 import * as Watch from "effect-build-esbuild/Watch";
-import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
+import type * as NodeMainExecutable from "effect-build-node-sea/NodeMainExecutable";
+import * as Raw from "effect-build-node-sea/Raw";
 import * as Rolldown from "effect-build-rolldown/Build";
 import type * as RolldownWatch from "effect-build-rolldown/Watch";
 import type * as Artifact from "effect-build/Artifact";
@@ -171,8 +172,9 @@ import * as NodeMain from "effect-build/Author/NodeMain";
 import * as Target from "effect-build/Target";
 
 const marker: DenoCompile.Permissions = { read: true };
-const main: AssembleExecutable.Main = { _tag: "Bytes", contents: new Uint8Array(), format: "commonjs" };
-const assembler: typeof AssembleExecutable.assembleExecutable = AssembleExecutable.assembleExecutable;
+const main: Raw.Main = { _tag: "Bytes", contents: new Uint8Array(), format: "commonjs" };
+const assembler: typeof Raw.assembleExecutable = Raw.assembleExecutable;
+const portableNodeVersion: typeof NodeMainExecutable.nodeVersion = "26.7.0";
 const bunBundleInput: BunBundle.DirectWriteInput = { entrypoints: ["main.ts"], outdir: "dist" };
 const explicitTarget: BunCompile.Target = process.platform === "darwin"
   ? (process.arch === "arm64" ? "macos-aarch64" : "macos-x64")
@@ -210,6 +212,7 @@ const appleOperations = [
 void marker;
 void main;
 void assembler;
+void portableNodeVersion;
 void bunBundleInput;
 void denoPlatform;
 void watching;

@@ -1663,7 +1663,7 @@ describe("v0.5 hard-cut contract", () => {
     const contract = await readJson<V05Contract>("tooling/v05-contract.json");
     const current = await readJson<Surface>(contract.publicSurface.currentSnapshot);
     expect(contract.publicSurface.currentSnapshotMeaning).toBe(
-      "stage-3-provider-profiles-and-external-author-gate-applied-node-sea-target-pending",
+      "stage-4-node-sea-public-hard-cut-applied-target-finalizer-evidence-pending",
     );
     const packages = current.packages;
 
@@ -1713,10 +1713,10 @@ describe("v0.5 hard-cut contract", () => {
     );
     expect(contract.publicSurface.compatibilityAliases).toEqual([]);
     expect(contract.publicSurface.stage0FreezeScope).toBe(
-      "exact-roots-and-subpaths-globally-with-apple-core-and-provider-profile-symbols-frozen-and-node-sea-target-symbols-pending",
+      "exact-roots-subpaths-and-owning-stage-symbols-frozen-for-all-seven-packages",
     );
     expect(contract.publicSurface.exactTargetSymbolsStatus).toBe(
-      "apple-core-and-provider-profile-symbols-frozen-node-sea-target-symbols-unfrozen-and-release-blocking",
+      "all-owning-stage-runtime-and-declaration-symbols-frozen-compatibility-evidence-remains-release-blocking",
     );
     expect(contract.publicSurface.targetRootNamespaces).toEqual({
       "effect-build": ["Artifact", "BuildError", "Target"],
@@ -1790,7 +1790,7 @@ describe("v0.5 hard-cut contract", () => {
       },
       freezeStage: "stage-2-before-core-deletion-and-provider-source-export",
     });
-    expect(contract.publicSurface.remainingSymbolFreezeStops).toEqual(["stage-4-node-sea-symbols"]);
+    expect(contract.publicSurface.remainingSymbolFreezeStops).toEqual([]);
     expect(contract.publicSurface.authorPromotionGate).toEqual({
       status: "passed-by-packed-external-adapter",
       adapter: "real-out-of-tree-non-monorepo-package",
@@ -1821,7 +1821,7 @@ describe("v0.5 hard-cut contract", () => {
       const pkg = packages[deletion.package];
       expect(pkg, `${deletion.package} exists`).toBeDefined();
       if (pkg === undefined) throw new Error(`scheduled deletion names missing package: ${deletion.package}`);
-      const applied = deletion.package === "effect-build";
+      const applied = deletion.package === "effect-build" || deletion.package === "effect-build-node-sea";
       switch (deletion.kind) {
         case "rootNamespace":
           if (applied) expect(pkg.namespaces, `${deletion.package} root ${deletion.name}`).not.toContain(deletion.name);

@@ -4,8 +4,9 @@ The approved target is `effect-build/v0.5-contract@1` in
 [`tooling/v05-contract.json`](../tooling/v05-contract.json). The exact current
 candidate exports remain asserted against
 [`tooling/public-api.json`](../tooling/public-api.json). Current and target
-surfaces remain separate until the remaining Node SEA hard cut. The Apple,
-core Stage 2, and provider-profile Stage 3 surfaces are frozen.
+surfaces now match the frozen v0.5 roots and subpaths. The Apple, core Stage 2,
+provider-profile Stage 3, and Node SEA Stage 4 symbols are frozen; compatibility
+and external certification remain separate promotion gates.
 
 ## Current implemented surface
 
@@ -30,7 +31,8 @@ import * as Build from "effect-build-esbuild/Build";
 import * as Context from "effect-build-esbuild/Context";
 import * as EsbuildProfile from "effect-build-esbuild/Profile";
 import * as Watch from "effect-build-esbuild/Watch";
-import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
+import type * as NodeMainExecutable from "effect-build-node-sea/NodeMainExecutable";
+import * as Raw from "effect-build-node-sea/Raw";
 import * as Rolldown from "effect-build-rolldown/Build";
 import * as RolldownProfile from "effect-build-rolldown/Profile";
 import * as RolldownWatch from "effect-build-rolldown/Watch";
@@ -67,10 +69,12 @@ out-of-tree adapter with a duplicate core graph and contains no provider branch.
 Rolldown 1.2.5 has no CSS bundling; CSS is therefore admitted only as an
 explicit authenticated browser resource for that provider.
 
-The current Node `AssembleExecutable` accepts file or byte mains and assets and
-targets an inferred host through `node --build-sea`. This is a raw host-native
-lane. Caller assets, bytes, separate builder/base selection, and target
-inference cannot mint portable SEA evidence.
+Node `Raw.assembleExecutable` accepts file or byte mains and assets plus a
+caller-asserted target through `node --build-sea`. This is a provider-native
+lane. Caller assets, bytes, separate builder/base selection, and asserted target
+cannot mint portable SEA evidence. `NodeMainExecutable` exposes only the frozen
+evidence-bearing types and constants; the finalizer callback and constructors
+remain package-private to the schema-bound repository matrix.
 
 `effect-build-apple` exposes authenticated artifacts, Developer ID Application
 signing, app/ZIP/DMG construction, the deliberately narrow one-app Developer ID
@@ -102,9 +106,9 @@ digest and detects replacement around invocation.
 ## Frozen target subpaths
 
 Stage 0 froze root namespace and subpath names. Each owning implementation stage
-must freeze its runtime/declaration symbols before first export. The Apple,
-core Stage 2, and provider-profile Stage 3 symbols are frozen in
-`tooling/public-api.json`; unresolved Node SEA symbols still block release.
+must freeze its runtime/declaration symbols before first export. All four owning
+stages are frozen in `tooling/public-api.json`; missing compatibility and
+credential-backed evidence still block release.
 
 Core keeps `Artifact`, `BuildError`, and `Target`, and adds the role-specific
 `Author/Tool`, `Author/BorrowedContent`, `Author/TreeSnapshot`,

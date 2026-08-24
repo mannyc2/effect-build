@@ -1424,9 +1424,9 @@
   },
   "publicSurface": {
     "currentSnapshot": "tooling/public-api.json",
-    "currentSnapshotMeaning": "stage-3-provider-profiles-and-external-author-gate-applied-node-sea-target-pending",
-    "stage0FreezeScope": "exact-roots-and-subpaths-globally-with-apple-core-and-provider-profile-symbols-frozen-and-node-sea-target-symbols-pending",
-    "exactTargetSymbolsStatus": "apple-core-and-provider-profile-symbols-frozen-node-sea-target-symbols-unfrozen-and-release-blocking",
+    "currentSnapshotMeaning": "stage-4-node-sea-public-hard-cut-applied-target-finalizer-evidence-pending",
+    "stage0FreezeScope": "exact-roots-subpaths-and-owning-stage-symbols-frozen-for-all-seven-packages",
+    "exactTargetSymbolsStatus": "all-owning-stage-runtime-and-declaration-symbols-frozen-compatibility-evidence-remains-release-blocking",
     "scheduledDeletions": [
       {
         "kind": "rootNamespace",
@@ -1492,7 +1492,7 @@
       },
       "freezeStage": "stage-2-before-core-deletion-and-provider-source-export"
     },
-    "remainingSymbolFreezeStops": ["stage-4-node-sea-symbols"],
+    "remainingSymbolFreezeStops": [],
     "authorPromotionGate": {
       "status": "passed-by-packed-external-adapter",
       "adapter": "real-out-of-tree-non-monorepo-package",

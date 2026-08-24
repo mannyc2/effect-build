@@ -45,7 +45,7 @@ interface Service {
 }
 
 export class Assembler extends Context.Service<Assembler, Service>()(
-  "effect-build-node-sea/AssembleExecutable/Assembler",
+  "effect-build-node-sea/Raw/Assembler",
 ) {}
 
 /** Node releases whose direct `--build-sea` assembly is exercised by CI; others proceed with a warning. */

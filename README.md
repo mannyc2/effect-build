@@ -11,18 +11,19 @@ add one sealed Node-main profile and one static-browser-application profile,
 publish immutable directory generations, and require exact evidence. The Apple
 source/API track is implemented locally; its credential-backed and clean-host
 certification is not earned. The core hard cut, portable author boundary, and
-Bun/esbuild/Rolldown profile adapters are implemented and frozen. Node SEA,
-compatibility certification, and the recoverable release coordinator remain.
+Bun/esbuild/Rolldown profile adapters and the Node SEA public hard cut are
+implemented and frozen. Target-finalizer evidence, compatibility certification,
+and the recoverable release coordinator remain.
 
-| Package                 | Current candidate                                                                    | v0.5 target                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `effect-build`          | canonical artifacts and role-specific Author/Profile subpaths; no public `Toolchain` | same frozen API with exact compatibility evidence                                       |
-| `effect-build-apple`    | selected direct Developer ID operation family                                        | same API plus complete credential-backed and clean-host evidence                        |
-| `effect-build-bun`      | native operations plus exact-1.3.14 Node-main and browser profile adapters           | same API with exact compatibility evidence                                              |
-| `effect-build-deno`     | executable compile and native directory bundle                                       | exact 2.9.5 native evidence; no portable Profile until metadata proves it               |
-| `effect-build-esbuild`  | bounded native build/context/watch plus Node-main and browser profiles               | same API with exact compatibility evidence                                              |
-| `effect-build-node-sea` | host-inferred assembly with file/byte mains and assets                               | honest `Raw` lane plus evidence-bearing `NodeMainExecutable`; ad-hoc Mach-O repair only |
-| `effect-build-rolldown` | bounded native build/watch plus Node-main and browser profiles                       | same API with exact compatibility evidence                                              |
+| Package                 | Current candidate                                                                    | v0.5 target                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `effect-build`          | canonical artifacts and role-specific Author/Profile subpaths; no public `Toolchain` | same frozen API with exact compatibility evidence                         |
+| `effect-build-apple`    | selected direct Developer ID operation family                                        | same API plus complete credential-backed and clean-host evidence          |
+| `effect-build-bun`      | native operations plus exact-1.3.14 Node-main and browser profile adapters           | same API with exact compatibility evidence                                |
+| `effect-build-deno`     | executable compile and native directory bundle                                       | exact 2.9.5 native evidence; no portable Profile until metadata proves it |
+| `effect-build-esbuild`  | bounded native build/context/watch plus Node-main and browser profiles               | same API with exact compatibility evidence                                |
+| `effect-build-node-sea` | honest `Raw` lane plus evidence-only `NodeMainExecutable` types                      | same API plus complete authenticated target-finalizer evidence            |
+| `effect-build-rolldown` | bounded native build/watch plus Node-main and browser profiles                       | same API with exact compatibility evidence                                |
 
 The current executable API remains usable while the cut is implemented:
 
