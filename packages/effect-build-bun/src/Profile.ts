@@ -212,10 +212,17 @@ const makeServices = (options?: LayerOptions) =>
             }
             files.push(Object.freeze({ path: relativePath, mediaType, imports: Object.freeze(imports) }));
             if (output.entryPoint !== undefined) {
-              const observedEntrypoint = yield* fileSystem.realPath(toPlatformMetadataPath(path, output.entryPoint))
-                .pipe(
-                  Effect.mapError((cause) => failed("resolve-browser-metadata-entrypoint", cause)),
-                );
+              const metadataEntrypoint = toPlatformMetadataPath(path, output.entryPoint);
+              const observedEntrypoint = yield* fileSystem.realPath(metadataEntrypoint).pipe(
+                Effect.mapError((cause) =>
+                  failed(
+                    `resolve-browser-metadata-entrypoint(${JSON.stringify(output.entryPoint)}=>${
+                      JSON.stringify(metadataEntrypoint)
+                    })`,
+                    cause,
+                  )
+                ),
+              );
               if (path.normalize(observedEntrypoint) === path.normalize(requestedEntrypoint)) {
                 entryModule = relativePath;
               }
