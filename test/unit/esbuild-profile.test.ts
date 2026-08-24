@@ -54,8 +54,13 @@ describe("esbuild portable profiles", () => {
   it("produces a complete immutable static-browser generation", async () => {
     const entry = join(root, "browser-main.ts");
     const css = join(root, "browser.css");
+    const lazy = join(root, "browser-lazy.ts");
     await writeFile(css, "body { color: rgb(1 2 3); }\n");
-    await writeFile(entry, 'import "./browser.css"; document.body.dataset.ready = "yes";\n');
+    await writeFile(lazy, 'document.body.dataset.lazy = "yes";\n');
+    await writeFile(
+      entry,
+      'import "./browser.css"; document.body.dataset.ready = "yes"; void import("./browser-lazy.js");\n',
+    );
     const generation = await Effect.runPromise(
       provide(StaticBrowserApplication.build({
         request: { protocol: StaticBrowserApplication.protocol, entrypoint: entry, resources: [] },
@@ -64,6 +69,10 @@ describe("esbuild portable profiles", () => {
     );
     expect(generation.manifest.files.some(({ path }) => path === "index.html")).toBe(true);
     expect(generation.manifest.files.some(({ mediaType }) => mediaType === "text/css; charset=utf-8")).toBe(true);
+    expect(generation.manifest.files.filter(({ mediaType }) => mediaType === "text/javascript; charset=utf-8"))
+      .toHaveLength(
+        2,
+      );
     expect(generation.manifest.files.every(({ digest }) => digest.value.length === 64)).toBe(true);
   });
 });

@@ -141,14 +141,44 @@ const browserProvider = Layer.effect(
           }
           outputByPortablePath.set(relativePath, output);
         }
-        const metadataByPortablePath = new Map(
-          Object.entries(result.metafile.outputs).map(([outputPath, metadata]) =>
-            [
-              portablePath(path, staging, path.resolve(outputPath)),
-              metadata,
-            ] as const
-          ),
-        );
+        const metadataByPortablePath = new Map<string, esbuild.Metafile["outputs"][string]>();
+        const metafileCandidates = (metafilePath: string): ReadonlySet<string> =>
+          new Set(
+            [path.resolve(metafilePath), path.resolve(workingDirectory, metafilePath)]
+              .map((candidate) => portablePath(path, staging, candidate))
+              .filter((candidate) => TreeSnapshot.validatePortablePath(candidate) === undefined),
+          );
+        for (const [outputPath, metadata] of Object.entries(result.metafile.outputs)) {
+          // esbuild documents metafile paths relative to absWorkingDir, but on
+          // macOS a realpath-spelled /private/var output can instead be emitted
+          // relative to the process directory while OutputFile keeps /var.
+          // Admit exactly one candidate that lands inside this private staging
+          // tree; never guess between two valid spellings.
+          const candidates = metafileCandidates(outputPath);
+          if (candidates.size !== 1) {
+            return yield* new PortableUnsupported({
+              profile: StaticBrowserApplication.protocol,
+              provider: identity.package,
+              reason: `metafile output path is outside staging or ambiguous: ${outputPath}`,
+            });
+          }
+          const [relativePath] = candidates;
+          if (relativePath === undefined || metadataByPortablePath.has(relativePath)) {
+            return yield* new PortableUnsupported({
+              profile: StaticBrowserApplication.protocol,
+              provider: identity.package,
+              reason: `duplicate metafile output path ${relativePath ?? outputPath}`,
+            });
+          }
+          metadataByPortablePath.set(relativePath, metadata);
+        }
+        if (metadataByPortablePath.size !== outputByPortablePath.size) {
+          return yield* new PortableUnsupported({
+            profile: StaticBrowserApplication.protocol,
+            provider: identity.package,
+            reason: "metafile and output file sets differ",
+          });
+        }
         const files: StaticBrowserApplication.ProducedFile[] = [];
         let entryModule: string | undefined;
         for (const [relativePath, output] of outputByPortablePath) {
@@ -175,16 +205,32 @@ const browserProvider = Layer.effect(
           yield* fileSystem.writeFile(outputPath, output.contents, { flag: "wx" }).pipe(
             Effect.mapError((cause) => failed("write-browser-output", cause)),
           );
-          const imports = metadata.imports.filter(({ external }) => !external).map(({ path: imported }) => {
-            const target = path.resolve(path.dirname(outputPath), imported);
-            return portablePath(path, staging, target);
-          });
           if (metadata.imports.some(({ external }) => external)) {
             return yield* new PortableUnsupported({
               profile: StaticBrowserApplication.protocol,
               provider: identity.package,
               reason: `external output edge in ${relativePath}`,
             });
+          }
+          const imports: string[] = [];
+          for (const { path: imported } of metadata.imports) {
+            const candidates = metafileCandidates(imported);
+            if (candidates.size !== 1) {
+              return yield* new PortableUnsupported({
+                profile: StaticBrowserApplication.protocol,
+                provider: identity.package,
+                reason: `metafile import path is outside staging or ambiguous: ${imported}`,
+              });
+            }
+            const [target] = candidates;
+            if (target === undefined) {
+              return yield* new PortableUnsupported({
+                profile: StaticBrowserApplication.protocol,
+                provider: identity.package,
+                reason: `metafile import path is missing: ${imported}`,
+              });
+            }
+            imports.push(target);
           }
           files.push(Object.freeze({ path: relativePath, mediaType, imports: Object.freeze(imports) }));
           if (
