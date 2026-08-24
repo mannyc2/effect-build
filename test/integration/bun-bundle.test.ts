@@ -40,7 +40,7 @@ describe("real Bun Bundle", () => {
       BunBundle.directWrite({ entrypoints: [entrypoint], outdir, target: "node", format: "esm" }),
     );
     expect(artifact._tag).toBe("DirectWriteOutcome");
-    expect(artifact.outdir).toBe(await realpath(outdir));
+    expect(await realpath(artifact.outdir)).toBe(await realpath(outdir));
     expect(artifact.tool.name).toBe("bun");
     expect(artifact.files).toHaveLength(1);
     const [file] = artifact.files;

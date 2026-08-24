@@ -53,7 +53,7 @@ describe.skipIf(!enabled)("real Deno Bundle", () => {
     const outdir = join(root, "dist");
     const artifact = await run(DenoBundle.directWrite({ entrypoints: [entrypoint], outdir }));
     expect(artifact._tag).toBe("DirectWriteOutcome");
-    expect(artifact.outdir).toBe(await realpath(outdir));
+    expect(await realpath(artifact.outdir)).toBe(await realpath(outdir));
     expect(artifact.tool.name).toBe("deno");
     const entry = artifact.files.find((file) => file.path.endsWith("bundle-entry.js"));
     expect(entry).toBeDefined();
