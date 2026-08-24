@@ -316,6 +316,7 @@ interface V05Contract {
         readonly mainAdvanceAfterInitialMutation: string;
       };
     };
+    readonly appleCertificationEvidence: unknown;
     readonly approvedPublisher: {
       readonly repository: string;
       readonly sourceRepository: string;
@@ -427,8 +428,9 @@ describe("v0.5 hard-cut contract", () => {
       targetFinalizerReceipt: "effect-build/node-target-finalizer-receipt@1",
       sealedNodeMain: "effect-build/sealed-node-main@1",
       releaseCandidate: "effect-build/release-candidate@1",
-      releaseEscrow: "effect-build/release-escrow@1",
-      releaseManifest: "effect-build/release-manifest@1",
+      appleCertificationIndex: "effect-build/apple-certification-index@1",
+      releaseEscrow: "effect-build/release-escrow@2",
+      releaseManifest: "effect-build/release-manifest@2",
     });
     expect(new Set(Object.values(contract.protocols)).size).toBe(Object.keys(contract.protocols).length);
     expect(contract.classifications).toEqual([
@@ -953,7 +955,8 @@ describe("v0.5 hard-cut contract", () => {
     });
     expect(contract.providerNativeHardening.appleDistribution).toEqual({
       package: "effect-build-apple",
-      status: "required-v0.5-track-not-yet-certified",
+      status: "implemented-locally-certification-not-earned",
+      implementationRevision: "5718e83907e8e463a16c2dc186e70fa3f5ca90a1",
       scope: "direct-developer-id-distribution-only",
       macAppStore: "unsupported-separate-product-scope",
       universalBinaryConstruction: "unsupported-separate-product-scope",
@@ -976,7 +979,63 @@ describe("v0.5 hard-cut contract", () => {
         "Assess",
       ],
       symbolFreeze:
-        "root-namespace-and-subpaths-only-operation-functions-full-option-types-exact-notary-json-status-decoding-and-detailed-receipt-evidence-shapes-remain-release-blocking-until-the-parallel-red-green-implementation-and-credential-backed-a7-fixtures-converge",
+        "operation-service-names-and-non-notary-input-result-structures-frozen-by-the-owning-stage-exact-notary-provider-json-status-decoding-and-detailed-notary-receipt-reconciliation-evidence-shapes-remain-provisional-through-a7",
+      selectedOperationInventory: {
+        Artifact: [
+          "observeFile",
+          "observeTree",
+          "observeExecutable",
+          "isFileArtifact",
+          "isTreeArtifact",
+          "isKind",
+          "reference",
+          "revalidate",
+          "sameIdentity",
+        ],
+        CodeSign: ["developerIdApplication", "sign", "Signer", "layer"],
+        AppBundle: ["create", "Creator", "layer"],
+        Zip: ["create", "Creator", "layer"],
+        DiskImage: ["create", "Creator", "layer"],
+        InstallerPackage: ["developerIdInstaller", "create", "Creator", "layer"],
+        Notary: [
+          "submit",
+          "operatorReconciliationEvidence",
+          "reconcile",
+          "info",
+          "wait",
+          "log",
+          "history",
+          "readReceipt",
+          "submittedReceiptPath",
+          "Notarizer",
+          "layer",
+        ],
+        Staple: ["staple", "Stapler", "layer"],
+        Assess: ["assess", "Assessor", "layer"],
+      },
+      selectedTypeBoundaries: {
+        artifactKinds:
+          "file-mach-o-entitlements-resource-zip-disk-image-installer-package-or-tree-app-bundle-resource-with-sha256-identity-and-symlink-safe-tree-manifest",
+        executableBridge:
+          "observeExecutable-requires-a-hashed-macos-core-executable-binds-thin-mach-o-cputype-to-provider-target-and-rejects-fat-or-universal-input",
+        codeSign:
+          "SignableArtifact-is-mach-o-disk-image-or-app-bundle-DeveloperIdApplication-is-nominal-and-SignInput-SignResult-preserve-artifact-kind",
+        containers:
+          "AppBundle-Zip-and-DiskImage-each-consume-their-one-explicit-authenticated-product-shape-and-return-a-new-kind-preserving-authenticated-artifact",
+        installerPackage:
+          "CreateInput-is-exactly-one-app-explicit-identifier-version-absolute-install-location-and-distinct-nominal-DeveloperIdInstaller",
+        notaryAuthority:
+          "submit-or-reconcile-mints-nominal-Submission-query-authority-readReceipt-returns-stored-NotaryReceipt-or-SubmittedReceipt-data-that-cannot-typecheck-for-info-wait-or-log-before-explicit-reconciliation",
+        staple:
+          "requires-an-authenticated-AcceptedSubmissionObservation-bound-to-the-exact-unstapled-digest-and-preserves-artifact-kind",
+        assess:
+          "returns-digest-bound-local-signature-and-gatekeeper-observations-and-never-claims-clean-host-acceptance",
+      },
+      intentionalPublicRecoverySurface: {
+        artifactLifecycleError: "public-shared-staging-and-publication-error-type",
+        taggedErrorConstructors:
+          "all-runtime-tagged-error-constructors-in-tooling-public-api-are-intentional-for-effect-tag-recovery",
+      },
       operations: {
         CodeSign:
           "developer-id-application-signing-with-secure-timestamp-explicit-caller-owned-hardened-runtime-and-entitlements-and-inside-out-order-no-ad-hoc-mode",
@@ -1006,7 +1065,7 @@ describe("v0.5 hard-cut contract", () => {
         failure: "no-caller-input-mutation-and-no-published-partial-output",
         notary:
           "unchanged-input-digest-plus-durable-submission-reference-and-observation-with-exact-json-status-log-and-evidence-shapes-provisional-through-a7",
-        assessment: "unchanged-input-digest-plus-tool-and-clean-host-observations",
+        assessment: "unchanged-input-digest-plus-host-local-static-tool-observations-never-clean-host-acceptance",
       },
       installerPackageScope: {
         component: "exactly-one-digest-authenticated-app-bundle",
@@ -1022,10 +1081,14 @@ describe("v0.5 hard-cut contract", () => {
         expansion: "requires-a-later-explicitly-funded-api",
       },
       provisionalUntilA7: {
-        operationFunctionNames: "not-frozen",
-        fullOptionTypes: "not-frozen",
-        notaryJsonAndStatusDecoding: "not-frozen-until-credential-backed-fixtures",
-        detailedReceiptAndEvidenceShapes: "not-frozen-until-credential-backed-fixtures",
+        operationAndServiceNames: "frozen-at-implementationRevision",
+        nonNotaryInputAndResultStructures: "frozen-at-implementationRevision",
+        submittedReceiptVsSubmissionAuthority:
+          "frozen-stored-data-cannot-substitute-for-live-or-reconciled-query-authority",
+        notaryJsonAndStatusDecoding:
+          "provisional-until-credential-backed-fixtures-breaking-change-permitted-before-release",
+        detailedNotaryReceiptAndReconciliationEvidenceShapes:
+          "provisional-until-credential-backed-fixtures-breaking-change-permitted-before-release",
       },
       credentialLaw: {
         developerIdApplication: "distinct-required-class-for-code-and-app-distribution-signing",
@@ -1033,7 +1096,7 @@ describe("v0.5 hard-cut contract", () => {
         identitySelection: "exact-certificate-sha1-and-class-never-display-name-alone",
         entitlements: "explicit-caller-authored-policy-never-inferred-from-provider-or-runtime",
         notaryAuthority:
-          "explicit-keychain-profile-or-notary-api-reference-never-raw-secret-in-request-result-log-or-receipt",
+          "one-explicit-caller-preprovisioned-notarytool-keychain-profile-never-api-reference-or-raw-secret-in-request-result-log-or-receipt",
         approval: "credential-provisioning-and-use-remain-consuming-release-system-authority",
       },
       certification: {
@@ -1041,17 +1104,41 @@ describe("v0.5 hard-cut contract", () => {
         toolchainPin:
           "release-blocking-freeze-exact-macos-xcode-codesign-pkgbuild-pkgutil-hdiutil-ditto-notarytool-stapler-and-spctl-versions-before-promotion",
         credentialBacked: true,
+        currentDisposition: {
+          sourceRevision: "5718e83907e8e463a16c2dc186e70fa3f5ca90a1",
+          localVerification: [
+            "bun-1.3.14-verify-13-typetest-files-111-unit-tests-built-packed-consumer-5-architecture-public-surface-tests-lint-format",
+            "focused-apple-unit-55-of-55",
+            "real-apple-noncredentialed-integration-2-of-2",
+            "fresh-installed-consumer",
+            "effect-build-apple-0.5.0-npm-pack-dry-run",
+          ],
+          locallyGreenNotFormallyEarned: ["A0", "A1", "A9"],
+          notEarned: ["A2", "A3", "A4", "A5", "A6", "A7", "A8"],
+          a7:
+            "not-earned-exact-notary-provider-decoder-status-and-detailed-receipt-reconciliation-shapes-remain-provisional",
+          cleanHostNotEarned: ["G-App", "G-ZIP", "G-DMG", "G-PKG"],
+          formalReceiptIssued: false,
+          developerIdCredentialUsed: false,
+          notaryNetworkSubmission: false,
+          cleanHostExercise: false,
+        },
         requiredProofs: [
           "developer-id-sign-bun-deno-and-node-sea-executables-with-minimum-proven-entitlements",
           "exercise-every-runtime-feature-claimed-compatible-with-hardened-runtime-and-entitlements",
-          "construct-sign-notarize-staple-and-quarantined-clean-host-launch-one-app-bundle",
+          "construct-sign-notarize-staple-and-locally-assess-one-app-bundle",
           "construct-sign-notarize-staple-mount-and-assess-one-disk-image",
           "construct-with-pkgbuild-and-developer-id-installer-sign-notarize-staple-install-run-remove-and-assess-one-flat-package-from-one-authenticated-app-component-with-explicit-identifier-version-install-location-mandatory-timestamp-and-pkgutil-verification",
           "notarize-and-assess-zip-transport-while-proving-zip-no-staple",
           "record-credential-backed-notary-success-non-success-service-and-unknown-outcome-resumption-fixtures-then-freeze-exact-json-status-and-evidence-decoding",
           "prove-credential-provenance-and-keychain-versus-notary-authority-boundary",
-          "combine-strict-tool-observations-with-quarantined-clean-host-gatekeeper-exercise",
           "prove-every-mutator-preserves-input-bytes-and-every-observer-binds-the-unchanged-input-digest",
+        ],
+        cleanHostRequiredProofs: [
+          "G-App-acquire-quarantined-app-transport-pass-gatekeeper-launch-and-exercise-runtime",
+          "G-ZIP-acquire-and-extract-quarantined-zip-prove-no-zip-staple-pass-gatekeeper-on-inner-product-and-run",
+          "G-DMG-acquire-quarantined-dmg-open-normal-user-flow-validate-stapled-product-copy-or-launch-and-run",
+          "G-PKG-acquire-quarantined-package-open-with-installer-pass-gatekeeper-install-run-and-remove",
         ],
         promotionStop:
           "any-missing-target-scenario-credential-or-clean-host-proof-blocks-effect-build-apple-and-v0.5-release",
@@ -1187,6 +1274,7 @@ describe("v0.5 hard-cut contract", () => {
       "esbuild",
       "rolldown",
       "appleDistribution",
+      "appleCleanHost",
       "effect",
       "effectInstallablePeerRange",
       "effectRepositoryDevelopmentPoint",
@@ -1210,6 +1298,11 @@ describe("v0.5 hard-cut contract", () => {
         systemTargets: ["macos-x64", "macos-aarch64"],
         runnerBinding: "requiredCompatibilityEvidencePoints-targetExecutionHosts",
         scenarioRule: "requiredCompatibilityEvidencePoints-coordinateRules-appleDistribution",
+      },
+      appleCleanHost: {
+        status: "quarantined-clean-host-evidence-required-not-yet-complete",
+        systemTargets: ["macos-x64", "macos-aarch64"],
+        scenarioRule: "requiredCompatibilityEvidencePoints-coordinateRules-appleCleanHost",
       },
       effect: ["4.0.0-beta.104", "4.0.0-rc.108"],
       effectInstallablePeerRange: ">=4.0.0-beta.104 <4.1.0-0",
@@ -1316,8 +1409,16 @@ describe("v0.5 hard-cut contract", () => {
           systemTarget: ["macos-x64", "macos-aarch64"],
         },
         expectedCoordinateCount: 14,
-        operation:
-          "credential-backed-build-sign-notarize-staple-where-supported-assess-and-quarantined-clean-host-exercise",
+        operation: "credential-backed-build-sign-notarize-staple-where-supported-and-locally-assess",
+      },
+      appleCleanHost: {
+        rule: "full-cartesian-product-no-pruning",
+        axes: {
+          product: ["G-App", "G-ZIP", "G-DMG", "G-PKG"],
+          systemTarget: ["macos-x64", "macos-aarch64"],
+        },
+        expectedCoordinateCount: 8,
+        operation: "acquire-the-exact-quarantined-release-transport-and-exercise-the-normal-clean-host-user-flow",
       },
       packedConsumers: {
         rule: "full-cartesian-product-no-pruning",
@@ -1561,18 +1662,49 @@ describe("v0.5 hard-cut contract", () => {
   it("records an exact hard cut from the current generated public surface", async () => {
     const contract = await readJson<V05Contract>("tooling/v05-contract.json");
     const current = await readJson<Surface>(contract.publicSurface.currentSnapshot);
-    expect(contract.publicSurface.currentSnapshotMeaning).toBe("candidate-source-not-v0.5-target");
+    expect(contract.publicSurface.currentSnapshotMeaning).toBe(
+      "integrated-source-including-apple-not-complete-v0.5-target",
+    );
     const packages = current.packages;
 
     expect(Object.keys(packages)).toEqual([
       "effect-build",
+      "effect-build-apple",
       "effect-build-bun",
       "effect-build-deno",
       "effect-build-esbuild",
       "effect-build-node-sea",
       "effect-build-rolldown",
     ]);
-    expect(packages["effect-build-apple"]).toBeUndefined();
+    expect(packages["effect-build-apple"]).toBeDefined();
+    const currentApple = packages["effect-build-apple"];
+    if (currentApple === undefined) throw new Error("missing integrated Apple public surface");
+    expect(currentApple.namespaces).toEqual([
+      "AppBundle",
+      "Artifact",
+      "Assess",
+      "CodeSign",
+      "DiskImage",
+      "InstallerPackage",
+      "Notary",
+      "Staple",
+      "Zip",
+    ]);
+    const appleContract = contract.providerNativeHardening.appleDistribution as {
+      readonly selectedOperationInventory: Readonly<Record<string, readonly string[]>>;
+      readonly intentionalPublicRecoverySurface: Readonly<Record<string, string>>;
+    };
+    for (const [subpath, selectedNames] of Object.entries(appleContract.selectedOperationInventory)) {
+      expect(currentApple.subpaths[`./${subpath}`]?.runtime, subpath).toEqual(
+        expect.arrayContaining([...selectedNames]),
+      );
+    }
+    expect(currentApple.subpaths["./Artifact"]?.declarations).toContain("LifecycleError");
+    expect(appleContract.intentionalPublicRecoverySurface).toEqual({
+      artifactLifecycleError: "public-shared-staging-and-publication-error-type",
+      taggedErrorConstructors:
+        "all-runtime-tagged-error-constructors-in-tooling-public-api-are-intentional-for-effect-tag-recovery",
+    });
     expect(Object.keys(contract.publicSurface.targetRootNamespaces)).toEqual(
       contract.release.orderedPackages,
     );
@@ -1581,10 +1713,10 @@ describe("v0.5 hard-cut contract", () => {
     );
     expect(contract.publicSurface.compatibilityAliases).toEqual([]);
     expect(contract.publicSurface.stage0FreezeScope).toBe(
-      "exact-root-namespaces-and-subpaths-not-complete-symbol-signatures",
+      "exact-roots-and-subpaths-globally-with-apple-symbols-frozen-by-its-owning-stage-and-other-target-symbols-pending",
     );
     expect(contract.publicSurface.exactTargetSymbolsStatus).toBe(
-      "intentionally-unfrozen-at-stage-0-and-release-blocking",
+      "apple-frozen-remaining-core-profile-and-node-sea-target-symbols-unfrozen-and-release-blocking",
     );
     expect(contract.publicSurface.targetRootNamespaces).toEqual({
       "effect-build": ["Artifact", "BuildError", "Target"],
@@ -1648,7 +1780,7 @@ describe("v0.5 hard-cut contract", () => {
       appleTargetSubpaths.map((subpath) => `./${subpath}`),
     );
     expect(contract.publicSurface.targetSymbolPolicy).toBe(
-      "each-api-changing-owning-stage-must-freeze-runtime-and-declaration-symbols-before-first-source-export-and-regenerate-public-api-beginning-with-the-stage-2-hard-cut",
+      "apple-owning-stage-has-frozen-its-runtime-and-declaration-symbols-each-remaining-api-changing-stage-must-do-the-same-and-regenerate-public-api",
     );
     expect(contract.publicSurface.providerNativeBundleResultMigration).toEqual({
       deletedCoreDeclarations: ["effect-build/Artifact#Bundle", "effect-build/Artifact#BundleFile"],
@@ -1663,7 +1795,6 @@ describe("v0.5 hard-cut contract", () => {
       "stage-2-core-hard-cut-and-native-bundle-symbols",
       "stage-3-provider-profile-symbols",
       "stage-4-node-sea-symbols",
-      "apple-distribution-operation-symbols-before-the-parallel-package-first-exports",
     ]);
     expect(contract.publicSurface.authorPromotionGate).toEqual({
       status: "release-blocking",
@@ -1967,8 +2098,8 @@ describe("v0.5 hard-cut contract", () => {
                 ExpiredOrDeleted: "admitted-physical-artifact-recovery-from-the-equivalent-escrow",
               },
               candidateBinding:
-                "the-equivalent-escrow-container-authenticates-the-exact-descriptor-and-payload-before-any-final-asset-continuation",
-              disposition: "admitted-only-to-complete-the-eight-final-assets-before-any-npm-mutation",
+                "the-equivalent-escrow-container-authenticates-the-exact-descriptor-payload-and-Apple-certification-wrappers-before-any-final-asset-continuation",
+              disposition: "admitted-only-to-complete-the-nine-final-assets-before-any-npm-mutation",
             },
             {
               arm: "pre-escrow-staging-rollback",
@@ -2026,7 +2157,7 @@ describe("v0.5 hard-cut contract", () => {
                 "exactly-seven-Equivalent-with-approved-provenance-matching-the-manifest-embedded-descriptor",
               actionsArtifacts: "irrelevant-not-in-the-terminal-proof-set",
               authentication:
-                "exact-equivalent-tag-and-draft-exact-eight-final-assets-canonical-manifest-embedded-descriptor-and-escrowRun-plus-seven-authoritative-Equivalent-registry-records-with-approved-provenance",
+                "exact-equivalent-tag-and-draft-exact-nine-final-assets-canonical-manifest-embedded-descriptor-certification-index-certification-artifact-subject-and-escrowRun-plus-exact-certification-bundle-and-seven-authoritative-Equivalent-registry-records-with-approved-provenance",
               disposition: "admitted-github-finalization-only",
               forbidden: "actions-wrapper-recovery-npm-mutation-asset-mutation-or-candidate-substitution",
             },
@@ -2038,7 +2169,7 @@ describe("v0.5 hard-cut contract", () => {
                 "exactly-seven-Equivalent-with-approved-provenance-matching-the-public-manifest-embedded-descriptor",
               actionsArtifacts: "irrelevant-not-in-the-terminal-proof-set",
               authentication:
-                "exact-equivalent-tag-public-release-and-eight-final-assets-canonical-manifest-embedded-descriptor-and-escrowRun-plus-seven-authoritative-Equivalent-registry-records-with-approved-provenance",
+                "exact-equivalent-tag-public-release-and-nine-final-assets-canonical-manifest-embedded-descriptor-certification-index-certification-artifact-subject-and-escrowRun-plus-exact-certification-bundle-and-seven-authoritative-Equivalent-registry-records-with-approved-provenance",
               disposition: "observation-only-success",
               forbidden: "all-mutations",
             },
@@ -2335,7 +2466,7 @@ describe("v0.5 hard-cut contract", () => {
           })),
         ],
         candidateBytes:
-          "required-only-for-initial-staging-or-npm-mutation-before-escrow-use-the-original-actions-artifacts-after-actions-artifact-expiry-use-the-identical-wrapper-bytes-from-the-one-durable-escrow-container-never-rebuild-repack-or-substitute-terminal-finalization-and-observation-only-arms-never-require-or-recover-wrapper-bytes",
+          "required-only-for-initial-staging-or-npm-mutation-before-escrow-use-the-original-three-actions-artifacts-after-actions-artifact-expiry-use-the-identical-wrapper-bytes-from-the-one-durable-escrow-container-never-rebuild-repack-recertify-or-substitute-terminal-finalization-and-observation-only-arms-never-require-or-recover-wrapper-bytes",
         actionsArtifactRestStates: {
           Available:
             "authoritative-200-id-name-digest-workflow_run-match-expired-literal-false-and-valid-expires_at-is-strictly-in-the-future",
@@ -2344,52 +2475,55 @@ describe("v0.5 hard-cut contract", () => {
           Unknown:
             "every-other-response-or-record-including-timeout-malformed-2xx-inconsistent-fields-non-404-4xx-5xx-or-rate-limit",
         },
-        actionsArtifactPairAggregation: {
-          members: ["descriptorArtifact", "payloadArtifact"],
+        actionsArtifactSetAggregation: {
+          members: ["descriptorArtifact", "payloadArtifact", "appleCertificationArtifact"],
           classification:
-            "independently-classify-both-exact-ids-at-one-recorded-observation-time-then-apply-precedence-Unknown-over-ExpiredOrDeleted-over-Available",
-          Available: "both-members-Available",
+            "independently-classify-all-three-exact-ids-at-one-recorded-observation-time-then-apply-precedence-Unknown-over-ExpiredOrDeleted-over-Available",
+          Available: "all-three-members-Available",
           ExpiredOrDeleted: "neither-member-Unknown-and-at-least-one-member-ExpiredOrDeleted",
           Unknown: "at-least-one-member-Unknown",
-          mixedAvailableExpired: "ExpiredOrDeleted-because-the-authenticated-pair-cannot-be-used",
-          report: "persist-both-member-states-and-the-aggregate-state",
+          mixedAvailableExpired: "ExpiredOrDeleted-because-the-authenticated-set-cannot-be-used",
+          report: "persist-all-three-member-states-and-the-aggregate-state",
         },
         physicalArtifactRecovery: {
           requiredBeforeFirstNpmMutation:
             "githubFinalization-coordinator-state-DraftEquivalentEscrowAndFinalAssetsComplete",
           escrowContainer:
-            "strictly-parse-the-one-equivalent-length-delimited-escrow-asset-and-recover-the-exact-original-descriptor-and-payload-artifact-zip-wrapper-bytes",
+            "strictly-parse-the-one-equivalent-length-delimited-escrow-asset-and-recover-the-exact-original-descriptor-payload-and-apple-certification-artifact-zip-wrapper-bytes",
           manifest:
-            "strictly-decode-the-canonical-final-manifest-asset-and-reconstruct-candidateDescriptor-canonical-bytes-plus-final-lf-to-candidateDescriptorDigest",
+            "strictly-decode-the-canonical-final-manifest-asset-and-reconstruct-candidateDescriptor-and-appleCertificationIndex-canonical-bytes-plus-final-lf-to-their-declared-digests",
           descriptor:
             "the-recovered-descriptor-wrapper-has-the-frozen-layout-and-its-canonical-file-equals-the-manifest-embedded-candidateDescriptor",
           payload:
             "the-recovered-payload-wrapper-and-seven-final-tarball-assets-have-the-exact-candidateDescriptor-package-names-byte-counts-and-digests",
+          appleCertification:
+            "the-recovered-certification-wrapper-has-the-frozen-two-entry-layout-and-its-canonical-index-and-opaque-bundle-equal-the-manifest-embedded-index-and-ninth-final-bundle-asset",
           authority:
             "escrowRun-matches-an-authoritative-successful-protected-release-workflow-escrow-job-at-candidate-sourceSha-and-the-equivalent-lightweight-tag-and-draft-release",
           actionsArtifactStatus: "require-ExpiredOrDeleted-never-Unknown-before-using-escrow",
-          disposition: "replace-only-the-actions-artifact-transport-with-identical-escrowed-wrapper-bytes",
-          forbidden: "rebuild-repack-overwrite-or-different-candidate-descriptor",
+          disposition: "replace-only-the-actions-artifact-transport-with-identical-three-wrapper-escrowed-bytes",
+          forbidden:
+            "rebuild-repack-recertify-overwrite-or-different-candidate-descriptor-certification-index-or-bundle",
         },
         preEscrowRollback: {
           authority:
             "future-release-coordinator-protocol-only-and-still-requires-separate-explicit-release-execution-authority",
           preconditions:
-            "candidate-after-first-github-mutation-before-an-equivalent-escrow-candidate-binding-actions-artifact-pair-state-persisted-but-irrelevant-all-seven-registry-records-authoritatively-Absent-exact-nonpublic-githubCoordinatorState-TagRollbackEligible-DraftRollbackEligibleEmpty-or-DraftRollbackEligiblePartialStaging-no-conflict-or-unknown-github-subject-fresh-protected-environment-approval-and-release-concurrency-single-writer-held",
+            "candidate-after-first-github-mutation-before-an-equivalent-escrow-candidate-binding-actions-artifact-set-state-persisted-but-irrelevant-all-seven-registry-records-authoritatively-Absent-exact-nonpublic-githubCoordinatorState-TagRollbackEligible-DraftRollbackEligibleEmpty-or-DraftRollbackEligiblePartialStaging-no-conflict-or-unknown-github-subject-fresh-protected-environment-approval-and-release-concurrency-single-writer-held",
           subjectAuthentication: {
             releaseInputs:
               "exact-immutable-candidateWorkflowRunId-candidateWorkflowRunAttempt-descriptorArtifactId-descriptorArtifactDigest-payloadArtifactId-and-payloadArtifactDigest-from-the-protected-release-dispatch",
             candidateRun:
               "authoritative-successful-candidate-workflow-run-id-attempt-repository-workflowPath-event-push-ref-main-and-headSha-match-release-inputs-and-frozen-candidate-metadata",
             artifactDisposition:
-              "persist-both-member-observations-and-the-actionsArtifactPairAggregation-state-but-do-not-use-artifact-bytes-or-state-for-rollback-authentication",
+              "persist-all-three-member-observations-and-the-actionsArtifactSetAggregation-state-but-do-not-use-artifact-bytes-state-or-Apple-certification-claims-for-rollback-authentication",
             sourceSha:
               "authoritative-candidate-run-headSha-equals-current-exact-lightweight-tag-target-and-release-workflow-github-sha-and-workflow-sha",
             githubSubjects:
-              "classify-only-fixed-tag-target-nonpublic-draft-metadata-and-exact-fixed-escrow-plus-eight-final-asset-name-id-length-wrapper-digest-set-with-no-duplicate-or-unexpected-name-byte-equivalence-is-not-required-or-claimed",
+              "classify-only-fixed-tag-target-nonpublic-draft-metadata-and-exact-fixed-escrow-plus-nine-final-asset-name-id-length-wrapper-digest-set-with-no-duplicate-or-unexpected-name-byte-equivalence-is-not-required-or-claimed",
             registry: "all-seven-authoritative-coordinate-observations-are-Absent",
             claimBoundary:
-              "authenticates-only-the-exact-rollback-subject-and-zero-npm-precondition-never-the-candidate-descriptor-package-records-or-candidate-bytes",
+              "authenticates-only-the-exact-rollback-subject-and-zero-npm-precondition-never-the-candidate-descriptor-package-records-candidate-bytes-or-Apple-certification",
           },
           sequence: [
             "persist-the-exact-observed-tag-draft-and-asset-id-name-length-digest-state-in-the-workflow-report",
@@ -2421,6 +2555,10 @@ describe("v0.5 hard-cut contract", () => {
         "descriptorArtifactDigest",
         "payloadArtifactId",
         "payloadArtifactDigest",
+        "appleCertificationWorkflowRunId",
+        "appleCertificationWorkflowRunAttempt",
+        "appleCertificationArtifactId",
+        "appleCertificationArtifactDigest",
       ],
       releaseInputFieldTypes: {
         candidateWorkflowRunId: "positive-decimal-string-without-leading-zero",
@@ -2429,6 +2567,10 @@ describe("v0.5 hard-cut contract", () => {
         descriptorArtifactDigest: "github-rest-sha256-colon-lowercase-64-hex",
         payloadArtifactId: "positive-decimal-string-without-leading-zero",
         payloadArtifactDigest: "github-rest-sha256-colon-lowercase-64-hex",
+        appleCertificationWorkflowRunId: "positive-decimal-string-without-leading-zero",
+        appleCertificationWorkflowRunAttempt: "string-exact-1",
+        appleCertificationArtifactId: "positive-decimal-string-without-leading-zero",
+        appleCertificationArtifactDigest: "github-rest-sha256-colon-lowercase-64-hex",
       },
       requiredDescriptorFields: [
         "schema",
@@ -2459,12 +2601,13 @@ describe("v0.5 hard-cut contract", () => {
         "for-initial-staging-or-Available-artifact-resumption-require-descriptor-workflowRunId-workflowRunAttempt-workflowRunHeadSha-workflowRef-and-sourceRef-to-equal-the-authoritative-api-run-and-input-metadata",
         "for-initial-staging-or-Available-artifact-resumption-fetch-payload-by-the-exact-input-payloadArtifactId-from-the-same-run-and-attempt-and-require-it-to-equal-descriptor-payloadArtifactId",
         "for-initial-staging-or-Available-artifact-resumption-require-api-payload-artifact-id-name-run-id-headSha-and-github-digest-to-equal-release-inputs-descriptor-and-authoritative-run-metadata",
-        "for-escrow-bound-final-assets-continuation-authenticate-the-equivalent-escrow-container-and-require-its-embedded-descriptor-to-equal-the-original-wrapper-descriptor-when-actions-artifacts-are-Available-or-use-only-its-identical-wrapper-bytes-when-ExpiredOrDeleted",
+        "for-initial-staging-or-Available-artifact-resumption-authenticate-release-appleCertificationEvidence-against-the-exact-candidate-and-protected-certification-inputs",
+        "for-escrow-bound-final-assets-continuation-authenticate-the-equivalent-escrow-container-and-require-its-embedded-descriptor-and-certification-index-to-equal-the-original-wrappers-when-actions-artifacts-are-Available-or-use-only-its-identical-three-wrapper-bytes-when-ExpiredOrDeleted",
         "for-ExpiredOrDeleted-escrow-backed-npm-resumption-strictly-authenticate-freshnessPolicy-physicalArtifactRecovery-without-fetching-the-deleted-actions-wrappers",
-        "for-terminal-finalization-or-observation-only-strictly-authenticate-the-arm-specific-tag-release-phase-eight-final-assets-canonical-manifest-embedded-descriptor-escrowRun-and-seven-Equivalent-registry-records-with-approved-provenance-without-observing-or-recovering-actions-wrapper-bytes",
+        "for-terminal-finalization-or-observation-only-strictly-authenticate-the-arm-specific-tag-release-phase-nine-final-assets-canonical-manifest-embedded-descriptor-certification-index-certification-artifact-subject-escrowRun-certification-bundle-and-seven-Equivalent-registry-records-with-approved-provenance-without-observing-or-recovering-actions-wrapper-bytes",
         "for-preEscrowRollback-authenticate-only-freshnessPolicy-preEscrowRollback-subjectAuthentication-and-make-no-candidate-descriptor-package-record-or-byte-equivalence-claim",
-        "for-every-nonrollback-arm-require-source-and-workflow-fields-to-equal-the-frozen-candidate-identity",
-        "for-every-nonrollback-arm-require-sourceSha-workflowRunHeadSha-and-checkedOutSourceSha-to-be-the-same-40-lowercase-hex-commit-on-sourceRef",
+        "for-every-nonrollback-arm-require-source-and-workflow-fields-to-equal-the-frozen-candidate-and-Apple-certification-identities",
+        "for-every-nonrollback-arm-require-candidate-and-certification-sourceSha-workflowRunHeadSha-and-checkedOutSourceSha-to-be-the-same-40-lowercase-hex-commit-on-sourceRef",
         "apply-freshnessPolicy-before-any-mutation-or-resumption",
         "for-every-nonrollback-arm-require-expiresAt-minus-createdAt-at-most-maximumAgeSeconds",
         "for-every-nonrollback-arm-require-exact-seven-package-records-and-payload-digests",
@@ -2676,6 +2819,9 @@ describe("v0.5 hard-cut contract", () => {
         "candidate.sourceSha",
         "candidate.workflowRunHeadSha",
         "candidate.checkedOutSourceSha",
+        "appleCertificationIndex.sourceSha",
+        "appleCertificationIndex.certificationWorkflowRunHeadSha",
+        "appleCertificationIndex.checkedOutSourceSha",
         "release.github.sha",
         "release.github.workflow_sha",
         "protected-main-head-after-environment-approval",
@@ -2726,7 +2872,7 @@ describe("v0.5 hard-cut contract", () => {
         required: [
           "new-workflow-run-id-with-runAttempt-exactly-one-on-the-equivalent-v0.5.0-tag-admitted-only-by-triggerAdmission",
           "github-sha-and-workflow-sha-equal-candidate-sourceSha",
-          "for-every-nonrollback-arm-the-same-candidate-descriptor-is-authenticated-from-the-equivalent-escrow-for-final-asset-or-npm-resumption-or-reconstructed-and-authenticated-from-the-final-manifest-for-terminal-only-paths-for-preEscrowRollback-use-only-freshnessPolicy-preEscrowRollback-subjectAuthentication-and-make-no-descriptor-or-package-byte-claim",
+          "for-every-nonrollback-arm-the-same-candidate-descriptor-Apple-certification-index-artifact-subject-and-bundle-are-authenticated-from-the-equivalent-three-wrapper-escrow-for-final-asset-or-npm-resumption-or-reconstructed-and-authenticated-from-the-final-manifest-and-bundle-asset-for-terminal-only-paths-for-preEscrowRollback-use-only-freshnessPolicy-preEscrowRollback-subjectAuthentication-and-make-no-descriptor-package-byte-or-Apple-certification-claim",
           "for-npm-resumption-registry-coordinates-are-a-contiguous-Equivalent-prefix-length-zero-through-six-followed-only-by-Absent-for-terminal-only-paths-all-seven-are-Equivalent-with-approved-provenance-for-every-Equivalent",
           "candidate-expiry-may-be-past-only-under-candidateIdentity-freshnessPolicy-postMutationExpiryException",
           "fresh-protected-environment-approval-except-already-public-observation-only-success-requires-no-new-approval",
@@ -2756,6 +2902,229 @@ describe("v0.5 hard-cut contract", () => {
       runAttempt: 1,
       disposition: "rejected-with-zero-mutations-before-rollback-classification",
     });
+    const appleCertification = contract.release.appleCertificationEvidence as {
+      readonly status: string;
+      readonly workflowRepository: string;
+      readonly workflowPath: string;
+      readonly workflowRef: string;
+      readonly workflowEvent: string;
+      readonly releaseInputFields: readonly string[];
+      readonly releaseInputFieldTypes: Readonly<Record<string, string>>;
+      readonly artifactName: string;
+      readonly indexFileName: string;
+      readonly bundleFileName: string;
+      readonly artifactLayout: string;
+      readonly indexEncoding: string;
+      readonly indexDigest: string;
+      readonly indexFields: readonly string[];
+      readonly indexCanonicalization: Readonly<Record<string, unknown>>;
+      readonly certificationCells: readonly string[];
+      readonly coordinateEncoding: string;
+      readonly appleDistributionCoordinates: readonly string[];
+      readonly appleCleanHostCoordinates: readonly string[];
+      readonly verdict: string;
+      readonly bundlePolicy: string;
+      readonly a7Boundary: string;
+      readonly authority: string;
+      readonly forbiddenAuthority: readonly string[];
+      readonly authentication: readonly string[];
+      readonly initialAdmission: string;
+      readonly escrowBinding: string;
+      readonly finalAsset: string;
+      readonly promotionStop: string;
+    };
+    expect(Object.keys(appleCertification)).toEqual([
+      "status",
+      "workflowRepository",
+      "workflowPath",
+      "workflowRef",
+      "workflowEvent",
+      "releaseInputFields",
+      "releaseInputFieldTypes",
+      "artifactName",
+      "indexFileName",
+      "bundleFileName",
+      "artifactLayout",
+      "indexEncoding",
+      "indexDigest",
+      "indexFields",
+      "indexCanonicalization",
+      "certificationCells",
+      "coordinateEncoding",
+      "appleDistributionCoordinates",
+      "appleCleanHostCoordinates",
+      "verdict",
+      "bundlePolicy",
+      "a7Boundary",
+      "authority",
+      "forbiddenAuthority",
+      "authentication",
+      "initialAdmission",
+      "escrowBinding",
+      "finalAsset",
+      "promotionStop",
+    ]);
+    expect(appleCertification).toMatchObject({
+      status: "required-before-unquarantine-currently-not-earned",
+      workflowRepository: "mannyc2/effect-build",
+      workflowPath: ".github/workflows/apple-certification.yml",
+      workflowRef: "refs/heads/main",
+      workflowEvent: "workflow_dispatch",
+      releaseInputFields: [
+        "appleCertificationWorkflowRunId",
+        "appleCertificationWorkflowRunAttempt",
+        "appleCertificationArtifactId",
+        "appleCertificationArtifactDigest",
+      ],
+      releaseInputFieldTypes: {
+        appleCertificationWorkflowRunId: "positive-decimal-string-without-leading-zero",
+        appleCertificationWorkflowRunAttempt: "string-exact-1",
+        appleCertificationArtifactId: "positive-decimal-string-without-leading-zero",
+        appleCertificationArtifactDigest: "github-rest-sha256-colon-lowercase-64-hex",
+      },
+      artifactName: "effect-build-v0.5.0-apple-certification",
+      indexFileName: "apple-certification-index.json",
+      bundleFileName: "effect-build-v0.5.0-apple-certification.bin",
+      artifactLayout:
+        "exactly-two-top-level-regular-files-no-directories-links-duplicates-unsafe-paths-or-unexpected-entries",
+      indexEncoding: "rfc8785-json-canonicalization-scheme-utf8-followed-by-one-lf",
+      indexDigest: "sha256-of-exact-canonical-index-file-bytes-including-final-lf",
+      verdict: "certified",
+      bundlePolicy: "opaque-to-release-coordinator-redacted-public-retained-byte-identity-only",
+      a7Boundary: "release-never-decodes-notary-provider-json-status-receipt-or-reconciliation-fields",
+      authority:
+        "exact-successful-github-workflow-run-and-artifact-rest-observations-plus-canonical-index-and-bundle-bytes",
+      forbiddenAuthority: [
+        "environment-variable-certification-claim",
+        "user-supplied-unverified-sha",
+        "unverified-url",
+        "ad-hoc-APPLE_RELEASE_CERTIFIED_SHA",
+        "ad-hoc-APPLE_RELEASE_CERTIFICATION_RECEIPT_SHA256",
+      ],
+      initialAdmission:
+        "missing-conflicting-unknown-expired-noncertified-incomplete-or-candidate-mismatched-certification-evidence-stops-with-zero-mutations",
+      escrowBinding:
+        "the-exact-actions-certification-artifact-zip-wrapper-is-the-third-length-delimited-escrow-body-and-its-index-and-opaque-public-bundle-bind-the-exact-candidate-before-final-asset-staging",
+      finalAsset:
+        "the-exact-opaque-public-redacted-bundle-file-is-the-ninth-final-release-asset-and-its-digest-index-and-actions-artifact-subject-are-embedded-in-the-canonical-release-manifest",
+      promotionStop:
+        "release-workflow-unquarantine-and-every-publication-arm-remain-blocked-until-A0-through-A9-all-fourteen-distribution-coordinates-and-all-eight-clean-host-coordinates-are-certified-for-the-exact-candidate",
+    });
+    expect(appleCertification.indexFields).toEqual([
+      "schema",
+      "version",
+      "sourceSha",
+      "candidateWorkflowRunId",
+      "candidateWorkflowRunAttempt",
+      "descriptorArtifactId",
+      "descriptorArtifactDigest",
+      "payloadArtifactId",
+      "payloadArtifactDigest",
+      "candidateDescriptorDigest",
+      "certificationWorkflowRepository",
+      "certificationWorkflowPath",
+      "certificationWorkflowRef",
+      "certificationWorkflowRunId",
+      "certificationWorkflowRunAttempt",
+      "certificationWorkflowRunHeadSha",
+      "certificationWorkflowEvent",
+      "checkedOutSourceSha",
+      "bundleFileName",
+      "bundleBytes",
+      "bundleSha256",
+      "verdict",
+      "certificationCells",
+      "appleDistributionCoordinates",
+      "appleCleanHostCoordinates",
+    ]);
+    expect(appleCertification.indexCanonicalization).toEqual({
+      objectMemberOrder: "rfc8785-utf16-code-unit-lexicographic-at-every-depth",
+      unknownFields: "rejected-at-every-object-level",
+      topLevelFieldSet: "exactly-indexFields",
+      jsonNumbers: "forbidden",
+      arrayOrder: "certificationCells-and-coordinate-arrays-exactly-the-frozen-orders",
+      integerEncoding: "positive-base10-integer-strings-without-leading-zero",
+      integerFields: [
+        "candidateWorkflowRunId",
+        "candidateWorkflowRunAttempt",
+        "descriptorArtifactId",
+        "payloadArtifactId",
+        "certificationWorkflowRunId",
+        "certificationWorkflowRunAttempt",
+        "bundleBytes",
+      ],
+      topLevelFieldTypes: {
+        schema: "string-equal-appleCertificationIndex-protocol",
+        version: "string-equal-0.5.0",
+        sourceSha: "string-lowercase-40-hex-equal-authenticated-candidate-sourceSha",
+        candidateWorkflowRunId: "positive-decimal-string-without-leading-zero-equal-protected-release-input",
+        candidateWorkflowRunAttempt: "positive-decimal-string-without-leading-zero-equal-protected-release-input",
+        descriptorArtifactId: "positive-decimal-string-without-leading-zero-equal-protected-release-input",
+        descriptorArtifactDigest: "github-rest-sha256-colon-lowercase-64-hex-equal-protected-release-input",
+        payloadArtifactId:
+          "positive-decimal-string-without-leading-zero-equal-protected-release-input-and-authenticated-candidate-descriptor",
+        payloadArtifactDigest:
+          "github-rest-sha256-colon-lowercase-64-hex-equal-protected-release-input-and-authenticated-candidate-descriptor",
+        candidateDescriptorDigest:
+          "string-lowercase-64-hex-of-exact-canonical-candidate-descriptor-file-bytes-including-final-lf",
+        certificationWorkflowRepository: "string-equal-workflowRepository",
+        certificationWorkflowPath: "string-equal-workflowPath",
+        certificationWorkflowRef: "string-equal-workflowRef",
+        certificationWorkflowRunId: "positive-decimal-string-without-leading-zero-equal-protected-release-input",
+        certificationWorkflowRunAttempt: "string-exact-1-equal-protected-release-input",
+        certificationWorkflowRunHeadSha: "string-lowercase-40-hex-equal-sourceSha",
+        certificationWorkflowEvent: "string-equal-workflowEvent",
+        checkedOutSourceSha: "string-lowercase-40-hex-equal-sourceSha",
+        bundleFileName: "string-equal-frozen-bundleFileName",
+        bundleBytes: "positive-decimal-string-without-leading-zero",
+        bundleSha256: "string-lowercase-64-hex-of-exact-bundle-file-bytes",
+        verdict: "string-exact-certified",
+        certificationCells: "array-exactly-certificationCells",
+        appleDistributionCoordinates: "array-exactly-appleDistributionCoordinates",
+        appleCleanHostCoordinates: "array-exactly-appleCleanHostCoordinates",
+      },
+      digestFields: {
+        candidateDescriptorDigest:
+          "sha256-of-exact-canonical-candidate-descriptor-file-bytes-including-the-one-final-lf",
+        bundleSha256: "sha256-of-exact-opaque-public-redacted-certification-bundle-bytes",
+      },
+    });
+    expect(appleCertification.certificationCells).toEqual(
+      Array.from({ length: 10 }, (_, index) => `A${index}`),
+    );
+    expect(new Set(appleCertification.certificationCells).size).toBe(10);
+    const distributionRule = contract.requiredCompatibilityEvidencePoints.coordinateRules.appleDistribution;
+    expect(distributionRule).toBeDefined();
+    if (distributionRule === undefined) throw new Error("missing appleDistribution coordinate rule");
+    const distributionAxes = distributionRule.axes;
+    const expectedDistributionCoordinates = distributionAxes.scenario!.flatMap((scenario) =>
+      distributionAxes.systemTarget!.map((systemTarget) => `${scenario}|${systemTarget}`)
+    );
+    expect(appleCertification.appleDistributionCoordinates).toEqual(expectedDistributionCoordinates);
+    expect(appleCertification.appleDistributionCoordinates).toHaveLength(14);
+    expect(new Set(appleCertification.appleDistributionCoordinates).size).toBe(14);
+    const cleanHostRule = contract.requiredCompatibilityEvidencePoints.coordinateRules.appleCleanHost;
+    expect(cleanHostRule).toBeDefined();
+    if (cleanHostRule === undefined) throw new Error("missing appleCleanHost coordinate rule");
+    const cleanHostAxes = cleanHostRule.axes;
+    const expectedCleanHostCoordinates = cleanHostAxes.product!.flatMap((product) =>
+      cleanHostAxes.systemTarget!.map((systemTarget) => `${product}|${systemTarget}`)
+    );
+    expect(appleCertification.appleCleanHostCoordinates).toEqual(expectedCleanHostCoordinates);
+    expect(appleCertification.appleCleanHostCoordinates).toHaveLength(8);
+    expect(new Set(appleCertification.appleCleanHostCoordinates).size).toBe(8);
+    expect(appleCertification.coordinateEncoding).toBe(
+      "axis-values-joined-by-literal-pipe-in-coordinateRules-axis-order",
+    );
+    expect(appleCertification.authentication).toEqual([
+      "before-any-initial-github-or-npm-mutation-fetch-the-certification-artifact-by-exact-input-run-id-run-attempt-and-artifact-id",
+      "require-authoritative-certification-workflow-run-repository-path-ref-event-headSha-attempt-one-and-conclusion-success-to-equal-frozen-authority-protected-release-inputs-and-authenticated-candidate-sourceSha",
+      "require-authoritative-certification-artifact-id-name-run-id-headSha-digest-expired-false-and-expires_at-in-the-future-to-equal-protected-release-inputs-and-frozen-authority",
+      "strictly-validate-the-two-entry-artifact-layout-canonical-index-exact-candidate-bindings-A0-through-A9-fourteen-distribution-coordinates-eight-clean-host-coordinates-and-whole-bundle-byte-count-and-sha256",
+      "require-index-sourceSha-certificationWorkflowRunHeadSha-checkedOutSourceSha-and-candidateDescriptorDigest-to-equal-the-authenticated-candidate-and-verdict-certified",
+      "after-an-equivalent-escrow-binding-use-only-the-identical-certification-artifact-wrapper-from-escrow-and-never-rebuild-recertify-or-substitute-it",
+      "for-terminal-github-finalization-or-observation-authenticate-the-manifest-embedded-index-and-digest-certification-artifact-subject-and-exact-public-certification-bundle-asset-without-requiring-an-actions-artifact",
+    ]);
     expect(contract.release.approvedPublisher).toEqual({
       repository: "mannyc2/effect-build",
       sourceRepository: "https://github.com/mannyc2/effect-build",
@@ -2835,7 +3204,7 @@ describe("v0.5 hard-cut contract", () => {
     });
     expect(contract.release.githubFinalization).toEqual({
       initialStartsAfter:
-        "authenticated-fresh-candidate-all-seven-npm-preflight-without-conflict-or-unknown-and-protected-environment-approval",
+        "authenticated-fresh-candidate-and-exact-Apple-certification-evidence-all-seven-npm-preflight-without-conflict-or-unknown-and-protected-environment-approval",
       resumptionStartsAfter:
         "exactly-one-candidateIdentity-freshnessPolicy-postMutationAdmission-arm-and-fresh-protected-environment-approval-except-already-public-observation-only-success-requires-no-new-approval-or-mutation",
       draftEscrowRequiredBefore: "the-first-npm-publication-attempt",
@@ -2859,13 +3228,15 @@ describe("v0.5 hard-cut contract", () => {
         escrowName: "effect-build-v0.5.0-release-escrow.bin",
         escrowSchema: contract.protocols.releaseEscrow,
         escrowEncoding:
-          "one-rfc8785-json-header-plus-one-lf-then-exact-descriptor-artifact-zip-bytes-then-exact-payload-artifact-zip-bytes-with-no-trailing-byte",
+          "one-rfc8785-json-header-plus-one-lf-then-exact-descriptor-artifact-zip-bytes-then-exact-payload-artifact-zip-bytes-then-exact-apple-certification-artifact-zip-bytes-with-no-trailing-byte",
         escrowHeaderFieldSet: [
           "protocol",
           "descriptorArtifactBytes",
           "descriptorArtifactDigest",
           "payloadArtifactBytes",
           "payloadArtifactDigest",
+          "certificationArtifactBytes",
+          "certificationArtifactDigest",
         ],
         escrowHeaderFieldTypes: {
           protocol: "string-equal-releaseEscrow-protocol",
@@ -2873,9 +3244,11 @@ describe("v0.5 hard-cut contract", () => {
           descriptorArtifactDigest: "string-equal-release-input-descriptorArtifactDigest",
           payloadArtifactBytes: "positive-decimal-string-without-leading-zero",
           payloadArtifactDigest: "string-equal-candidateDescriptor-payloadArtifactDigest",
+          certificationArtifactBytes: "positive-decimal-string-without-leading-zero",
+          certificationArtifactDigest: "string-equal-release-input-appleCertificationArtifactDigest",
         },
         escrowValidation:
-          "strict-header-canonicalization-exact-two-length-delimited-zip-wrappers-no-trailing-byte-wrapper-sha256-digests-and-the-frozen-descriptorArtifactLayout-and-payloadLayout",
+          "strict-header-canonicalization-exact-three-length-delimited-zip-wrappers-no-trailing-byte-wrapper-sha256-digests-and-the-frozen-descriptor-payload-and-certification-artifact-layouts",
         manifestName: "effect-build-v0.5.0-release-manifest.json",
         manifestSchema: contract.protocols.releaseManifest,
         manifestEncoding: "rfc8785-json-canonicalization-scheme-utf8-followed-by-one-lf",
@@ -2885,6 +3258,9 @@ describe("v0.5 hard-cut contract", () => {
           "tag",
           "candidateDescriptorDigest",
           "candidateDescriptor",
+          "appleCertificationIndexDigest",
+          "appleCertificationIndex",
+          "appleCertificationArtifact",
           "escrowRun",
         ],
         manifestCanonicalization: {
@@ -2892,12 +3268,23 @@ describe("v0.5 hard-cut contract", () => {
           unknownFields: "rejected-at-every-object-level",
           topLevelFieldSet: "exactly-manifestFields",
           candidateDescriptor: "exactly-candidateIdentity-requiredDescriptorFields-types-ordering-and-semantics",
+          appleCertificationIndex: "exactly-appleCertificationEvidence-indexFields-types-ordering-and-semantics",
           integerEncoding: "positive-base10-integer-strings-without-leading-zero",
           integerFields: [
             "candidateDescriptor.workflowRunId",
             "candidateDescriptor.workflowRunAttempt",
             "candidateDescriptor.payloadArtifactId",
             "candidateDescriptor.packages[].bytes",
+            "appleCertificationIndex.candidateWorkflowRunId",
+            "appleCertificationIndex.candidateWorkflowRunAttempt",
+            "appleCertificationIndex.descriptorArtifactId",
+            "appleCertificationIndex.payloadArtifactId",
+            "appleCertificationIndex.certificationWorkflowRunId",
+            "appleCertificationIndex.certificationWorkflowRunAttempt",
+            "appleCertificationIndex.bundleBytes",
+            "appleCertificationArtifact.workflowRunId",
+            "appleCertificationArtifact.workflowRunAttempt",
+            "appleCertificationArtifact.artifactId",
             "escrowRun.workflowRunId",
             "escrowRun.workflowRunAttempt",
             "escrowRun.escrowJobId",
@@ -2913,7 +3300,28 @@ describe("v0.5 hard-cut contract", () => {
             candidateDescriptorDigest:
               "string-lowercase-64-hex-of-exact-canonical-descriptor-file-bytes-including-final-lf",
             candidateDescriptor: "object-whose-rfc8785-canonical-bytes-plus-one-lf-hash-to-candidateDescriptorDigest",
+            appleCertificationIndexDigest:
+              "string-lowercase-64-hex-of-exact-canonical-appleCertificationIndex-bytes-including-final-lf",
+            appleCertificationIndex:
+              "object-whose-rfc8785-canonical-bytes-plus-one-lf-hash-to-appleCertificationIndexDigest",
+            appleCertificationArtifact: "object-exactly-appleCertificationArtifactFieldSet",
             escrowRun: "object-exactly-escrowRunFieldSet",
+          },
+          appleCertificationArtifactFieldSet: [
+            "workflowRunId",
+            "workflowRunAttempt",
+            "artifactId",
+            "artifactName",
+            "artifactDigest",
+          ],
+          appleCertificationArtifactFieldTypes: {
+            workflowRunId:
+              "positive-decimal-string-without-leading-zero-equal-release-input-appleCertificationWorkflowRunId",
+            workflowRunAttempt: "string-exact-1-equal-release-input-appleCertificationWorkflowRunAttempt",
+            artifactId: "positive-decimal-string-without-leading-zero-equal-release-input-appleCertificationArtifactId",
+            artifactName: "string-equal-appleCertificationEvidence-artifactName",
+            artifactDigest:
+              "github-rest-sha256-colon-lowercase-64-hex-equal-release-input-appleCertificationArtifactDigest",
           },
           escrowRunFieldSet: [
             "repository",
@@ -2960,6 +3368,9 @@ describe("v0.5 hard-cut contract", () => {
           },
           digestFields: {
             candidateDescriptorDigest: "sha256-of-exact-canonical-descriptor-file-bytes-including-the-one-final-lf",
+            appleCertificationIndexDigest:
+              "sha256-of-exact-canonical-appleCertificationIndex-file-bytes-including-the-one-final-lf",
+            "appleCertificationIndex.bundleSha256": "sha256-of-exact-opaque-certification-bundle-asset-bytes",
             "candidateDescriptor.packages[].sha256": "lowercase-64-hex",
             "candidateDescriptor.packages[].sha1": "lowercase-40-hex",
             "candidateDescriptor.packages[].sha512SRI":
@@ -2967,35 +3378,38 @@ describe("v0.5 hard-cut contract", () => {
           },
         },
         packageAssetNames: "the-seven-candidateDescriptor-package-record-filenames-in-orderedPackages-order",
-        stagedAssetCount: 9,
-        publicAssetCount: 8,
+        certificationBundleName: "effect-build-v0.5.0-apple-certification.bin",
+        stagedAssetCount: 10,
+        publicAssetCount: 9,
         stagedEquivalence:
-          "exact-escrow-plus-eight-final-name-set-with-exact-id-name-byte-length-github-sha256-digest-and-downloaded-bytes",
+          "exact-escrow-plus-nine-final-name-set-with-exact-id-name-byte-length-github-sha256-digest-and-downloaded-bytes",
         publicEquivalence:
-          "exact-eight-final-name-set-with-exact-id-name-byte-length-github-sha256-digest-and-downloaded-bytes",
+          "exact-nine-final-name-set-seven-tarballs-manifest-and-certification-bundle-with-exact-id-name-byte-length-github-sha256-digest-and-downloaded-bytes",
         unexpectedOrDuplicateAsset: "conflict-except-the-one-frozen-escrow-asset-is-required-only-before-publication",
         contentTypes: {
           escrow: "application/octet-stream",
           manifest: "application/json",
           package: "application/gzip",
+          certificationBundle: "application/octet-stream",
         },
       },
       escrowAuthentication: {
         actionsArtifactAvailability:
-          "initial-staging-requires-both-candidate-artifacts-expired-false-and-expires_at-in-the-future",
-        tagAndDraft: "exact-candidate-sourceSha-tag-draft-metadata-and-phase-correct-escrow-plus-eight-final-asset-set",
-        manifest: "strict-canonical-releaseManifest-with-embedded-candidateDescriptor-and-escrowRun",
+          "initial-staging-requires-descriptor-payload-and-Apple-certification-artifacts-expired-false-and-expires_at-in-the-future",
+        tagAndDraft: "exact-candidate-sourceSha-tag-draft-metadata-and-phase-correct-escrow-plus-nine-final-asset-set",
+        manifest:
+          "strict-canonical-releaseManifest-with-embedded-candidateDescriptor-appleCertificationIndex-appleCertificationArtifact-and-escrowRun",
         releaseRun:
           "authoritative-workflow-run-id-attempt-headSha-event-ref-repository-and-workflowPath-match-escrowRun",
         escrowJob: "authoritative-job-id-name-run-id-and-conclusion-success-match-escrowRun",
         approval:
           "authoritative-run-approval-history-selected-record-state-environment-id-environment-name-and-approving-user-id-match-escrowRun-and-protectedEnvironmentPolicy-with-no-approval-time-or-deployment-id-claim",
         physicalRecovery:
-          "when-actions-artifacts-are-ExpiredOrDeleted-extract-only-the-exact-wrapper-bytes-from-the-equivalent-escrow-container-then-revalidate-the-embedded-descriptor-manifest-and-seven-final-tarball-assets",
+          "when-actions-artifacts-are-ExpiredOrDeleted-extract-only-the-exact-three-wrapper-bytes-from-the-equivalent-escrow-container-then-revalidate-the-embedded-descriptor-certification-index-certification-artifact-subject-seven-final-tarball-assets-and-certification-bundle",
         terminalWithoutEscrow:
-          "when-all-seven-registry-records-are-Equivalent-and-the-coordinator-is-DraftEquivalentPublicAssetsComplete-or-Equivalent-authenticate-only-the-exact-phase-correct-tag-release-eight-final-assets-canonical-manifest-embedded-descriptor-escrowRun-and-registry-provenance-actions-artifact-state-is-irrelevant-and-wrapper-recovery-npm-or-asset-mutation-is-forbidden",
+          "when-all-seven-registry-records-are-Equivalent-and-the-coordinator-is-DraftEquivalentPublicAssetsComplete-or-Equivalent-authenticate-only-the-exact-phase-correct-tag-release-nine-final-assets-canonical-manifest-embedded-descriptor-certification-index-certification-artifact-subject-escrowRun-certification-bundle-and-registry-provenance-actions-artifact-state-is-irrelevant-and-wrapper-recovery-npm-or-asset-mutation-is-forbidden",
         mutationRule:
-          "the-one-escrow-container-and-eight-final-assets-are-created-and-verified-before-the-first-npm-publication-attempt-never-overwritten-and-only-the-escrow-container-is-deleted-after-seven-npm-equivalents",
+          "the-one-escrow-container-and-nine-final-assets-are-created-and-verified-before-the-first-npm-publication-attempt-never-overwritten-and-only-the-escrow-container-is-deleted-after-seven-npm-equivalents",
       },
       subjectObservationStates: ["Absent", "Equivalent", "Conflict", "Unknown"],
       subjectStateDefinitions: {
@@ -3025,16 +3439,16 @@ describe("v0.5 hard-cut contract", () => {
         DraftEquivalentEscrowCompleteFinalAssetsIncomplete:
           "tag-draft-and-the-one-escrow-asset-are-equivalent-every-present-final-asset-is-equivalent-no-extra-or-duplicate-asset-exists-and-one-or-more-final-assets-are-absent",
         DraftEquivalentEscrowAndFinalAssetsComplete:
-          "tag-draft-the-one-escrow-asset-and-the-exact-eight-final-assets-are-equivalent",
+          "tag-draft-the-one-escrow-asset-and-the-exact-nine-final-assets-are-equivalent",
         DraftEquivalentPublicAssetsComplete:
-          "tag-draft-and-the-exact-eight-final-assets-are-equivalent-and-the-escrow-asset-is-absent",
+          "tag-draft-and-the-exact-nine-final-assets-are-equivalent-and-the-escrow-asset-is-absent",
         TagRollbackEligible:
-          "actions-artifact-pair-state-is-persisted-but-irrelevant-tag-target-and-candidate-run-sourceSha-are-exact-release-and-assets-are-absent-and-no-candidate-descriptor-or-byte-equivalence-is-claimed",
+          "actions-artifact-set-state-is-persisted-but-irrelevant-tag-target-and-candidate-run-sourceSha-are-exact-release-and-assets-are-absent-and-no-candidate-descriptor-byte-equivalence-or-Apple-certification-is-claimed",
         DraftRollbackEligibleEmpty:
-          "actions-artifact-pair-state-is-persisted-but-irrelevant-tag-and-nonpublic-draft-fixed-metadata-and-candidate-run-sourceSha-are-exact-no-assets-exist-and-no-candidate-descriptor-or-byte-equivalence-is-claimed",
+          "actions-artifact-set-state-is-persisted-but-irrelevant-tag-and-nonpublic-draft-fixed-metadata-and-candidate-run-sourceSha-are-exact-no-assets-exist-and-no-candidate-descriptor-byte-equivalence-or-Apple-certification-is-claimed",
         DraftRollbackEligiblePartialStaging:
-          "actions-artifact-pair-state-is-persisted-but-irrelevant-tag-and-nonpublic-draft-fixed-metadata-and-candidate-run-sourceSha-are-exact-present-assets-use-only-the-fixed-escrow-plus-eight-final-name-set-with-no-duplicate-or-unexpected-name-and-no-candidate-descriptor-or-byte-equivalence-is-claimed",
-        Equivalent: "tag-public-release-metadata-and-the-exact-eight-name-asset-set-are-equivalent",
+          "actions-artifact-set-state-is-persisted-but-irrelevant-tag-and-nonpublic-draft-fixed-metadata-and-candidate-run-sourceSha-are-exact-present-assets-use-only-the-fixed-escrow-plus-nine-final-name-set-with-no-duplicate-or-unexpected-name-and-no-candidate-descriptor-byte-equivalence-or-Apple-certification-is-claimed",
+        Equivalent: "tag-public-release-metadata-and-the-exact-nine-name-asset-set-are-equivalent",
         Conflict:
           "any-subject-is-conflict-a-release-exists-without-an-equivalent-tag-a-public-release-exists-before-seven-npm-equivalents-a-public-release-is-incomplete-the-escrow-asset-is-absent-after-npm-mutation-but-before-seven-npm-equivalents-or-any-phase-unexpected-or-duplicate-asset-exists",
         Unknown: "any-required-subject-observation-is-unknown",
@@ -3042,8 +3456,8 @@ describe("v0.5 hard-cut contract", () => {
       observationBounds: "same-numeric-bounds-as-registryObservationBounds",
       protocol: [
         "require-the-workflow-level-release-concurrency-group-to-be-held-before-first-observation-through-terminal-reobservation",
-        "observe-tag-release-the-one-escrow-name-and-all-eight-final-asset-names-before-classification-or-github-mutation",
-        "stop-on-github-subject-or-registry-conflict-or-unknown-actions-artifact-unknown-is-irrelevant-only-in-the-two-terminal-arms",
+        "observe-tag-release-the-one-escrow-name-and-all-nine-final-asset-names-before-classification-or-github-mutation",
+        "stop-on-github-subject-or-registry-conflict-or-unknown-actions-artifact-Unknown-is-irrelevant-only-for-preEscrowRollback-escrow-present-github-finalization-escrow-deleted-draft-github-finalization-and-already-public-observation-only-success-waits-with-zero-further-mutations-during-escrow-bound-final-asset-staging-and-is-rejected-in-every-other-nonterminal-arm",
         "within-the-same-workflow-run-id-and-attempt-continuously-held-release-lease-advance-tag-then-draft-then-escrow-only-under-same-attempt-pre-escrow-staging-continuation-reject-any-runAttempt-greater-than-one-with-zero-mutations-before-classification-or-rollback-on-a-new-workflow-run-id-with-runAttempt-one-and-releaseRef-exact-refs/tags/v0.5.0-before-an-equivalent-escrow-candidate-binding-run-only-preEscrowRollback-with-zero-npm-mutations-reject-a-new-main-run-with-zero-mutations",
         "after-an-equivalent-escrow-binds-the-candidate-complete-final-asset-staging-from-authenticated-original-wrappers-when-Available-or-identical-escrowed-wrappers-when-ExpiredOrDeleted-and-wait-with-zero-further-mutations-when-Unknown",
         "from-TagAbsent-create-lightweight-tag-at-candidate-sourceSha-then-reobserve",
@@ -3059,13 +3473,48 @@ describe("v0.5 hard-cut contract", () => {
         "succeed-only-when-the-public-release-and-all-seven-registry-records-are-equivalent",
       ],
     });
+    const finalAssets = (contract.release.githubFinalization as {
+      readonly assets: {
+        readonly escrowHeaderFieldSet: readonly string[];
+        readonly manifestFields: readonly string[];
+        readonly certificationBundleName: string;
+        readonly stagedAssetCount: number;
+        readonly publicAssetCount: number;
+      };
+    }).assets;
+    expect(appleCertification.releaseInputFields).toEqual(
+      contract.release.candidateIdentity.releaseInputFields.slice(-4),
+    );
+    expect(finalAssets.certificationBundleName).toBe(appleCertification.bundleFileName);
+    expect(finalAssets.publicAssetCount).toBe(contract.release.orderedPackages.length + 2);
+    expect(finalAssets.stagedAssetCount).toBe(finalAssets.publicAssetCount + 1);
+    expect(finalAssets.escrowHeaderFieldSet).toEqual([
+      "protocol",
+      "descriptorArtifactBytes",
+      "descriptorArtifactDigest",
+      "payloadArtifactBytes",
+      "payloadArtifactDigest",
+      "certificationArtifactBytes",
+      "certificationArtifactDigest",
+    ]);
+    expect(finalAssets.manifestFields).toEqual([
+      "schema",
+      "version",
+      "tag",
+      "candidateDescriptorDigest",
+      "candidateDescriptor",
+      "appleCertificationIndexDigest",
+      "appleCertificationIndex",
+      "appleCertificationArtifact",
+      "escrowRun",
+    ]);
     expect(contract.release.protocol).toEqual([
       "hold-the-workflow-level-release-concurrency-group-before-first-observation-through-final-reobservation-or-rollback",
       "validate-runAttempt-and-triggerAdmission-then-select-exactly-one-initial-or-postMutationAdmission-arm-before-authentication",
-      "authenticate-only-the-selected-arm-subject-initial-staging-uses-the-fresh-seven-tarball-actions-candidate-escrow-backed-nonrollback-arms-use-the-equivalent-escrow-terminal-nonrollback-arms-use-the-final-manifest-and-registry-proof-preEscrowRollback-uses-only-its-rollback-subject-and-never-candidate-descriptor-package-or-byte-equivalence",
+      "authenticate-only-the-selected-arm-subject-initial-staging-uses-the-fresh-seven-tarball-actions-candidate-plus-exact-Apple-certification-artifact-escrow-backed-nonrollback-arms-use-the-equivalent-three-wrapper-escrow-terminal-nonrollback-arms-use-the-final-manifest-certification-bundle-and-registry-proof-preEscrowRollback-uses-only-its-rollback-subject-and-never-candidate-descriptor-package-byte-equivalence-or-Apple-certification",
       "apply-the-selected-arm-specific-preflight-before-mutation",
       "stop-with-zero-mutations-on-initial-conflict-or-unknown",
-      "reconcile-one-exact-tag-draft-one-escrow-container-and-eight-final-assets-before-first-npm-mutation",
+      "reconcile-one-exact-tag-draft-one-escrow-container-and-nine-final-assets-before-first-npm-mutation",
       "publish-only-first-absent-coordinate-whose-predecessors-are-equivalent",
       "reobserve-after-every-response-including-response-loss",
       "advance-only-on-equivalent",
@@ -3091,8 +3540,8 @@ describe("v0.5 hard-cut contract", () => {
           arm: "initial-staging",
           releaseRef: "refs/heads/main",
           runAttempt: 1,
-          candidateAuthentication: "fresh-actions-candidate-required",
-          subjectAuthentication: "candidateIdentity",
+          candidateAuthentication: "fresh-actions-candidate-and-Apple-certification-required",
+          subjectAuthentication: "candidateIdentity-plus-appleCertificationEvidence",
           disposition: "eligible-only-for-initial-preflight",
         },
       ],

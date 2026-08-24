@@ -1,19 +1,22 @@
 # effect-build
 
-effect-build expresses native build tools as composable Effect programs. The
-current PR candidate provides Bun, Deno, esbuild, raw Node SEA, and Rolldown
-operations with typed errors and scoped resource ownership.
+effect-build expresses native build tools as composable Effect programs. This
+integration branch provides Bun, Deno, esbuild, raw Node SEA, Rolldown, and the
+new direct-Developer-ID Apple distribution family with typed errors and scoped
+resource ownership.
 
-The approved v0.5 target is a hard cut and is not implemented yet. Its durable
-contract is [`effect-build/v0.5-contract@1`](docs/v0.5-contract.md): keep the
-native lanes, add one sealed Node-main profile and one static-browser-application
-profile, add a separate direct-Developer-ID Apple distribution family, publish
-immutable directory generations, and require exact evidence.
+The approved v0.5 target remains a coordinated hard cut. Its durable contract is
+[`effect-build/v0.5-contract@1`](docs/v0.5-contract.md): keep the native lanes,
+add one sealed Node-main profile and one static-browser-application profile,
+publish immutable directory generations, and require exact evidence. The Apple
+source/API track is now implemented locally; its credential-backed and clean-host
+certification is not earned, and the remaining core/profile hard cut is
+still transitional.
 
 | Package                 | Current candidate                                      | v0.5 target                                                                             |
 | ----------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------- |
 | `effect-build`          | `Target`, `Artifact`, `BuildError`, legacy `Toolchain` | canonical artifacts plus role-specific Author and Profile subpaths; no public Toolchain |
-| `effect-build-apple`    | not present                                            | direct Developer ID signing, Apple containers, notarization, stapling, and assessment   |
+| `effect-build-apple`    | selected direct Developer ID operation family          | same API plus complete credential-backed and clean-host evidence                        |
 | `effect-build-bun`      | executable compile and native directory bundle         | native operations plus Node-main and browser profile adapters                           |
 | `effect-build-deno`     | executable compile and native directory bundle         | exact 2.9.5 native evidence; no portable Profile until metadata proves it               |
 | `effect-build-esbuild`  | native build, context, and watch                       | native operations plus Node-main and browser profile adapters                           |
@@ -61,10 +64,15 @@ identifier, version, and install location, built by `pkgbuild` with a mandatory
 timestamp under an exact Developer ID Installer identity and verified by
 `pkgutil`. `productbuild`, `productsign`, multi-component packages, and installer
 scripts require a later API. Mac App Store and universal-binary construction
-are outside v0.5. Exact Notary JSON/status decoding and detailed receipt and
-evidence shapes remain provisional through the credential-backed A7 fixtures.
-The release is blocked until its credential-backed macOS x64
-and arm64 matrix and clean-host Gatekeeper exercises pass.
+are outside v0.5. Its selected operation/service inventory and non-Notary
+input/result structures are implemented and asserted by the public-surface
+snapshot. Exact Notary JSON/status decoding and detailed receipt and evidence
+shapes remain provisional through the credential-backed A7 fixtures. Local
+implementation evidence does not earn A0, A1, or A9 without retained exact-head
+receipts; A2–A8 and all eight clean-host G coordinates remain unearned. The
+release is blocked until its credential-backed macOS x64 and arm64 matrix and
+clean-host Gatekeeper exercises pass. See
+[Apple distribution](docs/apple-distribution.md).
 
 The exact current exports are generated in
 [`tooling/public-api.json`](tooling/public-api.json). Frozen target subpaths,

@@ -105,22 +105,19 @@ describe("public surface", () => {
     expect(versions.size).toBe(1);
   });
 
-  it("preflights and publishes the seven-package release set in deterministic order", async () => {
+  it("keeps publication quarantined until the exact-prepacked coordinator exists", async () => {
     const workflow = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
-    expect(workflow).toContain(
-      "packages=(effect-build effect-build-apple effect-build-bun effect-build-deno effect-build-esbuild effect-build-node-sea effect-build-rolldown)",
-    );
-    expect(workflow).toContain("mixed lockstep registry state");
-    expect(workflow).toContain('[[ "${registry_output}" == *"code E404"* ]]');
-    expect(workflow).toContain("registry preflight failed");
-    expect(workflow).toContain('for name in "${packages[@]}"; do');
-    expect(workflow).toContain("environment: npm");
-    expect(workflow).toContain("APPLE_RELEASE_CERTIFIED_SHA");
-    expect(workflow).toContain("APPLE_RELEASE_CERTIFICATION_RECEIPT_SHA256");
-    expect(workflow).toContain('[[ "${CERTIFIED_SHA:-}" != "${exact_sha}" ]]');
-    expect(workflow).toContain('npm view "${name}" name');
-    expect(workflow).toContain("unreserved npm package namespace");
-    expect(workflow).toContain("bootstrap the package and verify its trusted-publisher record");
+    expect(workflow).toContain("name: Release (quarantined)");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("group: effect-build-release-v0.5.0");
+    expect(workflow).toContain("cancel-in-progress: false");
+    expect(workflow).toContain("contents: read");
+    expect(workflow).toContain("Fixed-seven coordinator not implemented");
+    expect(workflow).toContain("Refuse publication");
+    expect(workflow).not.toContain("id-token: write");
+    expect(workflow).not.toContain("environment: npm");
+    expect(workflow).not.toContain("npm publish");
+    expect(workflow).not.toContain("APPLE_RELEASE_");
   });
 
   it("ships only declared modules in every package dist", async () => {

@@ -70,7 +70,7 @@ jobs:
           bun-version: 1.3.14
       - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
         with:
-          deno-version: v2.x
+          deno-version: 2.9.5
       - run: bun install --frozen-lockfile
       - run: bun run test:integration:deno
 
@@ -145,7 +145,7 @@ jobs:
       - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
         if: matrix.compiler == 'deno'
         with:
-          deno-version: v2.x
+          deno-version: 2.9.5
       - run: bun install --frozen-lockfile
       - name: Compile and validate the cell with independent oracles
         shell: bash

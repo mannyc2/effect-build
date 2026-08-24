@@ -80,7 +80,8 @@ unauthenticated path as a substitute.
 its source.
 
 `observeExecutable` is the provider bridge: it accepts only a hashed macOS `effect-build/Artifact.Executable`, independently
-rehashes the committed path, and requires the provider byte count and SHA-256 to match before minting a Mach-O artifact.
+rehashes the committed path, and requires the provider byte count and SHA-256 to match before minting a Mach-O artifact. It
+binds the provider target to a thin Mach-O CPU type and rejects FAT/universal input.
 
 | Operation                 | Accepted authenticated input                                                                                    | Result                                                                                 | Lifecycle                               |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------- |
@@ -216,6 +217,11 @@ source revision and exact artifact digests, a cell is **not earned**.
 | A8 — credential boundary          | Prove fingerprint and Team ID matching, distinct Application/Installer authorities, pre-provisioned Notary Keychain Profile provenance, no credential creation/import/unlock/sync, and complete secret redaction                      | Credential selection and containment     |
 | A9 — immutability                 | Prove failures never mutate caller inputs, mutations return new authenticated outputs, and observations bind the exact unchanged subject digest                                                                                       | Artifact lifecycle invariant             |
 
+At Apple implementation revision `5718e83907e8e463a16c2dc186e70fa3f5ca90a1`,
+the local A0, A1, and A9 gates were green, but no retained exact-revision
+receipt or CI record was issued, so none is formally earned. A2 through A8 are
+also not earned. No Developer ID or Notary credential was exercised.
+
 Universal binary construction is not one of these cells. x64 and arm64 outputs are independently built and certified. Adding a
 universal artifact would require a separately approved operation, digest/provenance model, and test matrix.
 
@@ -237,8 +243,11 @@ notarization evidence.
 | G-DMG           | Acquire the quarantined DMG, open it through the normal user flow, validate the stapled product, copy or launch the app as documented, and run it |
 | G-PKG           | Acquire the quarantined package, open it through Installer, pass Gatekeeper, install, run, and remove it cleanly                                  |
 
-Only cells for product forms actually released are required, but both claimed architectures are independent cells. Rosetta
-execution does not certify a native x64 build, and no result implies a universal-binary claim.
+The frozen v0.5 product includes all four forms, so all four G cells on both
+architectures are required: eight clean-host coordinates with no silent
+pruning. Narrowing that matrix requires an explicit Stage 0 contract revision.
+Rosetta execution does not certify a native x64 build, and no result implies a
+universal-binary claim.
 
 ### Certification receipt
 
@@ -256,6 +265,47 @@ Each completed cell produces a retained, redacted receipt containing:
 Capability cells such as adverse-response decoding may be bound to the exact implementation revision and supported Apple tool
 version. Product cells and every G-cell are byte-specific and must be repeated for the exact artifacts selected for release.
 
+### Certification artifact
+
+Certification is a separate post-candidate workflow, not a field that the
+candidate producer or release coordinator may self-assert. Its exact authority is
+`.github/workflows/apple-certification.yml` at `refs/heads/main`, event
+`workflow_dispatch`, run attempt exactly 1. Protected release inputs bind
+`appleCertificationWorkflowRunId`,
+`appleCertificationWorkflowRunAttempt`, `appleCertificationArtifactId`, and
+`appleCertificationArtifactDigest`.
+
+The Actions artifact is named `effect-build-v0.5.0-apple-certification` and
+contains exactly canonical `apple-certification-index.json` and opaque
+`effect-build-v0.5.0-apple-certification.bin`. The
+`effect-build/apple-certification-index@1` index binds the exact candidate source,
+candidate workflow run/attempt, descriptor and payload artifact IDs and REST
+digests, candidate-descriptor content digest, complete certification workflow
+identity, opaque bundle name/byte length/SHA-256, and verdict `certified`. Its
+cell sets are exact: A0 through A9 once each; all 14 row-major distribution
+coordinates formed by the seven frozen scenarios on `macos-x64` then
+`macos-aarch64`; and all eight row-major `G-App`, `G-ZIP`, `G-DMG`, and `G-PKG`
+clean-host coordinates on those two targets. Distribution identifiers use literal
+`|` separators and this scenario order:
+`developer-id-sign-bun-executable|<target>`,
+`developer-id-sign-deno-executable|<target>`,
+`developer-id-sign-node-sea-executable|<target>`,
+`notarized-stapled-app-bundle|<target>`,
+`notarized-zip-transport|<target>`,
+`notarized-stapled-disk-image|<target>`, and
+`notarized-stapled-installer-package|<target>`, expanding each target in the
+frozen `macos-x64`-then-`macos-aarch64` order. Clean-host identifiers are
+`<G-product>|<target>` in the frozen product-then-target order. Missing,
+duplicate, unexpected, pruned, non-certified, or candidate-mismatched evidence
+blocks release.
+
+The index and bundle authenticate the certification envelope, not a frozen A7
+payload schema. Exact Notary provider JSON/status decoding and detailed Notary
+receipt/reconciliation-evidence body shapes remain opaque to the release
+coordinator and provisional through credential-backed A7. A7 may still require a
+breaking Notary-shape change before v0.5; changing those opaque bytes necessarily
+changes the bundle digest and requires a new certification artifact.
+
 ## Merge and release authority
 
 Four statuses must remain distinct:
@@ -264,14 +314,25 @@ Four statuses must remain distinct:
 2. **Apple-certified** means the credential-backed and clean-host cells above have evidence for exact artifacts; a certificate
    on one candidate commit does not automatically certify a different merge or release build.
 3. **Merged** means an authorized integration placed the change on the target branch and the exact merge SHA passed its gates.
-4. **Released** means an authorized workflow built the fixed seven-package set from exact green main, completed all applicable
-   capability cells, repeated byte-specific product and G-cells for the selected release artifacts, and published it. Merge
-   does not authorize publication.
+4. **Released** means the separately authorized exact-prepacked coordinator
+   consumed the tested fixed-seven candidate, authenticated the retained
+   exact-revision Apple evidence, completed every A and G cell, converged all
+   seven registry records, and published GitHub last. Merge does not authorize
+   publication.
 
-The release workflow enforces that last boundary with the protected `npm` environment. Its authorized reviewer
-must bind `APPLE_RELEASE_CERTIFIED_SHA` to the exact checked-out green revision and
-`APPLE_RELEASE_CERTIFICATION_RECEIPT_SHA256` to the lowercase SHA-256 of the retained, redacted certification receipt. An
-absent, malformed, or mismatched binding fails before any package is published.
+The current release workflow is deliberately quarantined and always fails; it
+does not build, pack, sign, notarize, tag, or publish. The future coordinator
+must consume the exact prebuilt/tested tarballs and the independently produced
+certification artifact, obtain fresh protected `npm` environment approval, and
+bind all three Actions wrappers—candidate descriptor, candidate payload, and
+certification artifact—into `effect-build/release-escrow@2`. The canonical
+`effect-build/release-manifest@2` embeds the certification index plus its exact
+run ID/attempt/artifact ID/name/REST digest subject and binds the opaque bundle's
+name, byte length, and SHA-256. That `.bin` bundle is the ninth final asset after
+the seven tarballs and manifest; escrow is the tenth staged asset and is removed
+only after npm convergence. An ad hoc environment-variable or SHA assertion is
+not certification authority. Candidate creation, certification, merge, protected
+approval, namespace bootstrap, and publication remain distinct authorities.
 
 The deterministic v0.5 package order is `effect-build`, `effect-build-apple`, `effect-build-bun`, `effect-build-deno`,
 `effect-build-esbuild`, `effect-build-node-sea`, and `effect-build-rolldown`.

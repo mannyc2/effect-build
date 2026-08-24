@@ -45,10 +45,12 @@ ordered hard cut is complete.
   Applications and release systems still own product form, channel, identity,
   entitlements, credentials, approval, retries, publication, and retention.
   Mac App Store distribution and universal-binary construction are separate and
-  unsupported in v0.5. Exact operation function names, full option types,
-  Notary JSON/status decoding, and detailed receipt/evidence shapes remain
-  provisional until the parallel implementation and credential-backed A7
-  fixtures converge.
+  unsupported in v0.5. The Apple owning stage has frozen its selected
+  operation/service names, non-Notary input/result structures, stored-data versus
+  query-authority distinction, `Artifact.LifecycleError`, and tagged public error
+  constructors. Only exact Notary provider JSON/status decoding and detailed
+  Notary receipt/reconciliation-evidence shapes remain provisional through
+  credential-backed A7 and may still break before release.
 - A native Bun or Deno browser selector is provider-specific behavior, not a
   `StaticBrowserApplication`. The portable browser profile owns generated HTML,
   complete graph evidence, explicit resources and media types, relative
@@ -67,21 +69,30 @@ ordered hard cut is complete.
   the contract and later in the generated compatibility manifest. Pin the Deno
   promotion lane to 2.9.5 and reject every present empty permission list before
   provider work. Execute every frozen Cartesian coordinate; never prune a cell
-  as “not applicable.” Apple promotion additionally requires the separate
-  14-cell, credential-backed macOS x64/arm64 distribution matrix and
-  quarantined clean-host Gatekeeper exercises.
+  as “not applicable.” Apple promotion additionally requires A0 through A9, the
+  exact 14-cell credential-backed macOS x64/arm64 distribution matrix, and the
+  exact eight-cell quarantined clean-host Gatekeeper matrix.
 - Candidate construction may become automatic and read-only. Publication
   requires manual dispatch plus protected `npm` environment approval and the
   fixed ordered seven-package convergence protocol. The environment admits only
   `refs/heads/main` and the exact recovery ref `refs/tags/v0.5.0`, has exactly one
   configured User reviewer entry, requires one non-self approval, disallows
   administrator bypass, and must be read back before unquarantine and every
-  publication attempt. A green main run, merge, or certification does not
-  authorize publication. Before npm, stage one exact tag/draft, one temporary
-  length-delimited candidate escrow, and the eight final assets: nine staged
-  assets total. Candidate
-  freshness is required through initial preflight; later expiry or Actions
-  artifact deletion may use only identical wrapper bytes from the verified escrow.
+  publication attempt. The release workflow remains quarantined until those
+  controls and every external prerequisite are earned. A green main run, merge,
+  or certification does not authorize publication. Certification is a separate
+  post-candidate workflow and Actions artifact; protected release inputs bind its
+  run ID, attempt, artifact ID, and REST digest. Before npm, stage one exact
+  tag/draft, one `effect-build/release-escrow@2` container holding the descriptor,
+  payload, and certification wrappers, and nine final assets: the seven tarballs,
+  one `effect-build/release-manifest@2`, and the opaque
+  `effect-build-v0.5.0-apple-certification.bin`. That is ten staged assets including
+  escrow. The manifest embeds the canonical Apple certification index and exact
+  certification-artifact subject. Candidate freshness is required through initial
+  preflight; later expiry or Actions artifact deletion may use only identical
+  wrapper bytes from the verified escrow. The coordinator treats A7 Notary
+  provider JSON/status and detailed receipt/reconciliation-evidence bodies as
+  opaque and provisional while authenticating their enclosing bytes.
 - Keep library source Effect-platform-neutral: no `node:*` imports or
   `Effect.runPromise` under `packages/*/src`; applications provide one official
   platform Layer.

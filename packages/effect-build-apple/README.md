@@ -72,7 +72,8 @@ Xcode-owned `notarytool` and `stapler` paths are caller-resolved rather than dis
 library never installs a tool or falls back to another executable.
 
 `Artifact.observeExecutable` is the one-way bridge from a hashed macOS `effect-build/Artifact.Executable`: it independently
-rehashes the committed bytes and rejects disabled hashing, non-macOS targets, or producer metadata mismatches.
+rehashes the committed bytes, binds the provider target to the thin Mach-O CPU type, and rejects disabled hashing, non-macOS
+targets, FAT/universal input, or producer metadata mismatches.
 
 ## Policy and credential ownership
 

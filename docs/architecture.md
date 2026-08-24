@@ -1,9 +1,10 @@
 # Architecture
 
 The approved target is `effect-build/v0.5-contract@1` in
-[`tooling/v05-contract.json`](../tooling/v05-contract.json). The source at the
-recorded candidate SHA is transitional; this page separates its mechanics from
-the v0.5 guarantees.
+[`tooling/v05-contract.json`](../tooling/v05-contract.json). The source remains
+transitional for the core/profile hard cut. The Apple owning lane is implemented;
+this page separates implementation from still-unearned compatibility and
+distribution evidence.
 
 ## Current candidate
 
@@ -11,7 +12,8 @@ Core currently exposes `Target`, `Artifact`, `BuildError`, and a public
 `Toolchain` callback kernel. Bun and Deno executable compilation, Bun and Deno
 directory bundling, esbuild native operations, raw Node SEA assembly, and
 Rolldown native operations sit in provider packages with one-way dependencies
-on core.
+on core. `effect-build-apple` also depends only on core and exposes the selected
+nine-subpath direct-Developer-ID family without a compiler-sibling dependency.
 
 Executable publication stages one file and commits it through one rename. The
 current Bun and Deno bundle path is different: it renames staged files into an
@@ -92,16 +94,40 @@ installer scripts remain caller/release-system policy and require a later
 explicitly funded API. Exact Notary JSON/status decoding and detailed receipt
 and evidence shapes remain provisional until credential-backed A7 fixtures.
 
+The owning implementation stage has frozen the operation/service names and
+non-Notary input/result structures in `tooling/public-api.json`. It also freezes
+the nominal boundary between durable `SubmittedReceipt` data and live or
+reconciled `Submission` query authority. `Artifact.LifecycleError` and the
+generated tagged error constructors are intentional public recovery surfaces.
+A7 may still force a breaking change to the exact Notary provider decoder/status
+mapping or detailed Notary receipt/reconciliation-evidence structures.
+
 Every local mutator consumes authenticated immutable input, works in private
 staging, revalidates input before work and staged output before publication,
 and produces a new artifact, digest, and provenance edge. Notary is a remote,
 resumable observation bound to one input digest and submission ID; it does not
-mutate bytes or blindly resubmit an unknown outcome. Assessment binds tool and
-quarantined clean-host observations to unchanged bytes. The consuming
-application or release system—not this package—chooses form, channel, bundle
-identity, install policy, credentials, approval, retry policy, publication, and
-retention. Mac App Store distribution and universal-binary construction are
-outside v0.5.
+mutate bytes or blindly resubmit an unknown outcome. Assessment records only
+host-local static signature and policy observations bound to unchanged bytes;
+the separate G cells own quarantined clean-host Gatekeeper evidence. The
+consuming application or release system—not this package—chooses form, channel,
+bundle identity, install policy, credentials, approval, retry policy,
+publication, and retention. Mac App Store distribution and universal-binary
+construction are outside v0.5.
+
+Files publish atomically without clobbering by hard link. Trees reserve the
+destination and atomically replace only that operation-owned reservation; the
+destination parent is caller-controlled, and no hostile local reservation-swap
+guarantee is claimed. Notary persists and fsyncs a no-clobber attempt before
+launch. Once complete child output exists, post-run tool authentication,
+parsing, and durable sidecar commit finish in one uninterruptible region so a
+returned submission ID is not lost. Stored receipt bytes remain data rather
+than query authority, and blind resubmission is forbidden.
+
+Local A0, A1, and A9 evidence is green at Apple implementation revision
+`5718e83907e8e463a16c2dc186e70fa3f5ca90a1`, but those cells are not formally
+earned without retained exact-revision receipts/CI. A2–A8 and
+G-App/G-ZIP/G-DMG/G-PKG are not earned; no Developer ID or Notary credentials
+and no clean host were used.
 
 ### Lifecycle
 
