@@ -22,6 +22,14 @@ coordinates; admits only the exact target host before download; and returns
 structurally inspected, executed, digest-bound receipts. The matrix has not been
 dispatched, so those receipts are implemented capability, not earned evidence.
 
+The 84 non-Apple compatibility coordinates are likewise materialized behind a
+separate manual dispatch: 27 provider/browser/host cells with Playwright 1.62.1
+and revisions 1234/1538/2336, 15 provider-native tool/host cells, and 42 strict
+packed-consumer package/Effect/host cells. Their aggregation reauthenticates the
+successful jobs and exact receipt artifacts. Local sampling has executed all
+three browser providers in Chromium and a packed oldest-Effect coordinate; the
+full hosted matrix has not run and is not claimed as evidence.
+
 | Package                 | Current candidate                                                                    | v0.5 target                                                               |
 | ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | `effect-build`          | canonical artifacts and role-specific Author/Profile subpaths; no public `Toolchain` | same frozen API with exact compatibility evidence                         |

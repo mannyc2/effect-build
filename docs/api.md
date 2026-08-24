@@ -84,6 +84,15 @@ architecture inspection, and target execution. The repository aggregates only
 after all coordinate jobs succeed. Until a workflow run returns those receipts,
 the target support cells remain unadvertised.
 
+Non-Apple compatibility certification is also an explicit manual matrix. It
+executes every frozen browser, provider-native, and packed-consumer coordinate
+and aggregates 84 job-bound receipt artifacts without pruning. The browser lane
+uses exact Playwright 1.62.1 revisions and exercises a dynamic chunk, generated
+module host, authenticated stylesheet and resource, and immutable generation.
+The packed lane tests both the oldest admitted Effect peer and the repository
+development point with strict npm peer resolution on all three certification
+hosts. Implemented workflow topology is not substituted for executed receipts.
+
 `effect-build-apple` exposes authenticated artifacts, Developer ID Application
 signing, app/ZIP/DMG construction, the deliberately narrow one-app Developer ID
 Installer package, Notary submission/reconciliation, stapling, and digest-bound

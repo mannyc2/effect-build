@@ -130,6 +130,9 @@ const makeServices = (options?: LayerOptions) =>
 
     const browserProduce = Effect.fn("effect-build-bun/Profile.produceStaticBrowserApplication")(
       function*(request: StaticBrowserApplication.Request, staging: string) {
+        const requestedEntrypoint = yield* fileSystem.realPath(request.entrypoint).pipe(
+          Effect.mapError((cause) => failed("resolve-browser-entrypoint", cause)),
+        );
         return yield* Effect.scoped(Effect.gen(function*() {
           const metafilePath = yield* fileSystem.makeTempFileScoped({ prefix: "effect-build-bun-browser-" }).pipe(
             Effect.mapError((cause) => failed("allocate-browser-metafile", cause)),
@@ -207,13 +210,22 @@ const makeServices = (options?: LayerOptions) =>
               imports.push(relativeByMetadataPath.get(importedMetadataPath)!);
             }
             files.push(Object.freeze({ path: relativePath, mediaType, imports: Object.freeze(imports) }));
-            if (output.entryPoint !== undefined) entryModule = relativePath;
+            if (output.entryPoint !== undefined) {
+              const observedEntrypoint = yield* fileSystem.realPath(path.resolve(output.entryPoint)).pipe(
+                Effect.mapError((cause) => failed("resolve-browser-metadata-entrypoint", cause)),
+              );
+              if (path.normalize(observedEntrypoint) === path.normalize(requestedEntrypoint)) {
+                entryModule = relativePath;
+              }
+            }
           }
           if (entryModule === undefined) {
             return yield* new PortableUnsupported({
               profile: StaticBrowserApplication.protocol,
               provider: identity.package,
-              reason: "no authoritative entry module",
+              reason: `no authoritative entry module among ${
+                outputEntries.map(([, output]) => output.entryPoint ?? "<none>").join(", ")
+              }`,
             });
           }
           files.sort((left, right) => TreeSnapshot.comparePortablePaths(left.path, right.path));

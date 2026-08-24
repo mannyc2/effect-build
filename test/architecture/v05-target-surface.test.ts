@@ -108,4 +108,33 @@ describe("v0.5 target surface", () => {
     const packageManifest = await readFile(resolve(root, "packages/effect-build-node-sea/package.json"), "utf8");
     expect(packageManifest).not.toContain("node-target-finalizer");
   });
+
+  it("materializes all 84 non-Apple compatibility coordinates without pruning", async () => {
+    const workflow = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as {
+      readonly jobs: Readonly<
+        Record<string, {
+          readonly if?: string;
+          readonly needs?: readonly string[];
+          readonly strategy?: { readonly matrix?: Readonly<Record<string, readonly unknown[]>> };
+        }>
+      >;
+    };
+    const product = (job: string): number =>
+      Object.values(workflow.jobs[job]?.strategy?.matrix ?? {}).reduce((count, axis) => count * axis.length, 1);
+    expect(product("browser-compatibility")).toBe(27);
+    expect(product("provider-native-compatibility")).toBe(15);
+    expect(product("packed-consumer-compatibility")).toBe(42);
+    for (const job of ["browser-compatibility", "provider-native-compatibility", "packed-consumer-compatibility"]) {
+      expect(workflow.jobs[job]?.if).toContain("workflow_dispatch");
+    }
+    expect(workflow.jobs["compatibility-aggregate"]?.needs).toEqual([
+      "browser-compatibility",
+      "provider-native-compatibility",
+      "packed-consumer-compatibility",
+    ]);
+    const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
+      readonly devDependencies: Readonly<Record<string, string>>;
+    };
+    expect(manifest.devDependencies["@playwright/test"]).toBe("1.62.1");
+  });
 });

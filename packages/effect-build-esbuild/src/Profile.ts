@@ -108,11 +108,13 @@ const browserProvider = Layer.effect(
     const esbuildService = yield* Build.Esbuild;
     const produce = Effect.fn("effect-build-esbuild/Profile.produceStaticBrowserApplication")(
       function*(request: StaticBrowserApplication.Request, staging: string) {
+        const workingDirectory = path.dirname(path.resolve(request.entrypoint));
+        const requestedEntrypoint = path.normalize(path.resolve(request.entrypoint));
         const result = yield* mapBuildError(
           "produce-static-browser-application",
           esbuildService.build({
             entryPoints: [request.entrypoint],
-            absWorkingDir: path.dirname(path.resolve(request.entrypoint)),
+            absWorkingDir: workingDirectory,
             bundle: true,
             platform: "browser",
             format: "esm",
@@ -185,7 +187,10 @@ const browserProvider = Layer.effect(
             });
           }
           files.push(Object.freeze({ path: relativePath, mediaType, imports: Object.freeze(imports) }));
-          if (metadata.entryPoint !== undefined) entryModule = relativePath;
+          if (
+            metadata.entryPoint !== undefined
+            && path.normalize(path.resolve(workingDirectory, metadata.entryPoint)) === requestedEntrypoint
+          ) entryModule = relativePath;
         }
         if (entryModule === undefined) {
           return yield* new PortableUnsupported({
