@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,7 +53,7 @@ describe.skipIf(!enabled)("real Deno Bundle", () => {
     const outdir = join(root, "dist");
     const artifact = await run(DenoBundle.directWrite({ entrypoints: [entrypoint], outdir }));
     expect(artifact._tag).toBe("DirectWriteOutcome");
-    expect(artifact.outdir).toBe(outdir);
+    expect(artifact.outdir).toBe(await realpath(outdir));
     expect(artifact.tool.name).toBe("deno");
     const entry = artifact.files.find((file) => file.path.endsWith("bundle-entry.js"));
     expect(entry).toBeDefined();

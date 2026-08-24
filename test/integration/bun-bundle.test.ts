@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,7 +40,7 @@ describe("real Bun Bundle", () => {
       BunBundle.directWrite({ entrypoints: [entrypoint], outdir, target: "node", format: "esm" }),
     );
     expect(artifact._tag).toBe("DirectWriteOutcome");
-    expect(artifact.outdir).toBe(outdir);
+    expect(artifact.outdir).toBe(await realpath(outdir));
     expect(artifact.tool.name).toBe("bun");
     expect(artifact.files).toHaveLength(1);
     const [file] = artifact.files;

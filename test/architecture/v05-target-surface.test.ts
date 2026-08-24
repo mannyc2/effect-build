@@ -27,6 +27,14 @@ describe("v0.5 target surface", () => {
     expect(rootSource).not.toContain("Toolchain");
     expect(rootSource).not.toContain("Author");
     expect(rootSource).not.toContain("Profile");
+
+    const vitestConfig = await readFile(resolve(root, "vitest.config.ts"), "utf8");
+    for (const subpath of Object.keys(manifest.exports).filter((subpath) => subpath !== ".")) {
+      expect(vitestConfig, `missing source alias for ${subpath}`).toContain(
+        `"effect-build/${subpath.slice(2)}"`,
+      );
+    }
+    expect(vitestConfig).not.toContain("effect-build/Toolchain");
   });
 
   it("removes bundle and tool authority from the public artifact model", async () => {
