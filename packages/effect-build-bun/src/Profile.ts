@@ -214,14 +214,7 @@ const makeServices = (options?: LayerOptions) =>
             if (output.entryPoint !== undefined) {
               const metadataEntrypoint = toPlatformMetadataPath(path, output.entryPoint);
               const observedEntrypoint = yield* fileSystem.realPath(metadataEntrypoint).pipe(
-                Effect.mapError((cause) =>
-                  failed(
-                    `resolve-browser-metadata-entrypoint(${JSON.stringify(output.entryPoint)}=>${
-                      JSON.stringify(metadataEntrypoint)
-                    })`,
-                    cause,
-                  )
-                ),
+                Effect.mapError((cause) => failed("resolve-browser-metadata-entrypoint", cause)),
               );
               if (path.normalize(observedEntrypoint) === path.normalize(requestedEntrypoint)) {
                 entryModule = relativePath;

@@ -116,6 +116,7 @@ describe("rolldown Watch", () => {
     await writeFile(entry, 'export const generation = "gen-one";\n');
     let resultCloses = 0;
     let watcherCloses = 0;
+    let rebuildRequested = false;
     const events = await Effect.runPromise(
       Watch.events({
         input: entry,
@@ -132,9 +133,11 @@ describe("rolldown Watch", () => {
         }],
       }).pipe(
         Stream.tap((event) =>
-          event.code === "BUNDLE_END"
-            ? Effect.promise(() => writeFile(entry, 'export const generation = "gen-two";\n'))
-            : Effect.void
+          Effect.suspend(() => {
+            if (event.code !== "BUNDLE_END" || rebuildRequested) return Effect.void;
+            rebuildRequested = true;
+            return Effect.promise(() => writeFile(entry, 'export const generation = "gen-two";\n'));
+          })
         ),
         Stream.take(2),
         Stream.runCollect,

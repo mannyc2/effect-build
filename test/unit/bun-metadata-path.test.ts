@@ -10,6 +10,8 @@ describe("Bun metadata paths", () => {
       .toBe(String.raw`C:\Users\runner\entry.ts`);
     expect(toPlatformMetadataPath(win32, "/C:/Users/runner/entry.ts"))
       .toBe("C:/Users/runner/entry.ts");
+    expect(toPlatformMetadataPath(win32, "../../../../C:/Users/runner/entry.ts"))
+      .toBe("C:/Users/runner/entry.ts");
   });
 
   it("retains ordinary absolute paths and resolves relative metadata paths", () => {
