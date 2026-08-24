@@ -1,8 +1,10 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Exit } from "effect";
+import { execFile } from "node:child_process";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Profile from "../../packages/effect-build-bun/src/Profile.js";
 import * as NodeMain from "../../packages/effect-build/src/Author/NodeMain.js";
@@ -13,6 +15,13 @@ let fakeBun = "";
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-bun-profile-"));
+  if (process.platform === "win32") {
+    const { stdout } = await promisify(execFile)("where.exe", ["bun.exe"], { encoding: "utf8" });
+    const [executable] = stdout.split(/\r?\n/u).filter(Boolean);
+    if (executable === undefined) throw new Error("the pinned Bun executable is missing from PATH");
+    fakeBun = executable;
+    return;
+  }
   fakeBun = join(root, "bun");
   await writeFile(fakeBun, await readFile(new URL("../fixtures/tools/fake-bun.mjs", import.meta.url)));
   await chmod(fakeBun, 0o755);
