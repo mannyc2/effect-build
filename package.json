@@ -20,7 +20,7 @@
     "test:types": "tstyche",
     "test:unit": "vitest run test/unit",
     "test:architecture": "vitest run test/architecture",
-    "test:control-planes": "node --test scripts/node-finalizer/common.test.mjs scripts/release/coordinator-state.test.mjs",
+    "test:control-planes": "node --test scripts/node-finalizer/common.test.mjs scripts/release/candidate.test.mjs scripts/release/coordinator-state.test.mjs scripts/release/admission.test.mjs scripts/apple-certification/receipt.test.mjs scripts/apple-certification/authenticate.test.mjs",
     "test:consumer": "node scripts/test-built-consumer.mjs",
     "test:consumer:fresh": "node scripts/test-built-consumer.mjs --fresh-install",
     "test:integration:bun": "vitest run test/integration/bun-compile-executable.test.ts test/integration/bun-bundle.test.ts",

@@ -196,6 +196,11 @@ export const observeArtifact = async ({ repository, runId, name, token }) => {
   throw new Error(`artifact ${name} observation exhausted`);
 };
 
+export const observeArtifactById = async ({ repository, artifactId, token }) => {
+  positiveDecimal(String(artifactId), "artifactId");
+  return githubJson(`/repos/${repository}/actions/artifacts/${artifactId}`, token);
+};
+
 export const observeRun = async ({ repository, runId, token }) =>
   githubJson(`/repos/${repository}/actions/runs/${runId}`, token);
 

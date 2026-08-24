@@ -105,17 +105,19 @@ describe("public surface", () => {
     expect(versions.size).toBe(1);
   });
 
-  it("keeps publication quarantined until the exact-prepacked coordinator exists", async () => {
+  it("keeps publication quarantined after materializing the exact-prepacked control plane", async () => {
     const workflow = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
     expect(workflow).toContain("name: Release (quarantined)");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("group: effect-build-release-v0.5.0");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain("contents: read");
-    expect(workflow).toContain("Fixed-seven coordinator not implemented");
-    expect(workflow).toContain("Refuse publication");
-    expect(workflow).not.toContain("id-token: write");
-    expect(workflow).not.toContain("environment: npm");
+    expect(workflow).toContain("Stage 9 authority is unearned");
+    expect(workflow).toContain("if: false");
+    expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("environment: npm");
+    expect(workflow).toContain("candidateWorkflowRunId");
+    expect(workflow).toContain("appleCertificationArtifactDigest");
     expect(workflow).not.toContain("npm publish");
     expect(workflow).not.toContain("APPLE_RELEASE_");
   });

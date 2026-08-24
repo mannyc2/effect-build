@@ -1,9 +1,48 @@
 name: Release (quarantined)
 
-# Stage 0 disables the unsafe green-main publisher. This manual stub confers no
-# release authority and performs no checkout, install, build, pack, or mutation.
 on:
   workflow_dispatch:
+    inputs:
+      candidateWorkflowRunId:
+        description: Exact successful candidate workflow run ID
+        required: true
+        type: string
+      candidateWorkflowRunAttempt:
+        description: Exact successful candidate workflow run attempt
+        required: true
+        type: string
+      descriptorArtifactId:
+        description: Exact candidate descriptor artifact ID
+        required: true
+        type: string
+      descriptorArtifactDigest:
+        description: Exact candidate descriptor REST digest
+        required: true
+        type: string
+      payloadArtifactId:
+        description: Exact candidate payload artifact ID
+        required: true
+        type: string
+      payloadArtifactDigest:
+        description: Exact candidate payload REST digest
+        required: true
+        type: string
+      appleCertificationWorkflowRunId:
+        description: Exact successful Apple certification workflow run ID
+        required: true
+        type: string
+      appleCertificationWorkflowRunAttempt:
+        description: Exact Apple certification workflow run attempt, which must be 1
+        required: true
+        type: string
+      appleCertificationArtifactId:
+        description: Exact Apple certification artifact ID
+        required: true
+        type: string
+      appleCertificationArtifactDigest:
+        description: Exact Apple certification REST digest
+        required: true
+        type: string
 
 concurrency:
   group: effect-build-release-v0.5.0
@@ -13,12 +52,28 @@ permissions:
   contents: read
 
 jobs:
-  coordinator-not-implemented:
-    name: Fixed-seven coordinator not implemented
+  quarantine:
+    name: Refuse external mutation while Stage 9 authority is unearned
     runs-on: ubuntu-24.04
     steps:
-      - name: Refuse publication
+      - name: Keep the implemented fixed-seven control plane unreachable
         shell: bash
         run: |
-          echo "::error::v0.5 publication remains disabled until the exact-prepacked fixed-seven coordinator is implemented and reviewed"
+          echo "::error::v0.5 publication remains quarantined: the exact Apple artifact, npm namespace bootstrap, seven trusted-publisher bindings, protected-environment ID, and reviewer ID are not yet certified and frozen"
+          exit 1
+
+  stage-release-escrow:
+    if: false
+    name: stage-release-escrow
+    environment: npm
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    steps:
+      - name: Unreachable until the frozen contract earns external mutation authority
+        shell: bash
+        run: |
+          echo "::error::the fixed-seven coordinator is implemented and tested, but this privileged entry remains structurally unreachable"
           exit 1

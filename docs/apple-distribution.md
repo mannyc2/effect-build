@@ -320,9 +320,13 @@ Four statuses must remain distinct:
    seven registry records, and published GitHub last. Merge does not authorize
    publication.
 
-The current release workflow is deliberately quarantined and always fails; it
-does not build, pack, sign, notarize, tag, or publish. The future coordinator
-must consume the exact prebuilt/tested tarballs and the independently produced
+The release workflow remains deliberately quarantined and always fails; it does
+not build, pack, sign, notarize, tag, or publish. The repository now contains
+the fixed-seven convergence state machine, closed recovery admission, candidate
+and certification authenticators, and exact certification-envelope workflow.
+The protected release job remains structurally unreachable until its external
+authorities are earned and frozen. An authorized coordinator execution must
+consume the exact prebuilt/tested tarballs and the independently produced
 certification artifact, obtain fresh protected `npm` environment approval, and
 bind all three Actions wrappers—candidate descriptor, candidate payload, and
 certification artifact—into `effect-build/release-escrow@2`. The canonical

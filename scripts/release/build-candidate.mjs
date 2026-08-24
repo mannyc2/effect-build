@@ -13,6 +13,7 @@ import {
   requireEnvironment,
   sha256,
 } from "../node-finalizer/common.mjs";
+import { validateCandidateDescriptor } from "./candidate.mjs";
 
 const candidate = contract.release.candidateIdentity;
 const packageNames = contract.release.orderedPackages;
@@ -34,7 +35,7 @@ const manifestFromTarball = (bytes) => {
   const archive = gunzipSync(bytes);
   const record = 512;
   for (let offset = 0; offset < archive.byteLength; offset += record) {
-    const name = archive.subarray(offset, offset + 100).toString("utf8").replace(/\0.*$/u, "");
+    const name = archive.subarray(offset, offset + 100).toString("utf8").split("\0", 1)[0];
     const size = Number.parseInt(archive.subarray(offset + 124, offset + 136).toString("utf8").trim() || "0", 8);
     if (name === "package/package.json") {
       return JSON.parse(archive.subarray(offset + record, offset + record + size).toString("utf8"));
@@ -107,6 +108,7 @@ const descriptor = {
   packages: records,
 };
 const destination = output;
+validateCandidateDescriptor(canonicalBytes(descriptor), { now: created });
 await mkdir(dirname(destination), { recursive: true });
 await writeFile(destination, canonicalBytes(descriptor), { flag: "wx" });
 process.stdout.write(`${JSON.stringify({ descriptor: destination, sha256: sha256(canonicalBytes(descriptor)) })}\n`);

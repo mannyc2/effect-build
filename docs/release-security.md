@@ -1,15 +1,15 @@
 # Releases
 
 The release target is `effect-build/v0.5-contract@1` in
-[`tooling/v05-contract.json`](../tooling/v05-contract.json). Stage 0 has
-quarantined the candidate's unsafe green-main publisher. The current manual
-workflow deliberately fails and has read-only permissions; it cannot publish.
+[`tooling/v05-contract.json`](../tooling/v05-contract.json). The unsafe
+green-main publisher remains removed. The current manual workflow deliberately
+fails before its structurally unreachable protected job; it cannot publish.
 
 ## Candidate
 
-A future read-only job may construct a candidate automatically from one exact
-source SHA. It builds once, packs the seven packages once, inspects and hashes the
-seven tarballs, and tests those exact bytes. The authenticated candidate is the
+The read-only candidate workflow now constructs a candidate automatically from
+one exact main SHA. It builds once, packs the seven packages once, inspects and
+hashes the seven tarballs, and tests those exact bytes. The authenticated candidate is the
 only package-byte input the privileged workflow may consume; the separate Apple
 certification artifact supplies evidence only. That workflow may not checkout,
 install, build, or pack.

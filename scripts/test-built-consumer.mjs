@@ -40,7 +40,7 @@ const packedManifest = async (tarball) => {
   const archive = gunzipSync(await readFile(tarball));
   const record = 512;
   for (let offset = 0; offset < archive.byteLength; offset += record) {
-    const name = archive.subarray(offset, offset + 100).toString("utf8").replace(/\0.*$/, "");
+    const name = archive.subarray(offset, offset + 100).toString("utf8").split("\0", 1)[0];
     const size = Number.parseInt(archive.subarray(offset + 124, offset + 136).toString("utf8").trim() || "0", 8);
     if (name === "package/package.json") {
       return JSON.parse(archive.subarray(offset + record, offset + record + size).toString("utf8"));

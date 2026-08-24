@@ -3575,29 +3575,98 @@ describe("v0.5 hard-cut contract", () => {
       "automatic-generation-garbage-collection",
       "continuous-compatibility-inferred-from-semver",
     ]);
-    expect(parseYaml(workflow) as unknown).toEqual({
-      name: "Release (quarantined)",
-      on: { workflow_dispatch: null },
-      concurrency: {
-        group: "effect-build-release-v0.5.0",
-        "cancel-in-progress": false,
-      },
-      permissions: { contents: "read" },
-      jobs: {
-        "coordinator-not-implemented": {
-          name: "Fixed-seven coordinator not implemented",
-          "runs-on": "ubuntu-24.04",
-          steps: [
-            {
-              name: "Refuse publication",
-              shell: "bash",
-              run:
-                'echo "::error::v0.5 publication remains disabled until the exact-prepacked fixed-seven coordinator is implemented and reviewed"\nexit 1\n',
-            },
-          ],
-        },
-      },
+    const parsedWorkflow = parseYaml(workflow) as {
+      readonly name: string;
+      readonly on: { readonly workflow_dispatch: { readonly inputs: Record<string, unknown> } };
+      readonly concurrency: { readonly group: string; readonly "cancel-in-progress": boolean };
+      readonly permissions: Record<string, string>;
+      readonly jobs: Record<string, {
+        readonly if?: boolean;
+        readonly environment?: string;
+        readonly permissions?: Record<string, string>;
+        readonly steps: readonly unknown[];
+      }>;
+    };
+    expect(parsedWorkflow.name).toBe("Release (quarantined)");
+    expect(Object.keys(parsedWorkflow.on.workflow_dispatch.inputs)).toEqual(
+      contract.release.candidateIdentity.releaseInputFields,
+    );
+    expect(parsedWorkflow.concurrency).toEqual({
+      group: "effect-build-release-v0.5.0",
+      "cancel-in-progress": false,
     });
+    expect(parsedWorkflow.permissions).toEqual({ contents: "read" });
+    expect(Object.keys(parsedWorkflow.jobs)).toEqual(["quarantine", "stage-release-escrow"]);
+    const protectedJob = parsedWorkflow.jobs["stage-release-escrow"];
+    expect(protectedJob).toMatchObject({
+      if: false,
+      environment: "npm",
+      permissions: { actions: "read", contents: "write", "id-token": "write" },
+    });
+    const privilegedSource = JSON.stringify(protectedJob);
+    expect(privilegedSource).not.toMatch(/actions\/checkout|setup-node|\binstall\b|\bbuild\b|\bpack\b/u);
+    expect(
+      Object.values(parsedWorkflow.jobs).filter(({ environment }) => environment === "npm"),
+    ).toHaveLength(1);
+  });
+
+  it("materializes the exact candidate and Apple evidence workflows without matrix pruning", async () => {
+    const contract = await readJson<V05Contract>("tooling/v05-contract.json");
+    const candidateSource = await readFile(resolve(root, ".github/workflows/candidate.yml"), "utf8");
+    const appleSource = await readFile(resolve(root, ".github/workflows/apple-certification.yml"), "utf8");
+    const candidate = parseYaml(candidateSource) as {
+      readonly on: { readonly push: { readonly branches: readonly string[] } };
+      readonly jobs: Record<string, unknown>;
+    };
+    const apple = parseYaml(appleSource) as {
+      readonly on: { readonly workflow_dispatch: { readonly inputs: Record<string, unknown> } };
+      readonly jobs: {
+        readonly distribution: {
+          readonly strategy: {
+            readonly matrix: {
+              readonly scenario: readonly string[];
+              readonly target: readonly { readonly token: string; readonly runner: string }[];
+            };
+          };
+        };
+        readonly "clean-host": {
+          readonly strategy: {
+            readonly matrix: {
+              readonly product: readonly string[];
+              readonly target: readonly { readonly token: string; readonly runner: string }[];
+            };
+          };
+        };
+        readonly "certification-cells": {
+          readonly strategy: { readonly matrix: { readonly cell: readonly string[] } };
+        };
+      };
+    };
+    expect(candidate.on.push.branches).toEqual(["main"]);
+    expect(Object.keys(candidate.jobs)).toEqual(["build-pack-test"]);
+    expect(candidateSource).toContain("Pack the fixed seven exactly once");
+    expect(candidateSource).toContain("--tarball-directory release-candidate-payload");
+    expect(Object.keys(apple.on.workflow_dispatch.inputs)).toEqual(
+      contract.release.candidateIdentity.releaseInputFields.slice(0, 6),
+    );
+    const evidence = contract.release.appleCertificationEvidence as {
+      readonly certificationCells: readonly string[];
+      readonly appleDistributionCoordinates: readonly string[];
+      readonly appleCleanHostCoordinates: readonly string[];
+    };
+    const distributionMatrix = apple.jobs.distribution.strategy.matrix;
+    const cleanHostMatrix = apple.jobs["clean-host"].strategy.matrix;
+    expect(
+      distributionMatrix.scenario.flatMap((scenario) =>
+        distributionMatrix.target.map(({ token }) => `${scenario}|${token}`)
+      ),
+    ).toEqual(evidence.appleDistributionCoordinates);
+    expect(
+      cleanHostMatrix.product.flatMap((product) => cleanHostMatrix.target.map(({ token }) => `${product}|${token}`)),
+    ).toEqual(evidence.appleCleanHostCoordinates);
+    expect(apple.jobs["certification-cells"].strategy.matrix.cell).toEqual(evidence.certificationCells);
+    expect(appleSource).toContain("effect-build-v0.5.0-apple-certification");
+    expect(appleSource).not.toMatch(/APPLE_RELEASE_CERTIFIED_SHA|APPLE_RELEASE_CERTIFICATION_RECEIPT_SHA256/u);
   });
 
   it("keeps the authoritative docs on the same contract without stale guarantees", async () => {
