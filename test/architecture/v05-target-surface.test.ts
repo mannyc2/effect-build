@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -80,5 +81,31 @@ describe("v0.5 target surface", () => {
     expect(portable).not.toContain("Context.Service");
     expect(portable).not.toContain("Layer.Layer");
     expect(portable).not.toContain("finalize:");
+  });
+
+  it("keeps the 108-cell target finalizer private, exact, and manually admitted", async () => {
+    const workflow = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as {
+      readonly permissions: Readonly<Record<string, string>>;
+      readonly jobs: Readonly<
+        Record<string, {
+          readonly if?: string;
+          readonly needs?: string;
+          readonly strategy?: { readonly matrix?: Readonly<Record<string, readonly unknown[]>> };
+        }>
+      >;
+    };
+    expect(workflow.permissions.actions).toBe("read");
+    const construct = workflow.jobs["node-main-construct"]!;
+    const finalize = workflow.jobs["node-main-finalize"]!;
+    const product = (matrix: Readonly<Record<string, readonly unknown[]>> | undefined): number =>
+      Object.values(matrix ?? {}).reduce((count, axis) => count * axis.length, 1);
+    expect(product(construct.strategy?.matrix)).toBe(108);
+    expect(product(finalize.strategy?.matrix)).toBe(108);
+    expect(construct.if).toContain("workflow_dispatch");
+    expect(finalize.needs).toBe("node-main-construct");
+    expect(workflow.jobs["node-main-aggregate"]?.needs).toBe("node-main-finalize");
+
+    const packageManifest = await readFile(resolve(root, "packages/effect-build-node-sea/package.json"), "utf8");
+    expect(packageManifest).not.toContain("node-target-finalizer");
   });
 });

@@ -76,6 +76,14 @@ cannot mint portable SEA evidence. `NodeMainExecutable` exposes only the frozen
 evidence-bearing types and constants; the finalizer callback and constructors
 remain package-private to the schema-bound repository matrix.
 
+That private matrix is manually admitted and spans all 108 producer, format,
+construction-host, and target coordinates. Its controls use canonical JSON,
+strict two-file input/one-file output/one-file receipt artifact layouts,
+authoritative Actions REST bindings, exact-host admission, native-format and
+architecture inspection, and target execution. The repository aggregates only
+after all coordinate jobs succeed. Until a workflow run returns those receipts,
+the target support cells remain unadvertised.
+
 `effect-build-apple` exposes authenticated artifacts, Developer ID Application
 signing, app/ZIP/DMG construction, the deliberately narrow one-app Developer ID
 Installer package, Notary submission/reconciliation, stapling, and digest-bound

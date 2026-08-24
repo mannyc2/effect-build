@@ -15,6 +15,13 @@ Bun/esbuild/Rolldown profile adapters and the Node SEA public hard cut are
 implemented and frozen. Target-finalizer evidence, compatibility certification,
 and the recoverable release coordinator remain.
 
+The private Node target-finalizer implementation is present in `ci.yml` behind
+an explicit `workflow_dispatch` boolean. It authenticates the pinned Node
+manifest, signature, signer key, and archives; constructs all 108 frozen
+coordinates; admits only the exact target host before download; and returns
+structurally inspected, executed, digest-bound receipts. The matrix has not been
+dispatched, so those receipts are implemented capability, not earned evidence.
+
 | Package                 | Current candidate                                                                    | v0.5 target                                                               |
 | ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | `effect-build`          | canonical artifacts and role-specific Author/Profile subpaths; no public `Toolchain` | same frozen API with exact compatibility evidence                         |

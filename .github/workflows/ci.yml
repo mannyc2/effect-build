@@ -3,8 +3,16 @@ name: effect-build
 on:
   push: {}
   pull_request: {}
+  workflow_dispatch:
+    inputs:
+      run_node_target_matrix:
+        description: Run all 108 private Node target-finalizer coordinates
+        required: true
+        type: boolean
+        default: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -158,3 +166,174 @@ jobs:
             export EFFECT_BUILD_DENO_BIN="$(command -v deno)"
           fi
           bun run test:integration:target
+
+  node-main-construct:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_node_target_matrix
+    name: construct--node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction.token }}--to-${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        producer: [bun-cli, esbuild-api, rolldown-api]
+        format: [commonjs, module]
+        construction:
+          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
+          - { token: macos-aarch64, runner: macos-15 }
+          - { token: windows-x64, runner: windows-2025 }
+        target:
+          - macos-x64
+          - macos-aarch64
+          - linux-x64-gnu
+          - linux-aarch64-gnu
+          - windows-x64
+          - windows-aarch64
+    runs-on: ${{ matrix.construction.runner }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - name: Install GnuPG on macOS
+        if: runner.os == 'macOS'
+        run: brew install gnupg
+      - name: Install GnuPG on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install gnupg --no-progress -y
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Authenticate exact builder and target base distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .node-finalizer/tools
+          node scripts/node-finalizer/verify-node-base.mjs \
+            --target '${{ matrix.construction.token }}' \
+            --output '.node-finalizer/tools/builder${{ startsWith(matrix.construction.token, 'windows-') && '.exe' || '' }}' \
+            > .node-finalizer/builder.json
+          node scripts/node-finalizer/verify-node-base.mjs \
+            --target '${{ matrix.target }}' \
+            --output '.node-finalizer/tools/base${{ startsWith(matrix.target, 'windows-') && '.exe' || '' }}' \
+            > .node-finalizer/base.json
+      - name: Produce, seal, and construct the private coordinate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/node-finalizer/construct.mjs \
+            --producer '${{ matrix.producer }}' \
+            --format '${{ matrix.format }}' \
+            --construction-host '${{ matrix.construction.token }}' \
+            --target '${{ matrix.target }}' \
+            --builder "$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('.node-finalizer/builder.json')).executable)")" \
+            --base "$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('.node-finalizer/base.json')).executable)")" \
+            --output .node-finalizer/constructed
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction.token }}--to-${{ matrix.target }}--constructed
+          path: |
+            .node-finalizer/constructed/*--constructed
+            .node-finalizer/constructed/*--constructed.exe
+            .node-finalizer/constructed/*--assembler-offer.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  node-main-finalize:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_node_target_matrix
+    needs: node-main-construct
+    name: finalize--node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        producer: [bun-cli, esbuild-api, rolldown-api]
+        format: [commonjs, module]
+        construction_host: [linux-x64-gnu, macos-aarch64, windows-x64]
+        target:
+          - { token: macos-x64, runner: macos-15-intel }
+          - { token: macos-aarch64, runner: macos-15 }
+          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
+          - { token: linux-aarch64-gnu, runner: ubuntu-24.04-arm }
+          - { token: windows-x64, runner: windows-2025 }
+          - { token: windows-aarch64, runner: windows-11-arm }
+    runs-on: ${{ matrix.target.runner }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Authenticate input, finalize, inspect, and execute on the exact target
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/node-finalizer/finalize.mjs \
+            --producer '${{ matrix.producer }}' \
+            --format '${{ matrix.format }}' \
+            --construction-host '${{ matrix.construction_host }}' \
+            --target '${{ matrix.target.token }}' \
+            --output .node-finalizer/finalized
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}--finalized
+          path: .node-finalizer/finalized/*--finalized${{ startsWith(matrix.target.token, 'windows-') && '.exe' || '' }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Bind authoritative output artifact into the canonical receipt
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          coordinate='node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}'
+          node scripts/node-finalizer/complete-receipt.mjs \
+            --producer '${{ matrix.producer }}' \
+            --format '${{ matrix.format }}' \
+            --construction-host '${{ matrix.construction_host }}' \
+            --target '${{ matrix.target.token }}' \
+            --pending ".node-finalizer/finalized/${coordinate}--pending.json" \
+            --request ".node-finalizer/finalized/${coordinate}--request.json" \
+            --output ".node-finalizer/receipt/${coordinate}--target-finalizer-receipt.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}--receipt
+          path: .node-finalizer/receipt/*--target-finalizer-receipt.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  node-main-aggregate:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_node_target_matrix
+    needs: node-main-finalize
+    name: Aggregate 108 Node target-finalizer receipts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Reauthenticate all jobs, wrappers, layouts, controls, and returned bytes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/node-finalizer/aggregate.mjs node-main-target-finalizer-evidence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: node-main-target-finalizer-evidence
+          path: node-main-target-finalizer-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

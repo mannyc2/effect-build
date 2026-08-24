@@ -20,6 +20,7 @@
     "test:types": "tstyche",
     "test:unit": "vitest run test/unit",
     "test:architecture": "vitest run test/architecture",
+    "test:node-finalizer": "node --test scripts/node-finalizer/common.test.mjs",
     "test:consumer": "node scripts/test-built-consumer.mjs",
     "test:consumer:fresh": "node scripts/test-built-consumer.mjs --fresh-install",
     "test:integration:bun": "vitest run test/integration/bun-compile-executable.test.ts test/integration/bun-bundle.test.ts",
@@ -31,7 +32,7 @@
     "lint": "oxlint packages test typetest examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
-    "verify": "bun run build && bun run check && bun run test:types && bun run test:unit && node scripts/test-built-consumer.mjs --built && bun run test:architecture && bun run lint && bun run format:check",
+    "verify": "bun run build && bun run check && bun run test:types && bun run test:unit && node scripts/test-built-consumer.mjs --built && bun run test:architecture && bun run test:node-finalizer && bun run lint && bun run format:check",
     "verify:real": "bun run test:integration:bun && bun run test:integration:deno"
   },
   "devDependencies": {

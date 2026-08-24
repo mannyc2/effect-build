@@ -27,3 +27,11 @@ lane owns only the ad-hoc, no-timestamp `codesign --sign -` repair required for
 a runnable mutated Mach-O. Developer ID signing, entitlements and hardened
 runtime, Apple containers, notarization, stapling, and distribution assessment
 belong exclusively to the separate `effect-build-apple` operation family.
+
+The repository-only finalizer is a manual 108-coordinate CI matrix. It verifies
+the pinned Node release signature and archive digests, strictly authenticates
+private Actions artifact layouts and REST identities, admits only the exact
+target runner, repairs ad-hoc Mach-O signatures where required, independently
+inspects the native format and architecture, executes the returned bytes, and
+aggregates canonical receipts. Its presence does not itself advertise a target;
+only an exact successful matrix run can supply that evidence.
