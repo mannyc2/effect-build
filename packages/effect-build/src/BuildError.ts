@@ -1,5 +1,29 @@
 import { Schema } from "effect";
 
+const describeUnknown = (cause: unknown): string => {
+  if (typeof cause === "string") return cause;
+  if (cause instanceof Error) return cause.message;
+  if ((typeof cause === "object" && cause !== null) || typeof cause === "function") {
+    try {
+      const message = Reflect.get(cause, "message");
+      if (typeof message === "string") return message;
+    } catch {
+      // Fall through to the remaining bounded descriptions.
+    }
+    try {
+      const tag = Reflect.get(cause, "_tag");
+      if (typeof tag === "string") return tag;
+    } catch {
+      // Fall through to primitive coercion.
+    }
+  }
+  try {
+    return String(cause);
+  } catch {
+    return "unknown cause";
+  }
+};
+
 export class ToolNotFound extends Schema.TaggedError<ToolNotFound>()("ToolNotFound", {
   tool: Schema.String,
   command: Schema.String,
@@ -117,7 +141,7 @@ export class ProviderFailed extends Schema.TaggedError<ProviderFailed>()("Provid
   cause: Schema.Unknown,
 }) {
   override get message(): string {
-    const detail = this.cause instanceof Error ? this.cause.message : String(this.cause);
+    const detail = describeUnknown(this.cause);
     return `${this.provider} ${this.operation} failed${detail.length === 0 ? "" : `: ${detail}`}`;
   }
 }
