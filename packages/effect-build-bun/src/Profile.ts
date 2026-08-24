@@ -5,6 +5,7 @@ import * as TreeSnapshot from "effect-build/Author/TreeSnapshot";
 import { PortableUnsupported, ProviderFailed } from "effect-build/BuildError";
 import * as StaticBrowserApplication from "effect-build/Profile/StaticBrowserApplication";
 import { ChildProcessSpawner } from "effect/unstable/process";
+import { toPlatformMetadataPath } from "./internal/MetadataPath.js";
 
 export interface LayerOptions {
   /** Explicit Bun 1.3.14 executable; otherwise one deterministic PATH search. */
@@ -58,13 +59,6 @@ const mediaTypeOf = (relativePath: string): string | undefined => {
   if (lower.endsWith(".woff2")) return "font/woff2";
   if (lower.endsWith(".txt")) return "text/plain; charset=utf-8";
   return undefined;
-};
-
-const platformMetadataPath = (path: Path.Path, metadataPath: string): string => {
-  const windowsDrivePath = /^\/?[A-Za-z]:[\\/]/u.test(metadataPath);
-  const localPath = windowsDrivePath && metadataPath.startsWith("/") ? metadataPath.slice(1) : metadataPath;
-  if (windowsDrivePath) return localPath;
-  return path.isAbsolute(localPath) ? localPath : path.resolve(localPath);
 };
 
 const makeServices = (options?: LayerOptions) =>
@@ -218,9 +212,10 @@ const makeServices = (options?: LayerOptions) =>
             }
             files.push(Object.freeze({ path: relativePath, mediaType, imports: Object.freeze(imports) }));
             if (output.entryPoint !== undefined) {
-              const observedEntrypoint = yield* fileSystem.realPath(platformMetadataPath(path, output.entryPoint)).pipe(
-                Effect.mapError((cause) => failed("resolve-browser-metadata-entrypoint", cause)),
-              );
+              const observedEntrypoint = yield* fileSystem.realPath(toPlatformMetadataPath(path, output.entryPoint))
+                .pipe(
+                  Effect.mapError((cause) => failed("resolve-browser-metadata-entrypoint", cause)),
+                );
               if (path.normalize(observedEntrypoint) === path.normalize(requestedEntrypoint)) {
                 entryModule = relativePath;
               }
