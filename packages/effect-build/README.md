@@ -1,8 +1,24 @@
 # effect-build
 
-Portable artifact, target, matrix, and Author contracts for effect-build 0.4.
+Core exports the target vocabulary, authenticated executable observations,
+closed build errors, and role-specific authoring capabilities.
 
-The package root is namespace-only. Import values and types from the exact
-`Artifact`, `SystemTarget`, `Matrix`, `Author/Tool`, `Author/BorrowedOutput`,
-or `Author/Executable` subpath. It has no compiler selection, provider
-registry, fallback, or application runtime dependency.
+```ts
+import type * as Artifact from "effect-build/Artifact";
+import * as Generation from "effect-build/Author/Generation";
+import * as Tool from "effect-build/Author/Tool";
+import * as BuildError from "effect-build/BuildError";
+import * as Target from "effect-build/Target";
+```
+
+The v0.5 hard cut removed `effect-build/Toolchain`, mutable core bundle
+declarations, and ambient host-target inference without compatibility aliases.
+`Author/Generation` publishes immutable content-addressed trees and advances a
+single current reference. `Author/NodeMain` and
+`Profile/StaticBrowserApplication` own the two closed portable products, with
+provider work behind explicit Context services and core-owned validation,
+staging, authentication, and publication. Their external-author promotion gate
+is exercised from a fresh packed consumer with a duplicate core runtime graph.
+The Node SEA target API remains release-blocking work. See the
+[`effect-build/v0.5-contract@1`](https://github.com/mannyc2/effect-build/blob/main/docs/v0.5-contract.md)
+target decision.

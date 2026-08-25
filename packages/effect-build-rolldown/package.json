@@ -1,0 +1,52 @@
+{
+  "name": "effect-build-rolldown",
+  "version": "0.5.0",
+  "description": "Effect-native Rolldown Build and Watch operations.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "keywords": [
+    "effect",
+    "rolldown",
+    "bundle",
+    "javascript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mannyc2/effect-build.git",
+    "directory": "packages/effect-build-rolldown"
+  },
+  "bugs": {
+    "url": "https://github.com/mannyc2/effect-build/issues"
+  },
+  "homepage": "https://github.com/mannyc2/effect-build#readme",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./Build": { "types": "./dist/Build.d.ts", "import": "./dist/Build.js" },
+    "./Profile": { "types": "./dist/Profile.d.ts", "import": "./dist/Profile.js" },
+    "./Watch": { "types": "./dist/Watch.d.ts", "import": "./dist/Watch.js" }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json --force",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "effect-build": "workspace:^",
+    "rolldown": "1.2.5"
+  },
+  "peerDependencies": {
+    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+  },
+  "devDependencies": {
+    "effect": "4.0.0-rc.108"
+  }
+}

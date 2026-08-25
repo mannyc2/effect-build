@@ -1,0 +1,9 @@
+{
+  "name": "effect-build-example-rolldown",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "effect": "4.0.0-rc.108",
+    "effect-build-rolldown": "workspace:^"
+  }
+}

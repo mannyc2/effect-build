@@ -1,18 +1,31 @@
 # effect-build-esbuild
 
-Use `effect-build-esbuild/Build` for the selected build operation and
-`effect-build-esbuild/Context` for the selected incremental-context operation.
+Effect-native esbuild operations, in-process and in-memory: one-shot
+builds from `effect-build-esbuild/Build`, scoped incremental contexts from
+`effect-build-esbuild/Context`, and watch mode as a `Stream` from
+`effect-build-esbuild/Watch`. `effect-build-esbuild/Profile` is one explicit
+Layer providing both closed portable authoring services with exact esbuild
+0.28.2 identity and complete metafile analysis.
 
 ```ts
+import { Effect } from "effect";
 import * as Build from "effect-build-esbuild/Build";
 
-const program = Build.build({
-  entryPoints: ["src/main.ts"],
-  bundle: true,
-  outdir: "dist",
-  write: false,
-});
+const result = await Effect.runPromise(
+  Build.build({ entryPoints: ["src/main.ts"], bundle: true, write: false }).pipe(
+    Effect.provide(Build.layer),
+  ),
+);
 ```
 
-Each subpath owns its own layer. The package exposes no legacy bundle callback
-or a generic raw Esbuild escape hatch.
+Options are esbuild's own with one refinement: `write` must be the literal
+`false` — outputs stay in memory. `Build.transform` transpiles one file,
+`Build.analyzeMetafile` renders the native size report, `Context.make`
+returns a scoped context whose native `dispose` is owned by the Scope
+(cancel-then-dispose), and `Watch.changes` retains one pending completed build.
+A newer completion replaces an older pending completion and reports the count
+on `change.superseded`; broken rebuilds arrive as values on
+`change.result.errors`, and ending the stream stops the watcher. Failures are `EsbuildFailed`, exposing the
+native `errors`/`warnings` by reference. This native cancel/dispose behavior is
+not the portable OS process-tree cancellation guarantee. See the
+[repository](https://github.com/mannyc2/effect-build) for the full toolkit.

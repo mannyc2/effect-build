@@ -9,12 +9,12 @@
     ]
   },
   "include": [
-    "test/unit/v04-*.test.ts",
-    "test/architecture/v04-*.test.ts",
+    "test/unit/*.test.ts",
+    "test/architecture/*.test.ts",
+    "test/integration/*.test.ts",
     "vitest.config.ts"
   ],
   "exclude": [
-    "node_modules",
-    "test/consumer"
+    "node_modules"
   ]
 }

@@ -5,6 +5,9 @@
       "path": "./packages/effect-build"
     },
     {
+      "path": "./packages/effect-build-apple"
+    },
+    {
       "path": "./packages/effect-build-bun"
     },
     {
@@ -15,6 +18,9 @@
     },
     {
       "path": "./packages/effect-build-node-sea"
+    },
+    {
+      "path": "./packages/effect-build-rolldown"
     }
   ]
 }

@@ -1,0 +1,2 @@
+# Checkouts are LF everywhere; dprint and the packed tarballs assume it.
+* text=auto eol=lf
