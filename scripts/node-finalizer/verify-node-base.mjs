@@ -3,7 +3,13 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { nodeProfile, sha256, targetCell } from "./common.mjs";
+import {
+  canonicalBytes,
+  inspectNativeExecutable,
+  nodeProfile,
+  sha256,
+  targetCell,
+} from "./common.mjs";
 
 const execute = promisify(execFile);
 
@@ -91,11 +97,21 @@ const main = async () => {
       : join(extraction, folder, "bin", "node");
     const bytes = await readFile(executable);
     if (bytes.length === 0) throw new Error("authenticated Node executable is empty");
+    inspectNativeExecutable(bytes, target);
     const destination = resolve(output);
     await mkdir(dirname(destination), { recursive: true });
     await writeFile(destination, bytes, { flag: "wx", mode: process.platform === "win32" ? undefined : 0o755 });
     if (process.platform !== "win32") await chmod(destination, 0o755);
-    process.stdout.write(`${JSON.stringify({ target, executable: destination, archiveName: cell.distribution, archiveSha256: cell.sha256 })}\n`);
+    process.stdout.write(canonicalBytes({
+      protocol: "effect-build/authenticated-node-distribution-executable@1",
+      nodeVersion: "26.7.0",
+      target,
+      executable: destination,
+      executableBytes: String(bytes.length),
+      executableSha256: sha256(bytes),
+      archiveName: cell.distribution,
+      archiveSha256: cell.sha256,
+    }));
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

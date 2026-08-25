@@ -1,18 +1,18 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as CompileExecutable from "effect-build-bun/CompileExecutable";
+import { Command } from "effect-build-bun";
 
 const artifact = await Effect.runPromise(
-  CompileExecutable.compileExecutable({
-    entrypoint: "src/main.ts",
+  Command.CompileExecutable.compileExecutable({
+    entrypoints: ["src/main.ts"],
     outfile: "dist/app",
-    target: "linux-x64-gnu",
-    minify: true,
-    sourcemap: "linked",
+    target: "bun-linux-x64",
+    observation: "hashed",
+    options: { minify: true, sourcemap: "inline" },
   }).pipe(
-    Effect.provide(CompileExecutable.layer()),
+    Effect.provide(Command.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
 
-console.log(`${artifact.path} ${artifact.target} ${artifact.bytes} sha256=${artifact.sha256}`);
+console.log(`${artifact.path} ${artifact.target} ${artifact.bytes} sha256=${artifact.digest.value}`);

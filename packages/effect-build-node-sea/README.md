@@ -1,37 +1,41 @@
 # effect-build-node-sea
 
-The `Raw` lane exposes provider-native Node SEA assembly through
-`effect-build-node-sea/Raw`, driving `node --check` and
-`node --build-sea` over a file or byte main and optional assets.
+Exact Node 26.7.0 direct single-executable assembly through the selected-command
+lane.
 
 ```ts
-import * as Raw from "effect-build-node-sea/Raw";
+import { NodeServices } from "@effect/platform-node";
+import { Effect } from "effect";
+import { Command } from "effect-build-node-sea";
 
-Raw.assembleExecutable({
-  main: { _tag: "File", path: "dist/main.cjs", format: "commonjs" },
-  outfile: "dist/app",
-});
+await Effect.runPromise(
+  Command.AssembleExecutable.assembleDirect({
+    main: { _tag: "File", path: "src/main.cjs", format: "commonjs" },
+    outfile: "dist/app",
+    observation: "hashed",
+  }).pipe(
+    Effect.provide(Command.layer()),
+    Effect.provide(NodeServices.layer),
+  ),
+);
 ```
 
-This operation is provider-native only. Caller bytes, assets, an optional
-separate base, and caller-asserted target cannot mint portable target evidence.
-The separate `effect-build-node-sea/NodeMainExecutable` lane describes the
-evidence-bearing result using one authenticated Node 26.7.0 base,
-one sealed main, exact builder/base agreement, no assets, no snapshots, no code
-cache, structural target inspection, and exact-runner evidence. Cross-target
-finalization is confined to the private, schema-serializable repository
-certification/release capability; ordinary library callers do not receive a
-cross-target `AssembledExecutable` from that internal handoff; consequently the
-public module exposes no finalizer callback or result constructor. On macOS this
-lane owns only the ad-hoc, no-timestamp `codesign --sign -` repair required for
-a runnable mutated Mach-O. Developer ID signing, entitlements and hardened
-runtime, Apple containers, notarization, stapling, and distribution assessment
-belong exclusively to the separate `effect-build-apple` operation family.
+`Command.AssembleExecutable` is the only public operation. It accepts CommonJS
+or ESM mains and file-backed assets, delegates publication to core
+`Author/Executable`, and makes no caller-authored target-evidence claim. The
+legacy preparation-blob/injector path and former `Raw` and
+`NodeMainExecutable` subpaths are absent.
 
-The repository-only finalizer is a manual 108-coordinate CI matrix. It verifies
-the pinned Node release signature and archive digests, strictly authenticates
-private Actions artifact layouts and REST identities, admits only the exact
-target runner, repairs ad-hoc Mach-O signatures where required, independently
-inspects the native format and architecture, executes the returned bytes, and
-aggregates canonical receipts. Its presence does not itself advertise a target;
-only an exact successful matrix run can supply that evidence.
+The research-complete implementation also carries package-private candidates
+for provider-native CJS/ESM code cache, CJS startup snapshots, and explicit
+`execArgvExtension` policies (`none`, `env`, and `cli`). They run in the exact
+Node 26.7 evidence suite but are intentionally unreachable from package exports
+until their invalidation, relation, injection-resistance, and exact-host gates
+are certified.
+
+Cross-target Node-main work is a private five-construction-host repository
+matrix with authenticated builder/base distributions, independent native
+inspection, exact-target finalization, and receipts. Its control plane does not
+advertise any unexecuted target. macOS ad-hoc, no-timestamp signing repairs
+runnable Mach-O bytes only; Developer ID distribution belongs to
+`effect-build-apple`.

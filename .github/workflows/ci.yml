@@ -1,17 +1,18 @@
 name: effect-build
 
 on:
-  push: {}
+  push:
+    branches-ignore: [evidence/receipts-v1]
   pull_request: {}
   workflow_dispatch:
     inputs:
       run_node_target_matrix:
-        description: Run all 108 private Node target-finalizer coordinates
+        description: Run all 180 private Node target-finalizer coordinates
         required: true
         type: boolean
         default: false
       run_compatibility_matrix:
-        description: Run all 84 non-Apple compatibility coordinates
+        description: Run all 146 applicable non-Apple compatibility coordinates
         required: true
         type: boolean
         default: false
@@ -61,7 +62,8 @@ jobs:
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
-      - run: bun run test:integration:bun
+      - shell: bash
+        run: EFFECT_BUILD_BUN="$(command -v bun)" bun run test:integration:bun
 
   integration-deno:
     name: Real deno (${{ matrix.os }})
@@ -85,15 +87,12 @@ jobs:
         with:
           deno-version: 2.9.5
       - run: bun install --frozen-lockfile
-      - run: bun run test:integration:deno
+      - shell: bash
+        run: EFFECT_BUILD_DENO="$(command -v deno)" bun run test:integration:deno
 
   integration-node-sea:
-    name: Real Node SEA (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15, windows-2025]
-    runs-on: ${{ matrix.os }}
+    name: Real Node SEA (linux-x64-gnu)
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -106,7 +105,8 @@ jobs:
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
-      - run: bun run test:integration:node-sea
+      - shell: bash
+        run: EFFECT_BUILD_NODE="$(command -v node)" bun run test:integration:node-sea
 
   integration-apple-local:
     name: Real Apple tools (non-credentialed)
@@ -167,14 +167,44 @@ jobs:
           export EFFECT_BUILD_TARGET_COMPILER='${{ matrix.compiler }}'
           export EFFECT_BUILD_TARGET='${{ matrix.target }}'
           export EFFECT_BUILD_BUN_BIN="$(command -v bun)"
+          export EFFECT_BUILD_TARGET_RECEIPT='.compiler-target/compiler-target--${{ matrix.compiler }}--${{ matrix.target }}.json'
           if [[ '${{ matrix.compiler }}' == 'deno' ]]; then
             export EFFECT_BUILD_DENO_BIN="$(command -v deno)"
           fi
           bun run test:integration:target
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: compiler-target--${{ matrix.compiler }}--${{ matrix.target }}--receipt
+          path: .compiler-target/compiler-target--${{ matrix.compiler }}--${{ matrix.target }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  compiler-target-aggregate:
+    needs: target-cells
+    name: Aggregate 12 compiler-target receipts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Authenticate and aggregate every exact compiler-target receipt
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/aggregate-compiler-targets.mjs compiler-target-evidence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: compiler-target-evidence
+          path: compiler-target-evidence.json
+          if-no-files-found: error
+          retention-days: 30
 
   node-main-construct:
     if: github.event_name == 'workflow_dispatch' && inputs.run_node_target_matrix
-    name: construct--node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction.token }}--to-${{ matrix.target }}
+    name: construct--node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction.id }}--to-${{ matrix.target }}
     strategy:
       fail-fast: false
       max-parallel: 12
@@ -182,9 +212,11 @@ jobs:
         producer: [bun-cli, esbuild-api, rolldown-api]
         format: [commonjs, module]
         construction:
-          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
-          - { token: macos-aarch64, runner: macos-15 }
-          - { token: windows-x64, runner: windows-2025 }
+          - { id: linux-x64, runner: ubuntu-24.04, system_target: linux-x64-gnu }
+          - { id: linux-arm64, runner: ubuntu-24.04-arm, system_target: linux-aarch64-gnu }
+          - { id: macos-arm64, runner: macos-15, system_target: macos-aarch64 }
+          - { id: macos-x64, runner: macos-15-intel, system_target: macos-x64 }
+          - { id: windows-x64, runner: windows-2025, system_target: windows-x64 }
         target:
           - macos-x64
           - macos-aarch64
@@ -219,8 +251,8 @@ jobs:
           set -euo pipefail
           mkdir -p .node-finalizer/tools
           node scripts/node-finalizer/verify-node-base.mjs \
-            --target '${{ matrix.construction.token }}' \
-            --output '.node-finalizer/tools/builder${{ startsWith(matrix.construction.token, 'windows-') && '.exe' || '' }}' \
+            --target '${{ matrix.construction.system_target }}' \
+            --output '.node-finalizer/tools/builder${{ startsWith(matrix.construction.system_target, 'windows-') && '.exe' || '' }}' \
             > .node-finalizer/builder.json
           node scripts/node-finalizer/verify-node-base.mjs \
             --target '${{ matrix.target }}' \
@@ -233,14 +265,15 @@ jobs:
           node scripts/node-finalizer/construct.mjs \
             --producer '${{ matrix.producer }}' \
             --format '${{ matrix.format }}' \
-            --construction-host '${{ matrix.construction.token }}' \
+            --construction-host '${{ matrix.construction.id }}' \
             --target '${{ matrix.target }}' \
-            --builder "$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('.node-finalizer/builder.json')).executable)")" \
-            --base "$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('.node-finalizer/base.json')).executable)")" \
+            --builder-descriptor .node-finalizer/builder.json \
+            --base-descriptor .node-finalizer/base.json \
+            --bun "$(command -v bun)" \
             --output .node-finalizer/constructed
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction.token }}--to-${{ matrix.target }}--constructed
+          name: node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction.id }}--to-${{ matrix.target }}--constructed
           path: |
             .node-finalizer/constructed/*--constructed
             .node-finalizer/constructed/*--constructed.exe
@@ -259,7 +292,7 @@ jobs:
       matrix:
         producer: [bun-cli, esbuild-api, rolldown-api]
         format: [commonjs, module]
-        construction_host: [linux-x64-gnu, macos-aarch64, windows-x64]
+        construction_host: [linux-x64, linux-arm64, macos-arm64, macos-x64, windows-x64]
         target:
           - { token: macos-x64, runner: macos-15-intel }
           - { token: macos-aarch64, runner: macos-15 }
@@ -321,7 +354,7 @@ jobs:
   node-main-aggregate:
     if: github.event_name == 'workflow_dispatch' && inputs.run_node_target_matrix
     needs: node-main-finalize
-    name: Aggregate 108 Node target-finalizer receipts
+    name: Aggregate 180 Node target-finalizer receipts
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -356,8 +389,10 @@ jobs:
           - { token: firefox@1538, engine: firefox, revision: '1538' }
           - { token: webkit@2336, engine: webkit, revision: '2336' }
         host:
-          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
-          - { token: macos-aarch64, runner: macos-15 }
+          - { token: linux-x64, runner: ubuntu-24.04 }
+          - { token: linux-arm64, runner: ubuntu-24.04-arm }
+          - { token: macos-arm64, runner: macos-15 }
+          - { token: macos-x64, runner: macos-15-intel }
           - { token: windows-x64, runner: windows-2025 }
     runs-on: ${{ matrix.host.runner }}
     steps:
@@ -378,7 +413,7 @@ jobs:
       - name: Install the exact browser revision
         if: runner.os != 'Linux'
         run: bunx playwright install '${{ matrix.browser.engine }}'
-      - name: Build, serve, and execute the generation-qualified application
+      - name: Produce, lend, serve, and execute the BrowserModulePayload candidate
         shell: bash
         env:
           EFFECT_BUILD_BROWSER_PROVIDER: ${{ matrix.provider }}
@@ -388,8 +423,9 @@ jobs:
         run: |
           set -euo pipefail
           coordinate='browser--${{ matrix.provider }}--${{ matrix.browser.token }}--${{ matrix.host.token }}'
+          export EFFECT_BUILD_BUN_BIN="$(command -v bun)"
           export EFFECT_BUILD_COMPAT_RECEIPT=".compat/${coordinate}.json"
-          bunx vitest run test/integration/static-browser-compatibility.test.ts
+          bun x vitest run test/integration/browser-module-payload-compatibility.test.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: browser--${{ matrix.provider }}--${{ matrix.browser.token }}--${{ matrix.host.token }}--receipt
@@ -399,77 +435,150 @@ jobs:
 
   provider-native-compatibility:
     if: github.event_name == 'workflow_dispatch' && inputs.run_compatibility_matrix
-    name: native--${{ matrix.tool }}--${{ matrix.host.token }}
+    name: native--${{ matrix.cell }}--${{ matrix.host }}
     strategy:
       fail-fast: false
       matrix:
-        tool: [bun@1.3.14, deno@2.9.5, node@26.7.0, esbuild@0.28.2, rolldown@1.2.5]
-        host:
-          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
-          - { token: macos-aarch64, runner: macos-15 }
-          - { token: windows-x64, runner: windows-2025 }
-    runs-on: ${{ matrix.host.runner }}
+        cell:
+          - bun@1.3.14
+          - deno@2.9.5
+          - node@26.7.0
+          - esbuild@0.28.2+node@24.14.1
+          - esbuild@0.28.2+bun@1.3.14
+          - rolldown@1.2.5+node@24.14.1
+          - rolldown@1.2.5+bun@1.3.14
+        host: [linux-x64, linux-arm64, macos-arm64, macos-x64, windows-x64]
+        exclude:
+          - { cell: node@26.7.0, host: linux-arm64 }
+          - { cell: node@26.7.0, host: macos-arm64 }
+          - { cell: node@26.7.0, host: macos-x64 }
+          - { cell: node@26.7.0, host: windows-x64 }
+    runs-on: ${{ matrix.host == 'linux-x64' && 'ubuntu-24.04' || matrix.host == 'linux-arm64' && 'ubuntu-24.04-arm' || matrix.host == 'macos-arm64' && 'macos-15' || matrix.host == 'macos-x64' && 'macos-15-intel' || 'windows-2025' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: ${{ matrix.tool == 'node@26.7.0' && '26.7.0' || '24.14.1' }}
+          node-version: ${{ matrix.cell == 'node@26.7.0' && '26.7.0' || '24.14.1' }}
           package-manager-cache: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
       - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
-        if: matrix.tool == 'deno@2.9.5'
+        if: matrix.cell == 'deno@2.9.5'
         with:
           deno-version: 2.9.5
       - run: bun install --frozen-lockfile
-      - name: Execute the exact provider-native public contract
+      - name: Execute the exact admitted contract and conditional evidence candidates
         shell: bash
         env:
-          TOOL_CELL: ${{ matrix.tool }}
-          CERTIFICATION_HOST: ${{ matrix.host.token }}
+          PROVIDER_RUNTIME_CELL: ${{ matrix.cell }}
+          CERTIFICATION_HOST: ${{ matrix.host }}
         run: |
           set -euo pipefail
-          case "$TOOL_CELL" in
-            bun@1.3.14) bun run test:integration:bun ;;
-            deno@2.9.5) bun run test:integration:deno ;;
-            node@26.7.0) bun run test:integration:node-sea ;;
-            esbuild@0.28.2) bunx vitest run test/unit/esbuild-build.test.ts test/unit/esbuild-context.test.ts test/unit/esbuild-watch.test.ts ;;
-            rolldown@1.2.5) bunx vitest run test/unit/rolldown.test.ts ;;
+          node scripts/certification-host.mjs "$CERTIFICATION_HOST"
+          coordinate="native--${PROVIDER_RUNTIME_CELL}--${CERTIFICATION_HOST}"
+          observation_directory=".compat/${coordinate}--observations"
+          mkdir -p "$observation_directory"
+          export EFFECT_BUILD_PROVIDER_RUNTIME_CELL="$PROVIDER_RUNTIME_CELL"
+          export EFFECT_BUILD_CERTIFICATION_HOST="$CERTIFICATION_HOST"
+          export EFFECT_BUILD_PROVIDER_EVIDENCE_DIRECTORY="$observation_directory"
+          host_runtime='node@24.14.1'
+          case "$PROVIDER_RUNTIME_CELL" in
+            bun@1.3.14)
+              host_runtime='bun@1.3.14'
+              export EFFECT_BUILD_BUN="$(command -v bun)"
+              bun run test:integration:bun
+              ;;
+            deno@2.9.5)
+              host_runtime='deno@2.9.5'
+              export EFFECT_BUILD_DENO="$(command -v deno)"
+              bun run test:integration:deno
+              ;;
+            node@26.7.0)
+              host_runtime='node@26.7.0'
+              export EFFECT_BUILD_NODE="$(command -v node)"
+              bun run test:integration:node-sea
+              ;;
+            esbuild@0.28.2+node@24.14.1)
+              EFFECT_BUILD_EXPECTED_HOST_RUNTIME="$host_runtime" node ./node_modules/vitest/vitest.mjs run \
+                test/integration/provider-host-runtime.test.ts \
+                test/unit/esbuild-build.test.ts \
+                test/unit/esbuild-context.test.ts
+              node ./node_modules/vitest/vitest.mjs run \
+                test/unit/provider-command.test.ts \
+                test/integration/provider-command.test.ts \
+                -t 'esbuild'
+              ;;
+            esbuild@0.28.2+bun@1.3.14)
+              host_runtime='bun@1.3.14'
+              EFFECT_BUILD_EXPECTED_HOST_RUNTIME="$host_runtime" bun --bun ./node_modules/vitest/vitest.mjs run \
+                test/integration/provider-host-runtime.test.ts \
+                test/unit/esbuild-build.test.ts \
+                test/unit/esbuild-context.test.ts
+              bun --bun ./node_modules/vitest/vitest.mjs run \
+                test/unit/provider-command.test.ts \
+                test/integration/provider-command.test.ts \
+                -t 'esbuild'
+              ;;
+            rolldown@1.2.5+node@24.14.1)
+              EFFECT_BUILD_EXPECTED_HOST_RUNTIME="$host_runtime" node ./node_modules/vitest/vitest.mjs run \
+                test/integration/provider-host-runtime.test.ts \
+                test/unit/rolldown.test.ts \
+                test/unit/rolldown-api.test.ts
+              node ./node_modules/vitest/vitest.mjs run \
+                test/unit/provider-command.test.ts \
+                test/integration/provider-command.test.ts \
+                -t 'Rolldown'
+              ;;
+            rolldown@1.2.5+bun@1.3.14)
+              host_runtime='bun@1.3.14'
+              EFFECT_BUILD_EXPECTED_HOST_RUNTIME="$host_runtime" bun --bun ./node_modules/vitest/vitest.mjs run \
+                test/integration/provider-host-runtime.test.ts \
+                test/unit/rolldown.test.ts \
+                test/unit/rolldown-api.test.ts
+              bun --bun ./node_modules/vitest/vitest.mjs run \
+                test/unit/provider-command.test.ts \
+                test/integration/provider-command.test.ts \
+                -t 'Rolldown'
+              ;;
             *) exit 2 ;;
           esac
-          coordinate="native--${TOOL_CELL}--${CERTIFICATION_HOST}"
-          mkdir -p .compat
-          TOOL_CELL="$TOOL_CELL" CERTIFICATION_HOST="$CERTIFICATION_HOST" RECEIPT=".compat/${coordinate}.json" node --input-type=module -e \
-            'import { writeFileSync } from "node:fs"; writeFileSync(process.env.RECEIPT, JSON.stringify({ toolCell: process.env.TOOL_CELL, certificationHost: process.env.CERTIFICATION_HOST }) + "\n", { flag: "wx" })'
+          node scripts/provider-native-receipt.mjs \
+            "$PROVIDER_RUNTIME_CELL" \
+            "$CERTIFICATION_HOST" \
+            "$host_runtime" \
+            "$observation_directory" \
+            ".compat/${coordinate}.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: native--${{ matrix.tool }}--${{ matrix.host.token }}--receipt
-          path: .compat/native--${{ matrix.tool }}--${{ matrix.host.token }}.json
+          name: native--${{ matrix.cell }}--${{ matrix.host }}--receipt
+          path: .compat/native--${{ matrix.cell }}--${{ matrix.host }}.json
           if-no-files-found: error
           retention-days: 30
 
   packed-consumer-compatibility:
     if: github.event_name == 'workflow_dispatch' && inputs.run_compatibility_matrix
-    name: packed--${{ matrix.package }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}
+    name: packed--${{ matrix.package.name }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}
     strategy:
       fail-fast: false
       max-parallel: 12
       matrix:
         package:
-          - effect-build
-          - effect-build-apple
-          - effect-build-bun
-          - effect-build-deno
-          - effect-build-esbuild
-          - effect-build-node-sea
-          - effect-build-rolldown
+          - { name: effect-build, admission: release-train }
+          - { name: effect-build-apple, admission: release-train }
+          - { name: effect-build-bun, admission: release-train }
+          - { name: effect-build-deno, admission: release-train }
+          - { name: effect-build-esbuild, admission: release-train }
+          - { name: effect-build-node-sea, admission: release-train }
+          - { name: effect-build-rolldown, admission: conditional-provider-candidate }
         effect: [4.0.0-beta.104, 4.0.0-rc.108]
         host:
-          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
-          - { token: macos-aarch64, runner: macos-15 }
+          - { token: linux-x64, runner: ubuntu-24.04 }
+          - { token: linux-arm64, runner: ubuntu-24.04-arm }
+          - { token: macos-arm64, runner: macos-15 }
+          - { token: macos-x64, runner: macos-15-intel }
           - { token: windows-x64, runner: windows-2025 }
     runs-on: ${{ matrix.host.runner }}
     steps:
@@ -478,34 +587,39 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 24.14.1
+          node-version: ${{ matrix.package.name == 'effect-build-node-sea' && matrix.host.token == 'linux-x64' && '26.7.0' || '24.14.1' }}
           package-manager-cache: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
+      - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
+        if: matrix.package.name == 'effect-build-deno'
+        with:
+          deno-version: 2.9.5
       - run: bun install --frozen-lockfile
       - run: bun run build
       - name: Pack once and install the exact candidate coordinate with strict peers
         shell: bash
         run: |
           set -euo pipefail
-          coordinate='packed--${{ matrix.package }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}'
+          coordinate='packed--${{ matrix.package.name }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}'
           node scripts/test-packed-coordinate.mjs \
-            --package '${{ matrix.package }}' \
+            --package '${{ matrix.package.name }}' \
+            --admission '${{ matrix.package.admission }}' \
             --effect '${{ matrix.effect }}' \
             --host '${{ matrix.host.token }}' \
             --receipt ".compat/${coordinate}.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: packed--${{ matrix.package }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}--receipt
-          path: .compat/packed--${{ matrix.package }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}.json
+          name: packed--${{ matrix.package.name }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}--receipt
+          path: .compat/packed--${{ matrix.package.name }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}.json
           if-no-files-found: error
           retention-days: 30
 
   compatibility-aggregate:
     if: github.event_name == 'workflow_dispatch' && inputs.run_compatibility_matrix
     needs: [browser-compatibility, provider-native-compatibility, packed-consumer-compatibility]
-    name: Aggregate 84 non-Apple compatibility receipts
+    name: Aggregate 146 applicable non-Apple compatibility receipts
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd

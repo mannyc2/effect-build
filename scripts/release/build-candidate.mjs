@@ -4,19 +4,21 @@ import { dirname, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import {
   canonicalBytes,
-  contract,
   downloadArtifact,
   observeArtifact,
   positiveDecimal,
   readArtifactZip,
+  releaseCandidateIdentity,
+  releaseControl,
   requireEntries,
   requireEnvironment,
   sha256,
 } from "../node-finalizer/common.mjs";
 import { validateCandidateDescriptor } from "./candidate.mjs";
+import { assertLockstepPackageManifest } from "../lockstep-package.mjs";
 
-const candidate = contract.release.candidateIdentity;
-const packageNames = contract.release.orderedPackages;
+const candidate = releaseCandidateIdentity;
+const packageNames = releaseControl.orderedPackages;
 const payloadRoot = resolve(process.argv[2] ?? "release-candidate-payload");
 const output = resolve(process.argv[3] ?? "release-candidate.json");
 const repository = requireEnvironment("GITHUB_REPOSITORY");
@@ -51,12 +53,18 @@ for (const name of packageNames) {
   const filename = `${name}-0.5.0.tgz`;
   const bytes = await readFile(join(payloadRoot, filename));
   const manifest = manifestFromTarball(bytes);
-  if (manifest.name !== name || manifest.version !== "0.5.0") throw new Error(`packed identity mismatch for ${name}`);
+  assertLockstepPackageManifest({
+    manifest,
+    name,
+    version: "0.5.0",
+    firstPartyPackages: packageNames,
+    prerequisites: releaseControl.orderedPackagePrerequisites[name],
+  });
   records.push({
     name,
     version: "0.5.0",
     filename,
-    dependencyPrerequisites: contract.release.orderedPackagePrerequisites[name],
+    dependencyPrerequisites: releaseControl.orderedPackagePrerequisites[name],
     bytes: String(bytes.length),
     sha256: sha256(bytes),
     sha1: createHash("sha1").update(bytes).digest("hex"),

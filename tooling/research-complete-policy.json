@@ -1,0 +1,4308 @@
+{
+  "schema": "effect-build/research-complete-policy@1",
+  "status": "hard-cut-implementation-accounted-external-certification-open",
+  "contract": "tooling/research-complete-contract.json",
+  "supersedesAsProductAuthority": "tooling/v05-contract.json",
+  "authorityCommits": {
+    "maintainerDecisions": "c4cefd0acc2b7854cc25513967af1a8d415ccab0",
+    "r1OperationCrosswalk": "9f29d02f50211f85852d593579a2c96a6dc5167c",
+    "compatibilityClosure": "8a383db7a5f52ba382f10818330bbd4d1907c991",
+    "authorClosure": "5ebdc5f6df5a576d6762bfdc95d00d2ca06ecf06",
+    "productDecisions": "6f4a3329c8054943365b7c8bf3f39481fde57a14",
+    "surfaceAdjudication": "e8641a6ef2c4b8f1d8b0bc511d3079b7b1f9f84c",
+    "roleVerdicts": "c9ec68f8076b2e37e2aea739e4b406589688e956",
+    "matrixLaws": "87e350eb22c0f6fb24ed471b9de15cf89ab80758",
+    "v05AmbitiousContract": "e283d307a7d1b7833ce3d74889ad0d2fc9854b7f",
+    "v05AppleReconciliation": "2edd494b5d9428aa89ac9addd9762ac5636b283c",
+    "v05ReleaseControls": "ffa7c9ab1b3e59d177f3cc9381d83959559bb7ff"
+  },
+  "terminalOperationIds": {
+    "mandatory": [
+      "CAN-BUN-012",
+      "CAN-DENO-010",
+      "CAN-ESB-001",
+      "CAN-ESB-011",
+      "CAN-NODE-001"
+    ],
+    "supersededDirectSea": ["CAN-NODE-002", "CAN-NODE-003"]
+  },
+  "releaseControl": {
+    "candidateSchema": "effect-build/release-candidate@2",
+    "candidateIdentity": {
+      "sourceRepository": "https://github.com/mannyc2/effect-build",
+      "sourceRef": "refs/heads/main",
+      "workflowRepository": "mannyc2/effect-build",
+      "workflowPath": ".github/workflows/candidate.yml",
+      "workflowRef": "refs/heads/main",
+      "workflowEvent": "push",
+      "descriptorArtifactName": "effect-build-release-candidate-descriptor",
+      "descriptorFileName": "release-candidate.json",
+      "payloadArtifactName": "effect-build-release-candidate-payload",
+      "maximumAgeSeconds": 86400,
+      "requiredDescriptorFields": [
+        "schema",
+        "version",
+        "sourceRepository",
+        "sourceRef",
+        "sourceSha",
+        "workflowRepository",
+        "workflowPath",
+        "workflowRef",
+        "workflowRunId",
+        "workflowRunAttempt",
+        "workflowRunHeadSha",
+        "checkedOutSourceSha",
+        "payloadArtifactId",
+        "payloadArtifactName",
+        "payloadArtifactDigest",
+        "createdAt",
+        "expiresAt",
+        "packages"
+      ]
+    },
+    "candidatePackageRecordFields": [
+      "name",
+      "version",
+      "filename",
+      "dependencyPrerequisites",
+      "bytes",
+      "sha256",
+      "sha1",
+      "sha512SRI",
+      "packedName",
+      "packedVersion"
+    ],
+    "orderedPackages": [
+      "effect-build",
+      "effect-build-apple",
+      "effect-build-bun",
+      "effect-build-deno",
+      "effect-build-esbuild",
+      "effect-build-node-sea"
+    ],
+    "orderedPackagePrerequisites": {
+      "effect-build": [],
+      "effect-build-apple": ["effect-build"],
+      "effect-build-bun": ["effect-build"],
+      "effect-build-deno": ["effect-build"],
+      "effect-build-esbuild": ["effect-build"],
+      "effect-build-node-sea": ["effect-build"]
+    },
+    "conditionalPackageCandidates": ["effect-build-rolldown"]
+  },
+  "evidenceControl": {
+    "certificationHosts": [
+      { "id": "linux-x64", "runner": "ubuntu-24.04", "systemTarget": "linux-x64-gnu" },
+      { "id": "linux-arm64", "runner": "ubuntu-24.04-arm", "systemTarget": "linux-aarch64-gnu" },
+      { "id": "macos-arm64", "runner": "macos-15", "systemTarget": "macos-aarch64" },
+      { "id": "macos-x64", "runner": "macos-15-intel", "systemTarget": "macos-x64" },
+      { "id": "windows-x64", "runner": "windows-2025", "systemTarget": "windows-x64" }
+    ],
+    "targetExecutionHosts": [
+      { "target": "macos-x64", "runner": "macos-15-intel" },
+      { "target": "macos-aarch64", "runner": "macos-15" },
+      { "target": "linux-x64-gnu", "runner": "ubuntu-24.04" },
+      { "target": "linux-aarch64-gnu", "runner": "ubuntu-24.04-arm" },
+      { "target": "windows-x64", "runner": "windows-2025" },
+      { "target": "windows-aarch64", "runner": "windows-11-arm" }
+    ],
+    "directoryGeneration": {
+      "layout": {
+        "currentReference": "current.json",
+        "generationDirectory": "generations/sha256-<lowercase-hex>/",
+        "generationTree": "generations/sha256-<lowercase-hex>/tree/",
+        "manifest": "manifest.json",
+        "automaticGarbageCollection": false
+      },
+      "path": {
+        "separator": "/",
+        "portableComponentGrammar": "[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?",
+        "unicodePolicy": "portable-generation-paths-are-ascii",
+        "windowsReservedDeviceBasenames": [
+          "CON",
+          "PRN",
+          "AUX",
+          "NUL",
+          "COM1",
+          "COM2",
+          "COM3",
+          "COM4",
+          "COM5",
+          "COM6",
+          "COM7",
+          "COM8",
+          "COM9",
+          "LPT1",
+          "LPT2",
+          "LPT3",
+          "LPT4",
+          "LPT5",
+          "LPT6",
+          "LPT7",
+          "LPT8",
+          "LPT9"
+        ],
+        "forbid": [
+          "absolute-path",
+          "empty-component",
+          "dot-component",
+          "dot-dot-component",
+          "backslash",
+          "symlink-or-junction",
+          "windows-reserved-device-basename-with-or-without-extension",
+          "component-ending-dot-or-space",
+          "ascii-case-insensitive-collision"
+        ],
+        "ordering": "ascending-unsigned-utf8-byte-sequence"
+      },
+      "manifestBytes": {
+        "encoding": "utf-8-without-bom",
+        "serialization": "compact-json-with-one-trailing-lf",
+        "unknownFields": "reject",
+        "topLevelFieldOrder": ["protocol", "subject", "files"],
+        "subject": {
+          "unprofiledTreeFieldOrder": ["profile"],
+          "unprofiledTreeProfile": "effect-build/generation-subject/tree@1",
+          "staticBrowserFieldOrder": ["profile", "entry", "mount", "host"],
+          "staticBrowserEntry": "index.html",
+          "staticBrowserMount": "relative-same-origin",
+          "staticBrowserHost": "effect-build/generated-module-host@1"
+        },
+        "fileFieldOrder": ["path", "bytes", "digest", "mediaType"],
+        "digestFieldOrder": ["algorithm", "value"],
+        "byteCount": "canonical-unsigned-decimal-string",
+        "digest": "algorithm-sha256-plus-lowercase-64-hex-value",
+        "mediaType": {
+          "canonicalGrammar": "[a-z0-9][a-z0-9!#$%&*+.^_~-]*/[a-z0-9][a-z0-9!#$%&*+.^_~-]*(?:; charset=utf-8)?",
+          "canonicalization": "reject-noncanonical-do-not-normalize",
+          "staticBrowserNull": "forbidden",
+          "unprofiledTreeNull": "allowed"
+        },
+        "sample": "{\"protocol\":\"effect-build/generation-manifest@1\",\"subject\":{\"profile\":\"effect-build/profile/static-browser-application@1\",\"entry\":\"index.html\",\"mount\":\"relative-same-origin\",\"host\":\"effect-build/generated-module-host@1\"},\"files\":[{\"path\":\"assets/app.js\",\"bytes\":\"0\",\"digest\":{\"algorithm\":\"sha256\",\"value\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"mediaType\":\"text/javascript; charset=utf-8\"},{\"path\":\"index.html\",\"bytes\":\"0\",\"digest\":{\"algorithm\":\"sha256\",\"value\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"mediaType\":\"text/html; charset=utf-8\"}]}\n",
+        "sampleSha256": "211ead14e221092d32c78fd7c992d27aeb54753a837a89d1ac3b063d0aa28a3a"
+      },
+      "currentReferenceBytes": {
+        "encoding": "utf-8-without-bom",
+        "serialization": "compact-json-with-one-trailing-lf",
+        "unknownFields": "reject",
+        "fieldOrder": ["protocol", "manifestDigest"],
+        "digestFieldOrder": ["algorithm", "value"],
+        "sample": "{\"protocol\":\"effect-build/current-generation@1\",\"manifestDigest\":{\"algorithm\":\"sha256\",\"value\":\"211ead14e221092d32c78fd7c992d27aeb54753a837a89d1ac3b063d0aa28a3a\"}}\n",
+        "sampleSha256": "6d7d3f6cc5b36918d08b0be1800ca5dd7f8bfb56ced3cf52b19bd347ea6f3a30"
+      },
+      "activation": "atomically-replace-current-reference-only",
+      "readerProtocol": [
+        "read-and-strictly-decode-current-reference-once",
+        "derive-and-pin-the-generation-name-from-the-one-manifest-digest-without-retry-or-fallback",
+        "read-and-hash-the-named-manifest",
+        "require-manifest-digest-to-match-the-reference-and-derived-generation-name",
+        "serve-only-manifest-listed-contained-files-from-the-pinned-generation",
+        "verify-byte-count-and-digest-before-lending-content",
+        "resolve-new-root-navigation-through-current-and-redirect-to-a-generation-qualified-url"
+      ]
+    },
+    "coordinateRules": {
+      "compilerTargets": {
+        "rule": "explicit-exact-coordinate-list",
+        "constructionHost": "linux-x64",
+        "coordinates": [
+          { "compiler": "bun", "target": "macos-x64" },
+          { "compiler": "bun", "target": "macos-aarch64" },
+          { "compiler": "bun", "target": "linux-x64-gnu" },
+          { "compiler": "bun", "target": "linux-x64-musl" },
+          { "compiler": "bun", "target": "linux-aarch64-gnu" },
+          { "compiler": "bun", "target": "windows-x64" },
+          { "compiler": "deno", "target": "macos-x64" },
+          { "compiler": "deno", "target": "macos-aarch64" },
+          { "compiler": "deno", "target": "linux-x64-gnu" },
+          { "compiler": "deno", "target": "linux-aarch64-gnu" },
+          { "compiler": "deno", "target": "windows-x64" },
+          { "compiler": "deno", "target": "windows-aarch64" }
+        ],
+        "expectedCoordinateCount": 12,
+        "operation": "compile-hash-and-independently-inspect-cross-target-executable",
+        "targetExecutionClaim": "none-structural-inspection-only-separate-exact-target-execution-gates-remain-open"
+      },
+      "browserModulePayload": {
+        "rule": "full-cartesian-product-no-pruning",
+        "axes": {
+          "providerGroup": ["bun-cli", "esbuild-api", "rolldown-api"],
+          "browserEngine": ["chromium@1234", "firefox@1538", "webkit@2336"],
+          "certificationHost": ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"]
+        },
+        "expectedCoordinateCount": 45,
+        "operation": "produce-lend-serve-and-exercise-browser-module-payload"
+      },
+      "nodeMainExecutable": {
+        "rule": "full-cartesian-product-no-pruning",
+        "axes": {
+          "producerGroup": ["bun-cli", "esbuild-api", "rolldown-api"],
+          "mainFormat": ["commonjs", "module"],
+          "constructionHost": ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"],
+          "target": [
+            "macos-x64",
+            "macos-aarch64",
+            "linux-x64-gnu",
+            "linux-aarch64-gnu",
+            "windows-x64",
+            "windows-aarch64"
+          ]
+        },
+        "expectedCoordinateCount": 180,
+        "targetExecutionHostRule": "each-coordinate-executes-on-the-one-targetExecutionHost-with-the-same-target",
+        "operation": "produce-seal-cross-assemble-inspect-and-execute"
+      },
+      "providerNativeLanes": {
+        "rule": "cartesian-product-minus-explicit-unsupported-cells",
+        "axes": {
+          "providerRuntimeCell": [
+            "bun@1.3.14",
+            "deno@2.9.5",
+            "node@26.7.0",
+            "esbuild@0.28.2+node@24.14.1",
+            "esbuild@0.28.2+bun@1.3.14",
+            "rolldown@1.2.5+node@24.14.1",
+            "rolldown@1.2.5+bun@1.3.14"
+          ],
+          "certificationHost": ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"]
+        },
+        "expectedCartesianCoordinateCount": 35,
+        "explicitUnsupportedCoordinates": [
+          {
+            "providerRuntimeCell": "node@26.7.0",
+            "certificationHost": "linux-arm64",
+            "reason": "public-node-sea-host-target-is-linux-x64-gnu-only"
+          },
+          {
+            "providerRuntimeCell": "node@26.7.0",
+            "certificationHost": "macos-arm64",
+            "reason": "public-node-sea-host-target-is-linux-x64-gnu-only"
+          },
+          {
+            "providerRuntimeCell": "node@26.7.0",
+            "certificationHost": "macos-x64",
+            "reason": "public-node-sea-host-target-is-linux-x64-gnu-only"
+          },
+          {
+            "providerRuntimeCell": "node@26.7.0",
+            "certificationHost": "windows-x64",
+            "reason": "public-node-sea-host-target-is-linux-x64-gnu-only"
+          }
+        ],
+        "expectedUnsupportedCoordinateCount": 4,
+        "expectedCoordinateCount": 31,
+        "observationProtocol": "effect-build/provider-native-operation-observation@1",
+        "receiptProtocol": "effect-build/provider-native-evidence-receipt@2",
+        "observationRule": "each successful test writes one canonical coordinate-bound marker per actually exercised operation or atom; receipt creation requires the exact marker set and rejects inferred, missing, or extra evidence",
+        "operation": "provider-native-public-contract-smoke"
+      },
+      "packedConsumers": {
+        "rule": "full-cartesian-product-no-pruning",
+        "axes": {
+          "package": [
+            "effect-build",
+            "effect-build-apple",
+            "effect-build-bun",
+            "effect-build-deno",
+            "effect-build-esbuild",
+            "effect-build-node-sea"
+          ],
+          "effect": ["4.0.0-beta.104", "4.0.0-rc.108"],
+          "certificationHost": ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"]
+        },
+        "expectedCoordinateCount": 60,
+        "operation": "fresh-exact-release-train-packed-install-with-strict-peer-dependencies"
+      },
+      "packedConditionalProviderCandidates": {
+        "rule": "full-cartesian-product-no-pruning",
+        "axes": {
+          "package": ["effect-build-rolldown"],
+          "effect": ["4.0.0-beta.104", "4.0.0-rc.108"],
+          "certificationHost": ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"]
+        },
+        "expectedCoordinateCount": 10,
+        "operation": "fresh-exact-conditional-provider-candidate-packed-install-with-no-package-admission"
+      }
+    },
+    "nodeMainExecutable": {
+      "assemblerCell": "node@26.7.0",
+      "intendedEvidenceCells": [
+        {
+          "target": "macos-x64",
+          "distribution": "node-v26.7.0-darwin-x64.tar.xz",
+          "sha256": "bd19c6b98d923fb049f64b547163b9f7d52ae73f16fdee09ecef9ab248c4d6ff"
+        },
+        {
+          "target": "macos-aarch64",
+          "distribution": "node-v26.7.0-darwin-arm64.tar.xz",
+          "sha256": "595d2f934e081b82961d1a5fd41c6dbd0c5a952d9e8be5b4566ab754426968d2"
+        },
+        {
+          "target": "linux-x64-gnu",
+          "distribution": "node-v26.7.0-linux-x64.tar.xz",
+          "sha256": "982aa24dd8be4c889c6a8ab337ddff3b0896645b20f4239356e80552c16277ee"
+        },
+        {
+          "target": "linux-aarch64-gnu",
+          "distribution": "node-v26.7.0-linux-arm64.tar.xz",
+          "sha256": "afc7a004018485092ac8985b817b0d5684472bd9472e0b57d2ab88737e50090d"
+        },
+        {
+          "target": "windows-x64",
+          "distribution": "node-v26.7.0-win-x64.zip",
+          "sha256": "d3bd72755141ed32bbcd841228ee81897c8a98d50dfa7dae2179399a0a7c90f8"
+        },
+        {
+          "target": "windows-aarch64",
+          "distribution": "node-v26.7.0-win-arm64.zip",
+          "sha256": "be8775204cfceca5a73c30f91bf0de5e85274c01b776dc13f16b91aa251ebb01"
+        }
+      ],
+      "nodeDistributionManifest": {
+        "url": "https://nodejs.org/dist/v26.7.0/SHASUMS256.txt",
+        "sha256": "4533f0a43b9ba7f78a48230a0511b9dd5c931f20c3b3cac281ff9b7a2080fb2e",
+        "signatureUrl": "https://nodejs.org/dist/v26.7.0/SHASUMS256.txt.sig",
+        "signatureSha256": "7bb1dfdce6e58b8659b3e7f3e148c8165ad715358fd4876be49aa656fc8b8224",
+        "signerFingerprint": "5BE8A3F6C8A5C01D106C0AD820B1A390B168D356",
+        "releaseKeyRepositoryCommit": "b28073028e6d6855cfb53bf7fa0137599c01f967",
+        "releaseKeyUrl": "https://raw.githubusercontent.com/nodejs/release-keys/b28073028e6d6855cfb53bf7fa0137599c01f967/keys/5BE8A3F6C8A5C01D106C0AD820B1A390B168D356.asc",
+        "releaseKeySha256": "5115095e2f8010c75da052ecb1cfb3af630e084f0f8daa93a863557b01b0f90a",
+        "verification": "require-pinned-key-fingerprint-and-detached-signature-before-archive-digest-admission"
+      },
+      "targetFinalization": {
+        "capability": {
+          "protocol": "effect-build/node-target-finalizer@1",
+          "receiptProtocol": "effect-build/node-target-finalizer-receipt@1",
+          "publicExport": "none-package-private-research-complete",
+          "authority": {
+            "repository": "mannyc2/effect-build",
+            "workflowPath": ".github/workflows/ci.yml",
+            "workflowEvents": ["push", "pull_request", "workflow_dispatch"],
+            "restBindings": "authoritative-workflow-run-construction-job-input-artifact-finalizer-job-output-artifact-and-receipt-artifact-records"
+          },
+          "constructionOfferFieldSet": [
+            "protocol",
+            "sourceSha",
+            "workflowRepository",
+            "workflowPath",
+            "workflowRef",
+            "workflowRunId",
+            "workflowRunAttempt",
+            "workflowRunHeadSha",
+            "constructionJobName",
+            "coordinate",
+            "target",
+            "format",
+            "nodeVersion",
+            "mainSha256",
+            "baseArchiveName",
+            "baseArchiveSha256",
+            "constructionHost",
+            "constructedFileName",
+            "constructedBytes",
+            "constructedSha256",
+            "inputArtifactName"
+          ],
+          "requestOfferEqualFields": [
+            "sourceSha",
+            "workflowRepository",
+            "workflowPath",
+            "workflowRef",
+            "workflowRunId",
+            "workflowRunAttempt",
+            "workflowRunHeadSha",
+            "constructionJobName",
+            "coordinate",
+            "target",
+            "format",
+            "nodeVersion",
+            "mainSha256",
+            "baseArchiveName",
+            "baseArchiveSha256",
+            "constructionHost",
+            "constructedFileName",
+            "constructedBytes",
+            "constructedSha256",
+            "inputArtifactName"
+          ],
+          "requestFieldSet": [
+            "protocol",
+            "sourceSha",
+            "workflowRepository",
+            "workflowPath",
+            "workflowRef",
+            "workflowRunId",
+            "workflowRunAttempt",
+            "workflowRunHeadSha",
+            "constructionJobId",
+            "constructionJobName",
+            "coordinate",
+            "target",
+            "format",
+            "nodeVersion",
+            "mainSha256",
+            "baseArchiveName",
+            "baseArchiveSha256",
+            "constructionHost",
+            "constructedFileName",
+            "constructedBytes",
+            "constructedSha256",
+            "inputArtifactId",
+            "inputArtifactName",
+            "inputArtifactDigest",
+            "inputArtifactExpired",
+            "inputArtifactExpiresAt"
+          ],
+          "responseFieldSet": [
+            "protocol",
+            "requestSha256",
+            "sourceSha",
+            "workflowRunId",
+            "workflowRunAttempt",
+            "workflowRunHeadSha",
+            "constructionJobId",
+            "constructionJobName",
+            "finalizerJobId",
+            "finalizerJobName",
+            "coordinate",
+            "target",
+            "runner",
+            "inputArtifactId",
+            "inputArtifactName",
+            "inputArtifactDigest",
+            "inputArtifactExpired",
+            "inputArtifactExpiresAt",
+            "constructedFileName",
+            "constructedBytes",
+            "constructedSha256",
+            "outputArtifactId",
+            "outputArtifactName",
+            "outputArtifactDigest",
+            "outputArtifactExpired",
+            "outputArtifactExpiresAt",
+            "finalizedFileName",
+            "finalizedMode",
+            "finalizedBytes",
+            "finalizedSha256",
+            "nativeFormat",
+            "inspectedArchitecture",
+            "executionExitCode",
+            "stdoutSha256",
+            "stderrSha256"
+          ]
+        }
+      }
+    },
+    "appleCertification": {
+      "packageVersion": "0.5.0",
+      "protocols": {
+        "request": "effect-build/apple-certification-request@2",
+        "receipt": "effect-build/apple-certification-receipt@2",
+        "evidence": "effect-build/apple-certification-evidence@2",
+        "bundle": "effect-build/apple-certification-bundle@2",
+        "priorEvidenceManifest": "effect-build/apple-certification-prior-evidence@1",
+        "index": "effect-build/apple-certification-index@1"
+      },
+      "workflowRepository": "mannyc2/effect-build",
+      "workflowPath": ".github/workflows/apple-certification.yml",
+      "workflowRef": "refs/heads/main",
+      "workflowEvent": "workflow_dispatch",
+      "releaseInputFields": [
+        "appleCertificationWorkflowRunId",
+        "appleCertificationWorkflowRunAttempt",
+        "appleCertificationArtifactId",
+        "appleCertificationArtifactDigest"
+      ],
+      "artifactName": "effect-build-v0.5.0-apple-certification",
+      "indexFileName": "apple-certification-index.json",
+      "bundleFileName": "effect-build-v0.5.0-apple-certification.bin",
+      "indexFields": [
+        "schema",
+        "version",
+        "sourceSha",
+        "candidateWorkflowRunId",
+        "candidateWorkflowRunAttempt",
+        "descriptorArtifactId",
+        "descriptorArtifactDigest",
+        "payloadArtifactId",
+        "payloadArtifactDigest",
+        "candidateDescriptorDigest",
+        "certificationWorkflowRepository",
+        "certificationWorkflowPath",
+        "certificationWorkflowRef",
+        "certificationWorkflowRunId",
+        "certificationWorkflowRunAttempt",
+        "certificationWorkflowRunHeadSha",
+        "certificationWorkflowEvent",
+        "checkedOutSourceSha",
+        "bundleFileName",
+        "bundleBytes",
+        "bundleSha256",
+        "verdict",
+        "certificationCells",
+        "appleDistributionCoordinates",
+        "appleCleanHostCoordinates"
+      ],
+      "certificationCells": ["A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"],
+      "appleDistributionCoordinates": [
+        "developer-id-sign-bun-executable|macos-x64",
+        "developer-id-sign-bun-executable|macos-aarch64",
+        "developer-id-sign-deno-executable|macos-x64",
+        "developer-id-sign-deno-executable|macos-aarch64",
+        "developer-id-sign-node-sea-executable|macos-x64",
+        "developer-id-sign-node-sea-executable|macos-aarch64",
+        "notarized-stapled-app-bundle|macos-x64",
+        "notarized-stapled-app-bundle|macos-aarch64",
+        "notarized-zip-transport|macos-x64",
+        "notarized-zip-transport|macos-aarch64",
+        "notarized-stapled-disk-image|macos-x64",
+        "notarized-stapled-disk-image|macos-aarch64",
+        "notarized-stapled-installer-package|macos-x64",
+        "notarized-stapled-installer-package|macos-aarch64"
+      ],
+      "appleCleanHostCoordinates": [
+        "G-App|macos-x64",
+        "G-App|macos-aarch64",
+        "G-ZIP|macos-x64",
+        "G-ZIP|macos-aarch64",
+        "G-DMG|macos-x64",
+        "G-DMG|macos-aarch64",
+        "G-PKG|macos-x64",
+        "G-PKG|macos-aarch64"
+      ],
+      "verdict": "certified",
+      "certifierAuthority": {
+        "environment": "apple-certification",
+        "primaryPathVariable": "EFFECT_BUILD_APPLE_CERTIFIER",
+        "primaryDigestVariable": "EFFECT_BUILD_APPLE_CERTIFIER_SHA256",
+        "cleanHostPathVariable": "EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER",
+        "cleanHostDigestVariable": "EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256",
+        "digestRule": "lowercase-sha256-distinct-between-primary-and-clean-host",
+        "executionRule": "authenticate-regular-file-read-only-snapshot-and-rehash-immediately-before-and-after-execution"
+      },
+      "requestFields": [
+        "protocol",
+        "packageVersion",
+        "category",
+        "coordinate",
+        "sourceSha",
+        "checkedOutSourceSha",
+        "candidateWorkflowRunId",
+        "candidateDescriptorDigest",
+        "certificationWorkflowRunId",
+        "certificationWorkflowRunAttempt",
+        "certifierPath",
+        "certifierSha256",
+        "bunLockSha256",
+        "cleanWorktree",
+        "runnerOs",
+        "runnerArch",
+        "candidateDirectory",
+        "priorEvidenceDirectory",
+        "priorEvidenceManifestPath",
+        "priorEvidenceManifestSha256",
+        "receiptPath",
+        "evidencePath"
+      ],
+      "receiptFields": [
+        "protocol",
+        "packageVersion",
+        "category",
+        "coordinate",
+        "sourceSha",
+        "checkedOutSourceSha",
+        "candidateWorkflowRunId",
+        "candidateDescriptorDigest",
+        "certificationWorkflowRunId",
+        "certificationWorkflowRunAttempt",
+        "certifierPath",
+        "certifierSha256",
+        "bunLockSha256",
+        "cleanWorktree",
+        "priorEvidenceManifestSha256",
+        "requestSha256",
+        "runnerOs",
+        "runnerArch",
+        "evidenceBytes",
+        "evidenceSha256",
+        "verdict"
+      ],
+      "evidenceSchema": {
+        "fields": [
+          "protocol",
+          "packageVersion",
+          "category",
+          "coordinate",
+          "sourceSha",
+          "candidateDescriptorDigest",
+          "certifierPath",
+          "certifierSha256",
+          "bunLockSha256",
+          "priorEvidenceManifestSha256",
+          "requestSha256",
+          "runner",
+          "payload"
+        ],
+        "runnerFields": ["os", "arch", "osVersion"],
+        "artifactFields": ["role", "kind", "identityKind", "identitySha256", "bytes"],
+        "toolFields": ["name", "path", "version", "sha256"],
+        "stepFields": ["name", "status", "inputSha256", "outputSha256", "detailsSha256"],
+        "credentialFields": ["kind", "fingerprint", "teamId", "validFrom", "validUntil"],
+        "notaryFields": [
+          "submissionId",
+          "subjectSha256",
+          "transportSha256",
+          "terminalStatus",
+          "warningSummarySha256",
+          "logSha256"
+        ],
+        "priorEvidenceFields": [
+          "category",
+          "coordinate",
+          "priorEvidenceManifestSha256",
+          "receiptSha256",
+          "evidenceSha256",
+          "artifactIdentityKind",
+          "artifactBytes",
+          "artifactSha256"
+        ],
+        "priorEvidenceManifest": {
+          "fields": [
+            "protocol",
+            "packageVersion",
+            "category",
+            "coordinate",
+            "sourceSha",
+            "candidateWorkflowRunId",
+            "candidateDescriptorDigest",
+            "certificationWorkflowRunId",
+            "bunLockSha256",
+            "entries"
+          ],
+          "entryFields": [
+            "category",
+            "coordinate",
+            "certifierPath",
+            "certifierSha256",
+            "priorEvidenceManifestName",
+            "priorEvidenceManifestBytes",
+            "priorEvidenceManifestSha256",
+            "receiptName",
+            "receiptBytes",
+            "receiptSha256",
+            "evidenceName",
+            "evidenceBytes",
+            "evidenceSha256",
+            "artifactIdentityKind",
+            "artifactBytes",
+            "artifactSha256"
+          ],
+          "dependencyPolicy": {
+            "distribution": "none",
+            "cleanHostTargetRule": "same-target",
+            "cleanHostProductDistributionScenario": {
+              "G-App": "notarized-stapled-app-bundle",
+              "G-ZIP": "notarized-zip-transport",
+              "G-DMG": "notarized-stapled-disk-image",
+              "G-PKG": "notarized-stapled-installer-package"
+            },
+            "cell": {
+              "A0": [],
+              "A1": [],
+              "A2": [
+                "distribution/developer-id-sign-bun-executable|macos-x64",
+                "distribution/developer-id-sign-bun-executable|macos-aarch64",
+                "distribution/developer-id-sign-deno-executable|macos-x64",
+                "distribution/developer-id-sign-deno-executable|macos-aarch64",
+                "distribution/developer-id-sign-node-sea-executable|macos-x64",
+                "distribution/developer-id-sign-node-sea-executable|macos-aarch64"
+              ],
+              "A3": [
+                "distribution/notarized-stapled-app-bundle|macos-x64",
+                "distribution/notarized-stapled-app-bundle|macos-aarch64",
+                "clean-host/G-App|macos-x64",
+                "clean-host/G-App|macos-aarch64"
+              ],
+              "A4": [
+                "distribution/notarized-zip-transport|macos-x64",
+                "distribution/notarized-zip-transport|macos-aarch64",
+                "clean-host/G-ZIP|macos-x64",
+                "clean-host/G-ZIP|macos-aarch64"
+              ],
+              "A5": [
+                "distribution/notarized-stapled-disk-image|macos-x64",
+                "distribution/notarized-stapled-disk-image|macos-aarch64",
+                "clean-host/G-DMG|macos-x64",
+                "clean-host/G-DMG|macos-aarch64"
+              ],
+              "A6": [
+                "distribution/notarized-stapled-installer-package|macos-x64",
+                "distribution/notarized-stapled-installer-package|macos-aarch64",
+                "clean-host/G-PKG|macos-x64",
+                "clean-host/G-PKG|macos-aarch64"
+              ],
+              "A7": [
+                "distribution/notarized-stapled-app-bundle|macos-x64",
+                "distribution/notarized-stapled-app-bundle|macos-aarch64",
+                "distribution/notarized-zip-transport|macos-x64",
+                "distribution/notarized-zip-transport|macos-aarch64",
+                "distribution/notarized-stapled-disk-image|macos-x64",
+                "distribution/notarized-stapled-disk-image|macos-aarch64",
+                "distribution/notarized-stapled-installer-package|macos-x64",
+                "distribution/notarized-stapled-installer-package|macos-aarch64"
+              ],
+              "A8": "all-distribution-coordinates",
+              "A9": "all-distribution-and-clean-host-coordinates"
+            }
+          }
+        },
+        "quarantineFields": ["transportSha256", "attributeSha256", "decision"],
+        "claimFields": ["name", "status", "evidenceSha256"],
+        "distribution": {
+          "payloadFields": ["artifacts", "credentials", "notary", "steps", "tools"],
+          "requiredArtifactRoles": ["input", "distributed"],
+          "requiredOperations": {
+            "developer-id-sign-bun-executable": ["sign", "signature-verify", "runtime-exercise"],
+            "developer-id-sign-deno-executable": ["sign", "signature-verify", "runtime-exercise"],
+            "developer-id-sign-node-sea-executable": ["sign", "signature-verify", "runtime-exercise"],
+            "notarized-stapled-app-bundle": [
+              "construct",
+              "sign",
+              "notary-submit",
+              "staple",
+              "staple-validate",
+              "launch"
+            ],
+            "notarized-zip-transport": [
+              "archive",
+              "notary-submit",
+              "extract",
+              "no-zip-staple-claim",
+              "runtime-exercise"
+            ],
+            "notarized-stapled-disk-image": [
+              "construct",
+              "sign",
+              "notary-submit",
+              "staple",
+              "staple-validate",
+              "mount",
+              "runtime-exercise"
+            ],
+            "notarized-stapled-installer-package": [
+              "construct",
+              "installer-sign",
+              "notary-submit",
+              "staple",
+              "staple-validate",
+              "install",
+              "runtime-exercise",
+              "remove"
+            ]
+          }
+        },
+        "cleanHost": {
+          "payloadFields": ["artifacts", "priorEvidence", "quarantine", "steps", "tools"],
+          "requiredArtifactRoles": ["transport", "acquired-product"],
+          "requiredOperations": {
+            "G-App": ["acquire", "quarantine-verify", "gatekeeper", "launch", "runtime-exercise"],
+            "G-ZIP": [
+              "acquire",
+              "quarantine-verify",
+              "extract",
+              "no-zip-staple-claim",
+              "gatekeeper-inner",
+              "runtime-exercise"
+            ],
+            "G-DMG": [
+              "acquire",
+              "quarantine-verify",
+              "open",
+              "staple-validate",
+              "copy-or-launch",
+              "runtime-exercise"
+            ],
+            "G-PKG": [
+              "acquire",
+              "quarantine-verify",
+              "installer-open",
+              "gatekeeper",
+              "install",
+              "runtime-exercise",
+              "remove"
+            ]
+          }
+        },
+        "cell": {
+          "payloadFields": ["artifacts", "priorEvidence", "claims", "steps", "tools"],
+          "requiredArtifactRoles": ["candidate"],
+          "requiredOperation": "evaluate",
+          "requiredClaims": {
+            "A0": "deterministic-implementation",
+            "A1": "local-macos-tools",
+            "A2": "runtime-signing",
+            "A3": "app-product",
+            "A4": "zip-transport",
+            "A5": "disk-image",
+            "A6": "installer-package",
+            "A7": "notary-recovery",
+            "A8": "credential-boundary",
+            "A9": "artifact-immutability"
+          }
+        }
+      },
+      "bundlePolicy": "structured-category-evidence-validated-by-producer-opaque-to-release-coordinator",
+      "a7Boundary": "release-never-decodes-notary-provider-json-status-receipt-or-reconciliation-fields",
+      "externalGates": [
+        "protected-environment-rule-and-variable-readback",
+        "approved-primary-and-clean-host-certifier-byte-installation",
+        "same-uid-runner-isolation-and-approved-certifier-interpreter-toolchain-identities",
+        "credential-backed-A0-through-A9-and-14-distribution-and-8-clean-host-receipts"
+      ]
+    }
+  },
+  "targetModuleOverrides": {
+    "CAN-BUN-001": "Transpiler",
+    "CAN-BUN-002": "Transpiler",
+    "CAN-BUN-003": "Transpiler",
+    "CAN-BUN-004": "Transpiler",
+    "CAN-BUN-005": "Transpiler",
+    "CAN-BUN-006": "Build",
+    "CAN-BUN-007": "Build",
+    "CAN-BUN-008": "Build",
+    "CAN-BUN-009": "Build",
+    "CAN-BUN-010": "Watch",
+    "CAN-BUN-011": "CompileExecutable",
+    "CAN-BUN-012": "CompileExecutable",
+    "CAN-DENO-001": "Bundle",
+    "CAN-DENO-002": "Bundle",
+    "CAN-DENO-003": "Bundle",
+    "CAN-DENO-004": "Bundle",
+    "CAN-DENO-005": "Bundle",
+    "CAN-DENO-006": "Bundle",
+    "CAN-DENO-007": "Transpile",
+    "CAN-DENO-008": "Transpile",
+    "CAN-DENO-009": "Transpile",
+    "CAN-DENO-010": "CompileExecutable",
+    "CAN-DENO-011": "CompileWatch",
+    "CAN-ESB-001": "Build",
+    "CAN-ESB-002": "BuildToDirectory",
+    "CAN-ESB-003": "Transform",
+    "CAN-ESB-004": "AnalyzeMetafile",
+    "CAN-ESB-005": "FormatMessages",
+    "CAN-ESB-011": "Context",
+    "CAN-ESB-012": "ContextToDirectory",
+    "CAN-ESB-015": "Build",
+    "CAN-ESB-016": "BuildToDirectory",
+    "CAN-ESB-017": "Watch",
+    "CAN-ESB-018": "Serve",
+    "CAN-NODE-001": "AssembleExecutable",
+    "CAN-ROL-001": "Build",
+    "CAN-ROL-002": "Build",
+    "CAN-ROL-003": "Build",
+    "CAN-ROL-005": "Build",
+    "CAN-ROL-006": "Build",
+    "CAN-ROL-007": "Watch",
+    "CAN-ROL-008": "Watch",
+    "CAN-ROL-010": "Bundle",
+    "CAN-ROL-011": "BundleToDirectory",
+    "CAN-ROL-012": "Watch",
+    "CAN-ROL-013": "Transform",
+    "CAN-ROL-014": "Parse",
+    "CAN-ROL-015": "Minify",
+    "CAN-ROL-016": "Resolve",
+    "CAN-ROL-017": "Scan",
+    "CAN-ROL-018A": "DevEngine",
+    "CAN-ROL-018B": "DevEngine",
+    "CAN-ROL-020": "Declaration",
+    "CAN-ROL-022": "Config"
+  },
+  "targetImplementationExportOverrides": {
+    "CAN-BUN-001": "make",
+    "CAN-BUN-002": "transform",
+    "CAN-BUN-003": "transformSync",
+    "CAN-BUN-004": "scan",
+    "CAN-BUN-005": "scanImports",
+    "CAN-BUN-006": "build",
+    "CAN-BUN-007": "buildToDirectory",
+    "CAN-BUN-008": "build",
+    "CAN-BUN-009": "buildToDirectory",
+    "CAN-BUN-010": "watch",
+    "CAN-BUN-011": "compileExecutableDirect",
+    "CAN-BUN-012": "compileExecutable",
+    "CAN-DENO-001": "memory",
+    "CAN-DENO-002": "direct",
+    "CAN-DENO-003": "stdout",
+    "CAN-DENO-004": "direct",
+    "CAN-DENO-005": "watch",
+    "CAN-DENO-006": "declarations",
+    "CAN-DENO-007": "transpile",
+    "CAN-DENO-008": "transpileToDirectory",
+    "CAN-DENO-009": "emitDeclarations",
+    "CAN-DENO-010": "compileExecutable",
+    "CAN-DENO-011": "watch",
+    "CAN-ESB-001": "build",
+    "CAN-ESB-002": "buildToDirectory",
+    "CAN-ESB-003": "transform",
+    "CAN-ESB-004": "analyzeMetafile",
+    "CAN-ESB-005": "formatMessages",
+    "CAN-ESB-011": "make",
+    "CAN-ESB-012": "make",
+    "CAN-ESB-015": "build",
+    "CAN-ESB-016": "buildToDirectory",
+    "CAN-ESB-017": "watch",
+    "CAN-ESB-018": "serve",
+    "CAN-NODE-001": "assembleDirect",
+    "CAN-ROL-001": "make",
+    "CAN-ROL-002": "generateScoped",
+    "CAN-ROL-003": "writeScoped",
+    "CAN-ROL-005": "generate",
+    "CAN-ROL-006": "write",
+    "CAN-ROL-007": "direct",
+    "CAN-ROL-008": "skipWrite",
+    "CAN-ROL-010": "bundle",
+    "CAN-ROL-011": "bundleToDirectory",
+    "CAN-ROL-012": "watch",
+    "CAN-ROL-013": "transform",
+    "CAN-ROL-014": "parse",
+    "CAN-ROL-015": "minify",
+    "CAN-ROL-016": "make",
+    "CAN-ROL-017": "scan",
+    "CAN-ROL-018A": "makeMemory",
+    "CAN-ROL-018B": "makeToDirectory",
+    "CAN-ROL-020": "emit",
+    "CAN-ROL-022": "load"
+  },
+  "operationProgressOverrides": {
+    "CAN-ROL-008": {
+      "implementation": {
+        "status": "implemented-exact-rolldown-1.2.5-shape",
+        "refs": ["packages/effect-build-rolldown/src/Api/Watch.ts"]
+      },
+      "test": {
+        "status": "focused-test-present-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "exact-host-shape-corrected-current-certification-open",
+        "gates": [
+          "event order, owned result close, interruption, and full host matrix",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv:55",
+          "packages/effect-build-rolldown/src/Api/Watch.ts"
+        ]
+      },
+      "note": "Rolldown 1.2.5 watcher event.result exposes only close at runtime and in declarations; skip-write yields completion metadata and owned cleanup, never invented in-memory output."
+    },
+    "CAN-ROL-017": {
+      "implementation": {
+        "status": "implemented-exact-rolldown-1.2.5-shape",
+        "refs": ["packages/effect-build-rolldown/src/Api/Scan.ts"]
+      },
+      "test": {
+        "status": "focused-test-present-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "exact-host-shape-corrected-current-certification-open",
+        "gates": ["interruption and full host matrix", "five-host and packed-install certification"],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv:63",
+          "packages/effect-build-rolldown/src/Api/Scan.ts"
+        ]
+      },
+      "note": "Rolldown 1.2.5 declares Promise<Promise<void>>, but JavaScript promise assimilation settles only after cleanup; Api.Scan.scan is one-shot Effect<void> with no escapable borrowed cleanup authority."
+    },
+    "CAN-BUN-001": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Api/Transpiler.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "GC/native backing lifetime and concurrency",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Api/Transpiler.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Exact Bun 1.3.14 Transpiler construction is implemented and locally executed; native backing lifetime and concurrency certification remain open."
+    },
+    "CAN-BUN-002": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Api/Transpiler.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "provider work after Effect interruption",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Api/Transpiler.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Async transform preserves Bun's native Promise and makes no cancellation claim; provider work after Effect interruption remains open."
+    },
+    "CAN-BUN-003": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Api/Transpiler.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "non-interruptible execution boundary",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Api/Transpiler.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Sync transform is modeled as a synchronous non-cooperative host boundary; full boundary certification remains open."
+    },
+    "CAN-BUN-004": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Api/Transpiler.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "latency and adversarial accuracy",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Api/Transpiler.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Native scan results are preserved without a synthetic parser; latency and adversarial accuracy remain open."
+    },
+    "CAN-BUN-005": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Api/Transpiler.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "adversarial accuracy boundary",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Api/Transpiler.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Native scanImports is exposed with its documented accuracy boundary; adversarial certification remains open."
+    },
+    "CAN-BUN-006": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Api/Build.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "cancellation and retained artifact lifetime",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Api/Build.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Bun.build memory output remains native and caller-owned; cancellation and retained-artifact lifetime remain open."
+    },
+    "CAN-BUN-007": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Api/Build.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "partial writes; pre-existing outputs; interruption remnants",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Api/Build.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Bun.build direct output is explicitly provider-direct with no rollback claim; partial-write and remnant gates remain open."
+    },
+    "CAN-BUN-008": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Command/Build.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/bun-bundle.test.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "collection bounds and signal outcome",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Command/Build.ts",
+          "test/unit/bun-bundle.test.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Selected Bun stdout build uses bounded raw streams and exact reauthentication; full signal/bounds certification remains open."
+    },
+    "CAN-BUN-009": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Command/Build.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/bun-bundle.test.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "partial writes; replacement; signal remnants",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Command/Build.ts",
+          "test/unit/bun-bundle.test.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Selected Bun directory build declares provider-direct publication and preserves native project semantics; remnant certification remains open."
+    },
+    "CAN-BUN-010": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Command/Watch.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-scoped-interruption-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/bun-bundle.test.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "readiness; recovery; subtree termination; remnants",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Command/Watch.ts",
+          "test/unit/bun-bundle.test.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Bun watch is an opaque scoped child with interruption Cause preserved; exact-host initial publication and scope termination execute locally while cross-host readiness, recovery, subtree, remnant, and packed-install certification remain open."
+    },
+    "CAN-BUN-011": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Api/CompileExecutable.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "target matrix; acquisition; interruption remnants",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Api/CompileExecutable.ts",
+          "test/integration/bun-bundle.test.ts",
+          "typetest/bun-bundle.tst.ts"
+        ]
+      },
+      "note": "Native Bun host compile is implemented as provider-direct output with no atomicity claim; complete target/acquisition/remnant certification remains open."
+    },
+    "CAN-BUN-012": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-bun/src/Command/CompileExecutable.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/bun-compile-executable.test.ts",
+          "test/integration/bun-compile-executable.test.ts",
+          "test/integration/target-support.test.ts",
+          "typetest/bun-compile-executable.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "target matrix; acquisition; interruption and publication certification",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-bun/src/Command/CompileExecutable.ts",
+          "test/unit/bun-compile-executable.test.ts",
+          "test/integration/bun-compile-executable.test.ts",
+          "test/integration/target-support.test.ts",
+          "typetest/bun-compile-executable.tst.ts"
+        ]
+      },
+      "note": "Bun scalar and M2 matrix compilation use authenticated exact-tool execution and core atomic publication; external target/acquisition/publication certification remains open."
+    },
+    "CAN-DENO-001": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Api/Bundle.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "permission and interruption execution",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Api/Bundle.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "note": "Experimental Deno.bundle memory mode is implemented and locally executed only with --unstable-bundle; permission/interruption gates keep it package-private."
+    },
+    "CAN-DENO-002": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Api/Bundle.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-type-and-local-real-host-test-green-current-certification-open",
+        "refs": [
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "permission matrix; partial writes; remnants",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Api/Bundle.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "note": "Experimental Deno.bundle direct mode is implemented with explicit provider-direct ownership; permission/partial-write/remnant gates keep it package-private."
+    },
+    "CAN-DENO-003": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Command/Bundle.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "framing; stderr; bounds; interruption",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Command/Bundle.ts",
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "note": "Deno bundle stdout is implemented with raw bounded streams; framing/stderr/bounds/interruption gates keep it package-private."
+    },
+    "CAN-DENO-004": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Command/Bundle.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "partial writes and project precedence execution",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Command/Bundle.ts",
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "note": "Deno bundle direct output preserves config/import-map/lock/cache authority and declares partial publication; the complete gate remains open."
+    },
+    "CAN-DENO-005": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Command/Bundle.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-real-tool-scoped-interruption-tests-green-full-certification-open",
+        "refs": [
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "rebuild recovery; termination; reaping; remnants",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Command/Bundle.ts",
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "note": "Deno bundle watch executes against exact Deno 2.9.5 as an opaque scoped child with interruption Cause preserved; recovery/reaping/remnant gates keep it package-private."
+    },
+    "CAN-DENO-006": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Command/Bundle.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "closure and output topology",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Command/Bundle.ts",
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "note": "Deno bundle declaration roll-up is distinct from transpile declarations and locally executed; closure/topology certification remains open."
+    },
+    "CAN-DENO-007": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Command/Transpile.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "collection bounds and diagnostics execution",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Command/Transpile.ts",
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "note": "Deno transpile stdout is implemented with raw bounded output and native diagnostics; complete bounds/diagnostics certification remains open."
+    },
+    "CAN-DENO-008": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Command/Transpile.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "interruption and map remnants",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Command/Transpile.ts",
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "note": "Deno transpile directory output is provider-direct and locally executed; interruption/map-remnant certification remains open."
+    },
+    "CAN-DENO-009": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Command/Transpile.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "declaration failure and topology",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Command/Transpile.ts",
+          "test/unit/deno-bundle.test.ts",
+          "test/integration/deno-bundle.test.ts",
+          "typetest/deno-bundle.tst.ts"
+        ]
+      },
+      "note": "Deno tsc-backed declaration emission is implemented and locally executed; failure/topology certification remains open."
+    },
+    "CAN-DENO-010": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Command/CompileExecutable.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-current-certification-open",
+        "refs": [
+          "test/unit/deno-compile-executable.test.ts",
+          "test/integration/deno-compile-executable.test.ts",
+          "test/integration/target-support.test.ts",
+          "typetest/deno-compile-executable.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "host-target; cache/offline; denort relation; runtime",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Command/CompileExecutable.ts",
+          "test/unit/deno-compile-executable.test.ts",
+          "test/integration/deno-compile-executable.test.ts",
+          "test/integration/target-support.test.ts",
+          "typetest/deno-compile-executable.tst.ts"
+        ]
+      },
+      "note": "Deno scalar and M2 matrix compilation preserve config/permission/cache/denort authority and core atomic publication; the full host-target/acquisition/runtime gate remains open."
+    },
+    "CAN-DENO-011": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-deno/src/Command/CompileWatch.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-real-tool-scoped-interruption-tests-green-full-certification-open",
+        "refs": [
+          "test/unit/deno-compile-executable.test.ts",
+          "test/integration/deno-compile-executable.test.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "coalescing; termination; reaping; remnants",
+          "five-host and packed-install certification"
+        ],
+        "refs": [
+          "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "packages/effect-build-deno/src/Command/CompileWatch.ts",
+          "test/unit/deno-compile-executable.test.ts",
+          "test/integration/deno-compile-executable.test.ts"
+        ]
+      },
+      "note": "Deno compile watch executes against exact Deno 2.9.5 as provider-direct repeated replacement with scoped interruption; coalescing/reaping/remnant gates keep it package-private."
+    },
+    "CAN-ESB-001": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": ["packages/effect-build-esbuild/src/Api/Build.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/esbuild-build.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["one-shot provider continuation after interruption", "five-host and packed-install certification"]
+      },
+      "note": "Exact esbuild 0.28.2 in-process memory build is implemented; interruption and external certification remain open."
+    },
+    "CAN-ESB-002": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": ["packages/effect-build-esbuild/src/Api/BuildToDirectory.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/esbuild-build.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["partial writes and interruption remnants", "five-host and packed-install certification"]
+      },
+      "note": "Provider-direct API writing is implemented without inventing atomicity; partial-write and remnant certification remain open."
+    },
+    "CAN-ESB-003": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": ["packages/effect-build-esbuild/src/Api/Transform.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/esbuild-build.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["large-input temporary-file cleanup", "five-host and packed-install certification"]
+      },
+      "note": "Native async transform is implemented; large-input cleanup and external certification remain open."
+    },
+    "CAN-ESB-004": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": ["packages/effect-build-esbuild/src/Api/AnalyzeMetafile.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/esbuild-build.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["runtime rendering receipt", "five-host and packed-install certification"]
+      },
+      "note": "Native metafile analysis is implemented and locally executed; the full rendering receipt remains open."
+    },
+    "CAN-ESB-005": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": ["packages/effect-build-esbuild/src/Api/FormatMessages.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/esbuild-build.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["runtime rendering receipt", "five-host and packed-install certification"]
+      },
+      "note": "Native diagnostic formatting is implemented and locally executed; the full rendering receipt remains open."
+    },
+    "CAN-ESB-011": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-esbuild/src/Api/Context.ts",
+          "packages/effect-build-esbuild/src/internal/ContextOwner.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-scoped-lifecycle-test-green-current-certification-open",
+        "refs": ["test/unit/esbuild-context.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["race matrix; post-dispose; delayed plugin cleanup", "five-host and packed-install certification"]
+      },
+      "note": "The scoped memory context owner is implemented with cancel-before-dispose release; the full race matrix remains open."
+    },
+    "CAN-ESB-012": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-esbuild/src/Api/ContextToDirectory.ts",
+          "packages/effect-build-esbuild/src/internal/ContextOwner.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-scoped-lifecycle-test-green-current-certification-open",
+        "refs": ["test/unit/esbuild-context.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["context races and mixed-generation remnants", "five-host and packed-install certification"]
+      },
+      "note": "The scoped provider-direct context owner is implemented; mixed-generation remnant certification remains open."
+    },
+    "CAN-ESB-015": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-esbuild/src/Command/Build.ts",
+          "packages/effect-build-esbuild/src/internal/Runtime.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-real-tool-tests-green-current-certification-open",
+        "refs": ["test/unit/provider-command.test.ts", "test/integration/provider-command.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["bounds; bin form; signal and reaping", "five-host and packed-install certification"]
+      },
+      "note": "Selected-command stdout build is bounded, exact-version probed, and locally executed; the full signal/reaping matrix remains open."
+    },
+    "CAN-ESB-016": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-esbuild/src/Command/BuildToDirectory.ts",
+          "packages/effect-build-esbuild/src/internal/Runtime.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-real-tool-tests-green-current-certification-open",
+        "refs": ["test/unit/provider-command.test.ts", "test/integration/provider-command.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["partial writes; bin form; signal and reaping", "five-host and packed-install certification"]
+      },
+      "note": "Selected-command provider-direct build is implemented and locally executed without an atomicity claim; full remnant certification remains open."
+    },
+    "CAN-ESB-017": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape",
+        "refs": [
+          "packages/effect-build-esbuild/src/Command/Watch.ts",
+          "packages/effect-build-esbuild/src/internal/Runtime.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-real-exact-tool-scoped-interruption-tests-green-current-certification-open",
+        "refs": ["test/unit/provider-command.test.ts", "test/integration/provider-command.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["termination choice; descendants; remnants", "five-host and packed-install certification"]
+      },
+      "note": "Selected-command watch is implemented as a scoped child; descendant and remnant certification remain open."
+    },
+    "CAN-ESB-018": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-pinned-provider-shape-package-private",
+        "refs": [
+          "packages/effect-build-esbuild/src/Command/Serve.ts",
+          "packages/effect-build-esbuild/src/internal/Runtime.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-real-exact-tool-request-and-scope-close-tests-green-current-certification-open",
+        "refs": ["test/unit/provider-command.test.ts", "test/integration/provider-command.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": [
+          "machine-readable address or fixed-port decision; lifecycle",
+          "five-host and packed-install certification"
+        ]
+      },
+      "note": "Serve is implemented and tested package-private; its address and lifecycle gate prevents public admission."
+    },
+    "CAN-NODE-001": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-node-26.7.0-linux-x64-gnu-shape",
+        "refs": [
+          "packages/effect-build-node-sea/src/Command/AssembleExecutable.ts",
+          "packages/effect-build-node-sea/src/internal/Runtime.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-green-exact-real-cell-unavailable-current-certification-open",
+        "refs": [
+          "test/unit/node-sea-assemble-executable.test.ts",
+          "test/integration/node-sea-assemble-executable.test.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-model-execution-recorded-exact-real-cell-and-external-certification-open",
+        "gates": [
+          "exact binary capability; host-target and runtime matrix",
+          "exact Node 26.7.0 linux-x64-gnu and packed-install certification"
+        ]
+      },
+      "note": "Direct SEA assembly is implemented with exact builder/base reauthentication and atomic executable publication; this macOS checkout cannot execute the admitted Linux cell."
+    },
+    "CAN-ROL-001": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": [
+          "packages/effect-build-rolldown/src/Api/Build.ts",
+          "packages/effect-build-rolldown/src/internal/BuildOwner.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["concurrency and release law", "five-host and packed-install certification"]
+      },
+      "note": "The reusable build owner is implemented with drain-before-close release but remains package-private until its complete gate closes."
+    },
+    "CAN-ROL-002": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": [
+          "packages/effect-build-rolldown/src/Api/Build.ts",
+          "packages/effect-build-rolldown/src/internal/BuildOwner.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["repeatability; concurrent use; external memory", "five-host and packed-install certification"]
+      },
+      "note": "Reusable generation is implemented and locally exercised but remains package-private pending repeatability and memory certification."
+    },
+    "CAN-ROL-003": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": [
+          "packages/effect-build-rolldown/src/Api/Build.ts",
+          "packages/effect-build-rolldown/src/internal/BuildOwner.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["collisions; interruption; remnants", "five-host and packed-install certification"]
+      },
+      "note": "Reusable provider-direct writing is implemented without an atomicity claim and remains package-private pending remnant certification."
+    },
+    "CAN-ROL-005": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Build.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["interruption cleanup", "five-host and packed-install certification"]
+      },
+      "note": "One-shot in-memory generation is implemented and locally exercised but remains package-private pending interruption certification."
+    },
+    "CAN-ROL-006": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Build.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["partial writes and interruption cleanup", "five-host and packed-install certification"]
+      },
+      "note": "One-shot provider-direct writing is implemented without an atomicity claim and remains package-private pending cleanup certification."
+    },
+    "CAN-ROL-007": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Watch.ts"]
+      },
+      "test": {
+        "status": "focused-scoped-lifecycle-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["event order; result close; interruption", "five-host and packed-install certification"]
+      },
+      "note": "Direct-write watch is implemented with owned result cleanup and remains package-private pending the full event and interruption gate."
+    },
+    "CAN-ROL-010": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": [
+          "packages/effect-build-rolldown/src/Command/Bundle.ts",
+          "packages/effect-build-rolldown/src/Command/Runtime.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-real-tool-tests-green-current-certification-open",
+        "refs": ["test/unit/provider-command.test.ts", "test/integration/provider-command.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["multi-output framing and collection bounds", "five-host and packed-install certification"]
+      },
+      "note": "Selected-command stdout bundle is bounded, exact-version probed, and locally executed but remains package-private pending framing certification."
+    },
+    "CAN-ROL-011": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": [
+          "packages/effect-build-rolldown/src/Command/BundleToDirectory.ts",
+          "packages/effect-build-rolldown/src/Command/Runtime.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-real-tool-tests-green-current-certification-open",
+        "refs": ["test/unit/provider-command.test.ts", "test/integration/provider-command.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["partial writes and signal remnants", "five-host and packed-install certification"]
+      },
+      "note": "Selected-command provider-direct bundle is implemented and locally executed without an atomicity claim; it remains package-private."
+    },
+    "CAN-ROL-012": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": [
+          "packages/effect-build-rolldown/src/Command/Watch.ts",
+          "packages/effect-build-rolldown/src/Command/Runtime.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-local-real-exact-tool-scoped-interruption-tests-green-current-certification-open",
+        "refs": ["test/unit/provider-command.test.ts", "test/integration/provider-command.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["termination; reaping; remnants", "five-host and packed-install certification"]
+      },
+      "note": "Selected-command watch is implemented as a scoped child but remains package-private pending the full termination and remnant gate."
+    },
+    "CAN-ROL-013": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Transform.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["runtime contract", "five-host and packed-install certification"]
+      },
+      "note": "Native source transform is implemented and locally executed but remains package-private pending its complete runtime contract."
+    },
+    "CAN-ROL-014": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Parse.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["runtime contract", "five-host and packed-install certification"]
+      },
+      "note": "Native source parsing is implemented and locally executed but remains package-private pending its complete runtime contract."
+    },
+    "CAN-ROL-015": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Minify.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["runtime contract", "five-host and packed-install certification"]
+      },
+      "note": "Native source minification is implemented and locally executed but remains package-private pending its complete runtime contract."
+    },
+    "CAN-ROL-016": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Resolve.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["retention and release discovery", "five-host and packed-install certification"]
+      },
+      "note": "The caller-owned resolver factory is implemented without inventing release authority and remains package-private pending retention discovery."
+    },
+    "CAN-ROL-018A": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/DevEngine.ts"]
+      },
+      "test": {
+        "status": "focused-scoped-lifecycle-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["complete ownership and callback backpressure", "five-host and packed-install certification"]
+      },
+      "note": "The in-memory dev engine is implemented as a scoped owner but remains package-private pending ownership and backpressure certification."
+    },
+    "CAN-ROL-018B": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/DevEngine.ts"]
+      },
+      "test": {
+        "status": "focused-provider-direct-scoped-lifecycle-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["complete ownership; backpressure; remnants", "five-host and packed-install certification"]
+      },
+      "note": "The provider-direct dev engine is locally executed as a scoped owner but remains package-private pending backpressure and remnant certification."
+    },
+    "CAN-ROL-020": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Declaration.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["declaration correctness contract", "five-host and packed-install certification"]
+      },
+      "note": "Isolated declaration emission is implemented and locally executed but remains package-private pending correctness certification."
+    },
+    "CAN-ROL-022": {
+      "implementation": {
+        "status": "implemented-current-hard-cut-exact-rolldown-1.2.5-shape-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Config.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-local-provider-test-green-current-certification-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-named-gates-and-external-certification-open",
+        "gates": ["trust boundary and runtime behavior", "five-host and packed-install certification"]
+      },
+      "note": "Configuration loading is implemented as an explicit code-execution boundary but remains package-private pending trust-boundary certification."
+    },
+    "CAN-BUN-014": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-bun/src/Api/index.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/bun-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "There is no process-global Bun plugin registration operation; plugins remain per-build request authority."
+    },
+    "CAN-BUN-015": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-bun/src/Api/index.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/bun-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "No synthetic global plugin-clear operation exists because effect-build owns no global plugin registry."
+    },
+    "CAN-ESB-006": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/Build.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/esbuild-build.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Synchronous esbuild memory build is intentionally absent from the Effect operation surface."
+    },
+    "CAN-ESB-007": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/BuildToDirectory.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/esbuild-build.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Synchronous provider-direct esbuild writes are intentionally absent."
+    },
+    "CAN-ESB-008": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/Transform.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/esbuild-build.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Only the admitted asynchronous esbuild transform operation exists."
+    },
+    "CAN-ESB-009": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/AnalyzeMetafile.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/esbuild-build.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Only the admitted asynchronous metafile analysis operation exists."
+    },
+    "CAN-ESB-010": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/FormatMessages.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/esbuild-build.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Only the admitted asynchronous message-formatting operation exists."
+    },
+    "CAN-ESB-013": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/index.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/esbuild-context.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "effect-build exposes no process-global esbuild stop operation; scoped contexts own their lifecycle."
+    },
+    "CAN-ESB-014": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/index.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/esbuild-context.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "effect-build exposes no process-global esbuild initialize operation or global service owner."
+    },
+    "CAN-ESB-019": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/Build.ts", "packages/effect-build-esbuild/src/Command/Build.ts"]
+      },
+      "test": {
+        "status": "negative-lane-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/esbuild-build.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Host Api memory results and selected-command stdout are separate native operations; no host-Api stdout fiction is exposed."
+    },
+    "CAN-NODE-002": {
+      "implementation": {
+        "status": "prohibited-superseded-legacy-mode-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-node-sea/src/Command/AssembleExecutable.ts"]
+      },
+      "test": {
+        "status": "negative-legacy-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/node-sea-assemble-executable.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-supersession-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Preparation-blob generation is superseded by Node 26 direct SEA and is not retained as a fallback."
+    },
+    "CAN-NODE-003": {
+      "implementation": {
+        "status": "prohibited-superseded-legacy-mode-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-node-sea/src/Command/AssembleExecutable.ts"]
+      },
+      "test": {
+        "status": "negative-legacy-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/node-sea-assemble-executable.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-supersession-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Blob injection and AssembleLegacy are deleted; the package has one direct Node 26 SEA operation."
+    },
+    "CAN-ROL-021": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-rolldown/src/Api/index.ts"]
+      },
+      "test": {
+        "status": "negative-package-private-surface-and-type-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/rolldown.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "No module-runner transform operation is implemented or exported; the admitted transform candidate remains distinct."
+    }
+  },
+  "nonOperationProgressOverrides": {
+    "B02.1": {
+      "implementation": {
+        "status": "implemented-native-request-authority-current-hard-cut",
+        "refs": ["packages/effect-build-bun/src/Api/Build.ts"]
+      },
+      "test": {
+        "status": "focused-exact-bun-1.3.14-virtual-and-mixed-host-api-tests-green-external-certification-open",
+        "refs": ["test/integration/bun-bundle.test.ts", "typetest/bun-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["virtual and mixed graph five-host and packed-install certification"]
+      },
+      "note": "Bun BuildOptions remain the native authority for virtual and mixed graphs; no effect-build graph surrogate is introduced."
+    },
+    "B06.1": {
+      "implementation": {
+        "status": "implemented-native-request-authority-current-hard-cut",
+        "refs": ["packages/effect-build-bun/src/Api/Build.ts", "packages/effect-build-bun/src/internal/BuildCommand.ts"]
+      },
+      "test": {
+        "status": "focused-exact-bun-1.3.14-host-api-and-command-loader-tests-green-external-certification-open",
+        "refs": ["test/integration/bun-bundle.test.ts", "typetest/bun-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["loader matrix five-host and packed-install certification"]
+      },
+      "note": "Loaders remain provider-native options in both admitted Bun lanes."
+    },
+    "B06.2": {
+      "implementation": {
+        "status": "implemented-native-per-build-callback-authority-current-hard-cut",
+        "refs": ["packages/effect-build-bun/src/Api/Build.ts"]
+      },
+      "test": {
+        "status": "focused-exact-bun-1.3.14-per-build-plugin-callback-tests-green-lifetime-concurrency-certification-open",
+        "refs": ["test/integration/bun-bundle.test.ts", "typetest/bun-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["plugin callback lifetime, concurrency, and five-host certification"]
+      },
+      "note": "Bun plugin callbacks stay per-build and caller-owned through the exact native BuildConfig."
+    },
+    "B07.1": {
+      "implementation": {
+        "status": "implemented-native-html-graph-request-current-hard-cut",
+        "refs": ["packages/effect-build-bun/src/Api/Build.ts", "packages/effect-build-bun/src/Command/Build.ts"]
+      },
+      "test": {
+        "status": "focused-exact-bun-1.3.14-host-api-and-command-html-graph-tests-green-external-certification-open",
+        "refs": ["test/integration/bun-bundle.test.ts", "typetest/bun-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["HTML graph output semantics across five hosts and packed installs"]
+      },
+      "note": "HTML is a provider-native Bun entrypoint mode, not an effect-build HTML generator."
+    },
+    "B08.1": {
+      "implementation": {
+        "status": "implemented-native-modifier-authority-current-hard-cut",
+        "refs": ["packages/effect-build-bun/src/Api/Build.ts", "packages/effect-build-bun/src/internal/BuildCommand.ts"]
+      },
+      "test": {
+        "status": "focused-exact-bun-1.3.14-host-api-and-command-splitting-asset-sourcemap-tests-green-product-matrix-certification-open",
+        "refs": ["test/integration/bun-bundle.test.ts", "typetest/bun-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["splitting, assets, and sourcemap product matrix across five hosts"]
+      },
+      "note": "Splitting, assets, and source maps retain Bun's native request and publication semantics."
+    },
+    "B08.2": {
+      "implementation": {
+        "status": "implemented-native-result-authority-current-hard-cut",
+        "refs": ["packages/effect-build-bun/src/Api/Build.ts"]
+      },
+      "test": {
+        "status": "focused-exact-bun-1.3.14-native-artifact-chunk-metafile-and-post-build-readability-tests-green-lifetime-certification-open",
+        "refs": ["test/integration/bun-bundle.test.ts", "typetest/bun-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["chunk, metafile, and retained native artifact lifetime across five hosts"]
+      },
+      "note": "The host Api returns Bun's native BuildOutput and artifacts without lossy remapping."
+    },
+    "B10.1": {
+      "implementation": {
+        "status": "implemented-native-full-stack-html-compile-request-current-hard-cut",
+        "refs": [
+          "packages/effect-build-bun/src/Api/CompileExecutable.ts",
+          "packages/effect-build-bun/src/Command/CompileExecutable.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-exact-bun-1.3.14-host-api-and-command-full-stack-html-executable-tests-green-external-certification-open",
+        "refs": [
+          "test/unit/bun-compile-executable.test.ts",
+          "test/integration/bun-bundle.test.ts",
+          "test/integration/bun-compile-executable.test.ts",
+          "typetest/bun-compile-executable.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["full-stack HTML compile target matrix, acquisition, and packed-install certification"]
+      },
+      "note": "The host lane preserves Bun's native HTML compile request; the command lane preserves exact CLI entrypoint authority."
+    },
+    "D06.1": {
+      "implementation": {
+        "status": "implemented-exact-deno-2.9.5-candidate-package-private",
+        "refs": [
+          "packages/effect-build-deno/src/Command/Bundle.ts",
+          "packages/effect-build-deno/src/internal/Options.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-bundle-check-tests-green-project-precedence-gate-open",
+        "refs": ["test/unit/deno-bundle.test.ts", "test/integration/deno-bundle.test.ts", "typetest/deno-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["bundle --check project-precedence and five-host certification"]
+      },
+      "note": "The exact command candidate renders Deno's native check authority; the gated Bundle module remains package-private."
+    },
+    "D08.1": {
+      "implementation": {
+        "status": "implemented-explicit-or-provider-managed-acquisition-accounting-no-hidden-fallback",
+        "refs": [
+          "packages/effect-build-deno/src/Command/CompileExecutable.ts",
+          "packages/effect-build-deno/src/internal/Runtime.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-tool-tests-green-acquisition-matrix-open",
+        "refs": [
+          "test/unit/deno-compile-executable.test.ts",
+          "test/integration/deno-compile-executable.test.ts",
+          "typetest/deno-compile-executable.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["denort cold, warm, corrupt, offline, target-relation, and five-host acquisition matrix"]
+      },
+      "note": "Callers may authenticate an explicit denort; otherwise provider-managed acquisition is reported as such and never represented as effect-build installation."
+    },
+    "D09.1": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-deno/src/Api/index.ts"]
+      },
+      "test": {
+        "status": "negative-public-surface-test-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/deno-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "No compiled-runtime Deno.bundle capability is invented; the structural Api lane is intentionally empty."
+    },
+    "D10.1": {
+      "implementation": {
+        "status": "implemented-explicit-provider-native-permission-authority-package-private",
+        "refs": [
+          "packages/effect-build-deno/src/Api/Bundle.ts",
+          "packages/effect-build-deno/src/Command/Bundle.ts",
+          "packages/effect-build-deno/src/internal/Options.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-type-and-local-real-host-tests-green-permission-matrix-open",
+        "refs": ["test/unit/deno-bundle.test.ts", "test/integration/deno-bundle.test.ts", "typetest/deno-bundle.tst.ts"]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["allow-import, deny-import, project precedence, interruption, and five-host permission matrix"]
+      },
+      "note": "Permission authority remains explicit in each Deno bundle candidate and is never silently widened."
+    },
+    "E04.1": {
+      "implementation": {
+        "status": "implemented-scoped-native-context-operation-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/internal/ContextOwner.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-type-tests-green-external-certification-open",
+        "refs": ["test/unit/esbuild-context.test.ts", "typetest/esbuild-context.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["rebuild coalescing, interruption, plugin lifecycle, and five-host certification"]
+      },
+      "note": "Rebuild is an operation of the scoped native context owner, not a detached global handle."
+    },
+    "E05.1": {
+      "implementation": {
+        "status": "implemented-scoped-native-context-operation-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/internal/ContextOwner.ts"]
+      },
+      "test": {
+        "status": "focused-native-watch-success-unit-and-type-tests-green-external-certification-open",
+        "refs": ["test/unit/esbuild-context.test.ts", "typetest/esbuild-context.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["watch event ordering, interruption races, and five-host certification"]
+      },
+      "note": "context.watch remains scoped to the exact esbuild context owner."
+    },
+    "E06.1": {
+      "implementation": {
+        "status": "implemented-scoped-native-context-operation-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/internal/ContextOwner.ts"]
+      },
+      "test": {
+        "status": "focused-native-serve-success-unit-and-type-tests-green-external-certification-open",
+        "refs": ["test/unit/esbuild-context.test.ts", "typetest/esbuild-context.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["in-flight request shutdown and five-host certification"]
+      },
+      "note": "context.serve is exposed on the scoped native owner; the distinct CLI Serve candidate remains package-private."
+    },
+    "E07.1": {
+      "implementation": {
+        "status": "implemented-scoped-native-context-operation-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/internal/ContextOwner.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-type-tests-green-external-certification-open",
+        "refs": ["test/unit/esbuild-context.test.ts", "typetest/esbuild-context.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["cancel versus concurrent rebuild and five-host lifecycle certification"]
+      },
+      "note": "Cancellation targets the current native context work without disposing the owner."
+    },
+    "E08.1": {
+      "implementation": {
+        "status": "implemented-as-scope-finalizer-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/internal/ContextOwner.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-type-tests-green-external-certification-open",
+        "refs": ["test/unit/esbuild-context.test.ts", "typetest/esbuild-context.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["dispose exactly-once, delayed plugin cleanup, and five-host certification"]
+      },
+      "note": "Dispose is owned by Scope and is intentionally not an escapable public method."
+    },
+    "E09.1": {
+      "implementation": {
+        "status": "implemented-native-request-authority-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/Build.ts", "packages/effect-build-esbuild/src/Api/Context.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-type-tests-green-external-certification-open",
+        "refs": [
+          "test/unit/esbuild-build.test.ts",
+          "test/unit/esbuild-context.test.ts",
+          "typetest/esbuild-build.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["loader and plugin authority across five hosts and packed installs"]
+      },
+      "note": "Exact esbuild BuildOptions remain the authority; effect-build does not fork loader or plugin schemas."
+    },
+    "E09.2": {
+      "implementation": {
+        "status": "implemented-native-plugin-hook-authority-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/Build.ts", "packages/effect-build-esbuild/src/Api/Context.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-type-tests-green-external-certification-open",
+        "refs": [
+          "test/unit/esbuild-build.test.ts",
+          "test/unit/esbuild-context.test.ts",
+          "typetest/esbuild-context.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["plugin hook cancellation, disposal, async cleanup, and five-host certification"]
+      },
+      "note": "Plugin hooks execute under the exact native build or scoped context lifecycle."
+    },
+    "E10.1": {
+      "implementation": {
+        "status": "implemented-native-result-and-explicit-analysis-current-hard-cut",
+        "refs": [
+          "packages/effect-build-esbuild/src/Api/Build.ts",
+          "packages/effect-build-esbuild/src/Api/AnalyzeMetafile.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-and-type-tests-green-external-certification-open",
+        "refs": ["test/unit/esbuild-build.test.ts", "typetest/esbuild-build.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-execution-recorded-external-certification-open",
+        "gates": ["metafile fidelity and analysis across five hosts and packed installs"]
+      },
+      "note": "Metafile remains an esbuild-native result field and AnalyzeMetafile is a distinct native host operation."
+    },
+    "E12.1": {
+      "implementation": {
+        "status": "implemented-provider-owned-native-child-identity-no-global-ownership",
+        "refs": [
+          "packages/effect-build-esbuild/src/Api/Build.ts",
+          "packages/effect-build-esbuild/src/internal/ContextOwner.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-context-lifecycle-tests-green-shared-child-matrix-open",
+        "refs": ["test/unit/esbuild-build.test.ts", "test/unit/esbuild-context.test.ts"]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["shared native child failure, restart, concurrency, and five-host identity matrix"]
+      },
+      "note": "Native child identity remains provider-owned and observational; effect-build does not claim process-global ownership."
+    },
+    "E12.2": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build-esbuild/src/Api/index.ts", "packages/effect-build-esbuild/src/Command/index.ts"]
+      },
+      "test": {
+        "status": "negative-architecture-and-surface-tests-green",
+        "refs": ["test/architecture/v05-target-surface.test.ts", "typetest/esbuild-context.tst.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "No process-global child registry or lifecycle owner exists."
+    },
+    "S02.1": {
+      "implementation": {
+        "status": "implemented-exact-direct-sea-commonjs-current-hard-cut",
+        "refs": ["packages/effect-build-node-sea/src/Command/AssembleExecutable.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-type-tests-green-exact-real-cell-open",
+        "refs": ["test/unit/node-sea-assemble-executable.test.ts", "typetest/node-sea-assemble-executable.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-fake-exact-cell-recorded-external-certification-open",
+        "gates": ["Node 26.7.0 linux-x64-gnu real CommonJS cell and packed-install recurrence"]
+      },
+      "note": "CommonJS is one explicit main format in the admitted direct SEA request."
+    },
+    "S03.1": {
+      "implementation": {
+        "status": "implemented-exact-direct-sea-esm-candidate-current-hard-cut",
+        "refs": ["packages/effect-build-node-sea/src/Command/AssembleExecutable.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-type-tests-green-exact-real-cell-open",
+        "refs": ["test/unit/node-sea-assemble-executable.test.ts", "typetest/node-sea-assemble-executable.tst.ts"]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["Node 26.7.0 linux-x64-gnu ESM execution, import behavior, cache relation, and packed recurrence"]
+      },
+      "note": "ESM is implemented as a native mainFormat candidate; its deferred runtime proof remains open."
+    },
+    "S04.1": {
+      "implementation": {
+        "status": "implemented-exact-direct-sea-asset-embedding-current-hard-cut",
+        "refs": ["packages/effect-build-node-sea/src/Command/AssembleExecutable.ts"]
+      },
+      "test": {
+        "status": "focused-unit-and-type-tests-green-exact-real-cell-open",
+        "refs": ["test/unit/node-sea-assemble-executable.test.ts", "typetest/node-sea-assemble-executable.tst.ts"]
+      },
+      "evidence": {
+        "status": "local-private-snapshot-and-config-proof-recorded-external-certification-open",
+        "gates": ["Node 26.7.0 linux-x64-gnu asset execution and packed recurrence"]
+      },
+      "note": "Assets are privately snapshotted by key before the provider runs."
+    },
+    "S04.2": {
+      "implementation": {
+        "status": "implemented-provider-native-asset-lookup-input-candidate-no-runtime-wrapper",
+        "refs": ["packages/effect-build-node-sea/src/Command/AssembleExecutable.ts"]
+      },
+      "test": {
+        "status": "focused-embedding-tests-green-runtime-lookup-matrix-open",
+        "refs": ["test/unit/node-sea-assemble-executable.test.ts"]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["node:sea getAsset, getAssetKeys, copied value, raw borrowed view, and exact-host execution"]
+      },
+      "note": "effect-build embeds provider-native keys and bytes but does not wrap or misstate node:sea runtime lookup lifetimes."
+    },
+    "S05.1": {
+      "implementation": {
+        "status": "implemented-package-private-exact-node-26.7.0-code-cache-candidate-current-hard-cut",
+        "refs": [
+          "packages/effect-build-node-sea/src/internal/Assemble.ts",
+          "packages/effect-build-node-sea/src/internal/AssembleModes.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-private-mode-unit-and-exact-node-26.7.0-cjs-esm-runtime-tests-implemented-external-cell-open",
+        "refs": [
+          "test/unit/node-sea-assemble-executable.test.ts",
+          "test/integration/node-sea-assemble-executable.test.ts",
+          "typetest/node-sea-assemble-executable.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["code-cache CJS and ESM correctness, invalidation, builder/base relation, and exact-host matrix"]
+      },
+      "note": "The provider-native CJS and ESM code-cache modes are implemented package-private; the admitted public request remains fixed false until invalidation, relation, and exact-host gates close."
+    },
+    "S06.1": {
+      "implementation": {
+        "status": "implemented-package-private-exact-node-26.7.0-startup-snapshot-candidate-current-hard-cut",
+        "refs": [
+          "packages/effect-build-node-sea/src/internal/Assemble.ts",
+          "packages/effect-build-node-sea/src/internal/AssembleModes.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-private-mode-unit-and-exact-node-26.7.0-snapshot-runtime-test-implemented-external-cell-open",
+        "refs": [
+          "test/unit/node-sea-assemble-executable.test.ts",
+          "test/integration/node-sea-assemble-executable.test.ts",
+          "typetest/node-sea-assemble-executable.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["startup snapshot compatibility, mutation, builder/base relation, and exact-host matrix"]
+      },
+      "note": "The provider-native CJS startup-snapshot mode is implemented package-private with ESM and snapshot-plus-cache relations denied; public admission remains gated."
+    },
+    "S07.1": {
+      "implementation": {
+        "status": "implemented-package-private-explicit-exec-argv-policy-candidate-current-hard-cut",
+        "refs": [
+          "packages/effect-build-node-sea/src/internal/Assemble.ts",
+          "packages/effect-build-node-sea/src/internal/AssembleModes.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-private-mode-unit-and-exact-node-26.7.0-none-env-cli-runtime-tests-implemented-external-cell-open",
+        "refs": [
+          "test/unit/node-sea-assemble-executable.test.ts",
+          "test/integration/node-sea-assemble-executable.test.ts",
+          "typetest/node-sea-assemble-executable.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["execArgv fixed and extension policy, injection resistance, and exact-host matrix"]
+      },
+      "note": "Embedded arguments require an explicit none, env, or cli extension policy in the package-private candidate; the public request still exposes no unproved switch."
+    },
+    "S09.1": {
+      "implementation": {
+        "status": "implemented-private-candidate-correctness-repair-current-hard-cut",
+        "refs": [
+          "packages/effect-build-node-sea/src/Command/AssembleExecutable.ts",
+          "packages/effect-build/src/Author/Executable.ts"
+        ]
+      },
+      "test": {
+        "status": "focused-unit-tests-green-exact-real-cell-open",
+        "refs": ["test/unit/node-sea-assemble-executable.test.ts", "test/unit/core-author.test.ts"]
+      },
+      "evidence": {
+        "status": "local-publication-laws-recorded-external-certification-open",
+        "gates": ["native candidate repair and replacement across exact hosts and packed installs"]
+      },
+      "note": "Mode repair and inspection occur inside private staging before one atomic commit and make no distribution-trust claim."
+    },
+    "S09.2": {
+      "implementation": {
+        "status": "implemented-in-dedicated-apple-package-current-hard-cut",
+        "refs": ["packages/effect-build-apple/src/CodeSign.ts", "packages/effect-build-apple/src/Assess.ts"]
+      },
+      "test": {
+        "status": "focused-noncredential-and-local-real-tool-tests-green-credentialed-cells-open",
+        "refs": [
+          "test/unit/apple-artifact-codesign.test.ts",
+          "test/unit/apple-notary-staple-assess.test.ts",
+          "test/integration/apple-distribution.test.ts"
+        ]
+      },
+      "evidence": {
+        "status": "named-external-certification-gates-open",
+        "gates": [
+          "A0-A9 exact-candidate receipts",
+          "fourteen credential-backed distribution coordinates",
+          "eight quarantined clean-host coordinates"
+        ]
+      },
+      "note": "Distribution signing and verification are Apple-owned operations, never implicit Node SEA post-processing."
+    },
+    "S10.1": {
+      "implementation": {
+        "status": "implemented-exact-builder-base-identity-relation-current-hard-cut",
+        "refs": ["packages/effect-build-node-sea/src/internal/Runtime.ts"]
+      },
+      "test": {
+        "status": "focused-relation-and-mutation-tests-green-exact-real-cell-open",
+        "refs": ["test/unit/node-sea-assemble-executable.test.ts"]
+      },
+      "evidence": {
+        "status": "local-relation-proof-recorded-external-certification-open",
+        "gates": ["exact Node 26.7.0 linux-x64-gnu real builder/base and packed recurrence"]
+      },
+      "note": "Separate builder and base selections must have equal authenticated identity before provider work."
+    },
+    "F01.1": {
+      "implementation": {
+        "status": "satisfied-by-direct-official-effect-primitive-no-wrapper",
+        "refs": ["packages/effect-build/src/Author/Tool.ts"]
+      },
+      "test": {
+        "status": "provider-command-and-architecture-tests-green",
+        "refs": ["test/unit/provider-command.test.ts", "test/architecture/core-hard-cut.test.ts"]
+      },
+      "evidence": {
+        "status": "local-source-and-test-proof-recorded-external-certification-open",
+        "gates": ["five-host selected-command and packed-install certification"]
+      },
+      "note": "Author.Tool produces official ChildProcess.Command values; effect-build defines no shadow process primitive."
+    },
+    "F02.1": {
+      "implementation": {
+        "status": "satisfied-by-direct-official-effect-primitive-no-wrapper",
+        "refs": ["packages/effect-build/src/Author/BorrowedOutput.ts", "packages/effect-build/src/Author/Executable.ts"]
+      },
+      "test": {
+        "status": "scope-lifecycle-tests-green-external-certification-open",
+        "refs": ["test/unit/core-author.test.ts", "test/unit/esbuild-context.test.ts"]
+      },
+      "evidence": {
+        "status": "local-source-and-test-proof-recorded-external-certification-open",
+        "gates": ["interruption and cleanup across five hosts and packed installs"]
+      },
+      "note": "Borrowed handles and native owners use Effect Scope directly."
+    },
+    "F03.1": {
+      "implementation": {
+        "status": "satisfied-by-direct-official-effect-primitives-no-wrapper",
+        "refs": [
+          "packages/effect-build-esbuild/src/internal/Runtime.ts",
+          "packages/effect-build-apple/src/internal/Sha256.ts"
+        ]
+      },
+      "test": {
+        "status": "bounded-stream-and-streaming-hash-tests-green-external-certification-open",
+        "refs": ["test/unit/provider-command.test.ts", "test/unit/apple-artifact-codesign.test.ts"]
+      },
+      "evidence": {
+        "status": "local-source-and-test-proof-recorded-external-certification-open",
+        "gates": ["stream failure, backpressure, bounds, and five-host certification"]
+      },
+      "note": "Provider streams and sinks remain official Effect values; no effect-build stream abstraction is introduced."
+    },
+    "F04.1": {
+      "implementation": {
+        "status": "satisfied-by-direct-official-effect-primitives-no-wrapper",
+        "refs": ["packages/effect-build/src/Author/BorrowedOutput.ts", "packages/effect-build/src/Author/Executable.ts"]
+      },
+      "test": {
+        "status": "filesystem-containment-and-publication-tests-green-external-certification-open",
+        "refs": ["test/unit/core-author.test.ts", "test/architecture/core-hard-cut.test.ts"]
+      },
+      "evidence": {
+        "status": "local-source-and-test-proof-recorded-external-certification-open",
+        "gates": ["filesystem identity, containment, rename, and lock behavior across five hosts"]
+      },
+      "note": "Library source depends on Effect FileSystem and Path services, never node:fs or node:path."
+    },
+    "F05.1": {
+      "implementation": {
+        "status": "satisfied-by-direct-official-effect-primitives-no-wrapper",
+        "refs": ["packages/effect-build/src/Author/NodeMain.ts", "packages/effect-build-bun/src/internal/Runtime.ts"]
+      },
+      "test": {
+        "status": "service-and-layer-composition-tests-green-external-certification-open",
+        "refs": ["test/unit/core-profile.test.ts", "test/unit/bun-bundle.test.ts"]
+      },
+      "evidence": {
+        "status": "local-source-and-test-proof-recorded-external-certification-open",
+        "gates": ["composition laws across provider and five-host packed-install matrix"]
+      },
+      "note": "Capabilities use official Context.Service and Layer composition directly."
+    },
+    "F06.1": {
+      "implementation": {
+        "status": "satisfied-by-direct-official-effect-primitives-no-wrapper",
+        "refs": ["packages/effect-build/src/Matrix.ts", "packages/effect-build-esbuild/src/internal/Runtime.ts"]
+      },
+      "test": {
+        "status": "cause-and-interruption-tests-green-external-certification-open",
+        "refs": ["test/unit/core-matrix.test.ts", "test/unit/provider-command.test.ts"]
+      },
+      "evidence": {
+        "status": "local-source-and-test-proof-recorded-external-certification-open",
+        "gates": ["provider descendant termination, reaping, remnants, and five-host interruption matrix"]
+      },
+      "note": "Interruption remains Cause and closes Scope; it is never translated into a build error."
+    },
+    "F07.1": {
+      "implementation": {
+        "status": "satisfied-by-direct-official-effect-primitives-no-wrapper",
+        "refs": ["packages/effect-build/src/Author/BorrowedOutput.ts"]
+      },
+      "test": {
+        "status": "cleanup-reporting-tests-green-observability-integration-open",
+        "refs": ["test/unit/core-author.test.ts"]
+      },
+      "evidence": {
+        "status": "local-source-and-test-proof-recorded-external-certification-open",
+        "gates": ["application logger and tracer integration across packed consumers"]
+      },
+      "note": "Cleanup diagnostics use Effect logging and annotations directly; no logging facade is added."
+    },
+    "R01.1": {
+      "implementation": {
+        "status": "semantic-candidate-implemented-current-hard-cut",
+        "refs": ["packages/effect-build/src/Author/NodeMain.ts", "scripts/node-finalizer/private-adapters.mjs"]
+      },
+      "test": {
+        "status": "focused-core-and-private-matrix-tests-green-external-provider-matrix-open",
+        "refs": ["test/unit/core-profile.test.ts", "scripts/node-finalizer/common.test.mjs"]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["Linux arm64, macOS x64, all producer-assembler coordinates, and recurring packed-install evidence"]
+      },
+      "note": "NodeMain is offer-first and portable; no provider-specific finalizer is public through the role."
+    },
+    "R02.1": {
+      "implementation": {
+        "status": "semantic-candidate-implemented-current-hard-cut",
+        "refs": ["packages/effect-build/src/Profile/BrowserModulePayload.ts"]
+      },
+      "test": {
+        "status": "focused-core-contract-tests-green-provider-conformance-matrix-open",
+        "refs": [
+          "test/unit/core-browser-module-payload.test.ts",
+          "test/integration/browser-module-payload-compatibility.test.ts",
+          "typetest/profile.tst.ts"
+        ]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["multi-entry, edge, query, fragment, external, browser, five-host, and packed-install evidence"]
+      },
+      "note": "The role borrows provider-declared module payloads and never synthesizes HTML or infers a graph."
+    },
+    "R03.1": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": ["packages/effect-build/src/Artifact.ts", "packages/effect-build/src/index.ts"]
+      },
+      "test": {
+        "status": "negative-architecture-and-surface-tests-green",
+        "refs": ["test/architecture/core-hard-cut.test.ts", "test/architecture/v05-target-surface.test.ts"]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Executable artifacts preserve runtime and target identity; no runtime-neutral executable role is exposed."
+    },
+    "R04.1": {
+      "implementation": {
+        "status": "prohibited-by-research-and-absent-current-hard-cut",
+        "refs": [
+          "packages/effect-build-bun/src/Command/Watch.ts",
+          "packages/effect-build-deno/src/Command/CompileWatch.ts",
+          "packages/effect-build-rolldown/src/Command/Watch.ts"
+        ]
+      },
+      "test": {
+        "status": "negative-watch-surface-tests-green",
+        "refs": [
+          "typetest/esbuild-watch.tst.ts",
+          "typetest/rolldown.tst.ts",
+          "test/architecture/v05-target-surface.test.ts"
+        ]
+      },
+      "evidence": {
+        "status": "research-rejection-and-negative-surface-established",
+        "gates": []
+      },
+      "note": "Command watches expose opaque scoped child handles and raw streams; CLI text is never parsed into typed events."
+    },
+    "R05.1": {
+      "implementation": {
+        "status": "implemented-operation-owned-surface-law-current-hard-cut",
+        "refs": [
+          "packages/effect-build-bun/src/Api/index.ts",
+          "packages/effect-build-esbuild/src/Command/index.ts",
+          "packages/effect-build/src/index.ts"
+        ]
+      },
+      "test": {
+        "status": "generated-surface-and-owner-tests-green",
+        "refs": [
+          "test/architecture/public-surface.test.ts",
+          "test/architecture/v05-target-surface.test.ts",
+          "tooling/public-api.json"
+        ]
+      },
+      "evidence": {
+        "status": "current-source-and-generated-surface-proof-recorded",
+        "gates": ["five-host packed consumer surface recurrence"]
+      },
+      "note": "Every public module has one semantic owner; conditional candidates remain package-private until their named gate closes."
+    },
+    "OP-ROL-004.release": {
+      "implementation": {
+        "status": "implemented-as-scope-owned-release-boundary-package-private",
+        "refs": ["packages/effect-build-rolldown/src/internal/BuildOwner.ts"]
+      },
+      "test": {
+        "status": "focused-lifecycle-tests-green-named-gate-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["release versus in-flight work, idempotence, and five-host certification"]
+      },
+      "note": "The reusable build owner's release is a Scope finalizer and cannot escape as an unowned close handle."
+    },
+    "OP-ROL-009.release": {
+      "implementation": {
+        "status": "implemented-as-scope-owned-release-boundary-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/Watch.ts"]
+      },
+      "test": {
+        "status": "focused-lifecycle-tests-green-named-gate-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["watch release, callbacks, in-flight work, and five-host certification"]
+      },
+      "note": "Watcher release is owned by Scope for both native publication modes."
+    },
+    "OP-ROL-019.release": {
+      "implementation": {
+        "status": "implemented-as-scope-owned-release-boundary-package-private",
+        "refs": ["packages/effect-build-rolldown/src/Api/DevEngine.ts"]
+      },
+      "test": {
+        "status": "focused-lifecycle-tests-green-named-gate-open",
+        "refs": ["test/unit/rolldown-api.test.ts"]
+      },
+      "evidence": {
+        "status": "named-gate-open",
+        "gates": ["DevEngine release, in-flight work, experimental drift, and five-host certification"]
+      },
+      "note": "DevEngine release is a Scope finalizer for both native publication modes."
+    }
+  },
+  "invariants": {
+    "operationDispositionCounts": {
+      "mandatory": 5,
+      "positive-proof-gated": 22,
+      "conditional-gate": 27,
+      "rejected": 11,
+      "superseded-direct-sea": 2
+    },
+    "certificationHosts": [
+      "linux-x64",
+      "linux-arm64",
+      "macos-arm64",
+      "macos-x64",
+      "windows-x64"
+    ],
+    "firstPartyPackages": [
+      "effect-build",
+      "effect-build-apple",
+      "effect-build-bun",
+      "effect-build-deno",
+      "effect-build-esbuild",
+      "effect-build-node-sea"
+    ],
+    "conditionalPackageCandidates": ["effect-build-rolldown"],
+    "authorModules": ["Author/Tool", "Author/BorrowedOutput", "Author/Executable"],
+    "separateAuthorities": [
+      "implementation",
+      "test",
+      "certification",
+      "merge",
+      "release-approval",
+      "publication",
+      "post-release-verification"
+    ],
+    "apiCommandPolicy": "operation-specific-native-lanes-no-universal-mirroring",
+    "publicationStatus": "unauthorized-until-every-external-gate-is-earned"
+  },
+  "supplementalEntries": {
+    "core": [
+      {
+        "id": "CORE-ARTIFACT",
+        "title": "Canonical hashed and unhashed artifact vocabulary",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/artifact",
+        "authorityRefs": [
+          "research/post-0.3/corpus/DECISION-RECORD.md:218-230",
+          "plans/039-establish-core-capability-boundaries.md:22-31"
+        ],
+        "gates": ["same-size mutation, streaming hash, containment, and publication laws"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build/src/Artifact.ts"]
+        },
+        "test": {
+          "status": "focused-scalar-identity-mutation-and-publication-tests-green-external-certification-open",
+          "refs": ["test/unit/core.test.ts", "test/unit/core-author.test.ts", "typetest/artifact.tst.ts"]
+        },
+        "evidence": {
+          "status": "local-source-and-test-proof-recorded-named-external-gates-open",
+          "gates": [
+            "same-size mutation, streaming hash, containment, and publication laws",
+            "five-host and packed-install certification"
+          ],
+          "refs": ["packages/effect-build/src/Artifact.ts", "test/unit/core-author.test.ts"]
+        }
+      },
+      {
+        "id": "CORE-SYSTEM-TARGET",
+        "title": "Explicit system target independent from orchestrator and compiler host",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/system-target",
+        "authorityRefs": ["plans/039-establish-core-capability-boundaries.md:22-31"],
+        "gates": ["all five construction hosts remain distinct from artifact targets"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build/src/SystemTarget.ts"]
+        },
+        "test": {
+          "status": "focused-eight-target-and-host-independence-tests-green-external-matrix-open",
+          "refs": ["test/unit/core.test.ts", "test/architecture/v05-target-surface.test.ts", "typetest/target.tst.ts"]
+        },
+        "evidence": {
+          "status": "local-source-and-test-proof-recorded-named-external-gate-open",
+          "gates": ["all five construction hosts remain distinct from artifact targets"],
+          "refs": ["packages/effect-build/src/SystemTarget.ts", "test/host-target.ts"]
+        }
+      },
+      {
+        "id": "CORE-MATRIX",
+        "title": "Independent ordered compile matrix with Cause preservation",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/matrix",
+        "authorityRefs": [
+          "research/post-0.3/freeze/PRODUCT-DECISIONS.md:24-47",
+          "research/post-0.3/freeze/R7-MATRIX-LAWS.md:1-25"
+        ],
+        "gates": ["Bun and Deno matrix implementation and interruption receipts"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source-and-provider-adapters",
+          "refs": [
+            "packages/effect-build/src/Matrix.ts",
+            "packages/effect-build-bun/src/Command/CompileExecutable.ts",
+            "packages/effect-build-deno/src/Command/CompileExecutable.ts"
+          ]
+        },
+        "test": {
+          "status": "focused-ordering-bounds-cause-and-interruption-tests-green-external-receipts-open",
+          "refs": [
+            "test/unit/core-matrix.test.ts",
+            "test/unit/bun-compile-executable.test.ts",
+            "test/unit/deno-compile-executable.test.ts"
+          ]
+        },
+        "evidence": {
+          "status": "local-source-and-test-proof-recorded-named-external-gates-open",
+          "gates": ["Bun and Deno matrix interruption receipts", "five-host and packed-install certification"],
+          "refs": ["packages/effect-build/src/Matrix.ts", "test/unit/core-matrix.test.ts"]
+        }
+      },
+      {
+        "id": "CORE-AUTHOR-TOOL",
+        "title": "Author Tool protocol over official Effect command primitives",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/author-tool",
+        "authorityRefs": ["research/post-0.3/reconciliation/r4/CLOSURE.md:11-33"],
+        "gates": ["packed out-of-tree law execution"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build/src/Author/Tool.ts"]
+        },
+        "test": {
+          "status": "focused-selection-content-identity-and-launch-reauthentication-tests-green-packed-matrix-open",
+          "refs": ["test/unit/core.test.ts", "test/unit/provider-command.test.ts", "typetest/author-tool.tst.ts"]
+        },
+        "evidence": {
+          "status": "local-source-and-test-proof-recorded-named-external-gate-open",
+          "gates": ["packed out-of-tree law execution", "five-host selected-command certification"],
+          "refs": ["packages/effect-build/src/Author/Tool.ts", "test/unit/core.test.ts"]
+        }
+      },
+      {
+        "id": "CORE-AUTHOR-BORROWED-OUTPUT",
+        "title": "Revocable borrowed-output author protocol",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/author-borrowed-output",
+        "authorityRefs": ["research/post-0.3/reconciliation/r4/CLOSURE.md:11-33"],
+        "gates": ["containment, revalidation, and cleanup law execution"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build/src/Author/BorrowedOutput.ts"]
+        },
+        "test": {
+          "status": "focused-revocation-containment-mutation-cause-and-cleanup-tests-green-external-certification-open",
+          "refs": ["test/unit/core-author.test.ts", "typetest/core-author.tst.ts"]
+        },
+        "evidence": {
+          "status": "local-source-and-test-proof-recorded-named-external-gates-open",
+          "gates": [
+            "containment, revalidation, and cleanup law execution",
+            "five-host and packed-install certification"
+          ],
+          "refs": ["packages/effect-build/src/Author/BorrowedOutput.ts", "test/unit/core-author.test.ts"]
+        }
+      },
+      {
+        "id": "CORE-AUTHOR-EXECUTABLE",
+        "title": "Same-parent executable staging and publication author protocol",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/author-executable",
+        "authorityRefs": ["research/post-0.3/reconciliation/r4/CLOSURE.md:11-52"],
+        "gates": ["native-format, replacement, interruption, and cleanup law execution"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build/src/Author/Executable.ts"]
+        },
+        "test": {
+          "status": "focused-private-inspection-mutation-replacement-and-failure-tests-green-external-certification-open",
+          "refs": ["test/unit/core-author.test.ts", "typetest/core-author.tst.ts"]
+        },
+        "evidence": {
+          "status": "local-source-and-test-proof-recorded-named-external-gates-open",
+          "gates": [
+            "native-format, replacement, interruption, and cleanup law execution",
+            "five-host and packed-install certification"
+          ],
+          "refs": ["packages/effect-build/src/Author/Executable.ts", "test/unit/core-author.test.ts"]
+        }
+      },
+      {
+        "id": "CORE-COMPATIBILITY-HYBRID",
+        "title": "Provider-private finite compatibility evaluator",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/compatibility",
+        "authorityRefs": [
+          "research/post-0.3/reconciliation/r3/CLOSURE.md:8-46",
+          "research/post-0.3/corpus/COMPATIBILITY-BOUNDARY.md:39-108"
+        ],
+        "gates": ["exact provider and host cells plus selected-command reauthorization"],
+        "implementation": {
+          "status": "implemented-package-private-finite-evaluators-and-exact-matrix-control-planes",
+          "refs": [
+            ".github/workflows/ci.yml",
+            "scripts/certification-host.mjs",
+            "scripts/research-evidence-accounting.mjs",
+            "scripts/provider-native-receipt.mjs",
+            "scripts/aggregate-compatibility.mjs",
+            "scripts/node-finalizer/private-adapters.mjs",
+            "scripts/test-packed-coordinate.mjs"
+          ]
+        },
+        "test": {
+          "status": "local-evaluator-control-and-non-admission-tests-green-external-coordinate-execution-open",
+          "refs": [
+            "test/integration/browser-module-payload-compatibility.test.ts",
+            "test/integration/provider-host-runtime.test.ts",
+            "test/integration/provider-command.test.ts",
+            "scripts/certification-host.test.mjs",
+            "scripts/provider-native-receipt.test.mjs",
+            "scripts/node-finalizer/common.test.mjs",
+            "test/architecture/v05-contract.test.ts"
+          ]
+        },
+        "evidence": {
+          "status": "control-plane-and-local-smoke-proof-recorded-all-recurring-external-receipts-open",
+          "gates": [
+            "exact five-host browser-provider coordinates",
+            "exact five-host provider-native coordinates with unsupported cells recorded as exclusions",
+            "exact five-host packed-consumer coordinates",
+            "exact five-construction-host Node-main producer-format-target coordinates",
+            "selected-command reauthorization receipts for every applicable coordinate"
+          ],
+          "refs": [
+            "research/post-0.3/reconciliation/r3/CLOSURE.md:8-46",
+            ".github/workflows/ci.yml",
+            "scripts/aggregate-compatibility.mjs",
+            "scripts/node-finalizer/aggregate.mjs"
+          ]
+        }
+      },
+      {
+        "id": "CORE-API-COMMAND-BOUNDARY",
+        "title": "Operation-specific in-process and selected-command lanes",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/provider-native-boundary",
+        "authorityRefs": [
+          "research/post-0.3/corpus/lanes/provider-native-breadth/api-command-boundary.md:3-24",
+          "research/post-0.3/freeze/PRODUCT-DECISIONS.md:108-129"
+        ],
+        "gates": ["every live R1 operation receives its truthful native lane"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-across-all-provider-packages",
+          "refs": [
+            "packages/effect-build-bun/src/index.ts",
+            "packages/effect-build-deno/src/index.ts",
+            "packages/effect-build-esbuild/src/index.ts",
+            "packages/effect-build-node-sea/src/index.ts",
+            "packages/effect-build-rolldown/src/index.ts"
+          ]
+        },
+        "test": {
+          "status": "generated-surface-contract-and-provider-type-tests-green",
+          "refs": [
+            "test/architecture/public-surface.test.ts",
+            "test/architecture/v05-target-surface.test.ts",
+            "tooling/public-api.json"
+          ]
+        },
+        "evidence": {
+          "status": "all-live-operations-accounted-required-modules-public-conditional-modules-package-private-external-certification-open",
+          "gates": ["five-host and packed-install certification for every admitted public lane"],
+          "refs": ["tooling/research-complete-contract.json", "tooling/public-api.json"]
+        }
+      },
+      {
+        "id": "CORE-LIFECYCLE",
+        "title": "Scoped ownership, interruption, cleanup, and bounded collection",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/lifecycle",
+        "authorityRefs": [
+          "research/post-0.3/reconciliation/r4/CLOSURE.md:35-58",
+          "research/post-0.3/corpus/DECISION-RECORD.md:113-135"
+        ],
+        "gates": ["provider-specific cancellation and descendant/remnant matrices"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-scoped-ownership-and-bounded-command-collection",
+          "refs": [
+            "packages/effect-build/src/Author/BorrowedOutput.ts",
+            "packages/effect-build/src/Author/Executable.ts",
+            "packages/effect-build-esbuild/src/internal/Runtime.ts"
+          ]
+        },
+        "test": {
+          "status": "focused-cause-interruption-cleanup-bounds-and-mutation-tests-green-external-matrices-open",
+          "refs": [
+            "test/unit/core-author.test.ts",
+            "test/unit/provider-command.test.ts",
+            "test/unit/core-matrix.test.ts"
+          ]
+        },
+        "evidence": {
+          "status": "local-source-and-test-proof-recorded-named-external-gates-open",
+          "gates": [
+            "provider-specific cancellation and descendant/remnant matrices",
+            "five-host and packed-install certification"
+          ],
+          "refs": ["test/unit/core-author.test.ts", "test/unit/provider-command.test.ts"]
+        }
+      },
+      {
+        "id": "CORE-DURABLE-FILE",
+        "title": "Same-parent ordinary durable-file publication",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/author-durable-file",
+        "authorityRefs": [
+          "research/post-0.3/corpus/DECISION-RECORD.md:218-230",
+          "docs/v0.5-contract.md:204-251"
+        ],
+        "gates": ["same-parent publication, replacement, interruption, and exact-host lock behavior"],
+        "implementation": {
+          "status": "implemented-package-private-current-hard-cut-source",
+          "refs": ["packages/effect-build/src/Author/internal/DurableFile.ts"]
+        },
+        "test": {
+          "status": "focused-through-executable-and-browser-publication-laws-green-exact-host-lock-matrix-open",
+          "refs": [
+            "test/unit/core-author.test.ts",
+            "test/unit/core-browser-module-payload.test.ts",
+            "test/architecture/core-hard-cut.test.ts"
+          ]
+        },
+        "evidence": {
+          "status": "local-source-and-test-proof-recorded-named-external-gates-open",
+          "gates": [
+            "same-parent publication, replacement, interruption, and exact-host lock behavior",
+            "five-host and packed-install certification"
+          ],
+          "refs": ["packages/effect-build/src/Author/internal/DurableFile.ts", "test/unit/core-author.test.ts"]
+        }
+      },
+      {
+        "id": "CORE-DIRECTORY-GENERATION",
+        "title": "Immutable directory generation and atomic current-reference activation",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build/durable-generation",
+        "authorityRefs": [
+          "research/post-0.3/corpus/lanes/browser-role/decision-table.md:17-26,66-73",
+          "docs/v0.5-contract.md:204-251"
+        ],
+        "gates": ["canonical bytes, reader pinning, rollback, collision, and exact-host publication laws"],
+        "implementation": {
+          "status": "implemented-package-private-current-hard-cut-source",
+          "refs": ["packages/effect-build/src/Author/internal/DirectoryGeneration.ts"]
+        },
+        "test": {
+          "status": "focused-canonical-bytes-quiescence-snapshot-pinning-rollback-collision-and-tamper-tests-green-external-host-laws-open",
+          "refs": ["test/unit/core-directory-generation.test.ts", "test/architecture/core-directory-generation.test.ts"]
+        },
+        "evidence": {
+          "status": "local-source-and-test-proof-recorded-named-external-gates-open",
+          "gates": [
+            "canonical bytes, reader pinning, rollback, collision, and exact-host publication laws",
+            "five-host rename and replacement behavior",
+            "crash and power-loss durability",
+            "cross-process activation races",
+            "cross-host adversarial provider-mutation schedules"
+          ],
+          "refs": [
+            "packages/effect-build/src/Author/internal/DirectoryGeneration.ts",
+            "test/unit/core-directory-generation.test.ts",
+            "test/architecture/core-directory-generation.test.ts"
+          ]
+        }
+      }
+    ],
+    "profiles": [
+      {
+        "id": "PROFILE-NODE-SEALED-MAIN",
+        "title": "Portable sealed Node main",
+        "disposition": "ship-if-proof",
+        "semanticOwner": "effect-build/profile-node-main",
+        "authorityRefs": ["research/post-0.3/freeze/R5-PORTABLE-ROLE-VERDICTS.md:10-35"],
+        "gates": ["Linux arm64, macOS x64, and recurring packed-install evidence"],
+        "implementation": {
+          "status": "semantic-candidate-implemented-current-hard-cut",
+          "refs": ["packages/effect-build/src/Author/NodeMain.ts", "scripts/node-finalizer/private-adapters.mjs"]
+        },
+        "test": {
+          "status": "focused-offer-integrity-revocation-and-private-matrix-controls-green-external-host-cells-open",
+          "refs": [
+            "test/unit/core-profile.test.ts",
+            "scripts/node-finalizer/common.test.mjs",
+            "typetest/profile.tst.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-gate-open",
+          "gates": [
+            "Linux arm64, macOS x64, and recurring packed-install evidence",
+            "all authenticated producer-assembler coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/freeze/R5-PORTABLE-ROLE-VERDICTS.md:10-35",
+            "packages/effect-build/src/Author/NodeMain.ts"
+          ]
+        }
+      },
+      {
+        "id": "PROFILE-BROWSER-MODULE-PAYLOAD",
+        "title": "Borrowed provider-declared browser module payload",
+        "disposition": "ship-if-proof",
+        "semanticOwner": "effect-build/profile-browser-module-payload",
+        "authorityRefs": [
+          "research/post-0.3/freeze/R5-PORTABLE-ROLE-VERDICTS.md:37-53",
+          "research/post-0.3/corpus/lanes/browser-role/decision-table.md:5-26"
+        ],
+        "gates": ["multi-entry, edge, query, fragment, external, browser, and five-host evidence"],
+        "implementation": {
+          "status": "semantic-candidate-implemented-provider-conformance-open",
+          "refs": ["packages/effect-build/src/Profile/BrowserModulePayload.ts"]
+        },
+        "test": {
+          "status": "focused-core-contract-tested-provider-matrix-open",
+          "refs": [
+            "test/unit/core-browser-module-payload.test.ts",
+            "typetest/profile.tst.ts",
+            "test/architecture/v05-target-surface.test.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-gate-open",
+          "gates": ["multi-entry, edge, query, fragment, external, browser, and five-host evidence"],
+          "refs": [
+            "research/post-0.3/freeze/R5-PORTABLE-ROLE-VERDICTS.md:37-53",
+            "research/post-0.3/corpus/lanes/browser-role/decision-table.md:5-26"
+          ]
+        }
+      },
+      {
+        "id": "PROFILE-INCREMENTAL-NODE-MAIN",
+        "title": "Incremental Node main role independent from the Rolldown provider gate",
+        "disposition": "conditional-gate",
+        "semanticOwner": "effect-build/profile-incremental-node-main",
+        "authorityRefs": ["research/post-0.3/freeze/R6-ROLLDOWN-VERDICTS.md:29-39"],
+        "gates": ["close/inflight, import/external, identity, bounds, five-host, and packed evidence"],
+        "implementation": {
+          "status": "package-private-candidate-implemented-with-two-concrete-provider-adapters",
+          "refs": [
+            "packages/effect-build/src/Profile/internal/IncrementalNodeMain.ts",
+            "packages/effect-build/src/Author/internal/NodeMainLease.ts",
+            "packages/effect-build-esbuild/src/internal/ContextOwner.ts",
+            "packages/effect-build-rolldown/src/internal/BuildOwner.ts",
+            "test/fixtures/incremental-node-main-adapters.ts"
+          ]
+        },
+        "test": {
+          "status": "focused-lifecycle-identity-cause-and-unchanged-consumer-tests-green",
+          "refs": [
+            "test/unit/core-incremental-node-main.test.ts",
+            "test/unit/incremental-node-main-adapters.test.ts",
+            "test/architecture/core-hard-cut.test.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-gate-open",
+          "gates": [
+            "five-host provider close and inflight races",
+            "complete import and external policy",
+            "extended repeated-output and resource-growth stress",
+            "independently packed concrete adapters"
+          ],
+          "refs": ["research/post-0.3/freeze/R6-ROLLDOWN-VERDICTS.md:29-39"]
+        }
+      },
+      {
+        "id": "PROFILE-TYPED-WATCH-PROTOCOL",
+        "title": "Product-owned typed watch protocol distinct from CLI text parsing",
+        "disposition": "conditional-gate",
+        "semanticOwner": "effect-build/profile-typed-watch",
+        "authorityRefs": ["research/post-0.3/corpus/RESEARCH-PROGRAM.md:136-142"],
+        "gates": ["R8 protocol and lifecycle proof"],
+        "implementation": {
+          "status": "package-private-typed-host-event-candidate-implemented",
+          "refs": ["packages/effect-build/src/Profile/internal/TypedWatch.ts"]
+        },
+        "test": {
+          "status": "focused-boundary-projection-coalescing-recovery-and-cause-tests-green",
+          "refs": [
+            "test/unit/core-typed-watch.test.ts",
+            "test/architecture/core-hard-cut.test.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-gate-open",
+          "gates": [
+            "concrete host filesystem mappings and OS rename/coalescing semantics",
+            "cold and warm latency",
+            "graph-churn and burst resource stress",
+            "five-host output-loop failure and interruption matrices"
+          ],
+          "refs": ["research/post-0.3/corpus/RESEARCH-PROGRAM.md:136-142"]
+        }
+      }
+    ],
+    "apple": [
+      {
+        "id": "APPLE-ARTIFACT",
+        "title": "Authenticated immutable Apple artifact",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build-apple/artifact",
+        "authorityRefs": ["research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:75-106"],
+        "gates": ["credential and clean-host evidence binding"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build-apple/src/Artifact.ts"]
+        },
+        "test": {
+          "status": "focused-noncredential-tests-locally-green-external-certification-open",
+          "refs": [
+            "test/unit/apple-artifact-codesign.test.ts",
+            "test/unit/apple-containers.test.ts",
+            "test/unit/apple-notary-staple-assess.test.ts",
+            "typetest/apple.tst.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-external-certification-gates-open",
+          "gates": [
+            "credential and clean-host evidence binding",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:141-159",
+            "docs/apple-distribution.md:203-310"
+          ]
+        }
+      },
+      {
+        "id": "APPLE-CODE-SIGN",
+        "title": "Developer ID code signing",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build-apple/code-sign",
+        "authorityRefs": ["research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:75-106"],
+        "gates": ["credential-backed signing identity and validation cells"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build-apple/src/CodeSign.ts"]
+        },
+        "test": {
+          "status": "focused-noncredential-tests-locally-green-credentialed-signing-open",
+          "refs": [
+            "test/unit/apple-artifact-codesign.test.ts",
+            "test/integration/apple-distribution.test.ts",
+            "typetest/apple.tst.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-external-certification-gates-open",
+          "gates": [
+            "credential-backed signing identity and validation cells",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:141-159",
+            "docs/apple-distribution.md:203-310"
+          ]
+        }
+      },
+      {
+        "id": "APPLE-APP-BUNDLE",
+        "title": "Application bundle construction",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build-apple/app-bundle",
+        "authorityRefs": ["research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:75-106"],
+        "gates": ["signed nested-code and bundle verification cells"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build-apple/src/AppBundle.ts"]
+        },
+        "test": {
+          "status": "focused-unit-and-local-real-tool-tests-green-credentialed-product-open",
+          "refs": [
+            "test/unit/apple-containers.test.ts",
+            "test/integration/apple-distribution.test.ts",
+            "typetest/apple.tst.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-external-certification-gates-open",
+          "gates": [
+            "signed nested-code and bundle verification cells",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:141-159",
+            "docs/apple-distribution.md:203-310"
+          ]
+        }
+      },
+      {
+        "id": "APPLE-ZIP",
+        "title": "Apple distribution ZIP transport",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build-apple/zip",
+        "authorityRefs": ["research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:75-106"],
+        "gates": ["transport and notarization evidence cells"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build-apple/src/Zip.ts"]
+        },
+        "test": {
+          "status": "focused-unit-and-local-real-tool-tests-green-notarized-transport-open",
+          "refs": [
+            "test/unit/apple-containers.test.ts",
+            "test/integration/apple-distribution.test.ts",
+            "typetest/apple.tst.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-external-certification-gates-open",
+          "gates": [
+            "transport and notarization evidence cells",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:141-159",
+            "docs/apple-distribution.md:203-310"
+          ]
+        }
+      },
+      {
+        "id": "APPLE-DISK-IMAGE",
+        "title": "Disk image construction",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build-apple/disk-image",
+        "authorityRefs": ["research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:75-106"],
+        "gates": ["credential-backed DMG construction, signing, and assessment cells"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build-apple/src/DiskImage.ts"]
+        },
+        "test": {
+          "status": "focused-unit-and-local-real-tool-tests-green-credentialed-product-open",
+          "refs": [
+            "test/unit/apple-containers.test.ts",
+            "test/integration/apple-distribution.test.ts",
+            "typetest/apple.tst.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-external-certification-gates-open",
+          "gates": [
+            "credential-backed DMG construction, signing, and assessment cells",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:141-159",
+            "docs/apple-distribution.md:203-310"
+          ]
+        }
+      },
+      {
+        "id": "APPLE-INSTALLER-PACKAGE",
+        "title": "Installer package construction",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build-apple/installer-package",
+        "authorityRefs": ["research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:75-106"],
+        "gates": ["installer identity, timestamp, verification, and clean-host cells"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build-apple/src/InstallerPackage.ts"]
+        },
+        "test": {
+          "status": "focused-noncredential-tests-locally-green-credentialed-installer-open",
+          "refs": ["test/unit/apple-containers.test.ts", "typetest/apple.tst.ts"]
+        },
+        "evidence": {
+          "status": "named-external-certification-gates-open",
+          "gates": [
+            "installer identity, timestamp, verification, and clean-host cells",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:141-159",
+            "docs/apple-distribution.md:203-310"
+          ]
+        }
+      },
+      {
+        "id": "APPLE-NOTARY",
+        "title": "Digest-bound notarization and resumption",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build-apple/notary",
+        "authorityRefs": ["research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:75-106,141-159"],
+        "gates": ["A7 exact provider decoding and credential-backed reconciliation receipts"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source-provisional-A7-shapes",
+          "refs": ["packages/effect-build-apple/src/Notary.ts"]
+        },
+        "test": {
+          "status": "focused-simulated-recovery-and-envelope-tests-green-credentialed-A7-open",
+          "refs": [
+            "test/unit/apple-notary-staple-assess.test.ts",
+            "scripts/apple-certification/receipt.test.mjs",
+            "scripts/apple-certification/authenticate.test.mjs",
+            "typetest/apple.tst.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-external-certification-gates-open",
+          "gates": [
+            "A7 exact provider decoding and credential-backed reconciliation receipts",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:141-159",
+            "docs/apple-distribution.md:203-310"
+          ]
+        }
+      },
+      {
+        "id": "APPLE-STAPLE",
+        "title": "Notarization ticket stapling",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build-apple/staple",
+        "authorityRefs": ["research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:75-106"],
+        "gates": ["app, DMG, and installer staple evidence"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build-apple/src/Staple.ts"]
+        },
+        "test": {
+          "status": "focused-simulated-and-local-kind-fence-tests-green-credentialed-staple-open",
+          "refs": [
+            "test/unit/apple-notary-staple-assess.test.ts",
+            "test/integration/apple-distribution.test.ts",
+            "typetest/apple.tst.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-external-certification-gates-open",
+          "gates": [
+            "app, DMG, and installer staple evidence",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:141-159",
+            "docs/apple-distribution.md:203-310"
+          ]
+        }
+      },
+      {
+        "id": "APPLE-ASSESS",
+        "title": "Digest-bound distribution assessment",
+        "disposition": "mandatory",
+        "semanticOwner": "effect-build-apple/assess",
+        "authorityRefs": ["research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:75-106"],
+        "gates": ["fourteen credential cells and eight quarantined clean-host cells"],
+        "implementation": {
+          "status": "implemented-current-hard-cut-source",
+          "refs": ["packages/effect-build-apple/src/Assess.ts"]
+        },
+        "test": {
+          "status": "focused-unit-and-local-real-tool-tests-green-clean-host-certification-open",
+          "refs": [
+            "test/unit/apple-notary-staple-assess.test.ts",
+            "test/integration/apple-distribution.test.ts",
+            "typetest/apple.tst.ts"
+          ]
+        },
+        "evidence": {
+          "status": "named-external-certification-gates-open",
+          "gates": [
+            "fourteen credential cells and eight quarantined clean-host cells",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/APPLE-DISTRIBUTION-BOUNDARY.md:141-159",
+            "docs/apple-distribution.md:203-310"
+          ]
+        }
+      }
+    ],
+    "release": [
+      {
+        "id": "RELEASE-LOCKSTEP",
+        "title": "Lockstep first-party release with exact same-version peers",
+        "disposition": "mandatory",
+        "semanticOwner": "release/package-train",
+        "authorityRefs": ["research/post-0.3/corpus/DECISION-RECORD.md:178-187"],
+        "gates": ["all first-party packages converge together"],
+        "implementation": {
+          "status": "implemented-fixed-six-admitted-0.5.0-lockstep-package-train-with-exact-same-version-core-peers",
+          "refs": [
+            "package.json",
+            "packages/effect-build/package.json",
+            "packages/effect-build-apple/package.json",
+            "packages/effect-build-bun/package.json",
+            "packages/effect-build-deno/package.json",
+            "packages/effect-build-esbuild/package.json",
+            "packages/effect-build-node-sea/package.json",
+            "scripts/lockstep-package.mjs",
+            ".github/workflows/candidate.yml"
+          ]
+        },
+        "test": {
+          "status": "local-fixed-six-exact-peer-pack-and-out-of-tree-consumer-controls-green-external-release-train-open",
+          "refs": [
+            "scripts/test-built-consumer.mjs",
+            "scripts/test-packed-coordinate.mjs",
+            "scripts/release/candidate.test.mjs"
+          ]
+        },
+        "evidence": {
+          "status": "local-lockstep-manifests-and-control-tests-recorded-publication-and-external-consumer-matrix-open",
+          "gates": [
+            "all five-host packed-consumer receipts for the exact six admitted tarballs",
+            "one immutable successful candidate descriptor and payload",
+            "registry publication and post-publication verification"
+          ],
+          "refs": [
+            ".github/workflows/candidate.yml",
+            "scripts/release/build-candidate.mjs",
+            "scripts/test-built-consumer.mjs"
+          ]
+        }
+      },
+      {
+        "id": "RELEASE-FIVE-HOSTS",
+        "title": "Five construction and certification hosts independent from target runners",
+        "disposition": "mandatory",
+        "semanticOwner": "release/certification-hosts",
+        "authorityRefs": ["research/post-0.3/corpus/DECISION-RECORD.md:232-242"],
+        "gates": ["Linux x64, Linux arm64, macOS arm64, macOS x64, Windows x64"],
+        "implementation": {
+          "status": "implemented-five-host-dispatchable-control-plane-with-host-target-separation-and-explicit-unsupported-exclusions-no-recurring-host-receipts-claimed",
+          "refs": [
+            ".github/workflows/ci.yml",
+            "scripts/certification-host.mjs",
+            "scripts/aggregate-compatibility.mjs",
+            ".github/workflows/apple-certification.yml"
+          ]
+        },
+        "test": {
+          "status": "static-exact-matrix-shape-and-host-attestation-tests-locally-green-workflow-dispatch-not-authorized",
+          "refs": [
+            "scripts/certification-host.test.mjs",
+            "scripts/node-finalizer/common.test.mjs",
+            "test/architecture/v05-contract.test.ts",
+            "test/architecture/v05-target-surface.test.ts"
+          ]
+        },
+        "evidence": {
+          "status": "all-five-host-execution-and-receipts-open",
+          "gates": [
+            "Linux x64 recurring receipts",
+            "Linux arm64 recurring receipts",
+            "macOS arm64 recurring receipts",
+            "macOS x64 recurring receipts",
+            "Windows x64 recurring receipts"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/DECISION-RECORD.md:232-242",
+            ".github/workflows/ci.yml"
+          ]
+        }
+      },
+      {
+        "id": "RELEASE-RECEIPT-ARCHIVE",
+        "title": "Append-only orphan receipt archive",
+        "disposition": "mandatory",
+        "semanticOwner": "release/receipt-archive",
+        "authorityRefs": [
+          "research/post-0.3/corpus/DECISION-RECORD.md:244-260",
+          "research/post-0.3/corpus/RECEIPT-ARCHIVAL-DESIGN.md:8-54,63-120"
+        ],
+        "gates": ["separate least-privilege operational authority"],
+        "implementation": {
+          "status": "implemented-manual-protected-api-authenticated-hostile-input-validated-orphan-receipt-writer-no-dispatch-claimed",
+          "refs": [
+            ".github/workflows/receipt-archive.yml",
+            "scripts/receipt-archive/archive.mjs"
+          ]
+        },
+        "test": {
+          "status": "local-canonical-schema-hostile-zip-api-authentication-git-race-and-workflow-architecture-tests-green",
+          "refs": [
+            "scripts/receipt-archive/archive.test.mjs",
+            "test/architecture/receipt-archive.test.ts"
+          ]
+        },
+        "evidence": {
+          "status": "local-control-proof-recorded-external-protected-writer-authority-and-live-receipts-open",
+          "gates": [
+            "protected receipt-archive environment and required reviewer",
+            "append-only evidence/receipts-v1 ruleset and writer identity",
+            "authenticated production certification and terminal-release receipt archives"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/RECEIPT-ARCHIVAL-DESIGN.md:63-120",
+            ".github/workflows/receipt-archive.yml"
+          ]
+        }
+      },
+      {
+        "id": "RELEASE-AUTHORITY-SEPARATION",
+        "title": "Implementation, certification, merge, approval, publication, and verification remain separate",
+        "disposition": "mandatory",
+        "semanticOwner": "release/authority",
+        "authorityRefs": ["research/post-0.3/corpus/GOVERNANCE.md:23-35,64-80"],
+        "gates": ["publication remains unauthorized until every external control is earned"],
+        "implementation": {
+          "status": "implemented-distinct-local-control-planes-with-publication-structurally-quarantined",
+          "refs": [
+            ".github/workflows/candidate.yml",
+            ".github/workflows/apple-certification.yml",
+            ".github/workflows/release.yml",
+            "scripts/release/admission.mjs"
+          ]
+        },
+        "test": {
+          "status": "local-candidate-admission-coordinator-and-quarantine-tests-green-external-approvals-open",
+          "refs": [
+            "scripts/release/candidate.test.mjs",
+            "scripts/release/coordinator-state.test.mjs",
+            "scripts/release/admission.test.mjs"
+          ]
+        },
+        "evidence": {
+          "status": "local-negative-authority-proof-recorded-merge-release-approval-publication-and-verification-unearned",
+          "gates": [
+            "merge authority",
+            "protected release approval",
+            "registry publication authority",
+            "post-publication verification"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/GOVERNANCE.md:23-35,64-80",
+            ".github/workflows/release.yml"
+          ]
+        }
+      },
+      {
+        "id": "RELEASE-SECURITY",
+        "title": "Threat-modeled candidate, packed-consumer, provenance, and trusted-publisher controls",
+        "disposition": "mandatory",
+        "semanticOwner": "release/security",
+        "authorityRefs": ["research/post-0.3/corpus/RESEARCH-PROGRAM.md:155-174"],
+        "gates": ["R10 security and external registry/environment proof"],
+        "implementation": {
+          "status": "implemented-local-candidate-admission-packed-consumer-and-quarantined-publisher-controls",
+          "refs": [
+            "scripts/release/build-candidate.mjs",
+            "scripts/release/candidate.mjs",
+            "scripts/release/admission.mjs",
+            "scripts/test-built-consumer.mjs",
+            ".github/workflows/release.yml"
+          ]
+        },
+        "test": {
+          "status": "local-hostile-candidate-admission-coordinator-and-consumer-tests-green-external-R10-proof-open",
+          "refs": [
+            "scripts/release/candidate.test.mjs",
+            "scripts/release/coordinator-state.test.mjs",
+            "scripts/release/admission.test.mjs"
+          ]
+        },
+        "evidence": {
+          "status": "local-control-proof-recorded-registry-environment-provenance-and-trusted-publisher-evidence-open",
+          "gates": [
+            "protected environment and reviewer identity",
+            "npm namespace ownership and exact six-package trusted-publisher bindings",
+            "registry provenance and post-publication package verification",
+            "completed R10 hostile-input receipt-archive evidence"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/RESEARCH-PROGRAM.md:155-174",
+            "docs/release-security.md"
+          ]
+        }
+      },
+      {
+        "id": "RELEASE-APPLE-CERTIFICATION",
+        "title": "Credential-backed Apple certification kept separate from implementation",
+        "disposition": "mandatory",
+        "semanticOwner": "release/apple-certification",
+        "authorityRefs": ["research/post-0.3/corpus/RESEARCH-PROGRAM.md:143-153"],
+        "gates": [
+          "protected apple-certification environment identity and approved certifier digest readback",
+          "approved distinct primary and clean-host certifier bytes plus credential-backed @2 fixtures",
+          "same-uid runner isolation and approved interpreter/toolchain identities",
+          "A0-A9, fourteen distribution cells, and eight clean-host cells"
+        ],
+        "implementation": {
+          "status": "implemented-hard-cut-authenticated-certifier-snapshot-and-canonical-category-evidence-control-plane",
+          "refs": [
+            ".github/workflows/apple-certification.yml",
+            "scripts/apple-certification/run-harness.mjs",
+            "scripts/apple-certification/certifier.mjs",
+            "scripts/apple-certification/source.mjs",
+            "scripts/apple-certification/prior-evidence.mjs",
+            "scripts/apple-certification/build.mjs",
+            "scripts/apple-certification/authenticate.mjs",
+            "scripts/apple-certification/receipt.mjs"
+          ]
+        },
+        "test": {
+          "status": "local-noncredentialed-apple-and-control-plane-tests-green-credentialed-cells-open",
+          "refs": [
+            "test/integration/apple-distribution.test.ts",
+            "test/architecture/apple-certification-trust-boundary.test.ts",
+            "scripts/apple-certification/certifier.test.mjs",
+            "scripts/apple-certification/source.test.mjs",
+            "scripts/apple-certification/prior-evidence.test.mjs",
+            "scripts/apple-certification/authenticate.test.mjs",
+            "scripts/apple-certification/receipt.test.mjs"
+          ]
+        },
+        "evidence": {
+          "status": "all-credential-backed-and-clean-host-certification-receipts-open",
+          "gates": [
+            "protected apple-certification environment rules and exact path/digest variable readback",
+            "approved primary and clean-host certifier binary installation and credential-backed @2 evidence fixtures",
+            "same-uid runner isolation plus approved certifier interpreter and toolchain identities",
+            "A0-A9 exact-candidate certification receipts",
+            "fourteen credential-backed distribution coordinates",
+            "eight quarantined clean-host coordinates"
+          ],
+          "refs": [
+            "research/post-0.3/corpus/RESEARCH-PROGRAM.md:143-153",
+            "docs/apple-distribution.md"
+          ]
+        }
+      }
+    ]
+  },
+  "publicSurfaceOwners": {
+    "effect-build": {
+      "rootNamespaces": {
+        "Artifact": "effect-build/artifact",
+        "BorrowedOutput": "effect-build/author-borrowed-output",
+        "Executable": "effect-build/author-executable",
+        "Matrix": "effect-build/matrix",
+        "SystemTarget": "effect-build/system-target",
+        "Tool": "effect-build/author-tool"
+      },
+      "subpaths": {
+        "./Artifact": "effect-build/artifact",
+        "./Author/BorrowedOutput": "effect-build/author-borrowed-output",
+        "./Author/Executable": "effect-build/author-executable",
+        "./Author/Tool": "effect-build/author-tool",
+        "./Matrix": "effect-build/matrix",
+        "./SystemTarget": "effect-build/system-target"
+      }
+    },
+    "effect-build-apple": {
+      "rootNamespaces": {
+        "AppBundle": "effect-build-apple/app-bundle",
+        "Artifact": "effect-build-apple/artifact",
+        "Assess": "effect-build-apple/assess",
+        "CodeSign": "effect-build-apple/code-sign",
+        "DiskImage": "effect-build-apple/disk-image",
+        "InstallerPackage": "effect-build-apple/installer-package",
+        "Notary": "effect-build-apple/notary",
+        "Staple": "effect-build-apple/staple",
+        "Zip": "effect-build-apple/zip"
+      },
+      "subpaths": {
+        "./AppBundle": "effect-build-apple/app-bundle",
+        "./Artifact": "effect-build-apple/artifact",
+        "./Assess": "effect-build-apple/assess",
+        "./CodeSign": "effect-build-apple/code-sign",
+        "./DiskImage": "effect-build-apple/disk-image",
+        "./InstallerPackage": "effect-build-apple/installer-package",
+        "./Notary": "effect-build-apple/notary",
+        "./Staple": "effect-build-apple/staple",
+        "./Zip": "effect-build-apple/zip"
+      }
+    },
+    "effect-build-bun": {
+      "rootNamespaces": {
+        "Api": "effect-build-bun/api-root",
+        "Command": "effect-build-bun/command-root"
+      },
+      "subpaths": {
+        "./Api": "effect-build-bun/api-root",
+        "./Command": "effect-build-bun/command-root"
+      }
+    },
+    "effect-build-deno": {
+      "rootNamespaces": {
+        "Command": "effect-build-deno/command-root"
+      },
+      "subpaths": {
+        "./Command": "effect-build-deno/command-root"
+      }
+    },
+    "effect-build-esbuild": {
+      "rootNamespaces": {
+        "Api": "effect-build-esbuild/api-root",
+        "Command": "effect-build-esbuild/command-root"
+      },
+      "subpaths": {
+        "./Api": "effect-build-esbuild/api-root",
+        "./Command": "effect-build-esbuild/command-root"
+      }
+    },
+    "effect-build-node-sea": {
+      "rootNamespaces": {
+        "Command": "effect-build-node-sea/command-root"
+      },
+      "subpaths": {
+        "./Command": "effect-build-node-sea/command-root"
+      }
+    }
+  }
+}

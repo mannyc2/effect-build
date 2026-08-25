@@ -1,6 +1,6 @@
-import type * as Target from "../packages/effect-build/src/Target.js";
+import type { SystemTarget } from "../packages/effect-build/src/SystemTarget.js";
 
-export const hostTarget = (): Target.Target => {
+export const hostTarget = (): SystemTarget => {
   const architecture = process.arch === "x64" ? "x64" : process.arch === "arm64" ? "aarch64" : undefined;
   if (architecture === undefined) throw new Error(`unsupported test host architecture: ${process.arch}`);
   if (process.platform === "darwin") return architecture === "x64" ? "macos-x64" : "macos-aarch64";

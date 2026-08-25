@@ -5,36 +5,78 @@ import { parse } from "yaml";
 
 const root = resolve(import.meta.dirname, "../..");
 
-describe("v0.5 target surface", () => {
+interface ResearchContract {
+  readonly evidenceControl: {
+    readonly certificationHosts: readonly {
+      readonly id: string;
+      readonly runner: string;
+      readonly systemTarget: string;
+    }[];
+    readonly coordinateRules: {
+      readonly compilerTargets: {
+        readonly coordinates: readonly { readonly compiler: string; readonly target: string }[];
+        readonly expectedCoordinateCount: number;
+        readonly targetExecutionClaim: string;
+      };
+      readonly providerNativeLanes: {
+        readonly explicitUnsupportedCoordinates: readonly {
+          readonly providerRuntimeCell: string;
+          readonly certificationHost: string;
+        }[];
+      };
+    };
+  };
+  readonly releaseControl: {
+    readonly orderedPackages: readonly string[];
+    readonly conditionalPackageCandidates: readonly string[];
+  };
+  readonly targetPublicSurface: {
+    readonly coreModules: readonly string[];
+    readonly privateProfileCandidates: readonly {
+      readonly id: string;
+      readonly implementationPath: string;
+    }[];
+    readonly providerLanes: readonly {
+      readonly package: string;
+      readonly requirement: "required" | "gate-dependent";
+      readonly lanes: readonly {
+        readonly lane: "Api" | "Command";
+        readonly requirement: "required" | "gate-dependent";
+        readonly rootNamespace: "Api" | "Command";
+        readonly packageExport: "./Api" | "./Command";
+        readonly modules: readonly {
+          readonly module: string;
+          readonly implementationPath: string;
+          readonly requirement: "required" | "gate-dependent";
+          readonly operations: readonly {
+            readonly operationId: string;
+            readonly export: string | null;
+            readonly implementationExport: string;
+          }[];
+        }[];
+      }[];
+    }[];
+  };
+}
+
+const readContract = async (): Promise<ResearchContract> =>
+  JSON.parse(await readFile(resolve(root, "tooling/research-complete-contract.json"), "utf8")) as ResearchContract;
+
+describe("research-complete target surface", () => {
   it("hard-cuts the transitional core Toolchain surface", async () => {
+    const contract = await readContract();
     const manifest = JSON.parse(
       await readFile(resolve(root, "packages/effect-build/package.json"), "utf8"),
     ) as { readonly exports: Readonly<Record<string, unknown>> };
 
-    expect(Object.keys(manifest.exports).sort()).toEqual([
-      ".",
-      "./Artifact",
-      "./Author/BorrowedContent",
-      "./Author/Generation",
-      "./Author/NodeMain",
-      "./Author/Tool",
-      "./Author/TreeSnapshot",
-      "./BuildError",
-      "./Profile/StaticBrowserApplication",
-      "./Target",
-    ]);
+    expect(Object.keys(manifest.exports).sort()).toEqual([".", ...contract.targetPublicSurface.coreModules].sort());
 
     const rootSource = await readFile(resolve(root, "packages/effect-build/src/index.ts"), "utf8");
     expect(rootSource).not.toContain("Toolchain");
-    expect(rootSource).not.toContain("Author");
-    expect(rootSource).not.toContain("Profile");
 
     const vitestConfig = await readFile(resolve(root, "vitest.config.ts"), "utf8");
-    for (const subpath of Object.keys(manifest.exports).filter((subpath) => subpath !== ".")) {
-      expect(vitestConfig, `missing source alias for ${subpath}`).toContain(
-        `"effect-build/${subpath.slice(2)}"`,
-      );
-    }
+    expect(vitestConfig).toContain("find: /^effect-build\\/(.+)$/u");
+    expect(vitestConfig).toContain('replacement: resolve(coreRoot, "$1.ts")');
     expect(vitestConfig).not.toContain("effect-build/Toolchain");
   });
 
@@ -44,46 +86,130 @@ describe("v0.5 target surface", () => {
   });
 
   it("does not mint target identity from the orchestrator host", async () => {
-    const targetSource = await readFile(resolve(root, "packages/effect-build/src/Target.ts"), "utf8");
+    const targetSource = await readFile(resolve(root, "packages/effect-build/src/SystemTarget.ts"), "utf8");
     expect(targetSource).not.toMatch(/export const host\b/);
     expect(targetSource).not.toContain("globalThis");
   });
 
-  it("exercises the packed external-author boundary through public subpaths", async () => {
-    const fixture = await readFile(resolve(root, "test/fixtures/external-author-v05/index.js"), "utf8");
-    const imports = [...fixture.matchAll(/from\s+"([^"]+)"/gu)].map((match) => match[1]!);
-    expect(imports.filter((specifier) => specifier.startsWith("effect-build"))).toEqual([
-      "effect-build/Author/NodeMain",
-      "effect-build/Profile/StaticBrowserApplication",
-    ]);
-    expect(fixture).not.toContain("/src/");
-    expect(fixture).not.toContain("/internal/");
-
+  it("keeps proof-gated portable profiles implemented but package-private", async () => {
+    const contract = await readContract();
+    const manifest = JSON.parse(
+      await readFile(resolve(root, "packages/effect-build/package.json"), "utf8"),
+    ) as { readonly exports: Readonly<Record<string, unknown>> };
+    const rootSource = await readFile(resolve(root, "packages/effect-build/src/index.ts"), "utf8");
+    for (const candidate of contract.targetPublicSurface.privateProfileCandidates) {
+      expect(await readFile(resolve(root, candidate.implementationPath), "utf8"), candidate.id).toBeTypeOf("string");
+    }
+    expect(Object.keys(manifest.exports)).not.toContain("./Author/NodeMain");
+    expect(Object.keys(manifest.exports)).not.toContain("./Profile/BrowserModulePayload");
+    expect(rootSource).not.toContain("NodeMain");
+    expect(rootSource).not.toContain("BrowserModulePayload");
     const consumer = await readFile(resolve(root, "scripts/test-built-consumer.mjs"), "utf8");
     expect(consumer).toContain('"--strict-peer-deps"');
     expect(consumer).toContain('"--install-strategy=nested"');
-    expect(consumer).toContain("adapterProducerTag === NodeMain.Producer");
-    expect(consumer).toContain("unknown portable protocol reached the external provider");
+    expect(consumer).not.toContain("effect-build/Author/NodeMain");
+    expect(consumer).not.toContain("effect-build/Profile/BrowserModulePayload");
   });
 
-  it("hard-cuts Node SEA into truthful Raw and evidence-only portable modules", async () => {
-    const manifest = JSON.parse(
-      await readFile(resolve(root, "packages/effect-build-node-sea/package.json"), "utf8"),
-    ) as { readonly exports: Readonly<Record<string, unknown>> };
-    expect(Object.keys(manifest.exports).sort()).toEqual([".", "./NodeMainExecutable", "./Raw"]);
-    expect(await readFile(resolve(root, "packages/effect-build-node-sea/src/index.ts"), "utf8")).not.toContain(
-      "AssembleExecutable",
-    );
-    const portable = await readFile(
-      resolve(root, "packages/effect-build-node-sea/src/NodeMainExecutable.ts"),
-      "utf8",
-    );
-    expect(portable).not.toContain("Context.Service");
-    expect(portable).not.toContain("Layer.Layer");
-    expect(portable).not.toContain("finalize:");
+  it("hard-cuts every provider package to its truthful Api and Command roots", async () => {
+    const contract = await readContract();
+    const verifiedOperationIds: string[] = [];
+    for (const provider of contract.targetPublicSurface.providerLanes) {
+      const manifest = JSON.parse(
+        await readFile(resolve(root, `packages/${provider.package}/package.json`), "utf8"),
+      ) as { readonly private?: boolean; readonly exports: Readonly<Record<string, unknown>> };
+      const publicLanes = provider.lanes.filter(({ requirement }) => requirement === "required");
+      expect(Object.keys(manifest.exports), provider.package).toEqual([
+        ".",
+        ...publicLanes.map((lane) => lane.packageExport),
+      ]);
+      if (provider.requirement === "gate-dependent") expect(manifest.private, provider.package).toBe(true);
+      const rootSource = await readFile(resolve(root, `packages/${provider.package}/src/index.ts`), "utf8");
+      if (provider.requirement === "gate-dependent") {
+        expect(rootSource, `${provider.package} conditional root`).not.toMatch(/^\s*export\s/mu);
+      }
+      for (const lane of provider.lanes) {
+        if (lane.requirement === "required") {
+          expect(rootSource, `${provider.package}.${lane.rootNamespace}`).toContain(
+            `export * as ${lane.rootNamespace}`,
+          );
+        } else {
+          expect(rootSource, `${provider.package}.${lane.rootNamespace}`).not.toContain(
+            `export * as ${lane.rootNamespace}`,
+          );
+        }
+        const laneSource = await readFile(
+          resolve(root, `packages/${provider.package}/src/${lane.lane}/index.ts`),
+          "utf8",
+        );
+        for (const module of lane.modules) {
+          const moduleSource = await readFile(
+            resolve(root, `packages/${provider.package}/${module.implementationPath}`),
+            "utf8",
+          );
+          expect(moduleSource, `${provider.package}/${module.implementationPath}`).toBeTypeOf("string");
+          expect(
+            Object.hasOwn(manifest.exports, `./${lane.lane}/${module.module}`),
+            `${provider.package}/${lane.lane}/${module.module} direct package reachability`,
+          ).toBe(false);
+          const operationExport = `export * as ${module.module} from "./${module.module}.js";`;
+          if (lane.requirement === "required" && module.requirement === "required") {
+            expect(laneSource, `${provider.package}/${lane.lane}.${module.module}`).toContain(operationExport);
+          } else {
+            expect(laneSource, `${provider.package}/${lane.lane}.${module.module}`).not.toContain(operationExport);
+          }
+          for (const operation of module.operations) {
+            verifiedOperationIds.push(operation.operationId);
+            expect(operation.implementationExport, operation.operationId).toMatch(/^[A-Za-z_$][A-Za-z0-9_$]*$/u);
+            expect(moduleSource, operation.operationId).toMatch(
+              new RegExp(`export const ${operation.implementationExport}\\b`, "u"),
+            );
+            if (operation.export !== null) {
+              expect(operation.implementationExport, operation.operationId).toBe(operation.export);
+            }
+          }
+        }
+      }
+      for (
+        const inherited of ["./Build", "./Bundle", "./CompileExecutable", "./Context", "./Profile", "./Raw", "./Watch"]
+      ) {
+        expect(Object.hasOwn(manifest.exports, inherited), `${provider.package}${inherited}`).toBe(false);
+      }
+    }
+    expect(verifiedOperationIds).toHaveLength(54);
+    expect(new Set(verifiedOperationIds).size).toBe(54);
+    expect(
+      await readFile(resolve(root, "packages/effect-build-node-sea/src/internal/AssembleModes.ts"), "utf8"),
+    ).toContain("execArgvExtension");
+    expect(
+      await readFile(resolve(root, "packages/effect-build-node-sea/src/Command/index.ts"), "utf8"),
+    ).not.toContain("AssembleModes");
   });
 
-  it("keeps the 108-cell target finalizer private, exact, and manually admitted", async () => {
+  it("owns all twelve compiler-target cells and emits structural-only aggregate evidence", async () => {
+    const contract = await readContract();
+    const workflowSource = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
+    const workflow = parse(workflowSource) as {
+      readonly jobs: Readonly<
+        Record<string, {
+          readonly needs?: string;
+          readonly strategy?: { readonly matrix?: { readonly include?: readonly unknown[] } };
+        }>
+      >;
+    };
+    const rule = contract.evidenceControl.coordinateRules.compilerTargets;
+    expect(rule.expectedCoordinateCount).toBe(12);
+    expect(workflow.jobs["target-cells"]?.strategy?.matrix?.include).toEqual(rule.coordinates);
+    expect(workflow.jobs["compiler-target-aggregate"]?.needs).toBe("target-cells");
+    expect(rule.targetExecutionClaim).toContain("none-structural-inspection-only");
+    expect(workflowSource).toContain("EFFECT_BUILD_TARGET_RECEIPT");
+    expect(workflowSource).toContain("compiler-target-evidence.json");
+    const aggregate = await readFile(resolve(root, "scripts/aggregate-compiler-targets.mjs"), "utf8");
+    expect(aggregate).toContain("compilerTargetReceiptExpectation");
+    expect(aggregate).toContain("expected 12 compiler-target receipts");
+  });
+
+  it("keeps the 180-cell five-construction-host finalizer private, exact, and manually admitted", async () => {
     const workflow = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as {
       readonly permissions: Readonly<Record<string, string>>;
       readonly jobs: Readonly<
@@ -99,8 +225,21 @@ describe("v0.5 target surface", () => {
     const finalize = workflow.jobs["node-main-finalize"]!;
     const product = (matrix: Readonly<Record<string, readonly unknown[]>> | undefined): number =>
       Object.values(matrix ?? {}).reduce((count, axis) => count * axis.length, 1);
-    expect(product(construct.strategy?.matrix)).toBe(108);
-    expect(product(finalize.strategy?.matrix)).toBe(108);
+    expect(product(construct.strategy?.matrix)).toBe(180);
+    expect(product(finalize.strategy?.matrix)).toBe(180);
+    const construction = construct.strategy?.matrix?.construction as readonly {
+      readonly id: string;
+      readonly runner: string;
+      readonly system_target: string;
+    }[];
+    expect(construction).toEqual([
+      { id: "linux-x64", runner: "ubuntu-24.04", system_target: "linux-x64-gnu" },
+      { id: "linux-arm64", runner: "ubuntu-24.04-arm", system_target: "linux-aarch64-gnu" },
+      { id: "macos-arm64", runner: "macos-15", system_target: "macos-aarch64" },
+      { id: "macos-x64", runner: "macos-15-intel", system_target: "macos-x64" },
+      { id: "windows-x64", runner: "windows-2025", system_target: "windows-x64" },
+    ]);
+    expect(finalize.strategy?.matrix?.construction_host).toEqual(construction.map(({ id }) => id));
     expect(construct.if).toContain("workflow_dispatch");
     expect(finalize.needs).toBe("node-main-construct");
     expect(workflow.jobs["node-main-aggregate"]?.needs).toBe("node-main-finalize");
@@ -109,21 +248,86 @@ describe("v0.5 target surface", () => {
     expect(packageManifest).not.toContain("node-target-finalizer");
   });
 
-  it("materializes all 84 non-Apple compatibility coordinates without pruning", async () => {
-    const workflow = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as {
+  it("uses only research-complete authority for current host, finalizer, and release controls", async () => {
+    const currentControlFiles = [
+      "scripts/certification-host.mjs",
+      "scripts/aggregate-compatibility.mjs",
+      "scripts/node-finalizer/common.mjs",
+      "scripts/node-finalizer/aggregate.mjs",
+      "scripts/release/build-candidate.mjs",
+      "scripts/release/candidate.mjs",
+    ];
+    const sources = await Promise.all(
+      currentControlFiles.map(async (path) => [path, await readFile(resolve(root, path), "utf8")] as const),
+    );
+    for (const [path, source] of sources) {
+      expect(source, path).not.toContain("tooling/v05-contract.json");
+      expect(source, path).not.toContain("requiredCompatibilityEvidencePoints");
+    }
+    expect(sources.find(([path]) => path === "scripts/certification-host.mjs")?.[1]).toContain(
+      "tooling/research-complete-contract.json",
+    );
+    expect(sources.find(([path]) => path === "scripts/node-finalizer/common.mjs")?.[1]).toContain(
+      "research-complete-contract.json",
+    );
+  });
+
+  it("materializes 146 applicable five-host coordinates and excludes unsupported cells from passes", async () => {
+    const workflowSource = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
+    const workflow = parse(workflowSource) as {
       readonly jobs: Readonly<
         Record<string, {
           readonly if?: string;
           readonly needs?: readonly string[];
+          readonly "runs-on"?: string;
           readonly strategy?: { readonly matrix?: Readonly<Record<string, readonly unknown[]>> };
         }>
       >;
     };
-    const product = (job: string): number =>
-      Object.values(workflow.jobs[job]?.strategy?.matrix ?? {}).reduce((count, axis) => count * axis.length, 1);
-    expect(product("browser-compatibility")).toBe(27);
-    expect(product("provider-native-compatibility")).toBe(15);
-    expect(product("packed-consumer-compatibility")).toBe(42);
+    const matrix = (job: string) => workflow.jobs[job]?.strategy?.matrix ?? {};
+    const product = (job: string, axes: readonly string[]): number =>
+      axes.reduce((count, axis) => count * (matrix(job)[axis]?.length ?? 0), 1);
+    expect(product("browser-compatibility", ["provider", "browser", "host"])).toBe(45);
+    const native = matrix("provider-native-compatibility");
+    expect(product("provider-native-compatibility", ["cell", "host"])).toBe(35);
+    expect(native.exclude).toEqual([
+      { cell: "node@26.7.0", host: "linux-arm64" },
+      { cell: "node@26.7.0", host: "macos-arm64" },
+      { cell: "node@26.7.0", host: "macos-x64" },
+      { cell: "node@26.7.0", host: "windows-x64" },
+    ]);
+    expect(native.include).toBeUndefined();
+    const researchContract = await readContract();
+    const certificationHosts = researchContract.evidenceControl.certificationHosts;
+    const hostIds = certificationHosts.map(({ id }) => id);
+    const runnerHosts = certificationHosts.map(({ id: token, runner }) => ({ token, runner }));
+    expect(matrix("browser-compatibility").host).toEqual(runnerHosts);
+    expect(native.host).toEqual(hostIds);
+    expect(matrix("packed-consumer-compatibility").host).toEqual(runnerHosts);
+    expect(workflow.jobs["provider-native-compatibility"]?.["runs-on"]).toBe(
+      "${{ matrix.host == 'linux-x64' && 'ubuntu-24.04' || matrix.host == 'linux-arm64' && 'ubuntu-24.04-arm' || matrix.host == 'macos-arm64' && 'macos-15' || matrix.host == 'macos-x64' && 'macos-15-intel' || 'windows-2025' }}",
+    );
+    expect(native.exclude).toEqual(
+      researchContract.evidenceControl.coordinateRules.providerNativeLanes
+        .explicitUnsupportedCoordinates.map(({ providerRuntimeCell: cell, certificationHost: host }) => ({
+          cell,
+          host,
+        })),
+    );
+    expect(workflowSource).not.toContain("ineligible-public-target-static-contract-tested");
+    expect(35 - (native.exclude?.length ?? 0)).toBe(31);
+    expect(product("packed-consumer-compatibility", ["package", "effect", "host"])).toBe(70);
+    const packedPackages = matrix("packed-consumer-compatibility").package as readonly {
+      readonly name: string;
+      readonly admission: string;
+    }[];
+    expect(packedPackages.filter(({ admission }) => admission === "release-train").map(({ name }) => name)).toEqual(
+      researchContract.releaseControl.orderedPackages,
+    );
+    expect(
+      packedPackages.filter(({ admission }) => admission === "conditional-provider-candidate").map(({ name }) => name),
+    ).toEqual(researchContract.releaseControl.conditionalPackageCandidates);
+    expect(45 + 31 + 70).toBe(146);
     for (const job of ["browser-compatibility", "provider-native-compatibility", "packed-consumer-compatibility"]) {
       expect(workflow.jobs[job]?.if).toContain("workflow_dispatch");
     }

@@ -1,178 +1,252 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Exit } from "effect";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect";
+import { randomUUID } from "node:crypto";
+import { access, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import * as BorrowedContent from "../../packages/effect-build/src/Author/BorrowedContent.js";
-import * as Generation from "../../packages/effect-build/src/Author/Generation.js";
-import * as TreeSnapshot from "../../packages/effect-build/src/Author/TreeSnapshot.js";
+import { describe, expect, it } from "vitest";
+import * as BorrowedOutput from "../../packages/effect-build/src/Author/BorrowedOutput.js";
+import * as Executable from "../../packages/effect-build/src/Author/Executable.js";
 
-const roots: string[] = [];
+const layer = Layer.merge(NodeServices.layer, BorrowedOutput.CleanupReporter.layer);
 
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+const exists = (path: string): Promise<boolean> => access(path).then(() => true, () => false);
+
+const fileProducer = (contents: string): BorrowedOutput.Producer<never> => ({
+  prefix: "effect-build-borrowed-file-",
+  produce: (root) =>
+    Effect.promise(async () => {
+      const path = join(root, "output.bin");
+      await writeFile(path, contents);
+      return path;
+    }),
 });
 
-describe("Immutable generations", () => {
-  it("emits the frozen canonical static-browser manifest bytes", async () => {
-    const source = await makeRoot();
-    const generations = await makeRoot();
-    await mkdir(join(source, "assets"));
-    await writeFile(join(source, "assets", "app.js"), "");
-    await writeFile(join(source, "index.html"), "");
-    const snapshot = await Effect.runPromise(TreeSnapshot.observe(source).pipe(Effect.provide(NodeServices.layer)));
-    const generation = await Effect.runPromise(
-      Generation.publish({
-        generationRoot: generations,
-        snapshot,
-        subject: {
-          profile: "effect-build/profile/static-browser-application@1",
-          entry: "index.html",
-          mount: "relative-same-origin",
-          host: "effect-build/generated-module-host@1",
-        },
-        mediaTypes: {
-          "assets/app.js": "text/javascript; charset=utf-8",
-          "index.html": "text/html; charset=utf-8",
-        },
-      }).pipe(Effect.provide(NodeServices.layer)),
+describe("BorrowedOutput ownership laws", () => {
+  it("keeps authoritative observation inside one continuation and expires escaped handles deterministically", async () => {
+    let escaped: BorrowedOutput.File<"hashed"> | undefined;
+    let locator = "";
+    const digest = await Effect.runPromise(
+      BorrowedOutput.withFile(fileProducer("first"), "hashed", (file) =>
+        Effect.gen(function*() {
+          escaped = file;
+          locator = file.path;
+          const observed = yield* file.observe;
+          return observed.digest.value;
+        })).pipe(Effect.provide(layer)),
     );
-    expect(generation.manifestDigest.value).toBe("211ead14e221092d32c78fd7c992d27aeb54753a837a89d1ac3b063d0aa28a3a");
+
+    expect(digest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(await exists(locator)).toBe(false);
+    const expired = await Effect.runPromiseExit(escaped!.observe);
+    expect(Exit.isFailure(expired)).toBe(true);
+    if (Exit.isFailure(expired)) {
+      const error = Cause.findErrorOption(expired.cause);
+      expect(error._tag).toBe("Some");
+      if (error._tag === "Some") expect(error.value).toBeInstanceOf(BorrowedOutput.BorrowedOutputExpired);
+    }
   });
 
-  it("seals authenticated bytes, activates once, and resolves the pinned generation", async () => {
-    const source = await makeRoot();
-    const generations = await makeRoot();
-    await mkdir(join(source, "assets"));
-    await writeFile(join(source, "index.html"), "<script type=module src=assets/app.js></script>");
-    await writeFile(join(source, "assets", "app.js"), "export const version = 1;");
-    const snapshot = await Effect.runPromise(TreeSnapshot.observe(source).pipe(Effect.provide(NodeServices.layer)));
-    const generation = await Effect.runPromise(
-      Generation.publish({
-        generationRoot: generations,
-        snapshot,
-        subject: { profile: "effect-build/generation-subject/tree@1" },
-        mediaTypes: {
-          "index.html": "text/html; charset=utf-8",
-          "assets/app.js": "text/javascript; charset=utf-8",
-        },
-      }).pipe(Effect.provide(NodeServices.layer)),
+  it("detects same-size file and tree mutations even in unhashed public mode", async () => {
+    const fileExit = await Effect.runPromiseExit(
+      BorrowedOutput.withFile(
+        fileProducer("first"),
+        "unhashed",
+        (file) => Effect.promise(() => writeFile(file.path, "other")).pipe(Effect.andThen(file.observe)),
+      ).pipe(Effect.provide(layer)),
     );
-    expect(generation.root).toContain(`sha256-${generation.manifestDigest.value}`);
-    expect(await readFile(join(generation.tree, "assets", "app.js"), "utf8")).toContain("version = 1");
+    expect(Exit.isFailure(fileExit)).toBe(true);
+    if (Exit.isFailure(fileExit)) {
+      const error = Cause.findErrorOption(fileExit.cause);
+      expect(error._tag).toBe("Some");
+      if (error._tag === "Some") expect(error.value).toBeInstanceOf(BorrowedOutput.BorrowedOutputChanged);
+    }
 
-    const activated = await Effect.runPromise(
-      Generation.activate({ generation, expectedCurrent: null }).pipe(Effect.provide(NodeServices.layer)),
+    const treeExit = await Effect.runPromiseExit(
+      BorrowedOutput.withTree(
+        {
+          prefix: "effect-build-borrowed-tree-",
+          produce: (root) =>
+            Effect.promise(async () => {
+              await mkdir(join(root, "assets"));
+              await writeFile(join(root, "assets", "app.js"), "first");
+              return root;
+            }),
+        },
+        "unhashed",
+        (tree) =>
+          Effect.promise(() => writeFile(join(tree.root, "assets", "app.js"), "other")).pipe(
+            Effect.andThen(tree.observe),
+          ),
+      ).pipe(Effect.provide(layer)),
     );
-    expect(activated.manifestDigest).toEqual(generation.manifestDigest);
-    const resolved = await Effect.runPromise(
-      Generation.resolveCurrent(generations).pipe(Effect.provide(NodeServices.layer)),
-    );
-    expect(resolved.manifestDigest).toEqual(generation.manifestDigest);
+    expect(Exit.isFailure(treeExit)).toBe(true);
+    if (Exit.isFailure(treeExit)) {
+      const error = Cause.findErrorOption(treeExit.cause);
+      expect(error._tag).toBe("Some");
+      if (error._tag === "Some") expect(error.value).toBeInstanceOf(BorrowedOutput.BorrowedOutputChanged);
+    }
   });
 
-  it("rejects source mutation and stale expected-current activation", async () => {
-    const source = await makeRoot();
-    const generations = await makeRoot();
-    const input = join(source, "entry.js");
-    await writeFile(input, "first");
-    const staleSnapshot = await Effect.runPromise(
-      TreeSnapshot.observe(source).pipe(Effect.provide(NodeServices.layer)),
+  it.skipIf(process.platform === "win32")("rejects symbolic-link aliases and portable-path hazards", async () => {
+    const alias = await Effect.runPromiseExit(
+      BorrowedOutput.withFile(
+        {
+          prefix: "effect-build-borrowed-alias-",
+          produce: (root) =>
+            Effect.promise(async () => {
+              const target = join(root, "target.bin");
+              const linked = join(root, "alias.bin");
+              await writeFile(target, "bytes");
+              await symlink(target, linked);
+              return linked;
+            }),
+        },
+        "hashed",
+        () => Effect.void,
+      ).pipe(Effect.provide(layer)),
     );
-    await writeFile(input, "other");
-    const staleSeal = await run(
-      Generation.publish({
-        generationRoot: generations,
-        snapshot: staleSnapshot,
-        subject: { profile: "effect-build/generation-subject/tree@1" },
-      }).pipe(Effect.provide(NodeServices.layer)),
-    );
-    expect(Exit.isFailure(staleSeal)).toBe(true);
+    expect(Exit.isFailure(alias)).toBe(true);
+    if (Exit.isFailure(alias)) {
+      const error = Cause.findErrorOption(alias.cause);
+      expect(error._tag).toBe("Some");
+      if (error._tag === "Some") expect(error.value).toBeInstanceOf(BorrowedOutput.BorrowedOutputEscaped);
+    }
 
-    const freshSnapshot = await Effect.runPromise(
-      TreeSnapshot.observe(source).pipe(Effect.provide(NodeServices.layer)),
+    const reserved = await Effect.runPromiseExit(
+      BorrowedOutput.withTree(
+        {
+          prefix: "effect-build-borrowed-reserved-",
+          produce: (root) =>
+            Effect.promise(async () => {
+              await writeFile(join(root, "CON.txt"), "reserved");
+              return root;
+            }),
+        },
+        "hashed",
+        () => Effect.void,
+      ).pipe(Effect.provide(layer)),
     );
-    const first = await Effect.runPromise(
-      Generation.publish({
-        generationRoot: generations,
-        snapshot: freshSnapshot,
-        subject: { profile: "effect-build/generation-subject/tree@1" },
-      }).pipe(Effect.provide(NodeServices.layer)),
-    );
-    await Effect.runPromise(
-      Generation.activate({ generation: first, expectedCurrent: null }).pipe(
-        Effect.provide(NodeServices.layer),
+    expect(Exit.isFailure(reserved)).toBe(true);
+  });
+
+  it("preserves the exact caller failure and interruption Cause while cleanup completes", async () => {
+    const callerFailure = { _tag: "CallerFailure" as const, identity: Symbol("same-object") };
+    const failed = await Effect.runPromiseExit(
+      BorrowedOutput.withFile(fileProducer("bytes"), "hashed", () => Effect.fail(callerFailure)).pipe(
+        Effect.provide(layer),
       ),
     );
+    expect(Exit.isFailure(failed)).toBe(true);
+    if (Exit.isFailure(failed)) {
+      const error = Cause.findErrorOption(failed.cause);
+      expect(error._tag).toBe("Some");
+      if (error._tag === "Some") expect(error.value).toBe(callerFailure);
+    }
 
-    await writeFile(input, "third");
-    const nextSnapshot = await Effect.runPromise(
-      TreeSnapshot.observe(source).pipe(Effect.provide(NodeServices.layer)),
+    const interrupted = await Effect.runPromise(
+      Effect.gen(function*() {
+        const ready = yield* Deferred.make<string>();
+        const fiber = yield* BorrowedOutput.withFile(
+          fileProducer("bytes"),
+          "hashed",
+          (file) => Deferred.succeed(ready, file.path).pipe(Effect.andThen(Effect.never)),
+        ).pipe(Effect.forkChild({ startImmediately: true }));
+        const path = yield* Deferred.await(ready);
+        yield* Fiber.interrupt(fiber);
+        const exit = yield* Fiber.await(fiber);
+        return { exit, path };
+      }).pipe(Effect.provide(layer)),
     );
-    const next = await Effect.runPromise(
-      Generation.publish({
-        generationRoot: generations,
-        snapshot: nextSnapshot,
-        subject: { profile: "effect-build/generation-subject/tree@1" },
-      }).pipe(Effect.provide(NodeServices.layer)),
-    );
-    const conflict = await run(
-      Generation.activate({ generation: next, expectedCurrent: null }).pipe(Effect.provide(NodeServices.layer)),
-    );
-    expect(Exit.isFailure(conflict)).toBe(true);
-    const stillFirst = await Effect.runPromise(
-      Generation.resolveCurrent(generations).pipe(Effect.provide(NodeServices.layer)),
-    );
-    expect(stillFirst.manifestDigest).toEqual(first.manifestDigest);
+    expect(Exit.isFailure(interrupted.exit)).toBe(true);
+    if (Exit.isFailure(interrupted.exit)) expect(Cause.hasInterrupts(interrupted.exit.cause)).toBe(true);
+    expect(await exists(interrupted.path)).toBe(false);
   });
 });
 
-const makeRoot = async (): Promise<string> => {
-  const root = await mkdtemp(join(tmpdir(), "effect-build-author-"));
-  roots.push(root);
-  return root;
-};
-
-const run = <A, E>(effect: Effect.Effect<A, E, never>): Promise<Exit.Exit<A, E>> => Effect.runPromiseExit(effect);
-
-describe("Author content authentication", () => {
-  it("detects a same-size file mutation after borrowing", async () => {
-    const root = await makeRoot();
-    const file = join(root, "input.js");
-    await writeFile(file, "first");
-    const borrowed = await Effect.runPromise(
-      BorrowedContent.observeFile(file).pipe(Effect.provide(NodeServices.layer)),
+describe("Executable inspection and publication", () => {
+  it("inspects authenticated private bytes before committing one hashed executable", async () => {
+    const destination = join(tmpdir(), `effect-build-executable-${randomUUID()}`);
+    let inspectedBeforeCommit = false;
+    const artifact = await Effect.runPromise(
+      Executable.publish(
+        { destination, observation: "hashed" },
+        (candidate) => Effect.promise(() => writeFile(candidate, Uint8Array.of(0x7f, 0x45, 0x4c, 0x46, 1, 2, 3, 4))),
+        (candidate) =>
+          Effect.promise(async () => {
+            inspectedBeforeCommit = !(await exists(destination));
+            expect(candidate.digest.value).toMatch(/^[0-9a-f]{64}$/u);
+            return {
+              nativeFormat: "elf" as const,
+              runtime: { name: "bun", version: "1.3.14" },
+              target: "linux-x64-gnu" as const,
+            };
+          }),
+      ).pipe(Effect.provide(NodeServices.layer)),
     );
-    await writeFile(file, "other");
-    const exit = await run(BorrowedContent.revalidate(borrowed).pipe(Effect.provide(NodeServices.layer)));
-    expect(Exit.isFailure(exit)).toBe(true);
+    expect(inspectedBeforeCommit).toBe(true);
+    expect(artifact._tag).toBe("HashedExecutable");
+    expect(artifact.target).toBe("linux-x64-gnu");
+    expect(artifact.publication).toEqual({ commit: "same-parent-rename", committed: true });
+    expect([...await readFile(destination)]).toEqual([0x7f, 0x45, 0x4c, 0x46, 1, 2, 3, 4]);
+    await rm(destination, { force: true });
   });
 
-  it("rejects symbolic-link aliases before lending file authority", async () => {
-    const root = await makeRoot();
-    const target = join(root, "target.js");
-    const alias = join(root, "alias.js");
-    await writeFile(target, "export {};");
-    await symlink(target, alias);
-    const exit = await run(BorrowedContent.observeFile(alias).pipe(Effect.provide(NodeServices.layer)));
-    expect(Exit.isFailure(exit)).toBe(true);
+  it("rejects incoherent inspection and mutation without publishing the candidate", async () => {
+    const mismatch = join(tmpdir(), `effect-build-mismatch-${randomUUID()}`);
+    const mismatchExit = await Effect.runPromiseExit(
+      Executable.publish(
+        { destination: mismatch, observation: "unhashed" },
+        (candidate) => Effect.promise(() => writeFile(candidate, "first")),
+        () =>
+          Effect.succeed({
+            nativeFormat: "pe" as const,
+            runtime: { name: "bun", version: "1.3.14" },
+            target: "linux-x64-gnu" as const,
+          }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(Exit.isFailure(mismatchExit)).toBe(true);
+    expect(await exists(mismatch)).toBe(false);
+
+    const changed = join(tmpdir(), `effect-build-changed-${randomUUID()}`);
+    const changedExit = await Effect.runPromiseExit(
+      Executable.publish(
+        { destination: changed, observation: "hashed" },
+        (candidate) => Effect.promise(() => writeFile(candidate, "first")),
+        (candidate) =>
+          Effect.promise(async () => {
+            await writeFile(candidate.path, "other");
+            return {
+              nativeFormat: "elf" as const,
+              runtime: { name: "bun", version: "1.3.14" },
+              target: "linux-x64-gnu" as const,
+            };
+          }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(Exit.isFailure(changedExit)).toBe(true);
+    expect(await exists(changed)).toBe(false);
   });
 
-  it("observes a canonical, authenticated tree and rejects forbidden entries", async () => {
-    const root = await makeRoot();
-    await mkdir(join(root, "assets"));
-    await writeFile(join(root, "z.js"), "z");
-    await writeFile(join(root, "assets", "a.css"), "a");
-    const snapshot = await Effect.runPromise(
-      TreeSnapshot.observe(root).pipe(Effect.provide(NodeServices.layer)),
+  it("preserves an old destination when production fails before commit", async () => {
+    const destination = join(tmpdir(), `effect-build-old-${randomUUID()}`);
+    await writeFile(destination, "old");
+    const marker = { _tag: "ProducerFailure" as const };
+    const exit = await Effect.runPromiseExit(
+      Executable.publish(
+        { destination, observation: "hashed" },
+        () => Effect.fail(marker),
+        () => Effect.die("inspector must not run"),
+      ).pipe(Effect.provide(NodeServices.layer)),
     );
-    expect(snapshot.files.map(({ relativePath }) => relativePath)).toEqual(["assets/a.css", "z.js"]);
-    expect(snapshot.files.every(({ digest }) => /^[0-9a-f]{64}$/u.test(digest.value))).toBe(true);
-
-    const invalidRoot = await makeRoot();
-    await writeFile(join(invalidRoot, "CON.txt"), "reserved");
-    const invalid = await run(TreeSnapshot.observe(invalidRoot).pipe(Effect.provide(NodeServices.layer)));
-    expect(Exit.isFailure(invalid)).toBe(true);
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      const error = Cause.findErrorOption(exit.cause);
+      expect(error._tag).toBe("Some");
+      if (error._tag === "Some") expect(error.value).toBe(marker);
+    }
+    expect(await readFile(destination, "utf8")).toBe("old");
+    await rm(destination, { force: true });
   });
 });

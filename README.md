@@ -1,98 +1,100 @@
 # effect-build
 
-effect-build expresses native build tools as composable Effect programs. This
-integration branch provides Bun, Deno, esbuild, raw Node SEA, Rolldown, and the
-new direct-Developer-ID Apple distribution family with typed errors and scoped
-resource ownership.
+effect-build expresses native build tools as composable Effect programs while
+keeping provider semantics, lifecycle, and publication ownership explicit.
+This candidate is a hard cut to the complete accepted research surface: there
+are no compatibility aliases for the superseded v0.5 API.
 
-The approved v0.5 target remains a coordinated hard cut. Its durable contract is
-[`effect-build/v0.5-contract@1`](docs/v0.5-contract.md): keep the native lanes,
-add one sealed Node-main profile and one static-browser-application profile,
-publish immutable directory generations, and require exact evidence. The Apple
-source/API track is implemented locally; its credential-backed and clean-host
-certification is not earned. The core hard cut, portable author boundary, and
-Bun/esbuild/Rolldown profile adapters and the Node SEA public hard cut are
-implemented and frozen. Target-finalizer evidence, compatibility certification,
-and the recoverable release coordinator remain.
+The canonical scope is
+[`effect-build/research-complete-contract@1`](docs/research-complete-contract.md).
+Every mandatory or positive-proof-gated operation with a selected export is
+implemented in its provider-native `Api` or `Command` lane. Conditional
+operations are also implemented and tested, but remain package-private until
+their entire named gate is closed. Rejected and superseded operations are
+absent. Implementation does not itself close a compatibility, credential, or
+clean-host evidence gate.
 
-The private Node target-finalizer implementation is present in `ci.yml` behind
-an explicit `workflow_dispatch` boolean. It authenticates the pinned Node
-manifest, signature, signer key, and archives; constructs all 108 frozen
-coordinates; admits only the exact target host before download; and returns
-structurally inspected, executed, digest-bound receipts. The matrix has not been
-dispatched, so those receipts are implemented capability, not earned evidence.
+## Public hard cut
 
-The 84 non-Apple compatibility coordinates are likewise materialized behind a
-separate manual dispatch: 27 provider/browser/host cells with Playwright 1.62.1
-and revisions 1234/1538/2336, 15 provider-native tool/host cells, and 42 strict
-packed-consumer package/Effect/host cells. Their aggregation reauthenticates the
-successful jobs and exact receipt artifacts. Local sampling has executed all
-three browser providers in Chromium and a packed oldest-Effect coordinate; the
-full hosted matrix has not run and is not claimed as evidence.
+The core package has exactly six public subpaths:
 
-| Package                 | Current candidate                                                                    | v0.5 target                                                               |
-| ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `effect-build`          | canonical artifacts and role-specific Author/Profile subpaths; no public `Toolchain` | same frozen API with exact compatibility evidence                         |
-| `effect-build-apple`    | selected direct Developer ID operation family                                        | same API plus complete credential-backed and clean-host evidence          |
-| `effect-build-bun`      | native operations plus exact-1.3.14 Node-main and browser profile adapters           | same API with exact compatibility evidence                                |
-| `effect-build-deno`     | executable compile and native directory bundle                                       | exact 2.9.5 native evidence; no portable Profile until metadata proves it |
-| `effect-build-esbuild`  | bounded native build/context/watch plus Node-main and browser profiles               | same API with exact compatibility evidence                                |
-| `effect-build-node-sea` | honest `Raw` lane plus evidence-only `NodeMainExecutable` types                      | same API plus complete authenticated target-finalizer evidence            |
-| `effect-build-rolldown` | bounded native build/watch plus Node-main and browser profiles                       | same API with exact compatibility evidence                                |
+- `effect-build/Artifact`
+- `effect-build/SystemTarget`
+- `effect-build/Matrix`
+- `effect-build/Author/Tool`
+- `effect-build/Author/BorrowedOutput`
+- `effect-build/Author/Executable`
 
-The current executable API remains usable while the cut is implemented:
+Generic `BuildError`, `Target`, `Generation`, and `DurableFile` surfaces do not
+exist. Neither do the former `BorrowedContent`, `TreeSnapshot`,
+`StaticBrowserApplication`, provider `Profile`, Node SEA `Raw`, or inherited
+provider `Build`, `Bundle`, `CompileExecutable`, `Context`, and `Watch`
+subpaths. Providers expose only root `Api` and/or `Command` lanes as selected by
+the research contract; operation modules are namespaces inside those lanes.
+
+| Package                 | Public provider-native modules                                                                                                                                                                           | Implemented package-private conditional candidates                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `effect-build-bun`      | `Api.Transpiler`, `Api.Build`, `Api.CompileExecutable`; `Command.Build`, `Command.Watch`, `Command.CompileExecutable`                                                                                    | none                                                                                                       |
+| `effect-build-deno`     | `Command.Transpile`, `Command.CompileExecutable`                                                                                                                                                         | API bundle, command bundle, compile watch                                                                  |
+| `effect-build-esbuild`  | `Api.Build`, `Api.BuildToDirectory`, `Api.Transform`, `Api.AnalyzeMetafile`, `Api.FormatMessages`, `Api.Context`, `Api.ContextToDirectory`; `Command.Build`, `Command.BuildToDirectory`, `Command.Watch` | command serve                                                                                              |
+| `effect-build-node-sea` | `Command.AssembleExecutable`                                                                                                                                                                             | none                                                                                                       |
+| `effect-build-rolldown` | no public package; R6 did not admit it                                                                                                                                                                   | API build/watch/transform/parse/minify/resolve/scan/dev-engine/declaration/config and command bundle/watch |
+| `effect-build-apple`    | `Artifact`, `CodeSign`, `AppBundle`, `Zip`, `DiskImage`, `InstallerPackage`, `Notary`, `Staple`, `Assess`                                                                                                | none in the selected family                                                                                |
+
+For example, Bun compilation now enters through the command lane:
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as CompileExecutable from "effect-build-bun/CompileExecutable";
+import * as BunCommand from "effect-build-bun/Command";
+
+const program = BunCommand.CompileExecutable.compileExecutable({
+  entrypoints: ["src/main.ts"],
+  outfile: "dist/app",
+  observation: "hashed",
+});
 
 const artifact = await Effect.runPromise(
-  CompileExecutable.compileExecutable({
-    entrypoint: "src/main.ts",
-    outfile: "dist/app",
-    minify: true,
-  }).pipe(
-    Effect.provide(CompileExecutable.layer()),
+  program.pipe(
+    Effect.provide(BunCommand.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
 ```
 
-Current Bun and Deno bundle publication is incremental: a failure can leave a
-mixed destination. The v0.5 durable path instead observes a complete
-`TreeSnapshot`, seals an immutable content-addressed `DirectoryGeneration`, and
-atomically changes only `CurrentGeneration`. A native `target: "browser"` or
-`platform: "browser"` selector remains provider-specific and does not produce a
-portable `StaticBrowserApplication`.
+`Api` means an in-process provider host API. `Command` means an authenticated,
+exact-version executable selected through `Author/Tool`; command output is
+bounded and the tool is reauthenticated immediately before invocation.
+Provider-direct durable operations truthfully permit partial output on failure.
+Only `Author/Executable.publish` owns private staging, inspection, and atomic
+single-file replacement.
 
-Hard interruption is a portable-profile guarantee only for schema-serializable
-work inside an owned OS process tree. Native callbacks, plugins, contexts, and
-watchers retain their provider-specific lifecycle semantics.
+Four fully implemented profile candidates remain package-private because their
+admission gates are still open: offer-first `Author/NodeMain`, explicit hashed
+`Profile/BrowserModulePayload`, `IncrementalNodeMain`, and the typed-watch
+protocol. Their source and tests are accounting evidence, not public exports.
 
-Apple distribution is a separate closed provider family, not a portable build
-profile or generic deployer. Node SEA owns only the ad-hoc signature needed to
-make its mutated Mach-O runnable. `effect-build-apple` owns Developer ID
-Application/Installer distinctions, explicit hardened-runtime and entitlement
-policy, `.app`/ZIP/DMG/flat-PKG forms, notarization, stapling, and digest-bound
-assessment over its own digest-authenticated `Artifact` type. The initial flat
-PKG is deliberately one authenticated `.app` component with explicit
-identifier, version, and install location, built by `pkgbuild` with a mandatory
-timestamp under an exact Developer ID Installer identity and verified by
-`pkgutil`. `productbuild`, `productsign`, multi-component packages, and installer
-scripts require a later API. Mac App Store and universal-binary construction
-are outside v0.5. Its selected operation/service inventory and non-Notary
-input/result structures are implemented and asserted by the public-surface
-snapshot. Exact Notary JSON/status decoding and detailed receipt and evidence
-shapes remain provisional through the credential-backed A7 fixtures. Local
-implementation evidence does not earn A0, A1, or A9 without retained exact-head
-receipts; A2–A8 and all eight clean-host G coordinates remain unearned. The
-release is blocked until its credential-backed macOS x64 and arm64 matrix and
-clean-host Gatekeeper exercises pass. See
-[Apple distribution](docs/apple-distribution.md).
+## Evidence status
 
-The exact current exports are generated in
-[`tooling/public-api.json`](tooling/public-api.json). Frozen target subpaths,
-profile IDs, canonical generation bytes, lifecycle bounds, exact evidence
-points, and the fixed-seven manual release protocol live in
-[`tooling/v05-contract.json`](tooling/v05-contract.json).
+The implementation is not the certification result. The provider-native,
+browser, packed-consumer, Node target-finalizer, and Apple clean-host matrices
+must produce exact-head receipts before their gates close. In particular:
+
+- the exact five-host non-Apple compatibility and Node-finalizer coordinates
+  are implemented as manual workflows but have not been earned by an exact-head
+  run;
+- provider lifecycle, host, offline, cross-target, and reproducibility gates
+  remain open where the contract names them;
+- BrowserModulePayload still requires real provider/browser/five-host evidence;
+- Rolldown remains a private conditional package candidate until R6 and all
+  operation-specific gates close;
+- Apple source and local tool checks do not earn Developer ID, notarization,
+  Gatekeeper, or clean-host certification.
+
+The exact generated candidate exports are in
+[`tooling/public-api.json`](tooling/public-api.json). Operation dispositions,
+implementation/test accounting, named gates, target lanes, and authority
+boundaries are in
+[`tooling/research-complete-contract.json`](tooling/research-complete-contract.json).
+The older [`tooling/v05-contract.json`](tooling/v05-contract.json) is historical
+control-plane input, not a product-scope ceiling.

@@ -10,7 +10,17 @@ const messageArray = (value: unknown, key: "errors" | "warnings"): readonly esbu
 /** Wraps the native esbuild rejection; `errors`/`warnings` expose its diagnostics by reference. */
 export class EsbuildFailed extends Schema.TaggedError<EsbuildFailed>()("EsbuildFailed", {
   operation: Schema.Literals(
-    ["build", "transform", "analyzeMetafile", "make", "rebuild", "watch", "serve", "cancel"] as const,
+    [
+      "build",
+      "transform",
+      "analyzeMetafile",
+      "formatMessages",
+      "make",
+      "rebuild",
+      "watch",
+      "serve",
+      "cancel",
+    ] as const,
   ),
   cause: Schema.Unknown,
 }) {

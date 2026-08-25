@@ -7,7 +7,8 @@
   },
   "authority": {
     "decision": "portable-artifact-hard-cut",
-    "status": "target-not-yet-implemented",
+    "status": "superseded-implementation-snapshot",
+    "supersededBy": "tooling/research-complete-contract.json",
     "supersedes": [
       "mutable-partial-bundle-publication",
       "automatic-publication-after-green-main"
@@ -1223,14 +1224,24 @@
     ],
     "certificationHosts": [
       {
-        "id": "linux-x64-gnu",
+        "id": "linux-x64",
         "runner": "ubuntu-24.04",
         "systemTarget": "linux-x64-gnu"
       },
       {
-        "id": "macos-aarch64",
+        "id": "linux-arm64",
+        "runner": "ubuntu-24.04-arm",
+        "systemTarget": "linux-aarch64-gnu"
+      },
+      {
+        "id": "macos-arm64",
         "runner": "macos-15",
         "systemTarget": "macos-aarch64"
+      },
+      {
+        "id": "macos-x64",
+        "runner": "macos-15-intel",
+        "systemTarget": "macos-x64"
       },
       {
         "id": "windows-x64",
@@ -1286,7 +1297,7 @@
     ],
     "providerIndependenceRule": "different-group-id-requires-distinct-package-upstream-engine-and-adapter-codepath",
     "coordinateRules": {
-      "staticBrowserApplication": {
+      "browserModulePayload": {
         "rule": "full-cartesian-product-no-pruning",
         "axes": {
           "providerGroup": [
@@ -1300,13 +1311,15 @@
             "webkit@2336"
           ],
           "certificationHost": [
-            "linux-x64-gnu",
-            "macos-aarch64",
+            "linux-x64",
+            "linux-arm64",
+            "macos-arm64",
+            "macos-x64",
             "windows-x64"
           ]
         },
-        "expectedCoordinateCount": 27,
-        "operation": "build-serve-and-exercise-generation-qualified-application"
+        "expectedCoordinateCount": 45,
+        "operation": "produce-lend-serve-and-exercise-browser-module-payload"
       },
       "nodeMainExecutable": {
         "rule": "full-cartesian-product-no-pruning",
@@ -1321,8 +1334,10 @@
             "module"
           ],
           "constructionHost": [
-            "linux-x64-gnu",
-            "macos-aarch64",
+            "linux-x64",
+            "linux-arm64",
+            "macos-arm64",
+            "macos-x64",
             "windows-x64"
           ],
           "target": [
@@ -1334,27 +1349,55 @@
             "windows-aarch64"
           ]
         },
-        "expectedCoordinateCount": 108,
+        "expectedCoordinateCount": 180,
         "targetExecutionHostRule": "each-coordinate-executes-on-the-one-targetExecutionHost-with-the-same-target",
         "operation": "produce-seal-cross-assemble-inspect-and-execute"
       },
       "providerNativeLanes": {
-        "rule": "full-cartesian-product-no-pruning",
+        "rule": "cartesian-product-minus-explicit-unsupported-cells",
         "axes": {
-          "toolCell": [
+          "providerRuntimeCell": [
             "bun@1.3.14",
             "deno@2.9.5",
             "node@26.7.0",
-            "esbuild@0.28.2",
-            "rolldown@1.2.5"
+            "esbuild@0.28.2+node@24.14.1",
+            "esbuild@0.28.2+bun@1.3.14",
+            "rolldown@1.2.5+node@24.14.1",
+            "rolldown@1.2.5+bun@1.3.14"
           ],
           "certificationHost": [
-            "linux-x64-gnu",
-            "macos-aarch64",
+            "linux-x64",
+            "linux-arm64",
+            "macos-arm64",
+            "macos-x64",
             "windows-x64"
           ]
         },
-        "expectedCoordinateCount": 15,
+        "expectedCartesianCoordinateCount": 35,
+        "explicitUnsupportedCoordinates": [
+          {
+            "providerRuntimeCell": "node@26.7.0",
+            "certificationHost": "linux-arm64",
+            "reason": "public-node-sea-host-target-is-linux-x64-gnu-only"
+          },
+          {
+            "providerRuntimeCell": "node@26.7.0",
+            "certificationHost": "macos-arm64",
+            "reason": "public-node-sea-host-target-is-linux-x64-gnu-only"
+          },
+          {
+            "providerRuntimeCell": "node@26.7.0",
+            "certificationHost": "macos-x64",
+            "reason": "public-node-sea-host-target-is-linux-x64-gnu-only"
+          },
+          {
+            "providerRuntimeCell": "node@26.7.0",
+            "certificationHost": "windows-x64",
+            "reason": "public-node-sea-host-target-is-linux-x64-gnu-only"
+          }
+        ],
+        "expectedUnsupportedCoordinateCount": 4,
+        "expectedCoordinateCount": 31,
         "operation": "provider-native-public-contract-smoke"
       },
       "appleDistribution": {
@@ -1403,7 +1446,27 @@
             "effect-build-bun",
             "effect-build-deno",
             "effect-build-esbuild",
-            "effect-build-node-sea",
+            "effect-build-node-sea"
+          ],
+          "effect": [
+            "4.0.0-beta.104",
+            "4.0.0-rc.108"
+          ],
+          "certificationHost": [
+            "linux-x64",
+            "linux-arm64",
+            "macos-arm64",
+            "macos-x64",
+            "windows-x64"
+          ]
+        },
+        "expectedCoordinateCount": 60,
+        "operation": "fresh-exact-release-train-packed-install-with-strict-peer-dependencies"
+      },
+      "packedConditionalProviderCandidates": {
+        "rule": "full-cartesian-product-no-pruning",
+        "axes": {
+          "package": [
             "effect-build-rolldown"
           ],
           "effect": [
@@ -1411,13 +1474,15 @@
             "4.0.0-rc.108"
           ],
           "certificationHost": [
-            "linux-x64-gnu",
-            "macos-aarch64",
+            "linux-x64",
+            "linux-arm64",
+            "macos-arm64",
+            "macos-x64",
             "windows-x64"
           ]
         },
-        "expectedCoordinateCount": 42,
-        "operation": "fresh-exact-packed-install-with-strict-peer-dependencies"
+        "expectedCoordinateCount": 10,
+        "operation": "fresh-exact-conditional-provider-candidate-packed-install-with-no-package-admission"
       }
     },
     "installableRangeIsExecutionEvidence": false

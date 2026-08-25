@@ -10,6 +10,7 @@ import {
   decodeCanonical,
   downloadArtifact,
   hex,
+  inspectNativeExecutable,
   observeArtifact,
   observeJob,
   observeRun,
@@ -48,32 +49,6 @@ const validateOffer = (offer, expected) => {
   for (const [field, value] of Object.entries(expected)) {
     if (offer[field] !== value) throw new Error(`assembler offer ${field} mismatch`);
   }
-};
-
-const inspect = (bytes, target) => {
-  if (target.startsWith("linux-")) {
-    if (!bytes.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))) throw new Error("finalized file is not ELF");
-    const machine = bytes.readUInt16LE(18);
-    const architecture = machine === 62 ? "x64" : machine === 183 ? "aarch64" : undefined;
-    if (architecture === undefined || !target.includes(architecture === "aarch64" ? "aarch64" : "x64")) {
-      throw new Error(`ELF architecture mismatch: ${machine}`);
-    }
-    return { nativeFormat: "elf", architecture };
-  }
-  if (target.startsWith("windows-")) {
-    if (bytes.subarray(0, 2).toString("ascii") !== "MZ") throw new Error("finalized file is not PE");
-    const pe = bytes.readUInt32LE(0x3c);
-    if (bytes.subarray(pe, pe + 4).toString("binary") !== "PE\0\0") throw new Error("PE signature missing");
-    const machine = bytes.readUInt16LE(pe + 4);
-    const architecture = machine === 0x8664 ? "x64" : machine === 0xaa64 ? "aarch64" : undefined;
-    if (architecture === undefined || !target.endsWith(architecture)) throw new Error(`PE architecture mismatch: ${machine}`);
-    return { nativeFormat: "pe", architecture };
-  }
-  if (bytes.readUInt32LE(0) !== 0xfeedfacf) throw new Error("finalized file is not 64-bit little-endian Mach-O");
-  const cpu = bytes.readUInt32LE(4);
-  const architecture = cpu === 0x01000007 ? "x64" : cpu === 0x0100000c ? "aarch64" : undefined;
-  if (architecture === undefined || !target.endsWith(architecture)) throw new Error(`Mach-O architecture mismatch: ${cpu}`);
-  return { nativeFormat: "mach-o", architecture };
 };
 
 const main = async () => {
@@ -167,7 +142,7 @@ const main = async () => {
   const finalizedFileName = `${coordinateName}--finalized${target.startsWith("windows-") ? ".exe" : ""}`;
   const finalizedPath = join(outputRoot, finalizedFileName);
   const finalized = await readFile(working);
-  const inspection = inspect(finalized, target);
+  const inspection = inspectNativeExecutable(finalized, target);
   await writeFile(finalizedPath, finalized, { flag: "wx", mode: target.startsWith("windows-") ? undefined : 0o755 });
   if (!target.startsWith("windows-")) await chmod(finalizedPath, 0o755);
   const execution = await execute(finalizedPath, [], { timeout: 30_000, maxBuffer: 1_048_576, encoding: "buffer" });

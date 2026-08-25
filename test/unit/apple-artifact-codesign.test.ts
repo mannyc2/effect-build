@@ -21,7 +21,7 @@ import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import * as Artifact from "../../packages/effect-build-apple/src/Artifact.js";
 import * as CodeSign from "../../packages/effect-build-apple/src/CodeSign.js";
-import type * as CoreArtifact from "../../packages/effect-build/src/Artifact.js";
+import * as CoreArtifact from "../../packages/effect-build/src/Artifact.js";
 
 const roots: string[] = [];
 
@@ -335,32 +335,49 @@ describe.runIf(process.platform !== "win32")("Apple Artifact", () => {
     const source = await Effect.runPromise(
       Artifact.observeFile("mach-o", file).pipe(Effect.provide(NodeServices.layer)),
     );
-    const executable = {
-      _tag: "Executable" as const,
-      path: file,
-      bytes: source.identity.bytes,
+    const executable: CoreArtifact.HashedExecutable = {
+      _tag: "HashedExecutable",
+      path: file as CoreArtifact.AbsolutePath,
+      bytes: CoreArtifact.decimalBytes(`${source.identity.bytes}`),
       target: "macos-aarch64" as const,
-      tool: {
-        protocol: "effect-build/selected-tool@1" as const,
-        name: "fake",
-        version: "1",
-        executablePath: file,
-        digest: { algorithm: "sha256" as const, value: source.identity.digest.value },
-      },
-      sha256: source.identity.digest.value,
-      digest: { algorithm: "sha256" as const, value: source.identity.digest.value },
+      nativeFormat: "mach-o",
+      runtime: { name: "fake", version: "1" },
+      publication: { commit: "same-parent-rename", committed: true },
+      digest: CoreArtifact.sha256Digest(source.identity.digest.value),
     };
     const observed = await runArtifact(Artifact.observeExecutable(executable));
     expect(Exit.isSuccess(observed)).toBe(true);
     if (Exit.isSuccess(observed)) expect(observed.value.identity).toEqual(source.identity);
 
-    const { sha256: removedSha256, digest: removedDigest, ...unhashedExecutable } = executable;
-    void removedSha256;
+    const { digest: removedDigest, ...unhashedExecutable } = executable;
     void removedDigest;
     const unhashed = await runArtifact(
-      Artifact.observeExecutable(unhashedExecutable as unknown as CoreArtifact.Executable),
+      Artifact.observeExecutable({
+        ...unhashedExecutable,
+        _tag: "UnhashedExecutable",
+      } as unknown as CoreArtifact.HashedExecutable),
     );
-    expect(failure(unhashed)).toMatchObject({ _tag: "AppleInputInvalid", field: "digest" });
+    expect(failure(unhashed)).toMatchObject({ _tag: "AppleInputInvalid", field: "executable" });
+    const unpublished = await runArtifact(Artifact.observeExecutable({
+      ...executable,
+      publication: { commit: "same-parent-rename", committed: false },
+    } as unknown as CoreArtifact.HashedExecutable));
+    expect(failure(unpublished)).toMatchObject({ _tag: "AppleInputInvalid", field: "publication" });
+    const relative = await runArtifact(Artifact.observeExecutable({
+      ...executable,
+      path: "provider-output",
+    } as unknown as CoreArtifact.HashedExecutable));
+    expect(failure(relative)).toMatchObject({ _tag: "AppleInputInvalid", field: "path" });
+    const noncanonicalBytes = await runArtifact(Artifact.observeExecutable({
+      ...executable,
+      bytes: `0${executable.bytes}`,
+    } as unknown as CoreArtifact.HashedExecutable));
+    expect(failure(noncanonicalBytes)).toMatchObject({ _tag: "AppleInputInvalid", field: "bytes" });
+    const wrongNativeFormat = await runArtifact(Artifact.observeExecutable({
+      ...executable,
+      nativeFormat: "elf",
+    } as unknown as CoreArtifact.HashedExecutable));
+    expect(failure(wrongNativeFormat)).toMatchObject({ _tag: "AppleInputInvalid", field: "nativeFormat" });
     const linux = await runArtifact(Artifact.observeExecutable({ ...executable, target: "linux-x64-gnu" }));
     expect(failure(linux)).toMatchObject({ _tag: "AppleInputInvalid", field: "target" });
     const armAsX64 = await runArtifact(Artifact.observeExecutable({ ...executable, target: "macos-x64" }));
@@ -373,11 +390,10 @@ describe.runIf(process.platform !== "win32")("Apple Artifact", () => {
     );
     const x64Executable = {
       ...executable,
-      path: x64Path,
-      bytes: x64Source.identity.bytes,
+      path: x64Path as CoreArtifact.AbsolutePath,
+      bytes: CoreArtifact.decimalBytes(`${x64Source.identity.bytes}`),
       target: "macos-x64" as const,
-      sha256: x64Source.identity.digest.value,
-      digest: { algorithm: "sha256" as const, value: x64Source.identity.digest.value },
+      digest: CoreArtifact.sha256Digest(x64Source.identity.digest.value),
     };
     expect(Exit.isSuccess(await runArtifact(Artifact.observeExecutable(x64Executable)))).toBe(true);
     const x64AsArm = await runArtifact(Artifact.observeExecutable({ ...x64Executable, target: "macos-aarch64" }));
@@ -385,8 +401,7 @@ describe.runIf(process.platform !== "win32")("Apple Artifact", () => {
 
     const changed = await runArtifact(Artifact.observeExecutable({
       ...executable,
-      sha256: "0".repeat(64),
-      digest: { algorithm: "sha256", value: "0".repeat(64) },
+      digest: CoreArtifact.sha256Digest("0".repeat(64)),
     }));
     expect(failure(changed)).toMatchObject({ _tag: "ArtifactChanged" });
   });

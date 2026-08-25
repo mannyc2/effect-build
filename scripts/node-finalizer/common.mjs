@@ -1,12 +1,81 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { isAbsolute, normalize } from "node:path";
 import { inflateRawSync } from "node:zlib";
+import {
+  assertCertificationHost as assertD13CertificationHost,
+  certificationHostDefinition,
+  observedSystemTarget,
+} from "../certification-host.mjs";
 
 export const root = new URL("../../", import.meta.url);
-export const contract = JSON.parse(await readFile(new URL("../../tooling/v05-contract.json", import.meta.url), "utf8"));
-export const nodeProfile = contract.profiles.nodeMainExecutable;
+/** Canonical product and private evidence-control authority. */
+export const researchContract = JSON.parse(
+  await readFile(new URL("../../tooling/research-complete-contract.json", import.meta.url), "utf8"),
+);
+export const evidenceControl = Object.freeze(researchContract.evidenceControl);
+export const nodeProfile = evidenceControl.nodeMainExecutable;
 export const capability = nodeProfile.targetFinalization.capability;
-export const compatibility = contract.requiredCompatibilityEvidencePoints;
+export const compatibility = evidenceControl;
+export const appleCertification = Object.freeze(evidenceControl.appleCertification);
+
+if (researchContract.schema !== "effect-build/research-complete-contract@1") {
+  throw new Error("research-complete product scope is unavailable");
+}
+if (researchContract.releaseControl?.candidateSchema !== "effect-build/release-candidate@2") {
+  throw new Error("research-complete release control is unavailable");
+}
+export const releaseControl = Object.freeze(researchContract.releaseControl);
+export const releaseCandidateIdentity = Object.freeze({
+  ...releaseControl.candidateIdentity,
+  schema: releaseControl.candidateSchema,
+});
+export const releaseCandidatePackageRecordFields = Object.freeze(
+  [...releaseControl.candidatePackageRecordFields],
+);
+const releasePackedPackages = compatibility.coordinateRules.packedConsumers.axes.package;
+const conditionalPackedPackages = compatibility.coordinateRules.packedConditionalProviderCandidates.axes.package;
+if (JSON.stringify([...releasePackedPackages].sort()) !== JSON.stringify([...researchContract.invariants.firstPartyPackages].sort())) {
+  throw new Error("packed release-train axes differ from the admitted research-complete package train");
+}
+if (JSON.stringify(releasePackedPackages) !== JSON.stringify(researchContract.releaseControl.orderedPackages)) {
+  throw new Error("packed release-train axes differ from current release-control order");
+}
+if (
+  JSON.stringify([...conditionalPackedPackages].sort())
+  !== JSON.stringify([...researchContract.invariants.conditionalPackageCandidates].sort())
+) {
+  throw new Error("packed conditional-package axes differ from research-complete candidates");
+}
+if (
+  JSON.stringify(conditionalPackedPackages)
+  !== JSON.stringify(researchContract.releaseControl.conditionalPackageCandidates)
+) {
+  throw new Error("packed conditional-package axes differ from current release control");
+}
+if (releasePackedPackages.includes("effect-build-rolldown")) {
+  throw new Error("deferred Rolldown package entered the packed release-train matrix");
+}
+if (JSON.stringify(conditionalPackedPackages) !== JSON.stringify(["effect-build-rolldown"])) {
+  throw new Error("Rolldown must remain the one separately accounted conditional packed-package candidate");
+}
+const researchCertificationHosts = researchContract.invariants.certificationHosts;
+const evidenceCertificationHosts = compatibility.certificationHosts.map(({ id }) => id);
+if (JSON.stringify(researchCertificationHosts) !== JSON.stringify(evidenceCertificationHosts)) {
+  throw new Error("private evidence hosts do not cover the exact research-complete D13 host set");
+}
+const nodeRole = researchContract.supplemental.profiles.find(({ id }) => id === "PROFILE-NODE-SEALED-MAIN");
+if (nodeRole === undefined) throw new Error("research-complete scope omits the portable Node role");
+const nodeSeaLane = researchContract.targetPublicSurface.providerLanes.find(
+  ({ package: packageName }) => packageName === "effect-build-node-sea",
+);
+if (
+  nodeSeaLane === undefined
+  || nodeSeaLane.lanes.length !== 1
+  || nodeSeaLane.lanes[0]?.lane !== "Command"
+) {
+  throw new Error("public Node SEA authority must remain the one truthful Command lane");
+}
 
 export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 export const digest = (bytes) => ({ algorithm: "sha256", value: sha256(bytes) });
@@ -72,6 +141,80 @@ export const targetHost = (target) => {
   return host;
 };
 
+export const certificationHost = certificationHostDefinition;
+export const assertCertificationHost = assertD13CertificationHost;
+
+/** Strict structural inspection shared by construction and target execution. */
+export const inspectNativeExecutable = (input, target) => {
+  const bytes = Buffer.from(input);
+  if (target.startsWith("linux-")) {
+    if (bytes.length < 20 || !bytes.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))) {
+      throw new Error("executable is not ELF");
+    }
+    if (bytes[4] !== 2 || bytes[5] !== 1) throw new Error("executable is not 64-bit little-endian ELF");
+    const machine = bytes.readUInt16LE(18);
+    const architecture = machine === 62 ? "x64" : machine === 183 ? "aarch64" : undefined;
+    if (architecture === undefined || !target.includes(architecture === "aarch64" ? "aarch64" : "x64")) {
+      throw new Error(`ELF architecture mismatch: ${machine}`);
+    }
+    return Object.freeze({ nativeFormat: "elf", architecture });
+  }
+  if (target.startsWith("windows-")) {
+    if (bytes.length < 64 || bytes.subarray(0, 2).toString("ascii") !== "MZ") {
+      throw new Error("executable is not PE");
+    }
+    const pe = bytes.readUInt32LE(0x3c);
+    if (pe > bytes.length - 6 || bytes.subarray(pe, pe + 4).toString("binary") !== "PE\0\0") {
+      throw new Error("PE signature missing");
+    }
+    const machine = bytes.readUInt16LE(pe + 4);
+    const architecture = machine === 0x8664 ? "x64" : machine === 0xaa64 ? "aarch64" : undefined;
+    if (architecture === undefined || !target.endsWith(architecture)) {
+      throw new Error(`PE architecture mismatch: ${machine}`);
+    }
+    return Object.freeze({ nativeFormat: "pe", architecture });
+  }
+  if (bytes.length < 8 || bytes.readUInt32LE(0) !== 0xfeedfacf) {
+    throw new Error("executable is not 64-bit little-endian Mach-O");
+  }
+  const cpu = bytes.readUInt32LE(4);
+  const architecture = cpu === 0x01000007 ? "x64" : cpu === 0x0100000c ? "aarch64" : undefined;
+  if (architecture === undefined || !target.endsWith(architecture)) {
+    throw new Error(`Mach-O architecture mismatch: ${cpu}`);
+  }
+  return Object.freeze({ nativeFormat: "mach-o", architecture });
+};
+
+export const distributionDescriptorFields = Object.freeze([
+  "protocol",
+  "nodeVersion",
+  "target",
+  "executable",
+  "executableBytes",
+  "executableSha256",
+  "archiveName",
+  "archiveSha256",
+]);
+
+export const decodeDistributionDescriptor = (bytes) => {
+  const descriptor = decodeCanonical(bytes, distributionDescriptorFields);
+  if (descriptor.protocol !== "effect-build/authenticated-node-distribution-executable@1") {
+    throw new Error("authenticated Node distribution descriptor protocol mismatch");
+  }
+  if (descriptor.nodeVersion !== "26.7.0") throw new Error("authenticated Node version mismatch");
+  positiveDecimal(descriptor.executableBytes, "executableBytes");
+  hex(descriptor.executableSha256, 64, "executableSha256");
+  hex(descriptor.archiveSha256, 64, "archiveSha256");
+  if (!isAbsolute(descriptor.executable) || normalize(descriptor.executable) !== descriptor.executable) {
+    throw new Error("authenticated Node executable path must be absolute and normalized");
+  }
+  const cell = targetCell(descriptor.target);
+  if (descriptor.archiveName !== cell.distribution || descriptor.archiveSha256 !== cell.sha256) {
+    throw new Error("authenticated Node distribution descriptor is outside the frozen target cell");
+  }
+  return Object.freeze(descriptor);
+};
+
 export const coordinate = ({ producerGroup, format, constructionHost, target }) => {
   const axes = compatibility.coordinateRules.nodeMainExecutable.axes;
   if (!axes.producerGroup.includes(producerGroup)) throw new Error(`unknown producer group ${producerGroup}`);
@@ -81,12 +224,7 @@ export const coordinate = ({ producerGroup, format, constructionHost, target }) 
   return `node-main--${producerGroup}--${format}--from-${constructionHost}--to-${target}`;
 };
 
-export const systemTarget = () => {
-  if (process.platform === "darwin") return process.arch === "arm64" ? "macos-aarch64" : "macos-x64";
-  if (process.platform === "win32") return process.arch === "arm64" ? "windows-aarch64" : "windows-x64";
-  if (process.platform === "linux") return process.arch === "arm64" ? "linux-aarch64-gnu" : "linux-x64-gnu";
-  throw new Error(`unsupported runner ${process.platform}/${process.arch}`);
-};
+export const systemTarget = observedSystemTarget;
 
 export const assertExactTargetHost = (target) => {
   const observed = systemTarget();
@@ -178,12 +316,60 @@ export const githubJson = async (path, token) => {
   return JSON.parse(bytes.toString("utf8"));
 };
 
+const runJobs = new Map();
+const runArtifacts = new Map();
+const runKey = ({ repository, runId }) => `${repository}\0${runId}`;
+
+const listRunResources = async ({ repository, runId, token, resource, query = "" }) => {
+  const values = [];
+  let totalCount;
+  for (let page = 1; page <= 10; page += 1) {
+    const response = await githubJson(
+      `/repos/${repository}/actions/runs/${runId}/${resource}?${query}per_page=100&page=${page}`,
+      token,
+    );
+    if (!Number.isSafeInteger(response.total_count) || response.total_count < 0 || response.total_count > 1000) {
+      throw new Error(`${resource} total_count is outside the bounded run snapshot`);
+    }
+    if (!Array.isArray(response[resource])) throw new Error(`${resource} run snapshot is malformed`);
+    if (totalCount === undefined) totalCount = response.total_count;
+    if (response.total_count !== totalCount) throw new Error(`${resource} run snapshot changed during pagination`);
+    values.push(...response[resource]);
+    if (values.length === totalCount) return Object.freeze(values);
+    if (values.length > totalCount || response[resource].length !== 100) {
+      throw new Error(`${resource} run snapshot pagination is incomplete`);
+    }
+  }
+  throw new Error(`${resource} run snapshot exceeds ten pages`);
+};
+
+const cachedRunResources = (cache, options) => {
+  const key = runKey(options);
+  let pending = cache.get(key);
+  if (pending === undefined) {
+    pending = listRunResources(options);
+    cache.set(key, pending);
+    pending.catch(() => {
+      if (cache.get(key) === pending) cache.delete(key);
+    });
+  }
+  return pending;
+};
+
 export const observeArtifact = async ({ repository, runId, name, token }) => {
   for (const delay of [0, 1000, 3000]) {
-    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      runArtifacts.delete(runKey({ repository, runId }));
+    }
     try {
-      const page = await githubJson(`/repos/${repository}/actions/runs/${runId}/artifacts?name=${encodeURIComponent(name)}&per_page=100`, token);
-      const matches = page.artifacts.filter((artifact) => artifact.name === name);
+      const artifacts = await cachedRunResources(runArtifacts, {
+        repository,
+        runId,
+        token,
+        resource: "artifacts",
+      });
+      const matches = artifacts.filter((artifact) => artifact.name === name);
       if (matches.length !== 1) throw new Error(`expected exactly one artifact named ${name}, observed ${matches.length}`);
       const artifact = matches[0];
       if (artifact.expired || new Date(artifact.expires_at).getTime() <= Date.now()) throw new Error(`artifact ${name} is expired`);
@@ -205,15 +391,14 @@ export const observeRun = async ({ repository, runId, token }) =>
   githubJson(`/repos/${repository}/actions/runs/${runId}`, token);
 
 export const observeJob = async ({ repository, runId, name, token }) => {
-  const matches = [];
-  for (let page = 1; page <= 4; page += 1) {
-    const response = await githubJson(
-      `/repos/${repository}/actions/runs/${runId}/jobs?filter=all&per_page=100&page=${page}`,
-      token,
-    );
-    matches.push(...response.jobs.filter((job) => job.name === name));
-    if (response.jobs.length < 100) break;
-  }
+  const jobs = await cachedRunResources(runJobs, {
+    repository,
+    runId,
+    token,
+    resource: "jobs",
+    query: "filter=all&",
+  });
+  const matches = jobs.filter((job) => job.name === name);
   if (matches.length !== 1) throw new Error(`expected exactly one job named ${name}, observed ${matches.length}`);
   return matches[0];
 };

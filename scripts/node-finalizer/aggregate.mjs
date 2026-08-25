@@ -3,10 +3,10 @@ import { dirname, resolve } from "node:path";
 import {
   canonicalBytes,
   capability,
-  contract,
   coordinate,
   decodeCanonical,
   downloadArtifact,
+  evidenceControl,
   observeArtifact,
   observeJob,
   observeRun,
@@ -32,7 +32,7 @@ if (String(run.id) !== runId || String(run.run_attempt) !== runAttempt || run.he
   throw new Error("aggregation workflow-run binding mismatch");
 }
 
-const axes = contract.requiredCompatibilityEvidencePoints.coordinateRules.nodeMainExecutable.axes;
+const axes = evidenceControl.coordinateRules.nodeMainExecutable.axes;
 const receipts = [];
 for (const producerGroup of axes.producerGroup) {
   for (const format of axes.mainFormat) {
@@ -136,7 +136,10 @@ for (const producerGroup of axes.producerGroup) {
     }
   }
 }
-if (receipts.length !== 108) throw new Error(`expected 108 receipts, observed ${receipts.length}`);
+const expectedReceipts = evidenceControl.coordinateRules.nodeMainExecutable.expectedCoordinateCount;
+if (expectedReceipts !== 180 || receipts.length !== expectedReceipts) {
+  throw new Error(`expected 180 receipts, observed ${receipts.length}`);
+}
 const evidence = { sourceSha, workflowRunId: runId, workflowRunAttempt: runAttempt, receipts };
 const destination = resolve(output);
 await mkdir(dirname(destination), { recursive: true });

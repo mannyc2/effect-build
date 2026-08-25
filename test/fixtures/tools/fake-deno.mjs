@@ -5,7 +5,7 @@ import { join } from "node:path";
 const argv = process.argv.slice(2);
 
 if (argv[0] === "--version") {
-  const version = process.env.FAKE_DENO_VERSION ?? "2.9.3";
+  const version = process.env.FAKE_DENO_VERSION ?? "2.9.5";
   process.stdout.write(`deno ${version} (stable, release, x86_64-unknown-linux-gnu)\nv8 13.0\ntypescript 5.8\n`);
   process.exit(0);
 }
@@ -38,16 +38,33 @@ if (process.env.FAKE_DENO_MODE === "missing") process.exit(0);
 
 if (argv[0] === "bundle") {
   const outdirIndex = argv.indexOf("--outdir");
-  if (outdirIndex < 0 || argv[outdirIndex + 1] === undefined) process.exit(23);
-  const outdir = argv[outdirIndex + 1];
+  const outputIndex = argv.indexOf("--output");
+  const outdir = outdirIndex < 0 ? undefined : argv[outdirIndex + 1];
+  const output = outputIndex < 0 ? undefined : argv[outputIndex + 1];
   const entrypoints = [];
   for (let index = 1; index < argv.length; index++) {
     const value = argv[index];
-    if (value === "--outdir" || value === "--platform" || value === "--external") index++;
+    if (
+      value === "--outdir" || value === "--output" || value === "--platform" || value === "--external"
+      || value === "--format" || value === "--packages" || value === "--config" || value === "--import-map"
+      || value === "--lock" || value === "--cert" || value === "--conditions" || value === "--minimum-dependency-age"
+    ) index++;
     else if (!value.startsWith("--")) entrypoints.push(value);
   }
   if (entrypoints.length === 0) process.exit(23);
+  if (outdir === undefined && output === undefined) {
+    if (entrypoints.length !== 1) process.exit(23);
+    process.stdout.write(`// bundled ${entrypoints[0]}\nexport {};\n`);
+    process.exit(0);
+  }
   const sourcemap = argv.find((value) => value.startsWith("--sourcemap="))?.slice("--sourcemap=".length);
+  if (output !== undefined) {
+    await writeFile(output, `// bundled ${entrypoints[0]}\nexport {};\n`);
+    if (sourcemap === "linked" || sourcemap === "external") await writeFile(`${output}.map`, "{}\n");
+    process.exit(0);
+  }
+  if (outdir === undefined) process.exit(23);
+  await mkdir(outdir, { recursive: true });
   for (const entrypoint of entrypoints) {
     const base = entrypoint.split("/").at(-1).replace(/\.(ts|tsx|jsx|mjs|cjs|js)$/, "");
     await writeFile(join(outdir, `${base}.js`), `// bundled ${base}\nexport {};\n`);
@@ -56,6 +73,42 @@ if (argv[0] === "bundle") {
   if (argv.includes("--code-splitting")) {
     await mkdir(join(outdir, "chunks"), { recursive: true });
     await writeFile(join(outdir, "chunks", "chunk-fake.js"), "export const shared = 1;\n");
+  }
+  process.exit(0);
+}
+
+if (argv[0] === "transpile") {
+  const outdirIndex = argv.indexOf("--outdir");
+  const outputIndex = argv.indexOf("--output");
+  const outdir = outdirIndex < 0 ? undefined : argv[outdirIndex + 1];
+  const output = outputIndex < 0 ? undefined : argv[outputIndex + 1];
+  const files = [];
+  for (let index = 1; index < argv.length; index++) {
+    const value = argv[index];
+    if (
+      value === "--outdir" || value === "--output" || value === "--source-map" || value === "--config"
+      || value === "--import-map" || value === "--lock" || value === "--cert" || value === "--conditions"
+      || value === "--minimum-dependency-age"
+    ) index++;
+    else if (!value.startsWith("--")) files.push(value);
+  }
+  if (files.length === 0) process.exit(23);
+  if (outdir === undefined && output === undefined) {
+    if (files.length !== 1) process.exit(23);
+    process.stdout.write(`// transpiled ${files[0]}\nexport {};\n`);
+    process.exit(0);
+  }
+  if (output !== undefined) {
+    await writeFile(output, `// transpiled ${files[0]}\nexport {};\n`);
+    if (argv.includes("--declaration")) await writeFile(output.replace(/\.js$/u, ".d.ts"), "export {};\n");
+    process.exit(0);
+  }
+  if (outdir === undefined) process.exit(23);
+  await mkdir(outdir, { recursive: true });
+  for (const file of files) {
+    const base = file.split("/").at(-1).replace(/\.(ts|tsx|jsx|mts|mjs|cts|cjs|js)$/u, "");
+    await writeFile(join(outdir, `${base}.js`), `// transpiled ${base}\nexport {};\n`);
+    if (argv.includes("--declaration")) await writeFile(join(outdir, `${base}.d.ts`), "export {};\n");
   }
   process.exit(0);
 }

@@ -1,10 +1,10 @@
-import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as Build from "effect-build-esbuild/Build";
+import { Build } from "effect-build-esbuild/Api";
 
-const program = Build.build({ entryPoints: ["src/main.ts"], bundle: true, outdir: "dist", write: false }).pipe(
-  Effect.provide(Build.layer),
-  Effect.provide(NodeServices.layer),
-);
+const program = Build.build({
+  entryPoints: ["src/main.ts"],
+  bundle: true,
+  write: false,
+});
 
 await Effect.runPromise(program);

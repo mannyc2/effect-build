@@ -9,7 +9,22 @@ const diagnostics = (value: unknown): readonly rolldown.RolldownError[] => {
 
 /** Wraps the native rolldown rejection; `errors` exposes its diagnostics by reference. */
 export class RolldownFailed extends Schema.TaggedError<RolldownFailed>()("RolldownFailed", {
-  operation: Schema.Literals(["make", "generate", "write", "watch"] as const),
+  operation: Schema.Literals(
+    [
+      "make",
+      "generate",
+      "write",
+      "watch",
+      "transform",
+      "parse",
+      "minify",
+      "resolve",
+      "scan",
+      "dev",
+      "declaration",
+      "loadConfig",
+    ] as const,
+  ),
   cause: Schema.Unknown,
 }) {
   get errors(): readonly rolldown.RolldownError[] {

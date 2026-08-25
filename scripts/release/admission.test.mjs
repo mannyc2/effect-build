@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { selectAdmission } from "./admission.mjs";
+import { releaseControl } from "../node-finalizer/common.mjs";
 
-const absent = Array.from({ length: 7 }, () => "Absent");
-const equivalent = Array.from({ length: 7 }, () => "Equivalent");
+const absent = Array.from({ length: releaseControl.orderedPackages.length }, () => "Absent");
+const equivalent = Array.from({ length: releaseControl.orderedPackages.length }, () => "Equivalent");
 
 test("initial admission is fresh, available, all-absent, and main-only", () => {
   assert.deepEqual(selectAdmission({

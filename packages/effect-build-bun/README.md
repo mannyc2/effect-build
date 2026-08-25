@@ -1,38 +1,33 @@
 # effect-build-bun
 
-Effect-native Bun operations: native executables from
-`effect-build-bun/CompileExecutable` and directory bundles from
-`effect-build-bun/Bundle`, plus one `effect-build-bun/Profile` Layer providing
-both closed portable authoring services.
+Provider-native Bun 1.3.14 operations in distinct in-process and selected-command
+lanes.
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as CompileExecutable from "effect-build-bun/CompileExecutable";
+import { Command } from "effect-build-bun";
 
 const artifact = await Effect.runPromise(
-  CompileExecutable.compileExecutable({
-    entrypoint: "src/main.ts",
+  Command.CompileExecutable.compileExecutable({
+    entrypoints: ["src/main.ts"],
     outfile: "dist/app",
-    target: "linux-x64-gnu",
-    minify: true,
+    target: "bun-linux-x64",
+    observation: "hashed",
+    options: { minify: true },
   }).pipe(
-    Effect.provide(CompileExecutable.layer()),
+    Effect.provide(Command.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
-// { _tag: "Executable", path, bytes, target, tool, digest, sha256 }
 ```
 
-`Bundle.directWrite` runs `bun build` with `target` (browser/bun/node),
-`format`, `minify`, `sourcemap`, `splitting`, `packages`, and `external`,
-and returns a provider-local `DirectWriteOutcome` with mandatory file digests.
-It makes no atomic-publication claim: failure can leave a partially changed
-caller destination. `target: "browser"` is not the portable browser profile.
+`Api` exposes `Transpiler` (`make`, `transform`, `transformSync`, `scan`, and
+`scanImports`), `Build`, and `CompileExecutable`. `Command` exposes `Build`,
+`Watch`, and `CompileExecutable`. The two lanes remain different semantic owners
+even where their native operation names overlap.
 
-Each layer resolves Bun once, authenticates its executable bytes before and
-after the version probe, and revalidates them around every invocation. Bun
-profiles hard-require exact 1.3.14 and reject any other selected version before
-authoring. Full cross-host promotion evidence is incomplete.
-See the
-[repository](https://github.com/mannyc2/effect-build) for the full toolkit.
+Command operations authenticate the exact selected executable before launch.
+Provider-direct directory writes truthfully permit partial output after failure
+or interruption; only core `Author/Executable` owns atomic single-file
+replacement. The five-host and packed-consumer evidence gates remain open.

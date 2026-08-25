@@ -1,5 +1,5 @@
 import {
-  contract,
+  appleCertification,
   decodeCanonical,
   downloadArtifact,
   githubDigest,
@@ -12,7 +12,7 @@ import {
   sha256,
 } from "../node-finalizer/common.mjs";
 
-const apple = contract.release.appleCertificationEvidence;
+const apple = appleCertification;
 
 export const validateAppleCertification = ({ wrapperBytes, candidate, subject }) => {
   const entries = readArtifactZip(wrapperBytes);
@@ -21,7 +21,7 @@ export const validateAppleCertification = ({ wrapperBytes, candidate, subject })
   const bundleBytes = entries.get(apple.bundleFileName);
   const index = decodeCanonical(indexBytes, apple.indexFields);
   if (
-    index.schema !== contract.protocols.appleCertificationIndex || index.version !== "0.5.0"
+    index.schema !== apple.protocols.index || index.version !== apple.packageVersion
     || index.sourceSha !== candidate.descriptor.sourceSha
     || index.candidateWorkflowRunId !== candidate.descriptor.workflowRunId
     || index.candidateWorkflowRunAttempt !== candidate.descriptor.workflowRunAttempt

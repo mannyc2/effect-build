@@ -1,3 +1,3 @@
-export * as Build from "./Build.js";
-export * as Profile from "./Profile.js";
-export * as Watch from "./Watch.js";
+// Package-private evidence candidate. No public operation is admitted until the
+// independent Rolldown package gate closes.
+void 0;

@@ -34,7 +34,9 @@
     "build": "tsc -b tsconfig.json --force",
     "check": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": { "effect-build": "workspace:^" },
-  "peerDependencies": { "effect": ">=4.0.0-beta.104 <4.1.0-0" },
+  "peerDependencies": {
+    "effect": ">=4.0.0-beta.104 <4.1.0-0",
+    "effect-build": "0.5.0"
+  },
   "devDependencies": { "effect": "4.0.0-rc.108" }
 }

@@ -4,203 +4,174 @@
     "effect-build": {
       "namespaces": [
         "Artifact",
-        "BuildError",
-        "Target"
+        "BorrowedOutput",
+        "Executable",
+        "Matrix",
+        "SystemTarget",
+        "Tool"
       ],
       "subpaths": {
         "./Artifact": {
-          "runtime": [],
+          "runtime": [
+            "AbsolutePath",
+            "ArtifactInvalid",
+            "decimalBytes",
+            "sha256Digest"
+          ],
           "declarations": [
+            "AbsolutePath",
+            "ArtifactInvalid",
+            "DecimalBytes",
             "Digest",
-            "Executable"
+            "Executable",
+            "File",
+            "HashedExecutable",
+            "HashedFile",
+            "ObservationMode",
+            "RuntimeObservation",
+            "Sha256Value",
+            "UnhashedExecutable",
+            "UnhashedFile",
+            "decimalBytes",
+            "sha256Digest"
           ]
         },
-        "./Author/BorrowedContent": {
+        "./Author/BorrowedOutput": {
           "runtime": [
-            "digestBytes",
-            "observeFile",
-            "protocol",
-            "revalidate"
+            "BorrowedOutputChanged",
+            "BorrowedOutputEscaped",
+            "BorrowedOutputExpired",
+            "BorrowedOutputMissing",
+            "BorrowedOutputObservationFailed",
+            "CleanupFailedAfterSuccessfulUse",
+            "CleanupReporter",
+            "withFile",
+            "withTree"
           ],
           "declarations": [
-            "BorrowedFile",
-            "digestBytes",
-            "observeFile",
-            "protocol",
-            "revalidate"
-          ]
-        },
-        "./Author/Generation": {
-          "runtime": [
-            "activate",
-            "currentProtocol",
-            "generationProtocol",
-            "manifestProtocol",
-            "publish",
-            "resolveCurrent",
-            "rollback"
-          ],
-          "declarations": [
-            "ActivateInput",
-            "CurrentGeneration",
-            "DirectoryGeneration",
-            "GenerationManifest",
-            "ManifestFile",
-            "PublishInput",
-            "RollbackInput",
-            "activate",
-            "currentProtocol",
-            "generationProtocol",
-            "manifestProtocol",
-            "publish",
-            "resolveCurrent",
-            "rollback"
-          ]
-        },
-        "./Author/NodeMain": {
-          "runtime": [
+            "BorrowedOutputChanged",
+            "BorrowedOutputEscaped",
+            "BorrowedOutputExpired",
+            "BorrowedOutputMissing",
+            "BorrowedOutputObservationFailed",
+            "CleanupFailedAfterSuccessfulUse",
+            "CleanupObservation",
+            "CleanupReporter",
+            "DecimalBytes",
+            "Digest",
+            "Failure",
+            "File",
+            "FileObservation",
+            "HashedFileObservation",
+            "HashedTreeEntry",
+            "HashedTreeFileEntry",
+            "HashedTreeObservation",
+            "ObservationMode",
             "Producer",
-            "producedProtocol",
-            "profile",
-            "protocol",
-            "seal"
+            "Tree",
+            "TreeDirectoryEntry",
+            "TreeObservation",
+            "UnhashedFileObservation",
+            "UnhashedTreeEntry",
+            "UnhashedTreeFileEntry",
+            "UnhashedTreeObservation",
+            "withFile",
+            "withTree"
+          ]
+        },
+        "./Author/Executable": {
+          "runtime": [
+            "ExecutableCandidateChanged",
+            "ExecutableCandidateMissing",
+            "ExecutableCommitFailed",
+            "ExecutableDestinationInvalid",
+            "ExecutableDestinationLocked",
+            "ExecutableInspectionFailed",
+            "publish"
           ],
           "declarations": [
-            "Format",
-            "ProduceError",
-            "ProducedNodeMain",
-            "Producer",
-            "ProviderIdentity",
+            "Artifact",
+            "ExecutableCandidateChanged",
+            "ExecutableCandidateMissing",
+            "ExecutableCommitFailed",
+            "ExecutableDestinationInvalid",
+            "ExecutableDestinationLocked",
+            "ExecutableInspectionFailed",
+            "Failure",
+            "HashedArtifact",
+            "Inspection",
             "Request",
-            "SealError",
-            "SealedNodeMain",
-            "producedProtocol",
-            "profile",
-            "protocol",
-            "seal"
+            "UnhashedArtifact",
+            "publish"
           ]
         },
         "./Author/Tool": {
           "runtime": [
-            "probeVersion",
-            "publishExecutable",
-            "resolveExecutable",
-            "revalidateSelected",
-            "run",
-            "runOrFail",
-            "runOrFailSelected",
-            "runSelected",
+            "SelectedToolChanged",
+            "ToolNotFound",
+            "ToolSelectionAmbiguous",
+            "ToolSelectionInvalid",
+            "decimalBytes",
+            "define",
             "select",
-            "warnIfUntested"
+            "sha256Digest"
           ],
           "declarations": [
-            "Completion",
-            "Output",
-            "ProbeOptions",
-            "PublishOptions",
-            "ResolveOptions",
-            "RunOptions",
+            "Admission",
+            "Candidate",
+            "CapabilityObservation",
+            "CommandOptions",
+            "ContentIdentity",
+            "DecimalBytes",
+            "Definition",
+            "Digest",
+            "Observation",
+            "ParticipantIdentity",
             "SelectOptions",
             "SelectedTool",
-            "TestedRange",
-            "probeVersion",
-            "publishExecutable",
-            "resolveExecutable",
-            "revalidateSelected",
-            "run",
-            "runOrFail",
-            "runOrFailSelected",
-            "runSelected",
+            "SelectedToolChanged",
+            "Sha256Value",
+            "ToolNotFound",
+            "ToolSelectionAmbiguous",
+            "ToolSelectionInvalid",
+            "decimalBytes",
+            "define",
             "select",
-            "warnIfUntested"
+            "sha256Digest"
           ]
         },
-        "./Author/TreeSnapshot": {
+        "./Matrix": {
           "runtime": [
-            "comparePortablePaths",
-            "observe",
-            "protocol",
-            "revalidate",
-            "validatePortablePath"
+            "InvalidInput",
+            "run"
           ],
           "declarations": [
-            "SnapshotFile",
-            "TreeSnapshot",
-            "comparePortablePaths",
-            "observe",
-            "protocol",
-            "revalidate",
-            "validatePortablePath"
+            "CellIdentity",
+            "CellResult",
+            "Failure",
+            "Input",
+            "InvalidInput",
+            "Report",
+            "RunInput",
+            "Success",
+            "run"
           ]
         },
-        "./BuildError": {
+        "./SystemTarget": {
           "runtime": [
-            "ArtifactInvalid",
-            "CurrentConflict",
-            "CurrentUnknown",
-            "GenerationConflict",
-            "PortableRejected",
-            "PortableUnsupported",
-            "ProviderFailed",
-            "PublishFailed",
-            "SelectedToolChanged",
-            "ToolFailed",
-            "ToolNotFound",
-            "UnsupportedTarget"
-          ],
-          "declarations": [
-            "ArtifactInvalid",
-            "CurrentConflict",
-            "CurrentUnknown",
-            "GenerationConflict",
-            "PortableRejected",
-            "PortableUnsupported",
-            "ProviderFailed",
-            "PublishFailed",
-            "SelectedToolChanged",
-            "ToolFailed",
-            "ToolNotFound",
-            "UnsupportedTarget"
-          ]
-        },
-        "./Profile/StaticBrowserApplication": {
-          "runtime": [
-            "Provider",
-            "build",
-            "hostProtocol",
-            "producedProtocol",
-            "protocol"
-          ],
-          "declarations": [
-            "BuildError",
-            "BuildInput",
-            "ProduceError",
-            "ProducedApplication",
-            "ProducedFile",
-            "Provider",
-            "Request",
-            "Resource",
-            "StaticBrowserApplication",
-            "Subject",
-            "build",
-            "hostProtocol",
-            "producedProtocol",
-            "protocol"
-          ]
-        },
-        "./Target": {
-          "runtime": [
-            "Target",
-            "info"
+            "Abi",
+            "Architecture",
+            "OperatingSystem",
+            "SystemTarget",
+            "describe"
           ],
           "declarations": [
             "Abi",
             "Architecture",
-            "Info",
-            "NativeFormat",
+            "Descriptor",
             "OperatingSystem",
-            "Target",
-            "info"
+            "SystemTarget",
+            "describe"
           ]
         }
       }
@@ -492,54 +463,37 @@
     },
     "effect-build-bun": {
       "namespaces": [
-        "Bundle",
-        "CompileExecutable",
-        "Profile"
+        "Api",
+        "Command"
       ],
       "subpaths": {
-        "./Bundle": {
+        "./Api": {
           "runtime": [
-            "Bundler",
-            "directWrite",
+            "Build",
+            "CompileExecutable",
+            "Transpiler",
             "layer"
           ],
           "declarations": [
-            "Bundle",
-            "BundleFile",
-            "Bundler",
-            "DirectWriteError",
-            "DirectWriteInput",
-            "Format",
-            "LayerOptions",
-            "Sourcemap",
-            "Target",
-            "directWrite",
+            "Build",
+            "CompileExecutable",
+            "Transpiler",
             "layer"
           ]
         },
-        "./CompileExecutable": {
+        "./Command": {
           "runtime": [
-            "Compiler",
-            "Target",
-            "compileExecutable",
+            "Build",
+            "CompileExecutable",
+            "Watch",
             "layer"
           ],
           "declarations": [
-            "CompileExecutableError",
-            "CompileExecutableInput",
-            "Compiler",
+            "Build",
+            "CompileExecutable",
+            "LayerError",
             "LayerOptions",
-            "Target",
-            "compileExecutable",
-            "layer"
-          ]
-        },
-        "./Profile": {
-          "runtime": [
-            "layer"
-          ],
-          "declarations": [
-            "LayerOptions",
+            "Watch",
             "layer"
           ]
         }
@@ -547,45 +501,20 @@
     },
     "effect-build-deno": {
       "namespaces": [
-        "Bundle",
-        "CompileExecutable"
+        "Command"
       ],
       "subpaths": {
-        "./Bundle": {
+        "./Command": {
           "runtime": [
-            "Bundler",
-            "directWrite",
+            "CompileExecutable",
+            "Transpile",
             "layer"
           ],
           "declarations": [
-            "Bundle",
-            "BundleFile",
-            "Bundler",
-            "DirectWriteError",
-            "DirectWriteInput",
+            "CompileExecutable",
+            "LayerError",
             "LayerOptions",
-            "Platform",
-            "Sourcemap",
-            "directWrite",
-            "layer"
-          ]
-        },
-        "./CompileExecutable": {
-          "runtime": [
-            "Compiler",
-            "Target",
-            "compileExecutable",
-            "layer"
-          ],
-          "declarations": [
-            "CompileExecutableError",
-            "CompileExecutableInput",
-            "Compiler",
-            "LayerOptions",
-            "PermissionValue",
-            "Permissions",
-            "Target",
-            "compileExecutable",
+            "Transpile",
             "layer"
           ]
         }
@@ -593,161 +522,63 @@
     },
     "effect-build-esbuild": {
       "namespaces": [
-        "Build",
-        "Context",
-        "Profile",
-        "Watch"
+        "Api",
+        "Command"
       ],
       "subpaths": {
-        "./Build": {
+        "./Api": {
           "runtime": [
-            "Esbuild",
-            "EsbuildFailed",
-            "analyzeMetafile",
-            "build",
-            "layer",
-            "transform"
-          ],
-          "declarations": [
-            "Artifact",
-            "BuildError",
-            "Esbuild",
-            "EsbuildFailed",
-            "Options",
-            "analyzeMetafile",
-            "build",
-            "layer",
-            "transform"
-          ]
-        },
-        "./Context": {
-          "runtime": [
-            "Esbuild",
-            "EsbuildFailed",
-            "layer",
-            "make"
-          ],
-          "declarations": [
+            "AnalyzeMetafile",
+            "Build",
+            "BuildToDirectory",
             "Context",
-            "ContextError",
-            "Esbuild",
-            "EsbuildFailed",
-            "Options",
-            "layer",
-            "make"
+            "ContextToDirectory",
+            "FormatMessages",
+            "Transform"
+          ],
+          "declarations": [
+            "AnalyzeMetafile",
+            "Build",
+            "BuildToDirectory",
+            "Context",
+            "ContextToDirectory",
+            "FormatMessages",
+            "Transform"
           ]
         },
-        "./Profile": {
+        "./Command": {
           "runtime": [
-            "identity",
+            "Build",
+            "BuildToDirectory",
+            "Watch",
             "layer"
           ],
           "declarations": [
-            "identity",
+            "Build",
+            "BuildToDirectory",
+            "LayerError",
+            "LayerOptions",
+            "Watch",
             "layer"
-          ]
-        },
-        "./Watch": {
-          "runtime": [
-            "EsbuildFailed",
-            "changes"
-          ],
-          "declarations": [
-            "Change",
-            "EsbuildFailed",
-            "Options",
-            "changes"
           ]
         }
       }
     },
     "effect-build-node-sea": {
       "namespaces": [
-        "NodeMainExecutable",
-        "Raw"
+        "Command"
       ],
       "subpaths": {
-        "./NodeMainExecutable": {
+        "./Command": {
           "runtime": [
-            "nodeVersion",
-            "profile"
-          ],
-          "declarations": [
-            "Architecture",
-            "AssembledExecutable",
-            "AuthenticatedBase",
-            "ExecutedExecutable",
-            "FinalizedMode",
-            "NativeFormat",
-            "TargetSupportEvidence",
-            "nodeVersion",
-            "profile"
-          ]
-        },
-        "./Raw": {
-          "runtime": [
-            "Assembler",
-            "assembleExecutable",
+            "AssembleExecutable",
             "layer"
           ],
           "declarations": [
-            "AssembleExecutableError",
-            "AssembleExecutableInput",
-            "Assembler",
+            "AssembleExecutable",
+            "LayerError",
             "LayerOptions",
-            "Main",
-            "MainFormat",
-            "assembleExecutable",
             "layer"
-          ]
-        }
-      }
-    },
-    "effect-build-rolldown": {
-      "namespaces": [
-        "Build",
-        "Profile",
-        "Watch"
-      ],
-      "subpaths": {
-        "./Build": {
-          "runtime": [
-            "Rolldown",
-            "RolldownFailed",
-            "generate",
-            "layer",
-            "make",
-            "write"
-          ],
-          "declarations": [
-            "Build",
-            "Rolldown",
-            "RolldownFailed",
-            "generate",
-            "layer",
-            "make",
-            "write"
-          ]
-        },
-        "./Profile": {
-          "runtime": [
-            "identity",
-            "layer"
-          ],
-          "declarations": [
-            "identity",
-            "layer"
-          ]
-        },
-        "./Watch": {
-          "runtime": [
-            "RolldownFailed",
-            "events"
-          ],
-          "declarations": [
-            "Event",
-            "RolldownFailed",
-            "events"
           ]
         }
       }

@@ -97,6 +97,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           EFFECT_BUILD_APPLE_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER }}
+          EFFECT_BUILD_APPLE_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER_SHA256 }}
+          EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER }}
+          EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256 }}
           EFFECT_BUILD_APPLE_APPLICATION_FINGERPRINT: ${{ vars.EFFECT_BUILD_APPLE_APPLICATION_FINGERPRINT }}
           EFFECT_BUILD_APPLE_INSTALLER_FINGERPRINT: ${{ vars.EFFECT_BUILD_APPLE_INSTALLER_FINGERPRINT }}
           EFFECT_BUILD_APPLE_TEAM_ID: ${{ vars.EFFECT_BUILD_APPLE_TEAM_ID }}
@@ -107,11 +110,11 @@ jobs:
           node scripts/apple-certification/run-harness.mjs \
             --category distribution \
             --coordinate '${{ matrix.scenario }}|${{ matrix.target.token }}' \
-            --output apple-coordinate
+            --output "$RUNNER_TEMP/apple-coordinate"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: apple-certification-distribution-${{ strategy.job-index }}
-          path: apple-coordinate/*
+          path: ${{ runner.temp }}/apple-coordinate/*
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
@@ -142,24 +145,27 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: apple-certification-distribution-*
-          path: prior-evidence
+          path: ${{ runner.temp }}/prior-evidence
       - name: Exercise the normal quarantined product flow on a dedicated clean host
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          EFFECT_BUILD_APPLE_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER }}
+          EFFECT_BUILD_APPLE_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER }}
+          EFFECT_BUILD_APPLE_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER_SHA256 }}
+          EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER }}
+          EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256 }}
         run: |
           set -euo pipefail
           export CHECKED_OUT_SOURCE_SHA="$(git rev-parse HEAD)"
           node scripts/apple-certification/run-harness.mjs \
             --category clean-host \
             --coordinate '${{ matrix.product }}|${{ matrix.target.token }}' \
-            --prior-evidence prior-evidence \
-            --output apple-coordinate
+            --prior-evidence "$RUNNER_TEMP/prior-evidence" \
+            --output "$RUNNER_TEMP/apple-coordinate"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: apple-certification-clean-host-${{ strategy.job-index }}
-          path: apple-coordinate/*
+          path: ${{ runner.temp }}/apple-coordinate/*
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
@@ -184,13 +190,20 @@ jobs:
           package-manager-cache: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: apple-certification-*
-          path: prior-evidence
+          pattern: apple-certification-distribution-*
+          path: ${{ runner.temp }}/prior-evidence
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: apple-certification-clean-host-*
+          path: ${{ runner.temp }}/prior-evidence
       - name: Bind the capability verdict to retained distribution and clean-host evidence
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
           EFFECT_BUILD_APPLE_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER }}
+          EFFECT_BUILD_APPLE_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER_SHA256 }}
+          EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER }}
+          EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256 }}
           EFFECT_BUILD_APPLE_APPLICATION_FINGERPRINT: ${{ vars.EFFECT_BUILD_APPLE_APPLICATION_FINGERPRINT }}
           EFFECT_BUILD_APPLE_INSTALLER_FINGERPRINT: ${{ vars.EFFECT_BUILD_APPLE_INSTALLER_FINGERPRINT }}
           EFFECT_BUILD_APPLE_TEAM_ID: ${{ vars.EFFECT_BUILD_APPLE_TEAM_ID }}
@@ -201,12 +214,12 @@ jobs:
           node scripts/apple-certification/run-harness.mjs \
             --category cell \
             --coordinate '${{ matrix.cell }}' \
-            --prior-evidence prior-evidence \
-            --output apple-coordinate
+            --prior-evidence "$RUNNER_TEMP/prior-evidence" \
+            --output "$RUNNER_TEMP/apple-coordinate"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: apple-certification-cell-${{ strategy.job-index }}
-          path: apple-coordinate/*
+          path: ${{ runner.temp }}/apple-coordinate/*
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
@@ -215,6 +228,7 @@ jobs:
     needs: certification-cells
     name: Authenticate all 32 receipts and retain the exact certification envelope
     runs-on: ubuntu-24.04
+    environment: apple-certification
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -226,15 +240,19 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: apple-certification-*
-          path: apple-certification-evidence
+          path: ${{ runner.temp }}/apple-certification-evidence
       - name: Build the canonical index and opaque redacted bundle
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          EFFECT_BUILD_APPLE_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER }}
+          EFFECT_BUILD_APPLE_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER_SHA256 }}
+          EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER }}
+          EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256 }}
         run: |
           set -euo pipefail
           export CHECKED_OUT_SOURCE_SHA="$(git rev-parse HEAD)"
-          node scripts/apple-certification/build.mjs apple-certification-evidence apple-certification-output
+          node scripts/apple-certification/build.mjs "$RUNNER_TEMP/apple-certification-evidence" apple-certification-output
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: effect-build-v0.5.0-apple-certification

@@ -1,40 +1,59 @@
-import type { Crypto, Effect, FileSystem, Layer, Path } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import * as Bundle from "../packages/effect-build-deno/src/Bundle.js";
-import type * as BuildError from "../packages/effect-build/src/BuildError.js";
+import type { Effect } from "effect";
+import * as ApiBundle from "../packages/effect-build-deno/src/Api/Bundle.js";
+import * as Bundle from "../packages/effect-build-deno/src/Command/Bundle.js";
+import * as Transpile from "../packages/effect-build-deno/src/Command/Transpile.js";
+import * as Runtime from "../packages/effect-build-deno/src/internal/Runtime.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
-type LayerError<L> = L extends Layer.Layer<infer _A, infer E, infer _R> ? E : never;
-type LayerServices<L> = L extends Layer.Layer<infer _A, infer _E, infer R> ? R : never;
 
-export type _Platform = Assert<Same<Bundle.Platform, "browser" | "deno">>;
-
-export type _Error = Assert<
-  Same<Bundle.DirectWriteError, BuildError.ToolFailed | BuildError.ArtifactInvalid | BuildError.SelectedToolChanged>
+const memory = ApiBundle.memory({ entrypoints: ["main.ts"], write: false });
+export type _ApiMemory = Assert<
+  Same<
+    typeof memory,
+    Effect.Effect<
+      ApiBundle.Native.Result,
+      ApiBundle.DenoBundleFailed | ApiBundle.DenoBundleModeInvalid,
+      ApiBundle.Bundle
+    >
+  >
 >;
 
-const bundled = Bundle.directWrite({ entrypoints: ["src/main.ts"], outdir: "dist", platform: "browser" });
-
-export type _Bundle = Assert<
-  Same<typeof bundled, Effect.Effect<Bundle.Bundle, Bundle.DirectWriteError, Bundle.Bundler>>
->;
-
-// Entrypoints are a non-empty tuple; an empty list is unrepresentable.
+ApiBundle.direct({ entrypoints: ["main.ts"], outputPath: "bundle.js", write: true });
+ApiBundle.direct({ entrypoints: ["main.ts"], outputDir: "dist", write: true });
 // @ts-expect-error!
-Bundle.directWrite({ entrypoints: [], outdir: "dist" });
+ApiBundle.direct({ entrypoints: ["main.ts"], outputPath: "bundle.js", outputDir: "dist", write: true });
+// @ts-expect-error!
+ApiBundle.memory({ entrypoints: ["main.ts"], write: true });
 
-const built = Bundle.layer();
-
-export type _LayerError = Assert<
+const bundled = Bundle.stdout({ entrypoint: "main.ts", platform: "browser" });
+export type _CommandBundle = Assert<
   Same<
-    LayerError<typeof built>,
-    BuildError.ToolNotFound | BuildError.ToolFailed | BuildError.ArtifactInvalid | BuildError.SelectedToolChanged
+    typeof bundled,
+    Effect.Effect<Bundle.StdoutResult, Runtime.RunError | Runtime.DenoCommandInputInvalid, Runtime.Runtime>
   >
 >;
-export type _LayerServices = Assert<
+Bundle.direct({
+  entrypoints: ["main.ts"],
+  destination: { _tag: "Outdir", path: "dist" },
+});
+Bundle.declarations({
+  entrypoints: ["main.ts"],
+  destination: { _tag: "Outdir", path: "dist" },
+});
+Bundle.watch({
+  entrypoints: ["main.ts"],
+  destination: { _tag: "Outdir", path: "dist" },
+});
+
+const transpiled = Transpile.transpile({ file: "main.ts" });
+export type _Transpile = Assert<
   Same<
-    LayerServices<typeof built>,
-    Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner
+    typeof transpiled,
+    Effect.Effect<Transpile.StdoutResult, Runtime.RunError | Runtime.DenoCommandInputInvalid, Runtime.Runtime>
   >
 >;
+Transpile.transpileToDirectory({ files: ["main.ts"], outdir: "dist" });
+Transpile.emitDeclarations({ files: ["main.ts"], outdir: "types" });
+// @ts-expect-error!
+Transpile.transpileToDirectory({ files: [], outdir: "dist" });

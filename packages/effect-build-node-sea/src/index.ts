@@ -1,2 +1,1 @@
-export * as NodeMainExecutable from "./NodeMainExecutable.js";
-export * as Raw from "./Raw.js";
+export * as Command from "./Command/index.js";

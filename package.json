@@ -9,23 +9,26 @@
     "examples/bun",
     "examples/deno",
     "examples/esbuild",
-    "examples/node-sea",
-    "examples/rolldown"
+    "examples/node-sea"
   ],
   "scripts": {
     "clean": "node scripts/clean-dist.mjs",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
     "build": "bun run clean && tsc -b tsconfig.packages.json --force",
     "generate:surface": "node scripts/generate-public-api.mjs",
+    "generate:research-contract": "node scripts/research-contract/generate.mjs",
+    "validate:research-contract": "node scripts/research-contract/validate.mjs && node scripts/research-contract/generate.mjs --check",
+    "test:research-contract": "node --test scripts/research-contract/contract.test.mjs",
     "test:types": "tstyche",
     "test:unit": "vitest run test/unit",
-    "test:architecture": "vitest run test/architecture",
-    "test:control-planes": "node --test scripts/node-finalizer/common.test.mjs scripts/release/candidate.test.mjs scripts/release/coordinator-state.test.mjs scripts/release/admission.test.mjs scripts/apple-certification/receipt.test.mjs scripts/apple-certification/authenticate.test.mjs",
+    "test:architecture": "bun run validate:research-contract && bun run test:research-contract && vitest run test/architecture",
+    "test:control-planes": "node --test scripts/certification-host.test.mjs scripts/compiler-target-receipt.test.mjs scripts/provider-native-receipt.test.mjs scripts/node-finalizer/common.test.mjs scripts/release/candidate.test.mjs scripts/release/coordinator-state.test.mjs scripts/release/admission.test.mjs scripts/apple-certification/certifier.test.mjs scripts/apple-certification/source.test.mjs scripts/apple-certification/prior-evidence.test.mjs scripts/apple-certification/receipt.test.mjs scripts/apple-certification/authenticate.test.mjs scripts/receipt-archive/archive.test.mjs",
     "test:consumer": "node scripts/test-built-consumer.mjs",
     "test:consumer:fresh": "node scripts/test-built-consumer.mjs --fresh-install",
     "test:integration:bun": "vitest run test/integration/bun-compile-executable.test.ts test/integration/bun-bundle.test.ts",
     "test:integration:deno": "vitest run test/integration/deno-compile-executable.test.ts test/integration/deno-bundle.test.ts",
     "test:integration:node-sea": "vitest run test/integration/node-sea-assemble-executable.test.ts",
+    "test:integration:commands": "vitest run test/integration/provider-command.test.ts",
     "test:integration:apple": "vitest run test/integration/apple-distribution.test.ts",
     "test:integration:target": "vitest run test/integration/target-support.test.ts",
     "audit:dependencies": "bun audit --audit-level=high",
@@ -33,7 +36,7 @@
     "format": "dprint fmt",
     "format:check": "dprint check",
     "verify": "bun run build && bun run check && bun run test:types && bun run test:unit && node scripts/test-built-consumer.mjs --built && bun run test:architecture && bun run test:control-planes && bun run lint && bun run format:check",
-    "verify:real": "bun run test:integration:bun && bun run test:integration:deno"
+    "verify:real": "bun run test:integration:bun && bun run test:integration:deno && bun run test:integration:commands"
   },
   "devDependencies": {
     "@effect/platform-bun": "4.0.0-rc.108",

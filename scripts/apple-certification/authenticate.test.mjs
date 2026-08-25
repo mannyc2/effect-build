@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { deflateRawSync } from "node:zlib";
-import { canonicalBytes, contract, sha256 } from "../node-finalizer/common.mjs";
+import { appleCertification, canonicalBytes, sha256 } from "../node-finalizer/common.mjs";
 import { validateAppleCertification } from "./authenticate.mjs";
 
 const crc32 = (bytes) => {
@@ -54,7 +54,7 @@ const zip = (records) => {
 };
 
 const bundle = Buffer.from("opaque redacted evidence\n");
-const apple = contract.release.appleCertificationEvidence;
+const apple = appleCertification;
 const sourceSha = "1".repeat(40);
 const candidate = {
   descriptor: {
@@ -72,8 +72,8 @@ const subject = {
   workflowRunId: "8",
 };
 const index = () => ({
-  schema: contract.protocols.appleCertificationIndex,
-  version: "0.5.0",
+  schema: apple.protocols.index,
+  version: apple.packageVersion,
   sourceSha,
   candidateWorkflowRunId: "2",
   candidateWorkflowRunAttempt: "1",
