@@ -11,6 +11,8 @@ import {
   reauthenticateRequestSnapshot,
 } from "./snapshots.mjs";
 
+const testPosixModes = process.platform === "win32" ? test.skip : test;
+
 const candidateEntries = () => new Map([
   ["effect-build-0.5.0.tgz", Buffer.from("candidate core bytes\n")],
   ["effect-build-apple-0.5.0.tgz", Buffer.from("candidate apple bytes\n")],
@@ -41,14 +43,14 @@ const withFixture = async (run) => {
   }
 };
 
-test("candidate and request snapshots reauthenticate exact read-only bytes", async () => {
+testPosixModes("candidate and request snapshots reauthenticate exact read-only bytes", async () => {
   await withFixture(async ({ candidate, request }) => {
     assert.equal((await reauthenticateCandidateSnapshot(candidate)).files.length, 2);
     assert.equal((await reauthenticateRequestSnapshot(request)).bytes, String(Buffer.from('{"protocol":"test-request@1"}\n').length));
   });
 });
 
-test("candidate snapshot rejects mode, byte, and exact-file-set changes", async (context) => {
+testPosixModes("candidate snapshot rejects mode, byte, and exact-file-set changes", async (context) => {
   await context.test("file mode", async () =>
     withFixture(async ({ candidate, candidateRoot }) => {
       await chmod(join(candidateRoot, candidate.names[0]), 0o600);
@@ -138,7 +140,7 @@ test("candidate snapshot rejects mode, byte, and exact-file-set changes", async 
     }));
 });
 
-test("request snapshot rejects same-UID rewrite, mode change, and symbolic-link replacement", async (context) => {
+testPosixModes("request snapshot rejects same-UID rewrite, mode change, and symbolic-link replacement", async (context) => {
   await context.test("mode", async () =>
     withFixture(async ({ request, requestPath }) => {
       await chmod(requestPath, 0o600);
@@ -181,4 +183,17 @@ test("request snapshot rejects same-UID rewrite, mode change, and symbolic-link 
       await writeFile(requestPath, requestBytes, { mode: 0o400, flag: "wx" });
       await assert.rejects(() => reauthenticateRequestSnapshot(request), /captured filesystem identity/u);
     }));
+});
+
+test("snapshot capture fails closed without POSIX mode semantics", {
+  skip: process.platform !== "win32",
+}, async () => {
+  await assert.rejects(
+    () => captureCandidateSnapshot({ root: "C:\\candidate", entries: candidateEntries() }),
+    /require POSIX read-only mode semantics/u,
+  );
+  await assert.rejects(
+    () => captureRequestSnapshot({ path: "C:\\request.json", bytes: Buffer.from("request\n") }),
+    /require POSIX read-only mode semantics/u,
+  );
 });

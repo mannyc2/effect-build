@@ -9,6 +9,12 @@ const candidateDirectoryMode = 0o500;
 const snapshotFileMode = 0o400;
 const compareUtf16 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 
+const requirePosixSnapshotModes = () => {
+  if (process.platform === "win32") {
+    throw new Error("Apple certification snapshots require POSIX read-only mode semantics");
+  }
+};
+
 const exactAbsolutePath = (value, subject) => {
   if (typeof value !== "string" || !isAbsolute(value) || normalize(value) !== value) {
     throw new Error(`${subject} must be a normalized absolute path`);
@@ -92,6 +98,7 @@ const readExactSnapshotFile = async ({ path, originalBytes, expectedSha256, capt
 };
 
 export const captureCandidateSnapshot = async ({ root: rawRoot, entries }) => {
+  requirePosixSnapshotModes();
   const root = exactAbsolutePath(rawRoot, "candidate snapshot root");
   const originals = new Map();
   for (const [rawName, rawBytes] of entries) {
@@ -153,6 +160,7 @@ export const reauthenticateCandidateSnapshot = async (identity) => {
 };
 
 export const captureRequestSnapshot = async ({ path: rawPath, bytes: rawBytes }) => {
+  requirePosixSnapshotModes();
   const path = exactAbsolutePath(rawPath, "certification request snapshot path");
   if (!Buffer.isBuffer(rawBytes) || rawBytes.length === 0) {
     throw new Error("certification request snapshot must contain non-empty bytes");

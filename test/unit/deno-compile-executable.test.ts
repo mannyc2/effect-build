@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import type * as Artifact from "effect-build/Artifact";
-import { chmod, copyFile, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +16,7 @@ let executable = "";
 let denort = "";
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "effect-build-deno-compile-"));
+  root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-deno-compile-")));
   executable = join(root, "deno");
   denort = join(root, "denort");
   await copyFile(fixture, executable);
