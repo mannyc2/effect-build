@@ -17,6 +17,7 @@ const execute = promisify(execFile);
 const selectedDeno = process.env.EFFECT_BUILD_DENO ?? "/opt/homebrew/bin/deno";
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 const capabilityEntrypoint = fileURLToPath(new URL("../fixtures/app/deno-bundle-capability.ts", import.meta.url));
+const executablePath = (name: string): string => join(root, process.platform === "win32" ? `${name}.exe` : name);
 
 const exactDenoAvailable = (): boolean => {
   try {
@@ -87,7 +88,6 @@ describe.skipIf(!exactDenoAvailable())("real Deno 2.9.5 compileExecutable", () =
     expect(artifact).toMatchObject({
       _tag: "HashedExecutable",
       provider: "deno",
-      path: await realpath(outfile),
       bytes: `${bytes.byteLength}`,
       denoTarget: hostTarget(),
       runtime: { name: "deno", version: "2.9.5" },
@@ -97,13 +97,14 @@ describe.skipIf(!exactDenoAvailable())("real Deno 2.9.5 compileExecutable", () =
         evidenceGate: "cold-warm-corrupt-offline-target-relation-open",
       },
     });
+    expect(await realpath(artifact.path)).toBe(await realpath(outfile));
     expect(artifact.digest.value).toMatch(/^[0-9a-f]{64}$/u);
     expect((await execute(artifact.path, [])).stdout).toBe("effect-build-ok\n");
     await observeProviderNativeEvidence("CAN-DENO-010", "D08.1");
   }, 300_000);
 
   it("executes compile watch under Scope and interrupts the real provider child", async () => {
-    const outfile = join(root, "watched-app");
+    const outfile = executablePath("watched-app");
     const watchExit = await run(
       Effect.gen(function*() {
         const fiber = yield* Effect.forkChild(
@@ -140,7 +141,7 @@ describe.skipIf(!exactDenoAvailable())("real Deno 2.9.5 compileExecutable", () =
   it("records the pinned compiled-runtime Deno.bundle capability as unavailable", async () => {
     const artifact = await run(Compile.compileExecutable({
       entrypoint: capabilityEntrypoint,
-      outfile: join(root, "compiled-runtime-capability"),
+      outfile: executablePath("compiled-runtime-capability"),
       target: hostTarget(),
       observation: "unhashed",
     }));

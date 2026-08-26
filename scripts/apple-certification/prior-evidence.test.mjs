@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { canonicalBytes, sha256 } from "../node-finalizer/common.mjs";
 import {
@@ -22,8 +22,8 @@ const candidateWorkflowRunId = "2";
 const candidateDescriptorDigest = "3".repeat(64);
 const certificationWorkflowRunId = "4";
 const bunLockSha256 = "5".repeat(64);
-const primaryPath = "/opt/effect-build/apple-certifier";
-const cleanPath = "/opt/effect-build/apple-clean-host-certifier";
+const primaryPath = resolve("fixtures/apple-certifier");
+const cleanPath = resolve("fixtures/apple-clean-host-certifier");
 const primarySha256 = "6".repeat(64);
 const cleanSha256 = "7".repeat(64);
 const requestSha256 = "8".repeat(64);
@@ -101,7 +101,7 @@ const writeDistributionTriple = async (root, coordinate) => {
         logSha256: "f".repeat(64),
       }],
       steps: ["construct", "sign", "notary-submit", "staple", "staple-validate", "launch"].map(step),
-      tools: [{ name: "codesign", path: "/usr/bin/codesign", version: "1", sha256: "a".repeat(64) }],
+      tools: [{ name: "codesign", path: resolve("fixtures/codesign"), version: "1", sha256: "a".repeat(64) }],
     },
   });
   const receiptBytes = canonicalBytes({

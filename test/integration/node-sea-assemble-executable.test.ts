@@ -147,7 +147,11 @@ describe.skipIf(!cell.enabled).sequential("real Node SEA Command.AssembleExecuta
     const main = {
       _tag: "Bytes" as const,
       contents: new TextEncoder().encode(
-        "console.log(JSON.stringify({ execArgv: process.execArgv, argv: process.argv.slice(2) }))",
+        [
+          "let prototypeAccessThrows = false;",
+          "try { void ({}).__proto__; } catch { prototypeAccessThrows = true; }",
+          "console.log(JSON.stringify({ execArgv: process.execArgv, argv: process.argv.slice(2), prototypeAccessThrows }))",
+        ].join("\n"),
       ),
       format: "commonjs" as const,
     };
@@ -163,30 +167,45 @@ describe.skipIf(!cell.enabled).sequential("real Node SEA Command.AssembleExecuta
     const none = await build("none", "none");
     const noneOutput = JSON.parse(
       (await execute(none.path, ["script-value"], {
-        env: { ...process.env, NODE_OPTIONS: "--trace-warnings" },
+        env: { ...process.env, NODE_OPTIONS: "--disable-proto=throw" },
       })).stdout,
-    ) as { readonly execArgv: readonly string[]; readonly argv: readonly string[] };
+    ) as {
+      readonly execArgv: readonly string[];
+      readonly argv: readonly string[];
+      readonly prototypeAccessThrows: boolean;
+    };
     expect(noneOutput.execArgv).toEqual(["--no-warnings"]);
     expect(noneOutput.argv).toEqual(["script-value"]);
+    expect(noneOutput.prototypeAccessThrows).toBe(false);
 
     const env = await build("env", "env");
     const envOutput = JSON.parse(
       (await execute(env.path, ["script-value"], {
-        env: { ...process.env, NODE_OPTIONS: "--trace-warnings" },
+        env: { ...process.env, NODE_OPTIONS: "--disable-proto=throw" },
       })).stdout,
-    ) as { readonly execArgv: readonly string[]; readonly argv: readonly string[] };
-    expect(envOutput.execArgv).toEqual(expect.arrayContaining(["--no-warnings", "--trace-warnings"]));
+    ) as {
+      readonly execArgv: readonly string[];
+      readonly argv: readonly string[];
+      readonly prototypeAccessThrows: boolean;
+    };
+    expect(envOutput.execArgv).toEqual(["--no-warnings"]);
     expect(envOutput.argv).toEqual(["script-value"]);
+    expect(envOutput.prototypeAccessThrows).toBe(true);
 
     const cli = await build("cli", "cli");
     const cliOutput = JSON.parse(
       (await execute(
         cli.path,
-        ["--node-options=--trace-warnings", "script-value"],
+        ["--node-options=--disable-proto=throw", "script-value"],
       )).stdout,
-    ) as { readonly execArgv: readonly string[]; readonly argv: readonly string[] };
-    expect(cliOutput.execArgv).toEqual(expect.arrayContaining(["--no-warnings", "--trace-warnings"]));
+    ) as {
+      readonly execArgv: readonly string[];
+      readonly argv: readonly string[];
+      readonly prototypeAccessThrows: boolean;
+    };
+    expect(cliOutput.execArgv).toEqual(expect.arrayContaining(["--no-warnings", "--disable-proto=throw"]));
     expect(cliOutput.argv).toEqual(["script-value"]);
+    expect(cliOutput.prototypeAccessThrows).toBe(true);
     await observeProviderNativeEvidence("S07.1");
   }, 300_000);
 });

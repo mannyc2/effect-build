@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { canonicalBytes, sha256 } from "../node-finalizer/common.mjs";
 import {
@@ -26,7 +26,7 @@ const expectedBase = {
   candidateWorkflowRunId: "2",
   candidateDescriptorDigest: "3".repeat(64),
   certificationWorkflowRunId: "4",
-  certifierPath: "/opt/effect-build/apple-certifier",
+  certifierPath: resolve("fixtures/apple-certifier"),
   certifierSha256: "5".repeat(64),
   bunLockSha256: "6".repeat(64),
   requestSha256: "7".repeat(64),
@@ -50,7 +50,7 @@ const priorEvidenceManifest = (binding, entries = []) => ({
 const emptyPriorEvidenceManifestBytes = canonicalBytes(priorEvidenceManifest(expectedBase));
 const expected = {
   ...expectedBase,
-  priorEvidenceManifestPath: "/tmp/prior-evidence-manifest.json",
+  priorEvidenceManifestPath: resolve("fixtures/prior-evidence-manifest.json"),
   priorEvidenceManifestSha256: sha256(emptyPriorEvidenceManifestBytes),
 };
 
@@ -97,7 +97,7 @@ const evidence = (overrides = {}) => ({
       step("signature-verify", "b".repeat(64)),
       step("runtime-exercise", "c".repeat(64)),
     ],
-    tools: [{ name: "codesign", path: "/usr/bin/codesign", version: "1", sha256: "d".repeat(64) }],
+    tools: [{ name: "codesign", path: resolve("fixtures/codesign"), version: "1", sha256: "d".repeat(64) }],
   },
   ...overrides,
 });
@@ -144,12 +144,12 @@ const request = () => ({
   cleanWorktree: true,
   runnerOs: expected.runnerOs,
   runnerArch: expected.runnerArch,
-  candidateDirectory: "/tmp/candidate",
-  priorEvidenceDirectory: "/tmp/prior-evidence",
+  candidateDirectory: resolve("fixtures/candidate"),
+  priorEvidenceDirectory: resolve("fixtures/prior-evidence"),
   priorEvidenceManifestPath: expected.priorEvidenceManifestPath,
   priorEvidenceManifestSha256: expected.priorEvidenceManifestSha256,
-  receiptPath: "/tmp/distribution.receipt.json",
-  evidencePath: "/tmp/distribution.evidence.json",
+  receiptPath: resolve("fixtures/distribution.receipt.json"),
+  evidencePath: resolve("fixtures/distribution.evidence.json"),
 });
 
 const validateDistributionReceipt = (options) => validateReceipt({
@@ -257,7 +257,7 @@ test("clean-host and cell payloads require their category-specific proof", () =>
     ...expected,
     category: "clean-host",
     coordinate: categoryCoordinates["clean-host"][0],
-    certifierPath: "/opt/effect-build/clean-host-certifier",
+    certifierPath: resolve("fixtures/clean-host-certifier"),
     certifierSha256: "e".repeat(64),
     priorEvidenceManifestSha256: "f".repeat(64),
     priorEvidenceEntries: [cleanPriorEntry],
@@ -286,7 +286,7 @@ test("clean-host and cell payloads require their category-specific proof", () =>
       steps: ["acquire", "quarantine-verify", "gatekeeper", "launch", "runtime-exercise"].map((name) =>
         step(name, "d".repeat(64))
       ),
-      tools: [{ name: "spctl", path: "/usr/sbin/spctl", version: "1", sha256: "e".repeat(64) }],
+      tools: [{ name: "spctl", path: resolve("fixtures/spctl"), version: "1", sha256: "e".repeat(64) }],
     },
   };
   assert.equal(
@@ -330,7 +330,7 @@ test("clean-host and cell payloads require their category-specific proof", () =>
       priorEvidence: [],
       claims: [{ name: "deterministic-implementation", status: "passed", evidenceSha256: "c".repeat(64) }],
       steps: [step("evaluate", "d".repeat(64))],
-      tools: [{ name: "bun", path: "/usr/local/bin/bun", version: "1.3.14", sha256: "e".repeat(64) }],
+      tools: [{ name: "bun", path: resolve("fixtures/bun"), version: "1.3.14", sha256: "e".repeat(64) }],
     },
   };
   assert.equal(validateEvidence({ evidenceBytes: canonicalBytes(cellEvidence), expected: cellExpected }).coordinate, "A0");

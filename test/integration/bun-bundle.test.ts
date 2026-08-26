@@ -18,6 +18,8 @@ const bundledBun = "/Users/cjpher/.codex/toolchains/bun-1.3.14-arm64/bun-darwin-
 const selectedBun = process.env.EFFECT_BUILD_BUN ?? bundledBun;
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 const findings = fileURLToPath(new URL("../fixtures/bun-positive-findings/", import.meta.url));
+const executablePath = (path: string): string => process.platform === "win32" ? `${path}.exe` : path;
+const portablePath = (path: string): string => path.replaceAll("\\", "/");
 
 const exactBunAvailable = (): boolean => {
   try {
@@ -110,7 +112,7 @@ describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 provider breadth", () => 
 
   it("executes native Transpiler, Build memory/direct, and host compile APIs in the exact Bun host", async () => {
     const apiOutdir = join(root, "api-direct");
-    const apiExecutable = join(root, "api-executable");
+    const apiExecutable = executablePath(join(root, "api-executable"));
     const script = String.raw`
       import { Effect } from "effect";
       import * as Transpiler from "./packages/effect-build-bun/src/Api/Transpiler.ts";
@@ -172,7 +174,7 @@ describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 provider breadth", () => 
 
   it("executes every selected Bun host-API positive finding without normalizing native results", async () => {
     const findingsRoot = join(root, "host-positive-findings");
-    const fullStackExecutable = join(findingsRoot, "full-stack-api");
+    const fullStackExecutable = executablePath(join(findingsRoot, "full-stack-api"));
     const script = String.raw`
       import { Effect } from "effect";
       import { join } from "node:path";
@@ -465,7 +467,7 @@ describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 provider breadth", () => 
       metafile,
     }));
     expect(topology.publication).toBe("provider-direct-durable");
-    const topologyFiles = await readdir(topologyOutdir, { recursive: true });
+    const topologyFiles = (await readdir(topologyOutdir, { recursive: true })).map(portablePath);
     expect(topologyFiles.some((path) => path.startsWith("chunks/") && path.endsWith(".js"))).toBe(true);
     expect(topologyFiles.some((path) => path.startsWith("assets/") && path.endsWith(".asset"))).toBe(true);
     expect(topologyFiles.some((path) => path.endsWith(".js.map"))).toBe(true);

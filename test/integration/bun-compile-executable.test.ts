@@ -72,12 +72,12 @@ describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 compileExecutable", () =>
     expect(artifact).toMatchObject({
       _tag: "HashedExecutable",
       provider: "bun",
-      path: await realpath(outfile),
       bytes: `${bytes.byteLength}`,
       bunTarget: hostTarget(),
       runtime: { name: "bun", version: "1.3.14" },
       publication: { commit: "same-parent-rename", committed: true },
     });
+    expect(await realpath(artifact.path)).toBe(await realpath(outfile));
     expect(artifact.digest.value).toMatch(/^[0-9a-f]{64}$/u);
     expect(artifact.tool.participants[0].content.digest.value).toMatch(/^[0-9a-f]{64}$/u);
     expect((await execute(artifact.path, [])).stdout).toBe("effect-build-ok\n");
@@ -85,7 +85,7 @@ describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 compileExecutable", () =>
   }, 120_000);
 
   it("compiles and executes the provider-native full-stack HTML request mode", async () => {
-    const outfile = join(root, "full-stack-command");
+    const outfile = join(root, process.platform === "win32" ? "full-stack-command.exe" : "full-stack-command");
     const artifact = await run(Compile.compileExecutable({
       entrypoints: [fullStackEntrypoint],
       outfile,
