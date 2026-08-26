@@ -316,7 +316,7 @@ export const makePrivateAssemblerLayer = ({ builder, base, target, captureMain }
                         mainFormat: acquired.format,
                         executable: base.executable,
                         output: privateCandidate,
-                        disableExperimentalSEAWarning: false,
+                        disableExperimentalSEAWarning: true,
                         useSnapshot: false,
                         useCodeCache: false,
                       }, null, 2)}\n`, { flag: "wx" });

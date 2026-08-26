@@ -258,6 +258,7 @@ test("the private adapter uses offer-first roles and hard-cut provider roots", a
   assert.match(adapters, /packages\/effect-build-rolldown\/dist\/Api\/Build\.js/u);
   assert.doesNotMatch(adapters, /from "effect-build-rolldown\/Api"/u);
   assert.match(adapters, /makePrivateAssemblerLayer/u);
+  assert.match(adapters, /disableExperimentalSEAWarning: true/u);
 });
 
 test("the 45, 31, and split 60 plus 10-cell lanes use hard-cut suites and non-admitting receipts", async () => {
