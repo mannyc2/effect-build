@@ -17,6 +17,7 @@ const output = process.argv[2];
 if (output === undefined) throw new Error("usage: aggregate-compiler-targets.mjs <output-file>");
 const repository = requireEnvironment("GITHUB_REPOSITORY");
 const runId = requireEnvironment("GITHUB_RUN_ID");
+const runAttempt = requireEnvironment("GITHUB_RUN_ATTEMPT");
 const sourceSha = requireEnvironment("GITHUB_SHA");
 const token = requireEnvironment("GITHUB_TOKEN");
 const rule = evidenceControl.coordinateRules.compilerTargets;
@@ -43,7 +44,7 @@ const readReceipt = async (compiler, target) => {
   const jobName = `Target ${compiler}/${target}`;
   const artifactName = `compiler-target--${compiler}--${target}--receipt`;
   const filename = `compiler-target--${compiler}--${target}.json`;
-  const job = await observeJob({ repository, runId, name: jobName, token });
+  const job = await observeJob({ repository, runId, runAttempt, name: jobName, token });
   if (job.conclusion !== "success" || String(job.run_id) !== runId) {
     throw new Error(`compiler-target job did not succeed: ${jobName}`);
   }

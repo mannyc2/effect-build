@@ -372,6 +372,9 @@ export const observeArtifact = async ({ repository, runId, name, token }) => {
       const matches = artifacts.filter((artifact) => artifact.name === name);
       if (matches.length !== 1) throw new Error(`expected exactly one artifact named ${name}, observed ${matches.length}`);
       const artifact = matches[0];
+      if (String(artifact.workflow_run?.id) !== String(runId)) {
+        throw new Error(`artifact ${name} workflow-run binding mismatch`);
+      }
       if (artifact.expired || new Date(artifact.expires_at).getTime() <= Date.now()) throw new Error(`artifact ${name} is expired`);
       githubDigest(artifact.digest, `${name}.digest`);
       return artifact;
@@ -390,7 +393,7 @@ export const observeArtifactById = async ({ repository, artifactId, token }) => 
 export const observeRun = async ({ repository, runId, token }) =>
   githubJson(`/repos/${repository}/actions/runs/${runId}`, token);
 
-export const observeJob = async ({ repository, runId, name, token }) => {
+export const observeJob = async ({ repository, runId, runAttempt, name, token }) => {
   const jobs = await cachedRunResources(runJobs, {
     repository,
     runId,
@@ -398,7 +401,9 @@ export const observeJob = async ({ repository, runId, name, token }) => {
     resource: "jobs",
     query: "filter=all&",
   });
-  const matches = jobs.filter((job) => job.name === name);
+  const matches = jobs.filter((job) =>
+    job.name === name && (runAttempt === undefined || String(job.run_attempt) === String(runAttempt))
+  );
   if (matches.length !== 1) throw new Error(`expected exactly one job named ${name}, observed ${matches.length}`);
   return matches[0];
 };

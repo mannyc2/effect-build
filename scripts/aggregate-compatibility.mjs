@@ -21,6 +21,7 @@ const output = process.argv[2];
 if (output === undefined) throw new Error("usage: aggregate-compatibility.mjs <output-file>");
 const repository = requireEnvironment("GITHUB_REPOSITORY");
 const runId = requireEnvironment("GITHUB_RUN_ID");
+const runAttempt = requireEnvironment("GITHUB_RUN_ATTEMPT");
 const sourceSha = requireEnvironment("GITHUB_SHA");
 const token = requireEnvironment("GITHUB_TOKEN");
 const rules = evidenceControl.coordinateRules;
@@ -81,7 +82,7 @@ const receiptHostFields = (certificationHost) => {
 };
 
 const readReceipt = async (name, filename, expected) => {
-  const job = await observeJob({ repository, runId, name, token });
+  const job = await observeJob({ repository, runId, runAttempt, name, token });
   if (job.conclusion !== "success" || String(job.run_id) !== runId) throw new Error(`coordinate job did not succeed: ${name}`);
   const artifact = await observeArtifact({ repository, runId, name: `${name}--receipt`, token });
   if (String(artifact.workflow_run?.id) !== runId || artifact.workflow_run?.head_sha !== sourceSha) {

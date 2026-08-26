@@ -78,11 +78,11 @@ const main = async () => {
 
   const constructionJobName = `construct--${coordinateName}`;
   const finalizerJobName = `finalize--${coordinateName}`;
-  const constructionJob = await observeJob({ repository, runId, name: constructionJobName, token });
+  const constructionJob = await observeJob({ repository, runId, runAttempt, name: constructionJobName, token });
   if (constructionJob.conclusion !== "success" || String(constructionJob.run_id) !== runId) {
     throw new Error("authoritative construction job is not successful");
   }
-  const finalizerJob = await observeJob({ repository, runId, name: finalizerJobName, token });
+  const finalizerJob = await observeJob({ repository, runId, runAttempt, name: finalizerJobName, token });
   if (String(finalizerJob.run_id) !== runId) throw new Error("authoritative finalizer job mismatch");
 
   const inputArtifactName = `${coordinateName}--constructed`;

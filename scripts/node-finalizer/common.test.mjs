@@ -89,10 +89,11 @@ test("run aggregation snapshots every job and artifact page once", async () => {
     const values = Array.from({ length: page === 1 ? 100 : 1 }, (_, index) => {
       const id = offset + index;
       return resource === "jobs"
-        ? { id, name: `job-${id}` }
+        ? { id, name: `job-${id}`, run_attempt: 1 }
         : {
           id,
           name: `artifact-${id}`,
+          workflow_run: { id: 999999997 },
           expired: false,
           expires_at: "2100-01-01T00:00:00Z",
           digest: `sha256:${"0".repeat(64)}`,
@@ -106,8 +107,8 @@ test("run aggregation snapshots every job and artifact page once", async () => {
   try {
     const authority = { repository: "effect-build/snapshot-test", runId: "999999997", token: "test-token" };
     const [firstJob, lastJob, firstArtifact, lastArtifact] = await Promise.all([
-      observeJob({ ...authority, name: "job-0" }),
-      observeJob({ ...authority, name: "job-100" }),
+      observeJob({ ...authority, runAttempt: "1", name: "job-0" }),
+      observeJob({ ...authority, runAttempt: "1", name: "job-100" }),
       observeArtifact({ ...authority, name: "artifact-0" }),
       observeArtifact({ ...authority, name: "artifact-100" }),
     ]);

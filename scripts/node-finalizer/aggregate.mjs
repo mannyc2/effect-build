@@ -42,8 +42,8 @@ for (const producerGroup of axes.producerGroup) {
         const constructionJobName = `construct--${name}`;
         const finalizerJobName = `finalize--${name}`;
         const [constructionJob, finalizerJob] = await Promise.all([
-          observeJob({ repository, runId, name: constructionJobName, token }),
-          observeJob({ repository, runId, name: finalizerJobName, token }),
+          observeJob({ repository, runId, runAttempt, name: constructionJobName, token }),
+          observeJob({ repository, runId, runAttempt, name: finalizerJobName, token }),
         ]);
         if (constructionJob.conclusion !== "success" || finalizerJob.conclusion !== "success") {
           throw new Error(`coordinate jobs are not successful for ${name}`);
