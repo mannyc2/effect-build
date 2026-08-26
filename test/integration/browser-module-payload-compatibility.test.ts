@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, normalize, posix, relative, resolve, sep } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as BunCommand from "../../packages/effect-build-bun/src/Command/index.js";
+import { toPlatformMetadataPath } from "../../packages/effect-build-bun/src/internal/MetadataPath.js";
 import { Runtime as BunCommandRuntime } from "../../packages/effect-build-bun/src/internal/Runtime.js";
 import * as EsbuildApi from "../../packages/effect-build-esbuild/src/Api/index.js";
 import * as RolldownBuild from "../../packages/effect-build-rolldown/src/Api/Build.js";
@@ -63,8 +64,9 @@ const unsupported = (provider: string, reason: string) =>
 const portable = (root: string, path: string): string => relative(root, path).split(sep).join("/");
 
 const canonicalFile = async (path: string): Promise<string> => {
-  const absolute = resolve(path);
-  return realpath(absolute).catch(() => normalize(absolute));
+  const absolute = toPlatformMetadataPath({ isAbsolute, resolve }, path);
+  const canonical = await realpath(absolute).catch(() => normalize(absolute));
+  return process.platform === "win32" ? canonical.toLowerCase() : canonical;
 };
 
 const bunPortableOutput = (root: string, metadataPath: string): string => {

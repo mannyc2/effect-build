@@ -77,12 +77,24 @@ const waitForResponse = async (url: string): Promise<Response> => {
   }
 };
 
+const packageBinary = async (name: "esbuild" | "rolldown"): Promise<string> => {
+  const suffixes = process.platform === "win32" ? [".exe", ".cmd", ""] as const : [""] as const;
+  for (const suffix of suffixes) {
+    try {
+      return await realpath(resolve(`node_modules/.bin/${name}${suffix}`));
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+    }
+  }
+  throw new Error(`installed ${name} package has no executable shim for ${process.platform}`);
+};
+
 describe("real provider command binaries", () => {
   it("executes exact esbuild 0.28.2 stdout and direct-directory forms", async () => {
     const entry = join(root, "esbuild-entry.ts");
     const outdir = join(root, "esbuild-dist");
     await writeFile(entry, "export const commandEsbuild = 42;\n");
-    const binary = await realpath(resolve("node_modules/.bin/esbuild"));
+    const binary = await packageBinary("esbuild");
     const provider = Layer.provide(
       EsbuildCommand.layer({ executable: binary as never }),
       NodeServices.layer,
@@ -112,7 +124,7 @@ describe("real provider command binaries", () => {
     const entry = join(root, "esbuild-watch-entry.ts");
     const outfile = join(root, "esbuild-watch.js");
     await writeFile(entry, "export const watchedEsbuild = 44;\n");
-    const binary = await realpath(resolve("node_modules/.bin/esbuild"));
+    const binary = await packageBinary("esbuild");
     const provider = Layer.provide(EsbuildCommand.layer({ executable: binary as never }), NodeServices.layer);
     const layer = provideRuntime(provider);
     const watchExit = await Effect.runPromise(
@@ -151,7 +163,7 @@ describe("real provider command binaries", () => {
     const entry = join(root, "esbuild-serve-entry.ts");
     const outdir = join(root, "esbuild-serve-dist");
     await writeFile(entry, 'export const servedEsbuild = "request-ok";\n');
-    const binary = await realpath(resolve("node_modules/.bin/esbuild"));
+    const binary = await packageBinary("esbuild");
     const provider = Layer.provide(EsbuildCommand.layer({ executable: binary as never }), NodeServices.layer);
     const layer = provideRuntime(provider);
     const port = await reservePort();
@@ -185,7 +197,7 @@ describe("real provider command binaries", () => {
     const entry = join(root, "rolldown-entry.js");
     const outdir = join(root, "rolldown-dist");
     await writeFile(entry, "export const commandRolldown = 43;\n");
-    const binary = await realpath(resolve("node_modules/.bin/rolldown"));
+    const binary = await packageBinary("rolldown");
     const provider = Layer.provide(rolldownLayer({ executable: binary as never }), NodeServices.layer);
     const layer = provideRuntime(provider);
     const memory = await Effect.runPromise(
@@ -209,7 +221,7 @@ describe("real provider command binaries", () => {
     const entry = join(root, "rolldown-watch-entry.js");
     const outdir = join(root, "rolldown-watch-dist");
     await writeFile(entry, "export const watchedRolldown = 45;\n");
-    const binary = await realpath(resolve("node_modules/.bin/rolldown"));
+    const binary = await packageBinary("rolldown");
     const provider = Layer.provide(rolldownLayer({ executable: binary as never }), NodeServices.layer);
     const layer = provideRuntime(provider);
     const watchExit = await Effect.runPromise(

@@ -275,7 +275,8 @@ test("the 45, 31, and split 60 plus 10-cell lanes use hard-cut suites and non-ad
   assert.match(workflow, /EFFECT_BUILD_NODE="\$\(command -v node\)" bun run test:integration:node-sea/u);
   assert.match(workflow, /if \[\[ "\$RUNNER_OS" == "Windows" \]\]; then executable="\$\(cygpath -w "\$executable"\)"; fi/u);
   assert.match(workflow, /provider-host-runtime\.test\.ts/u);
-  assert.match(workflow, /bun --bun \.\/node_modules\/vitest\/vitest\.mjs/u);
+  assert.match(workflow, /EFFECT_BUILD_EXPECTED_HOST_RUNTIME="\$host_runtime" bun test/u);
+  assert.doesNotMatch(workflow, /bun --bun \.\/node_modules\/vitest\/vitest\.mjs/u);
   assert.match(workflow, /node scripts\/provider-native-receipt\.mjs/u);
   assert.match(nativeReceipt, /provider-native-test-observed-exact-operation-and-atom-evidence-no-conditional-admission/u);
   assert.match(nativeReceipt, /readProviderNativeObservationDirectory/u);

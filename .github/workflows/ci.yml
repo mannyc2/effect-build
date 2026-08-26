@@ -534,11 +534,11 @@ jobs:
               ;;
             esbuild@0.28.2+bun@1.3.14)
               host_runtime='bun@1.3.14'
-              EFFECT_BUILD_EXPECTED_HOST_RUNTIME="$host_runtime" bun --bun ./node_modules/vitest/vitest.mjs run \
+              EFFECT_BUILD_EXPECTED_HOST_RUNTIME="$host_runtime" bun test \
                 test/integration/provider-host-runtime.test.ts \
                 test/unit/esbuild-build.test.ts \
                 test/unit/esbuild-context.test.ts
-              bun --bun ./node_modules/vitest/vitest.mjs run \
+              bun test \
                 test/unit/provider-command.test.ts \
                 test/integration/provider-command.test.ts \
                 -t 'esbuild'
@@ -555,11 +555,11 @@ jobs:
               ;;
             rolldown@1.2.5+bun@1.3.14)
               host_runtime='bun@1.3.14'
-              EFFECT_BUILD_EXPECTED_HOST_RUNTIME="$host_runtime" bun --bun ./node_modules/vitest/vitest.mjs run \
+              EFFECT_BUILD_EXPECTED_HOST_RUNTIME="$host_runtime" bun test \
                 test/integration/provider-host-runtime.test.ts \
                 test/unit/rolldown.test.ts \
                 test/unit/rolldown-api.test.ts
-              bun --bun ./node_modules/vitest/vitest.mjs run \
+              bun test \
                 test/unit/provider-command.test.ts \
                 test/integration/provider-command.test.ts \
                 -t 'Rolldown'
