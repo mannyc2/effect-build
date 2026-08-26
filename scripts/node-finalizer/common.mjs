@@ -167,6 +167,9 @@ export const githubDigest = (value, field) => {
   return value;
 };
 
+export const githubActionArtifactDigest = (value, field) =>
+  `sha256:${hex(value, 64, field)}`;
+
 export const targetCell = (target) => {
   const cell = nodeProfile.intendedEvidenceCells.find((candidate) => candidate.target === target);
   if (cell === undefined) throw new Error(`unsupported Node target ${target}`);

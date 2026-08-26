@@ -21,6 +21,8 @@ import {
   observeArtifact,
   observeJob,
   evidenceControl,
+  githubActionArtifactDigest,
+  githubDigest,
   readArtifactZip,
   researchContract,
   requireEntries,
@@ -86,6 +88,14 @@ test("canonical controls reject unknown fields, numbers, and noncanonical bytes"
   assert.throws(() => canonicalBytes({ value: 1 }), /forbids numbers/u);
   assert.throws(() => decodeCanonical(canonicalBytes({ ...value, extra: "x" }), fields), /field mismatch/u);
   assert.throws(() => decodeCanonical(Buffer.from('{"value":"1","protocol":"example@1"}\n'), fields), /canonically/u);
+});
+
+test("upload-artifact digests normalize once to the GitHub API representation", () => {
+  const raw = "a".repeat(64);
+  assert.equal(githubActionArtifactDigest(raw, "action digest"), `sha256:${raw}`);
+  assert.equal(githubDigest(`sha256:${raw}`, "API digest"), `sha256:${raw}`);
+  assert.throws(() => githubActionArtifactDigest(`sha256:${raw}`, "action digest"), /lowercase 64-hex/u);
+  assert.throws(() => githubActionArtifactDigest("A".repeat(64), "action digest"), /lowercase 64-hex/u);
 });
 
 test("authenticated Node built-in inventories are canonical and admit only observed subsets", () => {

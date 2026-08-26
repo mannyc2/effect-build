@@ -6,7 +6,7 @@ import {
   coordinate,
   decodeCanonical,
   downloadArtifact,
-  githubDigest,
+  githubActionArtifactDigest,
   observeArtifactById,
   positiveDecimal,
   readArtifactZip,
@@ -45,7 +45,7 @@ const main = async () => {
     requireEnvironment("EFFECT_BUILD_OUTPUT_ARTIFACT_ID"),
     "EFFECT_BUILD_OUTPUT_ARTIFACT_ID",
   );
-  const outputArtifactDigest = githubDigest(
+  const outputArtifactDigest = githubActionArtifactDigest(
     requireEnvironment("EFFECT_BUILD_OUTPUT_ARTIFACT_DIGEST"),
     "EFFECT_BUILD_OUTPUT_ARTIFACT_DIGEST",
   );
