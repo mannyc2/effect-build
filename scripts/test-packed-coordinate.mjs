@@ -283,7 +283,7 @@ try {
     maxBuffer: 16 * 1024 * 1024,
   });
   if (fixture.bunTests !== undefined) {
-    await execute(packedEnvironment.EFFECT_BUILD_BUN, ["--bun", vitest, "run", ...fixture.bunTests], {
+    await execute(packedEnvironment.EFFECT_BUILD_BUN, ["test", ...fixture.bunTests], {
       cwd: root,
       env: packedEnvironment,
       maxBuffer: 16 * 1024 * 1024,

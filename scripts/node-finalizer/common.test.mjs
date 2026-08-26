@@ -295,6 +295,8 @@ test("the 45, 31, and split 60 plus 10-cell lanes use hard-cut suites and non-ad
   assert.match(aggregate, /atomIds: accounting\.atomIds/u);
   assert.match(packed, /targetPublicSurface\.providerLanes/u);
   assert.match(packed, /assertFixtureCoverage/u);
+  assert.match(packed, /\["test", \.\.\.fixture\.bunTests\]/u);
+  assert.doesNotMatch(packed, /\["--bun", vitest, "run", \.\.\.fixture\.bunTests\]/u);
   assert.match(packed, /observedEffectPaths\.size/u);
   assert.match(consumer, /effect-build-bun\/Api/u);
   assert.match(consumer, /effect-build-node-sea\/Command/u);
