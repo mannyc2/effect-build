@@ -344,7 +344,7 @@ const listRunResources = async ({ repository, runId, token, resource, query = ""
 };
 
 const cachedRunResources = (cache, options) => {
-  const key = runKey(options);
+  const key = `${runKey(options)}\0${options.resource}\0${options.query ?? ""}`;
   let pending = cache.get(key);
   if (pending === undefined) {
     pending = listRunResources(options);
@@ -368,6 +368,7 @@ export const observeArtifact = async ({ repository, runId, name, token }) => {
         runId,
         token,
         resource: "artifacts",
+        query: `name=${encodeURIComponent(name)}&`,
       });
       const matches = artifacts.filter((artifact) => artifact.name === name);
       if (matches.length !== 1) throw new Error(`expected exactly one artifact named ${name}, observed ${matches.length}`);

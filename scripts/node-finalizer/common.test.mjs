@@ -85,21 +85,22 @@ test("run aggregation snapshots every job and artifact page once", async () => {
     calls.push(`${url.pathname}?${url.searchParams.toString()}`);
     const page = Number(url.searchParams.get("page"));
     const resource = url.pathname.endsWith("/jobs") ? "jobs" : "artifacts";
+    const selectedArtifact = url.searchParams.get("name");
     const offset = (page - 1) * 100;
-    const values = Array.from({ length: page === 1 ? 100 : 1 }, (_, index) => {
+    const values = Array.from({ length: resource === "artifacts" ? 1 : page === 1 ? 100 : 1 }, (_, index) => {
       const id = offset + index;
       return resource === "jobs"
         ? { id, name: `job-${id}`, run_attempt: 1 }
         : {
-          id,
-          name: `artifact-${id}`,
+          id: Number(selectedArtifact?.slice("artifact-".length)),
+          name: selectedArtifact,
           workflow_run: { id: 999999997 },
           expired: false,
           expires_at: "2100-01-01T00:00:00Z",
           digest: `sha256:${"0".repeat(64)}`,
         };
     });
-    return new Response(JSON.stringify({ total_count: 101, [resource]: values }), {
+    return new Response(JSON.stringify({ total_count: resource === "artifacts" ? 1 : 101, [resource]: values }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -115,6 +116,7 @@ test("run aggregation snapshots every job and artifact page once", async () => {
     assert.deepEqual([firstJob.id, lastJob.id, firstArtifact.id, lastArtifact.id], [0, 100, 0, 100]);
     assert.equal(calls.filter((call) => call.includes("/jobs?")).length, 2);
     assert.equal(calls.filter((call) => call.includes("/artifacts?")).length, 2);
+    assert.equal(calls.filter((call) => call.includes("/artifacts?")).every((call) => call.includes("name=artifact-")), true);
   } finally {
     globalThis.fetch = originalFetch;
   }
