@@ -88,6 +88,7 @@ export const nodeMainExecutionExpectation = Object.freeze({
   stdoutSha256: sha256(Buffer.from(nodeMainExpectedStdout)),
   stderrSha256: sha256(Buffer.alloc(0)),
 });
+export const artifactDownloadTimeoutMs = 180_000;
 
 export const nodeBuiltinInventoryProgram = [
   'const { builtinModules, isBuiltin } = require("node:module");',
@@ -471,7 +472,7 @@ export const downloadArtifact = async (artifact, token) => {
   const response = await fetch(artifact.archive_download_url, {
     headers: githubHeaders(token),
     redirect: "follow",
-    signal: AbortSignal.timeout(35_000),
+    signal: AbortSignal.timeout(artifactDownloadTimeoutMs),
   });
   if (!response.ok) throw new Error(`artifact download returned ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());

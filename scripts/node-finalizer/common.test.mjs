@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import {
   admitsNodeBuiltins,
+  artifactDownloadTimeoutMs,
   canonicalBytes,
   canonicalNodeBuiltinInventory,
   capability,
@@ -154,6 +155,10 @@ test("artifact ZIP validation admits only exact regular top-level entries", () =
   const corrupt = zip([["payload.bin", "payload"]]);
   corrupt[30 + Buffer.byteLength("payload.bin")] ^= 1;
   assert.throws(() => readArtifactZip(corrupt), /CRC mismatch/u);
+});
+
+test("artifact downloads keep one bounded window sized for executable wrappers", () => {
+  assert.equal(artifactDownloadTimeoutMs, 180_000);
 });
 
 test("the private finalizer accounts for 150 applicable and 30 rejected coordinates without collision", () => {
