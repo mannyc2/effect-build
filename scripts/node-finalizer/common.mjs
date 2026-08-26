@@ -82,6 +82,12 @@ if (
 
 export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 export const digest = (bytes) => ({ algorithm: "sha256", value: sha256(bytes) });
+export const nodeMainExpectedStdout = "effect-build-node-main-ok\n";
+export const nodeMainExecutionExpectation = Object.freeze({
+  executionExitCode: "0",
+  stdoutSha256: sha256(Buffer.from(nodeMainExpectedStdout)),
+  stderrSha256: sha256(Buffer.alloc(0)),
+});
 
 export const nodeBuiltinInventoryProgram = [
   'const { builtinModules, isBuiltin } = require("node:module");',
@@ -188,7 +194,7 @@ export const inspectNativeExecutable = (input, target) => {
     if (architecture === undefined || !target.includes(architecture === "aarch64" ? "aarch64" : "x64")) {
       throw new Error(`ELF architecture mismatch: ${machine}`);
     }
-    return Object.freeze({ nativeFormat: "elf", architecture });
+    return Object.freeze({ nativeFormat: "elf", inspectedArchitecture: architecture });
   }
   if (target.startsWith("windows-")) {
     if (bytes.length < 64 || bytes.subarray(0, 2).toString("ascii") !== "MZ") {
@@ -203,7 +209,7 @@ export const inspectNativeExecutable = (input, target) => {
     if (architecture === undefined || !target.endsWith(architecture)) {
       throw new Error(`PE architecture mismatch: ${machine}`);
     }
-    return Object.freeze({ nativeFormat: "pe", architecture });
+    return Object.freeze({ nativeFormat: "pe", inspectedArchitecture: architecture });
   }
   if (bytes.length < 8 || bytes.readUInt32LE(0) !== 0xfeedfacf) {
     throw new Error("executable is not 64-bit little-endian Mach-O");
@@ -213,7 +219,7 @@ export const inspectNativeExecutable = (input, target) => {
   if (architecture === undefined || !target.endsWith(architecture)) {
     throw new Error(`Mach-O architecture mismatch: ${cpu}`);
   }
-  return Object.freeze({ nativeFormat: "mach-o", architecture });
+  return Object.freeze({ nativeFormat: "mach-o", inspectedArchitecture: architecture });
 };
 
 export const distributionDescriptorFields = Object.freeze([

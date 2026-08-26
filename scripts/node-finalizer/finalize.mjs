@@ -11,6 +11,8 @@ import {
   downloadArtifact,
   hex,
   inspectNativeExecutable,
+  nodeMainExecutionExpectation,
+  nodeMainExpectedStdout,
   observeArtifact,
   observeJob,
   observeRun,
@@ -146,7 +148,7 @@ const main = async () => {
   await writeFile(finalizedPath, finalized, { flag: "wx", mode: target.startsWith("windows-") ? undefined : 0o755 });
   if (!target.startsWith("windows-")) await chmod(finalizedPath, 0o755);
   const execution = await execute(finalizedPath, [], { timeout: 30_000, maxBuffer: 1_048_576, encoding: "buffer" });
-  if (!Buffer.from(execution.stdout).equals(Buffer.from("effect-build-node-main-ok\n")) || execution.stderr.length !== 0) {
+  if (!Buffer.from(execution.stdout).equals(Buffer.from(nodeMainExpectedStdout)) || execution.stderr.length !== 0) {
     throw new Error("finalized executable output mismatch");
   }
   const pending = {
@@ -159,9 +161,8 @@ const main = async () => {
     finalizedMode: target.startsWith("windows-") ? "not-applicable" : "0755",
     finalizedBytes: String(finalized.length),
     finalizedSha256: sha256(finalized),
-    nativeFormat: inspection.nativeFormat,
-    inspectedArchitecture: inspection.architecture,
-    executionExitCode: "0",
+    ...inspection,
+    executionExitCode: nodeMainExecutionExpectation.executionExitCode,
     stdoutSha256: sha256(Buffer.from(execution.stdout)),
     stderrSha256: sha256(Buffer.from(execution.stderr)),
   };

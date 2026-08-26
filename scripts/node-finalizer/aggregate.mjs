@@ -7,6 +7,8 @@ import {
   decodeCanonical,
   downloadArtifact,
   evidenceControl,
+  inspectNativeExecutable,
+  nodeMainExecutionExpectation,
   nodeMainApplicableTargets,
   observeArtifact,
   observeJob,
@@ -121,9 +123,8 @@ for (const producerGroup of axes.producerGroup) {
           finalizedMode: target.startsWith("windows-") ? "not-applicable" : "0755",
           finalizedBytes: String(finalized.length),
           finalizedSha256: sha256(finalized),
-          nativeFormat: target.startsWith("macos-") ? "mach-o" : target.startsWith("linux-") ? "elf" : "pe",
-          inspectedArchitecture: target.endsWith("aarch64") ? "aarch64" : "x64",
-          executionExitCode: "0",
+          ...inspectNativeExecutable(finalized, target),
+          ...nodeMainExecutionExpectation,
         };
         for (const [field, value] of Object.entries(expected)) {
           if (receipt[field] !== value) throw new Error(`receipt ${field} mismatch for ${name}`);

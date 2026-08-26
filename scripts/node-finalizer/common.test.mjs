@@ -12,6 +12,8 @@ import {
   decodeCanonical,
   decodeDistributionDescriptor,
   inspectNativeExecutable,
+  nodeMainExecutionExpectation,
+  nodeMainExpectedStdout,
   nodeMainApplicableCoordinates,
   nodeMainApplicableTargets,
   nodeBuiltinInventoryProgram,
@@ -21,6 +23,7 @@ import {
   readArtifactZip,
   researchContract,
   requireEntries,
+  sha256,
   targetCell,
 } from "./common.mjs";
 import { buildNodeMainMatrices } from "./matrix.mjs";
@@ -278,7 +281,7 @@ test("native inspection proves each admitted executable family and architecture"
   elf.writeUInt16LE(183, 18);
   assert.deepEqual(inspectNativeExecutable(elf, "linux-aarch64-gnu"), {
     nativeFormat: "elf",
-    architecture: "aarch64",
+    inspectedArchitecture: "aarch64",
   });
 
   const pe = Buffer.alloc(72);
@@ -286,16 +289,24 @@ test("native inspection proves each admitted executable family and architecture"
   pe.writeUInt32LE(64, 0x3c);
   pe.write("PE\0\0", 64, "binary");
   pe.writeUInt16LE(0x8664, 68);
-  assert.deepEqual(inspectNativeExecutable(pe, "windows-x64"), { nativeFormat: "pe", architecture: "x64" });
+  assert.deepEqual(inspectNativeExecutable(pe, "windows-x64"), {
+    nativeFormat: "pe",
+    inspectedArchitecture: "x64",
+  });
 
   const macho = Buffer.alloc(8);
   macho.writeUInt32LE(0xfeedfacf, 0);
   macho.writeUInt32LE(0x0100000c, 4);
   assert.deepEqual(inspectNativeExecutable(macho, "macos-aarch64"), {
     nativeFormat: "mach-o",
-    architecture: "aarch64",
+    inspectedArchitecture: "aarch64",
   });
   assert.throws(() => inspectNativeExecutable(macho, "macos-x64"), /architecture mismatch/u);
+  assert.deepEqual(nodeMainExecutionExpectation, {
+    executionExitCode: "0",
+    stdoutSha256: sha256(Buffer.from(nodeMainExpectedStdout)),
+    stderrSha256: sha256(Buffer.alloc(0)),
+  });
 });
 
 test("the private adapter uses offer-first roles and hard-cut provider roots", async () => {
