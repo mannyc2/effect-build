@@ -14,13 +14,20 @@ import {
   requireEnvironment,
   sha256,
 } from "../node-finalizer/common.mjs";
-import { validateCandidateDescriptor } from "./candidate.mjs";
+import {
+  decodeCandidatePublicNodeSeaEvidence,
+  validateCandidateDescriptor,
+} from "./candidate.mjs";
 import { assertLockstepPackageManifest } from "../lockstep-package.mjs";
 
 const candidate = releaseCandidateIdentity;
 const packageNames = releaseControl.orderedPackages;
 const payloadRoot = resolve(process.argv[2] ?? "release-candidate-payload");
 const output = resolve(process.argv[3] ?? "release-candidate.json");
+const publicNodeSeaEvidencePath = process.argv[4];
+if (publicNodeSeaEvidencePath === undefined) {
+  throw new Error("usage: build-candidate.mjs <payload-directory> <descriptor-output> <public-node-sea-evidence>");
+}
 const repository = requireEnvironment("GITHUB_REPOSITORY");
 const sourceSha = requireEnvironment("GITHUB_SHA");
 const sourceRef = requireEnvironment("GITHUB_REF");
@@ -74,6 +81,10 @@ for (const name of packageNames) {
   });
   payloadEntries.set(filename, bytes);
 }
+const publicNodeSeaEvidence = decodeCandidatePublicNodeSeaEvidence(
+  await readFile(resolve(publicNodeSeaEvidencePath)),
+  records,
+);
 
 const payloadArtifact = await observeArtifact({
   repository,
@@ -114,6 +125,7 @@ const descriptor = {
   createdAt: created.toISOString().replace(".000Z", "Z"),
   expiresAt: expires.toISOString().replace(".000Z", "Z"),
   packages: records,
+  publicNodeSeaEvidence,
 };
 const destination = output;
 validateCandidateDescriptor(canonicalBytes(descriptor), { now: created });

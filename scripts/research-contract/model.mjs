@@ -152,6 +152,7 @@ const exactReleaseCandidateIdentity = {
     "createdAt",
     "expiresAt",
     "packages",
+    "publicNodeSeaEvidence",
   ],
 };
 const exactReleaseCandidatePackageRecordFields = [
@@ -166,6 +167,37 @@ const exactReleaseCandidatePackageRecordFields = [
   "packedName",
   "packedVersion",
 ];
+const exactReleaseCandidatePublicNodeSeaEvidenceFields = [
+  "protocol",
+  "packageName",
+  "packageSha256",
+  "corePackageSha256",
+  "nodeVersion",
+  "target",
+  "nodeArchiveName",
+  "nodeArchiveSha256",
+  "nodeExecutableBytes",
+  "nodeExecutableSha256",
+  "assembledExecutableBytes",
+  "assembledExecutableSha256",
+  "executionExitCode",
+  "executionStdoutSha256",
+];
+const exactNodeUnsupportedTargets = [{
+  target: "macos-x64",
+  assemblerCell: "node@26.7.0",
+  mechanism: "direct-node-build-sea",
+  disposition: "rejected",
+  adjudicatedAt: "2026-08-26",
+  platformSupportObservation: "node-26.7.0-macos-x64-not-currently-supported",
+  observedFailure: "process-terminated-by-signal-SIGSEGV",
+  reason: "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+  evidence: [
+    "https://nodejs.org/api/single-executable-applications.html#platform-support",
+    "https://github.com/nodejs/node/issues/65479",
+    "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349",
+  ],
+}];
 // Freeze the complete policy-owned Apple schema without duplicating its runtime constants here.
 const exactAppleCertificationAuthoritySha256 = "7d77a73cd9153cff9a4aaf47707fa7886c426ae9b3ad877c0bba8f08c89ec6b5";
 
@@ -588,6 +620,28 @@ export const buildContract = (inputs) => {
     inputs.policy.publicSurfaceOwners,
     targetProviderLanes,
   );
+  const evidenceControl = structuredClone(inputs.policy.evidenceControl);
+  const nodeRule = evidenceControl.coordinateRules.nodeMainExecutable;
+  const unsupportedByTarget = new Map(
+    nodeRule.explicitUnsupportedTargets.map((entry) => [entry.target, entry]),
+  );
+  nodeRule.explicitUnsupportedCoordinates = nodeRule.axes.producerGroup.flatMap((producerGroup) =>
+    nodeRule.axes.mainFormat.flatMap((mainFormat) =>
+      nodeRule.axes.constructionHost.flatMap((constructionHost) =>
+        nodeRule.axes.target.flatMap((target) => {
+          const unsupported = unsupportedByTarget.get(target);
+          return unsupported === undefined ? [] : [{
+            producerGroup,
+            mainFormat,
+            constructionHost,
+            target,
+            disposition: unsupported.disposition,
+            reason: unsupported.reason,
+          }];
+        })
+      )
+    )
+  );
   return {
     schema: "effect-build/research-complete-contract@1",
     status: "hard-cut-implemented-local-evidence-external-certification-incomplete",
@@ -606,7 +660,7 @@ export const buildContract = (inputs) => {
     },
     invariants: inputs.policy.invariants,
     releaseControl: inputs.policy.releaseControl,
-    evidenceControl: inputs.policy.evidenceControl,
+    evidenceControl,
     operationRegister: {
       source: r1Path,
       count: operations.length,
@@ -835,7 +889,7 @@ export const validateContract = (contract, inputs) => {
   if (!sameJson(contract.invariants.conditionalPackageCandidates, exactConditionalPackageCandidates)) {
     throw new Error("conditional package candidate set changed");
   }
-  if (contract.releaseControl.candidateSchema !== "effect-build/release-candidate@2") {
+  if (contract.releaseControl.candidateSchema !== "effect-build/release-candidate@3") {
     throw new Error("release-candidate hard-cut schema changed");
   }
   if (!sameJson(contract.releaseControl.orderedPackages, exactFirstPartyPackages)) {
@@ -853,6 +907,12 @@ export const validateContract = (contract, inputs) => {
   if (!sameJson(contract.releaseControl.candidatePackageRecordFields, exactReleaseCandidatePackageRecordFields)) {
     throw new Error("release candidate package record fields changed");
   }
+  if (
+    !sameJson(
+      contract.releaseControl.candidatePublicNodeSeaEvidenceFields,
+      exactReleaseCandidatePublicNodeSeaEvidenceFields,
+    )
+  ) throw new Error("release candidate public Node SEA evidence fields changed");
   const evidence = contract.evidenceControl;
   if (!sameJson(evidence.certificationHosts, exactCertificationHostDefinitions)) {
     throw new Error("research-complete evidence control does not define the exact D13 hosts");
@@ -893,7 +953,6 @@ export const validateContract = (contract, inputs) => {
   ) throw new Error("compiler target evidence coordinates changed");
   for (const rule of [
     evidenceRules.browserModulePayload,
-    evidenceRules.nodeMainExecutable,
     evidenceRules.packedConsumers,
     evidenceRules.packedConditionalProviderCandidates,
   ]) {
@@ -916,6 +975,34 @@ export const validateContract = (contract, inputs) => {
   }
   if (!sameJson(evidenceRules.nodeMainExecutable.axes.target, exactTargetExecutionHosts.map(({ target }) => target))) {
     throw new Error("Node finalizer targets differ from current target execution hosts");
+  }
+  const nodeRule = evidenceRules.nodeMainExecutable;
+  const unsupportedNodeCoordinateKeys = nodeRule.explicitUnsupportedCoordinates.map(
+    ({ producerGroup, mainFormat, constructionHost, target }) =>
+      `${producerGroup}\0${mainFormat}\0${constructionHost}\0${target}`,
+  );
+  unique(unsupportedNodeCoordinateKeys, "Node unsupported coordinates");
+  if (
+    nodeRule.rule !== "cartesian-product-minus-explicit-unsupported-targets"
+    || cartesianCount(nodeRule.axes) !== nodeRule.expectedCartesianCoordinateCount
+    || !sameJson(nodeRule.explicitUnsupportedTargets, exactNodeUnsupportedTargets)
+    || nodeRule.explicitUnsupportedTargets.length !== nodeRule.expectedUnsupportedTargetCount
+    || nodeRule.explicitUnsupportedCoordinates.length !== nodeRule.expectedUnsupportedCoordinateCount
+    || nodeRule.expectedCoordinateCount
+      !== nodeRule.expectedCartesianCoordinateCount - nodeRule.expectedUnsupportedCoordinateCount
+    || nodeRule.expectedCartesianCoordinateCount !== 180
+    || nodeRule.expectedUnsupportedCoordinateCount !== 30
+    || nodeRule.expectedCoordinateCount !== 150
+  ) throw new Error("Node executable evidence applicability accounting changed");
+  for (const coordinate of nodeRule.explicitUnsupportedCoordinates) {
+    if (
+      !nodeRule.axes.producerGroup.includes(coordinate.producerGroup)
+      || !nodeRule.axes.mainFormat.includes(coordinate.mainFormat)
+      || !nodeRule.axes.constructionHost.includes(coordinate.constructionHost)
+      || coordinate.target !== "macos-x64"
+      || coordinate.disposition !== "rejected"
+      || coordinate.reason !== exactNodeUnsupportedTargets[0].reason
+    ) throw new Error("Node unsupported coordinate is outside current evidence authority");
   }
   if (!sameJson(evidenceRules.packedConsumers.axes.package, exactFirstPartyPackages)) {
     throw new Error("packed consumer evidence does not use the admitted package train");

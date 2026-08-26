@@ -169,7 +169,17 @@ test("owns current evidence and release identity without the superseded product 
     contract.evidenceControl.coordinateRules.packedConsumers.axes.package,
     contract.releaseControl.orderedPackages,
   );
-  assert.equal(contract.evidenceControl.coordinateRules.nodeMainExecutable.expectedCoordinateCount, 180);
+  const nodeRule = contract.evidenceControl.coordinateRules.nodeMainExecutable;
+  assert.equal(nodeRule.expectedCartesianCoordinateCount, 180);
+  assert.equal(nodeRule.expectedCoordinateCount, 150);
+  assert.equal(nodeRule.expectedUnsupportedCoordinateCount, 30);
+  assert.equal(nodeRule.explicitUnsupportedCoordinates.length, 30);
+  assert.deepEqual(nodeRule.explicitUnsupportedTargets.map(({ target, disposition }) => ({ target, disposition })), [
+    { target: "macos-x64", disposition: "rejected" },
+  ]);
+  assert.ok(nodeRule.explicitUnsupportedCoordinates.every(({ target, disposition }) =>
+    target === "macos-x64" && disposition === "rejected"
+  ));
   assert.equal(contract.evidenceControl.coordinateRules.compilerTargets.expectedCoordinateCount, 12);
   assert.equal(contract.evidenceControl.coordinateRules.compilerTargets.targetExecutionClaim.startsWith("none-"), true);
   assert.equal(
@@ -188,9 +198,10 @@ test("owns current evidence and release identity without the superseded product 
     contract.evidenceControl.nodeMainExecutable.targetFinalization.capability.publicExport,
     "none-package-private-research-complete",
   );
-  assert.equal(contract.releaseControl.candidateSchema, "effect-build/release-candidate@2");
+  assert.equal(contract.releaseControl.candidateSchema, "effect-build/release-candidate@3");
   assert.equal(contract.releaseControl.candidateIdentity.workflowPath, ".github/workflows/candidate.yml");
   assert.equal(contract.releaseControl.candidatePackageRecordFields.length, 10);
+  assert.equal(contract.releaseControl.candidatePublicNodeSeaEvidenceFields.length, 14);
   const apple = contract.evidenceControl.appleCertification;
   assert.deepEqual(apple.protocols, {
     request: "effect-build/apple-certification-request@2",
@@ -208,6 +219,26 @@ test("owns current evidence and release identity without the superseded product 
   assert.equal(apple.certifierAuthority.cleanHostDigestVariable, "EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256");
   assert.notEqual(apple.certifierAuthority.primaryDigestVariable, apple.certifierAuthority.cleanHostDigestVariable);
   assert.ok(apple.externalGates.length > 0);
+});
+
+test("rejects invented Node target applicability and preserves all 180 accounted coordinates", () => {
+  const omitted = structuredClone(inputs);
+  omitted.policy.evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedTargets = [];
+  omitted.policy.evidenceControl.coordinateRules.nodeMainExecutable.expectedUnsupportedTargetCount = 0;
+  omitted.policy.evidenceControl.coordinateRules.nodeMainExecutable.expectedUnsupportedCoordinateCount = 0;
+  omitted.policy.evidenceControl.coordinateRules.nodeMainExecutable.expectedCoordinateCount = 180;
+  assert.throws(
+    () => validateContract(buildContract(omitted), omitted),
+    /Node executable evidence applicability accounting changed/u,
+  );
+
+  const invented = structuredClone(inputs);
+  invented.policy.evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedTargets[0].target =
+    "macos-aarch64";
+  assert.throws(
+    () => validateContract(buildContract(invented), invented),
+    /Node executable evidence applicability accounting changed/u,
+  );
 });
 
 test("rejects weakened current directory-generation authority", () => {

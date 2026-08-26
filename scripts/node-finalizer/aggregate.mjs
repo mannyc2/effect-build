@@ -7,6 +7,7 @@ import {
   decodeCanonical,
   downloadArtifact,
   evidenceControl,
+  nodeMainApplicableTargets,
   observeArtifact,
   observeJob,
   observeRun,
@@ -37,7 +38,7 @@ const receipts = [];
 for (const producerGroup of axes.producerGroup) {
   for (const format of axes.mainFormat) {
     for (const constructionHost of axes.constructionHost) {
-      for (const target of axes.target) {
+      for (const target of nodeMainApplicableTargets) {
         const name = coordinate({ producerGroup, format, constructionHost, target });
         const constructionJobName = `construct--${name}`;
         const finalizerJobName = `finalize--${name}`;
@@ -137,10 +138,19 @@ for (const producerGroup of axes.producerGroup) {
   }
 }
 const expectedReceipts = evidenceControl.coordinateRules.nodeMainExecutable.expectedCoordinateCount;
-if (expectedReceipts !== 180 || receipts.length !== expectedReceipts) {
-  throw new Error(`expected 180 receipts, observed ${receipts.length}`);
+if (expectedReceipts !== 150 || receipts.length !== expectedReceipts) {
+  throw new Error(`expected 150 applicable receipts, observed ${receipts.length}`);
 }
-const evidence = { sourceSha, workflowRunId: runId, workflowRunAttempt: runAttempt, receipts };
+const evidence = {
+  sourceSha,
+  workflowRunId: runId,
+  workflowRunAttempt: runAttempt,
+  accountedCartesianCoordinates: String(
+    expectedReceipts + evidenceControl.coordinateRules.nodeMainExecutable.expectedUnsupportedCoordinateCount,
+  ),
+  rejectedCoordinates: evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedCoordinates,
+  receipts,
+};
 const destination = resolve(output);
 await mkdir(dirname(destination), { recursive: true });
 await writeFile(destination, canonicalBytes(evidence), { flag: "wx" });

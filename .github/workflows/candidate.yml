@@ -48,8 +48,22 @@ jobs:
             (cd "packages/${package}" && bun pm pack --destination ../../release-candidate-payload)
           done
           test "$(find release-candidate-payload -maxdepth 1 -type f -name '*.tgz' | wc -l | tr -d ' ')" = 6
-      - name: Test the exact six tarballs that will be retained
-        run: node scripts/test-built-consumer.mjs --built --tarball-directory release-candidate-payload
+      - name: Authenticate the exact Node 26.7 Linux x64 executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .candidate-node/tools
+          node scripts/node-finalizer/verify-node-base.mjs \
+            --target linux-x64-gnu \
+            --output .candidate-node/tools/node \
+            > .candidate-node/node.json
+      - name: Test the exact six tarballs and execute their public direct SEA operation
+        run: |
+          node scripts/test-built-consumer.mjs \
+            --built \
+            --tarball-directory release-candidate-payload \
+            --node-sea-descriptor .candidate-node/node.json \
+            --node-sea-receipt .candidate-node/public-node-sea-evidence.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: effect-build-release-candidate-payload
@@ -64,7 +78,10 @@ jobs:
         run: |
           set -euo pipefail
           export CHECKED_OUT_SOURCE_SHA="$(git rev-parse HEAD)"
-          node scripts/release/build-candidate.mjs release-candidate-payload release-candidate.json
+          node scripts/release/build-candidate.mjs \
+            release-candidate-payload \
+            release-candidate.json \
+            .candidate-node/public-node-sea-evidence.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: effect-build-release-candidate-descriptor

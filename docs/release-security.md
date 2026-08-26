@@ -10,7 +10,11 @@ fails before its structurally unreachable protected job; it cannot publish.
 
 The read-only candidate workflow now constructs a candidate automatically from
 one exact main SHA. It builds once, packs the six admitted packages once,
-inspects and hashes the six tarballs, and tests those exact bytes. The
+inspects and hashes the six tarballs, and tests those exact bytes. It also
+authenticates the pinned Node 26.7.0 Linux x64 distribution, uses the packed
+`effect-build` and `effect-build-node-sea` bytes to assemble and execute the
+sole public direct SEA operation, and embeds the canonical execution receipt in
+the candidate descriptor. The
 authenticated candidate is the only package-byte input the privileged workflow
 may consume; the separate Apple certification artifact supplies evidence only.
 That workflow may not checkout, install, build, or pack.
@@ -31,8 +35,9 @@ IDs/attempts/byte counts, and UTC
 second timestamps. Authoritative API run ID, attempt, event, ref, head SHA,
 conclusion, and both artifact records must match the inputs and embedded values.
 The successful push run, main-branch source, run-head and checkout SHA, exact
-version `0.5.0`, timestamps, and exact six package records are all rechecked
-before approval or registry observation.
+version `0.5.0`, timestamps, exact six package records, exact Node distribution,
+packed package digests, assembled executable digest, zero exit, and fixed stdout
+digest are all rechecked before approval or registry observation.
 
 Apple certification is a separate post-candidate operation. The authenticated
 workflow is `.github/workflows/apple-certification.yml` at `refs/heads/main`,

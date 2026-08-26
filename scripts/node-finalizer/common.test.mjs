@@ -9,6 +9,8 @@ import {
   decodeCanonical,
   decodeDistributionDescriptor,
   inspectNativeExecutable,
+  nodeMainApplicableCoordinates,
+  nodeMainApplicableTargets,
   observeArtifact,
   observeJob,
   evidenceControl,
@@ -17,6 +19,7 @@ import {
   requireEntries,
   targetCell,
 } from "./common.mjs";
+import { buildNodeMainMatrices } from "./matrix.mjs";
 
 const crc32 = (bytes) => {
   let crc = 0xffffffff;
@@ -133,7 +136,7 @@ test("artifact ZIP validation admits only exact regular top-level entries", () =
   assert.throws(() => readArtifactZip(corrupt), /CRC mismatch/u);
 });
 
-test("the private finalizer names all 180 five-host coordinates without collision", () => {
+test("the private finalizer accounts for 150 applicable and 30 rejected coordinates without collision", () => {
   assert.equal(capability.publicExport, "none-package-private-research-complete");
   const axes = evidenceControl.coordinateRules.nodeMainExecutable.axes;
   const names = axes.producerGroup.flatMap((producerGroup) =>
@@ -145,6 +148,37 @@ test("the private finalizer names all 180 five-host coordinates without collisio
   );
   assert.equal(names.length, 180);
   assert.equal(new Set(names).size, 180);
+  assert.deepEqual(nodeMainApplicableTargets, [
+    "macos-aarch64",
+    "linux-x64-gnu",
+    "linux-aarch64-gnu",
+    "windows-x64",
+    "windows-aarch64",
+  ]);
+  assert.equal(nodeMainApplicableCoordinates.length, 150);
+  assert.equal(evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedCoordinates.length, 30);
+  assert.equal(
+    nodeMainApplicableCoordinates.length
+      + evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedCoordinates.length,
+    180,
+  );
+  assert.ok(nodeMainApplicableCoordinates.every(({ target }) => target !== "macos-x64"));
+});
+
+test("GitHub Node matrices are generated only from applicable contract coordinates", () => {
+  const matrices = buildNodeMainMatrices();
+  assert.equal(matrices.construction.include.length, 150);
+  assert.equal(matrices.finalization.include.length, 150);
+  assert.ok(matrices.construction.include.every(({ target }) => target !== "macos-x64"));
+  assert.ok(matrices.finalization.include.every(({ target }) => target.token !== "macos-x64"));
+  const constructionNames = matrices.construction.include.map(({ producer, format, construction, target }) =>
+    coordinate({ producerGroup: producer, format, constructionHost: construction.id, target })
+  );
+  const finalizationNames = matrices.finalization.include.map(({ producer, format, construction_host, target }) =>
+    coordinate({ producerGroup: producer, format, constructionHost: construction_host, target: target.token })
+  );
+  assert.deepEqual(finalizationNames, constructionNames);
+  assert.equal(new Set(constructionNames).size, 150);
 });
 
 test("D13 host identities are independent from artifact targets and exclusions never become passes", () => {

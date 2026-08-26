@@ -32,7 +32,7 @@
     "sources": [
       {
         "path": "docs/v0.5-contract.md",
-        "sha256": "796ffdbcea6b3003a78c5ce062d95ea4fc5e7d209f8044f9e6c9f8ae9a96313f"
+        "sha256": "074f754d0b06ee4677a08a6983880ec7eab46c0d135fe53b4f847f6429ed9318"
       },
       {
         "path": "plans/039-establish-core-capability-boundaries.md",
@@ -112,7 +112,7 @@
       },
       {
         "path": "tooling/research-complete-policy.json",
-        "sha256": "f93e7dbf47966577b48163ce290ed5f33a4ef31e041555765e1e83162b59841f"
+        "sha256": "f7a36d153821d8e5a88874816ced5fd9cb1ef99c07ff4a79c2bd1c2345eaf4aa"
       }
     ],
     "deterministicGeneration": true,
@@ -163,7 +163,7 @@
     "publicationStatus": "unauthorized-until-every-external-gate-is-earned"
   },
   "releaseControl": {
-    "candidateSchema": "effect-build/release-candidate@2",
+    "candidateSchema": "effect-build/release-candidate@3",
     "candidateIdentity": {
       "sourceRepository": "https://github.com/mannyc2/effect-build",
       "sourceRef": "refs/heads/main",
@@ -193,7 +193,8 @@
         "payloadArtifactDigest",
         "createdAt",
         "expiresAt",
-        "packages"
+        "packages",
+        "publicNodeSeaEvidence"
       ]
     },
     "candidatePackageRecordFields": [
@@ -207,6 +208,22 @@
       "sha512SRI",
       "packedName",
       "packedVersion"
+    ],
+    "candidatePublicNodeSeaEvidenceFields": [
+      "protocol",
+      "packageName",
+      "packageSha256",
+      "corePackageSha256",
+      "nodeVersion",
+      "target",
+      "nodeArchiveName",
+      "nodeArchiveSha256",
+      "nodeExecutableBytes",
+      "nodeExecutableSha256",
+      "assembledExecutableBytes",
+      "assembledExecutableSha256",
+      "executionExitCode",
+      "executionStdoutSha256"
     ],
     "orderedPackages": [
       "effect-build",
@@ -495,7 +512,7 @@
         "operation": "produce-lend-serve-and-exercise-browser-module-payload"
       },
       "nodeMainExecutable": {
-        "rule": "full-cartesian-product-no-pruning",
+        "rule": "cartesian-product-minus-explicit-unsupported-targets",
         "axes": {
           "producerGroup": [
             "bun-cli",
@@ -522,9 +539,271 @@
             "windows-aarch64"
           ]
         },
-        "expectedCoordinateCount": 180,
+        "expectedCartesianCoordinateCount": 180,
+        "explicitUnsupportedTargets": [
+          {
+            "target": "macos-x64",
+            "assemblerCell": "node@26.7.0",
+            "mechanism": "direct-node-build-sea",
+            "disposition": "rejected",
+            "adjudicatedAt": "2026-08-26",
+            "platformSupportObservation": "node-26.7.0-macos-x64-not-currently-supported",
+            "observedFailure": "process-terminated-by-signal-SIGSEGV",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "evidence": [
+              "https://nodejs.org/api/single-executable-applications.html#platform-support",
+              "https://github.com/nodejs/node/issues/65479",
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349"
+            ]
+          }
+        ],
+        "expectedUnsupportedTargetCount": 1,
+        "expectedUnsupportedCoordinateCount": 30,
+        "expectedCoordinateCount": 150,
         "targetExecutionHostRule": "each-coordinate-executes-on-the-one-targetExecutionHost-with-the-same-target",
-        "operation": "produce-seal-cross-assemble-inspect-and-execute"
+        "operation": "produce-seal-cross-assemble-inspect-and-execute-every-applicable-coordinate-and-account-every-rejected-coordinate",
+        "explicitUnsupportedCoordinates": [
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "commonjs",
+            "constructionHost": "linux-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "commonjs",
+            "constructionHost": "linux-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "commonjs",
+            "constructionHost": "macos-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "commonjs",
+            "constructionHost": "macos-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "commonjs",
+            "constructionHost": "windows-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "module",
+            "constructionHost": "linux-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "module",
+            "constructionHost": "linux-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "module",
+            "constructionHost": "macos-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "module",
+            "constructionHost": "macos-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "bun-cli",
+            "mainFormat": "module",
+            "constructionHost": "windows-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "linux-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "linux-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "macos-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "macos-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "windows-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "module",
+            "constructionHost": "linux-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "module",
+            "constructionHost": "linux-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "module",
+            "constructionHost": "macos-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "module",
+            "constructionHost": "macos-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "esbuild-api",
+            "mainFormat": "module",
+            "constructionHost": "windows-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "linux-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "linux-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "macos-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "macos-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "commonjs",
+            "constructionHost": "windows-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "module",
+            "constructionHost": "linux-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "module",
+            "constructionHost": "linux-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "module",
+            "constructionHost": "macos-arm64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "module",
+            "constructionHost": "macos-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          },
+          {
+            "producerGroup": "rolldown-api",
+            "mainFormat": "module",
+            "constructionHost": "windows-x64",
+            "target": "macos-x64",
+            "disposition": "rejected",
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+          }
+        ]
       },
       "providerNativeLanes": {
         "rule": "cartesian-product-minus-explicit-unsupported-cells",
@@ -7264,7 +7543,7 @@
         "evidence": {
           "status": "named-gate-open",
           "gates": [
-            "Linux arm64, macOS x64, all producer-assembler coordinates, and recurring packed-install evidence"
+            "all 150 applicable producer-assembler coordinates and recurring packed-install evidence; all 30 macOS x64 coordinates remain explicit rejections"
           ],
           "refs": [
             "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv"
@@ -8015,7 +8294,7 @@
           "research/post-0.3/freeze/R5-PORTABLE-ROLE-VERDICTS.md:10-35"
         ],
         "gates": [
-          "Linux arm64, macOS x64, and recurring packed-install evidence"
+          "all 150 applicable direct-SEA coordinates and recurring packed-install evidence"
         ],
         "implementation": {
           "status": "semantic-candidate-implemented-current-hard-cut",
@@ -8035,8 +8314,8 @@
         "evidence": {
           "status": "named-gate-open",
           "gates": [
-            "Linux arm64, macOS x64, and recurring packed-install evidence",
-            "all authenticated producer-assembler coordinates"
+            "all 150 applicable direct-SEA coordinates and recurring packed-install evidence",
+            "all authenticated applicable producer-assembler coordinates; all 30 macOS x64 coordinates remain explicit rejections"
           ],
           "refs": [
             "research/post-0.3/freeze/R5-PORTABLE-ROLE-VERDICTS.md:10-35",

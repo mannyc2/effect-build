@@ -18,6 +18,19 @@ interface ResearchContract {
         readonly expectedCoordinateCount: number;
         readonly targetExecutionClaim: string;
       };
+      readonly nodeMainExecutable: {
+        readonly expectedCartesianCoordinateCount: number;
+        readonly expectedUnsupportedCoordinateCount: number;
+        readonly expectedCoordinateCount: number;
+        readonly explicitUnsupportedTargets: readonly {
+          readonly target: string;
+          readonly disposition: string;
+        }[];
+        readonly explicitUnsupportedCoordinates: readonly {
+          readonly target: string;
+          readonly disposition: string;
+        }[];
+      };
       readonly providerNativeLanes: {
         readonly explicitUnsupportedCoordinates: readonly {
           readonly providerRuntimeCell: string;
@@ -29,6 +42,7 @@ interface ResearchContract {
   readonly releaseControl: {
     readonly orderedPackages: readonly string[];
     readonly conditionalPackageCandidates: readonly string[];
+    readonly candidatePublicNodeSeaEvidenceFields: readonly string[];
   };
   readonly targetPublicSurface: {
     readonly coreModules: readonly string[];
@@ -215,40 +229,51 @@ describe("research-complete target surface", () => {
     expect(aggregate).toContain("expected 12 compiler-target receipts");
   });
 
-  it("keeps the 180-cell five-construction-host finalizer private, exact, and manually admitted", async () => {
-    const workflow = parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as {
+  it("derives 150 applicable private finalizer cells from a contract that accounts for all 180", async () => {
+    const contract = await readContract();
+    const workflowSource = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
+    const workflow = parse(workflowSource) as {
       readonly permissions: Readonly<Record<string, string>>;
       readonly jobs: Readonly<
         Record<string, {
           readonly if?: string;
-          readonly needs?: string;
-          readonly strategy?: { readonly matrix?: Readonly<Record<string, readonly unknown[]>> };
+          readonly needs?: string | readonly string[];
+          readonly outputs?: Readonly<Record<string, string>>;
+          readonly strategy?: { readonly matrix?: string };
         }>
       >;
     };
     expect(workflow.permissions.actions).toBe("read");
+    const rule = contract.evidenceControl.coordinateRules.nodeMainExecutable;
+    expect(rule.expectedCartesianCoordinateCount).toBe(180);
+    expect(rule.expectedCoordinateCount).toBe(150);
+    expect(rule.expectedUnsupportedCoordinateCount).toBe(30);
+    expect(rule.explicitUnsupportedTargets).toHaveLength(1);
+    expect(rule.explicitUnsupportedTargets[0]).toMatchObject({ target: "macos-x64", disposition: "rejected" });
+    expect(rule.explicitUnsupportedCoordinates).toHaveLength(30);
+    expect(
+      rule.explicitUnsupportedCoordinates.every(({ target, disposition }) =>
+        target === "macos-x64" && disposition === "rejected"
+      ),
+    ).toBe(true);
+    const plan = workflow.jobs["node-main-plan"]!;
     const construct = workflow.jobs["node-main-construct"]!;
     const finalize = workflow.jobs["node-main-finalize"]!;
-    const product = (matrix: Readonly<Record<string, readonly unknown[]>> | undefined): number =>
-      Object.values(matrix ?? {}).reduce((count, axis) => count * axis.length, 1);
-    expect(product(construct.strategy?.matrix)).toBe(180);
-    expect(product(finalize.strategy?.matrix)).toBe(180);
-    const construction = construct.strategy?.matrix?.construction as readonly {
-      readonly id: string;
-      readonly runner: string;
-      readonly system_target: string;
-    }[];
-    expect(construction).toEqual([
-      { id: "linux-x64", runner: "ubuntu-24.04", system_target: "linux-x64-gnu" },
-      { id: "linux-arm64", runner: "ubuntu-24.04-arm", system_target: "linux-aarch64-gnu" },
-      { id: "macos-arm64", runner: "macos-15", system_target: "macos-aarch64" },
-      { id: "macos-x64", runner: "macos-15-intel", system_target: "macos-x64" },
-      { id: "windows-x64", runner: "windows-2025", system_target: "windows-x64" },
-    ]);
-    expect(finalize.strategy?.matrix?.construction_host).toEqual(construction.map(({ id }) => id));
+    expect(plan.if).toContain("workflow_dispatch");
+    expect(plan.outputs).toEqual({
+      construction: "${{ steps.matrix.outputs.construction }}",
+      finalization: "${{ steps.matrix.outputs.finalization }}",
+    });
     expect(construct.if).toContain("workflow_dispatch");
-    expect(finalize.needs).toBe("node-main-construct");
+    expect(construct.needs).toBe("node-main-plan");
+    expect(construct.strategy?.matrix).toBe("${{ fromJSON(needs.node-main-plan.outputs.construction) }}");
+    expect(finalize.needs).toEqual(["node-main-plan", "node-main-construct"]);
+    expect(finalize.strategy?.matrix).toBe("${{ fromJSON(needs.node-main-plan.outputs.finalization) }}");
     expect(workflow.jobs["node-main-aggregate"]?.needs).toBe("node-main-finalize");
+    const matrixSource = await readFile(resolve(root, "scripts/node-finalizer/matrix.mjs"), "utf8");
+    expect(matrixSource).toContain("nodeMainApplicableCoordinates");
+    expect(matrixSource).not.toContain("macos-x64");
+    expect(workflowSource).toContain("Aggregate 150 applicable Node receipts and 30 contract rejections");
 
     const packageManifest = await readFile(resolve(root, "packages/effect-build-node-sea/package.json"), "utf8");
     expect(packageManifest).not.toContain("node-target-finalizer");
@@ -276,6 +301,25 @@ describe("research-complete target surface", () => {
     expect(sources.find(([path]) => path === "scripts/node-finalizer/common.mjs")?.[1]).toContain(
       "research-complete-contract.json",
     );
+  });
+
+  it("binds exact packed public Node 26.7 Linux SEA execution into every candidate descriptor", async () => {
+    const contract = await readContract();
+    const workflow = await readFile(resolve(root, ".github/workflows/candidate.yml"), "utf8");
+    expect(contract.releaseControl.candidatePublicNodeSeaEvidenceFields).toHaveLength(14);
+    expect(workflow).toContain("verify-node-base.mjs");
+    expect(workflow).toContain("--target linux-x64-gnu");
+    expect(workflow).toContain("--node-sea-descriptor .candidate-node/node.json");
+    expect(workflow).toContain("--node-sea-receipt .candidate-node/public-node-sea-evidence.json");
+    expect(workflow).toContain(".candidate-node/public-node-sea-evidence.json");
+    const candidate = await readFile(resolve(root, "scripts/release/candidate.mjs"), "utf8");
+    expect(candidate).toContain("effect-build/release-candidate-public-node-sea@1");
+    expect(candidate).toContain("public Node SEA candidate package binding mismatch");
+    expect(candidate).toContain("executionStdoutSha256");
+    const ci = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
+    expect(ci).toContain("packed-public-node-sea:");
+    expect(ci).toContain("name: packed-public-node-sea-evidence");
+    expect(ci).toContain("--node-sea-receipt .packed-node-sea/public-node-sea-evidence.json");
   });
 
   it("materializes 146 applicable five-host coordinates and excludes unsupported cells from passes", async () => {

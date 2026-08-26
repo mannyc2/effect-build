@@ -12,16 +12,20 @@ import {
   readArtifactZip,
   releaseCandidateIdentity,
   releaseCandidatePackageRecordFields,
+  releaseCandidatePublicNodeSeaEvidenceFields,
   releaseControl,
   requireEntries,
   sha256,
+  targetCell,
 } from "../node-finalizer/common.mjs";
 import { assertLockstepPackageManifest } from "../lockstep-package.mjs";
 
 const identity = releaseCandidateIdentity;
 const packageNames = releaseControl.orderedPackages;
 const recordFields = releaseCandidatePackageRecordFields;
+const publicNodeSeaEvidenceFields = releaseCandidatePublicNodeSeaEvidenceFields;
 const compareUtf16 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+export const publicNodeSeaSuccessOutput = "effect-build-packed-node-sea-candidate-ok\n";
 
 const exactFields = (value, expected, subject) => {
   if (value === null || Array.isArray(value) || typeof value !== "object") throw new Error(`${subject} must be an object`);
@@ -65,6 +69,41 @@ const manifestFromTarball = (bytes) => {
   }
   throw new Error("packed package manifest missing");
 };
+
+export const validateCandidatePublicNodeSeaEvidence = (evidence, packages) => {
+  exactFields(evidence, publicNodeSeaEvidenceFields, "publicNodeSeaEvidence");
+  if (
+    evidence.protocol !== "effect-build/release-candidate-public-node-sea@1"
+    || evidence.packageName !== "effect-build-node-sea"
+    || evidence.nodeVersion !== "26.7.0"
+    || evidence.target !== "linux-x64-gnu"
+    || evidence.executionExitCode !== "0"
+  ) throw new Error("public Node SEA candidate identity mismatch");
+  const packageRecord = packages.find(({ name }) => name === evidence.packageName);
+  const coreRecord = packages.find(({ name }) => name === "effect-build");
+  if (
+    packageRecord === undefined || coreRecord === undefined
+    || evidence.packageSha256 !== packageRecord.sha256
+    || evidence.corePackageSha256 !== coreRecord.sha256
+  ) throw new Error("public Node SEA candidate package binding mismatch");
+  const cell = targetCell(evidence.target);
+  if (
+    evidence.nodeArchiveName !== cell.distribution
+    || evidence.nodeArchiveSha256 !== cell.sha256
+  ) throw new Error("public Node SEA candidate distribution binding mismatch");
+  positiveDecimal(evidence.nodeExecutableBytes, "publicNodeSeaEvidence.nodeExecutableBytes");
+  positiveDecimal(evidence.assembledExecutableBytes, "publicNodeSeaEvidence.assembledExecutableBytes");
+  hex(evidence.nodeExecutableSha256, 64, "publicNodeSeaEvidence.nodeExecutableSha256");
+  hex(evidence.assembledExecutableSha256, 64, "publicNodeSeaEvidence.assembledExecutableSha256");
+  hex(evidence.executionStdoutSha256, 64, "publicNodeSeaEvidence.executionStdoutSha256");
+  if (evidence.executionStdoutSha256 !== sha256(Buffer.from(publicNodeSeaSuccessOutput, "utf8"))) {
+    throw new Error("public Node SEA candidate execution output mismatch");
+  }
+  return Object.freeze(evidence);
+};
+
+export const decodeCandidatePublicNodeSeaEvidence = (bytes, packages) =>
+  validateCandidatePublicNodeSeaEvidence(decodeCanonical(bytes, publicNodeSeaEvidenceFields), packages);
 
 export const validateCandidateDescriptor = (bytes, { now = new Date(), requireFresh = true } = {}) => {
   const descriptor = decodeCanonical(bytes, identity.requiredDescriptorFields);
@@ -110,6 +149,7 @@ export const validateCandidateDescriptor = (bytes, { now = new Date(), requireFr
     hex(record.sha1, 40, `${name}.sha1`);
     canonicalSRI(record.sha512SRI, `${name}.sha512SRI`);
   });
+  validateCandidatePublicNodeSeaEvidence(descriptor.publicNodeSeaEvidence, descriptor.packages);
   return Object.freeze({ descriptor, descriptorDigest: sha256(bytes), created, expires });
 };
 

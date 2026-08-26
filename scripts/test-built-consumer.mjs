@@ -2,13 +2,20 @@
 // install, typecheck, and run the exact hard-cut public surface. Deferred
 // profiles and the private Rolldown package candidate are intentionally absent.
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { assertLockstepPackageManifest } from "./lockstep-package.mjs";
+import {
+  canonicalBytes,
+  decodeDistributionDescriptor,
+  sha256,
+} from "./node-finalizer/common.mjs";
+import { publicNodeSeaSuccessOutput } from "./release/candidate.mjs";
 
 const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -19,11 +26,34 @@ const effectVersion = workspaceManifest.devDependencies.effect;
 const platformNodeVersion = workspaceManifest.devDependencies["@effect/platform-node"];
 const typescriptVersion = workspaceManifest.devDependencies.typescript;
 const consumerRoot = await mkdtemp(join(tmpdir(), "effect-build-consumer-"));
-const tarballDirectoryIndex = process.argv.indexOf("--tarball-directory");
-const suppliedTarballDirectory = tarballDirectoryIndex < 0 ? undefined : process.argv[tarballDirectoryIndex + 1];
-if (tarballDirectoryIndex >= 0 && suppliedTarballDirectory === undefined) {
-  throw new Error("--tarball-directory requires a path");
+const option = (name) => {
+  const indexes = process.argv.flatMap((value, index) => value === name ? [index] : []);
+  if (indexes.length > 1) throw new Error(`${name} may be supplied only once`);
+  if (indexes.length === 0) return undefined;
+  const value = process.argv[indexes[0] + 1];
+  if (value === undefined || value.startsWith("--")) throw new Error(`${name} requires a value`);
+  return value;
+};
+const suppliedTarballDirectory = option("--tarball-directory");
+const nodeSeaDescriptorPath = option("--node-sea-descriptor");
+const nodeSeaReceiptPath = option("--node-sea-receipt");
+if ((nodeSeaDescriptorPath === undefined) !== (nodeSeaReceiptPath === undefined)) {
+  throw new Error("--node-sea-descriptor and --node-sea-receipt must be supplied together");
 }
+const nodeSeaDescriptor = nodeSeaDescriptorPath === undefined
+  ? undefined
+  : decodeDistributionDescriptor(await readFile(resolve(nodeSeaDescriptorPath)));
+if (nodeSeaDescriptor !== undefined) {
+  if (nodeSeaDescriptor.target !== "linux-x64-gnu") {
+    throw new Error("the packed public Node SEA gate requires linux-x64-gnu");
+  }
+  const executable = await readFile(nodeSeaDescriptor.executable);
+  if (
+    String(executable.length) !== nodeSeaDescriptor.executableBytes
+    || sha256(executable) !== nodeSeaDescriptor.executableSha256
+  ) throw new Error("authenticated Node descriptor no longer matches its executable bytes");
+}
+const nodeSeaMain = `process.stdout.write(${JSON.stringify(publicNodeSeaSuccessOutput)});`;
 
 const packedManifest = async (tarball) => {
   const archive = gunzipSync(await readFile(tarball));
@@ -41,6 +71,7 @@ const packedManifest = async (tarball) => {
 
 try {
   const tarballs = {};
+  const tarballSha256 = {};
   const packDirectory = join(consumerRoot, "tarballs");
   await mkdir(packDirectory, { recursive: true });
   for (const name of packageNames) {
@@ -65,6 +96,7 @@ try {
       prerequisites: researchContract.releaseControl.orderedPackagePrerequisites[name],
     });
     tarballs[name] = tarball;
+    tarballSha256[name] = sha256(await readFile(tarball));
   }
 
   await writeFile(
@@ -207,8 +239,12 @@ const bundle = await Effect.runPromise(
   }),
 );
 
+const argument = (name: string): string | undefined => {
+  const index = process.argv.indexOf(name);
+  return index < 0 ? undefined : process.argv[index + 1];
+};
 let artifact: Artifact.Executable | undefined;
-const fakeBun = process.argv[2];
+const fakeBun = argument("--fake-bun");
 if (fakeBun !== undefined) {
   artifact = await Effect.runPromise(
     BunCommand.CompileExecutable.compileExecutable({
@@ -223,11 +259,42 @@ if (fakeBun !== undefined) {
   );
 }
 
+let nodeSeaArtifact: Artifact.HashedExecutable | undefined;
+const nodeSeaExecutable = argument("--node-sea-executable");
+if (nodeSeaExecutable !== undefined) {
+  nodeSeaArtifact = await Effect.runPromise(
+    NodeSeaCommand.AssembleExecutable.assembleDirect({
+      main: {
+        _tag: "Bytes",
+        contents: new TextEncoder().encode(${JSON.stringify(nodeSeaMain)}),
+        format: "commonjs",
+      },
+      outfile: join(process.cwd(), "dist", "node-sea-candidate"),
+      observation: "hashed",
+      disableExperimentalSEAWarning: true,
+    }).pipe(
+      Effect.provide(NodeSeaCommand.layer({
+        builderExecutable: nodeSeaExecutable as Artifact.AbsolutePath,
+        baseExecutable: nodeSeaExecutable as Artifact.AbsolutePath,
+      })),
+      Effect.provide(NodeServices.layer),
+    ),
+  );
+}
+
 console.log(JSON.stringify({
   outputs: bundle.outputFiles.length,
   target: artifact?.target ?? null,
   digestLength: artifact !== undefined && "digest" in artifact ? artifact.digest.value.length : null,
   nativeFormat: artifact === undefined ? null : SystemTarget.describe(artifact.target).nativeFormat,
+  nodeSea: nodeSeaArtifact === undefined ? null : {
+    path: nodeSeaArtifact.path,
+    bytes: nodeSeaArtifact.bytes,
+    sha256: nodeSeaArtifact.digest.value,
+    target: nodeSeaArtifact.target,
+    nativeFormat: nodeSeaArtifact.nativeFormat,
+    runtimeVersion: nodeSeaArtifact.runtime.version,
+  },
 }));
 `,
   );
@@ -254,7 +321,10 @@ console.log(JSON.stringify({
     const fakeBun = join(consumerRoot, "bun");
     await copyFile(join(root, "test/fixtures/tools/fake-bun.mjs"), fakeBun);
     await chmod(fakeBun, 0o755);
-    runArguments.push(fakeBun);
+    runArguments.push("--fake-bun", fakeBun);
+  }
+  if (nodeSeaDescriptor !== undefined) {
+    runArguments.push("--node-sea-executable", nodeSeaDescriptor.executable);
   }
   const { stdout } = await execute("node", runArguments, { cwd: consumerRoot });
   const report = JSON.parse(stdout.trim());
@@ -264,6 +334,43 @@ console.log(JSON.stringify({
     if (typeof report.target !== "string" || report.nativeFormat === null) {
       throw new Error(`consumer artifact target/format missing: ${stdout}`);
     }
+  }
+  if (nodeSeaDescriptor !== undefined && nodeSeaReceiptPath !== undefined) {
+    if (
+      report.nodeSea?.target !== "linux-x64-gnu"
+      || report.nodeSea.nativeFormat !== "elf"
+      || report.nodeSea.runtimeVersion !== "26.7.0"
+    ) throw new Error(`packed public Node SEA report mismatch: ${JSON.stringify(report.nodeSea)}`);
+    const assembled = await readFile(report.nodeSea.path);
+    if (
+      String(assembled.length) !== report.nodeSea.bytes
+      || sha256(assembled) !== report.nodeSea.sha256
+    ) throw new Error("packed public Node SEA artifact report does not match assembled bytes");
+    const completion = await execute(report.nodeSea.path, [], { cwd: consumerRoot });
+    if (completion.stdout !== publicNodeSeaSuccessOutput || completion.stderr !== "") {
+      throw new Error(`packed public Node SEA execution output mismatch: ${JSON.stringify(completion)}`);
+    }
+    const receipt = {
+      protocol: "effect-build/release-candidate-public-node-sea@1",
+      packageName: "effect-build-node-sea",
+      packageSha256: tarballSha256["effect-build-node-sea"],
+      corePackageSha256: tarballSha256["effect-build"],
+      nodeVersion: nodeSeaDescriptor.nodeVersion,
+      target: nodeSeaDescriptor.target,
+      nodeArchiveName: nodeSeaDescriptor.archiveName,
+      nodeArchiveSha256: nodeSeaDescriptor.archiveSha256,
+      nodeExecutableBytes: nodeSeaDescriptor.executableBytes,
+      nodeExecutableSha256: nodeSeaDescriptor.executableSha256,
+      assembledExecutableBytes: String(assembled.length),
+      assembledExecutableSha256: sha256(assembled),
+      executionExitCode: "0",
+      executionStdoutSha256: createHash("sha256").update(completion.stdout).digest("hex"),
+    };
+    const receiptDestination = resolve(nodeSeaReceiptPath);
+    await mkdir(dirname(receiptDestination), { recursive: true });
+    await writeFile(receiptDestination, canonicalBytes(receipt), { flag: "wx" });
+  } else if (report.nodeSea !== null) {
+    throw new Error("unexpected public Node SEA execution without an authenticated descriptor");
   }
   console.log("six-package consumer install, typecheck, and runtime checks passed");
 } finally {

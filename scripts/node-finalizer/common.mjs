@@ -22,7 +22,7 @@ export const appleCertification = Object.freeze(evidenceControl.appleCertificati
 if (researchContract.schema !== "effect-build/research-complete-contract@1") {
   throw new Error("research-complete product scope is unavailable");
 }
-if (researchContract.releaseControl?.candidateSchema !== "effect-build/release-candidate@2") {
+if (researchContract.releaseControl?.candidateSchema !== "effect-build/release-candidate@3") {
   throw new Error("research-complete release control is unavailable");
 }
 export const releaseControl = Object.freeze(researchContract.releaseControl);
@@ -32,6 +32,9 @@ export const releaseCandidateIdentity = Object.freeze({
 });
 export const releaseCandidatePackageRecordFields = Object.freeze(
   [...releaseControl.candidatePackageRecordFields],
+);
+export const releaseCandidatePublicNodeSeaEvidenceFields = Object.freeze(
+  [...releaseControl.candidatePublicNodeSeaEvidenceFields],
 );
 const releasePackedPackages = compatibility.coordinateRules.packedConsumers.axes.package;
 const conditionalPackedPackages = compatibility.coordinateRules.packedConditionalProviderCandidates.axes.package;
@@ -223,6 +226,27 @@ export const coordinate = ({ producerGroup, format, constructionHost, target }) 
   if (!axes.target.includes(target)) throw new Error(`unknown target ${target}`);
   return `node-main--${producerGroup}--${format}--from-${constructionHost}--to-${target}`;
 };
+
+export const nodeMainRule = Object.freeze(compatibility.coordinateRules.nodeMainExecutable);
+const rejectedNodeTargets = new Set(nodeMainRule.explicitUnsupportedTargets.map(({ target }) => target));
+export const nodeMainApplicableTargets = Object.freeze(
+  nodeMainRule.axes.target.filter((target) => !rejectedNodeTargets.has(target)),
+);
+export const nodeMainApplicableCoordinates = Object.freeze(
+  nodeMainRule.axes.producerGroup.flatMap((producerGroup) =>
+    nodeMainRule.axes.mainFormat.flatMap((format) =>
+      nodeMainRule.axes.constructionHost.flatMap((constructionHost) =>
+        nodeMainApplicableTargets.map((target) => Object.freeze({ producerGroup, format, constructionHost, target }))
+      )
+    )
+  ),
+);
+if (
+  nodeMainApplicableCoordinates.length !== nodeMainRule.expectedCoordinateCount
+  || nodeMainRule.explicitUnsupportedCoordinates.length !== nodeMainRule.expectedUnsupportedCoordinateCount
+  || nodeMainApplicableCoordinates.length + nodeMainRule.explicitUnsupportedCoordinates.length
+    !== nodeMainRule.expectedCartesianCoordinateCount
+) throw new Error("Node executable coordinate accounting is inconsistent");
 
 export const systemTarget = observedSystemTarget;
 
