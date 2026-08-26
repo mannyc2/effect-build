@@ -266,6 +266,7 @@ test("the 45, 31, and split 60 plus 10-cell lanes use hard-cut suites and non-ad
   const packed = await readFile(new URL("../test-packed-coordinate.mjs", import.meta.url), "utf8");
   const consumer = await readFile(new URL("../test-built-consumer.mjs", import.meta.url), "utf8");
   const nativeReceipt = await readFile(new URL("../provider-native-receipt.mjs", import.meta.url), "utf8");
+  const nodeBase = await readFile(new URL("./verify-node-base.mjs", import.meta.url), "utf8");
 
   assert.match(workflow, /browser-module-payload-compatibility\.test\.ts/u);
   assert.doesNotMatch(workflow, /static-browser-compatibility\.test\.ts/u);
@@ -300,6 +301,9 @@ test("the 45, 31, and split 60 plus 10-cell lanes use hard-cut suites and non-ad
   assert.match(packed, /\["test", \.\.\.fixture\.bunTests\]/u);
   assert.doesNotMatch(packed, /\["--bun", vitest, "run", \.\.\.fixture\.bunTests\]/u);
   assert.match(packed, /observedEffectPaths\.size/u);
+  assert.match(nodeBase, /\["--keyring", `\.\/\$\{keyringName\}`, signatureName, manifestName\]/u);
+  assert.match(nodeBase, /cwd: scratch/u);
+  assert.doesNotMatch(nodeBase, /\["--keyring", keyring/u);
   assert.match(consumer, /effect-build-bun\/Api/u);
   assert.match(consumer, /effect-build-node-sea\/Command/u);
   assert.doesNotMatch(consumer, /RolldownApi\.Build/u);

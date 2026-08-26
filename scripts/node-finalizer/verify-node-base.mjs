@@ -61,11 +61,14 @@ const main = async () => {
     const manifestLine = manifest.toString("utf8").split("\n").find((line) => line.endsWith(`  ${cell.distribution}`));
     if (manifestLine !== `${cell.sha256}  ${cell.distribution}`) throw new Error("archive is not exactly admitted by SHASUMS256.txt");
 
-    const manifestPath = join(scratch, "SHASUMS256.txt");
-    const signaturePath = join(scratch, "SHASUMS256.txt.sig");
-    const keyPath = join(scratch, "release-key.asc");
+    const manifestName = "SHASUMS256.txt";
+    const signatureName = "SHASUMS256.txt.sig";
+    const keyName = "release-key.asc";
+    const keyringName = "release-key.gpg";
+    const manifestPath = join(scratch, manifestName);
+    const signaturePath = join(scratch, signatureName);
+    const keyPath = join(scratch, keyName);
     const archivePath = join(scratch, cell.distribution);
-    const keyring = join(scratch, "release-key.gpg");
     await Promise.all([
       writeFile(manifestPath, manifest),
       writeFile(signaturePath, signature),
@@ -74,15 +77,19 @@ const main = async () => {
     ]);
     const fingerprint = await execute(
       "gpg",
-      ["--batch", "--no-autostart", "--with-colons", "--import-options", "show-only", "--import", keyPath],
-      { timeout: 30_000 },
+      ["--batch", "--no-autostart", "--with-colons", "--import-options", "show-only", "--import", keyName],
+      { timeout: 30_000, cwd: scratch },
     );
     const fingerprints = fingerprint.stdout.split("\n").filter((line) => line.startsWith("fpr:")).map((line) => line.split(":")[9]);
     if (!fingerprints.includes(manifestPolicy.signerFingerprint)) throw new Error("pinned Node release-key fingerprint missing");
-    await execute("gpg", ["--batch", "--no-autostart", "--yes", "--dearmor", "--output", keyring, keyPath], {
+    await execute("gpg", ["--batch", "--no-autostart", "--yes", "--dearmor", "--output", keyringName, keyName], {
       timeout: 30_000,
+      cwd: scratch,
     });
-    await execute("gpgv", ["--keyring", keyring, signaturePath, manifestPath], { timeout: 30_000 });
+    await execute("gpgv", ["--keyring", `./${keyringName}`, signatureName, manifestName], {
+      timeout: 30_000,
+      cwd: scratch,
+    });
 
     const extraction = join(scratch, "extract");
     await mkdir(extraction);
