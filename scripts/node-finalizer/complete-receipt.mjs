@@ -42,7 +42,7 @@ const main = async () => {
   const pending = JSON.parse(await readFile(resolve(args.pending), "utf8"));
   const requestBytes = await readFile(resolve(args.request));
   const request = decodeCanonical(requestBytes, capability.requestFieldSet);
-  if (JSON.stringify(request) !== JSON.stringify(pending.request) || sha256(requestBytes) !== pending.requestSha256) {
+  if (!canonicalBytes(pending.request).equals(requestBytes) || sha256(requestBytes) !== pending.requestSha256) {
     throw new Error("pending finalizer record does not bind the canonical request");
   }
   const outputArtifactName = `${coordinateName}--finalized`;
