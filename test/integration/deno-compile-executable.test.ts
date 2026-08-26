@@ -77,7 +77,7 @@ const run = <A, E>(
 
 describe.skipIf(!exactDenoAvailable())("real Deno 2.9.5 compileExecutable", () => {
   it("compiles, authenticates, atomically publishes, hashes, and executes the host artifact", async () => {
-    const outfile = join(root, "app");
+    const outfile = executablePath("app");
     const artifact = await run(Compile.compileExecutable({
       entrypoint,
       outfile,

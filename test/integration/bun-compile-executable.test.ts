@@ -19,6 +19,7 @@ const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta
 const fullStackEntrypoint = fileURLToPath(
   new URL("../fixtures/bun-positive-findings/fullstack/server.ts", import.meta.url),
 );
+const executablePath = (name: string): string => join(root, process.platform === "win32" ? `${name}.exe` : name);
 
 const exactBunAvailable = (): boolean => {
   try {
@@ -61,7 +62,7 @@ const run = <A, E>(
 
 describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 compileExecutable", () => {
   it("compiles, authenticates, atomically publishes, hashes, and executes the host artifact", async () => {
-    const outfile = join(root, "app");
+    const outfile = executablePath("app");
     const artifact = await run(Compile.compileExecutable({
       entrypoints: [entrypoint],
       outfile,
@@ -85,7 +86,7 @@ describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 compileExecutable", () =>
   }, 120_000);
 
   it("compiles and executes the provider-native full-stack HTML request mode", async () => {
-    const outfile = join(root, process.platform === "win32" ? "full-stack-command.exe" : "full-stack-command");
+    const outfile = executablePath("full-stack-command");
     const artifact = await run(Compile.compileExecutable({
       entrypoints: [fullStackEntrypoint],
       outfile,
@@ -94,11 +95,11 @@ describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 compileExecutable", () =>
     expect(artifact).toMatchObject({
       _tag: "UnhashedExecutable",
       provider: "bun",
-      path: await realpath(outfile),
       runtime: { name: "bun", version: "1.3.14" },
       publication: { commit: "same-parent-rename", committed: true },
       runtimeAcquisition: { _tag: "SelectedHostRuntime", evidence: "selected-command-content" },
     });
+    expect(await realpath(artifact.path)).toBe(await realpath(outfile));
     const completion = await execute(artifact.path, [], { timeout: 30_000 });
     const receiptLine = completion.stdout.split("\n").find((line) =>
       line.startsWith("EFFECT_BUILD_FULL_STACK_RECEIPT=")
