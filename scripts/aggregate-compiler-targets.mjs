@@ -18,7 +18,7 @@ if (output === undefined) throw new Error("usage: aggregate-compiler-targets.mjs
 const repository = requireEnvironment("GITHUB_REPOSITORY");
 const runId = requireEnvironment("GITHUB_RUN_ID");
 const runAttempt = requireEnvironment("GITHUB_RUN_ATTEMPT");
-const sourceSha = requireEnvironment("GITHUB_SHA");
+const sourceSha = requireEnvironment("EFFECT_BUILD_SOURCE_SHA");
 const token = requireEnvironment("GITHUB_TOKEN");
 const rule = evidenceControl.coordinateRules.compilerTargets;
 if (

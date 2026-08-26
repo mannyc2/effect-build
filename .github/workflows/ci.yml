@@ -156,6 +156,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24.14.1
@@ -195,12 +196,14 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24.14.1
           package-manager-cache: false
       - name: Authenticate and aggregate every exact compiler-target receipt
         env:
+          EFFECT_BUILD_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/aggregate-compiler-targets.mjs compiler-target-evidence.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -204,8 +204,14 @@ describe("research-complete target surface", () => {
     expect(rule.targetExecutionClaim).toContain("none-structural-inspection-only");
     expect(workflowSource).toContain("EFFECT_BUILD_TARGET_RECEIPT");
     expect(workflowSource).toContain("compiler-target-evidence.json");
+    expect(workflowSource.match(/ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/gu))
+      .toHaveLength(2);
+    expect(workflowSource).toContain(
+      "EFFECT_BUILD_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
+    );
     const aggregate = await readFile(resolve(root, "scripts/aggregate-compiler-targets.mjs"), "utf8");
     expect(aggregate).toContain("compilerTargetReceiptExpectation");
+    expect(aggregate).toContain('requireEnvironment("EFFECT_BUILD_SOURCE_SHA")');
     expect(aggregate).toContain("expected 12 compiler-target receipts");
   });
 
