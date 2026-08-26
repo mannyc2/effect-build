@@ -93,10 +93,16 @@ const main = async () => {
 
     const extraction = join(scratch, "extract");
     await mkdir(extraction);
-    if (cell.distribution.endsWith(".zip") && process.platform !== "win32") {
-      await execute("unzip", ["-q", archivePath, "-d", extraction], { timeout: 120_000 });
+    if (cell.distribution.endsWith(".zip")) {
+      await execute("unzip", ["-q", cell.distribution, "-d", "extract"], {
+        timeout: 120_000,
+        cwd: scratch,
+      });
     } else {
-      await execute("tar", ["-xf", archivePath, "-C", extraction], { timeout: 120_000 });
+      await execute("tar", ["-xf", cell.distribution, "-C", "extract"], {
+        timeout: 120_000,
+        cwd: scratch,
+      });
     }
     const folder = cell.distribution.replace(/\.(?:tar\.xz|zip)$/u, "");
     const executable = cell.distribution.includes("-win-")

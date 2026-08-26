@@ -257,6 +257,8 @@ jobs:
           set -euo pipefail
           command -v gpg
           command -v gpgv
+          command -v tar
+          command -v unzip
           gpg --version
           gpgv --version
       - run: bun install --frozen-lockfile
