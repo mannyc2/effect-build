@@ -250,10 +250,15 @@ jobs:
       - name: Install GnuPG on macOS
         if: runner.os == 'macOS'
         run: brew install gnupg
-      - name: Install GnuPG on Windows
+      - name: Authenticate Git for Windows GnuPG
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: choco install gnupg --no-progress -y
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v gpg
+          command -v gpgv
+          gpg --version
+          gpgv --version
       - run: bun install --frozen-lockfile
       - run: bun run build
       - name: Authenticate exact builder and target base distributions
