@@ -147,7 +147,7 @@ describe.skipIf(!cell.enabled).sequential("real Node SEA Command.AssembleExecuta
     const main = {
       _tag: "Bytes" as const,
       contents: new TextEncoder().encode(
-        "console.log(JSON.stringify({ execArgv: process.execArgv, argv: process.argv.slice(1) }))",
+        "console.log(JSON.stringify({ execArgv: process.execArgv, argv: process.argv.slice(2) }))",
       ),
       format: "commonjs" as const,
     };

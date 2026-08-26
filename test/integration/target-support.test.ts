@@ -20,6 +20,24 @@ const execute = promisify(execFile);
 const root = mkdtempSync(join(tmpdir(), "effect-build-target-support-"));
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 
+const bunTargets = {
+  "macos-x64": "bun-darwin-x64",
+  "macos-aarch64": "bun-darwin-arm64",
+  "linux-x64-gnu": "bun-linux-x64",
+  "linux-x64-musl": "bun-linux-x64-musl",
+  "linux-aarch64-gnu": "bun-linux-arm64",
+  "windows-x64": "bun-windows-x64",
+} as const satisfies Readonly<Record<string, BunCompile.Target>>;
+
+const denoTargets = {
+  "macos-x64": "x86_64-apple-darwin",
+  "macos-aarch64": "aarch64-apple-darwin",
+  "linux-x64-gnu": "x86_64-unknown-linux-gnu",
+  "linux-aarch64-gnu": "aarch64-unknown-linux-gnu",
+  "windows-x64": "x86_64-pc-windows-msvc",
+  "windows-aarch64": "aarch64-pc-windows-msvc",
+} as const satisfies Readonly<Record<string, DenoCompile.Target>>;
+
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const requiredEnvironment = (name: string): string => {
@@ -83,7 +101,7 @@ describe("provider target support", () => {
     let target: BunCompile.Target | DenoCompile.Target;
     let artifact: BunCompile.Artifact<"hashed"> | DenoCompile.Artifact<"hashed">;
     if (compiler === "bun") {
-      target = Schema.decodeUnknownSync(BunCompile.Target)(requested);
+      target = Schema.decodeUnknownSync(BunCompile.Target)(bunTargets[requested as keyof typeof bunTargets]);
       const outfile = join(root, `${compiler}-${target}${target.includes("windows") ? ".exe" : ""}`);
       artifact = await Effect.runPromise(
         BunCompile.compileExecutable({ entrypoints: [entrypoint], outfile, target, observation: "hashed" }).pipe(
@@ -92,7 +110,7 @@ describe("provider target support", () => {
         ),
       );
     } else {
-      target = Schema.decodeUnknownSync(DenoCompile.Target)(requested);
+      target = Schema.decodeUnknownSync(DenoCompile.Target)(denoTargets[requested as keyof typeof denoTargets]);
       const outfile = join(root, `${compiler}-${target}${target.includes("windows") ? ".exe" : ""}`);
       artifact = await Effect.runPromise(
         DenoCompile.compileExecutable({ entrypoint, outfile, target, observation: "hashed" }).pipe(

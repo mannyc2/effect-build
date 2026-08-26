@@ -3,7 +3,7 @@ import { Cause, Effect, Exit, FileSystem } from "effect";
 import { createHash } from "node:crypto";
 import { access, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sha256Digest } from "../../packages/effect-build/src/Artifact.js";
 import * as DirectoryGeneration from "../../packages/effect-build/src/Author/internal/DirectoryGeneration.js";
@@ -177,7 +177,7 @@ describe("package-private immutable directory generations", () => {
           get(target, property, receiver) {
             if (property !== "readFile") return Reflect.get(target, property, receiver) as unknown;
             return (candidate: string) => {
-              if (!mutated && candidate.endsWith("/z-later.txt")) {
+              if (!mutated && basename(candidate) === "z-later.txt") {
                 mutated = true;
                 return Effect.promise(() => writeFile(early, "after!\n")).pipe(
                   Effect.andThen(fileSystem.readFile(candidate)),

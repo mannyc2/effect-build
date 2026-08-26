@@ -54,7 +54,8 @@ describe("rolldown Api utilities", () => {
     const resolved = await Effect.runPromise(
       Effect.flatMap(Resolve.make(), (resolver) => resolver.resolve(root, "./entry.ts")),
     );
-    expect(resolved.path).toBe(await realpath(join(root, "entry.ts")));
+    expect(resolved.path).toBeDefined();
+    expect(await realpath(resolved.path!)).toBe(await realpath(join(root, "entry.ts")));
     await observeProviderNativeEvidence("CAN-ROL-016");
   });
 
