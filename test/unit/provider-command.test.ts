@@ -5,6 +5,11 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import * as BunBuild from "../../packages/effect-build-bun/src/Command/Build.js";
+import * as BunCommand from "../../packages/effect-build-bun/src/Command/index.js";
+import * as DenoBundle from "../../packages/effect-build-deno/src/Command/Bundle.js";
+import * as DenoCommand from "../../packages/effect-build-deno/src/Command/index.js";
+import * as DenoTranspile from "../../packages/effect-build-deno/src/Command/Transpile.js";
 import * as EsbuildBuild from "../../packages/effect-build-esbuild/src/Command/Build.js";
 import * as EsbuildBuildToDirectory from "../../packages/effect-build-esbuild/src/Command/BuildToDirectory.js";
 import * as EsbuildCommand from "../../packages/effect-build-esbuild/src/Command/index.js";
@@ -59,9 +64,18 @@ const makeSpawner = (): readonly [ChildProcessSpawner.ChildProcessSpawner["Servi
       const tool = basename(command.command);
       invocations.push({ tool, argv: command.args });
       if (command.args[0] === "--version") {
-        return handle(tool === "esbuild" ? "0.28.2\n" : "rolldown v1.2.5\n");
+        const version = tool === "bun"
+          ? "1.3.14\n"
+          : tool === "deno"
+          ? "deno 2.9.5\n"
+          : tool === "esbuild"
+          ? "0.28.2\n"
+          : "rolldown v1.2.5\n";
+        return handle(version);
       }
-      const writesDirectly = command.args.some((arg) => arg.startsWith("--outdir=") || arg === "--dir");
+      const writesDirectly = command.args.some((arg) =>
+        arg.startsWith("--outdir=") || arg === "--outdir" || arg === "--output" || arg === "--dir"
+      );
       return handle(writesDirectly ? "" : `${"x".repeat(96)}\n`);
     });
   });
@@ -89,6 +103,61 @@ const failure = <A, E>(exit: Exit.Exit<A, E>): E => {
 };
 
 describe("provider command lanes", () => {
+  it("fails closed when Bun or Deno primary stdout exceeds its capture bound", async () => {
+    const root = makeRoot();
+    const bunBinary = executable(root, "bun");
+    const denoBinary = executable(root, "deno");
+    const [spawner] = makeSpawner();
+    const platform = Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner));
+    const bunRuntime = Layer.provide(
+      BunCommand.layer({ executable: bunBinary as never, outputLimitBytes: 32 }),
+      platform,
+    );
+    const denoRuntime = Layer.provide(
+      DenoCommand.layer({ executable: denoBinary as never, outputLimitBytes: 32 }),
+      platform,
+    );
+
+    const bunExit = await Effect.runPromiseExit(
+      BunBuild.build({ entrypoint: "src/main.ts", bundle: true }).pipe(
+        Effect.provide(Layer.merge(bunRuntime, platform)),
+      ),
+    );
+    expect(failure(bunExit)).toMatchObject({
+      _tag: "BunCommandOutputTruncated",
+      operation: "buildStdout",
+      publication: "none",
+      exitCode: 0,
+      stdoutTruncated: true,
+      outputLimitBytes: 32,
+    });
+
+    const denoProvided = Layer.merge(denoRuntime, platform);
+    const bundleExit = await Effect.runPromiseExit(
+      DenoBundle.stdout({ entrypoint: "src/main.ts" }).pipe(Effect.provide(denoProvided)),
+    );
+    expect(failure(bundleExit)).toMatchObject({
+      _tag: "DenoCommandOutputTruncated",
+      operation: "bundleStdout",
+      publication: "none",
+      exitCode: 0,
+      stdoutTruncated: true,
+      outputLimitBytes: 32,
+    });
+
+    const transpileExit = await Effect.runPromiseExit(
+      DenoTranspile.transpile({ file: "src/main.ts" }).pipe(Effect.provide(denoProvided)),
+    );
+    expect(failure(transpileExit)).toMatchObject({
+      _tag: "DenoCommandOutputTruncated",
+      operation: "transpileStdout",
+      publication: "none",
+      exitCode: 0,
+      stdoutTruncated: true,
+      outputLimitBytes: 32,
+    });
+  });
+
   it("runs bounded exact esbuild stdout and provider-direct directory operations", async () => {
     const root = makeRoot();
     const binary = executable(root, "esbuild");
@@ -99,11 +168,17 @@ describe("provider command lanes", () => {
       platform,
     );
     const provided = Layer.merge(runtime, platform);
-    const built = await Effect.runPromise(
+    const built = await Effect.runPromiseExit(
       EsbuildBuild.build({ entrypoint: "src/main.ts", bundle: true, format: "esm" }).pipe(Effect.provide(provided)),
     );
-    expect(built.output.byteLength).toBe(32);
-    expect(built.completion.stdout.truncated).toBe(true);
+    expect(failure(built)).toMatchObject({
+      _tag: "EsbuildCommandOutputTruncated",
+      operation: "buildStdout",
+      publication: "none",
+      exitCode: 0,
+      stdoutTruncated: true,
+      outputLimitBytes: 32,
+    });
     expect(control.invocations.at(-1)?.argv).toEqual(["--bundle", "--format=esm", "src/main.ts"]);
 
     const direct = await Effect.runPromise(
@@ -175,11 +250,17 @@ describe("provider command lanes", () => {
     const platform = Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner));
     const runtime = Layer.provide(rolldownLayer({ executable: binary as never, outputLimitBytes: 40 }), platform);
     const provided = Layer.merge(runtime, platform);
-    const bundled = await Effect.runPromise(
+    const bundled = await Effect.runPromiseExit(
       RolldownBundle.bundle({ input: "src/main.ts", format: "esm", minify: true }).pipe(Effect.provide(provided)),
     );
-    expect(bundled.output.byteLength).toBe(40);
-    expect(bundled.completion.stdout.truncated).toBe(true);
+    expect(failure(bundled)).toMatchObject({
+      _tag: "RolldownCommandOutputTruncated",
+      operation: "bundleStdout",
+      publication: "none",
+      exitCode: 0,
+      stdoutTruncated: true,
+      outputLimitBytes: 40,
+    });
     expect(control.invocations.at(-1)?.argv).toEqual(["src/main.ts", "--format", "esm", "--minify"]);
 
     const direct = await Effect.runPromise(

@@ -63,6 +63,7 @@ export class ProviderFailed extends Schema.TaggedError<ProviderFailed>()("Provid
 export const profile = "effect-build/profile/node-main/sea-default-loader@1" as const;
 export const offerProtocol = "effect-build/profile/node-main/assembler-offer@1" as const;
 export const producedProtocol = "effect-build/profile/node-main/produced@1" as const;
+export const nodeVersion = "26.7.0" as const;
 
 export type Format = "commonjs" | "module";
 
@@ -83,7 +84,7 @@ export interface AssemblerOffer {
   readonly protocol: typeof offerProtocol;
   /** Changes whenever a compatibility-relevant semantic term changes. */
   readonly agreementId: string;
-  readonly nodeVersion: string;
+  readonly nodeVersion: typeof nodeVersion;
   readonly target: SystemTarget;
   readonly formats: readonly [Format, ...Format[]];
   readonly builtins: readonly string[];
@@ -153,7 +154,7 @@ export interface SealedMain {
   readonly [SealedMainTypeId]: typeof SealedMainTypeId;
   readonly profile: typeof profile;
   readonly agreementId: string;
-  readonly nodeVersion: string;
+  readonly nodeVersion: typeof nodeVersion;
   readonly target: SystemTarget;
   readonly format: Format;
   readonly builtins: readonly string[];
@@ -198,6 +199,15 @@ const canonicalBuiltins = (values: readonly string[]): readonly string[] | undef
     : undefined;
 };
 
+const completeProviderIdentity = (value: unknown): value is ProviderIdentity => {
+  if (typeof value !== "object" || value === null) return false;
+  const identity = value as Partial<Record<keyof ProviderIdentity, unknown>>;
+  return typeof identity.package === "string" && identity.package.length > 0
+    && typeof identity.version === "string" && identity.version.length > 0
+    && typeof identity.engine === "string" && identity.engine.length > 0
+    && typeof identity.engineVersion === "string" && identity.engineVersion.length > 0;
+};
+
 const validateRequest = (request: Request): Effect.Effect<void, PortableRejected> => {
   if ((request as { readonly protocol?: unknown }).protocol !== profile) {
     return Effect.fail(reject("request", "unknown profile protocol"));
@@ -213,8 +223,11 @@ const validateRequest = (request: Request): Effect.Effect<void, PortableRejected
 
 const validateOffer = (offer: AssemblerOffer, request: Request): Effect.Effect<void, PortableRejected> => {
   if (offer.protocol !== offerProtocol) return Effect.fail(reject("request", "assembler offered an unknown protocol"));
-  if (offer.agreementId.length === 0 || offer.nodeVersion.length === 0) {
-    return Effect.fail(reject("request", "assembler offer has an empty agreement or Node version"));
+  if (offer.agreementId.length === 0) {
+    return Effect.fail(reject("request", "assembler offer has an empty agreement"));
+  }
+  if (offer.nodeVersion !== nodeVersion) {
+    return Effect.fail(reject("request", `assembler must offer exact Node ${nodeVersion}`));
   }
   if (!offer.formats.includes(request.format)) {
     return Effect.fail(reject("request", `assembler does not accept ${request.format}`));
@@ -248,6 +261,9 @@ const validateProduced = (
     return Effect.fail(reject("analysis", "strict sealed main cannot have side outputs"));
   }
   if (produced.evidence.length === 0) return Effect.fail(reject("analysis", "producer evidence is empty"));
+  if (!completeProviderIdentity(produced.producer)) {
+    return Effect.fail(reject("analysis", "producer identity is incomplete"));
+  }
   const builtins = canonicalBuiltins(produced.builtins);
   if (builtins === undefined || builtins.some((builtin) => !offer.builtins.includes(builtin))) {
     return Effect.fail(reject("analysis", "producer reported a non-canonical or unavailable runtime load"));

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import {
+  admitsNodeBuiltins,
   canonicalBytes,
+  canonicalNodeBuiltinInventory,
   capability,
   coordinate,
   decodeCanonical,
@@ -11,6 +14,7 @@ import {
   inspectNativeExecutable,
   nodeMainApplicableCoordinates,
   nodeMainApplicableTargets,
+  nodeBuiltinInventoryProgram,
   observeArtifact,
   observeJob,
   evidenceControl,
@@ -78,6 +82,19 @@ test("canonical controls reject unknown fields, numbers, and noncanonical bytes"
   assert.throws(() => canonicalBytes({ value: 1 }), /forbids numbers/u);
   assert.throws(() => decodeCanonical(canonicalBytes({ ...value, extra: "x" }), fields), /field mismatch/u);
   assert.throws(() => decodeCanonical(Buffer.from('{"value":"1","protocol":"example@1"}\n'), fields), /canonically/u);
+});
+
+test("authenticated Node built-in inventories are canonical and admit only observed subsets", () => {
+  const probed = canonicalNodeBuiltinInventory(
+    JSON.parse(execFileSync(process.execPath, ["--eval", nodeBuiltinInventoryProgram], { encoding: "utf8" })),
+  );
+  assert.equal(probed.includes("node:sea"), true);
+  assert.equal(probed.includes("node:test"), true);
+  const inventory = canonicalNodeBuiltinInventory(["path", "node:sea", "assert/strict", "fs", "path"]);
+  assert.deepEqual(inventory, ["node:assert/strict", "node:fs", "node:path", "node:sea"]);
+  assert.equal(admitsNodeBuiltins(inventory, ["node:assert/strict", "node:sea"]), true);
+  assert.equal(admitsNodeBuiltins(inventory, ["node:not-admitted"]), false);
+  assert.throws(() => canonicalNodeBuiltinInventory(["fs", "not a builtin"]), /invalid Node built-in/u);
 });
 
 test("run aggregation snapshots every job and artifact page once", async () => {
@@ -282,6 +299,7 @@ test("native inspection proves each admitted executable family and architecture"
 });
 
 test("the private adapter uses offer-first roles and hard-cut provider roots", async () => {
+  const common = await readFile(new URL("./common.mjs", import.meta.url), "utf8");
   const construct = await readFile(new URL("./construct.mjs", import.meta.url), "utf8");
   const adapters = await readFile(new URL("./private-adapters.mjs", import.meta.url), "utf8");
   const completeReceipt = await readFile(new URL("./complete-receipt.mjs", import.meta.url), "utf8");
@@ -295,6 +313,12 @@ test("the private adapter uses offer-first roles and hard-cut provider roots", a
   assert.match(adapters, /packages\/effect-build-rolldown\/dist\/Api\/Build\.js/u);
   assert.doesNotMatch(adapters, /from "effect-build-rolldown\/Api"/u);
   assert.match(adapters, /makePrivateAssemblerLayer/u);
+  assert.match(adapters, /probe-builder-builtins/u);
+  assert.match(common, /builtinModules, isBuiltin/u);
+  assert.match(adapters, /admitsNodeBuiltins/u);
+  assert.doesNotMatch(adapters, /builtins: Object\.freeze\(\[\]\)/u);
+  assert.doesNotMatch(adapters, /main\.builtins\.length !== 0/u);
+  assert.match(construct, /node:sea/u);
   assert.match(adapters, /disableExperimentalSEAWarning: true/u);
   assert.match(completeReceipt, /canonicalBytes\(pending\.request\)\.equals\(requestBytes\)/u);
   assert.doesNotMatch(completeReceipt, /JSON\.stringify\(request\).*JSON\.stringify\(pending\.request\)/u);
@@ -319,7 +343,11 @@ test("the 45, 31, and split 60 plus 10-cell lanes use hard-cut suites and non-ad
   assert.doesNotMatch(workflow, /choco install gnupg/u);
   assert.match(workflow, /provider-host-runtime\.test\.ts/u);
   assert.equal(workflow.match(/host_runtime='bun@1\.3\.14'\n\s+bun run build/gu)?.length, 2);
-  assert.match(workflow, /EFFECT_BUILD_EXPECTED_HOST_RUNTIME="\$host_runtime" bun test/u);
+  assert.equal(
+    workflow.match(/bun \.\/node_modules\/vitest\/vitest\.mjs run --pool=forks/gu)?.length,
+    4,
+  );
+  assert.doesNotMatch(workflow, /\bbun test\b/u);
   assert.doesNotMatch(workflow, /bun --bun \.\/node_modules\/vitest\/vitest\.mjs/u);
   assert.match(workflow, /node scripts\/provider-native-receipt\.mjs/u);
   assert.match(nativeReceipt, /provider-native-test-observed-exact-operation-and-atom-evidence-no-conditional-admission/u);

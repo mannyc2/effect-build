@@ -37,3 +37,18 @@ export class BunCommandFailed extends Schema.TaggedError<BunCommandFailed>()("Bu
   stdoutTruncated: Schema.Boolean,
   stderrTruncated: Schema.Boolean,
 }) {}
+
+/** A successful stdout-producing command exceeded the configured capture bound. */
+export class BunCommandOutputTruncated extends Schema.TaggedError<BunCommandOutputTruncated>()(
+  "BunCommandOutputTruncated",
+  {
+    operation: Schema.String,
+    publication: Schema.Literal("none"),
+    exitCode: Schema.Number,
+    stdout: Schema.Uint8Array,
+    stderr: Schema.Uint8Array,
+    stdoutTruncated: Schema.Literal(true),
+    stderrTruncated: Schema.Boolean,
+    outputLimitBytes: Schema.Number,
+  },
+) {}

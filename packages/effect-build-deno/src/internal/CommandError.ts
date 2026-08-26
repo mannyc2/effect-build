@@ -36,3 +36,18 @@ export class DenoCommandFailed extends Schema.TaggedError<DenoCommandFailed>()("
   stdoutTruncated: Schema.Boolean,
   stderrTruncated: Schema.Boolean,
 }) {}
+
+/** A successful stdout-producing command exceeded the configured capture bound. */
+export class DenoCommandOutputTruncated extends Schema.TaggedError<DenoCommandOutputTruncated>()(
+  "DenoCommandOutputTruncated",
+  {
+    operation: Schema.String,
+    publication: Schema.Literal("none"),
+    exitCode: Schema.Number,
+    stdout: Schema.Uint8Array,
+    stderr: Schema.Uint8Array,
+    stdoutTruncated: Schema.Literal(true),
+    stderrTruncated: Schema.Boolean,
+    outputLimitBytes: Schema.Number,
+  },
+) {}

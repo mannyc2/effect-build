@@ -64,6 +64,51 @@ describe("esbuild Build", () => {
     await observeProviderNativeEvidence("CAN-ESB-002");
   });
 
+  it("rejects erased write-mode mismatches before invoking esbuild", async () => {
+    let providerStarts = 0;
+    const plugin: import("esbuild").Plugin = {
+      name: "write-mode-observer",
+      setup(build) {
+        build.onStart(() => {
+          providerStarts += 1;
+        });
+      },
+    };
+
+    const memory = await run(Build.build({
+      ...memoryInput('export const invalid = "memory";'),
+      write: true,
+      outfile: join(root, "invalid-memory-mode.js"),
+      plugins: [plugin],
+    } as never));
+    expect(failureOf(memory)).toMatchObject({
+      _tag: "EsbuildModeInvalid",
+      operation: "build",
+      mode: "memory",
+      reason: "write must be exactly false for caller-owned in-memory output",
+    });
+
+    const direct = await run(BuildToDirectory.buildToDirectory({
+      ...memoryInput('export const invalid = "direct";'),
+      write: false,
+      outfile: join(root, "invalid-direct-mode.js"),
+      plugins: [plugin],
+    } as never));
+    expect(failureOf(direct)).toMatchObject({
+      _tag: "EsbuildModeInvalid",
+      operation: "build",
+      mode: "direct",
+      reason: "write must be exactly true for provider-direct durable output",
+    });
+
+    const missing = await run(Build.build({
+      stdin: { contents: "export {};", loader: "ts" },
+      plugins: [plugin],
+    } as never));
+    expect(failureOf(missing)).toMatchObject({ _tag: "EsbuildModeInvalid", mode: "memory" });
+    expect(providerStarts).toBe(0);
+  });
+
   it("preserves native diagnostics by reference on failure", async () => {
     const exit = await run(
       Build.build({

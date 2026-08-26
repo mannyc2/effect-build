@@ -67,6 +67,22 @@ describe("Apple certification trust boundary", () => {
     expect(priorEvidence).toContain("validateCertificationEvidenceCrossLinks(records)");
     expect(harness).toContain("reauthenticatePriorEvidenceSnapshot(authenticatedPriorEvidence)");
     expect(harness).toContain("priorEvidenceDirectory: authenticatedPriorEvidence.snapshotRoot");
+    expect(harness).toContain("captureCandidateSnapshot");
+    expect(harness).toContain("captureRequestSnapshot");
+    const execution = harness.indexOf("await execute(certifier.snapshotPath");
+    const outputAcceptance = harness.indexOf("const outputEntries", execution);
+    for (
+      const reauthentication of [
+        "await reauthenticateCandidateSnapshot(candidateSnapshot)",
+        "await reauthenticateRequestSnapshot(requestSnapshot)",
+      ]
+    ) {
+      const before = harness.lastIndexOf(reauthentication, execution);
+      const after = harness.indexOf(reauthentication, execution);
+      expect(before, `${reauthentication} before execution`).toBeGreaterThan(-1);
+      expect(after, `${reauthentication} after execution`).toBeGreaterThan(execution);
+      expect(after, `${reauthentication} before output acceptance`).toBeLessThan(outputAcceptance);
+    }
     expect(`${harness}\n${receipt}`).not.toMatch(/apple-certification-(?:request|receipt|evidence|bundle)@1/u);
     expect(receipt).toContain("`${slug}.prior-evidence.json`");
     expect(receipt).toContain("const evidenceName = `${slug}.evidence.json`");

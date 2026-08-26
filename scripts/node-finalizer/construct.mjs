@@ -61,7 +61,10 @@ const main = async () => {
   const scratch = await mkdtemp(join(tmpdir(), "effect-build-node-construct-"));
   try {
     const entrypoint = join(scratch, format === "module" ? "entry.mjs" : "entry.cjs");
-    await writeFile(entrypoint, 'console.log("effect-build-node-main-ok");\n', { flag: "wx" });
+    const source = format === "module"
+      ? 'import { isSea } from "node:sea"; if (!isSea()) throw new Error("expected SEA execution"); console.log("effect-build-node-main-ok");\n'
+      : 'const { isSea } = require("node:sea"); if (!isSea()) throw new Error("expected SEA execution"); console.log("effect-build-node-main-ok");\n';
+    await writeFile(entrypoint, source, { flag: "wx" });
     const constructedFileName = `${coordinateName}--constructed${target.startsWith("windows-") ? ".exe" : ""}`;
     const outfile = join(outputRoot, constructedFileName);
     let sealed;

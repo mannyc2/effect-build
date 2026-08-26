@@ -28,8 +28,9 @@ Provider host APIs preserve their native semantic owner:
 
 - Bun API modules report host unavailability, native invocation failure, or a
   rejected publication mode;
-- esbuild API modules report `EsbuildFailed` while scoped context owners retain
-  drain-before-close behavior;
+- esbuild API modules report native `EsbuildFailed` values or reject a
+  contradictory explicit write mode as `EsbuildModeInvalid`, while scoped
+  context owners retain drain-before-close behavior;
 - Rolldown API failures remain package-private with the conditional operations
   they describe.
 
@@ -39,13 +40,16 @@ cancelled.
 
 ## Provider commands
 
-Command lanes distinguish four concerns:
+Command lanes distinguish five concerns:
 
 - input invalidity before provider work;
 - unsupported exact-version capability or relation;
 - transport failure while launching, communicating with, or reaping the child;
 - non-zero provider completion with bounded stdout and stderr plus truncation
-  observations.
+  observations;
+- successful completion whose primary in-memory stdout exceeded its capture
+  bound, reported as a provider-owned `CommandOutputTruncated` failure rather
+  than a successful partial value.
 
 The concrete tags are provider-owned (`BunCommand*`, `DenoCommand*`,
 `EsbuildCommand*`, and `NodeSea*`). A command is selected and observed once, then

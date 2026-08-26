@@ -1128,27 +1128,55 @@ export const requestFromEnvironment = (environment = process.env) => ({
   sourceSha: requiredEnvironment(environment, "CERTIFIED_SOURCE_SHA"),
 });
 
-export const policyFromEnvironment = (environment = process.env) => ({
-  repository: requiredEnvironment(environment, "GITHUB_REPOSITORY"),
-  repositoryId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_REPOSITORY_ID"),
-  producerClass: requiredEnvironment(environment, "RECEIPT_ARCHIVE_PRODUCER_CLASS"),
-  workflowId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_PRODUCER_WORKFLOW_ID"),
-  workflowPath: requiredEnvironment(environment, "RECEIPT_ARCHIVE_PRODUCER_WORKFLOW_PATH"),
-  workflowBlobSha: requiredEnvironment(environment, "RECEIPT_ARCHIVE_PRODUCER_WORKFLOW_BLOB_SHA"),
-  event: requiredEnvironment(environment, "RECEIPT_ARCHIVE_PRODUCER_EVENT"),
-  ref: requiredEnvironment(environment, "RECEIPT_ARCHIVE_PRODUCER_REF"),
-  actorId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_PRODUCER_ACTOR_ID"),
-  triggeringActorId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_PRODUCER_TRIGGERING_ACTOR_ID"),
-  artifactNamePrefix: requiredEnvironment(environment, "RECEIPT_ARCHIVE_PRODUCER_ARTIFACT_NAME_PREFIX"),
-  expectedConclusionsSha256: requiredEnvironment(environment, "RECEIPT_ARCHIVE_EXPECTED_CONCLUSIONS_SHA256"),
-  expectedInnerReceiptNamesSha256: requiredEnvironment(
-    environment,
-    "RECEIPT_ARCHIVE_EXPECTED_INNER_RECEIPT_NAMES_SHA256",
-  ),
-  environmentId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_ENVIRONMENT_ID"),
-  rulesetId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_RULESET_ID"),
-  reviewerId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_REVIEWER_ID"),
+const producerPolicyEnvironment = Object.freeze({
+  certification: Object.freeze({
+    workflowId: "RECEIPT_ARCHIVE_CERTIFICATION_WORKFLOW_ID",
+    workflowPath: "RECEIPT_ARCHIVE_CERTIFICATION_WORKFLOW_PATH",
+    workflowBlobSha: "RECEIPT_ARCHIVE_CERTIFICATION_WORKFLOW_BLOB_SHA",
+    event: "RECEIPT_ARCHIVE_CERTIFICATION_EVENT",
+    ref: "RECEIPT_ARCHIVE_CERTIFICATION_REF",
+    actorId: "RECEIPT_ARCHIVE_CERTIFICATION_ACTOR_ID",
+    triggeringActorId: "RECEIPT_ARCHIVE_CERTIFICATION_TRIGGERING_ACTOR_ID",
+    artifactNamePrefix: "RECEIPT_ARCHIVE_CERTIFICATION_ARTIFACT_NAME_PREFIX",
+    expectedConclusionsSha256: "RECEIPT_ARCHIVE_CERTIFICATION_EXPECTED_CONCLUSIONS_SHA256",
+    expectedInnerReceiptNamesSha256: "RECEIPT_ARCHIVE_CERTIFICATION_EXPECTED_INNER_RECEIPT_NAMES_SHA256",
+  }),
+  release: Object.freeze({
+    workflowId: "RECEIPT_ARCHIVE_RELEASE_WORKFLOW_ID",
+    workflowPath: "RECEIPT_ARCHIVE_RELEASE_WORKFLOW_PATH",
+    workflowBlobSha: "RECEIPT_ARCHIVE_RELEASE_WORKFLOW_BLOB_SHA",
+    event: "RECEIPT_ARCHIVE_RELEASE_EVENT",
+    ref: "RECEIPT_ARCHIVE_RELEASE_REF",
+    actorId: "RECEIPT_ARCHIVE_RELEASE_ACTOR_ID",
+    triggeringActorId: "RECEIPT_ARCHIVE_RELEASE_TRIGGERING_ACTOR_ID",
+    artifactNamePrefix: "RECEIPT_ARCHIVE_RELEASE_ARTIFACT_NAME_PREFIX",
+    expectedConclusionsSha256: "RECEIPT_ARCHIVE_RELEASE_EXPECTED_CONCLUSIONS_SHA256",
+    expectedInnerReceiptNamesSha256: "RECEIPT_ARCHIVE_RELEASE_EXPECTED_INNER_RECEIPT_NAMES_SHA256",
+  }),
 });
+
+export const policyFromEnvironment = (receiptClass, environment = process.env) => {
+  const selected = producerPolicyEnvironment[receiptClass];
+  if (selected === undefined) throw new Error("receipt archive policy class is not admitted");
+  return {
+    repository: requiredEnvironment(environment, "GITHUB_REPOSITORY"),
+    repositoryId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_REPOSITORY_ID"),
+    producerClass: receiptClass,
+    workflowId: requiredEnvironment(environment, selected.workflowId),
+    workflowPath: requiredEnvironment(environment, selected.workflowPath),
+    workflowBlobSha: requiredEnvironment(environment, selected.workflowBlobSha),
+    event: requiredEnvironment(environment, selected.event),
+    ref: requiredEnvironment(environment, selected.ref),
+    actorId: requiredEnvironment(environment, selected.actorId),
+    triggeringActorId: requiredEnvironment(environment, selected.triggeringActorId),
+    artifactNamePrefix: requiredEnvironment(environment, selected.artifactNamePrefix),
+    expectedConclusionsSha256: requiredEnvironment(environment, selected.expectedConclusionsSha256),
+    expectedInnerReceiptNamesSha256: requiredEnvironment(environment, selected.expectedInnerReceiptNamesSha256),
+    environmentId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_ENVIRONMENT_ID"),
+    rulesetId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_RULESET_ID"),
+    reviewerId: requiredEnvironment(environment, "RECEIPT_ARCHIVE_REVIEWER_ID"),
+  };
+};
 
 const main = async () => {
   if (
@@ -1157,10 +1185,11 @@ const main = async () => {
     || requiredEnvironment(process.env, "RECEIPT_ARCHIVE_PROTECTED_ENVIRONMENT") !== "receipt-archive"
   ) throw new Error("receipt archive requires the protected manual main workflow");
   const client = new GitHubClient({ token: requiredEnvironment(process.env, "GITHUB_TOKEN") });
+  const request = requestFromEnvironment();
   const result = await archiveReceipt({
     client,
-    request: requestFromEnvironment(),
-    policy: policyFromEnvironment(),
+    request,
+    policy: policyFromEnvironment(request.receiptClass),
   });
   process.stdout.write(`${JSON.stringify(result)}\n`);
 };

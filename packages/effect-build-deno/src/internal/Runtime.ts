@@ -7,6 +7,7 @@ import {
   type CommandOperation,
   DenoCommandFailed,
   DenoCommandInputInvalid,
+  DenoCommandOutputTruncated,
   DenoCommandTransportFailed,
   DenoCommandUnsupported,
 } from "./CommandError.js";
@@ -14,6 +15,7 @@ import {
 export {
   DenoCommandFailed,
   DenoCommandInputInvalid,
+  DenoCommandOutputTruncated,
   DenoCommandTransportFailed,
   DenoCommandUnsupported,
 } from "./CommandError.js";
@@ -55,10 +57,16 @@ type ReauthenticationError =
   | Effect.Error<Tool.SelectedTool<"denort">["reauthenticate"]>;
 export type RunError =
   | ReauthenticationError
+  | DenoCommandInputInvalid
   | DenoCommandTransportFailed
   | DenoCommandFailed
+  | DenoCommandOutputTruncated
   | DenoCommandUnsupported;
-export type WatchError = ReauthenticationError | DenoCommandTransportFailed | DenoCommandUnsupported;
+export type WatchError =
+  | ReauthenticationError
+  | DenoCommandInputInvalid
+  | DenoCommandTransportFailed
+  | DenoCommandUnsupported;
 
 interface AdmissionRequest {
   readonly operation: Exclude<CommandOperation, "probe">;
@@ -123,20 +131,28 @@ const invocationOptions = (
   const authority = {
     ...options?.environment?.values,
     ...(denoDir === undefined ? {} : { DENO_DIR: denoDir }),
-    ...(denort === undefined ? {} : { DENORT_BIN: denort.executablePath }),
+    DENORT_BIN: denort?.executablePath,
   };
-  const hasAuthority = Object.keys(authority).length > 0;
   return {
     ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
-    ...(hasAuthority
-      ? {
-        env: authority,
-        extendEnv: options?.environment?.inherit !== false,
-      }
-      : {}),
+    env: authority,
+    extendEnv: options?.environment?.inherit !== false,
     forceKillAfter: "2 seconds",
   };
 };
+
+const validateInvocationOptions = (
+  operation: Exclude<CommandOperation, "probe">,
+  options: InvocationOptions | undefined,
+): Effect.Effect<void, DenoCommandInputInvalid> =>
+  Object.hasOwn(options?.environment?.values ?? {}, "DENORT_BIN")
+    ? Effect.fail(
+      new DenoCommandInputInvalid({
+        operation,
+        reason: "environment.values.DENORT_BIN is reserved for authenticated layer selection",
+      }),
+    )
+    : Effect.void;
 
 const runCommand = (
   command: ChildProcess.Command,
@@ -366,6 +382,7 @@ const makeService = (
       );
     const run: Service["run"] = (operation, publication, argv, invocation) =>
       Effect.gen(function*() {
+        yield* validateInvocationOptions(operation, invocation);
         yield* definition.evaluate({ operation });
         yield* reauthenticate(operation);
         const compileRuntime = operation === "compileExecutable" ? denort : undefined;
@@ -386,10 +403,26 @@ const makeService = (
             stderrTruncated: completion.stderr.truncated,
           });
         }
+        if (
+          (operation === "bundleStdout" || operation === "transpileStdout")
+          && completion.stdout.truncated
+        ) {
+          return yield* new DenoCommandOutputTruncated({
+            operation,
+            publication: "none",
+            exitCode: completion.exitCode,
+            stdout: completion.stdout.bytes,
+            stderr: completion.stderr.bytes,
+            stdoutTruncated: true,
+            stderrTruncated: completion.stderr.truncated,
+            outputLimitBytes: options.outputLimitBytes,
+          });
+        }
         return completion;
       }).pipe(Effect.provide(services));
     const watch: Service["watch"] = (operation, argv, invocation) =>
       Effect.gen(function*() {
+        yield* validateInvocationOptions(operation, invocation);
         yield* definition.evaluate({ operation });
         yield* reauthenticate(operation);
         const compileRuntime = operation === "compileWatch" ? denort : undefined;

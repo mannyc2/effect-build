@@ -82,6 +82,45 @@ describe("esbuild Context", () => {
     await observeProviderNativeEvidence("CAN-ESB-012", "E04.1");
   });
 
+  it("rejects erased context write-mode mismatches before acquisition", async () => {
+    let providerSetups = 0;
+    const plugin: import("esbuild").Plugin = {
+      name: "context-write-mode-observer",
+      setup() {
+        providerSetups += 1;
+      },
+    };
+
+    const memory = await runScoped(EsbuildContext.make({
+      ...memoryInput("unused-memory-entry.ts", [plugin]),
+      write: true,
+    } as never));
+    expect(failureOf(memory)).toMatchObject({
+      _tag: "EsbuildModeInvalid",
+      operation: "make",
+      mode: "memory",
+      reason: "write must be exactly false for caller-owned in-memory output",
+    });
+
+    const direct = await runScoped(ContextToDirectory.make({
+      ...memoryInput("unused-direct-entry.ts", [plugin]),
+      write: false,
+    } as never));
+    expect(failureOf(direct)).toMatchObject({
+      _tag: "EsbuildModeInvalid",
+      operation: "make",
+      mode: "direct",
+      reason: "write must be exactly true for provider-direct durable output",
+    });
+
+    const missing = await runScoped(ContextToDirectory.make({
+      entryPoints: ["unused-missing-entry.ts"],
+      plugins: [plugin],
+    } as never));
+    expect(failureOf(missing)).toMatchObject({ _tag: "EsbuildModeInvalid", mode: "direct" });
+    expect(providerSetups).toBe(0);
+  });
+
   it("runs native context watch through initial build, rebuild, and scoped close", async () => {
     const entry = join(root, "watch-context-entry.ts");
     const outfile = join(root, "watch-context-output.js");

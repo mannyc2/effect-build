@@ -1,6 +1,12 @@
 import { Schema } from "effect";
 import type * as esbuild from "esbuild";
 
+export class EsbuildModeInvalid extends Schema.TaggedError<EsbuildModeInvalid>()("EsbuildModeInvalid", {
+  operation: Schema.Literals(["build", "make"] as const),
+  mode: Schema.Literals(["memory", "direct"] as const),
+  reason: Schema.String,
+}) {}
+
 const messageArray = (value: unknown, key: "errors" | "warnings"): readonly esbuild.Message[] => {
   if (typeof value !== "object" || value === null) return [];
   const messages = (value as Readonly<Record<string, unknown>>)[key];

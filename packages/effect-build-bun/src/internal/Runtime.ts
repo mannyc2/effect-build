@@ -6,6 +6,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import {
   BunCommandFailed,
   BunCommandInputInvalid,
+  BunCommandOutputTruncated,
   BunCommandTransportFailed,
   BunCommandUnsupported,
   type CommandOperation,
@@ -14,6 +15,7 @@ import {
 export {
   BunCommandFailed,
   BunCommandInputInvalid,
+  BunCommandOutputTruncated,
   BunCommandTransportFailed,
   BunCommandUnsupported,
 } from "./CommandError.js";
@@ -53,6 +55,7 @@ export type RunError =
   | ReauthenticationError
   | BunCommandTransportFailed
   | BunCommandFailed
+  | BunCommandOutputTruncated
   | BunCommandUnsupported;
 export type WatchError = ReauthenticationError | BunCommandTransportFailed | BunCommandUnsupported;
 
@@ -278,6 +281,18 @@ const makeService = (
             stderr: completion.stderr.bytes,
             stdoutTruncated: completion.stdout.truncated,
             stderrTruncated: completion.stderr.truncated,
+          });
+        }
+        if (operation === "buildStdout" && completion.stdout.truncated) {
+          return yield* new BunCommandOutputTruncated({
+            operation,
+            publication: "none",
+            exitCode: completion.exitCode,
+            stdout: completion.stdout.bytes,
+            stderr: completion.stderr.bytes,
+            stdoutTruncated: true,
+            stderrTruncated: completion.stderr.truncated,
+            outputLimitBytes: options.outputLimitBytes,
           });
         }
         return completion;

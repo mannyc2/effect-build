@@ -52,19 +52,23 @@ describe("M5/D14 durable receipt archive", () => {
         "RECEIPT_ARCHIVE_ENVIRONMENT_ID",
         "RECEIPT_ARCHIVE_RULESET_ID",
         "RECEIPT_ARCHIVE_REVIEWER_ID",
-        "RECEIPT_ARCHIVE_PRODUCER_CLASS",
-        "RECEIPT_ARCHIVE_PRODUCER_WORKFLOW_ID",
-        "RECEIPT_ARCHIVE_PRODUCER_WORKFLOW_PATH",
-        "RECEIPT_ARCHIVE_PRODUCER_WORKFLOW_BLOB_SHA",
-        "RECEIPT_ARCHIVE_PRODUCER_EVENT",
-        "RECEIPT_ARCHIVE_PRODUCER_REF",
-        "RECEIPT_ARCHIVE_PRODUCER_ACTOR_ID",
-        "RECEIPT_ARCHIVE_PRODUCER_TRIGGERING_ACTOR_ID",
-        "RECEIPT_ARCHIVE_PRODUCER_ARTIFACT_NAME_PREFIX",
-        "RECEIPT_ARCHIVE_EXPECTED_CONCLUSIONS_SHA256",
-        "RECEIPT_ARCHIVE_EXPECTED_INNER_RECEIPT_NAMES_SHA256",
+        ...["CERTIFICATION", "RELEASE"].flatMap((receiptClass) => [
+          `RECEIPT_ARCHIVE_${receiptClass}_WORKFLOW_ID`,
+          `RECEIPT_ARCHIVE_${receiptClass}_WORKFLOW_PATH`,
+          `RECEIPT_ARCHIVE_${receiptClass}_WORKFLOW_BLOB_SHA`,
+          `RECEIPT_ARCHIVE_${receiptClass}_EVENT`,
+          `RECEIPT_ARCHIVE_${receiptClass}_REF`,
+          `RECEIPT_ARCHIVE_${receiptClass}_ACTOR_ID`,
+          `RECEIPT_ARCHIVE_${receiptClass}_TRIGGERING_ACTOR_ID`,
+          `RECEIPT_ARCHIVE_${receiptClass}_ARTIFACT_NAME_PREFIX`,
+          `RECEIPT_ARCHIVE_${receiptClass}_EXPECTED_CONCLUSIONS_SHA256`,
+          `RECEIPT_ARCHIVE_${receiptClass}_EXPECTED_INNER_RECEIPT_NAMES_SHA256`,
+        ]),
       ]
     ) expect(source).toContain(name);
+    expect(source).not.toContain("RECEIPT_ARCHIVE_PRODUCER_");
+    expect(source).not.toContain("RECEIPT_ARCHIVE_EXPECTED_CONCLUSIONS_SHA256");
+    expect(source).not.toContain("RECEIPT_ARCHIVE_EXPECTED_INNER_RECEIPT_NAMES_SHA256");
     expect(source).toContain("metadata.sha !== approvedBlob");
     expect(source).toContain('createHash("sha1").update(`blob ${bytes.length}\\0`)');
     expect(source).toContain("/tmp/effect-build-receipt-archive.mjs");

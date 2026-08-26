@@ -148,7 +148,11 @@ const validateOffer = (
   if (offer.protocol !== NodeMain.offerProtocol) {
     return Effect.fail(new IncrementalOfferRejected({ reason: "unknown assembler offer protocol" }));
   }
-  if (offer.agreementId.length === 0 || offer.nodeVersion.length === 0 || !offer.formats.includes(program.format)) {
+  if (
+    offer.agreementId.length === 0
+    || offer.nodeVersion !== NodeMain.nodeVersion
+    || !offer.formats.includes(program.format)
+  ) {
     return Effect.fail(new IncrementalOfferRejected({ reason: "assembler offer does not admit the requested main" }));
   }
   if (

@@ -12,7 +12,10 @@ import * as Executable from "effect-build/Author/Executable";
 // successful execution into a public Api admission.
 import * as RolldownBuildCandidate from "../../packages/effect-build-rolldown/dist/Api/Build.js";
 import {
+  admitsNodeBuiltins,
+  canonicalNodeBuiltinInventory,
   inspectNativeExecutable,
+  nodeBuiltinInventoryProgram,
   sha256,
 } from "./common.mjs";
 
@@ -255,17 +258,30 @@ const probeBuilder = (builder) =>
         reason: "authenticated builder does not expose --build-sea",
       });
     }
+    yield* authenticateDescriptor(builder, "builder");
+    const inventory = yield* runBuilder(
+      builder,
+      "probe-builder-builtins",
+      ["--eval", nodeBuiltinInventoryProgram],
+      dirname(builder.executable),
+    );
+    const builtins = yield* Effect.try({
+      try: () => canonicalNodeBuiltinInventory(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(inventory.stdout))),
+      catch: (cause) => failed("effect-build-node-target-finalizer", "decode-builder-builtins", cause),
+    });
+    yield* authenticateDescriptor(builder, "builder");
+    return builtins;
   });
 
 export const makePrivateAssemblerLayer = ({ builder, base, target, captureMain }) => {
   const agreementId = `node@26.7.0:${target}:${base.executableSha256}:sea-default-loader`;
-  const offer = Object.freeze({
+  const offer = (builtins) => Object.freeze({
     protocol: NodeMain.offerProtocol,
     agreementId,
     nodeVersion: "26.7.0",
     target,
     formats: Object.freeze(["commonjs", "module"]),
-    builtins: Object.freeze([]),
+    builtins,
     loader: "sea-default",
     assets: "none",
     snapshot: false,
@@ -276,17 +292,18 @@ export const makePrivateAssemblerLayer = ({ builder, base, target, captureMain }
   return Layer.succeed(NodeMain.Assembler, {
     offer: () =>
       Effect.gen(function*() {
-        yield* probeBuilder(builder);
+        const builtins = yield* probeBuilder(builder);
         yield* authenticateDescriptor(base, "base");
-        return offer;
+        return offer(builtins);
       }),
     assemble: ({ outfile, main }) =>
       Effect.gen(function*() {
+        const builtins = yield* probeBuilder(builder);
         if (
           main.agreementId !== agreementId
           || main.nodeVersion !== "26.7.0"
           || main.target !== target
-          || main.builtins.length !== 0
+          || !admitsNodeBuiltins(builtins, main.builtins)
         ) {
           return yield* new NodeMain.PortableRejected({
             profile: NodeMain.profile,

@@ -14,6 +14,7 @@ import {
   type CommandOperation,
   EsbuildCommandFailed,
   EsbuildCommandInputInvalid,
+  EsbuildCommandOutputTruncated,
   EsbuildCommandTransportFailed,
   EsbuildCommandUnsupported,
 } from "./CommandError.js";
@@ -21,6 +22,7 @@ import {
 export {
   EsbuildCommandFailed,
   EsbuildCommandInputInvalid,
+  EsbuildCommandOutputTruncated,
   EsbuildCommandTransportFailed,
   EsbuildCommandUnsupported,
 } from "./CommandError.js";
@@ -69,7 +71,8 @@ export type RunError =
   | SelectedToolChanged
   | EsbuildCommandUnsupported
   | EsbuildCommandTransportFailed
-  | EsbuildCommandFailed;
+  | EsbuildCommandFailed
+  | EsbuildCommandOutputTruncated;
 export type ProcessError =
   | ArtifactInvalid
   | SelectedToolChanged
@@ -274,6 +277,18 @@ const makeService = (raw?: LayerOptions): Effect.Effect<
             stderr: completion.stderr.bytes,
             stdoutTruncated: completion.stdout.truncated,
             stderrTruncated: completion.stderr.truncated,
+          });
+        }
+        if (operation === "buildStdout" && completion.stdout.truncated) {
+          return yield* new EsbuildCommandOutputTruncated({
+            operation,
+            publication: "none",
+            exitCode: completion.exitCode,
+            stdout: completion.stdout.bytes,
+            stderr: completion.stderr.bytes,
+            stdoutTruncated: true,
+            stderrTruncated: completion.stderr.truncated,
+            outputLimitBytes: options.outputLimitBytes,
           });
         }
         return completion;

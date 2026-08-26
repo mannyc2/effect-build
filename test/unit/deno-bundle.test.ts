@@ -128,6 +128,50 @@ describeUnix("Deno bundle/transpile command candidates", () => {
     if (Exit.isSuccess(declarations)) expect(declarations.value.publication).toBe("provider-direct-durable");
   });
 
+  it("rejects every present empty bundle permission list before command work", async () => {
+    const permissionCases = [
+      ["allowImport", { allowImport: [] as never }],
+      ["denyImport", { denyImport: [] as never }],
+      ["allowScripts", { allowScripts: [] as never }],
+    ] as const;
+    for (const [field, permission] of permissionCases) {
+      const stdoutFailure = errorOf(
+        await run(Bundle.stdout({ entrypoint: "src/main.ts", ...permission })),
+      ) as Runtime.DenoCommandInputInvalid;
+      expect(stdoutFailure).toMatchObject({
+        _tag: "DenoCommandInputInvalid",
+        operation: "bundleStdout",
+        reason: `${field} must be true or a non-empty list`,
+      });
+
+      const directFailure = errorOf(
+        await run(Bundle.direct({
+          entrypoints: ["src/main.ts"],
+          destination: { _tag: "Outdir", path: join(root, `invalid-direct-${field}`) },
+          ...permission,
+        })),
+      ) as Runtime.DenoCommandInputInvalid;
+      expect(directFailure).toMatchObject({
+        _tag: "DenoCommandInputInvalid",
+        operation: "bundle",
+        reason: `${field} must be true or a non-empty list`,
+      });
+
+      const watchFailure = errorOf(
+        await run(Effect.scoped(Bundle.watch({
+          entrypoints: ["src/main.ts"],
+          destination: { _tag: "Outdir", path: join(root, `invalid-watch-${field}`) },
+          ...permission,
+        }))),
+      ) as Runtime.DenoCommandInputInvalid;
+      expect(watchFailure).toMatchObject({
+        _tag: "DenoCommandInputInvalid",
+        operation: "bundle",
+        reason: `${field} must be true or a non-empty list`,
+      });
+    }
+  });
+
   it("covers transpile stdout, direct output, and tsc-backed declarations as distinct operations", async () => {
     const stdout = await run(Transpile.transpile({ file: "src/main.ts", sourceMap: "inline" }));
     expect(Exit.isSuccess(stdout)).toBe(true);

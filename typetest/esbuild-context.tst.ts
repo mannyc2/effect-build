@@ -11,7 +11,11 @@ const made = Context.make(memoryOptions);
 export type _Make = Assert<
   Same<
     typeof made,
-    Effect.Effect<Context.Context<typeof memoryOptions>, Context.EsbuildFailed, Scope.Scope>
+    Effect.Effect<
+      Context.Context<typeof memoryOptions>,
+      Context.EsbuildFailed | Context.EsbuildModeInvalid,
+      Scope.Scope
+    >
   >
 >;
 
@@ -42,7 +46,7 @@ export type _DirectContext = Assert<
     typeof direct,
     Effect.Effect<
       ContextToDirectory.Context<typeof directOptions>,
-      ContextToDirectory.EsbuildFailed,
+      ContextToDirectory.EsbuildFailed | ContextToDirectory.EsbuildModeInvalid,
       Scope.Scope
     >
   >

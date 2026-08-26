@@ -33,6 +33,20 @@ export interface ImportPermissions {
 export const renderPermission = (name: string, value: PermissionValue | undefined): readonly string[] =>
   value === undefined ? [] : [value === true ? `--${name}` : `--${name}=${value.join(",")}`];
 
+export const validatePermission = (
+  operation: string,
+  field: string,
+  value: PermissionValue | undefined,
+): Effect.Effect<void, DenoCommandInputInvalid> =>
+  Array.isArray(value) && value.length === 0
+    ? Effect.fail(
+      new DenoCommandInputInvalid({
+        operation,
+        reason: `${field} must be true or a non-empty list`,
+      }),
+    )
+    : Effect.void;
+
 export const renderProject = (input: ProjectOptions): readonly string[] => [
   ...(input.config === undefined ? [] : input.config === false ? ["--no-config"] : ["--config", input.config]),
   ...(input.importMap === undefined ? [] : ["--import-map", input.importMap]),

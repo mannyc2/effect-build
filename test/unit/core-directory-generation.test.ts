@@ -36,6 +36,41 @@ const workspace = async (): Promise<
 };
 
 describe("package-private immutable directory generations", () => {
+  it("requires index.html before installing or activating a static-browser generation", async () => {
+    const paths = await workspace();
+    try {
+      await writeFile(join(paths.provider, "application.js"), "export {};\n");
+      const missingEntry = await runExit(DirectoryGeneration.seal({
+        providerRoot: paths.provider,
+        publicationRoot: paths.publication,
+        subject: DirectoryGeneration.staticBrowserSubject,
+        mediaTypes: { "application.js": "text/javascript; charset=utf-8" },
+      }));
+      expect(errorOf(missingEntry).reason).toContain("requires entry index.html");
+      expect(await exists(join(paths.publication, "current.json"))).toBe(false);
+      expect(await readdir(join(paths.publication, "generations"))).toEqual([]);
+
+      const manifestBytes = DirectoryGeneration.encodeManifest({
+        protocol: DirectoryGeneration.generationManifestProtocol,
+        subject: DirectoryGeneration.staticBrowserSubject,
+        files: [],
+      });
+      const manifestDigest = sha256Digest(createHash("sha256").update(manifestBytes).digest("hex"));
+      const generationRoot = join(paths.publication, "generations", `sha256-${manifestDigest.value}`);
+      await mkdir(join(generationRoot, "tree"), { recursive: true });
+      await writeFile(join(generationRoot, "manifest.json"), manifestBytes);
+
+      const activation = await runExit(DirectoryGeneration.activate({
+        publicationRoot: paths.publication,
+        manifestDigest,
+      }));
+      expect(errorOf(activation).reason).toContain("requires entry index.html");
+      expect(await exists(join(paths.publication, "current.json"))).toBe(false);
+    } finally {
+      await rm(paths.root, { recursive: true, force: true });
+    }
+  });
+
   it("seals canonical generations, pins old readers, and rolls current back without collection", async () => {
     const paths = await workspace();
     try {

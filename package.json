@@ -22,7 +22,7 @@
     "test:types": "tstyche",
     "test:unit": "vitest run test/unit",
     "test:architecture": "bun run validate:research-contract && bun run test:research-contract && vitest run test/architecture",
-    "test:control-planes": "node --test scripts/certification-host.test.mjs scripts/compiler-target-receipt.test.mjs scripts/provider-native-receipt.test.mjs scripts/node-finalizer/common.test.mjs scripts/release/candidate.test.mjs scripts/release/coordinator-state.test.mjs scripts/release/admission.test.mjs scripts/apple-certification/certifier.test.mjs scripts/apple-certification/source.test.mjs scripts/apple-certification/prior-evidence.test.mjs scripts/apple-certification/receipt.test.mjs scripts/apple-certification/authenticate.test.mjs scripts/receipt-archive/archive.test.mjs",
+    "test:control-planes": "node --test scripts/certification-host.test.mjs scripts/compiler-target-receipt.test.mjs scripts/provider-native-receipt.test.mjs scripts/node-finalizer/common.test.mjs scripts/release/candidate.test.mjs scripts/release/coordinator-state.test.mjs scripts/release/admission.test.mjs scripts/apple-certification/certifier.test.mjs scripts/apple-certification/source.test.mjs scripts/apple-certification/prior-evidence.test.mjs scripts/apple-certification/receipt.test.mjs scripts/apple-certification/snapshots.test.mjs scripts/apple-certification/authenticate.test.mjs scripts/receipt-archive/archive.test.mjs",
     "test:consumer": "node scripts/test-built-consumer.mjs",
     "test:consumer:fresh": "node scripts/test-built-consumer.mjs --fresh-install",
     "test:integration:bun": "vitest run test/integration/bun-compile-executable.test.ts test/integration/bun-bundle.test.ts",

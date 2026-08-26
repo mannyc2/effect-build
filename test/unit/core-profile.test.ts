@@ -183,6 +183,20 @@ describe("NodeMain offer-first portable author boundary", () => {
     expect(events).toEqual(["offer"]);
   });
 
+  it("rejects a non-26.7.0 assembler offer before provider work", async () => {
+    const events: string[] = [];
+    const incompatible = { ...offer, nodeVersion: "25.0.0" } as unknown as NodeMain.AssemblerOffer;
+    const result = await run(
+      NodeMain.assemble({
+        program: { protocol: NodeMain.profile, entrypoint: "src/main.ts", format: "module" },
+        outfile: "/tmp/effect-build-node-main-fixture",
+      }),
+      environment(producerLayer(events), assemblerLayer(events, incompatible)),
+    );
+    expect(Exit.isFailure(result)).toBe(true);
+    expect(events).toEqual(["offer"]);
+  });
+
   it("rejects producer metadata outside the agreement before assembler consumption", async () => {
     const events: string[] = [];
     const result = await run(
@@ -198,6 +212,27 @@ describe("NodeMain offer-first portable author boundary", () => {
     expect(Exit.isFailure(result)).toBe(true);
     expect(events).toEqual(["offer", "produce"]);
   });
+
+  for (const field of ["package", "version", "engine", "engineVersion"] as const) {
+    it(`rejects an empty producer ${field} before assembler consumption`, async () => {
+      const events: string[] = [];
+      const result = await run(
+        NodeMain.assemble({
+          program: { protocol: NodeMain.profile, entrypoint: "src/main.ts", format: "commonjs" },
+          outfile: "/tmp/effect-build-node-main-fixture",
+        }),
+        environment(
+          producerLayer(events, (produced) => ({
+            ...produced,
+            producer: { ...produced.producer, [field]: "" },
+          })),
+          assemblerLayer(events),
+        ),
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(events).toEqual(["offer", "produce"]);
+    });
+  }
 
   it("rejects structurally forged sealed-main values", async () => {
     const forged = {

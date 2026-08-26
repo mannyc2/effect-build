@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +29,12 @@ import {
   authenticateCertificationSource,
   reauthenticateCertificationSource,
 } from "./source.mjs";
+import {
+  captureCandidateSnapshot,
+  captureRequestSnapshot,
+  reauthenticateCandidateSnapshot,
+  reauthenticateRequestSnapshot,
+} from "./snapshots.mjs";
 
 const execute = promisify(execFile);
 const repositoryRoot = await realpath(fileURLToPath(new URL("../../", import.meta.url)));
@@ -76,13 +82,15 @@ const runner = {
   arch: requireEnvironment("RUNNER_ARCH"),
 };
 const temporaryRoot = await mkdtemp(join(tmpdir(), "effect-build-apple-certification-"));
+const candidateRoot = join(temporaryRoot, "candidate");
 try {
   const certifier = await snapshotApprovedCertifier({ category, temporaryRoot });
-  const candidateRoot = join(temporaryRoot, "candidate");
-  await mkdir(candidateRoot);
+  await mkdir(candidateRoot, { mode: 0o700 });
   for (const [filename, bytes] of candidate.payloadEntries) {
     await writeFile(join(candidateRoot, filename), bytes, { flag: "wx", mode: 0o400 });
   }
+  await chmod(candidateRoot, 0o500);
+  const candidateSnapshot = await captureCandidateSnapshot({ root: candidateRoot, entries: candidate.payloadEntries });
   const slug = coordinateSlug(category, coordinate);
   const priorEvidenceManifestOutputPath = join(outputRoot, `${slug}.prior-evidence.json`);
   const receiptPath = join(outputRoot, `${slug}.receipt.json`);
@@ -140,12 +148,12 @@ try {
   const requestBytes = canonicalBytes(request);
   validateRequest({ requestBytes, expected });
   await writeFile(requestPath, requestBytes, { flag: "wx", mode: 0o400 });
-  if (!(await readBoundedRegularFile({ path: requestPath, maximumBytes: maximumReceiptBytes, subject: "certification request" })).equals(requestBytes)) {
-    throw new Error("certification request changed after publication");
-  }
+  const requestSnapshot = await captureRequestSnapshot({ path: requestPath, bytes: requestBytes });
   await reauthenticateCertificationSource(source);
   await reauthenticateCertifierSnapshot(certifier);
   await reauthenticatePriorEvidenceSnapshot(authenticatedPriorEvidence);
+  await reauthenticateCandidateSnapshot(candidateSnapshot);
+  await reauthenticateRequestSnapshot(requestSnapshot);
   await mkdir(dirname(outputRoot), { recursive: true });
   await mkdir(outputRoot);
   const childEnvironment = Object.fromEntries([
@@ -168,6 +176,8 @@ try {
   await reauthenticateCertificationSource(source);
   await reauthenticateCertifierSnapshot(certifier);
   await reauthenticatePriorEvidenceSnapshot(authenticatedPriorEvidence);
+  await reauthenticateCandidateSnapshot(candidateSnapshot);
+  await reauthenticateRequestSnapshot(requestSnapshot);
   const outputEntries = await readdir(outputRoot, { withFileTypes: true });
   if (outputEntries.some((entry) => !entry.isFile())) throw new Error("certifier outputs must be regular files");
   const actualFiles = outputEntries.map(({ name }) => name).sort();
@@ -199,5 +209,9 @@ try {
     `${JSON.stringify({ coordinate, evidenceSha256: receipt.evidenceSha256, receiptSha256: sha256(receiptBytes) })}\n`,
   );
 } finally {
+  const candidateMetadata = await lstat(candidateRoot).catch(() => undefined);
+  if (candidateMetadata?.isDirectory() === true && !candidateMetadata.isSymbolicLink()) {
+    await chmod(candidateRoot, 0o700);
+  }
   await rm(temporaryRoot, { recursive: true, force: true });
 }

@@ -13,12 +13,16 @@ import * as Runtime from "../../packages/effect-build-deno/src/internal/Runtime.
 const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-deno.mjs", import.meta.url)));
 let root = "";
 let executable = "";
+let denort = "";
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-deno-compile-"));
   executable = join(root, "deno");
+  denort = join(root, "denort");
   await copyFile(fixture, executable);
+  await copyFile(fixture, denort);
   await chmod(executable, 0o755);
+  await chmod(denort, 0o755);
 });
 
 afterAll(async () => {
@@ -48,6 +52,28 @@ const input = (name: string, overrides: Partial<Compile.Input<"hashed">> = {}): 
   observation: "hashed",
   ...overrides,
 });
+
+const permissionFields = [
+  "allowRead",
+  "allowWrite",
+  "allowNet",
+  "allowEnv",
+  "allowRun",
+  "allowFfi",
+  "allowSys",
+  "allowImport",
+  "denyRead",
+  "denyWrite",
+  "denyNet",
+  "denyEnv",
+  "denyRun",
+  "denyFfi",
+  "denySys",
+  "denyImport",
+  "ignoreRead",
+  "ignoreEnv",
+  "allowScripts",
+] as const satisfies readonly (keyof Compile.Options)[];
 
 const run = <A, E>(
   effect: Effect.Effect<
@@ -164,7 +190,12 @@ describeUnix("Deno compileExecutable", () => {
       concurrency: 2,
       inputs: [
         input("matrix-success"),
-        input("matrix-invalid", { allowRead: [] as never }),
+        ...permissionFields.map((field, index) =>
+          input(
+            `matrix-invalid-${index}`,
+            { [field]: [] } as unknown as Partial<Compile.Input<"hashed">>,
+          )
+        ),
       ],
     }));
     expect(Exit.isSuccess(reportExit)).toBe(true);
@@ -172,9 +203,106 @@ describeUnix("Deno compileExecutable", () => {
       expect(reportExit.value).toMatchObject({ provider: "deno", operation: "compileExecutable", rollback: "none" });
       expect(reportExit.value.cells.map((cell) => [cell.identity.index, cell._tag])).toEqual([
         [0, "Success"],
-        [1, "Failure"],
+        ...permissionFields.map((_, index) => [index + 1, "Failure"]),
       ]);
-      expect(reportExit.value.cells[1]).toMatchObject({ error: { _tag: "DenoCommandInputInvalid" } });
+      for (const [index, field] of permissionFields.entries()) {
+        expect(reportExit.value.cells[index + 1]).toMatchObject({
+          error: {
+            _tag: "DenoCommandInputInvalid",
+            reason: `${field} must be true or a non-empty list`,
+          },
+        });
+      }
+    }
+  });
+
+  it("rejects every present empty compile-watch permission list", async () => {
+    for (const [index, field] of permissionFields.entries()) {
+      const failure = errorOf(
+        await run(Effect.scoped(CompileWatch.watch({
+          entrypoint: "main.ts",
+          outfile: join(root, `invalid-watch-permission-${index}`),
+          [field]: [],
+        } as never))),
+      ) as Runtime.DenoCommandInputInvalid;
+      expect(failure).toMatchObject({
+        _tag: "DenoCommandInputInvalid",
+        operation: "compileWatch",
+        reason: `${field} must be true or a non-empty list`,
+      });
+    }
+  });
+
+  it("reserves DENORT_BIN for authenticated layer selection", async () => {
+    const inheritedLog = join(root, "inherited-denort.log");
+    const previousDenort = process.env.DENORT_BIN;
+    process.env.DENORT_BIN = join(root, "unauthenticated-denort");
+    process.env.FAKE_DENO_LOG = inheritedLog;
+    try {
+      const inherited = await run(Compile.compileExecutable(input("inherited-denort")));
+      expect(Exit.isSuccess(inherited)).toBe(true);
+      const inheritedInvocation = JSON.parse((await readFile(inheritedLog, "utf8")).trim());
+      expect(inheritedInvocation).not.toHaveProperty("denort");
+
+      const injected = errorOf(
+        await run(Compile.compileExecutable(input("injected-denort", {
+          environment: { values: { DENORT_BIN: denort } },
+        }))),
+      ) as Runtime.DenoCommandInputInvalid;
+      expect(injected).toMatchObject({
+        _tag: "DenoCommandInputInvalid",
+        operation: "compileExecutable",
+        reason: "environment.values.DENORT_BIN is reserved for authenticated layer selection",
+      });
+      expect(await absent(join(root, "injected-denort"))).toBe(true);
+    } finally {
+      if (previousDenort === undefined) delete process.env.DENORT_BIN;
+      else process.env.DENORT_BIN = previousDenort;
+      delete process.env.FAKE_DENO_LOG;
+    }
+
+    const selectedLog = join(root, "selected-denort.log");
+    process.env.FAKE_DENO_LOG = selectedLog;
+    try {
+      const selected = await Effect.runPromiseExit(
+        Effect.gen(function*() {
+          const runtime = yield* Runtime.Runtime;
+          const compile = yield* runtime.run(
+            "compileExecutable",
+            "none",
+            ["compile", "--output", join(root, "selected-denort-output"), "main.ts"],
+          );
+          const watchOutput = join(root, "selected-denort-watch-output");
+          yield* Effect.scoped(
+            runtime.watch(
+              "compileWatch",
+              ["compile", "--watch", "--output", watchOutput, "main.ts"],
+            ).pipe(Effect.andThen(Effect.promise(() => waitForFile(watchOutput)))),
+          );
+          const bundle = yield* runtime.run(
+            "bundleDirect",
+            "provider-direct-durable",
+            ["bundle", "--output", join(root, "selected-denort-bundle-output.js"), "main.ts"],
+          );
+          return { compile, bundle };
+        }).pipe(
+          Effect.provide(Runtime.layer({
+            executable: executable as Artifact.AbsolutePath,
+            denort: denort as Artifact.AbsolutePath,
+          })),
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+      expect(Exit.isSuccess(selected)).toBe(true);
+      const selectedInvocations = (await readFile(selectedLog, "utf8")).trim().split("\n").map((line) =>
+        JSON.parse(line)
+      );
+      expect(selectedInvocations).toHaveLength(3);
+      expect(selectedInvocations[0].denort).toBe(denort);
+      expect(selectedInvocations[1].denort).toBe(denort);
+      expect(selectedInvocations[2]).not.toHaveProperty("denort");
+    } finally {
+      delete process.env.FAKE_DENO_LOG;
     }
   });
 

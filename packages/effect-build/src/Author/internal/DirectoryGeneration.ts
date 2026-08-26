@@ -293,6 +293,9 @@ const canonicalManifest = (value: unknown): Manifest | string => {
     previous = file.path;
     files.push(file);
   }
+  if (subject.profile === staticBrowserProfile && !filePaths.has(staticBrowserEntry)) {
+    return `static-browser manifest requires entry ${staticBrowserEntry}`;
+  }
   return Object.freeze({ protocol: generationManifestProtocol, subject, files: Object.freeze(files) });
 };
 
@@ -551,6 +554,13 @@ const captureSnapshot = (
       if (!knownFiles.has(named)) {
         return yield* failure("snapshot", named, "media type names an absent or non-file entry");
       }
+    }
+    if (request.subject.profile === staticBrowserProfile && !knownFiles.has(staticBrowserEntry)) {
+      return yield* failure(
+        "snapshot",
+        staticBrowserEntry,
+        `static-browser generation requires entry ${staticBrowserEntry}`,
+      );
     }
     for (const captured of files) {
       const canonical = path.normalize(

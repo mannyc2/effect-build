@@ -144,7 +144,7 @@ const parse = (bytes: Uint8Array): NativeObservation => {
 const matches = (target: SystemTarget, observed: NativeObservation): boolean => {
   const expected = describeTarget(target);
   return expected.os === observed.os && expected.architecture === observed.architecture
-    && (observed.abi === undefined || expected.abi === observed.abi);
+    && expected.abi === (observed.abi ?? null);
 };
 
 const targets: readonly SystemTarget[] = [

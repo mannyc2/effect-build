@@ -10,6 +10,7 @@ import {
   renderPermission,
   renderProject,
   validatePath,
+  validatePermission,
 } from "./Options.js";
 
 export const Target = Schema.Literals(
@@ -181,21 +182,14 @@ export const renderArgv = (
 
 const validatePermissionLists = (
   operation: "compileExecutable" | "compileWatch",
-  input: Permissions,
-): Effect.Effect<void, DenoCommandInputInvalid> => {
-  for (const [, field] of permissionFields) {
-    const value = input[field];
-    if (Array.isArray(value) && value.length === 0) {
-      return Effect.fail(
-        new DenoCommandInputInvalid({
-          operation,
-          reason: `${field} must be true or a non-empty list`,
-        }),
-      );
+  input: Options,
+): Effect.Effect<void, DenoCommandInputInvalid> =>
+  Effect.gen(function*() {
+    for (const [, field] of permissionFields) {
+      yield* validatePermission(operation, field, input[field]);
     }
-  }
-  return Effect.void;
-};
+    yield* validatePermission(operation, "allowScripts", input.allowScripts);
+  });
 
 const validateCommon = (
   operation: "compileExecutable" | "compileWatch",

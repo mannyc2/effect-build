@@ -13,7 +13,10 @@ type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ?
 declare const memoryOptions: esbuild.BuildOptions & { readonly write: false };
 const built = Build.build(memoryOptions);
 export type _Build = Assert<
-  Same<typeof built, Effect.Effect<esbuild.BuildResult<typeof memoryOptions>, Build.EsbuildFailed>>
+  Same<
+    typeof built,
+    Effect.Effect<esbuild.BuildResult<typeof memoryOptions>, Build.EsbuildFailed | Build.EsbuildModeInvalid>
+  >
 >;
 
 // Memory and provider-direct publication are distinct operations.
@@ -27,7 +30,10 @@ const written = BuildToDirectory.buildToDirectory(directOptions);
 export type _BuildToDirectory = Assert<
   Same<
     typeof written,
-    Effect.Effect<esbuild.BuildResult<typeof directOptions>, BuildToDirectory.EsbuildFailed>
+    Effect.Effect<
+      esbuild.BuildResult<typeof directOptions>,
+      BuildToDirectory.EsbuildFailed | BuildToDirectory.EsbuildModeInvalid
+    >
   >
 >;
 // @ts-expect-error!

@@ -11,6 +11,7 @@ import {
   authenticateReceipt,
   canonicalBytes,
   decodeCanonical,
+  policyFromEnvironment,
   readReceiptZip,
   validateReceipt,
   writeArchive,
@@ -432,6 +433,49 @@ const authenticationFixture = ({ receiptClass = "certification", receipt } = {})
 };
 
 const createDigest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+const policyEnvironment = (certification, release) => {
+  const environment = {
+    GITHUB_REPOSITORY: repository,
+    RECEIPT_ARCHIVE_REPOSITORY_ID: certification.repositoryId,
+    RECEIPT_ARCHIVE_ENVIRONMENT_ID: certification.environmentId,
+    RECEIPT_ARCHIVE_RULESET_ID: certification.rulesetId,
+    RECEIPT_ARCHIVE_REVIEWER_ID: certification.reviewerId,
+  };
+  for (const [receiptClass, policy] of [["CERTIFICATION", certification], ["RELEASE", release]]) {
+    for (const [suffix, field] of [
+      ["WORKFLOW_ID", "workflowId"],
+      ["WORKFLOW_PATH", "workflowPath"],
+      ["WORKFLOW_BLOB_SHA", "workflowBlobSha"],
+      ["EVENT", "event"],
+      ["REF", "ref"],
+      ["ACTOR_ID", "actorId"],
+      ["TRIGGERING_ACTOR_ID", "triggeringActorId"],
+      ["ARTIFACT_NAME_PREFIX", "artifactNamePrefix"],
+      ["EXPECTED_CONCLUSIONS_SHA256", "expectedConclusionsSha256"],
+      ["EXPECTED_INNER_RECEIPT_NAMES_SHA256", "expectedInnerReceiptNamesSha256"],
+    ]) environment[`RECEIPT_ARCHIVE_${receiptClass}_${suffix}`] = policy[field];
+  }
+  return environment;
+};
+
+test("protected producer policy selection is fixed and class-specific", () => {
+  const certification = authenticationFixture({ receiptClass: "certification" }).policy;
+  const release = authenticationFixture({ receiptClass: "release" }).policy;
+  release.workflowBlobSha = "3".repeat(40);
+  release.actorId = "90";
+  release.triggeringActorId = "91";
+  const environment = policyEnvironment(certification, release);
+
+  assert.deepEqual(policyFromEnvironment("certification", environment), certification);
+  assert.deepEqual(policyFromEnvironment("release", environment), release);
+  assert.throws(() => policyFromEnvironment("unknown", environment), /class is not admitted/u);
+
+  const missingCertification = { ...environment };
+  delete missingCertification.RECEIPT_ARCHIVE_CERTIFICATION_WORKFLOW_ID;
+  assert.throws(() => policyFromEnvironment("certification", missingCertification), /CERTIFICATION_WORKFLOW_ID/u);
+  assert.deepEqual(policyFromEnvironment("release", missingCertification), release);
+});
 
 test("GitHub API metadata, approved workflow revision, artifact digest, and receipt self-description all bind", async () => {
   const fixture = authenticationFixture();

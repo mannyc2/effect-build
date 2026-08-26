@@ -83,6 +83,34 @@ if (
 export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 export const digest = (bytes) => ({ algorithm: "sha256", value: sha256(bytes) });
 
+export const nodeBuiltinInventoryProgram = [
+  'const { builtinModules, isBuiltin } = require("node:module");',
+  'const prefixOnlyCandidates = ["node:ffi", "node:sea", "node:sqlite", "node:test", "node:test/reporters"];',
+  'const normalized = builtinModules.map((specifier) => specifier.startsWith("node:") ? specifier : `node:${specifier}`);',
+  "const inventory = [...new Set([...normalized, ...prefixOnlyCandidates])].filter((specifier) => isBuiltin(specifier));",
+  "process.stdout.write(JSON.stringify(inventory));",
+].join("");
+
+export const canonicalNodeBuiltinInventory = (value) => {
+  if (!Array.isArray(value)) throw new Error("Node built-in inventory must be an array");
+  const normalized = value.map((specifier) => {
+    if (typeof specifier !== "string") {
+      throw new Error(`invalid Node built-in specifier ${String(specifier)}`);
+    }
+    const bare = specifier.startsWith("node:") ? specifier.slice("node:".length) : specifier;
+    if (!/^[a-z0-9_./-]+$/u.test(bare)) {
+      throw new Error(`invalid Node built-in specifier ${specifier}`);
+    }
+    return `node:${bare}`;
+  });
+  return Object.freeze([...new Set(normalized)].sort((left, right) => left.localeCompare(right)));
+};
+
+export const admitsNodeBuiltins = (inventory, required) => {
+  const available = new Set(inventory);
+  return required.every((specifier) => available.has(specifier));
+};
+
 const compareUtf16 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 
 const canonicalValue = (value) => {

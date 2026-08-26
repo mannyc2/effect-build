@@ -14,6 +14,7 @@ import {
   type CommandOperation,
   RolldownCommandFailed,
   RolldownCommandInputInvalid,
+  RolldownCommandOutputTruncated,
   RolldownCommandTransportFailed,
   RolldownCommandUnsupported,
 } from "../internal/CommandError.js";
@@ -21,6 +22,7 @@ import {
 export {
   RolldownCommandFailed,
   RolldownCommandInputInvalid,
+  RolldownCommandOutputTruncated,
   RolldownCommandTransportFailed,
   RolldownCommandUnsupported,
 } from "../internal/CommandError.js";
@@ -69,7 +71,8 @@ export type RunError =
   | SelectedToolChanged
   | RolldownCommandUnsupported
   | RolldownCommandTransportFailed
-  | RolldownCommandFailed;
+  | RolldownCommandFailed
+  | RolldownCommandOutputTruncated;
 export type WatchError =
   | ArtifactInvalid
   | SelectedToolChanged
@@ -282,6 +285,18 @@ const makeService = (raw?: LayerOptions): Effect.Effect<
             stderr: completion.stderr.bytes,
             stdoutTruncated: completion.stdout.truncated,
             stderrTruncated: completion.stderr.truncated,
+          });
+        }
+        if (operation === "bundleStdout" && completion.stdout.truncated) {
+          return yield* new RolldownCommandOutputTruncated({
+            operation,
+            publication: "none",
+            exitCode: completion.exitCode,
+            stdout: completion.stdout.bytes,
+            stderr: completion.stderr.bytes,
+            stdoutTruncated: true,
+            stderrTruncated: completion.stderr.truncated,
+            outputLimitBytes: options.outputLimitBytes,
           });
         }
         return completion;

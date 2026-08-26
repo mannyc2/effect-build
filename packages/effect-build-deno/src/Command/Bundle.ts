@@ -10,6 +10,7 @@ import {
   renderPermission,
   renderProject,
   validatePath,
+  validatePermission,
 } from "../internal/Options.js";
 import type { Completion, RunError, WatchError } from "../internal/Runtime.js";
 import { Runtime } from "../internal/Runtime.js";
@@ -120,8 +121,19 @@ const renderDirectArgv = (
   ...input.entrypoints,
 ];
 
+const validatePermissionLists = (
+  operation: "bundleStdout" | "bundle",
+  input: Options,
+): Effect.Effect<void, DenoCommandInputInvalid> =>
+  Effect.gen(function*() {
+    yield* validatePermission(operation, "allowImport", input.allowImport);
+    yield* validatePermission(operation, "denyImport", input.denyImport);
+    yield* validatePermission(operation, "allowScripts", input.allowScripts);
+  });
+
 const validateDirect = (input: DirectInput): Effect.Effect<void, DenoCommandInputInvalid> =>
   Effect.gen(function*() {
+    yield* validatePermissionLists("bundle", input);
     yield* validatePath("bundle", "destination", input.destination.path);
     for (const entrypoint of input.entrypoints) yield* validatePath("bundle", "entrypoint", entrypoint);
   });
@@ -130,6 +142,7 @@ export const stdout = (
   input: StdoutInput,
 ): Effect.Effect<StdoutResult, RunError | DenoCommandInputInvalid, Runtime> =>
   Effect.gen(function*() {
+    yield* validatePermissionLists("bundleStdout", input);
     yield* validatePath("bundleStdout", "entrypoint", input.entrypoint);
     const runtime = yield* Runtime;
     const completion = yield* runtime.run("bundleStdout", "none", renderStdoutArgv(input), input);
