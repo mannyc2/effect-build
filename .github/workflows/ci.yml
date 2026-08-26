@@ -373,7 +373,8 @@ jobs:
             --construction-host '${{ matrix.construction_host }}' \
             --target '${{ matrix.target.token }}' \
             --output .node-finalizer/finalized
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - id: finalized_artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}--finalized
           path: .node-finalizer/finalized/*--finalized${{ startsWith(matrix.target.token, 'windows-') && '.exe' || '' }}
@@ -384,6 +385,8 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          EFFECT_BUILD_OUTPUT_ARTIFACT_ID: ${{ steps.finalized_artifact.outputs.artifact-id }}
+          EFFECT_BUILD_OUTPUT_ARTIFACT_DIGEST: ${{ steps.finalized_artifact.outputs.artifact-digest }}
         run: |
           set -euo pipefail
           coordinate='node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}'

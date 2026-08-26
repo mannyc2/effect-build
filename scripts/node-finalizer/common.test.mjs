@@ -319,6 +319,7 @@ test("the private adapter uses offer-first roles and hard-cut provider roots", a
   const construct = await readFile(new URL("./construct.mjs", import.meta.url), "utf8");
   const adapters = await readFile(new URL("./private-adapters.mjs", import.meta.url), "utf8");
   const completeReceipt = await readFile(new URL("./complete-receipt.mjs", import.meta.url), "utf8");
+  const workflow = await readFile(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
   const source = `${construct}\n${adapters}`;
   for (const stale of ["BuildError", "effect-build/Target", "NodeMain.seal", "/Profile", "node-sea/Raw"]) {
     assert.equal(source.includes(stale), false, stale);
@@ -338,6 +339,11 @@ test("the private adapter uses offer-first roles and hard-cut provider roots", a
   assert.match(adapters, /disableExperimentalSEAWarning: true/u);
   assert.match(completeReceipt, /canonicalBytes\(pending\.request\)\.equals\(requestBytes\)/u);
   assert.doesNotMatch(completeReceipt, /JSON\.stringify\(request\).*JSON\.stringify\(pending\.request\)/u);
+  assert.match(completeReceipt, /observeArtifactById/u);
+  assert.doesNotMatch(completeReceipt, /\bobserveArtifact\(/u);
+  assert.match(workflow, /id: finalized_artifact/u);
+  assert.match(workflow, /EFFECT_BUILD_OUTPUT_ARTIFACT_ID: \$\{\{ steps\.finalized_artifact\.outputs\.artifact-id \}\}/u);
+  assert.match(workflow, /EFFECT_BUILD_OUTPUT_ARTIFACT_DIGEST: \$\{\{ steps\.finalized_artifact\.outputs\.artifact-digest \}\}/u);
 });
 
 test("the 45, 31, and split 60 plus 10-cell lanes use hard-cut suites and non-admitting receipts", async () => {
