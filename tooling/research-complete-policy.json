@@ -297,17 +297,34 @@
                   "jobId": "98055230325"
                 }
               ],
-              "unobservedReason": "run 32925986358 was cancelled before any other macos-x64 finalization executed, including every native from-macos-x64 coordinate",
+              "cancelledAfterFinalizationStartedCount": 2,
+              "cancelledAfterFinalizationStartedCoordinates": [
+                {
+                  "producerGroup": "bun-cli",
+                  "mainFormat": "commonjs",
+                  "constructionHost": "macos-x64",
+                  "jobId": "98055230443"
+                },
+                {
+                  "producerGroup": "bun-cli",
+                  "mainFormat": "commonjs",
+                  "constructionHost": "macos-arm64",
+                  "jobId": "98055230455"
+                }
+              ],
+              "unobservedReason": "run 32925986358 was cancelled before any other macos-x64 coordinate produced a recorded executable outcome or target-finalizer receipt; two additional finalization jobs entered the combined finalization step but concluded cancelled without producing either, including one coordinate whose JavaScript main was constructed on macOS x64",
               "inferenceBasis": [
-                "https://nodejs.org/api/single-executable-applications.html#platform-support",
+                "https://nodejs.org/download/release/v26.7.0/docs/api/single-executable-applications.html#platform-support",
                 "https://github.com/nodejs/node/issues/65479"
               ]
             },
             "evidence": [
-              "https://nodejs.org/api/single-executable-applications.html#platform-support",
+              "https://nodejs.org/download/release/v26.7.0/docs/api/single-executable-applications.html#platform-support",
               "https://github.com/nodejs/node/issues/65479",
               "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349",
-              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230325"
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230325",
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230443",
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230455"
             ]
           }
         ],

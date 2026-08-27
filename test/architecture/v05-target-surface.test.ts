@@ -279,7 +279,7 @@ describe("research-complete target surface", () => {
       observationCounts.set(observation, (observationCounts.get(observation) ?? 0) + 1);
     }
     expect([...observationCounts.entries()].sort(([left], [right]) => left.localeCompare(right))).toEqual([
-      ["inferred-from-upstream-evidence-not-executed", 28],
+      ["inferred-from-upstream-evidence-no-recorded-execution-outcome", 28],
       ["observed-sigsegv-on-exact-target-runner", 2],
     ]);
     const plan = workflow.jobs["node-main-plan"]!;

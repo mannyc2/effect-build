@@ -235,7 +235,7 @@ test("the private finalizer accounts for 150 applicable and 30 rejected coordina
   assert.ok(
     evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedCoordinates.every(({ observation }) =>
       observation === "observed-sigsegv-on-exact-target-runner"
-      || observation === "inferred-from-upstream-evidence-not-executed"
+      || observation === "inferred-from-upstream-evidence-no-recorded-execution-outcome"
     ),
   );
 });

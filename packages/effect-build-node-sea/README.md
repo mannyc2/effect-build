@@ -40,8 +40,10 @@ advertise any unexecuted target. The complete 180-coordinate universe is
 accounted as 150 applicable positive coordinates and 30 explicit rejections for
 Node 26.7.0 direct SEA on macOS x64; rejected coordinates are never scheduled or
 counted as passes. That rejection is upstream-blocked rather than a rejection
-on the merits: the contract records which rejected coordinates were observed
-crashing and which are inferred, and it must be re-adjudicated before the Node
-assembler cell changes. macOS ad-hoc, no-timestamp signing repairs
+on the merits: the contract separates first-hand exact-target `SIGSEGV` job
+observations from coordinates with no recorded execution outcome that remain
+inferred from upstream evidence; failed jobs are not formal finalizer receipts.
+The rejection must be re-adjudicated before the Node assembler cell changes.
+macOS ad-hoc, no-timestamp signing repairs
 runnable Mach-O bytes only; Developer ID distribution belongs to
 `effect-build-apple`.

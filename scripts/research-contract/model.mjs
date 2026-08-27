@@ -184,7 +184,7 @@ const exactReleaseCandidatePublicNodeSeaEvidenceFields = [
   "executionStdoutSha256",
 ];
 const observedUnsupportedObservation = "observed-sigsegv-on-exact-target-runner";
-const inferredUnsupportedObservation = "inferred-from-upstream-evidence-not-executed";
+const inferredUnsupportedObservation = "inferred-from-upstream-evidence-no-recorded-execution-outcome";
 const unsupportedCoordinateKey = ({ producerGroup, mainFormat, constructionHost, target }) =>
   `${producerGroup}\0${mainFormat}\0${constructionHost}\0${target}`;
 const exactNodeUnsupportedTargets = [{
@@ -207,18 +207,25 @@ const exactNodeUnsupportedTargets = [{
       { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "linux-x64", jobId: "98055230349" },
       { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "linux-arm64", jobId: "98055230325" },
     ],
+    cancelledAfterFinalizationStartedCount: 2,
+    cancelledAfterFinalizationStartedCoordinates: [
+      { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "macos-x64", jobId: "98055230443" },
+      { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "macos-arm64", jobId: "98055230455" },
+    ],
     unobservedReason:
-      "run 32925986358 was cancelled before any other macos-x64 finalization executed, including every native from-macos-x64 coordinate",
+      "run 32925986358 was cancelled before any other macos-x64 coordinate produced a recorded executable outcome or target-finalizer receipt; two additional finalization jobs entered the combined finalization step but concluded cancelled without producing either, including one coordinate whose JavaScript main was constructed on macOS x64",
     inferenceBasis: [
-      "https://nodejs.org/api/single-executable-applications.html#platform-support",
+      "https://nodejs.org/download/release/v26.7.0/docs/api/single-executable-applications.html#platform-support",
       "https://github.com/nodejs/node/issues/65479",
     ],
   },
   evidence: [
-    "https://nodejs.org/api/single-executable-applications.html#platform-support",
+    "https://nodejs.org/download/release/v26.7.0/docs/api/single-executable-applications.html#platform-support",
     "https://github.com/nodejs/node/issues/65479",
     "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349",
     "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230325",
+    "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230443",
+    "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230455",
   ],
 }];
 // Freeze the complete policy-owned Apple schema without duplicating its runtime constants here.
@@ -275,8 +282,9 @@ const sorted = (values) => [...values].sort();
 const sameSet = (left, right) => JSON.stringify(sorted(left)) === JSON.stringify(sorted(right));
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const cartesianCount = (axes) => Object.values(axes).reduce((count, axis) => count * axis.length, 1);
+const isPositiveDecimalString = (value) => typeof value === "string" && /^[1-9]\d*$/u.test(value);
 const requireText = (value, label) => {
-  if (typeof value !== "string" || value.length === 0) throw new Error(`${label} must be non-empty text`);
+  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`${label} must be non-empty text`);
 };
 
 const authorityPathFromRef = (reference) => {
@@ -1025,29 +1033,45 @@ export const validateContract = (contract, inputs) => {
       );
     }
     const observation = unsupported.observation;
+    if (
+      typeof observation !== "object"
+      || observation === null
+      || !Array.isArray(observation.observedCoordinates)
+      || !Array.isArray(observation.cancelledAfterFinalizationStartedCoordinates)
+      || !Array.isArray(observation.inferenceBasis)
+      || !Number.isInteger(observation.observedCoordinateCount)
+      || !Number.isInteger(observation.inferredCoordinateCount)
+      || !Number.isInteger(observation.cancelledAfterFinalizationStartedCount)
+    ) throw new Error(`Node unsupported target ${unsupported.target} observation accounting changed`);
     const coordinatesForTarget = nodeRule.explicitUnsupportedCoordinates.filter(({ target }) => target === unsupported.target);
     const observed = coordinatesForTarget.filter((coordinate) => coordinate.observation === observedUnsupportedObservation);
     const inferred = coordinatesForTarget.filter((coordinate) => coordinate.observation === inferredUnsupportedObservation);
     if (observed.length === 0) {
       throw new Error(
-        `Node unsupported target ${unsupported.target} has no first-hand observed failure; a rejection requires at least one executed crash receipt`,
+        `Node unsupported target ${unsupported.target} has no first-hand exact-target SIGSEGV job observation; a rejection requires at least one observed exact-target failure`,
       );
     }
     if (
-      !/^\d+$/u.test(observation.workflowRunId)
+      !isPositiveDecimalString(observation.workflowRunId)
       || observed.length !== observation.observedCoordinateCount
       || inferred.length !== observation.inferredCoordinateCount
       || observed.length + inferred.length !== coordinatesForTarget.length
       || observation.observedCoordinates.length !== observation.observedCoordinateCount
+      || observation.cancelledAfterFinalizationStartedCoordinates.length
+        !== observation.cancelledAfterFinalizationStartedCount
     ) throw new Error(`Node unsupported target ${unsupported.target} observation accounting changed`);
     requireText(observation.workflowRunConclusion, `${unsupported.target}.observation.workflowRunConclusion`);
+    if (observation.workflowRunConclusion !== "cancelled") {
+      throw new Error(`Node unsupported target ${unsupported.target} workflowRunConclusion must be cancelled`);
+    }
     requireText(observation.unobservedReason, `${unsupported.target}.observation.unobservedReason`);
-    unique(
-      observation.observedCoordinates.map((observedCoordinate) =>
-        unsupportedCoordinateKey({ ...observedCoordinate, target: unsupported.target })
-      ),
-      `${unsupported.target} observed coordinates`,
+    const observedCoordinateKeys = observation.observedCoordinates.map((coordinate) =>
+      unsupportedCoordinateKey({ ...coordinate, target: unsupported.target })
     );
+    unique(observedCoordinateKeys, `${unsupported.target} observed coordinates`);
+    if (!sameSet(observedCoordinateKeys, observed.map(unsupportedCoordinateKey))) {
+      throw new Error(`Node unsupported target ${unsupported.target} observed coordinate labels differ from its failure evidence`);
+    }
     for (const observedCoordinate of observation.observedCoordinates) {
       const jobUrl =
         `https://github.com/mannyc2/effect-build/actions/runs/${observation.workflowRunId}/job/${observedCoordinate.jobId}`;
@@ -1055,10 +1079,38 @@ export const validateContract = (contract, inputs) => {
         !nodeRule.axes.producerGroup.includes(observedCoordinate.producerGroup)
         || !nodeRule.axes.mainFormat.includes(observedCoordinate.mainFormat)
         || !nodeRule.axes.constructionHost.includes(observedCoordinate.constructionHost)
-        || !/^\d+$/u.test(observedCoordinate.jobId)
+        || !isPositiveDecimalString(observedCoordinate.jobId)
         || !unsupported.evidence.includes(jobUrl)
       ) throw new Error(`Node unsupported target ${unsupported.target} cites an observed coordinate outside its evidence`);
     }
+    const inferredCoordinateKeys = new Set(inferred.map(unsupportedCoordinateKey));
+    unique(
+      observation.cancelledAfterFinalizationStartedCoordinates.map((coordinate) =>
+        unsupportedCoordinateKey({ ...coordinate, target: unsupported.target })
+      ),
+      `${unsupported.target} cancelled coordinates that entered finalization`,
+    );
+    for (const coordinate of observation.cancelledAfterFinalizationStartedCoordinates) {
+      const coordinateKey = unsupportedCoordinateKey({ ...coordinate, target: unsupported.target });
+      const jobUrl =
+        `https://github.com/mannyc2/effect-build/actions/runs/${observation.workflowRunId}/job/${coordinate.jobId}`;
+      if (
+        !inferredCoordinateKeys.has(coordinateKey)
+        || !isPositiveDecimalString(coordinate.jobId)
+        || !unsupported.evidence.includes(jobUrl)
+      ) {
+        throw new Error(
+          `Node unsupported target ${unsupported.target} cites a cancelled finalization-started coordinate outside its inferred evidence`,
+        );
+      }
+    }
+    unique(
+      [
+        ...observation.observedCoordinates,
+        ...observation.cancelledAfterFinalizationStartedCoordinates,
+      ].map(({ jobId }) => jobId),
+      `${unsupported.target} provenance job IDs`,
+    );
     if (
       observation.inferenceBasis.length === 0
       || !observation.inferenceBasis.every((reference) => unsupported.evidence.includes(reference))

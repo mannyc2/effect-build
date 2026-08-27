@@ -6,6 +6,12 @@ import { buildContract, readInputs, validateContract } from "./model.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const inputs = await readInputs(repositoryRoot);
+const nodeUnsupportedTarget = (contract) => {
+  const unsupported = contract.evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedTargets
+    .find(({ target }) => target === "macos-x64");
+  assert.ok(unsupported);
+  return unsupported;
+};
 
 test("accounts for the complete research authority without claiming external certification", () => {
   const contract = buildContract(inputs);
@@ -262,16 +268,20 @@ test("binds the macOS x64 rejection to the current assembler cell and forces re-
   const stale = structuredClone(contract);
   stale.evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedTargets[0].assemblerCell = "node@26.6.0";
   assert.throws(() => validateContract(stale, inputs), /re-adjudicate it on the current assembler/u);
+
+  const changedCurrent = structuredClone(contract);
+  changedCurrent.evidenceControl.nodeMainExecutable.assemblerCell = "node@26.8.0";
+  assert.throws(() => validateContract(changedCurrent, inputs), /re-adjudicate it on the current assembler/u);
 });
 
-test("separates observed macOS x64 crashes from inferred rejections and refuses inference-only rejection", () => {
+test("separates first-hand macOS x64 SIGSEGV job observations from inferred rejections", () => {
   const contract = buildContract(inputs);
   const rule = contract.evidenceControl.coordinateRules.nodeMainExecutable;
   const observed = rule.explicitUnsupportedCoordinates.filter(({ observation }) =>
     observation === "observed-sigsegv-on-exact-target-runner"
   );
   const inferred = rule.explicitUnsupportedCoordinates.filter(({ observation }) =>
-    observation === "inferred-from-upstream-evidence-not-executed"
+    observation === "inferred-from-upstream-evidence-no-recorded-execution-outcome"
   );
   assert.equal(observed.length, 2);
   assert.equal(inferred.length, 28);
@@ -285,22 +295,152 @@ test("separates observed macOS x64 crashes from inferred rejections and refuses 
     ],
   );
   assert.ok(inferred.some(({ constructionHost }) => constructionHost === "macos-x64"));
+  assert.equal(rule.explicitUnsupportedTargets[0].observation.cancelledAfterFinalizationStartedCount, 2);
+  assert.deepEqual(
+    rule.explicitUnsupportedTargets[0].observation.cancelledAfterFinalizationStartedCoordinates,
+    [
+      { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "macos-x64", jobId: "98055230443" },
+      { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "macos-arm64", jobId: "98055230455" },
+    ],
+  );
 
   const relabelled = structuredClone(contract);
   relabelled.evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedCoordinates
     .find(({ observation }) => observation === "observed-sigsegv-on-exact-target-runner")
-    .observation = "inferred-from-upstream-evidence-not-executed";
+    .observation = "inferred-from-upstream-evidence-no-recorded-execution-outcome";
   assert.throws(() => validateContract(relabelled, inputs), /observation accounting changed/u);
 
   const inferenceOnly = structuredClone(contract);
   const inferenceOnlyRule = inferenceOnly.evidenceControl.coordinateRules.nodeMainExecutable;
   for (const coordinate of inferenceOnlyRule.explicitUnsupportedCoordinates) {
-    coordinate.observation = "inferred-from-upstream-evidence-not-executed";
+    coordinate.observation = "inferred-from-upstream-evidence-no-recorded-execution-outcome";
   }
   inferenceOnlyRule.explicitUnsupportedTargets[0].observation.observedCoordinates = [];
   inferenceOnlyRule.explicitUnsupportedTargets[0].observation.observedCoordinateCount = 0;
   inferenceOnlyRule.explicitUnsupportedTargets[0].observation.inferredCoordinateCount = 30;
-  assert.throws(() => validateContract(inferenceOnly, inputs), /no first-hand observed failure/u);
+  assert.throws(() => validateContract(inferenceOnly, inputs), /no first-hand exact-target SIGSEGV job observation/u);
+});
+
+test("rejects malformed Node workflow and job identifiers", () => {
+  for (const malformedRunId of ["not-a-run", "0", 32925986358]) {
+    const changed = structuredClone(buildContract(inputs));
+    const unsupported = nodeUnsupportedTarget(changed);
+    const previousRunId = unsupported.observation.workflowRunId;
+    unsupported.observation.workflowRunId = malformedRunId;
+    unsupported.evidence = unsupported.evidence.map((reference) =>
+      reference.replace(`/runs/${previousRunId}/job/`, `/runs/${String(malformedRunId)}/job/`)
+    );
+    assert.throws(() => validateContract(changed, inputs), /observation accounting changed/u);
+  }
+
+  for (const malformedJobId of ["not-a-job", "0", 98055230349]) {
+    const changed = structuredClone(buildContract(inputs));
+    const unsupported = nodeUnsupportedTarget(changed);
+    const observed = unsupported.observation.observedCoordinates[0];
+    const previousJobId = observed.jobId;
+    observed.jobId = malformedJobId;
+    unsupported.evidence = unsupported.evidence.map((reference) =>
+      reference.replace(`/job/${previousJobId}`, `/job/${String(malformedJobId)}`)
+    );
+    assert.throws(
+      () => validateContract(changed, inputs),
+      /cites an observed coordinate outside its evidence/u,
+    );
+
+    const changedCancelled = structuredClone(buildContract(inputs));
+    const changedCancelledUnsupported = nodeUnsupportedTarget(changedCancelled);
+    const cancelled = changedCancelledUnsupported.observation.cancelledAfterFinalizationStartedCoordinates[0];
+    const previousCancelledJobId = cancelled.jobId;
+    cancelled.jobId = malformedJobId;
+    changedCancelledUnsupported.evidence = changedCancelledUnsupported.evidence.map((reference) =>
+      reference.replace(`/job/${previousCancelledJobId}`, `/job/${String(malformedJobId)}`)
+    );
+    assert.throws(
+      () => validateContract(changedCancelled, inputs),
+      /cites a cancelled finalization-started coordinate outside its inferred evidence/u,
+    );
+  }
+});
+
+test("binds observed and cancelled Node jobs to disjoint coordinate evidence", () => {
+  const substitutedObserved = structuredClone(buildContract(inputs));
+  const substitutedUnsupported = nodeUnsupportedTarget(substitutedObserved);
+  const substituted = substitutedUnsupported.observation.observedCoordinates[0];
+  const previousJobId = substituted.jobId;
+  substituted.constructionHost = "macos-x64";
+  substituted.jobId = "98055230999";
+  substitutedUnsupported.evidence = substitutedUnsupported.evidence.map((reference) =>
+    reference.replace(`/job/${previousJobId}`, `/job/${substituted.jobId}`)
+  );
+  assert.throws(
+    () => validateContract(substitutedObserved, inputs),
+    /observed coordinate labels differ from its failure evidence/u,
+  );
+
+  const reusedJob = structuredClone(buildContract(inputs));
+  const reusedUnsupported = nodeUnsupportedTarget(reusedJob);
+  reusedUnsupported.observation.cancelledAfterFinalizationStartedCoordinates[0].jobId =
+    reusedUnsupported.observation.observedCoordinates[0].jobId;
+  assert.throws(() => validateContract(reusedJob, inputs), /provenance job IDs contains duplicates/u);
+
+  const duplicateCancelled = structuredClone(buildContract(inputs));
+  const duplicateUnsupported = nodeUnsupportedTarget(duplicateCancelled);
+  duplicateUnsupported.observation.cancelledAfterFinalizationStartedCoordinates[1].constructionHost = "macos-x64";
+  assert.throws(
+    () => validateContract(duplicateCancelled, inputs),
+    /cancelled coordinates that entered finalization contains duplicates/u,
+  );
+
+  const wrongCount = structuredClone(buildContract(inputs));
+  nodeUnsupportedTarget(wrongCount).observation.cancelledAfterFinalizationStartedCount = 1;
+  assert.throws(() => validateContract(wrongCount, inputs), /observation accounting changed/u);
+
+  const missingCoordinates = structuredClone(buildContract(inputs));
+  delete nodeUnsupportedTarget(missingCoordinates).observation.cancelledAfterFinalizationStartedCoordinates;
+  assert.throws(() => validateContract(missingCoordinates, inputs), /observation accounting changed/u);
+});
+
+test("requires Node job and inference URLs to remain attached to evidence", () => {
+  const missingObservedJob = structuredClone(buildContract(inputs));
+  const missingObservedEvidence = nodeUnsupportedTarget(missingObservedJob).evidence;
+  nodeUnsupportedTarget(missingObservedJob).evidence = missingObservedEvidence.filter((reference) =>
+    reference !== "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349"
+  );
+  assert.throws(
+    () => validateContract(missingObservedJob, inputs),
+    /cites an observed coordinate outside its evidence/u,
+  );
+
+  const missingCancelledJob = structuredClone(buildContract(inputs));
+  const missingCancelledEvidence = nodeUnsupportedTarget(missingCancelledJob).evidence;
+  nodeUnsupportedTarget(missingCancelledJob).evidence = missingCancelledEvidence.filter((reference) =>
+    reference !== "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230443"
+  );
+  assert.throws(
+    () => validateContract(missingCancelledJob, inputs),
+    /cites a cancelled finalization-started coordinate outside its inferred evidence/u,
+  );
+
+  const detachedInference = structuredClone(buildContract(inputs));
+  nodeUnsupportedTarget(detachedInference).observation.inferenceBasis = ["https://example.invalid/not-evidence"];
+  assert.throws(
+    () => validateContract(detachedInference, inputs),
+    /inference basis is not part of its evidence/u,
+  );
+});
+
+test("rejects blank Node observation conclusion and reason", () => {
+  for (const field of ["workflowRunConclusion", "unobservedReason"]) {
+    for (const blank of ["", "   "]) {
+      const changed = structuredClone(buildContract(inputs));
+      nodeUnsupportedTarget(changed).observation[field] = blank;
+      assert.throws(() => validateContract(changed, inputs), new RegExp(`${field} must be non-empty text`, "u"));
+    }
+  }
+
+  const wrongConclusion = structuredClone(buildContract(inputs));
+  nodeUnsupportedTarget(wrongConclusion).observation.workflowRunConclusion = "success";
+  assert.throws(() => validateContract(wrongConclusion, inputs), /workflowRunConclusion must be cancelled/u);
 });
 
 test("rejects weakened current directory-generation authority", () => {
