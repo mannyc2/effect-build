@@ -3,7 +3,13 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { nodeProfile, sha256, targetCell } from "./common.mjs";
+import {
+  canonicalBytes,
+  inspectNativeExecutable,
+  nodeProfile,
+  sha256,
+  targetCell,
+} from "./common.mjs";
 
 const execute = promisify(execFile);
 
@@ -55,11 +61,14 @@ const main = async () => {
     const manifestLine = manifest.toString("utf8").split("\n").find((line) => line.endsWith(`  ${cell.distribution}`));
     if (manifestLine !== `${cell.sha256}  ${cell.distribution}`) throw new Error("archive is not exactly admitted by SHASUMS256.txt");
 
-    const manifestPath = join(scratch, "SHASUMS256.txt");
-    const signaturePath = join(scratch, "SHASUMS256.txt.sig");
-    const keyPath = join(scratch, "release-key.asc");
+    const manifestName = "SHASUMS256.txt";
+    const signatureName = "SHASUMS256.txt.sig";
+    const keyName = "release-key.asc";
+    const keyringName = "release-key.gpg";
+    const manifestPath = join(scratch, manifestName);
+    const signaturePath = join(scratch, signatureName);
+    const keyPath = join(scratch, keyName);
     const archivePath = join(scratch, cell.distribution);
-    const keyring = join(scratch, "release-key.gpg");
     await Promise.all([
       writeFile(manifestPath, manifest),
       writeFile(signaturePath, signature),
@@ -68,22 +77,32 @@ const main = async () => {
     ]);
     const fingerprint = await execute(
       "gpg",
-      ["--batch", "--no-autostart", "--with-colons", "--import-options", "show-only", "--import", keyPath],
-      { timeout: 30_000 },
+      ["--batch", "--no-autostart", "--with-colons", "--import-options", "show-only", "--import", keyName],
+      { timeout: 30_000, cwd: scratch },
     );
     const fingerprints = fingerprint.stdout.split("\n").filter((line) => line.startsWith("fpr:")).map((line) => line.split(":")[9]);
     if (!fingerprints.includes(manifestPolicy.signerFingerprint)) throw new Error("pinned Node release-key fingerprint missing");
-    await execute("gpg", ["--batch", "--no-autostart", "--yes", "--dearmor", "--output", keyring, keyPath], {
+    await execute("gpg", ["--batch", "--no-autostart", "--yes", "--dearmor", "--output", keyringName, keyName], {
       timeout: 30_000,
+      cwd: scratch,
     });
-    await execute("gpgv", ["--keyring", keyring, signaturePath, manifestPath], { timeout: 30_000 });
+    await execute("gpgv", ["--keyring", `./${keyringName}`, signatureName, manifestName], {
+      timeout: 30_000,
+      cwd: scratch,
+    });
 
     const extraction = join(scratch, "extract");
     await mkdir(extraction);
-    if (cell.distribution.endsWith(".zip") && process.platform !== "win32") {
-      await execute("unzip", ["-q", archivePath, "-d", extraction], { timeout: 120_000 });
+    if (cell.distribution.endsWith(".zip")) {
+      await execute("unzip", ["-q", cell.distribution, "-d", "extract"], {
+        timeout: 120_000,
+        cwd: scratch,
+      });
     } else {
-      await execute("tar", ["-xf", archivePath, "-C", extraction], { timeout: 120_000 });
+      await execute("tar", ["-xf", cell.distribution, "-C", "extract"], {
+        timeout: 120_000,
+        cwd: scratch,
+      });
     }
     const folder = cell.distribution.replace(/\.(?:tar\.xz|zip)$/u, "");
     const executable = cell.distribution.includes("-win-")
@@ -91,11 +110,21 @@ const main = async () => {
       : join(extraction, folder, "bin", "node");
     const bytes = await readFile(executable);
     if (bytes.length === 0) throw new Error("authenticated Node executable is empty");
+    inspectNativeExecutable(bytes, target);
     const destination = resolve(output);
     await mkdir(dirname(destination), { recursive: true });
     await writeFile(destination, bytes, { flag: "wx", mode: process.platform === "win32" ? undefined : 0o755 });
     if (process.platform !== "win32") await chmod(destination, 0o755);
-    process.stdout.write(`${JSON.stringify({ target, executable: destination, archiveName: cell.distribution, archiveSha256: cell.sha256 })}\n`);
+    process.stdout.write(canonicalBytes({
+      protocol: "effect-build/authenticated-node-distribution-executable@1",
+      nodeVersion: "26.7.0",
+      target,
+      executable: destination,
+      executableBytes: String(bytes.length),
+      executableSha256: sha256(bytes),
+      archiveName: cell.distribution,
+      archiveSha256: cell.sha256,
+    }));
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

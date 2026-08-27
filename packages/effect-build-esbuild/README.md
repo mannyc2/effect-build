@@ -1,31 +1,24 @@
 # effect-build-esbuild
 
-Effect-native esbuild operations, in-process and in-memory: one-shot
-builds from `effect-build-esbuild/Build`, scoped incremental contexts from
-`effect-build-esbuild/Context`, and watch mode as a `Stream` from
-`effect-build-esbuild/Watch`. `effect-build-esbuild/Profile` is one explicit
-Layer providing both closed portable authoring services with exact esbuild
-0.28.2 identity and complete metafile analysis.
+Provider-native esbuild 0.28.2 operations in separate in-process and
+selected-command lanes.
 
 ```ts
 import { Effect } from "effect";
-import * as Build from "effect-build-esbuild/Build";
+import { Build } from "effect-build-esbuild/Api";
 
 const result = await Effect.runPromise(
-  Build.build({ entryPoints: ["src/main.ts"], bundle: true, write: false }).pipe(
-    Effect.provide(Build.layer),
-  ),
+  Build.build({ entryPoints: ["src/main.ts"], bundle: true, write: false }),
 );
 ```
 
-Options are esbuild's own with one refinement: `write` must be the literal
-`false` — outputs stay in memory. `Build.transform` transpiles one file,
-`Build.analyzeMetafile` renders the native size report, `Context.make`
-returns a scoped context whose native `dispose` is owned by the Scope
-(cancel-then-dispose), and `Watch.changes` retains one pending completed build.
-A newer completion replaces an older pending completion and reports the count
-on `change.superseded`; broken rebuilds arrive as values on
-`change.result.errors`, and ending the stream stops the watcher. Failures are `EsbuildFailed`, exposing the
-native `errors`/`warnings` by reference. This native cancel/dispose behavior is
-not the portable OS process-tree cancellation guarantee. See the
-[repository](https://github.com/mannyc2/effect-build) for the full toolkit.
+`Api` exposes `Build`, `BuildToDirectory`, `Transform`, `AnalyzeMetafile`,
+`FormatMessages`, `Context`, and `ContextToDirectory`. Context owners are scoped,
+drain active work, and close once. `Command` exposes `Build`,
+`BuildToDirectory`, and `Watch`; command output is bounded and the exact selected
+tool is reauthenticated before launch.
+
+Command Serve is an implemented package-private conditional candidate. Rejected
+synchronous/shared-service controls and all former direct provider subpaths are
+absent. Five-host, dual Node/Bun host-runtime, and packed-consumer evidence
+remains open.

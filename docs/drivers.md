@@ -2,35 +2,40 @@
 
 ## Provider-native lanes
 
-**Bun** currently provides executable compilation and direct directory
-bundling. Its native browser target, format, splitting, external, project
-configuration, and diagnostics remain provider-specific. Direct bundle output
-is incremental and does not create a portable browser application.
+**Bun** exposes its admitted host Transpiler, Build, and CompileExecutable API
+operations plus command Build, Watch, and CompileExecutable operations. Native
+browser target, format, splitting, external, project configuration, and
+diagnostics remain provider-specific. Direct directory output is incremental
+and does not create a portable browser application.
 
-**Deno** currently provides executable compilation with typed permissions and
-direct directory bundling with a native browser or Deno platform selector. The
-required v0.5 promotion point is exactly Deno 2.9.5; `platform: "browser"` does not by
-itself prove the portable profile. Empty permission arrays will be rejected in
-the compatibility stage.
+**Deno** exposes command Transpile and CompileExecutable with typed permissions.
+API Bundle, command Bundle, and CompileWatch remain package-private candidates.
+The required promotion point is exactly Deno 2.9.5; a native browser selector
+does not prove the portable browser profile. Present empty permission arrays are
+rejected before provider work.
 
 **esbuild** keeps one-shot in-memory build/transform/analyze operations and its
 scoped native incremental context. Its provider-specific cancel/dispose
 sequence is distinct from portable process-tree containment.
 
-**Node SEA** currently drives `node --check` and `node --build-sea` over a file
-or byte main, optional assets, and an inferred host. This becomes the truthfully
-named `Raw` lane. The separate portable `NodeMainExecutable` lane uses one
-authenticated Node 26.7.0 base, one exact assembler agreement, sealed staged
-inputs, no assets, and evidence-backed targets. On macOS its exact-target
-finalizer performs only ad-hoc, no-timestamp runnable-Mach-O repair. Developer
-ID identity, entitlements, hardened runtime, containers, notarization, stapling,
-and distribution assessment are expressly outside Node SEA.
+**Node SEA** exposes only `Command.AssembleExecutable`, driving exact Node
+26.7.0 direct `node --build-sea` assembly. There is no public `Raw` lane or
+portable profile export. The private portable Node-main/finalizer candidate uses
+one authenticated base, one exact assembler agreement, sealed staged inputs, no
+assets, and evidence-backed targets. On macOS its target finalizer performs only
+ad-hoc, no-timestamp runnable-Mach-O repair. Developer ID identity, entitlements,
+hardened runtime, containers, notarization, stapling, and distribution
+assessment are expressly outside Node SEA.
 
-**Rolldown** keeps scoped native Build operations. Watch delivery retains one
-pending completed result and coalesces to the latest with an explicit
-superseded count. The adapter closes each native result before delivery, awaits
-the watcher close during stream shutdown, and preserves cleanup failures in
-Effect Cause.
+Code cache, startup snapshot, and embedded-argument extension policies are
+implemented as package-private provider-native candidates. They are evidence
+subjects, not accepted public options: the public operation keeps snapshot and
+cache disabled and exposes no `execArgv` switch until the named Node 26.7
+runtime and relation matrices close.
+
+**Rolldown** remains a private package candidate because R6 did not admit it.
+Its implemented API and command candidates retain scoped ownership and cleanup
+laws, but none is a public package or lane until all named gates close.
 
 **Apple distribution** is the separate target-only `effect-build-apple`
 package. Its closed direct-distribution subpaths are `Artifact`, `CodeSign`,
@@ -59,8 +64,9 @@ separately.
 
 ## Portable adapters
 
-Bun 1.3.14, esbuild 0.28.2, and Rolldown 1.2.5 are the intended Node-main
-producer cells and the candidate static-browser provider cells. The portable
-Node consumer and portable browser consumer each contain zero provider-name
-branches. Deno remains native-only for browser work until authoritative
-metadata completeness is proved through an explicit contract revision.
+The private Node-main and browser-payload consumers contain zero provider-name
+branches. Their concrete provider adapters, plus the incremental-main and
+typed-watch candidates, remain repository-private until every required
+five-host, browser, packed, lifecycle, and resource gate is earned. Deno remains
+native-only for browser work until authoritative metadata completeness is proved
+through an explicit contract revision.

@@ -6,7 +6,9 @@ import {
   coordinate,
   decodeCanonical,
   downloadArtifact,
-  observeArtifact,
+  githubActionArtifactDigest,
+  observeArtifactById,
+  positiveDecimal,
   readArtifactZip,
   requireEntries,
   requireEnvironment,
@@ -39,15 +41,28 @@ const main = async () => {
   const runId = requireEnvironment("GITHUB_RUN_ID");
   const sourceSha = requireEnvironment("GITHUB_SHA");
   const token = requireEnvironment("GITHUB_TOKEN");
+  const outputArtifactId = positiveDecimal(
+    requireEnvironment("EFFECT_BUILD_OUTPUT_ARTIFACT_ID"),
+    "EFFECT_BUILD_OUTPUT_ARTIFACT_ID",
+  );
+  const outputArtifactDigest = githubActionArtifactDigest(
+    requireEnvironment("EFFECT_BUILD_OUTPUT_ARTIFACT_DIGEST"),
+    "EFFECT_BUILD_OUTPUT_ARTIFACT_DIGEST",
+  );
   const pending = JSON.parse(await readFile(resolve(args.pending), "utf8"));
   const requestBytes = await readFile(resolve(args.request));
   const request = decodeCanonical(requestBytes, capability.requestFieldSet);
-  if (JSON.stringify(request) !== JSON.stringify(pending.request) || sha256(requestBytes) !== pending.requestSha256) {
+  if (!canonicalBytes(pending.request).equals(requestBytes) || sha256(requestBytes) !== pending.requestSha256) {
     throw new Error("pending finalizer record does not bind the canonical request");
   }
   const outputArtifactName = `${coordinateName}--finalized`;
-  const artifact = await observeArtifact({ repository, runId, name: outputArtifactName, token });
-  if (String(artifact.workflow_run?.id) !== runId || artifact.workflow_run?.head_sha !== sourceSha) {
+  const artifact = await observeArtifactById({ repository, artifactId: outputArtifactId, token });
+  if (
+    String(artifact.id) !== outputArtifactId || artifact.name !== outputArtifactName
+    || artifact.digest !== outputArtifactDigest || artifact.expired !== false
+    || new Date(artifact.expires_at).getTime() <= Date.now()
+    || String(artifact.workflow_run?.id) !== runId || artifact.workflow_run?.head_sha !== sourceSha
+  ) {
     throw new Error("output artifact workflow binding mismatch");
   }
   const wrapper = await downloadArtifact(artifact, token);

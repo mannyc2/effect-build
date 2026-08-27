@@ -16,7 +16,7 @@ type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ?
 type LayerError<L> = L extends Layer.Layer<infer _A, infer E, infer _R> ? E : never;
 type LayerServices<L> = L extends Layer.Layer<infer _A, infer _E, infer R> ? R : never;
 
-declare const executable: CoreArtifact.Executable;
+declare const executable: CoreArtifact.HashedExecutable;
 declare const machO: Artifact.FileArtifact<"mach-o">;
 declare const applicationIdentity: CodeSign.DeveloperIdApplication;
 declare const app: Artifact.TreeArtifact<"app-bundle">;

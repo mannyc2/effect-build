@@ -1,24 +1,36 @@
 # effect-build
 
-Core exports the target vocabulary, authenticated executable observations,
-closed build errors, and role-specific authoring capabilities.
+Core vocabulary and role-owned authoring protocols for provider-native build
+integrations.
+
+The package has exactly six public subpaths:
+
+- `effect-build/Artifact`
+- `effect-build/SystemTarget`
+- `effect-build/Matrix`
+- `effect-build/Author/Tool`
+- `effect-build/Author/BorrowedOutput`
+- `effect-build/Author/Executable`
 
 ```ts
 import type * as Artifact from "effect-build/Artifact";
-import * as Generation from "effect-build/Author/Generation";
+import * as BorrowedOutput from "effect-build/Author/BorrowedOutput";
+import * as Executable from "effect-build/Author/Executable";
 import * as Tool from "effect-build/Author/Tool";
-import * as BuildError from "effect-build/BuildError";
-import * as Target from "effect-build/Target";
+import * as Matrix from "effect-build/Matrix";
+import * as SystemTarget from "effect-build/SystemTarget";
 ```
 
-The v0.5 hard cut removed `effect-build/Toolchain`, mutable core bundle
-declarations, and ambient host-target inference without compatibility aliases.
-`Author/Generation` publishes immutable content-addressed trees and advances a
-single current reference. `Author/NodeMain` and
-`Profile/StaticBrowserApplication` own the two closed portable products, with
-provider work behind explicit Context services and core-owned validation,
-staging, authentication, and publication. Their external-author promotion gate
-is exercised from a fresh packed consumer with a duplicate core runtime graph.
-The Node SEA target API remains release-blocking work. See the
-[`effect-build/v0.5-contract@1`](https://github.com/mannyc2/effect-build/blob/main/docs/v0.5-contract.md)
-target decision.
+`Author/NodeMain`, `Profile/BrowserModulePayload`, `IncrementalNodeMain`, and
+the typed-watch protocol are implemented and tested package-private candidates.
+Their proof gates did not admit public exports.
+
+The research-complete hard cut has no generic `BuildError`, `Target`,
+`Generation`, `DurableFile`, `BorrowedContent`, `TreeSnapshot`, or
+`StaticBrowserApplication` compatibility surface. Errors, lifecycle, and
+publication authority belong to the operation or role that can state them
+truthfully.
+
+Those profile candidates have named external evidence gates still open. See the canonical
+[`effect-build/research-complete-contract@1`](https://github.com/mannyc2/effect-build/blob/main/docs/research-complete-contract.md)
+for dispositions, gates, and certification status.

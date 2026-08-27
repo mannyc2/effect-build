@@ -1,7 +1,8 @@
 {
   "name": "effect-build-rolldown",
   "version": "0.5.0",
-  "description": "Effect-native Rolldown Build and Watch operations.",
+  "private": true,
+  "description": "Effect-native provider API and command candidates for Rolldown.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -25,26 +26,19 @@
     "README.md",
     "LICENSE"
   ],
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./Build": { "types": "./dist/Build.d.ts", "import": "./dist/Build.js" },
-    "./Profile": { "types": "./dist/Profile.d.ts", "import": "./dist/Profile.js" },
-    "./Watch": { "types": "./dist/Watch.d.ts", "import": "./dist/Watch.js" }
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "effect-build": "workspace:^",
     "rolldown": "1.2.5"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+    "effect": ">=4.0.0-beta.104 <4.1.0-0",
+    "effect-build": "0.5.0"
   },
   "devDependencies": {
     "effect": "4.0.0-rc.108"

@@ -1,17 +1,16 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import * as BunProfile from "../../packages/effect-build-bun/dist/Profile.js";
-import * as EsbuildProfile from "../../packages/effect-build-esbuild/dist/Profile.js";
-import * as RolldownProfile from "../../packages/effect-build-rolldown/dist/Profile.js";
-import * as Raw from "../../packages/effect-build-node-sea/dist/Raw.js";
+import * as BorrowedOutput from "effect-build/Author/BorrowedOutput";
 import * as NodeMain from "../../packages/effect-build/dist/Author/NodeMain.js";
 import {
   canonicalBytes,
   capability,
+  assertCertificationHost,
   coordinate,
+  decodeDistributionDescriptor,
   nodeProfile,
   positiveDecimal,
   requireEnvironment,
@@ -19,6 +18,7 @@ import {
   systemTarget,
   targetCell,
 } from "./common.mjs";
+import { makePrivateAssemblerLayer, makeProducerLayer } from "./private-adapters.mjs";
 
 const parseArguments = () => {
   const values = Object.create(null);
@@ -37,49 +37,58 @@ const main = async () => {
   const format = args.format;
   const constructionHost = args["construction-host"];
   const target = args.target;
-  const builder = args.builder;
-  const base = args.base;
+  const builderDescriptorPath = args["builder-descriptor"];
+  const baseDescriptorPath = args["base-descriptor"];
   const bun = args.bun;
   const output = args.output;
-  if ([producerGroup, format, constructionHost, target, builder, base, output].some((value) => value === undefined)) {
-    throw new Error("producer, format, construction-host, target, builder, base, and output are required");
+  if (
+    [producerGroup, format, constructionHost, target, builderDescriptorPath, baseDescriptorPath, output]
+      .some((value) => value === undefined)
+  ) {
+    throw new Error(
+      "producer, format, construction-host, target, builder-descriptor, base-descriptor, and output are required",
+    );
   }
-  if (systemTarget() !== constructionHost) throw new Error(`construction host mismatch: ${systemTarget()} != ${constructionHost}`);
+  const host = assertCertificationHost(constructionHost);
+  if (systemTarget() !== host.systemTarget) throw new Error("construction host target observation changed");
+  const builder = decodeDistributionDescriptor(await readFile(resolve(builderDescriptorPath)));
+  const base = decodeDistributionDescriptor(await readFile(resolve(baseDescriptorPath)));
+  if (builder.target !== host.systemTarget) throw new Error("authenticated builder descriptor target mismatch");
+  if (base.target !== target) throw new Error("authenticated base descriptor target mismatch");
   const coordinateName = coordinate({ producerGroup, format, constructionHost, target });
   const outputRoot = resolve(output);
   await mkdir(outputRoot, { recursive: true });
   const scratch = await mkdtemp(join(tmpdir(), "effect-build-node-construct-"));
   try {
     const entrypoint = join(scratch, format === "module" ? "entry.mjs" : "entry.cjs");
-    await writeFile(entrypoint, 'console.log("effect-build-node-main-ok");\n', { flag: "wx" });
-    const provider = producerGroup === "bun-cli"
-      ? BunProfile.layer({ executable: bun })
-      : producerGroup === "esbuild-api"
-      ? EsbuildProfile.layer
-      : producerGroup === "rolldown-api"
-      ? RolldownProfile.layer
-      : undefined;
-    if (provider === undefined) throw new Error(`unsupported producer ${producerGroup}`);
+    const source = format === "module"
+      ? 'import { isSea } from "node:sea"; if (!isSea()) throw new Error("expected SEA execution"); console.log("effect-build-node-main-ok");\n'
+      : 'const { isSea } = require("node:sea"); if (!isSea()) throw new Error("expected SEA execution"); console.log("effect-build-node-main-ok");\n';
+    await writeFile(entrypoint, source, { flag: "wx" });
     const constructedFileName = `${coordinateName}--constructed${target.startsWith("windows-") ? ".exe" : ""}`;
     const outfile = join(outputRoot, constructedFileName);
-    const result = await Effect.runPromise(
-      Effect.scoped(Effect.gen(function*() {
-        const sealed = yield* NodeMain.seal({ protocol: NodeMain.profile, entrypoint, format });
-        const artifact = yield* Raw.assembleExecutable({
-          main: { _tag: "File", path: sealed.path, format: sealed.format },
-          outfile,
-          target,
-        });
-        return { sealed, artifact };
-      })).pipe(
-        Effect.provide(provider),
-        Effect.provide(Raw.layer({ builderExecutable: builder, baseExecutable: base })),
+    let sealed;
+    const adapters = Layer.mergeAll(
+      makeProducerLayer({ producerGroup, ...(bun === undefined ? {} : { bunExecutable: bun }) }),
+      makePrivateAssemblerLayer({ builder, base, target, captureMain: (value) => { sealed = value; } }),
+      BorrowedOutput.CleanupReporter.layer,
+    );
+    const artifact = await Effect.runPromise(
+      NodeMain.assemble({
+        program: { protocol: NodeMain.profile, entrypoint, format },
+        outfile,
+      }).pipe(
+        Effect.provide(adapters),
         Effect.provide(NodeServices.layer),
       ),
     );
-    if (result.artifact.path !== outfile) throw new Error(`Raw constructed unexpected path ${result.artifact.path}`);
+    if (sealed === undefined) throw new Error("private assembler did not consume the sealed main");
+    if (artifact.path !== outfile) throw new Error(`private assembler constructed unexpected path ${artifact.path}`);
+    if (artifact.target !== target || artifact.runtime.name !== "node" || artifact.runtime.version !== "26.7.0") {
+      throw new Error("private assembler returned incompatible executable facts");
+    }
     const bytes = await readFile(outfile);
-    if (sha256(bytes) !== result.artifact.digest.value) throw new Error("constructed artifact digest changed");
+    if (sha256(bytes) !== artifact.digest.value) throw new Error("constructed artifact digest changed");
     const sourceSha = requireEnvironment("GITHUB_SHA");
     const repository = requireEnvironment("GITHUB_REPOSITORY");
     const runId = positiveDecimal(requireEnvironment("GITHUB_RUN_ID"), "GITHUB_RUN_ID");
@@ -101,7 +110,7 @@ const main = async () => {
       target,
       format,
       nodeVersion: nodeProfile.assemblerCell.slice("node@".length),
-      mainSha256: result.sealed.digest.value,
+      mainSha256: sealed.identity.digest.value,
       baseArchiveName: cell.distribution,
       baseArchiveSha256: cell.sha256,
       constructionHost,

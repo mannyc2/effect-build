@@ -1,7 +1,7 @@
 {
   "name": "effect-build-bun",
   "version": "0.5.0",
-  "description": "Bun executable compiler for effect-build.",
+  "description": "Provider-native Bun API and selected-command operations for effect-build.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -35,17 +35,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./Bundle": {
-      "types": "./dist/Bundle.d.ts",
-      "import": "./dist/Bundle.js"
+    "./Api": {
+      "types": "./dist/Api/index.d.ts",
+      "import": "./dist/Api/index.js"
     },
-    "./CompileExecutable": {
-      "types": "./dist/CompileExecutable.d.ts",
-      "import": "./dist/CompileExecutable.js"
-    },
-    "./Profile": {
-      "types": "./dist/Profile.d.ts",
-      "import": "./dist/Profile.js"
+    "./Command": {
+      "types": "./dist/Command/index.d.ts",
+      "import": "./dist/Command/index.js"
     }
   },
   "scripts": {
@@ -53,10 +49,11 @@
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "effect-build": "workspace:^"
+    "bun-types": "1.3.14"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+    "effect": ">=4.0.0-beta.104 <4.1.0-0",
+    "effect-build": "0.5.0"
   },
   "devDependencies": {
     "effect": "4.0.0-rc.108"

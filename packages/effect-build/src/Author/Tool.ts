@@ -1,411 +1,368 @@
-import { Cause, Config, Crypto, Effect, FileSystem, Option, Path, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import type { Executable } from "../Artifact.js";
-import type { Digest } from "../Artifact.js";
-import { ArtifactInvalid, PublishFailed, SelectedToolChanged, ToolFailed, ToolNotFound } from "../BuildError.js";
-import * as Target from "../Target.js";
-import * as BorrowedContent from "./BorrowedContent.js";
+import { Config, Crypto, Effect, FileSystem, Option, Path, Schema } from "effect";
+import { ChildProcess } from "effect/unstable/process";
+import type { AbsolutePath, DecimalBytes, Digest } from "../Artifact.js";
+import * as Artifact from "../Artifact.js";
 
-export interface SelectedTool {
-  readonly protocol: "effect-build/selected-tool@1";
+export class ToolNotFound extends Schema.TaggedError<ToolNotFound>()("ToolNotFound", {
+  tool: Schema.String,
+  command: Schema.String,
+}) {
+  override get message(): string {
+    return `${this.tool} executable not found: ${this.command}`;
+  }
+}
+
+export class ToolSelectionInvalid extends Schema.TaggedError<ToolSelectionInvalid>()(
+  "ToolSelectionInvalid",
+  { tool: Schema.String, reason: Schema.String },
+) {}
+
+export class ToolSelectionAmbiguous extends Schema.TaggedError<ToolSelectionAmbiguous>()(
+  "ToolSelectionAmbiguous",
+  { tool: Schema.String, candidates: Schema.Array(Schema.String) },
+) {}
+
+export class SelectedToolChanged extends Schema.TaggedError<SelectedToolChanged>()("SelectedToolChanged", {
+  tool: Schema.String,
+  path: Schema.String,
+  expected: Schema.String,
+  observed: Schema.String,
+}) {
+  override get message(): string {
+    return `${this.tool} executable changed at ${this.path}: expected ${this.expected}, observed ${this.observed}`;
+  }
+}
+
+export type { DecimalBytes, Digest, Sha256Value } from "../Artifact.js";
+
+export interface ContentIdentity {
+  readonly digest: Digest;
+  readonly bytes: DecimalBytes;
+}
+
+export const decimalBytes = Artifact.decimalBytes;
+export const sha256Digest = Artifact.sha256Digest;
+
+export interface ParticipantIdentity {
+  readonly role: string;
   readonly name: string;
   readonly version: string;
-  readonly executablePath: string;
-  readonly digest: Digest;
+  readonly revision: string;
+  readonly channel: string;
+  readonly content: ContentIdentity;
 }
 
-export interface Output {
-  readonly text: string;
-  readonly truncated: boolean;
+export type CapabilityObservation =
+  | { readonly _tag: "Present"; readonly id: string; readonly evidence: string }
+  | { readonly _tag: "Missing"; readonly id: string; readonly reason: string }
+  | { readonly _tag: "Indeterminate"; readonly id: string; readonly reason: string };
+
+export interface Observation<Name extends string> {
+  readonly name: Name;
+  readonly participants: readonly [ParticipantIdentity, ...ParticipantIdentity[]];
+  readonly capabilities: readonly CapabilityObservation[];
 }
 
-export interface Completion {
-  readonly exitCode: number;
-  readonly stdout: Output;
-  readonly stderr: Output;
+export type Admission =
+  | { readonly _tag: "ReviewedAdmission"; readonly admissionKey: string }
+  | {
+    readonly _tag: "UntestedOverride";
+    readonly admissionKey: string;
+    readonly warningCode: "EFFECT_BUILD_UNTESTED_VERSION";
+  };
+
+export type CommandOptions = Omit<ChildProcess.CommandOptions, "shell">;
+
+export interface Candidate<Name extends string> {
+  readonly name: Name;
+  readonly executablePath: AbsolutePath;
+  readonly content: ContentIdentity;
+  readonly command: (argv: readonly string[], options?: CommandOptions) => ChildProcess.Command;
 }
 
-const outputLimit = 1024 * 1024;
-
-const collectOutput = (stream: Stream.Stream<Uint8Array, unknown>): Effect.Effect<Output, unknown> =>
-  Stream.runFold(
-    stream,
-    () => ({ chunks: [] as Uint8Array[], bytes: 0, truncated: false }),
-    (state, chunk) => {
-      const remaining = outputLimit - state.bytes;
-      if (remaining <= 0) return { ...state, truncated: true };
-      const retained = chunk.byteLength <= remaining ? chunk : chunk.slice(0, remaining);
-      return {
-        chunks: [...state.chunks, retained],
-        bytes: state.bytes + retained.byteLength,
-        truncated: state.truncated || retained.byteLength !== chunk.byteLength,
-      };
-    },
-  ).pipe(
-    Effect.map((state) => {
-      const bytes = new Uint8Array(state.bytes);
-      let offset = 0;
-      for (const chunk of state.chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      return { text: new TextDecoder().decode(bytes), truncated: state.truncated };
-    }),
-  );
-
-/** Maps failures without disturbing interruption or defects. */
-const mapFailureCause = <A, E, R, E2>(
-  effect: Effect.Effect<A, E, R>,
-  mapError: (error: E) => E2,
-): Effect.Effect<A, E2, R> => Effect.catchCause(effect, (cause) => Effect.failCause(Cause.map(cause, mapError)));
-
-const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-export interface RunOptions {
-  readonly tool: string;
-  readonly executable: string;
-  readonly args: readonly string[];
-  readonly cwd?: string | undefined;
+export interface SelectedTool<Name extends string = string> extends Candidate<Name> {
+  readonly protocol: "effect-build/selected-tool@1";
+  readonly observation: Observation<Name>;
+  /** Re-observes exact bytes; providers sequence this immediately before yielding `command(...)`. */
+  readonly reauthenticate: Effect.Effect<
+    void,
+    Artifact.ArtifactInvalid | SelectedToolChanged,
+    Crypto.Crypto | FileSystem.FileSystem | Path.Path
+  >;
 }
 
-/**
- * Spawns the tool and gathers bounded stdout/stderr and the exit code.
- * Interruption closes the scope and terminates the child process.
- */
-export const run = (
-  options: RunOptions,
-): Effect.Effect<Completion, ToolFailed, ChildProcessSpawner.ChildProcessSpawner> =>
-  mapFailureCause(
-    Effect.scoped(
-      Effect.gen(function*() {
-        const handle = yield* ChildProcess.make(options.executable, options.args, {
-          shell: false,
-          forceKillAfter: "2 seconds",
-          ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-        });
-        const [stdout, stderr, exitCode] = yield* Effect.all(
-          [collectOutput(handle.stdout), collectOutput(handle.stderr), handle.exitCode] as const,
-          { concurrency: "unbounded" },
-        );
-        return { exitCode: Number(exitCode), stdout, stderr };
-      }),
-    ),
-    (error) => new ToolFailed({ tool: options.tool, exitCode: -1, stdout: "", stderr: describe(error) }),
-  );
-
-/** Like {@link run}, but a non-zero exit code fails with `ToolFailed`. */
-export const runOrFail = (
-  options: RunOptions,
-): Effect.Effect<Completion, ToolFailed, ChildProcessSpawner.ChildProcessSpawner> =>
-  Effect.flatMap(run(options), (completion) =>
-    completion.exitCode === 0
-      ? Effect.succeed(completion)
-      : Effect.fail(
-        new ToolFailed({
-          tool: options.tool,
-          exitCode: completion.exitCode,
-          stdout: completion.stdout.text,
-          stderr: completion.stderr.text,
-        }),
-      ));
-
-export interface ResolveOptions {
-  readonly name: string;
-  /** Explicit executable path; wins over the PATH search when present. */
+export interface SelectOptions<Name extends string, ObserveError, Requirements = never> {
+  readonly name: Name;
+  /** Explicit selection is accepted only when already absolute. */
   readonly executable?: string | undefined;
+  /** Provider-owned version, revision, channel, capability, and probe semantics. */
+  readonly observe: (candidate: Candidate<Name>) => Effect.Effect<Observation<Name>, ObserveError, Requirements>;
 }
 
-const usableCandidate = (
-  fileSystem: FileSystem.FileSystem,
-  path: Path.Path,
-  candidate: string,
-): Effect.Effect<string | undefined> =>
-  Effect.gen(function*() {
-    const canonical = yield* Effect.option(fileSystem.realPath(candidate));
-    if (Option.isNone(canonical)) return undefined;
-    const information = yield* Effect.option(fileSystem.stat(canonical.value));
-    if (Option.isNone(information) || information.value.type !== "File") return undefined;
-    if (path.sep !== "\\" && (Number(information.value.mode) & 0o111) === 0) return undefined;
-    return path.normalize(canonical.value);
-  });
-
-/**
- * Resolves the tool executable exactly once: an explicit path wins, otherwise
- * one deterministic PATH walk. Never installs, retries, or substitutes.
- */
-export const resolveExecutable = (
-  options: ResolveOptions,
-): Effect.Effect<string, ToolNotFound, FileSystem.FileSystem | Path.Path> =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    if (options.executable !== undefined) {
-      const explicit = options.executable;
-      const resolved = yield* usableCandidate(fileSystem, path, explicit);
-      if (resolved === undefined) {
-        return yield* Effect.fail(new ToolNotFound({ tool: options.name, command: explicit }));
-      }
-      return resolved;
-    }
-    const environment = yield* Config.string("PATH").pipe(Effect.orElseSucceed(() => ""));
-    const names = path.sep === "\\" ? [options.name, `${options.name}.exe`] : [options.name];
-    for (const entry of environment.split(path.sep === "\\" ? ";" : ":")) {
-      if (entry.length === 0 || !path.isAbsolute(entry)) continue;
-      for (const name of names) {
-        const resolved = yield* usableCandidate(fileSystem, path, path.join(entry, name));
-        if (resolved !== undefined) return resolved;
-      }
-    }
-    return yield* Effect.fail(new ToolNotFound({ tool: options.name, command: options.name }));
-  });
-
-export interface ProbeOptions extends RunOptions {
-  /** Extracts the version from probe stdout; defaults to the trimmed first line. */
-  readonly parse?: ((stdout: string) => string | undefined) | undefined;
+export interface Definition<Name extends string, Request, Refusal, Requirements = never> {
+  readonly tool: SelectedTool<Name>;
+  /** Provider-owned finite policy; core supplies no version-range or relation DSL. */
+  readonly evaluate: (request: Request) => Effect.Effect<Admission, Refusal, Requirements>;
 }
 
-const firstLine = (text: string): string | undefined => text.trim().split("\n")[0]?.trim();
-
-export const probeVersion = (
-  options: ProbeOptions,
-): Effect.Effect<string, ToolFailed, ChildProcessSpawner.ChildProcessSpawner> =>
-  Effect.flatMap(runOrFail(options), (completion) => {
-    const version = (options.parse ?? firstLine)(completion.stdout.text);
-    return version === undefined || version.length === 0
-      ? Effect.fail(
-        new ToolFailed({
-          tool: options.tool,
-          exitCode: completion.exitCode,
-          stdout: completion.stdout.text,
-          stderr: "version probe produced no parsable version",
-        }),
-      )
-      : Effect.succeed(version);
-  });
-
-export interface SelectOptions extends ResolveOptions {
-  readonly versionArgs: readonly string[];
-  readonly parseVersion?: ((stdout: string) => string | undefined) | undefined;
-}
-
-/** Selects one canonical executable and binds its version to its exact bytes. */
-export const select = (
-  options: SelectOptions,
-): Effect.Effect<
-  SelectedTool,
-  ToolNotFound | ToolFailed | ArtifactInvalid | SelectedToolChanged,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
-> =>
-  Effect.gen(function*() {
-    const executablePath = yield* resolveExecutable(options);
-    const before = yield* BorrowedContent.observeFile(executablePath);
-    const version = yield* probeVersion({
-      tool: options.name,
-      executable: executablePath,
-      args: options.versionArgs,
-      parse: options.parseVersion,
-    });
-    const after = yield* BorrowedContent.observeFile(executablePath);
-    if (before.bytes !== after.bytes || before.digest.value !== after.digest.value) {
-      return yield* new SelectedToolChanged({
-        tool: options.name,
-        path: executablePath,
-        expected: before.digest.value,
-        observed: after.digest.value,
-      });
-    }
-    return Object.freeze({
-      protocol: "effect-build/selected-tool@1" as const,
-      name: options.name,
-      version,
-      executablePath,
-      digest: before.digest,
-    });
-  });
-
-export const revalidateSelected = (
-  selected: SelectedTool,
-): Effect.Effect<void, ArtifactInvalid | SelectedToolChanged, Crypto.Crypto | FileSystem.FileSystem | Path.Path> =>
-  Effect.gen(function*() {
-    const observed = yield* BorrowedContent.observeFile(selected.executablePath);
-    if (observed.digest.value !== selected.digest.value) {
-      return yield* new SelectedToolChanged({
-        tool: selected.name,
-        path: selected.executablePath,
-        expected: selected.digest.value,
-        observed: observed.digest.value,
-      });
-    }
-  });
-
-export const runSelected = (
-  options: { readonly selected: SelectedTool; readonly args: readonly string[]; readonly cwd?: string | undefined },
-): Effect.Effect<
-  Completion,
-  ToolFailed | ArtifactInvalid | SelectedToolChanged,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
-> =>
-  revalidateSelected(options.selected).pipe(
-    Effect.andThen(run({
-      tool: options.selected.name,
-      executable: options.selected.executablePath,
-      args: options.args,
-      cwd: options.cwd,
-    })),
-    Effect.onExit(() => revalidateSelected(options.selected)),
-  );
-
-export const runOrFailSelected = (
-  options: { readonly selected: SelectedTool; readonly args: readonly string[]; readonly cwd?: string | undefined },
-): Effect.Effect<
-  Completion,
-  ToolFailed | ArtifactInvalid | SelectedToolChanged,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
-> =>
-  Effect.flatMap(runSelected(options), (completion) =>
-    completion.exitCode === 0
-      ? Effect.succeed(completion)
-      : Effect.fail(
-        new ToolFailed({
-          tool: options.selected.name,
-          exitCode: completion.exitCode,
-          stdout: completion.stdout.text,
-          stderr: completion.stderr.text,
-        }),
-      ));
-
-export interface TestedRange {
-  readonly minimum: string;
-  readonly before: string;
-}
-
-const numeric = (version: string): readonly number[] =>
-  version.replace(/^v/, "").split(".").map((part) => Number.parseInt(part, 10) || 0);
-
-const compareVersions = (left: string, right: string): number => {
-  const a = numeric(left);
-  const b = numeric(right);
-  for (let index = 0; index < 3; index++) {
-    const delta = (a[index] ?? 0) - (b[index] ?? 0);
-    if (delta !== 0) return delta < 0 ? -1 : 1;
-  }
-  return 0;
-};
-
-/** Logs one warning when the probed version is outside the CI-tested range; never refuses. */
-export const warnIfUntested = (
-  options: { readonly tool: string; readonly version: string; readonly tested: TestedRange },
-): Effect.Effect<void> =>
-  compareVersions(options.version, options.tested.minimum) >= 0
-    && compareVersions(options.version, options.tested.before) < 0
-    ? Effect.void
-    : Effect.logWarning(
-      `effect-build: ${options.tool} ${options.version} is outside the tested range `
-        + `>=${options.tested.minimum} <${options.tested.before}; proceeding anyway`,
-    );
-
-const machOMagics: readonly (readonly number[])[] = [
-  [0xcf, 0xfa, 0xed, 0xfe],
-  [0xfe, 0xed, 0xfa, 0xcf],
-  [0xca, 0xfe, 0xba, 0xbe],
-  [0xbe, 0xba, 0xfe, 0xca],
-  [0xca, 0xfe, 0xba, 0xbf],
-  [0xbf, 0xba, 0xfe, 0xca],
-];
-
-const sniffFormat = (bytes: Uint8Array): Target.NativeFormat | undefined => {
-  if (bytes.byteLength < 4) return undefined;
-  if (bytes[0] === 0x7f && bytes[1] === 0x45 && bytes[2] === 0x4c && bytes[3] === 0x46) return "elf";
-  if (bytes[0] === 0x4d && bytes[1] === 0x5a) return "pe";
-  return machOMagics.some((magic) => magic.every((byte, index) => byte === bytes[index])) ? "mach-o" : undefined;
-};
+export const define = <Name extends string, Request, Refusal, Requirements = never>(
+  definition: Definition<Name, Request, Refusal, Requirements>,
+): Definition<Name, Request, Refusal, Requirements> => Object.freeze(definition);
 
 const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
-export interface PublishOptions<E, R> {
-  readonly tool: SelectedTool;
-  readonly outfile: string;
-  readonly cwd?: string | undefined;
-  readonly target: Target.Target;
-  /** Writes the executable at the private staged path. */
-  readonly produce: (stagedPath: string) => Effect.Effect<void, E, R>;
-}
+const invalid = (path: string, reason: string): Artifact.ArtifactInvalid =>
+  new Artifact.ArtifactInvalid({ path, reason });
+
+const observeContent = (
+  executablePath: AbsolutePath,
+): Effect.Effect<ContentIdentity, Artifact.ArtifactInvalid, Crypto.Crypto | FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const crypto = yield* Crypto.Crypto;
+    const information = yield* fileSystem.stat(executablePath).pipe(
+      Effect.mapError(() => invalid(executablePath, "unable to inspect selected executable")),
+    );
+    if (information.type !== "File") return yield* invalid(executablePath, "selected executable is not a file");
+    const contents = yield* fileSystem.readFile(executablePath).pipe(
+      Effect.mapError(() => invalid(executablePath, "unable to read selected executable")),
+    );
+    if (`${contents.byteLength}` !== `${information.size}`) {
+      return yield* invalid(executablePath, "selected executable changed during observation");
+    }
+    const digest = yield* crypto.digest("SHA-256", contents).pipe(
+      Effect.mapError(() => invalid(executablePath, "sha-256 digest unavailable")),
+    );
+    return Object.freeze({
+      bytes: decimalBytes(`${contents.byteLength}`),
+      digest: sha256Digest(hex(new Uint8Array(digest))),
+    });
+  });
+
+const sameContent = (left: ContentIdentity, right: ContentIdentity): boolean =>
+  left.bytes === right.bytes && left.digest.value === right.digest.value;
+
+const nonEmptyObservationString = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && !value.includes("\0");
+
+const copyContentIdentity = (value: unknown): ContentIdentity | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const content = value as { readonly bytes?: unknown; readonly digest?: unknown };
+  if (typeof content.bytes !== "string" || !/^(?:0|[1-9][0-9]*)$/u.test(content.bytes)) return undefined;
+  if (typeof content.digest !== "object" || content.digest === null) return undefined;
+  const digest = content.digest as { readonly algorithm?: unknown; readonly value?: unknown };
+  if (digest.algorithm !== "sha256" || typeof digest.value !== "string" || !/^[0-9a-f]{64}$/u.test(digest.value)) {
+    return undefined;
+  }
+  return Object.freeze({
+    bytes: decimalBytes(content.bytes),
+    digest: sha256Digest(digest.value),
+  });
+};
+
+const invalidObservation = (tool: string, reason: string): ToolSelectionInvalid =>
+  new ToolSelectionInvalid({ tool, reason });
+
+const copyObservation = <const Name extends string>(
+  name: Name,
+  value: unknown,
+): Effect.Effect<Observation<Name>, ToolSelectionInvalid> =>
+  Effect.gen(function*() {
+    if (typeof value !== "object" || value === null) {
+      return yield* invalidObservation(name, "tool observation must be an object");
+    }
+    const observation = value as {
+      readonly name?: unknown;
+      readonly participants?: unknown;
+      readonly capabilities?: unknown;
+    };
+    if (observation.name !== name) {
+      return yield* invalidObservation(name, "tool observation name does not match the selected tool");
+    }
+    if (!Array.isArray(observation.participants) || observation.participants.length === 0) {
+      return yield* invalidObservation(name, "tool observation requires at least one participant");
+    }
+    const participants: ParticipantIdentity[] = [];
+    for (const value of observation.participants) {
+      if (typeof value !== "object" || value === null) {
+        return yield* invalidObservation(name, "tool observation contains an invalid participant");
+      }
+      const participant = value as Partial<Record<keyof ParticipantIdentity, unknown>>;
+      if (
+        !nonEmptyObservationString(participant.role)
+        || !nonEmptyObservationString(participant.name)
+        || !nonEmptyObservationString(participant.version)
+        || !nonEmptyObservationString(participant.revision)
+        || !nonEmptyObservationString(participant.channel)
+      ) {
+        return yield* invalidObservation(name, "tool observation contains an incomplete participant identity");
+      }
+      const content = copyContentIdentity(participant.content);
+      if (content === undefined) {
+        return yield* invalidObservation(name, "tool observation contains an invalid participant content identity");
+      }
+      participants.push(Object.freeze({
+        role: participant.role,
+        name: participant.name,
+        version: participant.version,
+        revision: participant.revision,
+        channel: participant.channel,
+        content,
+      }));
+    }
+    if (!Array.isArray(observation.capabilities)) {
+      return yield* invalidObservation(name, "tool observation capabilities must be an array");
+    }
+    const capabilities: CapabilityObservation[] = [];
+    for (const value of observation.capabilities) {
+      if (typeof value !== "object" || value === null) {
+        return yield* invalidObservation(name, "tool observation contains an invalid capability");
+      }
+      const capability = value as {
+        readonly _tag?: unknown;
+        readonly id?: unknown;
+        readonly evidence?: unknown;
+        readonly reason?: unknown;
+      };
+      if (!nonEmptyObservationString(capability.id)) {
+        return yield* invalidObservation(name, "tool observation contains a capability without an id");
+      }
+      if (capability._tag === "Present") {
+        if (!nonEmptyObservationString(capability.evidence)) {
+          return yield* invalidObservation(name, "present capability observation requires evidence");
+        }
+        capabilities.push(Object.freeze({ _tag: "Present", id: capability.id, evidence: capability.evidence }));
+      } else if (capability._tag === "Missing" || capability._tag === "Indeterminate") {
+        if (!nonEmptyObservationString(capability.reason)) {
+          return yield* invalidObservation(name, `${capability._tag} capability observation requires a reason`);
+        }
+        capabilities.push(Object.freeze({ _tag: capability._tag, id: capability.id, reason: capability.reason }));
+      } else {
+        return yield* invalidObservation(name, "tool observation contains an unknown capability tag");
+      }
+    }
+    return Object.freeze({
+      name,
+      participants: Object.freeze(participants) as readonly [ParticipantIdentity, ...ParticipantIdentity[]],
+      capabilities: Object.freeze(capabilities),
+    });
+  });
+
+const makeCommand =
+  (executablePath: AbsolutePath) => (argv: readonly string[], options: CommandOptions = {}): ChildProcess.Command =>
+    ChildProcess.make(executablePath, argv, { ...options, shell: false });
+
+const canonicalCandidate = (
+  fileSystem: FileSystem.FileSystem,
+  path: Path.Path,
+  candidate: string,
+): Effect.Effect<AbsolutePath | undefined> =>
+  Effect.gen(function*() {
+    const canonical = yield* Effect.option(fileSystem.realPath(candidate));
+    if (Option.isNone(canonical)) return undefined;
+    const normalized = path.normalize(canonical.value);
+    if (!path.isAbsolute(normalized)) return undefined;
+    const information = yield* Effect.option(fileSystem.stat(normalized));
+    if (Option.isNone(information) || information.value.type !== "File") return undefined;
+    if (path.sep !== "\\" && (Number(information.value.mode) & 0o111) === 0) return undefined;
+    return normalized as AbsolutePath;
+  });
+
+const resolve = <Name extends string>(
+  name: Name,
+  explicit: string | undefined,
+): Effect.Effect<
+  AbsolutePath,
+  ToolNotFound | ToolSelectionAmbiguous | ToolSelectionInvalid,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    if (explicit !== undefined) {
+      if (!path.isAbsolute(explicit) || path.normalize(explicit) !== explicit) {
+        return yield* new ToolSelectionInvalid({
+          tool: name,
+          reason: "explicit executable must be an absolute normalized path",
+        });
+      }
+      const candidate = yield* canonicalCandidate(fileSystem, path, explicit);
+      if (candidate === undefined) return yield* new ToolNotFound({ tool: name, command: explicit });
+      return candidate;
+    }
+
+    const environment = yield* Config.string("PATH").pipe(Effect.orElseSucceed(() => ""));
+    const candidates = new Map<string, AbsolutePath>();
+    const names = path.sep === "\\" ? [name, `${name}.exe`] : [name];
+    for (const entry of environment.split(path.sep === "\\" ? ";" : ":")) {
+      if (entry.length === 0 || !path.isAbsolute(entry)) continue;
+      for (const executableName of names) {
+        const candidate = yield* canonicalCandidate(fileSystem, path, path.join(entry, executableName));
+        if (candidate !== undefined) candidates.set(candidate, candidate);
+      }
+    }
+    const unique = [...candidates.values()];
+    if (unique.length === 0) return yield* new ToolNotFound({ tool: name, command: name });
+    if (unique.length > 1) {
+      return yield* new ToolSelectionAmbiguous({ tool: name, candidates: unique });
+    }
+    return unique[0]!;
+  });
+
+const changed = (name: string, path: AbsolutePath, expected: ContentIdentity, observed: ContentIdentity) =>
+  new SelectedToolChanged({
+    tool: name,
+    path,
+    expected: expected.digest.value,
+    observed: observed.digest.value,
+  });
 
 /**
- * Stages in a private same-parent temp directory, lets `produce` write the
- * executable, sanity-checks the native magic against the target, and commits
- * with one atomic rename. Windows targets gain a missing `.exe` suffix.
+ * Selects and observes exactly one executable. Selection never installs,
+ * substitutes, retries, or treats a contiguous version range as evidence.
  */
-export const publishExecutable = <E, R>(
-  options: PublishOptions<E, R>,
+export const select = <const Name extends string, ObserveError, Requirements = never>(
+  options: SelectOptions<Name, ObserveError, Requirements>,
 ): Effect.Effect<
-  Executable,
-  PublishFailed | E,
-  FileSystem.FileSystem | Path.Path | Crypto.Crypto | R
+  SelectedTool<Name>,
+  | ToolNotFound
+  | ToolSelectionAmbiguous
+  | ToolSelectionInvalid
+  | Artifact.ArtifactInvalid
+  | SelectedToolChanged
+  | ObserveError,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | Requirements
 > =>
-  Effect.scoped(
-    Effect.gen(function*() {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const crypto = yield* Crypto.Crypto;
-      const suffix = Target.info(options.target).executableSuffix;
-      const requested = path.normalize(path.resolve(options.cwd ?? "", options.outfile));
-      const destination = suffix !== "" && !requested.toLowerCase().endsWith(suffix)
-        ? `${requested}${suffix}`
-        : requested;
-      const parent = path.dirname(destination);
-      const failWith = (reason: string) => new PublishFailed({ destination, reason });
-      yield* mapFailureCause(
-        fileSystem.makeDirectory(parent, { recursive: true }),
-        (error) => failWith(`make-directory: ${describe(error)}`),
-      );
-      const staging = yield* mapFailureCause(
-        fileSystem.makeTempDirectoryScoped({ directory: parent, prefix: ".effect-build-" }),
-        (error) => failWith(`make-staging: ${describe(error)}`),
-      );
-      const staged = path.join(staging, path.basename(destination));
-      yield* options.produce(staged);
-      const information = yield* fileSystem.stat(staged).pipe(
-        Effect.mapError((error) =>
-          error.reason._tag === "NotFound"
-            ? failWith("the tool did not produce an output file at the staged path")
-            : failWith(`stat: ${describe(error)}`)
+  Effect.gen(function*() {
+    const executablePath = yield* resolve(options.name, options.executable);
+    const before = yield* observeContent(executablePath);
+    const command = makeCommand(executablePath);
+    const observed = yield* options.observe(Object.freeze({
+      name: options.name,
+      executablePath,
+      content: before,
+      command,
+    }));
+    const observation = yield* copyObservation(options.name, observed);
+    const after = yield* observeContent(executablePath);
+    if (!sameContent(before, after)) return yield* changed(options.name, executablePath, before, after);
+
+    const reauthenticate = Effect.suspend(() =>
+      observeContent(executablePath).pipe(
+        Effect.flatMap((observed) =>
+          sameContent(before, observed)
+            ? Effect.void
+            : Effect.fail(changed(options.name, executablePath, before, observed))
         ),
-      );
-      if (information.type !== "File") {
-        return yield* Effect.fail(failWith("the staged output is not a regular file"));
-      }
-      if (path.sep !== "\\" && (Number(information.mode) & 0o111) === 0) {
-        return yield* Effect.fail(failWith("the staged output is not executable"));
-      }
-      const bytes = Number(information.size);
-      const contents = yield* fileSystem.readFile(staged).pipe(
-        Effect.mapError((error) => failWith(`read: ${describe(error)}`)),
-      );
-      const magic = contents.subarray(0, 4);
-      const digestBytes = yield* crypto.digest("SHA-256", contents).pipe(
-        Effect.mapError(() => failWith("sha-256 digest unavailable")),
-      );
-      const sha256 = hex(new Uint8Array(digestBytes));
-      const format = sniffFormat(magic);
-      const expected = Target.info(options.target).nativeFormat;
-      if (format !== expected) {
-        return yield* Effect.fail(
-          failWith(`native format mismatch: expected ${expected}, found ${format ?? "unknown"}`),
-        );
-      }
-      yield* mapFailureCause(
-        fileSystem.rename(staged, destination),
-        (error) => failWith(`rename: ${describe(error)}`),
-      );
-      return {
-        _tag: "Executable" as const,
-        path: destination,
-        bytes,
-        target: options.target,
-        tool: options.tool,
-        sha256,
-        digest: { algorithm: "sha256", value: sha256 },
-      };
-    }),
-  );
+      )
+    );
+    return Object.freeze({
+      protocol: "effect-build/selected-tool@1" as const,
+      name: options.name,
+      executablePath,
+      content: before,
+      observation,
+      command,
+      reauthenticate,
+    });
+  });

@@ -71,9 +71,13 @@ scope-owned with bounded output. Interruption remains interruption; it is not tr
 Xcode-owned `notarytool` and `stapler` paths are caller-resolved rather than discovered by a hidden `xcrun` invocation; the
 library never installs a tool or falls back to another executable.
 
-`Artifact.observeExecutable` is the one-way bridge from a hashed macOS `effect-build/Artifact.Executable`: it independently
-rehashes the committed bytes, binds the provider target to the thin Mach-O CPU type, and rejects missing digest identity, non-macOS
-targets, FAT/universal input, or producer metadata mismatches.
+`Artifact.observeExecutable` is the one-way bridge from a macOS
+`effect-build/Artifact.HashedExecutable`: it requires the hard-cut committed
+same-parent publication record, absolute normalized path, canonical decimal
+byte count, SHA-256 digest, and `mach-o` native format. It independently
+rehashes the committed bytes, binds the provider target to the thin Mach-O CPU
+type, and rejects unhashed, non-macOS, FAT/universal, or inconsistent producer
+metadata.
 
 ## Policy and credential ownership
 

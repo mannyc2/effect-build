@@ -1,156 +1,197 @@
 # API
 
-The approved target is `effect-build/v0.5-contract@1` in
-[`tooling/v05-contract.json`](../tooling/v05-contract.json). The exact current
-candidate exports remain asserted against
-[`tooling/public-api.json`](../tooling/public-api.json). Current and target
-surfaces now match the frozen v0.5 roots and subpaths. The Apple, core Stage 2,
-provider-profile Stage 3, and Node SEA Stage 4 symbols are frozen; compatibility
-and external certification remain separate promotion gates.
+The authoritative scope is `effect-build/research-complete-contract@1` in
+[`tooling/research-complete-contract.json`](../tooling/research-complete-contract.json).
+The generated candidate export snapshot is
+[`tooling/public-api.json`](../tooling/public-api.json).
 
-## Current implemented surface
+This is a hard cut. There are no compatibility aliases, provider registries,
+automatic provider selection, raw-argv public operations, retries, or automatic
+tool installation.
 
-Operations live at package subpaths:
+## Admission policy
+
+Research dispositions determine publication:
+
+- `mandatory` and `positive-proof-gated` rows with a selected export are public
+  candidate operations;
+- `conditional-gate` rows are fully implemented and tested package-private
+  candidates until every part of their named gate is closed;
+- `rejected` and `superseded-direct-sea` rows have no public implementation.
+
+An open evidence gate blocks certification and release. It does not make an
+implemented positive selection disappear, and implementation alone never
+closes the gate.
+
+## Core
+
+`effect-build` has exactly six public subpaths:
+
+| Subpath                              | Owner                                                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `effect-build/Artifact`              | Absolute paths, hashed or unhashed file/executable observations, runtime format and architecture observations |
+| `effect-build/SystemTarget`          | Closed OS/architecture/ABI target vocabulary and descriptions                                                 |
+| `effect-build/Matrix`                | Provider-neutral deterministic cell fan-out and aggregate reports                                             |
+| `effect-build/Author/Tool`           | Exact executable selection, capability observation, admission, and content reauthentication                   |
+| `effect-build/Author/BorrowedOutput` | Scoped hashed or unhashed file/tree leases with cleanup reporting                                             |
+| `effect-build/Author/Executable`     | Private candidate staging, executable inspection, and atomic single-file replacement                          |
+
+All six are also re-exported as root namespaces.
+
+The hard cut removes `BuildError`, `Target`, `Generation`, `DurableFile`,
+`BorrowedContent`, `TreeSnapshot`, and `StaticBrowserApplication`. Durable-file
+publication may exist internally, but it is not public authority.
+
+### Package-private profile candidates
+
+The private `Author/NodeMain.assemble` candidate asks the assembler for an offer before invoking the
+producer. The core validates the offer, produced protocol, provider identity,
+format, and content identity. `acquire` exposes the main only inside its scoped
+continuation; the sealed value has no recoverable public transport path.
+
+### Browser module payload
+
+The private `Profile/BrowserModulePayload.withPayload` candidate validates explicit entries and
+provider-declared files, roles, media types, associations, and internal/external
+edges against a hashed borrowed tree. `IncrementalNodeMain` and the typed-watch
+protocol are likewise implemented and tested privately. None is a package
+export until its complete provider, lifecycle, browser, resource, and five-host
+gate is earned.
+
+## Provider lanes
+
+An `Api` lane calls a provider's in-process host API. A `Command` lane owns an
+authenticated exact-version executable and uses the official Effect process
+service. Command stdout/stderr capture is bounded, the selected tool is
+reauthenticated immediately before invocation, and lifecycle behavior remains
+operation-specific.
+
+Provider package manifests expose only `.`, `./Api`, and/or `./Command` as
+selected below. Operation modules are namespaces inside those lanes. The former
+provider `Build`, `Bundle`, `CompileExecutable`, `Context`, `Profile`, `Raw`, and
+`Watch` package subpaths are absent.
+
+### Bun 1.3.14
 
 ```ts
-import * as AppleAppBundle from "effect-build-apple/AppBundle";
-import * as AppleArtifact from "effect-build-apple/Artifact";
-import * as AppleAssess from "effect-build-apple/Assess";
-import * as AppleCodeSign from "effect-build-apple/CodeSign";
-import * as AppleDiskImage from "effect-build-apple/DiskImage";
-import * as AppleInstallerPackage from "effect-build-apple/InstallerPackage";
-import * as AppleNotary from "effect-build-apple/Notary";
-import * as AppleStaple from "effect-build-apple/Staple";
-import * as AppleZip from "effect-build-apple/Zip";
-import * as BunBundle from "effect-build-bun/Bundle";
-import * as BunCompile from "effect-build-bun/CompileExecutable";
-import * as BunProfile from "effect-build-bun/Profile";
-import * as DenoBundle from "effect-build-deno/Bundle";
-import * as DenoCompile from "effect-build-deno/CompileExecutable";
-import * as Build from "effect-build-esbuild/Build";
-import * as Context from "effect-build-esbuild/Context";
-import * as EsbuildProfile from "effect-build-esbuild/Profile";
-import * as Watch from "effect-build-esbuild/Watch";
-import type * as NodeMainExecutable from "effect-build-node-sea/NodeMainExecutable";
-import * as Raw from "effect-build-node-sea/Raw";
-import * as Rolldown from "effect-build-rolldown/Build";
-import * as RolldownProfile from "effect-build-rolldown/Profile";
-import * as RolldownWatch from "effect-build-rolldown/Watch";
-import * as Target from "effect-build/Target";
+import * as BunApi from "effect-build-bun/Api";
+import * as BunCommand from "effect-build-bun/Command";
 ```
 
-`BunCompile.compileExecutable` and `DenoCompile.compileExecutable` take an
-entrypoint, output file, explicit provider-supported target, optional working
-directory, and native options. Hashing is mandatory. They return the current
-`Artifact.Executable` observation.
+| Lane module                 | Public operations                                           |
+| --------------------------- | ----------------------------------------------------------- |
+| `Api.Transpiler`            | `make`, `transform`, `transformSync`, `scan`, `scanImports` |
+| `Api.Build`                 | `build`, `buildToDirectory`                                 |
+| `Api.CompileExecutable`     | `compileExecutableDirect`                                   |
+| `Command.Build`             | `build`, `buildToDirectory`                                 |
+| `Command.Watch`             | `watch`                                                     |
+| `Command.CompileExecutable` | `compileExecutable`                                         |
 
-`BunBundle.directWrite` and `DenoBundle.directWrite` take non-empty entrypoints
-plus an output directory and return provider-local `DirectWriteOutcome` values
-with mandatory file digests. The provider writes the caller destination
-directly, so a failed operation can leave a mixed directory. Native Bun `target: "browser"` and Deno
-`platform: "browser"` are provider selectors, not portable application
-closure.
+`BunApi.layer` supplies the exact Bun host capabilities. `BunCommand.layer`
+selects and authenticates the executable. The host API and command operations
+remain different semantic owners even where their native names overlap.
 
-esbuild `Build`, `Context`, and `Watch` expose its native in-memory and scoped
-context semantics. Rolldown `Build` and `Watch` expose native handles and
-completed-result events. Both watch streams retain one pending completion,
-coalesce to the latest with an explicit superseded count, and keep cleanup
-failure in Effect Cause. Rolldown closes each native result before delivery and
-awaits one watcher close during stream shutdown. These are provider-native
-operations; they do not inherit the portable OS process-tree guarantee.
+### Deno 2.9.5
 
-`Author/NodeMain.seal` and `Profile/StaticBrowserApplication.build` are the two
-closed portable products. Bun, esbuild, and Rolldown each expose one explicit
-`Profile.layer` that provides both authoring services. The core validates the
-request before provider work, owns private staging and immutable publication,
-requires complete provider metadata, and rejects local runtime dependencies or
-external browser graph edges. The packed consumer gate installs a real
-out-of-tree adapter with a duplicate core graph and contains no provider branch.
-Rolldown 1.2.5 has no CSS bundling; CSS is therefore admitted only as an
-explicit authenticated browser resource for that provider.
+```ts
+import * as DenoCommand from "effect-build-deno/Command";
+```
 
-Node `Raw.assembleExecutable` accepts file or byte mains and assets plus a
-caller-asserted target through `node --build-sea`. This is a provider-native
-lane. Caller assets, bytes, separate builder/base selection, and asserted target
-cannot mint portable SEA evidence. `NodeMainExecutable` exposes only the frozen
-evidence-bearing types and constants; the finalizer callback and constructors
-remain package-private to the schema-bound repository matrix.
+| Lane module                 | Public operations                                       |
+| --------------------------- | ------------------------------------------------------- |
+| `Command.Transpile`         | `transpile`, `transpileToDirectory`, `emitDeclarations` |
+| `Command.CompileExecutable` | `compileExecutable`                                     |
 
-That private matrix is manually admitted and spans all 108 producer, format,
-construction-host, and target coordinates. Its controls use canonical JSON,
-strict two-file input/one-file output/one-file receipt artifact layouts,
-authoritative Actions REST bindings, exact-host admission, native-format and
-architecture inspection, and target execution. The repository aggregates only
-after all coordinate jobs succeed. Until a workflow run returns those receipts,
-the target support cells remain unadvertised.
+No Deno `./Api` export exists: M8 forbids an empty or synthetic twin. API
+bundle, command bundle, and compile-watch implementations remain package-private
+conditional candidates. Deno declaration emission is
+the provider's transpile/tsc-backed operation, not a bundle declaration roll-up.
 
-Non-Apple compatibility certification is also an explicit manual matrix. It
-executes every frozen browser, provider-native, and packed-consumer coordinate
-and aggregates 84 job-bound receipt artifacts without pruning. The browser lane
-uses exact Playwright 1.62.1 revisions and exercises a dynamic chunk, generated
-module host, authenticated stylesheet and resource, and immutable generation.
-The packed lane tests both the oldest admitted Effect peer and the repository
-development point with strict npm peer resolution on all three certification
-hosts. Implemented workflow topology is not substituted for executed receipts.
+### esbuild 0.28.2
 
-`effect-build-apple` exposes authenticated artifacts, Developer ID Application
-signing, app/ZIP/DMG construction, the deliberately narrow one-app Developer ID
-Installer package, Notary submission/reconciliation, stapling, and digest-bound
-assessment. Its selected operation/service names are:
+```ts
+import * as EsbuildApi from "effect-build-esbuild/Api";
+import * as EsbuildCommand from "effect-build-esbuild/Command";
+```
 
-- `Artifact`: `observeFile`, `observeTree`, `observeExecutable`,
-  `isFileArtifact`, `isTreeArtifact`, `isKind`, `reference`, `revalidate`, and
-  `sameIdentity`;
-- `CodeSign`: `developerIdApplication`, `sign`, `Signer`, and `layer`;
-- `AppBundle`, `Zip`, and `DiskImage`: `create`, `Creator`, and `layer`;
-- `InstallerPackage`: `developerIdInstaller`, `create`, `Creator`, and `layer`;
-- `Notary`: `submit`, `operatorReconciliationEvidence`, `reconcile`, `info`,
-  `wait`, `log`, `history`, `readReceipt`, `submittedReceiptPath`, `Notarizer`,
-  and `layer`;
-- `Staple`: `staple`, `Stapler`, and `layer`; and
-- `Assess`: `assess`, `Assessor`, and `layer`.
+| Lane module                | Public operations  |
+| -------------------------- | ------------------ |
+| `Api.Build`                | `build`            |
+| `Api.BuildToDirectory`     | `buildToDirectory` |
+| `Api.Transform`            | `transform`        |
+| `Api.AnalyzeMetafile`      | `analyzeMetafile`  |
+| `Api.FormatMessages`       | `formatMessages`   |
+| `Api.Context`              | `make`             |
+| `Api.ContextToDirectory`   | `make`             |
+| `Command.Build`            | `build`            |
+| `Command.BuildToDirectory` | `buildToDirectory` |
+| `Command.Watch`            | `watch`            |
 
-The non-Notary input/result structures are selected. A stored submitted Notary
-receipt is data, not query authority; it must pass explicit operator
-reconciliation before `info`, `wait`, or `log`. Exact Notary JSON/status decoding
-and detailed receipt/reconciliation-evidence shapes remain provisional through
-credential-backed A7.
+Context owners are scoped and drain active work before one close. Command serve
+is implemented package-private; its conditional gate has not admitted an
+export. The rejected synchronous and shared-service controls are absent.
 
-The Stage 2 hard cut removed `effect-build/Toolchain` without a compatibility
-alias. `Author/Tool` now binds a canonical executable path, version, and byte
-digest and detects replacement around invocation.
+### Node SEA
 
-## Frozen target subpaths
+```ts
+import * as NodeSeaCommand from "effect-build-node-sea/Command";
+```
 
-Stage 0 froze root namespace and subpath names. Each owning implementation stage
-must freeze its runtime/declaration symbols before first export. All four owning
-stages are frozen in `tooling/public-api.json`; missing compatibility and
-credential-backed evidence still block release.
+`Command.AssembleExecutable.assembleDirect` is the sole public Node SEA
+operation. It accepts CommonJS or ESM file/byte mains and file-backed assets,
+then delegates single-file publication to `Author/Executable`. It deliberately
+has no public target assertion, snapshot, code-cache, injector, or raw-argv
+field. The admitted default is the exact Node 26.7.0 `linux-x64-gnu` direct SEA
+cell with a same-version builder/base relation. The explicit untested-version
+layer override is local experimentation, never portable evidence.
 
-Core keeps `Artifact`, `BuildError`, and `Target`, and adds the role-specific
-`Author/Tool`, `Author/BorrowedContent`, `Author/TreeSnapshot`,
-`Author/Generation`, `Author/NodeMain`, and
-`Profile/StaticBrowserApplication` subpaths. Bun, esbuild, and Rolldown add one
-`Profile` subpath. Node SEA replaces `AssembleExecutable` with `Raw` and
-`NodeMainExecutable`. Deno has no portable Profile subpath unless a later
-explicit contract revision admits one.
+Cross-target construction belongs to the private authenticated repository
+finalizer matrix and does not widen this public operation. Its exact coordinate
+count is generated from the five construction hosts rather than documented as
+an inherited constant.
 
-The seventh package `effect-build-apple` implements root namespaces and matching
-subpaths for `Artifact`, `CodeSign`, `AppBundle`, `Zip`, `DiskImage`,
-`InstallerPackage`, `Notary`, `Staple`, and `Assess`. This family is direct
-Developer ID distribution only, not Mac App Store support or a generic
-deployment API; universal-binary construction is also outside v0.5. The exact
-selected operations and non-Notary types are frozen by the current generated
-surface. Only the A7-dependent Notary decoder/status and detailed receipt/
-evidence structures remain provisional and release-blocking.
+### Rolldown 1.2.5
 
-The same cut removes current `Artifact.Bundle`, `Artifact.BundleFile`,
-caller-authored `Artifact.Tool`, and `Target.host`. Durable directory results use
-`TreeSnapshot`, `DirectoryGeneration`, and `CurrentGeneration`; portable Node
-results progress through sealed, assembled, target-supported, and exact-artifact
-executed evidence states. Native Bun and Deno bundle result ownership moves to
-their respective `Bundle` subpaths as provider-local `Bundle` and `BundleFile`
-declarations before the core declarations disappear.
+`effect-build-rolldown` is a private package because R6 did not admit it; it has
+no public lane roots. Its API build/watch/transform/parse/minify/resolve/scan/dev-engine/
+declaration/config modules and command bundle/bundle-to-directory/watch modules
+are implemented and tested package-private candidates. Every R1 Rolldown row is
+conditional, so exposing any one of them before its complete named gate closes
+would be a false promotion.
 
-Portable fan-out remains plain Effect composition. One unchanged consumer uses
-an explicit provider Layer and contains zero provider-name branches.
+## Publication and interruption
+
+In-memory results remain caller-owned values. Scoped contexts and watchers own
+one close. Provider-direct directory operations truthfully report direct durable
+publication: failure or interruption may leave partial files, caches, or mixed
+destinations. They do not claim atomic rollback.
+
+`Author/Executable.publish` is the separate single-file authority. It creates a
+same-parent private candidate, checks that candidate, inspects native format and
+architecture, optionally hashes it, and atomically replaces the destination.
+
+Interruption remains an Effect Cause event; it is not translated into a typed
+provider error. A native host callback that exposes no cancellation primitive
+may stop being awaited without claiming native work was cancelled. Command
+operations close their scoped child process. Broader descendant-tree guarantees
+are claimed only by the schema-bound private workflow that proves them.
+
+## Apple distribution
+
+`effect-build-apple` remains a separate direct Developer ID family with exactly
+nine public modules: `Artifact`, `CodeSign`, `AppBundle`, `Zip`, `DiskImage`,
+`InstallerPackage`, `Notary`, `Staple`, and `Assess`. It is not a provider
+profile, generic deployer, Mac App Store API, or universal-binary constructor.
+
+Its local implementation and tool tests do not earn credential-backed signing,
+notarization, stapling, Gatekeeper, or clean-host evidence. Consult
+[Apple distribution](apple-distribution.md) and the canonical contract for the
+open A and G gates.
+
+## Matrix composition
+
+Portable fan-out is ordinary Effect composition through `effect-build/Matrix`.
+A consumer supplies a cell evaluator and explicit provider layer; the core has
+no provider registry or provider-name branch. Executed, digest-bound receipts,
+not workflow topology or a local sample, determine whether a matrix gate is
+closed.

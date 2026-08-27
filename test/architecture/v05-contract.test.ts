@@ -49,6 +49,7 @@ interface V05Contract {
   readonly authority: {
     readonly decision: string;
     readonly status: string;
+    readonly supersededBy: string;
     readonly supersedes: readonly string[];
     readonly separateAuthorities: readonly string[];
   };
@@ -224,6 +225,13 @@ interface V05Contract {
         readonly rule: string;
         readonly axes: Readonly<Record<string, readonly string[]>>;
         readonly expectedCoordinateCount: number;
+        readonly expectedCartesianCoordinateCount?: number;
+        readonly expectedUnsupportedCoordinateCount?: number;
+        readonly explicitUnsupportedCoordinates?: readonly {
+          readonly providerRuntimeCell: string;
+          readonly certificationHost: string;
+          readonly reason: string;
+        }[];
         readonly operation: string;
         readonly targetExecutionHostRule?: string;
       }>
@@ -403,7 +411,8 @@ describe("v0.5 hard-cut contract", () => {
     });
     expect(contract.authority).toEqual({
       decision: "portable-artifact-hard-cut",
-      status: "target-not-yet-implemented",
+      status: "superseded-implementation-snapshot",
+      supersededBy: "tooling/research-complete-contract.json",
       supersedes: ["mutable-partial-bundle-publication", "automatic-publication-after-green-main"],
       separateAuthorities: [
         "implementation",
@@ -1311,8 +1320,10 @@ describe("v0.5 hard-cut contract", () => {
       installableRangeIsExecutionEvidence: false,
     });
     expect(compatibility.certificationHosts).toEqual([
-      { id: "linux-x64-gnu", runner: "ubuntu-24.04", systemTarget: "linux-x64-gnu" },
-      { id: "macos-aarch64", runner: "macos-15", systemTarget: "macos-aarch64" },
+      { id: "linux-x64", runner: "ubuntu-24.04", systemTarget: "linux-x64-gnu" },
+      { id: "linux-arm64", runner: "ubuntu-24.04-arm", systemTarget: "linux-aarch64-gnu" },
+      { id: "macos-arm64", runner: "macos-15", systemTarget: "macos-aarch64" },
+      { id: "macos-x64", runner: "macos-15-intel", systemTarget: "macos-x64" },
       { id: "windows-x64", runner: "windows-2025", systemTarget: "windows-x64" },
     ]);
     expect(compatibility.targetExecutionHosts).toEqual([
@@ -1350,22 +1361,22 @@ describe("v0.5 hard-cut contract", () => {
       "different-group-id-requires-distinct-package-upstream-engine-and-adapter-codepath",
     );
     expect(compatibility.coordinateRules).toEqual({
-      staticBrowserApplication: {
+      browserModulePayload: {
         rule: "full-cartesian-product-no-pruning",
         axes: {
           providerGroup: ["bun-cli", "esbuild-api", "rolldown-api"],
           browserEngine: ["chromium@1234", "firefox@1538", "webkit@2336"],
-          certificationHost: ["linux-x64-gnu", "macos-aarch64", "windows-x64"],
+          certificationHost: ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"],
         },
-        expectedCoordinateCount: 27,
-        operation: "build-serve-and-exercise-generation-qualified-application",
+        expectedCoordinateCount: 45,
+        operation: "produce-lend-serve-and-exercise-browser-module-payload",
       },
       nodeMainExecutable: {
         rule: "full-cartesian-product-no-pruning",
         axes: {
           producerGroup: ["bun-cli", "esbuild-api", "rolldown-api"],
           mainFormat: ["commonjs", "module"],
-          constructionHost: ["linux-x64-gnu", "macos-aarch64", "windows-x64"],
+          constructionHost: ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"],
           target: [
             "macos-x64",
             "macos-aarch64",
@@ -1375,23 +1386,49 @@ describe("v0.5 hard-cut contract", () => {
             "windows-aarch64",
           ],
         },
-        expectedCoordinateCount: 108,
+        expectedCoordinateCount: 180,
         targetExecutionHostRule: "each-coordinate-executes-on-the-one-targetExecutionHost-with-the-same-target",
         operation: "produce-seal-cross-assemble-inspect-and-execute",
       },
       providerNativeLanes: {
-        rule: "full-cartesian-product-no-pruning",
+        rule: "cartesian-product-minus-explicit-unsupported-cells",
         axes: {
-          toolCell: [
+          providerRuntimeCell: [
             "bun@1.3.14",
             "deno@2.9.5",
             "node@26.7.0",
-            "esbuild@0.28.2",
-            "rolldown@1.2.5",
+            "esbuild@0.28.2+node@24.14.1",
+            "esbuild@0.28.2+bun@1.3.14",
+            "rolldown@1.2.5+node@24.14.1",
+            "rolldown@1.2.5+bun@1.3.14",
           ],
-          certificationHost: ["linux-x64-gnu", "macos-aarch64", "windows-x64"],
+          certificationHost: ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"],
         },
-        expectedCoordinateCount: 15,
+        expectedCartesianCoordinateCount: 35,
+        explicitUnsupportedCoordinates: [
+          {
+            providerRuntimeCell: "node@26.7.0",
+            certificationHost: "linux-arm64",
+            reason: "public-node-sea-host-target-is-linux-x64-gnu-only",
+          },
+          {
+            providerRuntimeCell: "node@26.7.0",
+            certificationHost: "macos-arm64",
+            reason: "public-node-sea-host-target-is-linux-x64-gnu-only",
+          },
+          {
+            providerRuntimeCell: "node@26.7.0",
+            certificationHost: "macos-x64",
+            reason: "public-node-sea-host-target-is-linux-x64-gnu-only",
+          },
+          {
+            providerRuntimeCell: "node@26.7.0",
+            certificationHost: "windows-x64",
+            reason: "public-node-sea-host-target-is-linux-x64-gnu-only",
+          },
+        ],
+        expectedUnsupportedCoordinateCount: 4,
+        expectedCoordinateCount: 31,
         operation: "provider-native-public-contract-smoke",
       },
       appleDistribution: {
@@ -1423,12 +1460,29 @@ describe("v0.5 hard-cut contract", () => {
       packedConsumers: {
         rule: "full-cartesian-product-no-pruning",
         axes: {
-          package: contract.release.orderedPackages,
+          package: [
+            "effect-build",
+            "effect-build-apple",
+            "effect-build-bun",
+            "effect-build-deno",
+            "effect-build-esbuild",
+            "effect-build-node-sea",
+          ],
           effect: ["4.0.0-beta.104", "4.0.0-rc.108"],
-          certificationHost: ["linux-x64-gnu", "macos-aarch64", "windows-x64"],
+          certificationHost: ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"],
         },
-        expectedCoordinateCount: 42,
-        operation: "fresh-exact-packed-install-with-strict-peer-dependencies",
+        expectedCoordinateCount: 60,
+        operation: "fresh-exact-release-train-packed-install-with-strict-peer-dependencies",
+      },
+      packedConditionalProviderCandidates: {
+        rule: "full-cartesian-product-no-pruning",
+        axes: {
+          package: ["effect-build-rolldown"],
+          effect: ["4.0.0-beta.104", "4.0.0-rc.108"],
+          certificationHost: ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64", "windows-x64"],
+        },
+        expectedCoordinateCount: 10,
+        operation: "fresh-exact-conditional-provider-candidate-packed-install-with-no-package-admission",
       },
     });
     const nodeRule = compatibility.coordinateRules.nodeMainExecutable;
@@ -1455,30 +1509,30 @@ describe("v0.5 hard-cut contract", () => {
         )
       )
     );
-    expect(targetFinalizerCoordinates).toHaveLength(108);
-    expect(new Set(targetFinalizerCoordinates).size).toBe(108);
-    const targetFinalizerCoordinate = "node-main--bun-cli--commonjs--from-linux-x64-gnu--to-macos-x64";
+    expect(targetFinalizerCoordinates).toHaveLength(180);
+    expect(new Set(targetFinalizerCoordinates).size).toBe(180);
+    const targetFinalizerCoordinate = "node-main--bun-cli--commonjs--from-linux-x64--to-macos-x64";
     expect(targetFinalizerCoordinates).toContain(targetFinalizerCoordinate);
     expect(`construct--${targetFinalizerCoordinate}`).toBe(
-      "construct--node-main--bun-cli--commonjs--from-linux-x64-gnu--to-macos-x64",
+      "construct--node-main--bun-cli--commonjs--from-linux-x64--to-macos-x64",
     );
     expect(`finalize--${targetFinalizerCoordinate}`).toBe(
-      "finalize--node-main--bun-cli--commonjs--from-linux-x64-gnu--to-macos-x64",
+      "finalize--node-main--bun-cli--commonjs--from-linux-x64--to-macos-x64",
     );
     expect(`${targetFinalizerCoordinate}--constructed`).toBe(
-      "node-main--bun-cli--commonjs--from-linux-x64-gnu--to-macos-x64--constructed",
+      "node-main--bun-cli--commonjs--from-linux-x64--to-macos-x64--constructed",
     );
     expect(`${targetFinalizerCoordinate}--finalized`).toBe(
-      "node-main--bun-cli--commonjs--from-linux-x64-gnu--to-macos-x64--finalized",
+      "node-main--bun-cli--commonjs--from-linux-x64--to-macos-x64--finalized",
     );
     expect(`${targetFinalizerCoordinate}--assembler-offer.json`).toBe(
-      "node-main--bun-cli--commonjs--from-linux-x64-gnu--to-macos-x64--assembler-offer.json",
+      "node-main--bun-cli--commonjs--from-linux-x64--to-macos-x64--assembler-offer.json",
     );
     expect(`${targetFinalizerCoordinate}--receipt`).toBe(
-      "node-main--bun-cli--commonjs--from-linux-x64-gnu--to-macos-x64--receipt",
+      "node-main--bun-cli--commonjs--from-linux-x64--to-macos-x64--receipt",
     );
     expect(`${targetFinalizerCoordinate}--target-finalizer-receipt.json`).toBe(
-      "node-main--bun-cli--commonjs--from-linux-x64-gnu--to-macos-x64--target-finalizer-receipt.json",
+      "node-main--bun-cli--commonjs--from-linux-x64--to-macos-x64--target-finalizer-receipt.json",
     );
     for (
       const suffix of [
@@ -1490,12 +1544,19 @@ describe("v0.5 hard-cut contract", () => {
       ]
     ) {
       const names = targetFinalizerCoordinates.map((coordinate) => `${coordinate}${suffix}`);
-      expect(new Set(names).size, suffix).toBe(108);
+      expect(new Set(names).size, suffix).toBe(180);
     }
     for (const [name, rule] of Object.entries(compatibility.coordinateRules)) {
       const product = Object.values(rule.axes).reduce((count, axis) => count * axis.length, 1);
-      expect(rule.rule, name).toBe("full-cartesian-product-no-pruning");
-      expect(rule.expectedCoordinateCount, name).toBe(product);
+      if (name === "providerNativeLanes") {
+        expect(rule.rule).toBe("cartesian-product-minus-explicit-unsupported-cells");
+        expect(rule.expectedCartesianCoordinateCount).toBe(product);
+        expect(rule.expectedUnsupportedCoordinateCount).toBe(rule.explicitUnsupportedCoordinates?.length);
+        expect(rule.expectedCoordinateCount).toBe(product - (rule.explicitUnsupportedCoordinates?.length ?? 0));
+      } else {
+        expect(rule.rule, name).toBe("full-cartesian-product-no-pruning");
+        expect(rule.expectedCoordinateCount, name).toBe(product);
+      }
     }
   });
 
@@ -1674,7 +1735,6 @@ describe("v0.5 hard-cut contract", () => {
       "effect-build-deno",
       "effect-build-esbuild",
       "effect-build-node-sea",
-      "effect-build-rolldown",
     ]);
     expect(packages["effect-build-apple"]).toBeDefined();
     const currentApple = packages["effect-build-apple"];
@@ -1782,14 +1842,18 @@ describe("v0.5 hard-cut contract", () => {
     expect(contract.publicSurface.targetSymbolPolicy).toBe(
       "apple-owning-stage-has-frozen-its-runtime-and-declaration-symbols-each-remaining-api-changing-stage-must-do-the-same-and-regenerate-public-api",
     );
-    expect(contract.publicSurface.providerNativeBundleResultMigration).toEqual({
+    const historicalBundleMigration = contract.publicSurface.providerNativeBundleResultMigration;
+    expect(historicalBundleMigration).toMatchObject({
       deletedCoreDeclarations: ["effect-build/Artifact#Bundle", "effect-build/Artifact#BundleFile"],
-      replacementOwners: {
-        "effect-build-bun/Bundle": ["Bundle", "BundleFile"],
-        "effect-build-deno/Bundle": ["Bundle", "BundleFile"],
-      },
       freezeStage: "stage-2-before-core-deletion-and-provider-source-export",
     });
+    expect(Object.keys(historicalBundleMigration.replacementOwners)).toHaveLength(2);
+    for (const historicalOwner of Object.keys(historicalBundleMigration.replacementOwners)) {
+      const separator = historicalOwner.indexOf("/");
+      const packageName = historicalOwner.slice(0, separator);
+      const retiredSubpath = `./${historicalOwner.slice(separator + 1)}`;
+      expect(current.packages[packageName]?.subpaths[retiredSubpath], historicalOwner).toBeUndefined();
+    }
     expect(contract.publicSurface.remainingSymbolFreezeStops).toEqual([]);
     expect(contract.publicSurface.authorPromotionGate).toEqual({
       status: "passed-by-packed-external-adapter",
@@ -1834,7 +1898,10 @@ describe("v0.5 hard-cut contract", () => {
         case "declaration":
           {
             const subpath = pkg.subpaths[deletion.subpath];
-            if (subpath === undefined) throw new Error(`scheduled deletion names missing subpath: ${deletion.subpath}`);
+            if (subpath === undefined) {
+              if (applied) break;
+              throw new Error(`scheduled deletion names missing subpath: ${deletion.subpath}`);
+            }
             if (applied) {
               expect(subpath.declarations, `${deletion.package}${deletion.subpath}`).not.toContain(deletion.name);
             } else expect(subpath.declarations, `${deletion.package}${deletion.subpath}`).toContain(deletion.name);
@@ -1843,7 +1910,10 @@ describe("v0.5 hard-cut contract", () => {
         case "runtimeAndDeclaration":
           {
             const subpath = pkg.subpaths[deletion.subpath];
-            if (subpath === undefined) throw new Error(`scheduled deletion names missing subpath: ${deletion.subpath}`);
+            if (subpath === undefined) {
+              if (applied) break;
+              throw new Error(`scheduled deletion names missing subpath: ${deletion.subpath}`);
+            }
             if (applied) {
               expect(subpath.runtime, `${deletion.package}${deletion.subpath} runtime`).not.toContain(deletion.name);
               expect(subpath.declarations, `${deletion.package}${deletion.subpath} declarations`).not.toContain(
@@ -3644,7 +3714,7 @@ describe("v0.5 hard-cut contract", () => {
     };
     expect(candidate.on.push.branches).toEqual(["main"]);
     expect(Object.keys(candidate.jobs)).toEqual(["build-pack-test"]);
-    expect(candidateSource).toContain("Pack the fixed seven exactly once");
+    expect(candidateSource).toContain("Pack the six admitted packages exactly once");
     expect(candidateSource).toContain("--tarball-directory release-candidate-payload");
     expect(Object.keys(apple.on.workflow_dispatch.inputs)).toEqual(
       contract.release.candidateIdentity.releaseInputFields.slice(0, 6),
@@ -3665,11 +3735,18 @@ describe("v0.5 hard-cut contract", () => {
       cleanHostMatrix.product.flatMap((product) => cleanHostMatrix.target.map(({ token }) => `${product}|${token}`)),
     ).toEqual(evidence.appleCleanHostCoordinates);
     expect(apple.jobs["certification-cells"].strategy.matrix.cell).toEqual(evidence.certificationCells);
+    const certificationCellSource = appleSource.slice(
+      appleSource.indexOf("  certification-cells:"),
+      appleSource.indexOf("  aggregate:"),
+    );
+    expect(certificationCellSource).toContain("pattern: apple-certification-distribution-*");
+    expect(certificationCellSource).toContain("pattern: apple-certification-clean-host-*");
+    expect(certificationCellSource).not.toMatch(/^\s*pattern: apple-certification-\*\s*$/mu);
     expect(appleSource).toContain("effect-build-v0.5.0-apple-certification");
     expect(appleSource).not.toMatch(/APPLE_RELEASE_CERTIFIED_SHA|APPLE_RELEASE_CERTIFICATION_RECEIPT_SHA256/u);
   });
 
-  it("keeps the authoritative docs on the same contract without stale guarantees", async () => {
+  it("keeps authoritative docs on the research-complete contract without stale guarantees", async () => {
     const files = [
       "AGENTS.md",
       "README.md",
@@ -3679,6 +3756,7 @@ describe("v0.5 hard-cut contract", () => {
       "docs/errors.md",
       "docs/drivers.md",
       "docs/release-security.md",
+      "docs/research-complete-contract.md",
       "docs/v0.5-contract.md",
       "packages/effect-build/README.md",
       "packages/effect-build-bun/README.md",
@@ -3690,13 +3768,15 @@ describe("v0.5 hard-cut contract", () => {
     const text = (await Promise.all(files.map((file) => readFile(resolve(root, file), "utf8")))).join("\n");
 
     for (const file of ["AGENTS.md", "docs/architecture.md", "docs/api.md", "docs/release-security.md"]) {
-      expect(await readFile(resolve(root, file), "utf8"), file).toContain("effect-build/v0.5-contract@1");
+      expect(await readFile(resolve(root, file), "utf8"), file).toContain(
+        "effect-build/research-complete-contract@1",
+      );
     }
     for (const file of ["AGENTS.md", "README.md", "docs/architecture.md", "docs/api.md", "docs/drivers.md"]) {
       expect(await readFile(resolve(root, file), "utf8"), file).toContain("effect-build-apple");
     }
     expect(await readFile(resolve(root, "docs/release-security.md"), "utf8")).toContain(
-      "Fixed-seven convergence",
+      "Fixed-six convergence",
     );
     expect(await readFile(resolve(root, "packages/effect-build-node-sea/README.md"), "utf8")).toContain(
       "ad-hoc, no-timestamp",

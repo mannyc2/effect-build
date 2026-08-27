@@ -1,10 +1,11 @@
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const exists = async (path: string): Promise<boolean> => await access(path).then(() => true, () => false);
 
 interface SurfaceSubpath {
   readonly runtime: readonly string[];
@@ -48,8 +49,26 @@ const sorted = (values: readonly string[]): readonly string[] => [...values].sor
 interface Manifest {
   readonly name: string;
   readonly version: string;
+  readonly private?: boolean;
+  readonly publishConfig?: unknown;
   readonly exports: Record<string, { readonly types: string; readonly import: string }>;
   readonly dependencies?: Record<string, string>;
+  readonly optionalDependencies?: Record<string, string>;
+  readonly devDependencies?: Record<string, string>;
+  readonly peerDependencies?: Record<string, string>;
+}
+
+interface ResearchContract {
+  readonly targetPublicSurface: {
+    readonly privateProfileCandidates: readonly { readonly implementationPath: string }[];
+    readonly providerLanes: readonly {
+      readonly package: string;
+      readonly lanes: readonly {
+        readonly lane: "Api" | "Command";
+        readonly modules: readonly { readonly module: string }[];
+      }[];
+    }[];
+  };
 }
 
 const readManifest = async (name: string): Promise<Manifest> =>
@@ -64,10 +83,32 @@ describe("public surface", () => {
         Object.keys(surface.packages).map(async (name) => [name, await readManifest(name)] as const),
       ),
     );
+    for (const [name, contract] of Object.entries(surface.packages)) {
+      expect(Object.keys(manifests.get(name)!.exports), `${name} manifest/public-api projection`).toEqual([
+        ".",
+        ...Object.keys(contract.subpaths),
+      ]);
+    }
+    const built = (await Promise.all([...manifests.entries()].flatMap(([name, manifest]) =>
+      Object.values(manifest.exports).flatMap((entry) => [
+        exists(resolve(root, `packages/${name}`, entry.import)),
+        exists(resolve(root, `packages/${name}`, entry.types)),
+      ])
+    ))).every(Boolean);
+    if (!built) {
+      return;
+    }
     const declarationFiles = Object.entries(surface.packages).flatMap(([name, contract]) => {
       const manifest = manifests.get(name)!;
-      return [manifest.exports["."]!, ...Object.keys(contract.subpaths).map((subpath) => manifest.exports[subpath]!)]
-        .map((entry) => resolve(root, `packages/${name}`, entry.types));
+      return [
+        manifest.exports["."]!,
+        ...Object.keys(contract.subpaths).map((subpath) =>
+          manifest.exports[subpath]!
+        ),
+      ]
+        .map((entry) =>
+          resolve(root, `packages/${name}`, entry.types)
+        );
     });
     const readDeclarationExports = declarationExports(declarationFiles);
     for (const [name, contract] of Object.entries(surface.packages)) {
@@ -93,7 +134,7 @@ describe("public surface", () => {
     }
   }, 30_000);
 
-  it("keeps seven lockstep packages with one-way provider-to-core dependencies", async () => {
+  it("keeps six admitted lockstep packages and one private Rolldown candidate", async () => {
     const surface = await readSurface();
     const names = Object.keys(surface.packages);
     expect(names).toEqual([
@@ -103,7 +144,6 @@ describe("public surface", () => {
       "effect-build-deno",
       "effect-build-esbuild",
       "effect-build-node-sea",
-      "effect-build-rolldown",
     ]);
     const versions = new Set<string>();
     for (const name of names) {
@@ -112,11 +152,20 @@ describe("public surface", () => {
       const dependencies = Object.keys(manifest.dependencies ?? {});
       if (name === "effect-build") expect(dependencies).toEqual([]);
       else {
-        expect(dependencies, name).toContain("effect-build");
+        expect(dependencies, name).not.toContain("effect-build");
+        expect(manifest.optionalDependencies?.["effect-build"], name).toBeUndefined();
+        expect(manifest.devDependencies?.["effect-build"], name).toBeUndefined();
+        expect(manifest.peerDependencies?.["effect-build"], name).toBe(manifest.version);
         expect(dependencies.filter((dependency) => dependency.startsWith("effect-build-")), name).toEqual([]);
       }
     }
     expect(versions.size).toBe(1);
+    const rolldown = await readManifest("effect-build-rolldown");
+    expect(rolldown.private).toBe(true);
+    expect(rolldown.publishConfig).toBeUndefined();
+    expect(rolldown.dependencies?.["effect-build"]).toBeUndefined();
+    expect(rolldown.peerDependencies?.["effect-build"]).toBe(rolldown.version);
+    expect(names).not.toContain("effect-build-rolldown");
   });
 
   it("keeps publication quarantined after materializing the exact-prepacked control plane", async () => {
@@ -138,14 +187,35 @@ describe("public surface", () => {
 
   it("ships only declared modules in every package dist", async () => {
     const surface = await readSurface();
-    for (const [name, contract] of Object.entries(surface.packages)) {
-      const entries = await readdir(resolve(root, `packages/${name}/dist`), { recursive: true });
+    const research = JSON.parse(
+      await readFile(resolve(root, "tooling/research-complete-contract.json"), "utf8"),
+    ) as ResearchContract;
+    for (const name of Object.keys(surface.packages)) {
+      const dist = resolve(root, `packages/${name}/dist`);
+      if (!await exists(dist)) continue;
+      const entries = await readdir(dist, { recursive: true });
+      const manifest = await readManifest(name);
       const declared = new Set(
-        ["index", ...Object.keys(contract.subpaths).map((subpath) => subpath.slice(2))].flatMap((module) => [
-          `${module}.js`,
-          `${module}.d.ts`,
-        ]),
+        Object.values(manifest.exports).flatMap((entry) => [entry.import, entry.types]).map((path) =>
+          path.replace(/^\.\/dist\//u, "")
+        ),
       );
+      const provider = research.targetPublicSurface.providerLanes.find((entry) => entry.package === name);
+      for (const lane of provider?.lanes ?? []) {
+        declared.add(`${lane.lane}/index.js`);
+        declared.add(`${lane.lane}/index.d.ts`);
+        for (const module of lane.modules) {
+          declared.add(`${lane.lane}/${module.module}.js`);
+          declared.add(`${lane.lane}/${module.module}.d.ts`);
+        }
+      }
+      if (name === "effect-build") {
+        for (const candidate of research.targetPublicSurface.privateProfileCandidates) {
+          const relative = candidate.implementationPath.replace("packages/effect-build/src/", "").replace(/\.ts$/u, "");
+          declared.add(`${relative}.js`);
+          declared.add(`${relative}.d.ts`);
+        }
+      }
       const undeclared = entries.filter((entry) =>
         typeof entry === "string"
         && (entry.endsWith(".js") || entry.endsWith(".d.ts"))

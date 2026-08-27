@@ -1,74 +1,55 @@
-import type { Crypto, Effect, FileSystem, Layer, Path } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import * as CompileExecutable from "../packages/effect-build-bun/src/CompileExecutable.js";
-import type * as Artifact from "../packages/effect-build/src/Artifact.js";
-import type * as BuildError from "../packages/effect-build/src/BuildError.js";
+import type { Crypto, Effect, FileSystem, Path } from "effect";
+import * as Compile from "../packages/effect-build-bun/src/Command/CompileExecutable.js";
+import * as Bun from "../packages/effect-build-bun/src/index.js";
+import * as Runtime from "../packages/effect-build-bun/src/internal/Runtime.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
-type LayerError<L> = L extends Layer.Layer<infer _A, infer E, infer _R> ? E : never;
-type LayerServices<L> = L extends Layer.Layer<infer _A, infer _E, infer R> ? R : never;
 
-export type _Target = Assert<
+export type _RootNamespaces = Assert<Same<keyof typeof Bun, "Api" | "Command">>;
+export type _TargetIncludesMuslAndArm64 = Assert<
   Same<
-    CompileExecutable.Target,
-    | "macos-x64"
-    | "macos-aarch64"
-    | "linux-x64-gnu"
-    | "linux-x64-musl"
-    | "linux-aarch64-gnu"
-    | "windows-x64"
+    Extract<Compile.Target, "bun-linux-arm64-musl" | "bun-windows-arm64">,
+    "bun-linux-arm64-musl" | "bun-windows-arm64"
   >
 >;
 
-export type _Error = Assert<
+const scalar = Compile.compileExecutable({
+  entrypoints: ["main.ts"],
+  outfile: "app",
+  target: "bun-linux-x64-musl",
+  observation: "hashed",
+});
+export type _Scalar = Assert<
   Same<
-    CompileExecutable.CompileExecutableError,
-    | BuildError.ToolFailed
-    | BuildError.UnsupportedTarget
-    | BuildError.PublishFailed
-    | BuildError.ArtifactInvalid
-    | BuildError.SelectedToolChanged
+    typeof scalar,
+    Effect.Effect<
+      Compile.Artifact<"hashed">,
+      Compile.CompileExecutableError,
+      Runtime.Runtime | Crypto.Crypto | FileSystem.FileSystem | Path.Path
+    >
   >
 >;
 
-declare const input: CompileExecutable.CompileExecutableInput;
-const compiled = CompileExecutable.compileExecutable(input);
-
-export type _Compile = Assert<
-  Same<
-    typeof compiled,
-    Effect.Effect<Artifact.Executable, CompileExecutable.CompileExecutableError, CompileExecutable.Compiler>
-  >
+const matrix = Compile.compileExecutableMatrix<"unhashed">({
+  inputs: [{
+    entrypoints: ["main.ts"],
+    outfile: "app",
+    observation: "unhashed",
+  }],
+  concurrency: 1,
+});
+export type _Matrix = Assert<
+  Same<Effect.Success<typeof matrix>, Compile.MatrixReport<"unhashed">>
+>;
+export type _MatrixError = Assert<
+  Same<Effect.Error<typeof matrix>["_tag"], "InvalidInput">
+>;
+export type _MatrixServices = Assert<
+  Same<Effect.Services<typeof matrix>, Runtime.Runtime | Crypto.Crypto | FileSystem.FileSystem | Path.Path>
 >;
 
-const built = CompileExecutable.layer({ executable: "/usr/local/bin/bun" });
-
-export type _LayerError = Assert<
-  Same<
-    LayerError<typeof built>,
-    BuildError.ToolNotFound | BuildError.ToolFailed | BuildError.ArtifactInvalid | BuildError.SelectedToolChanged
-  >
->;
-export type _LayerServices = Assert<
-  Same<
-    LayerServices<typeof built>,
-    Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner
-  >
->;
-
-// The input is closed and flat: no nested options bag, no observation mode.
-export type _Input = Assert<
-  Same<
-    CompileExecutable.CompileExecutableInput,
-    {
-      readonly entrypoint: string;
-      readonly outfile: string;
-      readonly cwd?: string;
-      readonly target: CompileExecutable.Target;
-      readonly minify?: boolean;
-      readonly sourcemap?: "linked" | "inline";
-      readonly bytecode?: boolean;
-    }
-  >
->;
+// @ts-expect-error!
+Compile.compileExecutable({ entrypoints: [], outfile: "app", observation: "hashed" });
+// @ts-expect-error!
+Compile.compileExecutable({ entrypoints: ["main.ts"], outfile: "app", observation: "hash" });

@@ -1,24 +1,28 @@
 # effect-build documentation
 
-The approved v0.5 target is
-[`effect-build/v0.5-contract@1`](v0.5-contract.md). It is a target contract, not
-a claim that every hard-cut or certification cell is complete. The Apple source
-track is implemented locally; credential-backed and clean-host evidence remains
-unearned.
+The canonical product scope is
+[`effect-build/research-complete-contract@1`](research-complete-contract.md).
+It accounts for every accepted finding and valid evidence gate. The hard-cut
+candidate implements the selected surface, while certification remains a
+separate receipt-backed authority. The older v0.5 contract is an implementation
+and release-control snapshot, not a product-scope ceiling.
 
-| Document                                    | Covers                                                        |
-| ------------------------------------------- | ------------------------------------------------------------- |
-| [v0.5 contract](v0.5-contract.md)           | Profiles, protocols, cutover, evidence, and release authority |
-| [API](api.md)                               | Current candidate API and scheduled hard cut                  |
-| [Architecture](architecture.md)             | Current mechanics and v0.5 target invariants                  |
-| [Integrations](drivers.md)                  | Native lanes and portable-profile eligibility                 |
-| [Apple distribution](apple-distribution.md) | Direct Developer ID API, lifecycle, and certification cells   |
-| [Errors](errors.md)                         | Current errors and lifecycle boundaries                       |
-| [Releases](release-security.md)             | Quarantine and fixed-seven target protocol                    |
+| Document                                                    | Covers                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------ |
+| [Research-complete contract](research-complete-contract.md) | Canonical operations, gates, ownership, and authority        |
+| [v0.5 snapshot](v0.5-contract.md)                           | Existing profile and release-control implementation snapshot |
+| [API](api.md)                                               | Research-complete hard-cut surface and provider lanes        |
+| [Architecture](architecture.md)                             | Mechanics and architectural invariants                       |
+| [Integrations](drivers.md)                                  | Native lanes and portable-profile eligibility                |
+| [Apple distribution](apple-distribution.md)                 | Direct Developer ID API, lifecycle, and certification cells  |
+| [Errors](errors.md)                                         | Role-owned failures, publication, and interruption           |
+| [Releases](release-security.md)                             | Quarantine and fixed-six target protocol                     |
 
 Runnable candidate examples are under [`examples/`](../examples). The exact
 current built surface is asserted against
-[`tooling/public-api.json`](../tooling/public-api.json); the target subpaths and
-deletions are frozen separately in
-[`tooling/v05-contract.json`](../tooling/v05-contract.json). `plans/` and
-`research/` are historical and carry no authority over current work.
+[`tooling/public-api.json`](../tooling/public-api.json); canonical scope,
+target provider lanes, terminal dispositions, and semantic ownership are in
+[`tooling/research-complete-contract.json`](../tooling/research-complete-contract.json).
+`plans/` and `research/` remain provenance inputs to that generated canon.
+Implementation status, executed certification, merge, and publication are
+reported independently; none is inferred from another.

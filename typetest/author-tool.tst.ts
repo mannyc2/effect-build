@@ -1,45 +1,49 @@
-import type { Crypto, Effect, FileSystem, Path } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { type Crypto, Effect, type FileSystem, type Path } from "effect";
+import type { ChildProcess } from "effect/unstable/process";
 import type * as Artifact from "../packages/effect-build/src/Artifact.js";
 import * as Tool from "../packages/effect-build/src/Author/Tool.js";
-import type * as BuildError from "../packages/effect-build/src/BuildError.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 
-declare const produce: (stagedPath: string) => Effect.Effect<void, BuildError.ToolFailed, ChildProcessSpawner>;
+declare const candidate: Tool.Candidate<"bun">;
+const command = candidate.command(["--version"]);
+export type _OfficialCommand = Assert<Same<typeof command, ChildProcess.Command>>;
+export type _ExactContent = Assert<Same<typeof candidate.content.digest, Artifact.Digest>>;
 
-const published = Tool.publishExecutable({
-  tool: {
-    protocol: "effect-build/selected-tool@1",
-    name: "bun",
-    version: "1.3.14",
-    executablePath: "/usr/local/bin/bun",
-    digest: { algorithm: "sha256", value: "0".repeat(64) },
-  },
-  outfile: "dist/app",
-  target: "linux-x64-gnu",
-  produce,
+declare const observation: Tool.Observation<"bun">;
+const selected = Tool.select({
+  name: "bun",
+  observe: () => Effect.succeed(observation),
 });
-
-// Producer failures and requirements flow through publication.
-export type _Publish = Assert<
+export type _Select = Assert<
   Same<
-    typeof published,
+    typeof selected,
     Effect.Effect<
-      Artifact.Executable,
-      BuildError.PublishFailed | BuildError.ToolFailed,
-      FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner
+      Tool.SelectedTool<"bun">,
+      | Tool.ToolNotFound
+      | Tool.ToolSelectionAmbiguous
+      | Tool.ToolSelectionInvalid
+      | Artifact.ArtifactInvalid
+      | Tool.SelectedToolChanged,
+      Crypto.Crypto | FileSystem.FileSystem | Path.Path
     >
   >
 >;
 
-const resolved = Tool.resolveExecutable({ name: "bun" });
-export type _Resolve = Assert<
-  Same<typeof resolved, Effect.Effect<string, BuildError.ToolNotFound, FileSystem.FileSystem | Path.Path>>
+declare const tool: Tool.SelectedTool<"bun">;
+export type _Reauthenticate = Assert<
+  Same<
+    typeof tool.reauthenticate,
+    Effect.Effect<
+      void,
+      Artifact.ArtifactInvalid | Tool.SelectedToolChanged,
+      Crypto.Crypto | FileSystem.FileSystem | Path.Path
+    >
+  >
 >;
 
-const completion = Tool.run({ tool: "bun", executable: "/usr/local/bin/bun", args: ["--version"] });
-export type _Run = Assert<
-  Same<typeof completion, Effect.Effect<Tool.Completion, BuildError.ToolFailed, ChildProcessSpawner>>
->;
+// @ts-expect-error! Core exposes official Command construction, not generic execution.
+Tool.run({ tool: "bun", args: ["--version"] });
+// @ts-expect-error! Core exposes no generic run-or-fail compatibility facade.
+Tool.runOrFail({ tool: "bun", args: ["--version"] });

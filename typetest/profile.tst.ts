@@ -1,69 +1,56 @@
-import type { Crypto, Effect, FileSystem, Layer, Path, Scope } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import * as BunProfile from "../packages/effect-build-bun/src/Profile.js";
-import * as EsbuildProfile from "../packages/effect-build-esbuild/src/Profile.js";
-import * as RolldownProfile from "../packages/effect-build-rolldown/src/Profile.js";
-import * as NodeMain from "../packages/effect-build/src/Author/NodeMain.js";
-import type * as BuildError from "../packages/effect-build/src/BuildError.js";
-import * as StaticBrowserApplication from "../packages/effect-build/src/Profile/StaticBrowserApplication.js";
+import { type Crypto, Effect, type FileSystem, type Path } from "effect";
+import type * as Artifact from "../packages/effect-build/src/Artifact.js";
+import * as BorrowedOutput from "../packages/effect-build/src/Author/BorrowedOutput.js";
+import type * as NodeMain from "../packages/effect-build/src/Author/NodeMain.js";
+import * as BrowserModulePayload from "../packages/effect-build/src/Profile/BrowserModulePayload.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
-type PortableServices = NodeMain.Producer | StaticBrowserApplication.Provider;
 
-const sealed = NodeMain.seal({
-  protocol: NodeMain.profile,
-  entrypoint: "main.ts",
-  format: "module",
-});
-export type _NodeMain = Assert<
+const payload = BrowserModulePayload.withPayload(
+  {
+    protocol: BrowserModulePayload.protocol,
+    entries: [{ id: "application", source: "/source/application.ts" }],
+    mode: "production",
+    sourceMaps: "linked",
+    minify: true,
+    external: ["react"],
+    conditions: ["browser"],
+  },
+  (borrowed) => Effect.succeed(borrowed.tree.initial.manifestDigest.value),
+);
+
+export type _BrowserModulePayload = Assert<
   Same<
-    typeof sealed,
+    typeof payload,
     Effect.Effect<
-      NodeMain.SealedNodeMain,
-      NodeMain.SealError,
-      NodeMain.Producer | Scope.Scope | FileSystem.FileSystem | Path.Path | Crypto.Crypto
+      Artifact.Sha256Value,
+      BrowserModulePayload.Error,
+      | BrowserModulePayload.Provider
+      | BorrowedOutput.CleanupReporter
+      | Crypto.Crypto
+      | FileSystem.FileSystem
+      | Path.Path
     >
   >
 >;
 
-const browser = StaticBrowserApplication.build({
-  request: { protocol: StaticBrowserApplication.protocol, entrypoint: "main.ts", resources: [] },
-  generationRoot: "dist/browser",
-});
-export type _Browser = Assert<
-  Same<
-    typeof browser,
-    Effect.Effect<
-      StaticBrowserApplication.StaticBrowserApplication,
-      StaticBrowserApplication.BuildError,
-      StaticBrowserApplication.Provider | Crypto.Crypto | FileSystem.FileSystem | Path.Path
-    >
-  >
+declare const borrowed: BrowserModulePayload.Borrowed;
+export type _HashedTree = Assert<Same<typeof borrowed.tree, BorrowedOutput.Tree<"hashed">>>;
+export type _ProducerIdentity = Assert<Same<typeof borrowed.producer, NodeMain.ProviderIdentity>>;
+export type _EntryRole = Assert<
+  Same<BrowserModulePayload.FileRole, "entry" | "chunk" | "style" | "asset" | "source-map" | "other">
 >;
+export type _NoGeneratedHtml = Assert<Same<"html" extends keyof BrowserModulePayload.Borrowed ? true : false, false>>;
 
-export type _BunLayer = Assert<
-  Same<
-    ReturnType<typeof BunProfile.layer>,
-    Layer.Layer<
-      PortableServices,
-      | BuildError.ToolFailed
-      | BuildError.ArtifactInvalid
-      | BuildError.SelectedToolChanged
-      | BuildError.ToolNotFound
-      | BuildError.PortableUnsupported,
-      Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner
-    >
-  >
->;
-export type _EsbuildLayer = Assert<
-  Same<typeof EsbuildProfile.layer, Layer.Layer<PortableServices, never, Path.Path | FileSystem.FileSystem>>
->;
-export type _RolldownLayer = Assert<
-  Same<typeof RolldownProfile.layer, Layer.Layer<PortableServices, never, Path.Path | FileSystem.FileSystem>>
->;
+BrowserModulePayload.withPayload({
+  // @ts-expect-error! protocol majors are closed, literal contracts.
+  protocol: "effect-build/profile/browser-module-payload@2",
+  entries: [{ id: "application", source: "/source/application.ts" }],
+  mode: "production",
+  sourceMaps: "linked",
+  minify: true,
+}, () => Effect.void);
 
-// @ts-expect-error! protocol majors are closed, literal contracts.
-NodeMain.seal({ protocol: "effect-build/profile/node-main@2", entrypoint: "main.ts", format: "module" });
-// @ts-expect-error! browser profile requests require the exact protocol.
-StaticBrowserApplication.build({ request: { entrypoint: "main.ts", resources: [] }, generationRoot: "dist" });
+// @ts-expect-error! browser payload requests require explicit module entries and build semantics.
+BrowserModulePayload.withPayload({ protocol: BrowserModulePayload.protocol }, () => Effect.void);

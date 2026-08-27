@@ -502,14 +502,44 @@ export const observeTree = <K extends TreeArtifactKind>(
  * The provider digest is mandatory; this bridge independently re-observes the committed bytes.
  */
 export const observeExecutable = (
-  executable: CoreArtifact.Executable,
+  executable: CoreArtifact.Executable<"hashed">,
 ): Effect.Effect<FileArtifact<"mach-o">, ArtifactError | AppleInputInvalid, ArtifactServices> =>
   Effect.gen(function*() {
-    if (executable._tag !== "Executable") {
+    const path = yield* Path.Path;
+    if (executable._tag !== "HashedExecutable") {
       return yield* new AppleInputInvalid({
         operation: "Artifact.observeExecutable",
         field: "executable",
-        reason: "expected an effect-build Executable",
+        reason: "expected a hashed effect-build Executable",
+      });
+    }
+    const publication = (executable as Partial<CoreArtifact.HashedExecutable>).publication;
+    if (publication?.commit !== "same-parent-rename" || publication.committed !== true) {
+      return yield* new AppleInputInvalid({
+        operation: "Artifact.observeExecutable",
+        field: "publication",
+        reason: "expected a committed same-parent rename",
+      });
+    }
+    if (!path.isAbsolute(executable.path) || path.normalize(executable.path) !== executable.path) {
+      return yield* new AppleInputInvalid({
+        operation: "Artifact.observeExecutable",
+        field: "path",
+        reason: "provider path must be absolute and normalized",
+      });
+    }
+    if (!/^(?:0|[1-9][0-9]*)$/u.test(executable.bytes)) {
+      return yield* new AppleInputInvalid({
+        operation: "Artifact.observeExecutable",
+        field: "bytes",
+        reason: "provider byte count must be canonical unsigned decimal",
+      });
+    }
+    if (executable.nativeFormat !== "mach-o") {
+      return yield* new AppleInputInvalid({
+        operation: "Artifact.observeExecutable",
+        field: "nativeFormat",
+        reason: `expected mach-o, received ${executable.nativeFormat}`,
       });
     }
     if (executable.target !== "macos-x64" && executable.target !== "macos-aarch64") {
@@ -526,15 +556,10 @@ export const observeExecutable = (
         reason: "provider SHA-256 authentication is required",
       });
     }
-    if (executable.sha256 !== executable.digest.value) {
-      return yield* new AppleInputInvalid({
-        operation: "Artifact.observeExecutable",
-        field: "sha256",
-        reason: "legacy SHA-256 projection does not match the authenticated digest",
-      });
-    }
     const observed = yield* observeFile("mach-o", executable.path);
-    if (observed.identity.bytes !== executable.bytes || observed.identity.digest.value !== executable.digest.value) {
+    if (
+      `${observed.identity.bytes}` !== executable.bytes || observed.identity.digest.value !== executable.digest.value
+    ) {
       return yield* new ArtifactChanged({
         path: executable.path,
         expected: JSON.stringify({ bytes: executable.bytes, sha256: executable.digest.value }),

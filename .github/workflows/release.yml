@@ -56,10 +56,10 @@ jobs:
     name: Refuse external mutation while Stage 9 authority is unearned
     runs-on: ubuntu-24.04
     steps:
-      - name: Keep the implemented fixed-seven control plane unreachable
+      - name: Keep the admitted-package control plane unreachable
         shell: bash
         run: |
-          echo "::error::v0.5 publication remains quarantined: the exact Apple artifact, npm namespace bootstrap, seven trusted-publisher bindings, protected-environment ID, and reviewer ID are not yet certified and frozen"
+          echo "::error::v0.5 publication remains quarantined: the exact Apple artifact, npm namespace bootstrap, six trusted-publisher bindings, protected-environment ID, and reviewer ID are not yet certified and frozen"
           exit 1
 
   stage-release-escrow:
@@ -75,5 +75,5 @@ jobs:
       - name: Unreachable until the frozen contract earns external mutation authority
         shell: bash
         run: |
-          echo "::error::the fixed-seven coordinator is implemented and tested, but this privileged entry remains structurally unreachable"
+          echo "::error::the six-package coordinator is implemented and tested, but this privileged entry remains structurally unreachable"
           exit 1

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { classifyGithub, coordinate, nextAction, registryPrefix } from "./coordinator-state.mjs";
+import { releaseControl } from "../node-finalizer/common.mjs";
 
 const absentAssets = () => Array.from({ length: 9 }, () => "Absent");
 const equivalentAssets = () => Array.from({ length: 9 }, () => "Equivalent");
@@ -44,7 +45,7 @@ test("the coordinator performs one mutation at a time and converges after respon
       escrow: "Absent",
       finalAssets: absentAssets(),
     },
-    registry: Array.from({ length: 7 }, () => "Absent"),
+    registry: Array.from({ length: releaseControl.orderedPackages.length }, () => "Absent"),
   };
   const mutations = [];
   let loseResponseAt = 3;
@@ -69,7 +70,10 @@ test("the coordinator performs one mutation at a time and converges after respon
     },
   });
   assert.deepEqual(result, { _tag: "Complete" });
-  assert.equal(mutations.filter(({ kind }) => kind === "publish-coordinate").length, 7);
+  assert.equal(
+    mutations.filter(({ kind }) => kind === "publish-coordinate").length,
+    releaseControl.orderedPackages.length,
+  );
   assert.equal(mutations.at(-1).kind, "publish-draft");
 });
 

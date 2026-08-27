@@ -8,13 +8,35 @@ import { basename, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
-import * as BunCompile from "../../packages/effect-build-bun/src/CompileExecutable.js";
-import * as DenoCompile from "../../packages/effect-build-deno/src/CompileExecutable.js";
+import * as BunCompile from "../../packages/effect-build-bun/src/Command/CompileExecutable.js";
+import * as BunRuntime from "../../packages/effect-build-bun/src/internal/Runtime.js";
+import * as DenoCompile from "../../packages/effect-build-deno/src/Command/CompileExecutable.js";
+import * as DenoRuntime from "../../packages/effect-build-deno/src/internal/Runtime.js";
 import type * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import { assertCertificationHost } from "../../scripts/certification-host.mjs";
+import { writeCompilerTargetReceipt } from "../../scripts/compiler-target-receipt.mjs";
 
 const execute = promisify(execFile);
 const root = mkdtempSync(join(tmpdir(), "effect-build-target-support-"));
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
+
+const bunTargets = {
+  "macos-x64": "bun-darwin-x64",
+  "macos-aarch64": "bun-darwin-arm64",
+  "linux-x64-gnu": "bun-linux-x64",
+  "linux-x64-musl": "bun-linux-x64-musl",
+  "linux-aarch64-gnu": "bun-linux-arm64",
+  "windows-x64": "bun-windows-x64",
+} as const satisfies Readonly<Record<string, BunCompile.Target>>;
+
+const denoTargets = {
+  "macos-x64": "x86_64-apple-darwin",
+  "macos-aarch64": "aarch64-apple-darwin",
+  "linux-x64-gnu": "x86_64-unknown-linux-gnu",
+  "linux-aarch64-gnu": "aarch64-unknown-linux-gnu",
+  "windows-x64": "x86_64-pc-windows-msvc",
+  "windows-aarch64": "aarch64-pc-windows-msvc",
+} as const satisfies Readonly<Record<string, DenoCompile.Target>>;
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -72,39 +94,52 @@ describe("provider target support", () => {
     if (compiler !== "bun" && compiler !== "deno") throw new Error("EFFECT_BUILD_TARGET_COMPILER must be bun or deno");
     const requested = requiredEnvironment("EFFECT_BUILD_TARGET");
     const executable = requiredEnvironment(compiler === "bun" ? "EFFECT_BUILD_BUN_BIN" : "EFFECT_BUILD_DENO_BIN");
+    const receipt = requiredEnvironment("EFFECT_BUILD_TARGET_RECEIPT");
     if (!isAbsolute(executable)) throw new Error(`the provisioned ${compiler} executable must be absolute`);
     accessSync(executable, constants.X_OK);
 
     let target: BunCompile.Target | DenoCompile.Target;
-    let artifact: Artifact.Executable;
+    let artifact: BunCompile.Artifact<"hashed"> | DenoCompile.Artifact<"hashed">;
     if (compiler === "bun") {
-      target = Schema.decodeUnknownSync(BunCompile.Target)(requested);
+      target = Schema.decodeUnknownSync(BunCompile.Target)(bunTargets[requested as keyof typeof bunTargets]);
+      const outfile = join(root, `${compiler}-${target}${target.includes("windows") ? ".exe" : ""}`);
       artifact = await Effect.runPromise(
-        BunCompile.compileExecutable({ entrypoint, outfile: join(root, `${compiler}-${target}`), target }).pipe(
-          Effect.provide(BunCompile.layer({ executable })),
+        BunCompile.compileExecutable({ entrypoints: [entrypoint], outfile, target, observation: "hashed" }).pipe(
+          Effect.provide(BunRuntime.layer({ executable: executable as Artifact.AbsolutePath })),
           Effect.provide(NodeServices.layer),
         ),
       );
     } else {
-      target = Schema.decodeUnknownSync(DenoCompile.Target)(requested);
+      target = Schema.decodeUnknownSync(DenoCompile.Target)(denoTargets[requested as keyof typeof denoTargets]);
+      const outfile = join(root, `${compiler}-${target}${target.includes("windows") ? ".exe" : ""}`);
       artifact = await Effect.runPromise(
-        DenoCompile.compileExecutable({ entrypoint, outfile: join(root, `${compiler}-${target}`), target }).pipe(
-          Effect.provide(DenoCompile.layer({ executable })),
+        DenoCompile.compileExecutable({ entrypoint, outfile, target, observation: "hashed" }).pipe(
+          Effect.provide(DenoRuntime.layer({ executable: executable as Artifact.AbsolutePath })),
           Effect.provide(NodeServices.layer),
         ),
       );
     }
     const bytes = readFileSync(artifact.path);
     expect(artifact).toMatchObject({
-      _tag: "Executable",
-      bytes: bytes.byteLength,
-      target,
+      _tag: "HashedExecutable",
+      bytes: `${bytes.byteLength}`,
+      provider: compiler,
+      publication: { commit: "same-parent-rename", committed: true },
     });
     expect(artifact.tool.name).toBe(compiler);
-    expect(artifact.tool.version).toMatch(/^\d+\.\d+\.\d+/);
-    expect(artifact.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+    expect(artifact.tool.participants[0].version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(artifact.digest.value).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect(isAbsolute(artifact.path)).toBe(true);
-    expect(basename(artifact.path).endsWith(".exe")).toBe(target.startsWith("windows-"));
-    await oracle(artifact.path, target);
+    expect(basename(artifact.path).endsWith(".exe")).toBe(artifact.target.startsWith("windows-"));
+    await oracle(artifact.path, artifact.target);
+    await writeCompilerTargetReceipt({
+      output: receipt,
+      compiler,
+      target: artifact.target,
+      toolVersion: artifact.tool.participants[0].version,
+      artifactBytes: artifact.bytes,
+      artifactSha256: artifact.digest.value,
+      observedHost: assertCertificationHost("linux-x64"),
+    });
   }, 300_000);
 });

@@ -79,9 +79,13 @@ unauthenticated path as a substitute.
 `sameIdentity` intentionally ignores paths and compares authenticated content identity so a staged copy can be proved equal to
 its source.
 
-`observeExecutable` is the provider bridge: it accepts only a hashed macOS `effect-build/Artifact.Executable`, independently
-rehashes the committed path, and requires the provider byte count and SHA-256 to match before minting a Mach-O artifact. It
-binds the provider target to a thin Mach-O CPU type and rejects FAT/universal input.
+`observeExecutable` is the provider bridge: it accepts only a macOS
+`effect-build/Artifact.HashedExecutable` with a committed same-parent
+publication record, absolute normalized path, canonical decimal byte count,
+SHA-256 digest, and `mach-o` native format. It independently rehashes the
+committed path and requires the provider byte count and SHA-256 to match before
+minting a Mach-O artifact. It binds the provider target to a thin Mach-O CPU
+type and rejects FAT/universal input.
 
 | Operation                 | Accepted authenticated input                                                                                    | Result                                                                                 | Lifecycle                               |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------- |
@@ -217,10 +221,15 @@ source revision and exact artifact digests, a cell is **not earned**.
 | A8 — credential boundary          | Prove fingerprint and Team ID matching, distinct Application/Installer authorities, pre-provisioned Notary Keychain Profile provenance, no credential creation/import/unlock/sync, and complete secret redaction                      | Credential selection and containment     |
 | A9 — immutability                 | Prove failures never mutate caller inputs, mutations return new authenticated outputs, and observations bind the exact unchanged subject digest                                                                                       | Artifact lifecycle invariant             |
 
-At Apple implementation revision `5718e83907e8e463a16c2dc186e70fa3f5ca90a1`,
-the local A0, A1, and A9 gates were green, but no retained exact-revision
-receipt or CI record was issued, so none is formally earned. A2 through A8 are
-also not earned. No Developer ID or Notary credential was exercised.
+The generated research-complete contract accounts all nine current source
+modules as implemented and records focused non-credential and local-tool test
+progress without marking certification. Historical revision
+`5718e83907e8e463a16c2dc186e70fa3f5ca90a1` had locally green A0, A1, and A9
+checks but no retained exact-revision receipt or CI record; those results do not
+transfer to a later candidate. No current exact-candidate A0–A9 receipt set,
+14-coordinate credential-backed distribution matrix, or eight-coordinate
+quarantined clean-host matrix has been retained, so every formal Apple
+certification coordinate remains open.
 
 Universal binary construction is not one of these cells. x64 and arm64 outputs are independently built and certified. Adding a
 universal artifact would require a separately approved operation, digest/provenance model, and test matrix.
@@ -245,7 +254,7 @@ notarization evidence.
 
 The frozen v0.5 product includes all four forms, so all four G cells on both
 architectures are required: eight clean-host coordinates with no silent
-pruning. Narrowing that matrix requires an explicit Stage 0 contract revision.
+pruning. Narrowing that matrix requires an explicit research-authority revision.
 Rosetta execution does not certify a native x64 build, and no result implies a
 universal-binary claim.
 
@@ -261,6 +270,47 @@ Each completed cell produces a retained, redacted receipt containing:
 - assessment observations and, for G-cells, clean-host OS/architecture, quarantine evidence, user-flow decision, and execution or
   install/removal result; and
 - an explicit verdict naming only the operation, artifact kind, architecture, and product form actually certified.
+
+The certifier boundary is a hard-cut `effect-build/apple-certification-request@2` →
+`effect-build/apple-certification-receipt@2` protocol; there is no `@1`
+decoder or fallback. Every request binds the exact package version, source and
+candidate-descriptor identities, `bun.lock` SHA-256, clean-worktree assertion,
+runner, configured certifier path, approved certifier SHA-256, and the canonical
+prior-evidence manifest path and digest. The receipt
+repeats those identities and binds the exact request SHA-256. The workflow reads
+the primary path/digest from protected environment variables
+`EFFECT_BUILD_APPLE_CERTIFIER` and
+`EFFECT_BUILD_APPLE_CERTIFIER_SHA256`; clean-host jobs use the separately
+approved `EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER` and
+`EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256`. The primary and clean-host
+digests must differ. The harness authenticates the configured regular file,
+copies those bytes into mode-0500 private temporary storage, and rehashes that read-only snapshot
+immediately before and after executing only the snapshot.
+
+Evidence is canonical `effect-build/apple-certification-evidence@2` JSON, not an
+opaque `verdict: certified` wrapper. Distribution records must contain exact
+artifact identities, certificate validity, tool identities, and the operations
+required by their scenario; notarized scenarios also require accepted Notary
+subject/transport/log identities. Clean-host records additionally bind prior
+distribution receipts, quarantine evidence, and the product-specific normal
+user flow. A0–A9 records bind prior evidence, the cell-specific claim, tools,
+artifacts, and executed checks. Missing, additional, duplicated, failed, or
+wrong-host records are rejected before aggregation. Raw provider responses and
+secrets remain excluded; provisional A7 details are represented by authenticated
+redacted digests rather than silently frozen as a public provider schema.
+
+Prior evidence is never passed through from an Actions download directory. The
+harness validates bounded regular manifest/receipt/evidence triples, snapshots
+only the exact permitted dependency set into a private read-only directory, and
+rehashes that directory and its retained canonical manifest before and after the
+certifier. Each G cell depends on the matching same-target app, ZIP, DMG, or PKG
+distribution coordinate, and its quarantined transport digest must equal the
+producer's distributed-artifact digest. A0 and A1 use direct cell-local proof;
+A2 binds all six runtime-signing coordinates; A3–A6 bind both matching
+distribution and G coordinates; A7 binds all eight notarized product
+coordinates; A8 binds all 14 distribution coordinates; and A9 binds all 22
+distribution and clean-host coordinates. Aggregate validation repeats every
+file digest, dependency, and transport-identity cross-link.
 
 Capability cells such as adverse-response decoding may be bound to the exact implementation revision and supported Apple tool
 version. Product cells and every G-cell are byte-specific and must be repeated for the exact artifacts selected for release.
@@ -299,6 +349,20 @@ frozen `macos-x64`-then-`macos-aarch64` order. Clean-host identifiers are
 duplicate, unexpected, pruned, non-certified, or candidate-mismatched evidence
 blocks release.
 
+The opaque public bundle is assembled only after all 32 retained prior-evidence
+manifests, canonical `@2` receipts, and category-specific evidence documents validate. Its internal
+`effect-build/apple-certification-bundle@2` header binds each request, certifier,
+lockfile, prior manifest, receipt, evidence, and artifact digest. Opacity is a release-coordinator
+boundary, not permission for the certification producer to emit unstructured
+evidence.
+
+Repository source implements these checks but cannot establish that the live
+`apple-certification` environment actually has the approved paths/digests,
+review rules, same-UID isolation, approved interpreter/toolchain identities,
+runner files, credentials, or clean-host separation. Protected
+environment readback plus credential-backed execution of every exact coordinate
+and retention of its validated bundle remain named external gates.
+
 The index and bundle authenticate the certification envelope, not a frozen A7
 payload schema. Exact Notary provider JSON/status decoding and detailed Notary
 receipt/reconciliation-evidence body shapes remain opaque to the release
@@ -315,14 +379,14 @@ Four statuses must remain distinct:
    on one candidate commit does not automatically certify a different merge or release build.
 3. **Merged** means an authorized integration placed the change on the target branch and the exact merge SHA passed its gates.
 4. **Released** means the separately authorized exact-prepacked coordinator
-   consumed the tested fixed-seven candidate, authenticated the retained
+   consumed the tested fixed-six candidate, authenticated the retained
    exact-revision Apple evidence, completed every A and G cell, converged all
-   seven registry records, and published GitHub last. Merge does not authorize
+   six registry records, and published GitHub last. Merge does not authorize
    publication.
 
 The release workflow remains deliberately quarantined and always fails; it does
 not build, pack, sign, notarize, tag, or publish. The repository now contains
-the fixed-seven convergence state machine, closed recovery admission, candidate
+the fixed-six convergence state machine, closed recovery admission, candidate
 and certification authenticators, and exact certification-envelope workflow.
 The protected release job remains structurally unreachable until its external
 authorities are earned and frozen. An authorized coordinator execution must
@@ -332,14 +396,16 @@ bind all three Actions wrappers—candidate descriptor, candidate payload, and
 certification artifact—into `effect-build/release-escrow@2`. The canonical
 `effect-build/release-manifest@2` embeds the certification index plus its exact
 run ID/attempt/artifact ID/name/REST digest subject and binds the opaque bundle's
-name, byte length, and SHA-256. That `.bin` bundle is the ninth final asset after
-the seven tarballs and manifest; escrow is the tenth staged asset and is removed
+name, byte length, and SHA-256. That `.bin` bundle is the eighth final asset after
+the six tarballs and manifest; escrow is the ninth staged asset and is removed
 only after npm convergence. An ad hoc environment-variable or SHA assertion is
 not certification authority. Candidate creation, certification, merge, protected
 approval, namespace bootstrap, and publication remain distinct authorities.
 
-The deterministic v0.5 package order is `effect-build`, `effect-build-apple`, `effect-build-bun`, `effect-build-deno`,
-`effect-build-esbuild`, `effect-build-node-sea`, and `effect-build-rolldown`.
+The deterministic v0.5 package order is `effect-build`, `effect-build-apple`,
+`effect-build-bun`, `effect-build-deno`, `effect-build-esbuild`, and
+`effect-build-node-sea`. `effect-build-rolldown` remains a private conditional
+candidate; it has no v0.5 package, registry, or release-asset coordinate.
 
 ## Explicit exclusions
 

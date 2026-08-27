@@ -15,10 +15,7 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "paths": {
-      "effect-build/Artifact": ["./packages/effect-build/src/Artifact.ts"],
-      "effect-build/BuildError": ["./packages/effect-build/src/BuildError.ts"],
-      "effect-build/Target": ["./packages/effect-build/src/Target.ts"],
-      "effect-build/Toolchain": ["./packages/effect-build/src/Toolchain.ts"]
+      "effect-build/Artifact": ["./packages/effect-build/src/Artifact.ts"]
     },
     "declaration": true,
     "declarationMap": true,

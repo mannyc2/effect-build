@@ -1,5 +1,5 @@
 import {
-  contract,
+  appleCertification,
   decodeCanonical,
   downloadArtifact,
   githubDigest,
@@ -12,7 +12,7 @@ import {
   sha256,
 } from "../node-finalizer/common.mjs";
 
-const apple = contract.release.appleCertificationEvidence;
+const apple = appleCertification;
 
 export const validateAppleCertification = ({ wrapperBytes, candidate, subject }) => {
   const entries = readArtifactZip(wrapperBytes);
@@ -21,7 +21,7 @@ export const validateAppleCertification = ({ wrapperBytes, candidate, subject })
   const bundleBytes = entries.get(apple.bundleFileName);
   const index = decodeCanonical(indexBytes, apple.indexFields);
   if (
-    index.schema !== contract.protocols.appleCertificationIndex || index.version !== "0.5.0"
+    index.schema !== apple.protocols.index || index.version !== apple.packageVersion
     || index.sourceSha !== candidate.descriptor.sourceSha
     || index.candidateWorkflowRunId !== candidate.descriptor.workflowRunId
     || index.candidateWorkflowRunAttempt !== candidate.descriptor.workflowRunAttempt
@@ -35,7 +35,7 @@ export const validateAppleCertification = ({ wrapperBytes, candidate, subject })
     || index.certificationWorkflowRef !== apple.workflowRef
     || index.certificationWorkflowRunId !== subject.workflowRunId
     || index.certificationWorkflowRunAttempt !== "1"
-    || index.certificationWorkflowRunHeadSha !== candidate.descriptor.sourceSha
+    || index.certificationWorkflowRunHeadSha !== subject.workflowRunHeadSha
     || index.certificationWorkflowEvent !== apple.workflowEvent
     || index.checkedOutSourceSha !== candidate.descriptor.sourceSha
     || index.bundleFileName !== apple.bundleFileName || index.verdict !== apple.verdict
@@ -79,13 +79,14 @@ export const authenticateAppleCertification = async ({ repository, token, inputs
   if (
     String(run.id) !== workflowRunId || String(run.run_attempt) !== "1" || run.event !== apple.workflowEvent
     || run.path !== apple.workflowPath || run.head_repository?.full_name !== repository
-    || run.head_sha !== candidate.descriptor.sourceSha || `refs/heads/${run.head_branch}` !== apple.workflowRef
+    || `refs/heads/${run.head_branch}` !== apple.workflowRef
     || run.conclusion !== "success"
   ) throw new Error("Apple certification workflow run authority mismatch");
+  const workflowRunHeadSha = hex(run.head_sha, 40, "Apple certification workflow run head_sha");
   if (
     String(artifact.id) !== artifactId || artifact.name !== apple.artifactName || artifact.digest !== artifactDigest
     || String(artifact.workflow_run?.id) !== workflowRunId
-    || artifact.workflow_run?.head_sha !== candidate.descriptor.sourceSha || artifact.expired !== false
+    || artifact.workflow_run?.head_sha !== workflowRunHeadSha || artifact.expired !== false
     || new Date(artifact.expires_at).getTime() <= now.getTime()
   ) throw new Error("Apple certification artifact authority mismatch");
   const wrapperBytes = await downloadArtifact(artifact, token);
@@ -97,6 +98,7 @@ export const authenticateAppleCertification = async ({ repository, token, inputs
         descriptorArtifactId: inputs.descriptorArtifactId,
         descriptorArtifactDigest: inputs.descriptorArtifactDigest,
         workflowRunId,
+        workflowRunHeadSha,
       },
     }),
     run,

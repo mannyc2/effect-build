@@ -3,10 +3,13 @@ import { dirname, resolve } from "node:path";
 import {
   canonicalBytes,
   capability,
-  contract,
   coordinate,
   decodeCanonical,
   downloadArtifact,
+  evidenceControl,
+  inspectNativeExecutable,
+  nodeMainExecutionExpectation,
+  nodeMainApplicableTargets,
   observeArtifact,
   observeJob,
   observeRun,
@@ -32,18 +35,18 @@ if (String(run.id) !== runId || String(run.run_attempt) !== runAttempt || run.he
   throw new Error("aggregation workflow-run binding mismatch");
 }
 
-const axes = contract.requiredCompatibilityEvidencePoints.coordinateRules.nodeMainExecutable.axes;
+const axes = evidenceControl.coordinateRules.nodeMainExecutable.axes;
 const receipts = [];
 for (const producerGroup of axes.producerGroup) {
   for (const format of axes.mainFormat) {
     for (const constructionHost of axes.constructionHost) {
-      for (const target of axes.target) {
+      for (const target of nodeMainApplicableTargets) {
         const name = coordinate({ producerGroup, format, constructionHost, target });
         const constructionJobName = `construct--${name}`;
         const finalizerJobName = `finalize--${name}`;
         const [constructionJob, finalizerJob] = await Promise.all([
-          observeJob({ repository, runId, name: constructionJobName, token }),
-          observeJob({ repository, runId, name: finalizerJobName, token }),
+          observeJob({ repository, runId, runAttempt, name: constructionJobName, token }),
+          observeJob({ repository, runId, runAttempt, name: finalizerJobName, token }),
         ]);
         if (constructionJob.conclusion !== "success" || finalizerJob.conclusion !== "success") {
           throw new Error(`coordinate jobs are not successful for ${name}`);
@@ -120,9 +123,8 @@ for (const producerGroup of axes.producerGroup) {
           finalizedMode: target.startsWith("windows-") ? "not-applicable" : "0755",
           finalizedBytes: String(finalized.length),
           finalizedSha256: sha256(finalized),
-          nativeFormat: target.startsWith("macos-") ? "mach-o" : target.startsWith("linux-") ? "elf" : "pe",
-          inspectedArchitecture: target.endsWith("aarch64") ? "aarch64" : "x64",
-          executionExitCode: "0",
+          ...inspectNativeExecutable(finalized, target),
+          ...nodeMainExecutionExpectation,
         };
         for (const [field, value] of Object.entries(expected)) {
           if (receipt[field] !== value) throw new Error(`receipt ${field} mismatch for ${name}`);
@@ -136,8 +138,20 @@ for (const producerGroup of axes.producerGroup) {
     }
   }
 }
-if (receipts.length !== 108) throw new Error(`expected 108 receipts, observed ${receipts.length}`);
-const evidence = { sourceSha, workflowRunId: runId, workflowRunAttempt: runAttempt, receipts };
+const expectedReceipts = evidenceControl.coordinateRules.nodeMainExecutable.expectedCoordinateCount;
+if (expectedReceipts !== 150 || receipts.length !== expectedReceipts) {
+  throw new Error(`expected 150 applicable receipts, observed ${receipts.length}`);
+}
+const evidence = {
+  sourceSha,
+  workflowRunId: runId,
+  workflowRunAttempt: runAttempt,
+  accountedCartesianCoordinates: String(
+    expectedReceipts + evidenceControl.coordinateRules.nodeMainExecutable.expectedUnsupportedCoordinateCount,
+  ),
+  rejectedCoordinates: evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedCoordinates,
+  receipts,
+};
 const destination = resolve(output);
 await mkdir(dirname(destination), { recursive: true });
 await writeFile(destination, canonicalBytes(evidence), { flag: "wx" });
