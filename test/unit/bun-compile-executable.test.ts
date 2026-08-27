@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as BunCompile from "../../packages/effect-build-bun/src/CompileExecutable.js";
-import { hostTarget } from "../host-target.js";
+import * as Target from "../../packages/effect-build/src/Target.js";
 
 const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-bun.mjs", import.meta.url)));
 let root = "";
@@ -41,7 +41,6 @@ const failureOf = <A, E>(exit: Exit.Exit<A, E>): E => {
 const input = (name: string, overrides: Partial<BunCompile.CompileExecutableInput> = {}) => ({
   entrypoint: "main.ts",
   outfile: join(root, name),
-  target: hostTarget() as BunCompile.Target,
   ...overrides,
 });
 
@@ -78,13 +77,13 @@ describeUnix("Bun CompileExecutable", () => {
     expect(await absent(join(root, "missing-tool"))).toBe(true);
   });
 
-  it("compiles for the explicit host target and records a hashed artifact", async () => {
+  it("compiles for the host by default and records a hashed artifact", async () => {
     const exit = await run(BunCompile.compileExecutable(input("hashed")));
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
       expect(exit.value._tag).toBe("Executable");
-      expect(exit.value.target).toBe(hostTarget());
-      expect(exit.value.tool).toMatchObject({ name: "bun", version: "1.3.14" });
+      expect(exit.value.target).toBe(Target.host());
+      expect(exit.value.tool).toEqual({ name: "bun", version: "1.3.14" });
       expect(exit.value.path).toBe(join(root, "hashed"));
       expect(exit.value.bytes).toBeGreaterThan(0);
       expect(exit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -144,7 +143,7 @@ describeUnix("Bun CompileExecutable", () => {
       expect(invocation.argv).toContain("--minify");
       expect(invocation.argv).toContain("--sourcemap=linked");
       expect(invocation.argv).toContain("--bytecode");
-      expect(invocation.argv.filter((value) => value.startsWith("--target="))).toHaveLength(1);
+      expect(invocation.argv.some((value) => value.startsWith("--target="))).toBe(false);
       expect(invocation.argv.at(-1)).toBe("main.ts");
     } finally {
       delete process.env.FAKE_BUN_LOG;

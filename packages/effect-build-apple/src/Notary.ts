@@ -1,1123 +1,881 @@
-import { Cause, Clock, Context, Crypto, Effect, Exit, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import type * as Artifact from "effect-build/Artifact";
+import { ToolFailed } from "effect-build/BuildError";
+import type { PublishFailed, ToolNotFound } from "effect-build/BuildError";
+import * as Toolchain from "effect-build/Toolchain";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import * as Artifact from "./Artifact.js";
-import * as Lifecycle from "./internal/Lifecycle.js";
-import * as NotaryBinding from "./internal/NotaryBinding.js";
-import * as Tool from "./internal/Tool.js";
+import {
+  capturePlatformServices,
+  describe,
+  resolveAppleTool,
+  scrub,
+  scrubToolFailure,
+  verifyFileArtifact,
+} from "./internal.js";
+import {
+  captureBundle,
+  captureBundlePath,
+  identityEquals,
+  makeBundleRemovable,
+  materializeBundle,
+} from "./internal/BundleIdentity.js";
+import {
+  AppleToolFact,
+  Architecture,
+  BundleInspectionFailed,
+  FileArtifactIdentityMismatch,
+  hasDeveloperIdApplicationSignature,
+  hasDeveloperIdDiskImageSignature,
+  hasDeveloperIdInstallerSignature,
+  ProductKind,
+  ProductStateInvalid,
+  Sha256,
+} from "./Model.js";
+import type {
+  AppleToolOptions,
+  DeveloperIdApplicationBundle,
+  DeveloperIdDiskImage,
+  DeveloperIdInstallerPackage,
+} from "./Model.js";
 
-export type NotarizableArtifact =
-  | Artifact.FileArtifact<"mach-o" | "zip" | "disk-image" | "installer-package">
-  | Artifact.TreeArtifact<"app-bundle">;
+export { FileArtifactIdentityMismatch as ArtifactIdentityMismatch } from "./Model.js";
 
-export interface KeychainProfile {
-  readonly _tag: "KeychainProfile";
+/** Apple accepts UDIF images, signed flat installers, and ZIP archives, not raw `.app` directories. */
+export const SubmissionKind = Schema.Literals(["dmg", "pkg", "zip"] as const);
+export type SubmissionKind = typeof SubmissionKind.Type;
+
+/** Canonical lowercase Apple submission UUID. */
+export const SubmissionId = Schema.String.check(
+  Schema.isPattern(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    { expected: "a lowercase UUID submission identifier" },
+  ),
+);
+export type SubmissionId = typeof SubmissionId.Type;
+
+/** Submission exists but has not reached an Apple terminal state. */
+export class Pending extends Schema.TaggedClass<Pending>()("Pending", {
+  providerStatus: Schema.NonEmptyString,
+}) {}
+
+/** Apple accepted the exact submitted bytes. */
+export class Accepted extends Schema.TaggedClass<Accepted>()("Accepted", {
+  providerStatus: Schema.Literal("Accepted"),
+}) {}
+
+/** Apple reached a negative terminal state (`Invalid` or `Rejected`). */
+export class Rejected extends Schema.TaggedClass<Rejected>()("Rejected", {
+  providerStatus: Schema.NonEmptyString,
+  summary: Schema.optionalKey(Schema.NonEmptyString),
+}) {}
+
+export const Status = Schema.Union([Pending, Accepted, Rejected]);
+export type Status = typeof Status.Type;
+
+export interface SubmitDiskImageInput {
+  readonly kind: "dmg";
+  readonly artifact: DeveloperIdDiskImage;
+}
+
+export interface SubmitInstallerPackageInput {
+  readonly kind: "pkg";
+  readonly artifact: DeveloperIdInstallerPackage;
+}
+
+/** Closed public file-submission family; app ZIP transports are created only by `submitApp`. */
+export type SubmitInput = SubmitDiskImageInput | SubmitInstallerPackageInput;
+
+interface PreparedSubmissionInput {
+  readonly kind: SubmissionKind;
+  readonly artifact: Artifact.FileArtifact;
+  readonly architecture: Architecture;
+}
+
+/** Signed `.app` bundle to package into, verify from, and submit as an Apple ZIP transport. */
+export interface SubmitAppInput {
+  readonly bundle: DeveloperIdApplicationBundle;
+}
+
+/** Exact local product identity to which an accepted Apple ticket may be stapled. */
+export class StapleTarget extends Schema.Class<StapleTarget>(
+  "effect-build-apple/StapleTarget",
+)({
+  kind: ProductKind,
+  identityKind: Schema.Literals(["file-bytes", "bundle-manifest"] as const),
+  artifactBytes: Schema.Natural,
+  artifactSha256: Sha256,
+  bundleName: Schema.optionalKey(Schema.NonEmptyString),
+}) {}
+
+/** Durable identity required to resume on a fresh runner. */
+export class SubmissionReference extends Schema.Class<SubmissionReference>(
+  "effect-build-apple/SubmissionReference",
+)({
+  submissionId: SubmissionId,
+  kind: SubmissionKind,
+  architecture: Architecture,
+  artifactBytes: Schema.Natural,
+  artifactSha256: Sha256,
+  submissionTool: AppleToolFact,
+  stapleTarget: Schema.optionalKey(StapleTarget),
+  transportTool: Schema.optionalKey(AppleToolFact),
+}) {}
+
+/** Credential-free provider-native result suitable for the release journal. */
+export class Submission extends Schema.Class<Submission>("effect-build-apple/Submission")({
+  submissionId: SubmissionId,
+  kind: SubmissionKind,
+  architecture: Architecture,
+  artifactBytes: Schema.Natural,
+  artifactSha256: Sha256,
+  status: Status,
+  message: Schema.optionalKey(Schema.NonEmptyString),
+  submissionTool: AppleToolFact,
+  tool: AppleToolFact,
+  stapleTarget: Schema.optionalKey(StapleTarget),
+  transportTool: Schema.optionalKey(AppleToolFact),
+}) {}
+
+/** Credential-free status observation correlated to the recorded submission ID. */
+export class Observation extends Schema.Class<Observation>("effect-build-apple/Observation")({
+  submissionId: SubmissionId,
+  kind: SubmissionKind,
+  architecture: Architecture,
+  artifactBytes: Schema.Natural,
+  artifactSha256: Sha256,
+  status: Status,
+  message: Schema.optionalKey(Schema.NonEmptyString),
+  name: Schema.optionalKey(Schema.NonEmptyString),
+  createdDate: Schema.optionalKey(Schema.NonEmptyString),
+  submissionTool: AppleToolFact,
+  tool: AppleToolFact,
+  stapleTarget: Schema.optionalKey(StapleTarget),
+  transportTool: Schema.optionalKey(AppleToolFact),
+}) {}
+
+/** Typed issue projection from Apple's notarization log. */
+export class LogIssue extends Schema.Class<LogIssue>("effect-build-apple/LogIssue")({
+  severity: Schema.NonEmptyString,
+  message: Schema.NonEmptyString,
+  path: Schema.optionalKey(Schema.NonEmptyString),
+  code: Schema.optionalKey(Schema.String),
+  docUrl: Schema.optionalKey(Schema.NonEmptyString),
+}) {}
+
+/** Credential-free notarization log correlated to the same durable reference. */
+export class Log extends Schema.Class<Log>("effect-build-apple/Log")({
+  submissionId: SubmissionId,
+  kind: SubmissionKind,
+  architecture: Architecture,
+  artifactBytes: Schema.Natural,
+  artifactSha256: Sha256,
+  status: Status,
+  statusSummary: Schema.optionalKey(Schema.NonEmptyString),
+  statusCode: Schema.optionalKey(Schema.Number),
+  archiveFilename: Schema.optionalKey(Schema.NonEmptyString),
+  issues: Schema.Array(LogIssue),
+  submissionTool: AppleToolFact,
+  tool: AppleToolFact,
+  stapleTarget: Schema.optionalKey(StapleTarget),
+  transportTool: Schema.optionalKey(AppleToolFact),
+}) {}
+
+/** Any provider result carrying the exact submission identity and a notarization status. */
+export type Result = Submission | Observation | Log;
+
+/** Durable proof that Apple accepted one exact submitted file identity. */
+export class AcceptedReference extends Schema.Class<AcceptedReference>(
+  "effect-build-apple/AcceptedReference",
+)({
+  submissionId: SubmissionId,
+  kind: SubmissionKind,
+  architecture: Architecture,
+  artifactBytes: Schema.Natural,
+  artifactSha256: Sha256,
+  providerStatus: Schema.Literal("Accepted"),
+  submissionTool: AppleToolFact,
+  tool: AppleToolFact,
+  stapleTarget: StapleTarget,
+  transportTool: Schema.optionalKey(AppleToolFact),
+}) {}
+
+/** A pending or rejected result cannot authorize stapling. */
+export class ResultNotAccepted extends Schema.TaggedError<ResultNotAccepted>()(
+  "NotaryResultNotAccepted",
+  {
+    submissionId: SubmissionId,
+    providerStatus: Schema.NonEmptyString,
+  },
+) {
+  override get message(): string {
+    return `Apple notarization ${this.submissionId} is ${this.providerStatus}, not Accepted`;
+  }
+}
+
+/** Accepted generic ZIP submissions do not prove a staplable product identity. */
+export class ResultHasNoStapleTarget extends Schema.TaggedError<ResultHasNoStapleTarget>()(
+  "NotaryResultHasNoStapleTarget",
+  { submissionId: SubmissionId },
+) {
+  override get message(): string {
+    return `Apple notarization ${this.submissionId} has no verified stapling target`;
+  }
+}
+
+/** Narrow a provider result into the only evidence type accepted by the stapling boundary. */
+export const acceptedReference = (
+  result: Result,
+): Effect.Effect<AcceptedReference, ResultNotAccepted | ResultHasNoStapleTarget> => {
+  if (result.status._tag !== "Accepted") {
+    return Effect.fail(
+      new ResultNotAccepted({
+        submissionId: result.submissionId,
+        providerStatus: result.status.providerStatus,
+      }),
+    );
+  }
+  if (result.stapleTarget === undefined) {
+    return Effect.fail(new ResultHasNoStapleTarget({ submissionId: result.submissionId }));
+  }
+  return Effect.succeed(
+    new AcceptedReference({
+      submissionId: result.submissionId,
+      kind: result.kind,
+      architecture: result.architecture,
+      artifactBytes: result.artifactBytes,
+      artifactSha256: result.artifactSha256,
+      providerStatus: "Accepted",
+      submissionTool: result.submissionTool,
+      tool: result.tool,
+      stapleTarget: result.stapleTarget,
+      ...(result.transportTool === undefined ? {} : { transportTool: result.transportTool }),
+    }),
+  );
+};
+
+/** The command may have committed remotely but no submission ID was recovered. Never blind-retry. */
+export class SubmissionOutcomeUnknown extends Schema.TaggedError<SubmissionOutcomeUnknown>()(
+  "SubmissionOutcomeUnknown",
+  {
+    artifactSha256: Sha256,
+    reason: Schema.NonEmptyString,
+  },
+) {
+  override get message(): string {
+    return `Apple submission outcome is unknown for ${this.artifactSha256}: ${this.reason}`;
+  }
+}
+
+/** Local private snapshot preparation failed before any Apple submission was dispatched. */
+export class SubmissionPreparationFailed extends Schema.TaggedError<SubmissionPreparationFailed>()(
+  "SubmissionPreparationFailed",
+  {
+    path: Schema.NonEmptyString,
+    reason: Schema.NonEmptyString,
+  },
+) {
+  override get message(): string {
+    return `could not prepare notarization input ${this.path}: ${this.reason}`;
+  }
+}
+
+/** Apple returned JSON that cannot be interpreted as the requested operation. */
+export class ResponseInvalid extends Schema.TaggedError<ResponseInvalid>()(
+  "NotaryResponseInvalid",
+  {
+    operation: Schema.Literals(["submit", "info", "log"] as const),
+    reason: Schema.NonEmptyString,
+  },
+) {
+  override get message(): string {
+    return `invalid notarytool ${this.operation} response: ${this.reason}`;
+  }
+}
+
+/** Apple returned a different job identity than the one requested on this runner. */
+export class CorrelationFailed extends Schema.TaggedError<CorrelationFailed>()(
+  "NotaryCorrelationFailed",
+  {
+    operation: Schema.Literals(["info", "log"] as const),
+    expectedSubmissionId: Schema.NonEmptyString,
+    observedSubmissionId: Schema.NonEmptyString,
+  },
+) {
+  override get message(): string {
+    return `notarytool ${this.operation} returned ${this.observedSubmissionId}; expected ${this.expectedSubmissionId}`;
+  }
+}
+
+interface CredentialArguments {
+  readonly args: readonly string[];
+  readonly sensitiveValues: readonly string[];
+}
+
+interface CredentialService {
+  readonly arguments: Effect.Effect<CredentialArguments>;
+}
+
+/** Process-local Apple notary credential coordinates. No operation returns this service. */
+export class Credential extends Context.Service<Credential, CredentialService>()(
+  "effect-build-apple/Notary/Credential",
+) {}
+
+export interface KeychainProfileOptions {
   readonly profile: string;
-  readonly keychainPath?: string;
+  readonly keychain?: string | undefined;
 }
 
-export type S3Acceleration = "enabled" | "disabled";
-export type SubmissionStatus = "In Progress" | "Accepted" | "Invalid" | "Rejected";
+/** A pre-created notarytool keychain profile; secret values remain in the keychain. */
+export const keychainProfileCredentialLayer = (
+  options: KeychainProfileOptions,
+): Layer.Layer<Credential> =>
+  Layer.succeed(Credential, {
+    arguments: Effect.succeed({
+      args: [
+        "--keychain-profile",
+        options.profile,
+        ...(options.keychain === undefined ? [] : ["--keychain", options.keychain]),
+      ],
+      sensitiveValues: [options.profile, ...(options.keychain === undefined ? [] : [options.keychain])],
+    }),
+  });
 
-declare const NotaryReceiptTypeId: unique symbol;
-declare const SubmissionReferenceTypeId: unique symbol;
-declare const SubmissionObservationTypeId: unique symbol;
-declare const OperatorReconciliationEvidenceTypeId: unique symbol;
-
-export interface TransportReference {
-  readonly kind: "zip" | "disk-image" | "installer-package";
-  readonly bytes: number;
-  readonly digest: Artifact.Digest;
+export interface ApiKeyOptions {
+  readonly keyFile: string;
+  readonly keyId: string;
+  readonly issuer: string;
 }
 
-export interface TransportPreparationProvenance extends Artifact.MutationProvenance {
-  readonly operation: "notary.prepare-transport";
-}
-
-export interface SubmissionReference {
-  readonly [SubmissionReferenceTypeId]: typeof SubmissionReferenceTypeId;
-  readonly submissionId: string;
-  readonly subject: Artifact.ArtifactReference;
-  readonly transport: TransportReference;
-}
-
-interface ReceiptBase {
-  readonly [NotaryReceiptTypeId]: typeof NotaryReceiptTypeId;
-  readonly schema: "effect-build-apple/notary-receipt@1";
-  readonly attemptId: string;
-  readonly startedAtEpochMillis: number;
-  readonly receiptPath: string;
-  readonly subject: Artifact.ArtifactReference;
-  readonly transport: TransportReference;
-  readonly preparation: TransportPreparationProvenance;
-  readonly notarytool: Artifact.ToolReference;
-}
-
-export interface SubmissionAttemptStarted extends ReceiptBase {
-  readonly state: "SubmissionAttemptStarted";
-}
-
-interface SubmissionBase extends ReceiptBase {
-  readonly state: "Submitted";
-  readonly submissionId: string;
-  /** No-wait submit returns a job id, not a status observation. */
-  readonly submittedStatus: "Not Queried";
-}
-
-export interface SubmitResponseSubmission extends SubmissionBase {
-  readonly source: "submit-response";
-  readonly reconciliation?: undefined;
-}
-
-export interface OperatorReconciliationRecord {
-  readonly authority: string;
-  readonly observedAtEpochMillis: number;
-}
-
-export interface OperatorReconciledSubmission extends SubmissionBase {
-  readonly source: "operator-reconciliation";
-  readonly reconciliation: OperatorReconciliationRecord;
-}
-
-/** Durable submitted state read from receipt storage. This is data, not query authority. */
-export type SubmittedReceipt = SubmitResponseSubmission | OperatorReconciledSubmission;
-/** Live-submit or explicitly reconciled authority accepted by `info`, `wait`, and `log`. */
-export type Submission = SubmittedReceipt & SubmissionReference;
-export type NotaryReceipt = SubmissionAttemptStarted | SubmittedReceipt;
-
-export interface SubmitInput {
-  readonly artifact: NotarizableArtifact;
-  /** Durable, no-clobber attempt receipt path written before the upload process starts. */
-  readonly receiptPath: string;
-}
-
-export interface SubmissionObservation extends SubmissionReference {
-  readonly [SubmissionObservationTypeId]: typeof SubmissionObservationTypeId;
-  readonly status: SubmissionStatus;
-  readonly rawJson: string;
-  readonly notarytool: Artifact.ToolReference;
-}
-
-export type AcceptedSubmissionObservation = SubmissionObservation & { readonly status: "Accepted" };
-
-export interface OperatorReconciliationEvidence {
-  readonly [OperatorReconciliationEvidenceTypeId]: typeof OperatorReconciliationEvidenceTypeId;
-  readonly _tag: "OperatorReconciliationEvidence";
-  readonly receipt: NotaryReceipt;
-  readonly submissionId: string;
-  readonly authority: string;
-  readonly observedAtEpochMillis: number;
-}
-
-export interface OperatorReconciliationEvidenceInput {
-  readonly receipt: NotaryReceipt;
-  readonly submissionId: string;
-  /** Human-auditable authority, for example the retained notarytool history export reviewed by the operator. */
-  readonly authority: string;
-}
-
-export interface ReconcileInput {
-  readonly receipt: NotaryReceipt;
-  readonly evidence: OperatorReconciliationEvidence;
-}
-
-export interface RawJsonObservation {
-  readonly rawJson: string;
-  readonly notarytool: Artifact.ToolReference;
-}
-
-export interface SubmissionLogObservation extends RawJsonObservation {
-  readonly submissionId: string;
-  readonly subject: Artifact.ArtifactReference;
-  readonly transport: TransportReference;
-}
-
-export interface WaitOptions {
-  /** notarytool duration such as `30s`, `5m`, or `1h`; timeout does not cancel the server job. */
-  readonly timeout: string;
-}
+/** App Store Connect API-key coordinates; private key bytes never enter this API. */
+export const apiKeyCredentialLayer = (options: ApiKeyOptions): Layer.Layer<Credential> =>
+  Layer.succeed(Credential, {
+    arguments: Effect.succeed({
+      args: ["--key", options.keyFile, "--key-id", options.keyId, "--issuer", options.issuer],
+      sensitiveValues: [options.keyFile, options.keyId, options.issuer],
+    }),
+  });
 
 export interface LayerOptions {
-  /** Exact notarytool executable path, normally obtained from `xcrun --no-cache --find notarytool`. */
-  readonly notarytoolPath: string;
-  readonly dittoPath?: string;
-  readonly credentials: KeychainProfile;
-  /** Explicit choice; the library never retries with the opposite transport policy. */
-  readonly s3Acceleration: S3Acceleration;
+  readonly xcrun: AppleToolOptions;
+  readonly ditto: AppleToolOptions;
+  readonly codesign: AppleToolOptions;
+  readonly pkgutil: AppleToolOptions;
 }
 
-export class NotaryConfigurationInvalid extends Schema.TaggedError<NotaryConfigurationInvalid>()(
-  "NotaryConfigurationInvalid",
-  { field: Schema.String, reason: Schema.String },
-) {}
-
-export class NotaryReceiptExists extends Schema.TaggedError<NotaryReceiptExists>()("NotaryReceiptExists", {
-  receiptPath: Schema.String,
-}) {}
-
-export class NotaryReceiptFailed extends Schema.TaggedError<NotaryReceiptFailed>()("NotaryReceiptFailed", {
-  receiptPath: Schema.String,
-  reason: Schema.String,
-}) {}
-
-export class NotaryReceiptInvalid extends Schema.TaggedError<NotaryReceiptInvalid>()("NotaryReceiptInvalid", {
-  receiptPath: Schema.String,
-  reason: Schema.String,
-}) {}
-
-export class SubmissionReceiptCommitFailed extends Schema.TaggedError<SubmissionReceiptCommitFailed>()(
-  "SubmissionReceiptCommitFailed",
-  { receiptPath: Schema.String, submissionId: Schema.String, reason: Schema.String },
-) {}
-
-export class InvalidNotaryResponse extends Schema.TaggedError<InvalidNotaryResponse>()("InvalidNotaryResponse", {
-  operation: Schema.String,
-  reason: Schema.String,
-  rawJson: Schema.String,
-}) {}
-
-export class UnknownSubmissionOutcome extends Schema.TaggedError<UnknownSubmissionOutcome>()(
-  "UnknownSubmissionOutcome",
-  { receiptPath: Schema.String, reason: Schema.String, stdout: Schema.String, stderr: Schema.String },
-) {}
-
-export class NotaryBindingInvalid extends Schema.TaggedError<NotaryBindingInvalid>()("NotaryBindingInvalid", {
-  reason: Schema.String,
-}) {}
-
 export type SubmitError =
-  | Artifact.UnsupportedArtifactKind
-  | Artifact.ArtifactError
-  | Artifact.LifecycleError
-  | Artifact.ToolError
-  | NotaryReceiptExists
-  | NotaryReceiptFailed
-  | SubmissionReceiptCommitFailed
-  | UnknownSubmissionOutcome;
-
-export type ReadReceiptError = NotaryReceiptFailed | NotaryReceiptInvalid;
-export type QueryError =
-  | Artifact.ToolError
-  | InvalidNotaryResponse
-  | NotaryConfigurationInvalid
-  | NotaryBindingInvalid
-  | ReadReceiptError;
-export type ReconcileError = ReadReceiptError | SubmissionReceiptCommitFailed | NotaryBindingInvalid;
+  | FileArtifactIdentityMismatch
+  | SubmissionPreparationFailed
+  | SubmissionOutcomeUnknown
+  | ProductStateInvalid
+  | ToolFailed;
+export type SubmitAppError = SubmitError | ToolFailed | PublishFailed | BundleInspectionFailed;
+export type ObserveError = ToolFailed | ResponseInvalid | CorrelationFailed;
 
 interface Service {
   readonly submit: (input: SubmitInput) => Effect.Effect<Submission, SubmitError>;
-  readonly info: (submission: Submission) => Effect.Effect<SubmissionObservation, QueryError>;
-  readonly wait: (submission: Submission, options: WaitOptions) => Effect.Effect<SubmissionObservation, QueryError>;
-  readonly log: (submission: Submission) => Effect.Effect<SubmissionLogObservation, QueryError>;
-  readonly history: () => Effect.Effect<RawJsonObservation, QueryError>;
+  readonly submitApp: (input: SubmitAppInput) => Effect.Effect<Submission, SubmitAppError>;
+  readonly info: (reference: SubmissionReference) => Effect.Effect<Observation, ObserveError>;
+  readonly log: (reference: SubmissionReference) => Effect.Effect<Log, ObserveError>;
 }
 
-export class Notarizer extends Context.Service<Notarizer, Service>()("effect-build-apple/Notary/Notarizer") {}
+export class Client extends Context.Service<Client, Service>()(
+  "effect-build-apple/Notary/Client",
+) {}
 
-const receiptSchema = "effect-build-apple/notary-receipt@1" as const;
-const preparationOperation = "notary.prepare-transport" as const;
-const supported = ["mach-o", "app-bundle", "zip", "disk-image", "installer-package"] as const;
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
-const duration = /^[1-9][0-9]*(?:s|m|h)?$/u;
-const digestPattern = /^[0-9a-f]{64}$/u;
-const statuses = new Set<SubmissionStatus>(["In Progress", "Accepted", "Invalid", "Rejected"]);
-type AttemptFields = Omit<SubmissionAttemptStarted, typeof NotaryReceiptTypeId>;
-type SubmissionFields =
-  | Omit<SubmitResponseSubmission, typeof NotaryReceiptTypeId>
-  | Omit<OperatorReconciledSubmission, typeof NotaryReceiptTypeId>;
+type JsonObject = Record<string, unknown>;
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const canonicalCopy = <A>(value: A): A => {
-  if (Array.isArray(value)) {
-    return Object.freeze(value.map((entry) => canonicalCopy(entry))) as A;
-  }
-  if (isRecord(value)) {
-    const copy: Record<string, unknown> = {};
-    for (const key of Object.keys(value).sort()) {
-      const entry = value[key];
-      if (entry !== undefined) copy[key] = canonicalCopy(entry);
-    }
-    return Object.freeze(copy) as A;
-  }
-  return value;
-};
-
-const canonicalJson = (value: unknown): string => `${JSON.stringify(canonicalCopy(value), null, 2)}\n`;
-const sameCanonicalValue = (left: unknown, right: unknown): boolean => canonicalJson(left) === canonicalJson(right);
-
-const mintAttempt = (fields: AttemptFields): SubmissionAttemptStarted =>
-  NotaryBinding.registerAttempt(canonicalCopy(fields) as SubmissionAttemptStarted);
-
-const storedSubmission = (fields: SubmissionFields): SubmittedReceipt =>
-  NotaryBinding.registerStoredReceipt(canonicalCopy(fields) as SubmittedReceipt);
-
-const liveSubmission = (fields: SubmissionFields): Submission =>
-  NotaryBinding.registerLiveSubmission(canonicalCopy(fields) as unknown as Submission);
-
-const reconciledSubmission = (fields: SubmissionFields): Submission =>
-  NotaryBinding.registerReconciledSubmission(canonicalCopy(fields) as unknown as Submission);
-
-const describe = (error: unknown): string => error instanceof Error ? error.message : String(error);
-
-const actualKind = (value: unknown): string =>
-  typeof value === "object" && value !== null && "kind" in value ? String(value.kind) : "unknown";
-
-const validateArtifact = (artifact: NotarizableArtifact): Effect.Effect<void, Artifact.UnsupportedArtifactKind> =>
-  supported.includes(actualKind(artifact) as typeof supported[number])
-    ? Effect.void
-    : Effect.fail(
-      new Artifact.UnsupportedArtifactKind({
-        operation: "notary.submit",
-        actual: actualKind(artifact),
-        expected: [...supported],
-      }),
-    );
-
-const validateConfiguration = (options: LayerOptions): Effect.Effect<void, NotaryConfigurationInvalid> => {
-  if (options.credentials._tag !== "KeychainProfile") {
-    return Effect.fail(new NotaryConfigurationInvalid({ field: "credentials", reason: "unsupported authority" }));
-  }
-  if (options.credentials.profile.trim() === "") {
-    return Effect.fail(new NotaryConfigurationInvalid({ field: "credentials.profile", reason: "must not be empty" }));
-  }
-  if (options.credentials.keychainPath !== undefined && !options.credentials.keychainPath.startsWith("/")) {
-    return Effect.fail(
-      new NotaryConfigurationInvalid({ field: "credentials.keychainPath", reason: "must be an absolute path" }),
-    );
-  }
-  if (options.s3Acceleration !== "enabled" && options.s3Acceleration !== "disabled") {
-    return Effect.fail(
-      new NotaryConfigurationInvalid({
-        field: "s3Acceleration",
-        reason: "must explicitly be enabled or disabled",
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const parseJson = (
-  operation: string,
-  rawJson: string,
-): Effect.Effect<Readonly<Record<string, unknown>>, InvalidNotaryResponse> =>
+const parseObject = (
+  operation: "submit" | "info" | "log",
+  text: string,
+): Effect.Effect<JsonObject, ResponseInvalid> =>
   Effect.try({
-    try: () => JSON.parse(rawJson) as unknown,
-    catch: (error) => new InvalidNotaryResponse({ operation, reason: describe(error), rawJson }),
-  }).pipe(
-    Effect.flatMap((parsed) =>
-      isRecord(parsed)
-        ? Effect.succeed(parsed)
-        : Effect.fail(new InvalidNotaryResponse({ operation, reason: "expected a JSON object", rawJson }))
-    ),
-  );
-
-const parseSubmission = (
-  operation: string,
-  rawJson: string,
-  expectedId?: string,
-): Effect.Effect<{ readonly id: string; readonly status: SubmissionStatus }, InvalidNotaryResponse> =>
-  Effect.gen(function*() {
-    const parsed = yield* parseJson(operation, rawJson);
-    const id = parsed.id;
-    const status = parsed.status;
-    if (typeof id !== "string" || !uuid.test(id.toLowerCase())) {
-      return yield* new InvalidNotaryResponse({ operation, reason: "missing valid submission id", rawJson });
-    }
-    const normalizedId = id.toLowerCase();
-    if (expectedId !== undefined && normalizedId !== expectedId.toLowerCase()) {
-      return yield* new InvalidNotaryResponse({
+    try: () => {
+      const parsed: unknown = JSON.parse(text);
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new Error("expected one JSON object");
+      }
+      return parsed as JsonObject;
+    },
+    catch: (error) =>
+      new ResponseInvalid({
         operation,
-        reason: "response submission id does not match request",
-        rawJson,
-      });
-    }
-    if (typeof status !== "string" || !statuses.has(status as SubmissionStatus)) {
-      return yield* new InvalidNotaryResponse({ operation, reason: "unknown or missing notarization status", rawJson });
-    }
-    return { id: normalizedId, status: status as SubmissionStatus };
+        reason: error instanceof Error ? error.message : String(error),
+      }),
   });
 
-const parseSubmitResponse = (
-  rawJson: string,
-): Effect.Effect<{ readonly id: string }, InvalidNotaryResponse> =>
-  Effect.gen(function*() {
-    const parsed = yield* parseJson("submit", rawJson);
-    const id = parsed.id;
-    if (typeof id !== "string" || !uuid.test(id.toLowerCase())) {
-      return yield* new InvalidNotaryResponse({
-        operation: "submit",
-        reason: "missing valid submission id",
-        rawJson,
-      });
-    }
-    return { id: id.toLowerCase() };
-  });
+const nonEmpty = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 ? value : undefined;
 
-const receiptJson = (receipt: NotaryReceipt): string => canonicalJson(receipt);
-
-export const submittedReceiptPath = (receiptPath: string, attemptId: string): string =>
-  `${receiptPath}.${attemptId.toLowerCase()}.submitted.json`;
-
-const resolveReceiptPath = (
-  requested: string,
-  options: {
-    readonly createParent?: boolean;
-    readonly inputs?: readonly Artifact.Artifact[];
-  } = {},
-): Effect.Effect<string, NotaryReceiptFailed, FileSystem.FileSystem | Path.Path> =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const absolute = yield* Lifecycle.resolveProspectivePath(requested).pipe(
-      Effect.mapError((error) => new NotaryReceiptFailed({ receiptPath: requested, reason: error.reason })),
-    );
-    yield* Lifecycle.rejectTreeOverlap(absolute, options.inputs ?? []).pipe(
-      Effect.mapError((error) => new NotaryReceiptFailed({ receiptPath: absolute, reason: error.reason })),
-    );
-    const parent = path.dirname(absolute);
-    if (options.createParent === true) {
-      yield* fileSystem.makeDirectory(parent, { recursive: true }).pipe(
-        Effect.mapError((error) => new NotaryReceiptFailed({ receiptPath: absolute, reason: describe(error) })),
-      );
-      const canonicalParent = path.normalize(
-        yield* fileSystem.realPath(parent).pipe(
-          Effect.mapError((error) => new NotaryReceiptFailed({ receiptPath: absolute, reason: describe(error) })),
-        ),
-      );
-      if (canonicalParent !== parent) {
-        return yield* new NotaryReceiptFailed({
-          receiptPath: absolute,
-          reason: "receipt parent changed while it was being created",
-        });
-      }
-    }
-    return absolute;
-  });
-
-interface DurableWriteFailure {
-  readonly phase: "stage" | "link" | "parent-sync";
-  readonly reason: string;
-  readonly collision: boolean;
-}
-
-const durableNoClobber = (
-  destination: string,
-  contents: string,
-): Effect.Effect<void, DurableWriteFailure, FileSystem.FileSystem | Path.Path> =>
-  Effect.scoped(
-    Effect.gen(function*() {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const parent = path.dirname(destination);
-      const stageFailure = (error: unknown): DurableWriteFailure => ({
-        phase: "stage",
-        reason: describe(error),
-        collision: false,
-      });
-      const temporary = yield* fileSystem.makeTempFileScoped({
-        directory: parent,
-        prefix: ".effect-build-apple-notary-receipt-",
-      }).pipe(Effect.mapError(stageFailure));
-      yield* fileSystem.chmod(temporary, 0o600).pipe(Effect.mapError(stageFailure));
-      const file = yield* fileSystem.open(temporary, { flag: "w", mode: 0o600 }).pipe(Effect.mapError(stageFailure));
-      yield* file.writeAll(new TextEncoder().encode(contents)).pipe(Effect.mapError(stageFailure));
-      yield* file.sync.pipe(Effect.mapError(stageFailure));
-      const staged = yield* fileSystem.readFileString(temporary).pipe(Effect.mapError(stageFailure));
-      if (staged !== contents) {
-        return yield* Effect.fail({
-          phase: "stage" as const,
-          reason: "staged receipt bytes changed before publication",
-          collision: false,
-        });
-      }
-      yield* Effect.uninterruptible(
-        Effect.gen(function*() {
-          const linked = yield* Effect.exit(fileSystem.link(temporary, destination));
-          if (Exit.isFailure(linked)) {
-            const collision = yield* fileSystem.exists(destination).pipe(Effect.orElseSucceed(() => false));
-            return yield* Effect.fail({
-              phase: "link" as const,
-              reason: Cause.pretty(linked.cause),
-              collision,
-            });
-          }
-          const directory = yield* fileSystem.open(parent, { flag: "r" }).pipe(
-            Effect.mapError((error): DurableWriteFailure => ({
-              phase: "parent-sync",
-              reason: describe(error),
-              collision: false,
-            })),
-          );
-          yield* directory.sync.pipe(
-            Effect.mapError((error): DurableWriteFailure => ({
-              phase: "parent-sync",
-              reason: describe(error),
-              collision: false,
-            })),
-          );
-        }),
-      );
-    }),
-  );
-
-const createReceipt = (
-  receipt: SubmissionAttemptStarted,
-): Effect.Effect<void, NotaryReceiptExists | NotaryReceiptFailed, FileSystem.FileSystem | Path.Path> =>
-  durableNoClobber(receipt.receiptPath, receiptJson(receipt)).pipe(
-    Effect.mapError((error) =>
-      error.phase === "link" && error.collision
-        ? new NotaryReceiptExists({ receiptPath: receipt.receiptPath })
-        : new NotaryReceiptFailed({ receiptPath: receipt.receiptPath, reason: `${error.phase}: ${error.reason}` })
-    ),
-  );
-
-const commitReceipt = (
-  receipt: SubmittedReceipt,
-): Effect.Effect<void, SubmissionReceiptCommitFailed, FileSystem.FileSystem | Path.Path> => {
-  const destination = submittedReceiptPath(receipt.receiptPath, receipt.attemptId);
-  return durableNoClobber(destination, receiptJson(receipt)).pipe(
-    Effect.mapError((error) =>
-      new SubmissionReceiptCommitFailed({
-        receiptPath: destination,
-        submissionId: receipt.submissionId,
-        reason: `${error.phase}: ${error.reason}${error.collision ? " (destination already exists)" : ""}`,
-      })
-    ),
-  );
+const requireText = (
+  operation: "submit" | "info" | "log",
+  object: JsonObject,
+  key: string,
+): Effect.Effect<string, ResponseInvalid> => {
+  const value = nonEmpty(object[key]);
+  return value === undefined
+    ? Effect.fail(new ResponseInvalid({ operation, reason: `missing non-empty ${key}` }))
+    : Effect.succeed(value);
 };
 
-const exactFields = (value: Readonly<Record<string, unknown>>, expected: readonly string[]): boolean =>
-  JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...expected].sort());
+const requireSubmissionId = (
+  operation: "submit" | "info" | "log",
+  object: JsonObject,
+  key: string,
+  sensitiveValues: readonly string[],
+): Effect.Effect<SubmissionId, ResponseInvalid> =>
+  Effect.flatMap(requireText(operation, object, key), (value) => {
+    const canonical = value.toLowerCase();
+    if (sensitiveValues.some((sensitive) => sensitive.length > 0 && canonical.includes(sensitive.toLowerCase()))) {
+      return Effect.fail(new ResponseInvalid({ operation, reason: `${key} overlaps credential material` }));
+    }
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(canonical)
+      ? Effect.succeed(canonical as SubmissionId)
+      : Effect.fail(new ResponseInvalid({ operation, reason: `${key} is not a submission UUID` }));
+  });
 
-const validDigest = (value: unknown): value is Artifact.Digest =>
-  isRecord(value) && exactFields(value, ["algorithm", "value"]) && value.algorithm === "sha256"
-  && typeof value.value === "string" && digestPattern.test(value.value);
-
-const validSubject = (value: unknown): value is Artifact.ArtifactReference =>
-  isRecord(value) && exactFields(value, ["kind", "path", "digest"])
-  && supported.includes(value.kind as typeof supported[number]) && typeof value.path === "string"
-  && value.path.startsWith("/") && validDigest(value.digest);
-
-const validTransport = (value: unknown): value is TransportReference =>
-  isRecord(value) && exactFields(value, ["kind", "bytes", "digest"])
-  && (value.kind === "zip" || value.kind === "disk-image" || value.kind === "installer-package")
-  && typeof value.bytes === "number" && Number.isSafeInteger(value.bytes) && value.bytes >= 0
-  && validDigest(value.digest);
-
-const validTool = (value: unknown, expectedName?: string): value is Artifact.ToolReference =>
-  isRecord(value) && exactFields(value, ["name", "path", "sha256"]) && typeof value.name === "string"
-  && value.name !== "" && (expectedName === undefined || value.name === expectedName) && typeof value.path === "string"
-  && value.path.startsWith("/") && validDigest(value.sha256);
-
-const validOutput = (value: unknown): value is Artifact.OutputObservation =>
-  isRecord(value) && exactFields(value, ["text", "truncated"]) && typeof value.text === "string"
-  && typeof value.truncated === "boolean";
-
-const validTime = (value: unknown): value is number =>
-  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-
-const validInvocation = (value: unknown): value is Artifact.ToolInvocation => {
-  if (!isRecord(value)) return false;
-  const fields = [
-    "tool",
-    "args",
-    "startedAtEpochMillis",
-    "completedAtEpochMillis",
-    "exitCode",
-    "stdout",
-    "stderr",
-    ...(value.cwd === undefined ? [] : ["cwd"]),
-  ];
-  return exactFields(value, fields) && validTool(value.tool) && Array.isArray(value.args)
-    && value.args.every((argument) => typeof argument === "string")
-    && (value.cwd === undefined || (typeof value.cwd === "string" && value.cwd.startsWith("/")))
-    && validTime(value.startedAtEpochMillis) && validTime(value.completedAtEpochMillis)
-    && value.completedAtEpochMillis >= value.startedAtEpochMillis && typeof value.exitCode === "number"
-    && Number.isSafeInteger(value.exitCode) && validOutput(value.stdout) && validOutput(value.stderr);
+const normalizeStatus = (
+  operation: "submit" | "info" | "log",
+  providerStatus: string,
+  summary?: string | undefined,
+): Effect.Effect<Status, ResponseInvalid> => {
+  const normalized = providerStatus.trim().toLowerCase();
+  if (normalized === "accepted") {
+    return Effect.succeed(new Accepted({ providerStatus: "Accepted" }));
+  }
+  if (normalized === "in progress" || normalized === "in-progress" || normalized === "submitted") {
+    return Effect.succeed(new Pending({ providerStatus }));
+  }
+  if (normalized === "invalid" || normalized === "rejected") {
+    return Effect.succeed(
+      new Rejected({
+        providerStatus,
+        ...(summary === undefined ? {} : { summary }),
+      }),
+    );
+  }
+  return Effect.fail(new ResponseInvalid({ operation, reason: `unknown status ${providerStatus}` }));
 };
 
-const validPreparation = (
-  value: unknown,
-  subject: Artifact.ArtifactReference,
-  transport: TransportReference,
-): value is TransportPreparationProvenance => {
-  if (
-    !isRecord(value) || !exactFields(value, [
-      "operation",
-      "startedAtEpochMillis",
-      "completedAtEpochMillis",
-      "inputs",
-      "output",
-      "tools",
-    ])
-  ) return false;
-  if (
-    value.operation !== preparationOperation || !validTime(value.startedAtEpochMillis)
-    || !validTime(value.completedAtEpochMillis) || value.completedAtEpochMillis < value.startedAtEpochMillis
-    || !Array.isArray(value.inputs) || value.inputs.length !== 1 || !validSubject(value.inputs[0])
-    || !sameCanonicalValue(value.inputs[0], subject) || !validSubject(value.output)
-    || value.output.kind !== transport.kind || !sameCanonicalValue(value.output.digest, transport.digest)
-    || !Array.isArray(value.tools) || value.tools.length === 0 || !value.tools.every(validInvocation)
-  ) return false;
-  return true;
+const issue = (value: unknown, sensitiveValues: readonly string[]): LogIssue | undefined => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const object = value as JsonObject;
+  const severity = nonEmpty(object.severity);
+  const message = nonEmpty(object.message);
+  if (severity === undefined || message === undefined) return undefined;
+  const path = nonEmpty(object.path);
+  const codeValue = object.code;
+  const code = typeof codeValue === "string" || typeof codeValue === "number" ? String(codeValue) : undefined;
+  const docUrl = nonEmpty(object.docUrl);
+  return new LogIssue({
+    severity: scrub(severity, sensitiveValues),
+    message: scrub(message, sensitiveValues),
+    ...(path === undefined ? {} : { path: scrub(path, sensitiveValues) }),
+    ...(code === undefined ? {} : { code: scrub(code, sensitiveValues) }),
+    ...(docUrl === undefined ? {} : { docUrl: scrub(docUrl, sensitiveValues) }),
+  });
 };
 
-const validReconciliation = (value: unknown): value is OperatorReconciliationRecord =>
-  isRecord(value) && exactFields(value, ["authority", "observedAtEpochMillis"])
-  && typeof value.authority === "string" && value.authority.trim() === value.authority && value.authority.length > 0
-  && value.authority.length <= 1024 && validTime(value.observedAtEpochMillis);
-
-const commonReceiptFields = [
-  "schema",
-  "state",
-  "attemptId",
-  "startedAtEpochMillis",
-  "receiptPath",
-  "subject",
-  "transport",
-  "preparation",
-  "notarytool",
-] as const;
-
-const readReceiptValue = (
-  value: unknown,
-  baseReceiptPath: string,
-  storagePath: string,
-  expectedState: "SubmissionAttemptStarted" | "Submitted",
-): Effect.Effect<NotaryReceipt, NotaryReceiptInvalid> => {
-  if (!isRecord(value) || value.schema !== receiptSchema || value.state !== expectedState) {
-    return Effect.fail(
-      new NotaryReceiptInvalid({ receiptPath: storagePath, reason: "unexpected receipt schema or state" }),
-    );
-  }
-  const submittedFields = [
-    ...commonReceiptFields,
-    "submissionId",
-    "submittedStatus",
-    "source",
-    ...(value.source === "operator-reconciliation" ? ["reconciliation"] : []),
-  ];
-  if (!exactFields(value, expectedState === "SubmissionAttemptStarted" ? commonReceiptFields : submittedFields)) {
-    return Effect.fail(
-      new NotaryReceiptInvalid({ receiptPath: storagePath, reason: "receipt field set is not canonical" }),
-    );
-  }
-  if (
-    typeof value.attemptId !== "string" || !uuid.test(value.attemptId) || !validTime(value.startedAtEpochMillis)
-    || value.receiptPath !== baseReceiptPath || !validSubject(value.subject) || !validTransport(value.transport)
-    || !validPreparation(value.preparation, value.subject, value.transport)
-    || !validTool(value.notarytool, "notarytool")
-  ) {
-    return Effect.fail(new NotaryReceiptInvalid({ receiptPath: storagePath, reason: "receipt fields are malformed" }));
-  }
-  const base = {
-    schema: receiptSchema,
-    attemptId: value.attemptId,
-    startedAtEpochMillis: value.startedAtEpochMillis,
-    receiptPath: baseReceiptPath,
-    subject: value.subject,
-    transport: value.transport,
-    preparation: value.preparation,
-    notarytool: value.notarytool,
-  };
-  if (expectedState === "SubmissionAttemptStarted") {
-    return Effect.succeed(mintAttempt({ ...base, state: "SubmissionAttemptStarted" }));
-  }
-  if (
-    typeof value.submissionId !== "string" || !uuid.test(value.submissionId)
-    || value.submittedStatus !== "Not Queried"
-    || (value.source !== "submit-response" && value.source !== "operator-reconciliation")
-    || (value.source === "operator-reconciliation" && !validReconciliation(value.reconciliation))
-  ) {
-    return Effect.fail(
-      new NotaryReceiptInvalid({ receiptPath: storagePath, reason: "submitted fields are malformed" }),
-    );
-  }
-  return Effect.succeed(storedSubmission({
-    ...base,
-    state: "Submitted",
-    submissionId: value.submissionId,
-    submittedStatus: "Not Queried",
-    source: value.source,
-    ...(value.source === "operator-reconciliation" ? { reconciliation: value.reconciliation } : {}),
-  } as SubmissionFields));
-};
-
-const readJsonFile = (
-  storagePath: string,
-): Effect.Effect<unknown, ReadReceiptError, FileSystem.FileSystem> =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const symbolicLink = yield* Effect.option(fileSystem.readLink(storagePath));
-    if (symbolicLink._tag === "Some") {
-      return yield* new NotaryReceiptInvalid({
-        receiptPath: storagePath,
-        reason: "receipt must not be a symbolic link",
-      });
-    }
-    const contents = yield* fileSystem.readFileString(storagePath).pipe(
-      Effect.mapError((error) => new NotaryReceiptFailed({ receiptPath: storagePath, reason: describe(error) })),
-    );
-    return yield* Effect.try({
-      try: () => JSON.parse(contents) as unknown,
-      catch: (error) => new NotaryReceiptInvalid({ receiptPath: storagePath, reason: describe(error) }),
-    });
-  });
-
-const attemptFromSubmission = (submission: SubmittedReceipt): SubmissionAttemptStarted =>
-  canonicalCopy({
-    schema: submission.schema,
-    state: "SubmissionAttemptStarted" as const,
-    attemptId: submission.attemptId,
-    startedAtEpochMillis: submission.startedAtEpochMillis,
-    receiptPath: submission.receiptPath,
-    subject: submission.subject,
-    transport: submission.transport,
-    preparation: submission.preparation,
-    notarytool: submission.notarytool,
-  }) as SubmissionAttemptStarted;
-
-export const readReceipt = (
-  input: string,
-): Effect.Effect<NotaryReceipt, ReadReceiptError, FileSystem.FileSystem | Path.Path> =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const receiptPath = yield* resolveReceiptPath(input);
-    const attempt = yield* readJsonFile(receiptPath).pipe(
-      Effect.flatMap((value) => readReceiptValue(value, receiptPath, receiptPath, "SubmissionAttemptStarted")),
-    );
-    if (attempt.state !== "SubmissionAttemptStarted") {
-      return yield* new NotaryReceiptInvalid({ receiptPath, reason: "base receipt is not an attempt" });
-    }
-    const sidecarPath = submittedReceiptPath(receiptPath, attempt.attemptId);
-    const sidecarExists = yield* fileSystem.exists(sidecarPath).pipe(
-      Effect.mapError((error) => new NotaryReceiptFailed({ receiptPath: sidecarPath, reason: describe(error) })),
-    );
-    if (!sidecarExists) return attempt;
-    const submission = yield* readJsonFile(sidecarPath).pipe(
-      Effect.flatMap((value) => readReceiptValue(value, receiptPath, sidecarPath, "Submitted")),
-    );
-    if (submission.state !== "Submitted" || !sameCanonicalValue(attemptFromSubmission(submission), attempt)) {
-      return yield* new NotaryReceiptInvalid({
-        receiptPath: sidecarPath,
-        reason: "submitted sidecar is not bound to the exact base attempt",
-      });
-    }
-    return submission;
-  });
-
-export const operatorReconciliationEvidence = (
-  input: OperatorReconciliationEvidenceInput,
-): Effect.Effect<OperatorReconciliationEvidence, NotaryBindingInvalid> =>
-  Effect.gen(function*() {
-    const receiptIsKnown = input.receipt.state === "SubmissionAttemptStarted"
-      ? NotaryBinding.isAttempt(input.receipt) || NotaryBinding.isStoredReceipt(input.receipt)
-      : NotaryBinding.isAuthorizedSubmission(input.receipt) || NotaryBinding.isStoredReceipt(input.receipt);
-    if (!receiptIsKnown) {
-      return yield* new NotaryBindingInvalid({ reason: "receipt was not read or produced by this Notary module" });
-    }
-    const submissionId = input.submissionId.toLowerCase();
-    if (!uuid.test(submissionId)) {
-      return yield* new NotaryBindingInvalid({ reason: "submissionId must be a UUID" });
-    }
-    if (input.receipt.state === "Submitted" && input.receipt.submissionId !== submissionId) {
-      return yield* new NotaryBindingInvalid({ reason: "operator evidence does not match the stored submission id" });
-    }
-    const authority = input.authority.trim();
-    if (authority === "" || authority.length > 1024) {
-      return yield* new NotaryBindingInvalid({ reason: "authority must contain 1 to 1024 non-whitespace characters" });
-    }
-    const evidence = canonicalCopy({
-      _tag: "OperatorReconciliationEvidence" as const,
-      receipt: input.receipt,
-      submissionId,
-      authority,
-      observedAtEpochMillis: yield* Clock.currentTimeMillis,
-    }) as OperatorReconciliationEvidence;
-    return NotaryBinding.registerReconciliationEvidence(evidence);
-  });
-
-export const reconcile = (
-  input: ReconcileInput,
-): Effect.Effect<Submission, ReconcileError, FileSystem.FileSystem | Path.Path> =>
-  Effect.gen(function*() {
-    if (!NotaryBinding.isReconciliationEvidence(input.evidence)) {
-      return yield* new NotaryBindingInvalid({ reason: "operator reconciliation evidence is not authenticated" });
-    }
-    if (!sameCanonicalValue(input.evidence.receipt, input.receipt)) {
-      return yield* new NotaryBindingInvalid({ reason: "operator evidence is bound to a different receipt" });
-    }
-    const current = yield* readReceipt(input.receipt.receiptPath);
-    if (!sameCanonicalValue(current, input.receipt)) {
-      return yield* new NotaryBindingInvalid({ reason: "durable receipt changed before reconciliation" });
-    }
-    if (current.state === "Submitted") {
-      if (current.submissionId !== input.evidence.submissionId) {
-        return yield* new NotaryBindingInvalid({ reason: "durable submission id differs from operator evidence" });
-      }
-      return reconciledSubmission(current as SubmissionFields);
-    }
-    const submitted = canonicalCopy({
-      ...current,
-      state: "Submitted" as const,
-      submissionId: input.evidence.submissionId,
-      submittedStatus: "Not Queried" as const,
-      source: "operator-reconciliation" as const,
-      reconciliation: {
-        authority: input.evidence.authority,
-        observedAtEpochMillis: input.evidence.observedAtEpochMillis,
-      },
-    }) as SubmittedReceipt;
-    yield* commitReceipt(submitted);
-    const persisted = yield* readReceipt(current.receiptPath);
-    if (persisted.state !== "Submitted" || !sameCanonicalValue(persisted, submitted)) {
-      return yield* new NotaryBindingInvalid({ reason: "submitted sidecar changed during reconciliation" });
-    }
-    return reconciledSubmission(persisted as SubmissionFields);
-  });
+type LayerError = ToolNotFound | ToolFailed;
 
 const makeService = (
   options: LayerOptions,
 ): Effect.Effect<
   Service,
-  Artifact.ToolError | NotaryConfigurationInvalid,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  LayerError,
+  | Crypto.Crypto
+  | FileSystem.FileSystem
+  | Path.Path
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Credential
 > =>
   Effect.gen(function*() {
-    yield* validateConfiguration(options);
-    const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const crypto = yield* Crypto.Crypto;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const notarytool = yield* Tool.select({ name: "notarytool", path: options.notarytoolPath });
-    const ditto = yield* Tool.select({ name: "ditto", path: options.dittoPath ?? "/usr/bin/ditto" });
-    const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
-      Context.add(Path.Path, path),
-      Context.add(Crypto.Crypto, crypto),
-      Context.add(ChildProcessSpawner.ChildProcessSpawner, spawner),
-    );
-    const credentials = [
-      "--keychain-profile",
-      options.credentials.profile,
-      ...(options.credentials.keychainPath === undefined ? [] : ["--keychain", options.credentials.keychainPath]),
-    ] as const;
+    const { fileSystem, path, services } = yield* capturePlatformServices;
+    const credentialService = yield* Credential;
+    const credential = yield* credentialService.arguments;
+    const safeText = (value: unknown): string | undefined => {
+      const text = nonEmpty(value);
+      return text === undefined ? undefined : scrub(text, credential.sensitiveValues);
+    };
+    const xcrun = yield* resolveAppleTool("xcrun", options.xcrun, ["notarytool", "--version"], "notarytool");
+    const ditto = yield* resolveAppleTool("ditto", options.ditto, ["--help"]);
+    const codesign = yield* resolveAppleTool("codesign", options.codesign, ["--version"]);
+    const pkgutil = yield* resolveAppleTool("pkgutil", options.pkgutil, ["--help"]);
+    const tool = new AppleToolFact({ name: "notarytool", version: xcrun.tool.version });
+    const transportTool = new AppleToolFact({ name: "ditto", version: ditto.tool.version });
+    const run = (operation: "submit" | "info" | "log", args: readonly string[]) =>
+      Toolchain.runBytesOrFail({
+        tool: "notarytool",
+        executable: xcrun.executable,
+        args: ["notarytool", operation, ...args, "--output-format", "json", ...credential.args],
+      }).pipe(
+        Effect.mapError((failure) => scrubToolFailure(failure, credential.sensitiveValues)),
+        Effect.flatMap((completion) =>
+          Effect.try({
+            try: () => new TextDecoder("utf-8", { fatal: true }).decode(completion.stdout),
+            catch: (error) =>
+              new ResponseInvalid({
+                operation,
+                reason: `stdout was not valid UTF-8: ${scrub(String(error), credential.sensitiveValues)}`,
+              }),
+          })
+        ),
+      );
 
-    const prepareTransport = (artifact: NotarizableArtifact) =>
-      Effect.gen(function*() {
-        const startedAtEpochMillis = yield* Clock.currentTimeMillis;
-        const copied = yield* Lifecycle.copyAuthenticatedScoped({ input: artifact, copyTool: ditto });
-        const tools: Artifact.ToolInvocation[] = [...copied.tools];
-        let transportArtifact: Artifact.FileArtifact<"zip" | "disk-image" | "installer-package">;
-        if (copied.artifact.kind === "app-bundle" || copied.artifact.kind === "mach-o") {
-          const archivePath = `${copied.artifact.path}.zip`;
-          tools.push(
-            yield* Tool.runOrFail({
-              tool: ditto,
-              args: ["-c", "-k", "--keepParent", copied.artifact.path, archivePath],
-            }),
-          );
-          transportArtifact = yield* Artifact.observeFile("zip", archivePath);
-          const extractionRoot = yield* fileSystem.makeTempDirectoryScoped({
-            prefix: ".effect-build-apple-notary-transport-verify-",
-          }).pipe(
-            Effect.mapError((error) =>
-              new Artifact.ArtifactObservationFailed({ path: archivePath, reason: describe(error) })
-            ),
-          );
-          tools.push(yield* Tool.runOrFail({ tool: ditto, args: ["-x", "-k", archivePath, extractionRoot] }));
-          const extractedPath = path.join(extractionRoot, path.basename(copied.artifact.path));
-          const extracted = copied.artifact._tag === "TreeArtifact"
-            ? yield* Artifact.observeTree("app-bundle", extractedPath)
-            : yield* Artifact.observeFile("mach-o", extractedPath);
-          if (!Artifact.sameIdentity(copied.artifact, extracted)) {
-            return yield* new Artifact.ArtifactChanged({
-              path: extracted.path,
-              expected: JSON.stringify(copied.artifact.identity),
-              observed: JSON.stringify(extracted.identity),
+    const snapshot = Effect.fn("effect-build-apple.snapshotNotaryInput")(function*(input: PreparedSubmissionInput) {
+      const verified = yield* verifyFileArtifact("notary submit", input.artifact);
+      const staging = yield* fileSystem.makeTempDirectoryScoped({ prefix: ".effect-build-notary-" }).pipe(
+        Effect.mapError((error) =>
+          new SubmissionPreparationFailed({
+            path: verified.source,
+            reason: `create private snapshot failed: ${describe(error)}`,
+          })
+        ),
+      );
+      const staged = path.join(staging, path.basename(verified.source));
+      yield* fileSystem.writeFile(staged, verified.contents).pipe(
+        Effect.mapError((error) =>
+          new SubmissionPreparationFailed({
+            path: verified.source,
+            reason: `write private snapshot failed: ${describe(error)}`,
+          })
+        ),
+      );
+      return { staged, bytes: verified.bytes, sha256: verified.sha256 } as const;
+    });
+
+    const submitPrepared = Effect.fn("effect-build-apple.notarySubmitPrepared")(function*(
+      input: PreparedSubmissionInput,
+      stapleTarget: StapleTarget | undefined,
+      appTransportTool: AppleToolFact | undefined,
+    ) {
+      return yield* Effect.scoped(
+        Effect.gen(function*() {
+          const verified = yield* snapshot(input);
+          if (input.kind === "dmg") {
+            yield* Toolchain.runOrFail({
+              tool: "codesign",
+              executable: codesign.executable,
+              args: ["--verify", "--strict", "--verbose=2", verified.staged],
+            });
+          } else if (input.kind === "pkg") {
+            yield* Toolchain.runOrFail({
+              tool: "pkgutil",
+              executable: pkgutil.executable,
+              args: ["--check-signature", verified.staged],
             });
           }
-          yield* Artifact.revalidate(copied.artifact);
-        } else {
-          transportArtifact = copied.artifact as Artifact.FileArtifact<"zip" | "disk-image" | "installer-package">;
-        }
-        yield* Artifact.revalidate(transportArtifact);
-        const completedAtEpochMillis = yield* Clock.currentTimeMillis;
-        const reference: TransportReference = canonicalCopy({
-          kind: transportArtifact.kind,
-          bytes: transportArtifact.identity.bytes,
-          digest: transportArtifact.identity.digest,
-        });
-        const provenance = canonicalCopy({
-          operation: preparationOperation,
-          startedAtEpochMillis,
-          completedAtEpochMillis,
-          inputs: [Artifact.reference(artifact)],
-          output: Artifact.reference(transportArtifact),
-          tools,
-        }) as TransportPreparationProvenance;
-        return { artifact: transportArtifact, reference, provenance };
-      });
+          const response = yield* run("submit", [verified.staged]).pipe(
+            Effect.mapError((failure) =>
+              new SubmissionOutcomeUnknown({
+                artifactSha256: verified.sha256,
+                reason: scrub(failure.message, credential.sensitiveValues),
+              })
+            ),
+          );
+          return yield* Effect.gen(function*() {
+            const object = yield* parseObject("submit", response);
+            const submissionId = yield* requireSubmissionId("submit", object, "id", credential.sensitiveValues);
+            const providerStatus = safeText(object.status) ?? "Submitted";
+            const message = safeText(object.message);
+            const status = yield* normalizeStatus("submit", providerStatus, message);
+            return new Submission({
+              submissionId,
+              kind: input.kind,
+              architecture: input.architecture,
+              artifactBytes: verified.bytes,
+              artifactSha256: verified.sha256,
+              status,
+              ...(message === undefined ? {} : { message }),
+              submissionTool: tool,
+              tool,
+              ...(stapleTarget === undefined ? {} : { stapleTarget }),
+              ...(appTransportTool === undefined ? {} : { transportTool: appTransportTool }),
+            });
+          }).pipe(
+            Effect.mapError((failure) =>
+              new SubmissionOutcomeUnknown({
+                artifactSha256: verified.sha256,
+                reason: scrub(failure.message, credential.sensitiveValues),
+              })
+            ),
+          );
+        }),
+      );
+    });
 
-    const validateDurableSubmission = (submission: Submission) =>
-      Effect.gen(function*() {
-        if (!NotaryBinding.isAuthorizedSubmission(submission) || submission.state !== "Submitted") {
-          return yield* new NotaryBindingInvalid({
-            reason: "submission is not authorized by a live submit or operator reconciliation",
+    const submit = Effect.fn("effect-build-apple.notarySubmit")(function*(input: SubmitInput) {
+      const artifactPath = path.resolve(input.artifact.path);
+      if (!path.basename(artifactPath).endsWith(input.kind === "dmg" ? ".dmg" : ".pkg")) {
+        return yield* new ProductStateInvalid({
+          operation: `submit ${input.kind} for notarization`,
+          path: artifactPath,
+          expected: `a .${input.kind} product path`,
+        });
+      }
+      if (input.kind === "dmg") {
+        if (!hasDeveloperIdDiskImageSignature(input.artifact)) {
+          return yield* new ProductStateInvalid({
+            operation: "submit disk image for notarization",
+            path: artifactPath,
+            expected: "a native-verified Developer ID disk image",
           });
         }
-        const durable = yield* readReceipt(submission.receiptPath);
-        if (durable.state !== "Submitted" || !sameCanonicalValue(durable, submission)) {
-          return yield* new NotaryBindingInvalid({ reason: "durable submitted receipt changed before query" });
-        }
-      });
-
-    const queryArgs = (operation: "info" | "wait", submissionId: string): string[] => [
-      operation,
-      submissionId,
-      ...credentials,
-      "--output-format",
-      "json",
-      "--no-progress",
-    ];
-
-    const query = (
-      operation: "info" | "wait",
-      submission: Submission,
-      trailing: readonly string[] = [],
-    ): Effect.Effect<SubmissionObservation, QueryError> =>
-      Effect.gen(function*() {
-        yield* validateDurableSubmission(submission);
-        const invocation = yield* Tool.runOrFail({
-          tool: notarytool,
-          args: [...queryArgs(operation, submission.submissionId), ...trailing],
+      } else if (!hasDeveloperIdInstallerSignature(input.artifact)) {
+        return yield* new ProductStateInvalid({
+          operation: "submit installer package for notarization",
+          path: artifactPath,
+          expected: "a native-verified Developer ID installer package",
         });
-        const parsed = yield* parseSubmission(operation, invocation.stdout.text, submission.submissionId);
-        const observation = canonicalCopy({
-          submissionId: parsed.id,
-          subject: submission.subject,
-          transport: submission.transport,
-          status: parsed.status,
-          rawJson: invocation.stdout.text,
-          notarytool,
-        }) as unknown as SubmissionObservation;
-        return NotaryBinding.registerObservation(observation);
-      }).pipe(Effect.provide(services));
+      }
+      return yield* submitPrepared(
+        { ...input, architecture: input.artifact.architecture },
+        new StapleTarget({
+          kind: input.kind,
+          identityKind: "file-bytes",
+          artifactBytes: input.artifact.bytes,
+          artifactSha256: input.artifact.sha256 as Sha256,
+        }),
+        undefined,
+      );
+    });
 
-    const commitSubmitResponse = (
-      attempt: SubmissionAttemptStarted,
-      submissionId: string,
-    ): Effect.Effect<SubmittedReceipt, SubmissionReceiptCommitFailed, FileSystem.FileSystem | Path.Path> =>
-      Effect.gen(function*() {
-        const submitted = canonicalCopy({
-          ...attempt,
-          state: "Submitted" as const,
-          submissionId,
-          submittedStatus: "Not Queried" as const,
-          source: "submit-response" as const,
-        }) as SubmittedReceipt;
-        yield* commitReceipt(submitted);
-        const persisted = yield* readReceipt(attempt.receiptPath).pipe(
+    const submitApp = Effect.fn("effect-build-apple.notarySubmitApp")(function*(input: SubmitAppInput) {
+      return yield* Effect.scoped(Effect.gen(function*() {
+        const sourceAppPath = path.resolve(input.bundle.outdir);
+        if (!hasDeveloperIdApplicationSignature(input.bundle)) {
+          return yield* new ProductStateInvalid({
+            operation: "submit app for notarization",
+            path: sourceAppPath,
+            expected: "a native-verified Developer ID Application bundle",
+          });
+        }
+        const captured = yield* captureBundle(input.bundle);
+        if (!captured.identity.bundleName.endsWith(".app")) {
+          return yield* new BundleInspectionFailed({
+            path: captured.source,
+            reason: "notary app transport requires a .app bundle directory",
+          });
+        }
+        const staging = yield* fileSystem.makeTempDirectoryScoped({ prefix: ".effect-build-notary-app-" }).pipe(
           Effect.mapError((error) =>
-            new SubmissionReceiptCommitFailed({
-              receiptPath: submittedReceiptPath(attempt.receiptPath, attempt.attemptId),
-              submissionId,
-              reason: describe(error),
+            new BundleInspectionFailed({
+              path: captured.source,
+              reason: `create private app-transport directory failed: ${describe(error)}`,
             })
           ),
         );
-        if (persisted.state !== "Submitted" || !sameCanonicalValue(persisted, submitted)) {
-          return yield* new SubmissionReceiptCommitFailed({
-            receiptPath: submittedReceiptPath(attempt.receiptPath, attempt.attemptId),
-            submissionId,
-            reason: "submitted sidecar changed during durable verification",
+        const stagedApp = path.join(staging, captured.identity.bundleName);
+        yield* Effect.addFinalizer(() => makeBundleRemovable(captured, stagedApp));
+        yield* materializeBundle(captured, stagedApp);
+        yield* Toolchain.runOrFail({
+          tool: "codesign",
+          executable: codesign.executable,
+          args: ["--verify", "--deep", "--strict", "--verbose=2", stagedApp],
+        });
+        const stagedIdentity = (yield* captureBundlePath(stagedApp)).identity;
+        if (!identityEquals(captured.identity, stagedIdentity)) {
+          return yield* new BundleInspectionFailed({
+            path: stagedApp,
+            reason: `private app snapshot differs from ${captured.identity.artifactSha256}`,
           });
         }
-        return persisted;
-      });
-
-    const submit = (input: SubmitInput): Effect.Effect<Submission, SubmitError> =>
-      Effect.scoped(
-        Effect.gen(function*() {
-          yield* validateArtifact(input.artifact);
-          const transport = yield* prepareTransport(input.artifact);
-          const receiptPath = yield* resolveReceiptPath(input.receiptPath, {
-            createParent: true,
-            inputs: [input.artifact],
-          });
-          const attempt = mintAttempt({
-            schema: receiptSchema,
-            state: "SubmissionAttemptStarted",
-            attemptId: yield* crypto.randomUUIDv7.pipe(
-              Effect.mapError((error) => new NotaryReceiptFailed({ receiptPath, reason: describe(error) })),
-            ),
-            startedAtEpochMillis: yield* Clock.currentTimeMillis,
-            receiptPath,
-            subject: Artifact.reference(input.artifact),
-            transport: transport.reference,
-            preparation: transport.provenance,
-            notarytool,
-          });
-          yield* createReceipt(attempt);
-          yield* Artifact.revalidate(input.artifact);
-          yield* Artifact.revalidate(transport.artifact);
-          // The tool runner keeps the child interruptible, then invokes this callback
-          // in the same uninterruptible completion region that owns post-run tool auth.
-          const committed = yield* Tool.runWithCompletion(
-            {
-              tool: notarytool,
-              args: [
-                "submit",
-                transport.artifact.path,
-                ...credentials,
-                "--output-format",
-                "json",
-                "--no-progress",
-                "--no-wait",
-                options.s3Acceleration === "enabled" ? "--s3-acceleration" : "--no-s3-acceleration",
-              ],
-            },
-            ({ invocation, postAuthentication }) =>
-              Effect.gen(function*() {
-                const parsed = yield* parseSubmitResponse(invocation.stdout.text).pipe(
-                  Effect.mapError((error) =>
-                    new UnknownSubmissionOutcome({
-                      receiptPath,
-                      reason: invocation.exitCode === 0
-                        ? error.reason
-                        : `notarytool submit exited with code ${invocation.exitCode}: ${error.reason}`,
-                      stdout: invocation.stdout.text,
-                      stderr: invocation.stderr.text,
-                    })
-                  ),
-                );
-                const persisted = yield* commitSubmitResponse(attempt, parsed.id);
-                return { invocation, parsed, persisted, postAuthentication };
-              }),
-          ).pipe(
-            Effect.catchTags({
-              AppleToolUnavailable: (error) =>
-                Effect.fail(
-                  new UnknownSubmissionOutcome({
-                    receiptPath,
-                    reason: describe(error),
-                    stdout: "",
-                    stderr: "",
-                  }),
-                ),
-              AppleToolChanged: (error) =>
-                Effect.fail(
-                  new UnknownSubmissionOutcome({
-                    receiptPath,
-                    reason: describe(error),
-                    stdout: "",
-                    stderr: "",
-                  }),
-                ),
-              AppleToolFailed: (error) =>
-                Effect.fail(
-                  new UnknownSubmissionOutcome({
-                    receiptPath,
-                    reason: describe(error),
-                    stdout: error.stdout,
-                    stderr: error.stderr,
-                  }),
-                ),
+        const zipName = `${captured.identity.bundleName.slice(0, -4)}.zip`;
+        const zipPath = path.join(staging, zipName);
+        const transport = yield* Toolchain.publishFile({
+          tool: ditto.tool,
+          outfile: zipPath,
+          produce: (privateZip) =>
+            Toolchain.runOrFail({
+              tool: "ditto",
+              executable: ditto.executable,
+              args: ["-c", "-k", "--keepParent", stagedApp, privateZip],
             }),
-          );
-          const { invocation, parsed, persisted, postAuthentication } = committed;
-          if (Exit.isFailure(postAuthentication)) {
-            const found = Cause.findErrorOption(postAuthentication.cause);
-            return yield* new UnknownSubmissionOutcome({
-              receiptPath,
-              reason: `notarytool changed after returning submission response: ${
-                found._tag === "Some" ? describe(found.value) : Cause.pretty(postAuthentication.cause)
-              }`,
-              stdout: invocation.stdout.text,
-              stderr: invocation.stderr.text,
-            });
-          }
-          if (invocation.exitCode !== 0) {
-            yield* Effect.ignore(Artifact.revalidate(transport.artifact));
-            yield* Effect.ignore(Artifact.revalidate(input.artifact));
-            return yield* new UnknownSubmissionOutcome({
-              receiptPath,
-              reason: `notarytool submit returned id ${parsed.id} but exited with code ${invocation.exitCode}`,
-              stdout: invocation.stdout.text,
-              stderr: invocation.stderr.text,
-            });
-          }
-          // Once the service has returned a valid job identifier, durability wins over
-          // every subsequent local check. A detected mutation can fail this call, but it
-          // must never erase the only handle that prevents a blind resubmission.
-          yield* Artifact.revalidate(transport.artifact);
-          yield* Artifact.revalidate(input.artifact);
-          return liveSubmission(persisted as SubmissionFields);
-        }),
-      ).pipe(Effect.provide(services));
-
-    const info = (submission: Submission) => query("info", submission);
-    const wait = (submission: Submission, waitOptions: WaitOptions) => {
-      if (!duration.test(waitOptions.timeout)) {
-        return Effect.fail(
-          new NotaryConfigurationInvalid({
-            field: "timeout",
-            reason: "expected a positive integer with optional s, m, or h suffix",
-          }),
-        );
-      }
-      return query("wait", submission, ["--timeout", waitOptions.timeout]);
-    };
-    const raw = (
-      operation: "history" | "log",
-      args: readonly string[],
-    ): Effect.Effect<RawJsonObservation, QueryError> =>
-      Effect.gen(function*() {
-        const invocation = yield* Tool.runOrFail({ tool: notarytool, args });
-        yield* parseJson(operation, invocation.stdout.text);
-        return canonicalCopy({ rawJson: invocation.stdout.text, notarytool });
-      }).pipe(Effect.provide(services));
-    const history = () => raw("history", ["history", ...credentials, "--output-format", "json", "--no-progress"]);
-    const log = (submission: Submission): Effect.Effect<SubmissionLogObservation, QueryError> =>
-      Effect.gen(function*() {
-        yield* validateDurableSubmission(submission);
-        const observation = yield* raw("log", ["log", submission.submissionId, ...credentials]);
-        return canonicalCopy({
-          submissionId: submission.submissionId,
-          subject: submission.subject,
-          transport: submission.transport,
-          ...observation,
         });
-      }).pipe(Effect.provide(services));
+        const extracted = path.join(staging, "extracted");
+        yield* fileSystem.makeDirectory(extracted, { recursive: true }).pipe(
+          Effect.mapError((error) =>
+            new BundleInspectionFailed({
+              path: extracted,
+              reason: `create extraction directory failed: ${describe(error)}`,
+            })
+          ),
+        );
+        const extractedApp = path.join(extracted, captured.identity.bundleName);
+        yield* Effect.addFinalizer(() => makeBundleRemovable(captured, extractedApp));
+        yield* Toolchain.runOrFail({
+          tool: "ditto",
+          executable: ditto.executable,
+          args: ["-x", "-k", transport.path, extracted],
+        });
+        const extractedEntries = (yield* fileSystem.readDirectory(extracted).pipe(
+          Effect.mapError((error) =>
+            new BundleInspectionFailed({
+              path: extracted,
+              reason: `read extraction directory failed: ${describe(error)}`,
+            })
+          ),
+        )).sort();
+        if (
+          extractedEntries.length !== 1
+          || extractedEntries[0] !== captured.identity.bundleName
+        ) {
+          return yield* new BundleInspectionFailed({
+            path: extracted,
+            reason: `verified ZIP extraction must contain exactly ${captured.identity.bundleName}`,
+          });
+        }
+        const extractedIdentity = (yield* captureBundlePath(extractedApp)).identity;
+        if (!identityEquals(captured.identity, extractedIdentity)) {
+          return yield* new BundleInspectionFailed({
+            path: transport.path,
+            reason:
+              `ZIP projection mismatch: expected ${captured.identity.artifactSha256}, observed ${extractedIdentity.artifactSha256}`,
+          });
+        }
+        yield* Toolchain.runOrFail({
+          tool: "codesign",
+          executable: codesign.executable,
+          args: [
+            "--verify",
+            "--deep",
+            "--strict",
+            "--verbose=2",
+            extractedApp,
+          ],
+        });
+        return yield* submitPrepared(
+          { kind: "zip", artifact: transport, architecture: input.bundle.architecture },
+          new StapleTarget({
+            kind: "app",
+            identityKind: "bundle-manifest",
+            artifactBytes: captured.identity.artifactBytes,
+            artifactSha256: captured.identity.artifactSha256,
+            bundleName: captured.identity.bundleName,
+          }),
+          transportTool,
+        );
+      }));
+    });
 
-    return { submit, info, wait, log, history };
+    const info = Effect.fn("effect-build-apple.notaryInfo")(function*(reference: SubmissionReference) {
+      const response = yield* run("info", [reference.submissionId]);
+      const object = yield* parseObject("info", response);
+      const submissionId = yield* requireSubmissionId("info", object, "id", credential.sensitiveValues);
+      if (submissionId !== reference.submissionId) {
+        return yield* new CorrelationFailed({
+          operation: "info",
+          expectedSubmissionId: reference.submissionId,
+          observedSubmissionId: submissionId,
+        });
+      }
+      const providerStatus = safeText(object.status);
+      if (providerStatus === undefined) {
+        return yield* new ResponseInvalid({ operation: "info", reason: "missing non-empty status" });
+      }
+      const message = safeText(object.message);
+      const status = yield* normalizeStatus("info", providerStatus, message);
+      const name = safeText(object.name);
+      const createdDate = safeText(object.createdDate);
+      return new Observation({
+        submissionId,
+        kind: reference.kind,
+        architecture: reference.architecture,
+        artifactBytes: reference.artifactBytes,
+        artifactSha256: reference.artifactSha256,
+        status,
+        ...(message === undefined ? {} : { message }),
+        ...(name === undefined ? {} : { name }),
+        ...(createdDate === undefined ? {} : { createdDate }),
+        submissionTool: reference.submissionTool,
+        tool,
+        ...(reference.stapleTarget === undefined ? {} : { stapleTarget: reference.stapleTarget }),
+        ...(reference.transportTool === undefined ? {} : { transportTool: reference.transportTool }),
+      });
+    });
+
+    const log = Effect.fn("effect-build-apple.notaryLog")(function*(reference: SubmissionReference) {
+      const response = yield* run("log", [reference.submissionId]);
+      const object = yield* parseObject("log", response);
+      const submissionId = yield* requireSubmissionId("log", object, "jobId", credential.sensitiveValues);
+      if (submissionId !== reference.submissionId) {
+        return yield* new CorrelationFailed({
+          operation: "log",
+          expectedSubmissionId: reference.submissionId,
+          observedSubmissionId: submissionId,
+        });
+      }
+      const providerStatus = safeText(object.status);
+      if (providerStatus === undefined) {
+        return yield* new ResponseInvalid({ operation: "log", reason: "missing non-empty status" });
+      }
+      const statusSummary = safeText(object.statusSummary);
+      const status = yield* normalizeStatus("log", providerStatus, statusSummary);
+      const statusCode = typeof object.statusCode === "number" ? object.statusCode : undefined;
+      const archiveFilename = safeText(object.archiveFilename);
+      if (object.issues !== undefined && !Array.isArray(object.issues)) {
+        return yield* new ResponseInvalid({ operation: "log", reason: "issues must be an array when present" });
+      }
+      const issues: LogIssue[] = [];
+      for (const [index, value] of (object.issues ?? []).entries()) {
+        const parsed = issue(value, credential.sensitiveValues);
+        if (parsed === undefined) {
+          return yield* new ResponseInvalid({
+            operation: "log",
+            reason: `issues[${index}] was not a complete notarization issue`,
+          });
+        }
+        issues.push(parsed);
+      }
+      return new Log({
+        submissionId,
+        kind: reference.kind,
+        architecture: reference.architecture,
+        artifactBytes: reference.artifactBytes,
+        artifactSha256: reference.artifactSha256,
+        status,
+        ...(statusSummary === undefined ? {} : { statusSummary }),
+        ...(statusCode === undefined ? {} : { statusCode }),
+        ...(archiveFilename === undefined ? {} : { archiveFilename }),
+        issues,
+        submissionTool: reference.submissionTool,
+        tool,
+        ...(reference.stapleTarget === undefined ? {} : { stapleTarget: reference.stapleTarget }),
+        ...(reference.transportTool === undefined ? {} : { transportTool: reference.transportTool }),
+      });
+    });
+
+    return {
+      submit: (input) => submit(input).pipe(Effect.provide(services)),
+      submitApp: (input) => submitApp(input).pipe(Effect.provide(services)),
+      info: (reference) => info(reference).pipe(Effect.provide(services)),
+      log: (reference) => log(reference).pipe(Effect.provide(services)),
+    };
   });
 
-export const submit = (input: SubmitInput): Effect.Effect<Submission, SubmitError, Notarizer> =>
-  Notarizer.use((service) => service.submit(input));
+export const submit = (
+  input: SubmitInput,
+): Effect.Effect<Submission, SubmitError, Client> => Client.use((service) => service.submit(input));
+
+export const submitApp = (
+  input: SubmitAppInput,
+): Effect.Effect<Submission, SubmitAppError, Client> => Client.use((service) => service.submitApp(input));
 
 export const info = (
-  submission: Submission,
-): Effect.Effect<SubmissionObservation, QueryError, Notarizer> => Notarizer.use((service) => service.info(submission));
-
-export const wait = (
-  submission: Submission,
-  options: WaitOptions,
-): Effect.Effect<SubmissionObservation, QueryError, Notarizer> =>
-  Notarizer.use((service) => service.wait(submission, options));
+  reference: SubmissionReference,
+): Effect.Effect<Observation, ObserveError, Client> => Client.use((service) => service.info(reference));
 
 export const log = (
-  submission: Submission,
-): Effect.Effect<SubmissionLogObservation, QueryError, Notarizer> =>
-  Notarizer.use((service) => service.log(submission));
-
-export const history = (): Effect.Effect<RawJsonObservation, QueryError, Notarizer> =>
-  Notarizer.use((service) => service.history());
+  reference: SubmissionReference,
+): Effect.Effect<Log, ObserveError, Client> => Client.use((service) => service.log(reference));
 
 export const layer = (
   options: LayerOptions,
 ): Layer.Layer<
-  Notarizer,
-  Artifact.ToolError | NotaryConfigurationInvalid,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
-> => Layer.effect(Notarizer, makeService(options));
+  Client,
+  LayerError,
+  | Crypto.Crypto
+  | FileSystem.FileSystem
+  | Path.Path
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Credential
+> => Layer.effect(Client, makeService(options));

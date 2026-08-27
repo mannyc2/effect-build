@@ -1,66 +1,80 @@
 # Integrations
 
-## Provider-native lanes
+**Bun** (`effect-build-bun/CompileExecutable`, `.../Bundle`) runs
+`bun build --compile` with `minify`, `sourcemap`, and `bytecode`
+passthrough over six targets (macos x64/aarch64, linux x64 gnu/musl,
+linux aarch64 gnu, windows x64), and `bun build` bundling with `target`
+(browser/bun/node), `format`, `minify`, `sourcemap`, `splitting`,
+`packages`, and `external`. Project configuration (`bunfig.toml`,
+`tsconfig.json`) is inherited from `cwd` exactly as the CLI would.
 
-**Bun** currently provides executable compilation and direct directory
-bundling. Its native browser target, format, splitting, external, project
-configuration, and diagnostics remain provider-specific. Direct bundle output
-is incremental and does not create a portable browser application.
+**Deno** (`effect-build-deno/CompileExecutable`, `.../Bundle`) runs
+`deno compile` with typed `permissions` (rendered to `--allow-*` flags),
+plus `bundle` and `minify` (type-constrained to require `bundle`), over
+six targets including windows-aarch64 mapped to Rust triples; and
+`deno bundle` (Deno ≥ 2.4) with `platform` (browser/deno), `minify`,
+`codeSplitting`, `sourcemap`, and `external`.
 
-**Deno** currently provides executable compilation with typed permissions and
-direct directory bundling with a native browser or Deno platform selector. The
-required v0.5 promotion point is exactly Deno 2.9.5; `platform: "browser"` does not by
-itself prove the portable profile. Empty permission arrays will be rejected in
-the compatibility stage.
+**esbuild** (`effect-build-esbuild/Build`, `.../Context`, `.../Watch`)
+uses the package's own esbuild dependency in-process. `Build.build` is one
+in-memory build, `Build.transform` a one-file transpile, and
+`Build.analyzeMetafile` the native size report; `Context.make` is a scoped
+incremental context — native `dispose` is hidden and owned by the Scope
+finalizer's cancel-then-dispose sequence — and `Watch.changes` streams
+every completed build until the stream ends. All layers are constants
+with no requirements.
 
-**esbuild** keeps one-shot in-memory build/transform/analyze operations and its
-scoped native incremental context. Its provider-specific cancel/dispose
-sequence is distinct from portable process-tree containment.
+**Node SEA** (`effect-build-node-sea/AssembleExecutable`) assembles a
+single-file executable for the host with a builder node (`--check`, then
+`--build-sea` over a generated sea-config) and a base node binary that
+defaults to the builder. Assets embed by key; mains come from a file or
+raw bytes.
 
-**Node SEA** currently drives `node --check` and `node --build-sea` over a file
-or byte main, optional assets, and an inferred host. This becomes the truthfully
-named `Raw` lane. The separate portable `NodeMainExecutable` lane uses one
-authenticated Node 26.7.0 base, one exact assembler agreement, sealed staged
-inputs, no assets, and evidence-backed targets. On macOS its exact-target
-finalizer performs only ad-hoc, no-timestamp runnable-Mach-O repair. Developer
-ID identity, entitlements, hardened runtime, containers, notarization, stapling,
-and distribution assessment are expressly outside Node SEA.
+**Rolldown** (`effect-build-rolldown/Build`, `.../Watch`) uses the
+package's own rolldown dependency in-process. `Build.make` is a scoped
+handle over the native `RolldownBuild` — `generate` bundles in memory,
+`write` bundles onto disk, and native `close` is owned by the Scope —
+with `Build.generate`/`Build.write` as one-shot forms. `Watch.events`
+streams sanitized watcher events and closes rollup-convention result
+handles itself.
 
-**Rolldown** keeps scoped native Build operations. Watch delivery retains one
-pending completed result and coalesces to the latest with an explicit
-superseded count. The adapter closes each native result before delivery, awaits
-the watcher close during stream shutdown, and preserves cleanup failures in
-Effect Cause.
+**Archives** (`effect-build-archives/Archive`, `.../SourceArchive`) encodes
+ZIP and tar.gz deterministically from explicit layouts and rejects unsafe or
+ambiguous names. Source archives ask one resolved Git executable for one
+exact tree, honor `export-ignore`, preserve executable/symlink modes and LFS
+pointer bytes, and exclude `.git`, build output, and unsupplied gitlinks.
 
-**Apple distribution** is the separate target-only `effect-build-apple`
-package. Its closed direct-distribution subpaths are `Artifact`, `CodeSign`,
-`AppBundle`, `Zip`, `DiskImage`, `InstallerPackage`, `Notary`, `Staple`, and
-`Assess`. Mutating operations preserve immutable caller inputs and return new
-digest-addressed artifacts after pre-work and pre-publication revalidation;
-Notary resumes by submission ID without blind resubmission, and assessment
-returns observations bound to unchanged bytes.
-Developer ID Application and Installer identities remain distinct. The initial
-installer package is one authenticated `.app` component with explicit
-identifier, version, and install location, an exact Installer identity,
-`pkgbuild` with a mandatory timestamp, and `pkgutil` verification.
-`productbuild`, `productsign`, multi-component packages, and installer scripts
-remain outside this API. Exact Notary JSON/status decoding and detailed receipt
-and evidence shapes remain provisional through credential-backed A7 fixtures.
-Exact
-toolchain pins, credentials, both macOS architectures, product-form proofs, and
-quarantined clean-host Gatekeeper exercises are release-blocking. Mac App Store
-and universal-binary construction are separate unsupported scopes.
+**Python** (`effect-build-python/Build`) resolves and probes one uv frontend,
+requires `pyproject.toml` plus a valid `uv.lock`, disables Python downloads,
+forces PEP 517, gives the tool one private cache, and admits exactly one wheel
+and one sdist. The acceptance matrix fixes uv 0.12.x and both `uv_build` and
+`poetry-core` fixtures.
 
-Selected-command native layers still prefer an explicit executable and
-otherwise perform one deterministic PATH search. They never install or
-substitute a tool. Native permissiveness does not admit a portable operation:
-portable profile identity, exact evidence, and pre-commit analysis gates apply
-separately.
+**nFPM** (`effect-build-nfpm/Package`) projects typed metadata/content into a
+private native configuration and drives nFPM 2.47.x for deb, rpm, apk, Arch
+Linux, and unsigned MSIX. Release, timestamp, payload modes, and the selected
+MSIX metadata are closed schema fields; there is no arbitrary native
+configuration escape hatch.
 
-## Portable adapters
+**Windows** (`effect-build-windows/SignMsix`) copies an unsigned MSIX to
+private staging, drives SignTool with SHA-256 and an RFC 3161 SHA-256
+timestamp, verifies with `/pa /tw` (warnings fail), and then publishes. Credentials are supplied
+as a PFX service or an exact certificate-store thumbprint and are scrubbed
+from failures.
 
-Bun 1.3.14, esbuild 0.28.2, and Rolldown 1.2.5 are the intended Node-main
-producer cells and the candidate static-browser provider cells. The portable
-Node consumer and portable browser consumer each contain zero provider-name
-branches. Deno remains native-only for browser work until authoritative
-metadata completeness is proved through an explicit contract revision.
+**SBOM** (`effect-build-sbom/Generate`) makes the scan subject explicit:
+directories use Syft `--from dir`, finalized files use `--from file`. Output
+is either SPDX JSON 2.3 or CycloneDX JSON 1.6 and is schema-decoded before
+publication from the exact held commit bytes using fatal UTF-8 decoding; the
+tested tool line is Syft 1.50.x.
+
+**Apple** (`effect-build-apple`) owns the selected direct-distribution path:
+exact arm64/x64 `.app` bundles, UDZO DMGs, unsigned flat packages, Developer
+ID application/installer signing, notary submit/info/log, stapling, and
+Gatekeeper assessment. Apple tools are resolved/probed once. Notary
+credentials remain services; returned submission references contain only
+the provider ID, product kind, byte length, and artifact digest.
+
+All selected-command layers accept an explicit executable path and
+otherwise perform one deterministic PATH search. Untested tool versions
+warn once and proceed; there is no version or host refusal.

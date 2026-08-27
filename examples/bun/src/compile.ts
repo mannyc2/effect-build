@@ -6,7 +6,6 @@ const artifact = await Effect.runPromise(
   CompileExecutable.compileExecutable({
     entrypoint: "src/main.ts",
     outfile: "dist/app",
-    target: "linux-x64-gnu",
     minify: true,
     sourcemap: "linked",
   }).pipe(

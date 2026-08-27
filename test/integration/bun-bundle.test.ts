@@ -1,7 +1,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,18 +38,19 @@ describe("real Bun Bundle", () => {
   it("bundles the import graph into one hashed file that node can execute", async () => {
     const outdir = join(root, "dist");
     const artifact = await run(
-      BunBundle.directWrite({ entrypoints: [entrypoint], outdir, target: "node", format: "esm" }),
+      BunBundle.bundle({ entrypoints: [entrypoint], outdir, target: "node", format: "esm" }),
     );
-    expect(artifact._tag).toBe("DirectWriteOutcome");
-    expect(await realpath(artifact.outdir)).toBe(await realpath(outdir));
+    expect(artifact._tag).toBe("Bundle");
+    expect(artifact.outdir).toBe(outdir);
     expect(artifact.tool.name).toBe("bun");
-    expect(artifact.files).toHaveLength(1);
-    const [file] = artifact.files;
+    const files = artifact.entries.filter((entry) => entry._tag === "File");
+    expect(files).toHaveLength(1);
+    const [file] = files;
     expect(file).toBeDefined();
     if (file === undefined) return;
     const bytes = await readFile(file.path);
     expect(file.bytes).toBe(bytes.byteLength);
-    expect(file.digest.value).toMatch(/^[0-9a-f]{64}$/u);
+    expect(file.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect(bytes.toString("utf8")).toContain("effect-build-bundle-ok");
     const completion = await execute(process.execPath, [file.path]);
     expect(completion.stdout).toBe("effect-build-bundle-ok\n");
@@ -56,17 +58,19 @@ describe("real Bun Bundle", () => {
 
   it("keeps requested externals unresolved and fails natively without them", async () => {
     const external = fileURLToPath(new URL("../fixtures/app/bundle-external.ts", import.meta.url));
-    await expect(run(BunBundle.directWrite({ entrypoints: [external], outdir: join(root, "dist-unresolved") })))
+    await expect(run(BunBundle.bundle({ entrypoints: [external], outdir: join(root, "dist-unresolved") })))
       .rejects.toMatchObject({ _tag: "ToolFailed", tool: "bun" });
     const artifact = await run(
-      BunBundle.directWrite({
+      BunBundle.bundle({
         entrypoints: [external],
         outdir: join(root, "dist-external"),
         target: "node",
         external: ["an-unresolvable-external-for-effect-build"],
       }),
     );
-    const entry = artifact.files.find((file) => file.path.endsWith("bundle-external.js"));
+    const entry = artifact.entries.find((candidate) =>
+      candidate._tag === "File" && candidate.path.endsWith("bundle-external.js")
+    );
     expect(entry).toBeDefined();
     if (entry === undefined) return;
     expect(await readFile(entry.path, "utf8")).toContain("an-unresolvable-external-for-effect-build");

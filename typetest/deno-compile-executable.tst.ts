@@ -21,11 +21,7 @@ export type _Target = Assert<
 export type _Error = Assert<
   Same<
     CompileExecutable.CompileExecutableError,
-    | BuildError.ToolFailed
-    | BuildError.UnsupportedTarget
-    | BuildError.PublishFailed
-    | BuildError.ArtifactInvalid
-    | BuildError.SelectedToolChanged
+    BuildError.ToolFailed | BuildError.UnsupportedTarget | BuildError.PublishFailed
   >
 >;
 
@@ -40,18 +36,11 @@ export type _Compile = Assert<
 >;
 
 // minify requires bundle: true.
-CompileExecutable.compileExecutable({
-  entrypoint: "main.ts",
-  outfile: "app",
-  target: "linux-x64-gnu",
-  bundle: true,
-  minify: true,
-});
+CompileExecutable.compileExecutable({ entrypoint: "main.ts", outfile: "app", bundle: true, minify: true });
 // @ts-expect-error!
 CompileExecutable.compileExecutable({
   entrypoint: "main.ts",
   outfile: "app",
-  target: "linux-x64-gnu",
   minify: true,
 });
 
@@ -59,13 +48,11 @@ CompileExecutable.compileExecutable({
 CompileExecutable.compileExecutable({
   entrypoint: "main.ts",
   outfile: "app",
-  target: "linux-x64-gnu",
   permissions: { read: true, net: ["example.com:443"] },
 });
 CompileExecutable.compileExecutable({
   entrypoint: "main.ts",
   outfile: "app",
-  target: "linux-x64-gnu",
   // @ts-expect-error!
   permissions: { all: true, read: true },
 });

@@ -1,7 +1,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,23 +52,25 @@ const run = <A, E>(effect: Effect.Effect<A, E, DenoBundle.Bundler>) =>
 describe.skipIf(!enabled)("real Deno Bundle", () => {
   it("bundles the import graph into one hashed file that node can execute", async () => {
     const outdir = join(root, "dist");
-    const artifact = await run(DenoBundle.directWrite({ entrypoints: [entrypoint], outdir }));
-    expect(artifact._tag).toBe("DirectWriteOutcome");
-    expect(await realpath(artifact.outdir)).toBe(await realpath(outdir));
+    const artifact = await run(DenoBundle.bundle({ entrypoints: [entrypoint], outdir }));
+    expect(artifact._tag).toBe("Bundle");
+    expect(artifact.outdir).toBe(outdir);
     expect(artifact.tool.name).toBe("deno");
-    const entry = artifact.files.find((file) => file.path.endsWith("bundle-entry.js"));
+    const entry = artifact.entries.find((candidate) =>
+      candidate._tag === "File" && candidate.path.endsWith("bundle-entry.js")
+    );
     expect(entry).toBeDefined();
-    if (entry === undefined) return;
+    if (entry === undefined || entry._tag !== "File") return;
     const bytes = await readFile(entry.path);
     expect(entry.bytes).toBe(bytes.byteLength);
-    expect(entry.digest.value).toMatch(/^[0-9a-f]{64}$/u);
+    expect(entry.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect(bytes.toString("utf8")).toContain("effect-build-bundle-ok");
     const completion = await execute(process.execPath, [entry.path]);
     expect(completion.stdout).toBe("effect-build-bundle-ok\n");
   }, 300_000);
 
   it("surfaces deno diagnostics as ToolFailed", async () => {
-    await expect(run(DenoBundle.directWrite({
+    await expect(run(DenoBundle.bundle({
       entrypoints: [join(root, "missing.ts")],
       outdir: join(root, "dist-failure"),
     }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "deno" });

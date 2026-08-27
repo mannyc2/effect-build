@@ -1,9 +1,7 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path } from "effect";
-import type { Digest } from "effect-build/Artifact";
-import type * as Tool from "effect-build/Author/Tool";
-import * as Toolchain from "effect-build/Author/Tool";
-import * as TreeSnapshot from "effect-build/Author/TreeSnapshot";
-import { ArtifactInvalid, type SelectedToolChanged, type ToolFailed, type ToolNotFound } from "effect-build/BuildError";
+import type * as Artifact from "effect-build/Artifact";
+import type { PublishFailed, ToolFailed, ToolNotFound } from "effect-build/BuildError";
+import * as Toolchain from "effect-build/Toolchain";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 /** The intended execution environment of the bundle; bun's own `--target` values. */
@@ -13,7 +11,7 @@ export type Format = "esm" | "cjs" | "iife";
 
 export type Sourcemap = "linked" | "inline" | "external" | "none";
 
-export interface DirectWriteInput {
+export interface BundleInput {
   readonly entrypoints: readonly [string, ...string[]];
   readonly outdir: string;
   readonly cwd?: string;
@@ -33,25 +31,10 @@ export interface LayerOptions {
   readonly executable?: string;
 }
 
-export interface BundleFile {
-  readonly path: string;
-  readonly relativePath: string;
-  readonly bytes: number;
-  readonly digest: Digest;
-}
-
-/** Truthful provider-native outcome: the caller destination may be partially changed on failure. */
-export interface Bundle {
-  readonly _tag: "DirectWriteOutcome";
-  readonly outdir: string;
-  readonly files: readonly BundleFile[];
-  readonly tool: Tool.SelectedTool;
-}
-
-export type DirectWriteError = ToolFailed | ArtifactInvalid | SelectedToolChanged;
+export type BundleError = ToolFailed | PublishFailed;
 
 interface Service {
-  readonly directWrite: (input: DirectWriteInput) => Effect.Effect<Bundle, DirectWriteError>;
+  readonly bundle: (input: BundleInput) => Effect.Effect<Artifact.Bundle, BundleError>;
 }
 
 export class Bundler extends Context.Service<Bundler, Service>()(
@@ -61,9 +44,9 @@ export class Bundler extends Context.Service<Bundler, Service>()(
 /** Bun releases exercised by this repository's CI; others proceed with a warning. */
 const tested: Toolchain.TestedRange = { minimum: "1.2.0", before: "2.0.0" };
 
-const renderArgv = (input: DirectWriteInput, outdir: string): readonly string[] => [
+const renderArgv = (input: BundleInput, stagedDirectory: string): readonly string[] => [
   "build",
-  `--outdir=${outdir}`,
+  `--outdir=${stagedDirectory}`,
   ...(input.target === undefined ? [] : [`--target=${input.target}`]),
   ...(input.format === undefined ? [] : [`--format=${input.format}`]),
   ...(input.minify === true ? ["--minify"] : []),
@@ -74,7 +57,7 @@ const renderArgv = (input: DirectWriteInput, outdir: string): readonly string[] 
   ...input.entrypoints,
 ];
 
-type LayerError = ToolNotFound | ToolFailed | ArtifactInvalid | SelectedToolChanged;
+type LayerError = ToolNotFound | ToolFailed;
 
 const makeService = (
   options?: LayerOptions,
@@ -88,49 +71,38 @@ const makeService = (
     const path = yield* Path.Path;
     const crypto = yield* Crypto.Crypto;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const tool: Tool.SelectedTool = yield* Toolchain.select({
-      name: "bun",
-      executable: options?.executable,
-      versionArgs: ["--version"],
-    });
-    yield* Toolchain.warnIfUntested({ tool: "bun", version: tool.version, tested });
+    const executable = yield* Toolchain.resolveExecutable({ name: "bun", executable: options?.executable });
+    const version = yield* Toolchain.probeVersion({ tool: "bun", executable, args: ["--version"] });
+    yield* Toolchain.warnIfUntested({ tool: "bun", version, tested });
+    const tool: Artifact.Tool = { name: "bun", version };
     const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
       Context.add(Path.Path, path),
       Context.add(Crypto.Crypto, crypto),
       Context.add(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
 
-    const directWrite = (input: DirectWriteInput): Effect.Effect<Bundle, DirectWriteError> =>
-      Effect.gen(function*() {
-        const outdir = path.normalize(path.resolve(input.cwd ?? "", input.outdir));
-        yield* fileSystem.makeDirectory(outdir, { recursive: true }).pipe(
-          Effect.mapError(() =>
-            new ArtifactInvalid({
-              path: outdir,
-              reason: "unable to create provider-owned output directory",
-            })
+    const bundle = (input: BundleInput): Effect.Effect<Artifact.Bundle, BundleError> =>
+      Toolchain.publishBundle({
+        tool,
+        outdir: input.outdir,
+        cwd: input.cwd,
+        produce: (stagedDirectory) =>
+          Effect.asVoid(
+            Toolchain.runOrFail({
+              tool: "bun",
+              executable,
+              args: renderArgv(input, stagedDirectory),
+              cwd: input.cwd,
+            }),
           ),
-        );
-        yield* Toolchain.runOrFailSelected({
-          selected: tool,
-          args: renderArgv(input, outdir),
-          cwd: input.cwd,
-        });
-        const snapshot = yield* TreeSnapshot.observe(outdir);
-        return {
-          _tag: "DirectWriteOutcome" as const,
-          outdir: snapshot.root,
-          files: snapshot.files.map(({ path, relativePath, bytes, digest }) => ({ path, relativePath, bytes, digest })),
-          tool,
-        };
       }).pipe(Effect.provide(services));
 
-    return { directWrite };
+    return { bundle };
   });
 
-export const directWrite = (
-  input: DirectWriteInput,
-): Effect.Effect<Bundle, DirectWriteError, Bundler> => Bundler.use((service) => service.directWrite(input));
+export const bundle = (
+  input: BundleInput,
+): Effect.Effect<Artifact.Bundle, BundleError, Bundler> => Bundler.use((service) => service.bundle(input));
 
 export const layer = (
   options?: LayerOptions,

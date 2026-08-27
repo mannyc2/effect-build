@@ -14,9 +14,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import * as Raw from "../../packages/effect-build-node-sea/src/Raw.js";
+import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
 import * as Target from "../../packages/effect-build/src/Target.js";
-import { hostTarget } from "../host-target.js";
 
 const roots: string[] = [];
 
@@ -31,7 +30,7 @@ const makeRoot = (): string => {
 };
 
 const hostBinary = (): Uint8Array => {
-  const format = Target.info(hostTarget()).nativeFormat;
+  const format = Target.info(Target.host() ?? "linux-x64-gnu").nativeFormat;
   const bytes = new Uint8Array(8);
   if (format === "elf") bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
   else if (format === "pe") bytes.set([0x4d, 0x5a], 0);
@@ -157,7 +156,7 @@ interface Harness {
   readonly node: string;
   readonly control: Control;
   readonly run: <A, E>(
-    effect: Effect.Effect<A, E, Raw.Assembler>,
+    effect: Effect.Effect<A, E, AssembleExecutable.Assembler>,
   ) => Promise<Exit.Exit<A, E | { readonly _tag: string }>>;
 }
 
@@ -167,12 +166,12 @@ const makeHarness = (options: { readonly fake?: FakeNodeOptions } = {}): Harness
   writeFileSync(node, hostBinary());
   chmodSync(node, 0o755);
   const [spawner, control] = makeSpawner(options.fake);
-  const provider = Raw.layer({ builderExecutable: node });
+  const provider = AssembleExecutable.layer({ builderExecutable: node });
   const provided = Layer.provide(
     provider,
     Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
   );
-  const run = <A, E>(effect: Effect.Effect<A, E, Raw.Assembler>) =>
+  const run = <A, E>(effect: Effect.Effect<A, E, AssembleExecutable.Assembler>) =>
     Effect.runPromiseExit(effect.pipe(Effect.provide(provided)));
   return { root, node, control, run };
 };
@@ -184,25 +183,24 @@ const failure = <A, E>(exit: Exit.Exit<A, E>): E => {
   return found.value;
 };
 
-describe("Node SEA Raw", () => {
+describe("Node SEA AssembleExecutable", () => {
   it("assembles file and bytes mains with assets through --check and --build-sea", async () => {
     const harness = makeHarness();
     const fileMain = join(harness.root, "main.cjs");
     const assetPath = join(harness.root, "message.txt");
     writeFileSync(fileMain, "require('node:fs'); console.log('cjs');\n");
     writeFileSync(assetPath, "asset\n");
-    const fileExit = await harness.run(Raw.assembleExecutable({
+    const fileExit = await harness.run(AssembleExecutable.assembleExecutable({
       main: { _tag: "File", path: fileMain, format: "commonjs" },
       outfile: join(harness.root, "file-app"),
-      target: hostTarget(),
       assets: { message: assetPath },
       disableExperimentalSEAWarning: true,
     }));
     expect(Exit.isSuccess(fileExit)).toBe(true);
     if (Exit.isSuccess(fileExit)) {
       expect(fileExit.value._tag).toBe("Executable");
-      expect(fileExit.value.tool).toMatchObject({ name: "node", version: "26.7.0" });
-      expect(fileExit.value.target).toBe(hostTarget());
+      expect(fileExit.value.tool).toEqual({ name: "node", version: "26.7.0" });
+      expect(fileExit.value.target).toBe(Target.host());
       expect(fileExit.value.sha256).toHaveLength(64);
     }
     const config = harness.control.configs[0]!;
@@ -221,17 +219,16 @@ describe("Node SEA Raw", () => {
     expect(isAbsolute(String(config.output))).toBe(true);
     expect(dirname(String(config.output))).not.toBe(harness.root);
 
-    const bytesExit = await harness.run(Raw.assembleExecutable({
+    const bytesExit = await harness.run(AssembleExecutable.assembleExecutable({
       main: {
         _tag: "Bytes",
         contents: new TextEncoder().encode("import 'node:fs'; console.log('esm');\n"),
         format: "module",
       },
       outfile: join(harness.root, "bytes-app"),
-      target: hostTarget(),
     }));
     expect(Exit.isSuccess(bytesExit)).toBe(true);
-    if (Exit.isSuccess(bytesExit)) expect(bytesExit.value.sha256).toHaveLength(64);
+    if (Exit.isSuccess(bytesExit)) expect(bytesExit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
     const bytesConfig = harness.control.configs[1]!;
     expect(String(bytesConfig.main).endsWith("main.mjs")).toBe(true);
     expect(bytesConfig.mainFormat).toBe("module");
@@ -240,10 +237,9 @@ describe("Node SEA Raw", () => {
 
   it("proceeds with a warning for untested node versions", async () => {
     const harness = makeHarness({ fake: { version: "27.1.0" } });
-    const exit = await harness.run(Raw.assembleExecutable({
+    const exit = await harness.run(AssembleExecutable.assembleExecutable({
       main: { _tag: "Bytes", contents: new TextEncoder().encode("console.log('x')"), format: "commonjs" },
       outfile: join(harness.root, "untested-app"),
-      target: hostTarget(),
     }));
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) expect(exit.value.tool.version).toBe("27.1.0");
@@ -258,31 +254,30 @@ describe("Node SEA Raw", () => {
           format: "commonjs" as const,
         },
         outfile: join(root, name),
-        target: hostTarget(),
-      }) satisfies Raw.AssembleExecutableInput;
+      }) satisfies AssembleExecutable.AssembleExecutableInput;
 
     const syntax = makeHarness({ fake: { mode: "syntax-failure" } });
-    expect(failure(await syntax.run(Raw.assembleExecutable(input(syntax.root, "syntax")))))
+    expect(failure(await syntax.run(AssembleExecutable.assembleExecutable(input(syntax.root, "syntax")))))
       .toMatchObject({ _tag: "ToolFailed", exitCode: 7, stdout: "syntax stdout", stderr: "syntax stderr" });
     expect(syntax.control.builds()).toBe(0);
 
     const spawn = makeHarness({ fake: { mode: "build-spawn-failure" } });
-    expect(failure(await spawn.run(Raw.assembleExecutable(input(spawn.root, "spawn")))))
+    expect(failure(await spawn.run(AssembleExecutable.assembleExecutable(input(spawn.root, "spawn")))))
       .toMatchObject({ _tag: "ToolFailed", exitCode: -1 });
 
     const build = makeHarness({ fake: { mode: "build-failure" } });
-    expect(failure(await build.run(Raw.assembleExecutable(input(build.root, "build")))))
+    expect(failure(await build.run(AssembleExecutable.assembleExecutable(input(build.root, "build")))))
       .toMatchObject({ _tag: "ToolFailed", exitCode: 19, stdout: "build stdout", stderr: "build stderr" });
 
     const missing = makeHarness({ fake: { mode: "missing-output" } });
     const missingFailure = failure(
-      await missing.run(Raw.assembleExecutable(input(missing.root, "missing"))),
+      await missing.run(AssembleExecutable.assembleExecutable(input(missing.root, "missing"))),
     ) as { readonly _tag: string; readonly reason: string };
     expect(missingFailure._tag).toBe("PublishFailed");
     expect(missingFailure.reason).toContain("did not produce");
 
     const invalid = makeHarness({ fake: { mode: "invalid-output" } });
-    expect(failure(await invalid.run(Raw.assembleExecutable(input(invalid.root, "invalid")))))
+    expect(failure(await invalid.run(AssembleExecutable.assembleExecutable(input(invalid.root, "invalid")))))
       .toMatchObject({ _tag: "PublishFailed" });
 
     // The committed path gains the host's executable suffix on windows.
@@ -290,7 +285,7 @@ describe("Node SEA Raw", () => {
     const preserved = makeHarness({ fake: { mode: "invalid-output" } });
     const preservedDestination = join(preserved.root, "preserved") + suffix;
     writeFileSync(preservedDestination, "old-public-artifact");
-    expect(failure(await preserved.run(Raw.assembleExecutable(input(preserved.root, "preserved")))))
+    expect(failure(await preserved.run(AssembleExecutable.assembleExecutable(input(preserved.root, "preserved")))))
       .toMatchObject({ _tag: "PublishFailed" });
     expect(readFileSync(preservedDestination, "utf8")).toBe("old-public-artifact");
 
@@ -298,7 +293,7 @@ describe("Node SEA Raw", () => {
     const destination = join(replacement.root, "replacement") + suffix;
     writeFileSync(destination, "old-public-artifact");
     const replaced = await replacement.run(
-      Raw.assembleExecutable(input(replacement.root, "replacement")),
+      AssembleExecutable.assembleExecutable(input(replacement.root, "replacement")),
     );
     expect(Exit.isSuccess(replaced)).toBe(true);
     expect(readFileSync(destination, "utf8")).not.toBe("old-public-artifact");
@@ -315,7 +310,7 @@ describe("Node SEA Raw", () => {
     writeFileSync(node, hostBinary());
     chmodSync(node, 0o755);
     const [spawner, control] = makeSpawner({ mode: "delay" });
-    const provider = Raw.layer({ builderExecutable: node });
+    const provider = AssembleExecutable.layer({ builderExecutable: node });
     const provided = Layer.provide(
       provider,
       Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
@@ -325,10 +320,9 @@ describe("Node SEA Raw", () => {
       Effect.scoped(Effect.gen(function*() {
         const context = yield* Layer.build(provided);
         const fiber = yield* Effect.forkChild(
-          Raw.assembleExecutable({
+          AssembleExecutable.assembleExecutable({
             main: { _tag: "Bytes", contents: new TextEncoder().encode("console.log('x')"), format: "commonjs" },
             outfile,
-            target: hostTarget(),
           }).pipe(Effect.provide(context)),
         );
         yield* Effect.promise(control.started);

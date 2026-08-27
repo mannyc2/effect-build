@@ -1,337 +1,343 @@
-import { Context, Effect, FileSystem, Layer, Path } from "effect";
+import { Context, Crypto, Effect, Exit, FileSystem, Layer, Path, Schema } from "effect";
+import type * as Artifact from "effect-build/Artifact";
+import { PublishFailed } from "effect-build/BuildError";
+import type { ArtifactVerificationFailed, ToolFailed, ToolNotFound } from "effect-build/BuildError";
+import * as Toolchain from "effect-build/Toolchain";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import * as Artifact from "./Artifact.js";
-import * as Lifecycle from "./internal/Lifecycle.js";
-import * as Tool from "./internal/Tool.js";
+import {
+  capturePlatformServices,
+  ensureNewDestination,
+  isSafeRelative,
+  publishFailure,
+  resolveAppleTool,
+  xmlEscape,
+} from "./internal.js";
+import type { AppleToolOptions, ApplicationBundle } from "./Model.js";
 
-export interface Resource {
-  readonly artifact: Artifact.FileArtifact<"resource"> | Artifact.TreeArtifact<"resource">;
-  /** Relative path below `Contents/Resources`, using `/` separators. */
+/** One finalized regular file written below `Contents/Resources`. */
+export interface AppResource {
+  readonly artifact: Artifact.FileArtifact;
   readonly destination: string;
 }
 
-export interface CreateInput {
-  readonly executable: Artifact.FileArtifact<"mach-o">;
-  readonly resources?: readonly Resource[];
-  /** Destination ending in `.app`, resolved against the current working directory. */
-  readonly outfile: string;
+/** Architecture-specific executable and final `.app` directory. */
+export interface AppVariantInput {
+  readonly executable: Artifact.Executable;
+  readonly outdir: string;
+  readonly minimumSystemVersion?: string;
+}
+
+/** Exact two-architecture app bundle construction input. */
+export interface BuildAppBundlesInput {
   readonly bundleIdentifier: string;
   readonly bundleName: string;
+  readonly displayName: string;
   readonly executableName: string;
   readonly version: string;
   readonly shortVersion: string;
-  readonly minimumSystemVersion: string;
+  readonly arm64: AppVariantInput;
+  readonly x64: AppVariantInput;
+  readonly resources?: readonly AppResource[];
+}
+
+export interface AppBundles {
+  readonly arm64: ApplicationBundle;
+  readonly x64: ApplicationBundle;
 }
 
 export interface LayerOptions {
-  readonly dittoPath?: string;
-  readonly plutilPath?: string;
+  readonly plutil: AppleToolOptions;
 }
 
-export type CreateResult = Artifact.MutationResult<Artifact.TreeArtifact<"app-bundle">>;
-export type CreateError =
-  | Artifact.UnsupportedArtifactKind
-  | Artifact.AppleInputInvalid
-  | Artifact.ArtifactPublishFailed
-  | Artifact.ArtifactError
-  | Artifact.LifecycleError
-  | Artifact.ToolError;
+/** An app executable was not one thin Mach-O of the architecture selected by its output slot. */
+export class ExecutableArchitectureMismatch extends Schema.TaggedError<ExecutableArchitectureMismatch>()(
+  "ExecutableArchitectureMismatch",
+  {
+    path: Schema.NonEmptyString,
+    expected: Schema.Literals(["arm64", "x64"] as const),
+    observed: Schema.NonEmptyString,
+  },
+) {
+  override get message(): string {
+    return `${this.path} is ${this.observed}; expected one thin ${this.expected} Mach-O executable`;
+  }
+}
+
+export type BuildAppBundlesError =
+  | ToolFailed
+  | PublishFailed
+  | ArtifactVerificationFailed
+  | ExecutableArchitectureMismatch;
 
 interface Service {
-  readonly create: (input: CreateInput) => Effect.Effect<CreateResult, CreateError>;
+  readonly buildAppBundles: (input: BuildAppBundlesInput) => Effect.Effect<AppBundles, BuildAppBundlesError>;
 }
 
-export class Creator extends Context.Service<Creator, Service>()("effect-build-apple/AppBundle/Creator") {}
+export class Builder extends Context.Service<Builder, Service>()(
+  "effect-build-apple/AppBundle/Builder",
+) {}
 
-const operation = "app-bundle.create";
-const bundleIdentifierPattern = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u;
-const bundleVersionPattern = /^(?:0|[1-9]\d{0,3})(?:\.(?:0|[1-9]\d?)){0,2}$/u;
-const shortVersionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
-const systemVersionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/u;
-const containsXmlControl = (value: string): boolean =>
-  [...value].some((character) => {
-    const codePoint = character.codePointAt(0)!;
-    return codePoint <= 0x1f && codePoint !== 0x09 && codePoint !== 0x0a && codePoint !== 0x0d;
-  });
-const containsPathControl = (value: string): boolean =>
-  [...value].some((character) => {
-    const codePoint = character.codePointAt(0)!;
-    return codePoint <= 0x1f || codePoint === 0x7f;
-  });
-
-const failInput = (field: string, reason: string): Artifact.AppleInputInvalid =>
-  new Artifact.AppleInputInvalid({ operation, field, reason });
-const actualKind = (value: unknown): string =>
-  typeof value === "object" && value !== null && "kind" in value ? String(value.kind) : "unknown";
-
-const validateText = (field: string, value: string): Effect.Effect<void, Artifact.AppleInputInvalid> => {
-  if (value.length === 0) return Effect.fail(failInput(field, "must not be empty"));
-  if (containsXmlControl(value)) {
-    return Effect.fail(failInput(field, "contains a character XML property lists cannot encode"));
-  }
-  return Effect.void;
+const plist = (input: BuildAppBundlesInput, variant: AppVariantInput): string => {
+  const minimum = variant.minimumSystemVersion === undefined
+    ? ""
+    : `\n  <key>LSMinimumSystemVersion</key>\n  <string>${xmlEscape(variant.minimumSystemVersion)}</string>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDisplayName</key>
+  <string>${xmlEscape(input.displayName)}</string>
+  <key>CFBundleExecutable</key>
+  <string>${xmlEscape(input.executableName)}</string>
+  <key>CFBundleIdentifier</key>
+  <string>${xmlEscape(input.bundleIdentifier)}</string>
+  <key>CFBundleName</key>
+  <string>${xmlEscape(input.bundleName)}</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>${xmlEscape(input.shortVersion)}</string>
+  <key>CFBundleVersion</key>
+  <string>${xmlEscape(input.version)}</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>${minimum}
+</dict>
+</plist>
+`;
 };
 
-const validateRelativeResourcePath = (
-  destination: string,
-): Effect.Effect<void, Artifact.AppleInputInvalid> => {
-  if (destination.length === 0) return Effect.fail(failInput("resources.destination", "must not be empty"));
-  if (destination.startsWith("/") || destination.includes("\\")) {
-    return Effect.fail(failInput("resources.destination", "must be a relative path using / separators"));
+type LayerError = ToolNotFound | ToolFailed;
+
+const bytesEqual = (bytes: Uint8Array, expected: readonly number[]): boolean =>
+  expected.every((byte, index) => bytes[index] === byte);
+
+const describeMachO = (header: Uint8Array): { readonly architecture?: "arm64" | "x64"; readonly observed: string } => {
+  if (header.byteLength < 4) return { observed: "a truncated file" };
+  const magic = header.subarray(0, 4);
+  if (
+    bytesEqual(magic, [0xca, 0xfe, 0xba, 0xbe])
+    || bytesEqual(magic, [0xbe, 0xba, 0xfe, 0xca])
+    || bytesEqual(magic, [0xca, 0xfe, 0xba, 0xbf])
+    || bytesEqual(magic, [0xbf, 0xba, 0xfe, 0xca])
+  ) {
+    return { observed: "a universal/fat Mach-O, which exact-architecture bundles do not admit" };
   }
-  const segments = destination.split("/");
-  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
-    return Effect.fail(failInput("resources.destination", "must not contain empty, . or .. path segments"));
+  const littleEndian = bytesEqual(magic, [0xcf, 0xfa, 0xed, 0xfe]);
+  const bigEndian = bytesEqual(magic, [0xfe, 0xed, 0xfa, 0xcf]);
+  if (!littleEndian && !bigEndian) return { observed: "a non-Mach-O file" };
+  if (header.byteLength < 32) return { observed: "a truncated 64-bit Mach-O header" };
+  const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
+  const cpu = view.getUint32(4, littleEndian);
+  const fileType = view.getUint32(12, littleEndian);
+  const loadCommandBytes = view.getUint32(20, littleEndian);
+  if (fileType !== 2) return { observed: `a non-executable Mach-O with file type ${fileType}` };
+  if (loadCommandBytes > header.byteLength - 32) {
+    return { observed: "a Mach-O whose load-command table exceeds the finalized bytes" };
   }
-  if (containsPathControl(destination)) {
-    return Effect.fail(failInput("resources.destination", "contains an unsupported control character"));
-  }
-  if (destination.normalize("NFC") !== destination) {
-    return Effect.fail(failInput("resources.destination", "must use NFC-normalized Unicode"));
-  }
-  return Effect.void;
+  if (cpu === 0x0100000c) return { architecture: "arm64", observed: "a thin arm64 Mach-O" };
+  if (cpu === 0x01000007) return { architecture: "x64", observed: "a thin x64 Mach-O" };
+  return { observed: `a thin Mach-O with unsupported CPU type 0x${cpu.toString(16)}` };
 };
-
-const validateResources = (resources: readonly Resource[]): Effect.Effect<void, Artifact.AppleInputInvalid> =>
-  Effect.gen(function*() {
-    const destinations: string[] = [];
-    for (const resource of resources) {
-      yield* validateRelativeResourcePath(resource.destination);
-      const folded = resource.destination.normalize("NFC").toLocaleLowerCase("en-US");
-      for (const existing of destinations) {
-        if (folded === existing || folded.startsWith(`${existing}/`) || existing.startsWith(`${folded}/`)) {
-          return yield* Effect.fail(
-            failInput("resources.destination", `conflicts with another resource path: ${resource.destination}`),
-          );
-        }
-      }
-      destinations.push(folded);
-    }
-  });
-
-const validateInput = (
-  input: CreateInput,
-): Effect.Effect<void, Artifact.UnsupportedArtifactKind | Artifact.AppleInputInvalid> =>
-  Effect.gen(function*() {
-    if (!Artifact.isFileArtifact(input.executable) || !Artifact.isKind(input.executable, "mach-o")) {
-      return yield* Effect.fail(
-        new Artifact.UnsupportedArtifactKind({
-          operation,
-          expected: ["mach-o file"],
-          actual: actualKind(input.executable),
-        }),
-      );
-    }
-    if (!input.outfile.endsWith(".app")) yield* Effect.fail(failInput("outfile", "must end in .app"));
-    yield* validateText("bundleIdentifier", input.bundleIdentifier);
-    if (!bundleIdentifierPattern.test(input.bundleIdentifier)) {
-      yield* Effect.fail(
-        failInput("bundleIdentifier", "must be a period-separated identifier using letters, digits, or hyphens"),
-      );
-    }
-    yield* validateText("bundleName", input.bundleName);
-    yield* validateText("executableName", input.executableName);
-    if (
-      input.executableName === "." || input.executableName === ".." || input.executableName.includes("/")
-      || input.executableName.includes("\\") || containsPathControl(input.executableName)
-      || input.executableName.normalize("NFC") !== input.executableName
-    ) {
-      yield* Effect.fail(
-        failInput("executableName", "must be one NFC-normalized file name without control characters"),
-      );
-    }
-    yield* validateText("version", input.version);
-    if (!bundleVersionPattern.test(input.version)) {
-      yield* Effect.fail(failInput("version", "must be one to three release integers in Apple CFBundleVersion form"));
-    }
-    yield* validateText("shortVersion", input.shortVersion);
-    if (!shortVersionPattern.test(input.shortVersion)) {
-      yield* Effect.fail(failInput("shortVersion", "must be exactly three period-separated release integers"));
-    }
-    yield* validateText("minimumSystemVersion", input.minimumSystemVersion);
-    if (!systemVersionPattern.test(input.minimumSystemVersion)) {
-      yield* Effect.fail(
-        failInput("minimumSystemVersion", "must be a two- or three-component macOS release version"),
-      );
-    }
-    for (const resource of input.resources ?? []) {
-      if (
-        (!Artifact.isFileArtifact(resource.artifact) && !Artifact.isTreeArtifact(resource.artifact))
-        || !Artifact.isKind(resource.artifact, "resource")
-      ) {
-        return yield* Effect.fail(
-          new Artifact.UnsupportedArtifactKind({
-            operation,
-            expected: ["resource file or tree"],
-            actual: actualKind(resource.artifact),
-          }),
-        );
-      }
-    }
-    yield* validateResources(input.resources ?? []);
-  });
-
-const escapeXml = (value: string): string =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-
-const plistEntry = (key: string, value: string): string =>
-  `  <key>${key}</key>\n  <string>${escapeXml(value)}</string>\n`;
-
-const renderInfoPlist = (input: CreateInput): string =>
-  `<?xml version="1.0" encoding="UTF-8"?>\n`
-  + `<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n`
-  + `<plist version="1.0">\n`
-  + `<dict>\n`
-  + plistEntry("CFBundleDisplayName", input.bundleName)
-  + plistEntry("CFBundleExecutable", input.executableName)
-  + plistEntry("CFBundleIdentifier", input.bundleIdentifier)
-  + plistEntry("CFBundleInfoDictionaryVersion", "6.0")
-  + plistEntry("CFBundleName", input.bundleName)
-  + plistEntry("CFBundlePackageType", "APPL")
-  + plistEntry("CFBundleShortVersionString", input.shortVersion)
-  + plistEntry("CFBundleVersion", input.version)
-  + plistEntry("LSMinimumSystemVersion", input.minimumSystemVersion)
-  + `</dict>\n`
-  + `</plist>\n`;
-
-const fsFailure = (destination: string, action: string, error: unknown): Artifact.ArtifactPublishFailed =>
-  new Artifact.ArtifactPublishFailed({
-    destination,
-    reason: `${action}: ${error instanceof Error ? error.message : String(error)}`,
-  });
 
 const makeService = (
-  options: LayerOptions = {},
+  options: LayerOptions,
 ): Effect.Effect<
   Service,
-  Artifact.ToolError,
-  Artifact.ArtifactServices | ChildProcessSpawner.ChildProcessSpawner
+  LayerError,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > =>
   Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const ditto = yield* Tool.select({ name: "ditto", path: options.dittoPath ?? "/usr/bin/ditto" });
-    const plutil = yield* Tool.select({ name: "plutil", path: options.plutilPath ?? "/usr/bin/plutil" });
-    const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
-      Context.add(Path.Path, path),
-      Context.add(ChildProcessSpawner.ChildProcessSpawner, spawner),
-    );
+    const { fileSystem, path, services } = yield* capturePlatformServices;
+    const plutil = yield* resolveAppleTool("plutil", options.plutil, ["-help"]);
 
-    const create = Effect.fn("effect-build-apple/AppBundle.create")(function*(input: CreateInput) {
-      yield* validateInput(input);
-      const resources = input.resources ?? [];
-      const inputs: readonly Artifact.Artifact[] = [input.executable, ...resources.map(({ artifact }) => artifact)];
-      return yield* Lifecycle.publishConstructedTree({
-        operation,
-        inputs,
-        destination: input.outfile,
-        kind: "app-bundle",
-        copyTool: ditto,
-        produce: ({ inputs: snapshots, stagedPath }) =>
+    const validateExecutable = Effect.fn("effect-build-apple.validateAppExecutable")(function*(
+      executable: Artifact.Executable,
+      expected: "arm64" | "x64",
+    ) {
+      const expectedTarget = expected === "arm64" ? "macos-aarch64" : "macos-x64";
+      if (executable.target !== expectedTarget) {
+        return yield* new ExecutableArchitectureMismatch({
+          path: path.resolve(executable.path),
+          expected,
+          observed: `a core ${executable.target} executable`,
+        });
+      }
+      const contents = yield* Toolchain.readVerifiedFile(executable);
+      const observed = describeMachO(contents);
+      if (observed.architecture !== expected) {
+        return yield* new ExecutableArchitectureMismatch({
+          path: path.resolve(executable.path),
+          expected,
+          observed: observed.observed,
+        });
+      }
+      return contents;
+    });
+
+    const buildOne = Effect.fn("effect-build-apple.buildAppBundle")(function*(
+      input: BuildAppBundlesInput,
+      variant: AppVariantInput,
+      executableContents: Uint8Array,
+      resourcesContents: readonly Uint8Array[],
+    ) {
+      const destination = path.resolve(variant.outdir);
+      for (const resource of input.resources ?? []) {
+        if (!isSafeRelative(resource.destination)) {
+          return yield* new PublishFailed({
+            destination,
+            reason: `resource destination is not a safe relative path: ${resource.destination}`,
+          });
+        }
+      }
+      return yield* Toolchain.publishBundle({
+        tool: plutil.tool,
+        outdir: variant.outdir,
+        produce: (staging) =>
           Effect.gen(function*() {
-            const contents = path.join(stagedPath, "Contents");
+            const contents = path.join(staging, "Contents");
             const macos = path.join(contents, "MacOS");
-            const resourcesRoot = path.join(contents, "Resources");
+            const resources = path.join(contents, "Resources");
             yield* fileSystem.makeDirectory(macos, { recursive: true }).pipe(
-              Effect.mapError((error) => fsFailure(stagedPath, "create app bundle directories", error)),
+              Effect.mapError(publishFailure(destination, "create Contents/MacOS")),
             );
-            if (resources.length > 0) {
-              yield* fileSystem.makeDirectory(resourcesRoot, { recursive: true }).pipe(
-                Effect.mapError((error) => fsFailure(stagedPath, "create resource directory", error)),
+            yield* fileSystem.makeDirectory(resources, { recursive: true }).pipe(
+              Effect.mapError(publishFailure(destination, "create Contents/Resources")),
+            );
+            const executable = path.join(macos, input.executableName);
+            yield* fileSystem.writeFile(executable, executableContents).pipe(
+              Effect.mapError(publishFailure(destination, "write verified executable")),
+            );
+            yield* fileSystem.chmod(executable, 0o755).pipe(
+              Effect.mapError(publishFailure(destination, "make executable")),
+            );
+            for (const [index, resource] of (input.resources ?? []).entries()) {
+              const target = path.join(resources, resource.destination);
+              yield* fileSystem.makeDirectory(path.dirname(target), { recursive: true }).pipe(
+                Effect.mapError(publishFailure(destination, "create resource directory")),
+              );
+              yield* fileSystem.writeFile(target, resourcesContents[index]!).pipe(
+                Effect.mapError(publishFailure(destination, `write verified resource ${resource.destination}`)),
               );
             }
-
-            const executableSnapshot = snapshots[0]!;
-            const executableDestination = path.join(macos, input.executableName);
-            const toolInvocations: Artifact.ToolInvocation[] = [];
-            toolInvocations.push(
-              yield* Tool.runOrFail({
-                tool: ditto,
-                args: ["--norsrc", "--noextattr", "--noacl", executableSnapshot.path, executableDestination],
-              }),
+            const infoPlist = path.join(contents, "Info.plist");
+            yield* fileSystem.writeFileString(infoPlist, plist(input, variant)).pipe(
+              Effect.mapError(publishFailure(destination, "write Info.plist")),
             );
-            const executableStat = yield* fileSystem.stat(executableDestination).pipe(
-              Effect.mapError((error) => fsFailure(stagedPath, "stat copied executable", error)),
-            );
-            if ((executableStat.mode & 0o7777) !== input.executable.identity.mode) {
-              return yield* Effect.fail(
-                new Artifact.ArtifactPublishFailed({
-                  destination: stagedPath,
-                  reason: `executable mode changed from ${input.executable.identity.mode.toString(8)} to ${
-                    (executableStat.mode & 0o7777).toString(8)
-                  }`,
-                }),
-              );
-            }
-            const copiedExecutable = yield* Artifact.observeFile("mach-o", executableDestination);
-            if (!Artifact.sameIdentity(executableSnapshot, copiedExecutable)) {
-              return yield* new Artifact.ArtifactChanged({
-                path: executableDestination,
-                expected: JSON.stringify(executableSnapshot.identity),
-                observed: JSON.stringify(copiedExecutable.identity),
-              });
-            }
-
-            for (let index = 0; index < resources.length; index += 1) {
-              const resource = resources[index]!;
-              const snapshot = snapshots[index + 1]!;
-              const destination = path.join(resourcesRoot, ...resource.destination.split("/"));
-              yield* fileSystem.makeDirectory(path.dirname(destination), { recursive: true }).pipe(
-                Effect.mapError((error) => fsFailure(stagedPath, "create resource parent directory", error)),
-              );
-              const destinationExists = yield* fileSystem.exists(destination).pipe(
-                Effect.mapError((error) => fsFailure(stagedPath, "inspect resource destination", error)),
-              );
-              if (destinationExists) {
-                return yield* new Artifact.ArtifactPublishFailed({
-                  destination,
-                  reason: "resource destination already exists after filesystem normalization",
-                });
-              }
-              toolInvocations.push(
-                yield* Tool.runOrFail({
-                  tool: ditto,
-                  args: ["--norsrc", "--noextattr", "--noacl", snapshot.path, destination],
-                }),
-              );
-              const copiedResource = snapshot._tag === "FileArtifact"
-                ? yield* Artifact.observeFile("resource", destination)
-                : yield* Artifact.observeTree("resource", destination);
-              if (!Artifact.sameIdentity(snapshot, copiedResource)) {
-                return yield* new Artifact.ArtifactChanged({
-                  path: destination,
-                  expected: JSON.stringify(snapshot.identity),
-                  observed: JSON.stringify(copiedResource.identity),
-                });
-              }
-            }
-
-            const plist = path.join(contents, "Info.plist");
-            yield* fileSystem.writeFileString(plist, renderInfoPlist(input)).pipe(
-              Effect.mapError((error) => fsFailure(stagedPath, "write Info.plist", error)),
-            );
-            toolInvocations.push(yield* Tool.runOrFail({ tool: plutil, args: ["-lint", plist] }));
-            return toolInvocations;
+            yield* Toolchain.runOrFail({
+              tool: "plutil",
+              executable: plutil.executable,
+              args: ["-lint", "--", infoPlist],
+            });
           }),
       });
     });
 
-    return { create: (input) => create(input).pipe(Effect.provide(services)) };
+    const buildAppBundles = Effect.fn("effect-build-apple.buildAppBundles")(function*(input: BuildAppBundlesInput) {
+      if (path.resolve(input.arm64.outdir) === path.resolve(input.x64.outdir)) {
+        return yield* new PublishFailed({
+          destination: path.resolve(input.arm64.outdir),
+          reason: "arm64 and x64 app bundles require distinct output directories",
+        });
+      }
+      yield* ensureNewDestination(input.arm64.outdir);
+      yield* ensureNewDestination(input.x64.outdir);
+      for (const variant of [input.arm64, input.x64]) {
+        if (!path.basename(path.resolve(variant.outdir)).endsWith(".app")) {
+          return yield* new PublishFailed({
+            destination: path.resolve(variant.outdir),
+            reason: "Apple application bundle outputs must end in .app",
+          });
+        }
+      }
+      if (!/^[A-Za-z0-9][A-Za-z0-9.-]+$/.test(input.bundleIdentifier)) {
+        return yield* new PublishFailed({
+          destination: path.resolve(input.arm64.outdir),
+          reason: `invalid bundle identifier: ${input.bundleIdentifier}`,
+        });
+      }
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(input.executableName)) {
+        return yield* new PublishFailed({
+          destination: path.resolve(input.arm64.outdir),
+          reason: `invalid executable name: ${input.executableName}`,
+        });
+      }
+      const destinations = (input.resources ?? []).map((resource) => resource.destination);
+      const folded = destinations.map((destination) => destination.normalize("NFC").toLowerCase());
+      for (const [index, destination] of destinations.entries()) {
+        if (!isSafeRelative(destination)) {
+          return yield* new PublishFailed({
+            destination: path.resolve(input.arm64.outdir),
+            reason: `resource destination is not a safe relative path: ${destination}`,
+          });
+        }
+        if (folded.indexOf(folded[index]!) !== index) {
+          return yield* new PublishFailed({
+            destination: path.resolve(input.arm64.outdir),
+            reason: `duplicate or case-colliding resource destination: ${destination}`,
+          });
+        }
+        if (
+          folded.some((candidate, candidateIndex) =>
+            candidateIndex !== index
+            && (candidate.startsWith(`${folded[index]!}/`) || folded[index]!.startsWith(`${candidate}/`))
+          )
+        ) {
+          return yield* new PublishFailed({
+            destination: path.resolve(input.arm64.outdir),
+            reason: `resource file/directory prefix collision: ${destination}`,
+          });
+        }
+      }
+      const armExecutable = yield* validateExecutable(input.arm64.executable, "arm64");
+      const x64Executable = yield* validateExecutable(input.x64.executable, "x64");
+      const resources = yield* Effect.forEach(input.resources ?? [], (resource) =>
+        Toolchain.readVerifiedFile(resource.artifact), { concurrency: "unbounded" });
+      let attemptedArm64 = false;
+      let attemptedX64 = false;
+      const pair = Effect.gen(function*() {
+        attemptedArm64 = true;
+        const arm64 = yield* buildOne(input, input.arm64, armExecutable, resources);
+        attemptedX64 = true;
+        const x64 = yield* buildOne(input, input.x64, x64Executable, resources);
+        return {
+          arm64: { ...arm64, architecture: "arm64" as const },
+          x64: { ...x64, architecture: "x64" as const },
+        };
+      });
+      return yield* pair.pipe(
+        Effect.onExit((exit) =>
+          Exit.isSuccess(exit)
+            ? Effect.void
+            : Effect.gen(function*() {
+              if (attemptedArm64) {
+                yield* fileSystem.remove(path.resolve(input.arm64.outdir), { recursive: true, force: true }).pipe(
+                  Effect.ignore,
+                );
+              }
+              if (attemptedX64) {
+                yield* fileSystem.remove(path.resolve(input.x64.outdir), { recursive: true, force: true }).pipe(
+                  Effect.ignore,
+                );
+              }
+            })
+        ),
+      );
+    });
+
+    return {
+      buildAppBundles: (input) =>
+        buildAppBundles(input).pipe(Effect.provide(services)),
+    };
   });
 
-export const create = (input: CreateInput): Effect.Effect<CreateResult, CreateError, Creator> =>
-  Creator.use((service) => service.create(input));
+export const buildAppBundles = (
+  input: BuildAppBundlesInput,
+): Effect.Effect<AppBundles, BuildAppBundlesError, Builder> => Builder.use((service) => service.buildAppBundles(input));
 
 export const layer = (
-  options?: LayerOptions,
+  options: LayerOptions,
 ): Layer.Layer<
-  Creator,
-  Artifact.ToolError,
-  Artifact.ArtifactServices | ChildProcessSpawner.ChildProcessSpawner
-> => Layer.effect(Creator, makeService(options));
+  Builder,
+  LayerError,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+> => Layer.effect(Builder, makeService(options));

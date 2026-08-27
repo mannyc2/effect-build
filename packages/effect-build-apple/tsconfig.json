@@ -5,6 +5,12 @@
     "outDir": "dist",
     "tsBuildInfoFile": "../../node_modules/.cache/effect-build-apple.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
-  "references": [{ "path": "../effect-build" }]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../effect-build"
+    }
+  ]
 }

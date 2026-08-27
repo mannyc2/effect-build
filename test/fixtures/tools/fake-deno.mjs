@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { writeSync } from "node:fs";
 import { appendFile, chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -6,7 +7,7 @@ const argv = process.argv.slice(2);
 
 if (argv[0] === "--version") {
   const version = process.env.FAKE_DENO_VERSION ?? "2.9.3";
-  process.stdout.write(`deno ${version} (stable, release, x86_64-unknown-linux-gnu)\nv8 13.0\ntypescript 5.8\n`);
+  writeSync(1, `deno ${version} (stable, release, x86_64-unknown-linux-gnu)\nv8 13.0\ntypescript 5.8\n`);
   process.exit(0);
 }
 
@@ -22,8 +23,8 @@ if (log !== undefined) {
 }
 
 if (process.env.FAKE_DENO_MODE === "fail") {
-  process.stdout.write("fake stdout diagnostic");
-  process.stderr.write("fake stderr diagnostic");
+  writeSync(1, "fake stdout diagnostic");
+  writeSync(2, "fake stderr diagnostic");
   process.exit(17);
 }
 

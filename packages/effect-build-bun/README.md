@@ -2,8 +2,7 @@
 
 Effect-native Bun operations: native executables from
 `effect-build-bun/CompileExecutable` and directory bundles from
-`effect-build-bun/Bundle`, plus one `effect-build-bun/Profile` Layer providing
-both closed portable authoring services.
+`effect-build-bun/Bundle`.
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
@@ -14,25 +13,20 @@ const artifact = await Effect.runPromise(
   CompileExecutable.compileExecutable({
     entrypoint: "src/main.ts",
     outfile: "dist/app",
-    target: "linux-x64-gnu",
     minify: true,
   }).pipe(
     Effect.provide(CompileExecutable.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
-// { _tag: "Executable", path, bytes, target, tool, digest, sha256 }
+// { _tag: "Executable", path, bytes, target, tool, sha256 }
 ```
 
-`Bundle.directWrite` runs `bun build` with `target` (browser/bun/node),
+`Bundle.bundle` runs `bun build` with `target` (browser/bun/node),
 `format`, `minify`, `sourcemap`, `splitting`, `packages`, and `external`,
-and returns a provider-local `DirectWriteOutcome` with mandatory file digests.
-It makes no atomic-publication claim: failure can leave a partially changed
-caller destination. `target: "browser"` is not the portable browser profile.
+and returns an `Artifact.Bundle` listing every committed file.
 
-Each layer resolves Bun once, authenticates its executable bytes before and
-after the version probe, and revalidates them around every invocation. Bun
-profiles hard-require exact 1.3.14 and reject any other selected version before
-authoring. Full cross-host promotion evidence is incomplete.
-See the
+Each layer selects and probes Bun once — an explicit `executable` path
+wins, otherwise one deterministic PATH walk — and warns once outside the
+CI-tested range; it never installs or substitutes. See the
 [repository](https://github.com/mannyc2/effect-build) for the full toolkit.

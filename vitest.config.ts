@@ -8,14 +8,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "effect-build/Artifact": core("Artifact"),
-      "effect-build/Author/BorrowedContent": core("Author/BorrowedContent"),
-      "effect-build/Author/Generation": core("Author/Generation"),
-      "effect-build/Author/NodeMain": core("Author/NodeMain"),
-      "effect-build/Author/Tool": core("Author/Tool"),
-      "effect-build/Author/TreeSnapshot": core("Author/TreeSnapshot"),
       "effect-build/BuildError": core("BuildError"),
-      "effect-build/Profile/StaticBrowserApplication": core("Profile/StaticBrowserApplication"),
       "effect-build/Target": core("Target"),
+      "effect-build/Toolchain": core("Toolchain"),
     },
   },
   test: {

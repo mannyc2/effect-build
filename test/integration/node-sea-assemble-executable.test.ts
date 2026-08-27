@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import * as Raw from "../../packages/effect-build-node-sea/src/Raw.js";
-import { hostTarget } from "../host-target.js";
+import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
+import * as Target from "../../packages/effect-build/src/Target.js";
 
 const execute = promisify(execFile);
 const fixture = fileURLToPath(new URL("../fixtures/tools/node-sea/", import.meta.url));
@@ -35,31 +35,29 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const run = <A, E>(effect: Effect.Effect<A, E, Raw.Assembler>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, AssembleExecutable.Assembler>) =>
   Effect.runPromise(
     effect.pipe(
-      Effect.provide(Raw.layer(
+      Effect.provide(AssembleExecutable.layer(
         process.env.EFFECT_BUILD_NODE === undefined ? {} : { builderExecutable: process.env.EFFECT_BUILD_NODE },
       )),
       Effect.provide(NodeServices.layer),
     ),
   );
 
-describe.skipIf(!enabled).sequential("real Node SEA Raw", () => {
+describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
   it("assembles, hashes, publishes, and executes a CJS file main", async () => {
     const outfile = join(root, "cjs-app");
-    const target = hostTarget();
-    const artifact = await run(Raw.assembleExecutable({
+    const artifact = await run(AssembleExecutable.assembleExecutable({
       main: { _tag: "File", path: join(fixture, "main.cjs"), format: "commonjs" },
       outfile,
-      target,
     }));
     const bytes = await readFile(artifact.path);
     expect(artifact).toMatchObject({
       _tag: "Executable",
       path: process.platform === "win32" ? `${outfile}.exe` : outfile,
       bytes: bytes.byteLength,
-      target,
+      target: Target.host(),
     });
     expect(artifact.tool.name).toBe("node");
     expect(artifact.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
@@ -68,24 +66,22 @@ describe.skipIf(!enabled).sequential("real Node SEA Raw", () => {
 
   it("assembles an ESM main with embedded assets", async () => {
     const outfile = join(root, "esm-app");
-    const artifact = await run(Raw.assembleExecutable({
+    const artifact = await run(AssembleExecutable.assembleExecutable({
       main: { _tag: "File", path: join(fixture, "main.mjs"), format: "module" },
       outfile,
-      target: hostTarget(),
       assets: { message: join(fixture, "message.txt") },
       disableExperimentalSEAWarning: true,
     }));
-    expect(artifact.sha256).toHaveLength(64);
+    expect(artifact.sha256).toMatch(/^[0-9a-f]{64}$/);
     const completion = await execute(artifact.path, []);
     expect(completion.stdout).toContain("node-sea-esm-ok");
     expect(completion.stdout).toContain("node-sea-asset-ok");
   }, 300_000);
 
   it("surfaces node diagnostics as ToolFailed for a broken main", async () => {
-    await expect(run(Raw.assembleExecutable({
+    await expect(run(AssembleExecutable.assembleExecutable({
       main: { _tag: "Bytes", contents: new TextEncoder().encode("this is not (javascript"), format: "commonjs" },
       outfile: join(root, "broken"),
-      target: hostTarget(),
     }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "node" });
   }, 300_000);
 });

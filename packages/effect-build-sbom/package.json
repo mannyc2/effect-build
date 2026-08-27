@@ -1,0 +1,56 @@
+{
+  "name": "effect-build-sbom",
+  "version": "0.6.0",
+  "description": "Effect-native SPDX and CycloneDX SBOM generation with Syft.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "keywords": [
+    "effect",
+    "sbom",
+    "syft",
+    "spdx",
+    "cyclonedx"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mannyc2/effect-build.git",
+    "directory": "packages/effect-build-sbom"
+  },
+  "bugs": {
+    "url": "https://github.com/mannyc2/effect-build/issues"
+  },
+  "homepage": "https://github.com/mannyc2/effect-build#readme",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./Generate": {
+      "types": "./dist/Generate.d.ts",
+      "import": "./dist/Generate.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json --force",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "effect-build": "workspace:^"
+  },
+  "peerDependencies": {
+    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+  },
+  "devDependencies": {
+    "effect": "4.0.0-rc.108"
+  }
+}

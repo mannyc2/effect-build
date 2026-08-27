@@ -1,136 +1,325 @@
-import { Context, Effect, FileSystem, Layer, Path } from "effect";
+import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import type { PublishFailed, ToolFailed, ToolNotFound } from "effect-build/BuildError";
+import * as Toolchain from "effect-build/Toolchain";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import * as Artifact from "./Artifact.js";
-import * as Lifecycle from "./internal/Lifecycle.js";
-import * as NotaryBinding from "./internal/NotaryBinding.js";
-import * as Tool from "./internal/Tool.js";
-import * as Notary from "./Notary.js";
+import { capturePlatformServices, publishFailure, resolveAppleTool, verifyFileArtifact } from "./internal.js";
+import { captureBundle, materializeBundle } from "./internal/BundleIdentity.js";
+import {
+  hasDeveloperIdApplicationSignature,
+  hasDeveloperIdDiskImageSignature,
+  hasDeveloperIdInstallerSignature,
+  NotarizationTicket,
+  ProductStateInvalid,
+} from "./Model.js";
+import type {
+  AppleToolOptions,
+  BundleInspectionFailed,
+  DeveloperIdApplicationBundle,
+  DeveloperIdDiskImage,
+  DeveloperIdInstallerPackage,
+  FileArtifactIdentityMismatch,
+  StapledApplicationBundle,
+  StapledDiskImage,
+  StapledInstallerPackage,
+} from "./Model.js";
+import type { AcceptedReference } from "./Notary.js";
 
-export type StapleArtifact =
-  | Artifact.TreeArtifact<"app-bundle">
-  | Artifact.FileArtifact<"disk-image" | "installer-package">;
+/** Accepted `.app` bundle and verified ZIP-to-bundle evidence used to authorize stapling. */
+export interface StapleAppInput {
+  readonly source: DeveloperIdApplicationBundle;
+  readonly acceptance: AcceptedReference;
+  readonly outdir: string;
+}
 
-export interface StapleInput<A extends StapleArtifact = StapleArtifact> {
-  readonly input: A;
-  readonly destination: string;
-  readonly notarization: Notary.AcceptedSubmissionObservation;
+/** Accepted DMG or pkg copied, stapled, validated, and published as new bytes. */
+export interface StapleDiskImageInput {
+  readonly kind: "dmg";
+  readonly source: DeveloperIdDiskImage;
+  readonly acceptance: AcceptedReference;
+  readonly outfile: string;
+}
+
+export interface StapleInstallerPackageInput {
+  readonly kind: "pkg";
+  readonly source: DeveloperIdInstallerPackage;
+  readonly acceptance: AcceptedReference;
+  readonly outfile: string;
+}
+
+export type StapleFileInput = StapleDiskImageInput | StapleInstallerPackageInput;
+
+/** Accepted evidence and the exact pre-staple artifact identity disagree. */
+export class AcceptanceMismatch extends Schema.TaggedError<AcceptanceMismatch>()(
+  "NotaryAcceptanceMismatch",
+  {
+    submissionId: Schema.NonEmptyString,
+    expectedKind: Schema.Literals(["app", "dmg", "pkg"] as const),
+    acceptedKind: Schema.NonEmptyString,
+    expectedBytes: Schema.Natural,
+    acceptedBytes: Schema.Natural,
+    expectedSha256: Schema.NonEmptyString,
+    acceptedSha256: Schema.NonEmptyString,
+  },
+) {
+  override get message(): string {
+    return `Apple acceptance ${this.submissionId} does not identify the ${this.expectedKind} selected for stapling`;
+  }
 }
 
 export interface LayerOptions {
-  /** Exact stapler executable path, normally obtained from `xcrun --no-cache --find stapler`. */
-  readonly staplerPath: string;
-  readonly dittoPath?: string;
+  readonly xcrun: AppleToolOptions;
+  readonly codesign: AppleToolOptions;
+  readonly pkgutil: AppleToolOptions;
 }
 
-export interface StapleResult<A extends StapleArtifact = StapleArtifact> extends Artifact.MutationResult<A> {
-  /** Exact authenticated Accepted observation that authorized this staple operation. */
-  readonly notarization: Notary.AcceptedSubmissionObservation;
-}
 export type StapleError =
-  | Artifact.UnsupportedArtifactKind
-  | Artifact.ArtifactError
-  | Notary.NotaryBindingInvalid
-  | Artifact.LifecycleError
-  | Artifact.ToolError;
+  | ToolFailed
+  | PublishFailed
+  | FileArtifactIdentityMismatch
+  | AcceptanceMismatch
+  | ProductStateInvalid;
+export type StapleAppError = StapleError | BundleInspectionFailed;
 
 interface Service {
-  readonly staple: <A extends StapleArtifact>(input: StapleInput<A>) => Effect.Effect<StapleResult<A>, StapleError>;
+  readonly stapleApp: (input: StapleAppInput) => Effect.Effect<StapledApplicationBundle, StapleAppError>;
+  readonly stapleFile: (
+    input: StapleFileInput,
+  ) => Effect.Effect<StapledDiskImage | StapledInstallerPackage, StapleError>;
 }
 
-export class Stapler extends Context.Service<Stapler, Service>()("effect-build-apple/Staple/Stapler") {}
+export class Stapler extends Context.Service<Stapler, Service>()(
+  "effect-build-apple/Staple/Stapler",
+) {}
 
-const operation = "staple";
-const supported = ["app-bundle", "disk-image", "installer-package"] as const;
-
-const actualKind = (value: unknown): string =>
-  typeof value === "object" && value !== null && "kind" in value ? String(value.kind) : "unknown";
-
-const validate = (
-  input: StapleInput,
-): Effect.Effect<void, Artifact.UnsupportedArtifactKind | Notary.NotaryBindingInvalid> =>
-  Effect.gen(function*() {
-    if (!supported.includes(actualKind(input.input) as typeof supported[number])) {
-      return yield* new Artifact.UnsupportedArtifactKind({
-        operation,
-        actual: actualKind(input.input),
-        expected: [...supported],
-      });
-    }
-    if (!NotaryBinding.isObservation(input.notarization) || input.notarization.status !== "Accepted") {
-      return yield* new Notary.NotaryBindingInvalid({
-        reason: "stapling requires an authenticated Accepted Notary observation",
-      });
-    }
-    const subject = Artifact.reference(input.input);
-    if (
-      input.notarization.subject.kind !== subject.kind
-      || input.notarization.subject.digest.algorithm !== subject.digest.algorithm
-      || input.notarization.subject.digest.value !== subject.digest.value
-    ) {
-      return yield* new Notary.NotaryBindingInvalid({
-        reason: "Accepted Notary observation is bound to a different artifact",
-      });
-    }
-  });
+type LayerError = ToolNotFound | ToolFailed;
 
 const makeService = (
   options: LayerOptions,
 ): Effect.Effect<
   Service,
-  Artifact.ToolError,
-  FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  LayerError,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > =>
   Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const stapler = yield* Tool.select({ name: "stapler", path: options.staplerPath });
-    const ditto = yield* Tool.select({ name: "ditto", path: options.dittoPath ?? "/usr/bin/ditto" });
-    const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
-      Context.add(Path.Path, path),
-      Context.add(ChildProcessSpawner.ChildProcessSpawner, spawner),
-    );
+    const { fileSystem, path, services } = yield* capturePlatformServices;
+    const xcrun = yield* resolveAppleTool("xcrun", options.xcrun, ["stapler", "-h"], "stapler");
+    const codesign = yield* resolveAppleTool("codesign", options.codesign, ["--version"]);
+    const pkgutil = yield* resolveAppleTool("pkgutil", options.pkgutil, ["--help"]);
+    const run = (operation: "staple" | "validate", target: string) =>
+      Toolchain.runOrFail({
+        tool: "stapler",
+        executable: xcrun.executable,
+        args: ["stapler", operation, target],
+      });
 
-    const runStaple = <A extends StapleArtifact>(
-      input: StapleInput<A>,
-    ): Effect.Effect<StapleResult<A>, StapleError> =>
-      Effect.gen(function*() {
-        yield* validate(input);
-        const mutate = ({ staged }: Lifecycle.MutationContext<A>) =>
+    const mismatch = (
+      input: { readonly acceptance: AcceptedReference },
+      expectedKind: "app" | "dmg" | "pkg",
+      expectedBytes: number,
+      expectedSha256: string,
+    ) =>
+      new AcceptanceMismatch({
+        submissionId: input.acceptance.submissionId,
+        expectedKind,
+        acceptedKind: input.acceptance.stapleTarget.kind,
+        expectedBytes,
+        acceptedBytes: input.acceptance.stapleTarget.artifactBytes,
+        expectedSha256,
+        acceptedSha256: input.acceptance.stapleTarget.artifactSha256,
+      });
+
+    const stapleApp = Effect.fn("effect-build-apple.stapleApp")(function*(input: StapleAppInput) {
+      const sourceAppPath = path.resolve(input.source.outdir);
+      if (!hasDeveloperIdApplicationSignature(input.source)) {
+        return yield* new ProductStateInvalid({
+          operation: "staple app",
+          path: sourceAppPath,
+          expected: "a Developer ID Application bundle",
+        });
+      }
+      if (
+        !path.basename(sourceAppPath).endsWith(".app") || !path.basename(path.resolve(input.outdir)).endsWith(".app")
+      ) {
+        return yield* new ProductStateInvalid({
+          operation: "staple app",
+          path: sourceAppPath,
+          expected: ".app source and output directories",
+        });
+      }
+      const captured = yield* captureBundle(input.source);
+      const target = input.acceptance.stapleTarget;
+      if (
+        input.acceptance.providerStatus !== "Accepted"
+        || input.acceptance.architecture !== input.source.architecture
+        || target.kind !== "app"
+        || target.identityKind !== "bundle-manifest"
+        || target.bundleName !== captured.identity.bundleName
+        || target.artifactBytes !== captured.identity.artifactBytes
+        || target.artifactSha256 !== captured.identity.artifactSha256
+      ) {
+        return yield* mismatch(
+          input,
+          "app",
+          captured.identity.artifactBytes,
+          captured.identity.artifactSha256,
+        );
+      }
+      const stapled = yield* Toolchain.publishBundle({
+        tool: xcrun.tool,
+        outdir: input.outdir,
+        produce: (staging) =>
           Effect.gen(function*() {
-            const stapled = yield* Tool.runOrFail({ tool: stapler, args: ["staple", staged.path] });
-            const validated = yield* Tool.runOrFail({ tool: stapler, args: ["validate", staged.path] });
-            return [stapled, validated];
-          });
-        const published = yield* input.input._tag === "FileArtifact"
-          ? Lifecycle.publishFileMutation({
-            operation,
-            input: input.input,
-            destination: input.destination,
-            copyTool: ditto,
-            mutate: mutate as (context: Lifecycle.MutationContext<Artifact.FileArtifact>) => ReturnType<typeof mutate>,
-          }) as Effect.Effect<Artifact.MutationResult<A>, StapleError>
-          : Lifecycle.publishTreeMutation({
-            operation,
-            input: input.input,
-            destination: input.destination,
-            copyTool: ditto,
-            mutate: mutate as (context: Lifecycle.MutationContext<Artifact.TreeArtifact>) => ReturnType<typeof mutate>,
-          }) as Effect.Effect<Artifact.MutationResult<A>, StapleError>;
-        return Object.freeze({ ...published, notarization: input.notarization });
-      }).pipe(Effect.provide(services));
+            yield* materializeBundle(captured, staging);
+            yield* Toolchain.runOrFail({
+              tool: "codesign",
+              executable: codesign.executable,
+              args: ["--verify", "--deep", "--strict", "--verbose=2", staging],
+            });
+            yield* run("staple", staging);
+            yield* run("validate", staging);
+            yield* Toolchain.runOrFail({
+              tool: "codesign",
+              executable: codesign.executable,
+              args: ["--verify", "--deep", "--strict", "--verbose=2", staging],
+            });
+          }),
+      });
+      const notarizationTicket = new NotarizationTicket({
+        submissionId: input.acceptance.submissionId,
+        submittedKind: input.acceptance.kind,
+        submittedBytes: input.acceptance.artifactBytes,
+        submittedSha256: input.acceptance.artifactSha256,
+        targetKind: input.acceptance.stapleTarget.kind,
+        targetIdentityKind: input.acceptance.stapleTarget.identityKind,
+        targetBytes: input.acceptance.stapleTarget.artifactBytes,
+        targetSha256: input.acceptance.stapleTarget.artifactSha256,
+        targetArchitecture: input.source.architecture,
+        ...(input.acceptance.stapleTarget.bundleName === undefined
+          ? {}
+          : { targetBundleName: input.acceptance.stapleTarget.bundleName }),
+        submissionTool: input.acceptance.submissionTool,
+        acceptanceTool: input.acceptance.tool,
+      });
+      return {
+        ...stapled,
+        architecture: input.source.architecture,
+        signature: input.source.signature,
+        notarizationTicket,
+      } satisfies StapledApplicationBundle;
+    });
 
-    return { staple: runStaple };
+    const stapleFile = Effect.fn("effect-build-apple.stapleFile")(function*(input: StapleFileInput) {
+      const destination = path.resolve(input.outfile);
+      if (
+        !path.basename(path.resolve(input.source.path)).endsWith(`.${input.kind}`)
+        || !path.basename(destination).endsWith(`.${input.kind}`)
+      ) {
+        return yield* new ProductStateInvalid({
+          operation: `staple ${input.kind}`,
+          path: path.resolve(input.source.path),
+          expected: `.${input.kind} source and output paths`,
+        });
+      }
+      const signatureValid = input.kind === "dmg"
+        ? hasDeveloperIdDiskImageSignature(input.source)
+        : hasDeveloperIdInstallerSignature(input.source);
+      if (!signatureValid) {
+        return yield* new ProductStateInvalid({
+          operation: `staple ${input.kind}`,
+          path: path.resolve(input.source.path),
+          expected: input.kind === "dmg"
+            ? "a Developer ID-signed disk image"
+            : "a Developer ID Installer-signed package",
+        });
+      }
+      const verified = yield* verifyFileArtifact(`staple ${input.kind}`, input.source);
+      if (
+        input.acceptance.providerStatus !== "Accepted"
+        || input.acceptance.architecture !== input.source.architecture
+        || input.acceptance.stapleTarget.kind !== input.kind
+        || input.acceptance.stapleTarget.identityKind !== "file-bytes"
+        || input.acceptance.stapleTarget.artifactBytes !== verified.bytes
+        || input.acceptance.stapleTarget.artifactSha256 !== verified.sha256
+      ) {
+        return yield* mismatch(input, input.kind, verified.bytes, verified.sha256);
+      }
+      const stapled = yield* Toolchain.publishFile({
+        tool: xcrun.tool,
+        outfile: input.outfile,
+        produce: (stagedPath) =>
+          Effect.gen(function*() {
+            yield* fileSystem.writeFile(stagedPath, verified.contents).pipe(
+              Effect.mapError(publishFailure(destination, `stage verified accepted ${input.kind}`)),
+            );
+            yield* Toolchain.runOrFail({
+              tool: input.kind === "pkg" ? "pkgutil" : "codesign",
+              executable: input.kind === "pkg" ? pkgutil.executable : codesign.executable,
+              args: input.kind === "pkg"
+                ? ["--check-signature", stagedPath]
+                : ["--verify", "--strict", "--verbose=2", stagedPath],
+            });
+            yield* run("staple", stagedPath);
+            yield* run("validate", stagedPath);
+            yield* Toolchain.runOrFail({
+              tool: input.kind === "pkg" ? "pkgutil" : "codesign",
+              executable: input.kind === "pkg" ? pkgutil.executable : codesign.executable,
+              args: input.kind === "pkg"
+                ? ["--check-signature", stagedPath]
+                : ["--verify", "--strict", "--verbose=2", stagedPath],
+            });
+          }),
+      });
+      const notarizationTicket = new NotarizationTicket({
+        submissionId: input.acceptance.submissionId,
+        submittedKind: input.acceptance.kind,
+        submittedBytes: input.acceptance.artifactBytes,
+        submittedSha256: input.acceptance.artifactSha256,
+        targetKind: input.acceptance.stapleTarget.kind,
+        targetIdentityKind: input.acceptance.stapleTarget.identityKind,
+        targetBytes: input.acceptance.stapleTarget.artifactBytes,
+        targetSha256: input.acceptance.stapleTarget.artifactSha256,
+        targetArchitecture: input.source.architecture,
+        ...(input.acceptance.stapleTarget.bundleName === undefined
+          ? {}
+          : { targetBundleName: input.acceptance.stapleTarget.bundleName }),
+        submissionTool: input.acceptance.submissionTool,
+        acceptanceTool: input.acceptance.tool,
+      });
+      return input.kind === "dmg"
+        ? {
+          ...stapled,
+          architecture: input.source.architecture,
+          signature: input.source.signature,
+          notarizationTicket,
+        } satisfies StapledDiskImage
+        : {
+          ...stapled,
+          architecture: input.source.architecture,
+          signature: input.source.signature,
+          notarizationTicket,
+        } satisfies StapledInstallerPackage;
+    });
+
+    return {
+      stapleApp: (input) => stapleApp(input).pipe(Effect.provide(services)),
+      stapleFile: (input) => stapleFile(input).pipe(Effect.provide(services)),
+    };
   });
 
-export const staple = <A extends StapleArtifact>(
-  input: StapleInput<A>,
-): Effect.Effect<StapleResult<A>, StapleError, Stapler> => Stapler.use((service) => service.staple(input));
+export const stapleApp = (
+  input: StapleAppInput,
+): Effect.Effect<StapledApplicationBundle, StapleAppError, Stapler> =>
+  Stapler.use((service) => service.stapleApp(input));
+
+export const stapleFile = (
+  input: StapleFileInput,
+): Effect.Effect<StapledDiskImage | StapledInstallerPackage, StapleError, Stapler> =>
+  Stapler.use((service) => service.stapleFile(input));
 
 export const layer = (
   options: LayerOptions,
 ): Layer.Layer<
   Stapler,
-  Artifact.ToolError,
-  FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  LayerError,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > => Layer.effect(Stapler, makeService(options));

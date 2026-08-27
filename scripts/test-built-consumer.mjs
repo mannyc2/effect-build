@@ -1,4 +1,4 @@
-// Packs the seven built packages and proves a fresh npm consumer can install,
+// Packs every package in the generated public surface and proves a fresh npm consumer can install,
 // typecheck, and run them: a real fake-bun compile plus in-memory esbuild and
 // rolldown builds, with type-level use of every public module.
 import { execFile } from "node:child_process";
@@ -11,15 +11,8 @@ import { gunzipSync } from "node:zlib";
 
 const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const packageNames = [
-  "effect-build",
-  "effect-build-apple",
-  "effect-build-bun",
-  "effect-build-deno",
-  "effect-build-esbuild",
-  "effect-build-node-sea",
-  "effect-build-rolldown",
-];
+const publicSurface = JSON.parse(await readFile(join(root, "tooling/public-api.json"), "utf8"));
+const packageNames = Object.keys(publicSurface.packages).sort();
 
 const workspaceManifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const effectVersion = workspaceManifest.devDependencies.effect;
@@ -28,11 +21,6 @@ const typescriptVersion = workspaceManifest.devDependencies.typescript;
 
 const consumerRoot = await mkdtemp(join(tmpdir(), "effect-build-consumer-"));
 const cleanup = async () => rm(consumerRoot, { recursive: true, force: true });
-const tarballDirectoryIndex = process.argv.indexOf("--tarball-directory");
-const suppliedTarballDirectory = tarballDirectoryIndex < 0 ? undefined : process.argv[tarballDirectoryIndex + 1];
-if (tarballDirectoryIndex >= 0 && suppliedTarballDirectory === undefined) {
-  throw new Error("--tarball-directory requires a path");
-}
 
 const disallowedSpecifier = /^(?:workspace:|catalog:|file:|link:|portal:)/;
 
@@ -40,7 +28,7 @@ const packedManifest = async (tarball) => {
   const archive = gunzipSync(await readFile(tarball));
   const record = 512;
   for (let offset = 0; offset < archive.byteLength; offset += record) {
-    const name = archive.subarray(offset, offset + 100).toString("utf8").split("\0", 1)[0];
+    const name = archive.subarray(offset, offset + 100).toString("utf8").replace(/\0.*$/, "");
     const size = Number.parseInt(archive.subarray(offset + 124, offset + 136).toString("utf8").trim() || "0", 8);
     if (name === "package/package.json") {
       return JSON.parse(archive.subarray(offset + record, offset + record + size).toString("utf8"));
@@ -53,19 +41,14 @@ const packedManifest = async (tarball) => {
 try {
   const tarballs = {};
   for (const name of packageNames) {
-    let tarball;
-    if (suppliedTarballDirectory === undefined) {
-      const packDirectory = join(consumerRoot, "tarballs");
-      await mkdir(packDirectory, { recursive: true });
-      const { stdout } = await execute("bun", ["pm", "pack", "--destination", packDirectory], {
-        cwd: join(root, "packages", name),
-      });
-      const line = stdout.split("\n").find((candidate) => candidate.trim().endsWith(".tgz"));
-      if (line === undefined) throw new Error(`bun pm pack produced no tarball for ${name}:\n${stdout}`);
-      tarball = join(packDirectory, line.trim().split("/").at(-1));
-    } else {
-      tarball = resolve(suppliedTarballDirectory, `${name}-0.5.0.tgz`);
-    }
+    const packDirectory = join(consumerRoot, "tarballs");
+    await mkdir(packDirectory, { recursive: true });
+    const { stdout } = await execute("bun", ["pm", "pack", "--destination", packDirectory], {
+      cwd: join(root, "packages", name),
+    });
+    const line = stdout.split("\n").find((candidate) => candidate.trim().endsWith(".tgz"));
+    if (line === undefined) throw new Error(`bun pm pack produced no tarball for ${name}:\n${stdout}`);
+    const tarball = join(packDirectory, line.trim().split("/").at(-1));
     const manifest = await packedManifest(tarball);
     for (const [dependency, specifier] of Object.entries(manifest.dependencies ?? {})) {
       if (disallowedSpecifier.test(specifier)) {
@@ -75,41 +58,6 @@ try {
     tarballs[name] = tarball;
   }
 
-  // Pack a real out-of-tree author adapter. Its exact core tarball dependency,
-  // combined with npm's nested install strategy below, intentionally creates a
-  // second effect-build runtime graph. The adapter and consumer must still
-  // interoperate through public Context service identifiers alone.
-  const adapterRoot = join(consumerRoot, "external-author");
-  await mkdir(adapterRoot, { recursive: true });
-  await copyFile(join(root, "test/fixtures/external-author-v05/index.js"), join(adapterRoot, "index.js"));
-  await copyFile(join(root, "test/fixtures/external-author-v05/index.d.ts"), join(adapterRoot, "index.d.ts"));
-  await writeFile(
-    join(adapterRoot, "package.json"),
-    JSON.stringify(
-      {
-        name: "@fixture/effect-build-author",
-        version: "1.0.0",
-        type: "module",
-        files: ["index.js", "index.d.ts"],
-        exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
-        dependencies: { "effect-build": tarballs["effect-build"] },
-        peerDependencies: { effect: effectVersion },
-      },
-      null,
-      2,
-    ),
-  );
-  const packDirectory = join(consumerRoot, "tarballs");
-  await mkdir(packDirectory, { recursive: true });
-  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  const pack = await execute(npm, ["pack", adapterRoot, "--pack-destination", packDirectory], {
-    cwd: consumerRoot,
-    shell: process.platform === "win32",
-  });
-  const adapterFilename = pack.stdout.split("\n").find((candidate) => candidate.trim().endsWith(".tgz"));
-  if (adapterFilename === undefined) throw new Error(`npm pack produced no external author tarball:\n${pack.stdout}`);
-  const adapterTarball = join(packDirectory, adapterFilename.trim().split(/[\\/]/u).at(-1));
-
   await writeFile(
     join(consumerRoot, "package.json"),
     JSON.stringify(
@@ -118,13 +66,11 @@ try {
         private: true,
         type: "module",
         dependencies: {
-          "@fixture/effect-build-author": adapterTarball,
           "@effect/platform-node": platformNodeVersion,
           effect: effectVersion,
           ...Object.fromEntries(packageNames.map((name) => [name, tarballs[name]])),
         },
         devDependencies: { typescript: typescriptVersion },
-        overrides: { "@effect/platform-node-shared": platformNodeVersion },
       },
       null,
       2,
@@ -151,112 +97,84 @@ try {
     ),
   );
   await writeFile(join(consumerRoot, "rolldown-entry.js"), "export const consumed = 1;\n");
-  await writeFile(join(consumerRoot, "external-entry.js"), "export const external = 1;\n");
   await writeFile(
     join(consumerRoot, "main.ts"),
     `import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import { adapterProducerTag, getCalls, layer as externalAuthorLayer } from "@fixture/effect-build-author";
-import * as Apple from "effect-build-apple";
-import * as AppleAppBundle from "effect-build-apple/AppBundle";
-import * as AppleArtifact from "effect-build-apple/Artifact";
-import * as AppleAssess from "effect-build-apple/Assess";
-import * as AppleCodeSign from "effect-build-apple/CodeSign";
-import * as AppleDiskImage from "effect-build-apple/DiskImage";
-import * as AppleInstallerPackage from "effect-build-apple/InstallerPackage";
-import * as AppleNotary from "effect-build-apple/Notary";
-import * as AppleStaple from "effect-build-apple/Staple";
-import * as AppleZip from "effect-build-apple/Zip";
+import * as CoreRoot from "effect-build";
+import * as AppleRoot from "effect-build-apple";
+import * as ArchivesRoot from "effect-build-archives";
+import * as BunRoot from "effect-build-bun";
+import * as DenoRoot from "effect-build-deno";
+import * as EsbuildRoot from "effect-build-esbuild";
+import * as NfpmRoot from "effect-build-nfpm";
+import * as NodeSeaRoot from "effect-build-node-sea";
+import * as PythonRoot from "effect-build-python";
+import * as RolldownRoot from "effect-build-rolldown";
+import * as SbomRoot from "effect-build-sbom";
+import * as WindowsRoot from "effect-build-windows";
+import * as AppleModel from "effect-build-apple/Model";
+import * as BinaryArchive from "effect-build-archives/Archive";
+import * as SourceArchive from "effect-build-archives/SourceArchive";
 import * as BunBundle from "effect-build-bun/Bundle";
 import * as BunCompile from "effect-build-bun/CompileExecutable";
 import * as DenoBundle from "effect-build-deno/Bundle";
 import * as DenoCompile from "effect-build-deno/CompileExecutable";
 import * as Build from "effect-build-esbuild/Build";
 import * as Watch from "effect-build-esbuild/Watch";
-import type * as NodeMainExecutable from "effect-build-node-sea/NodeMainExecutable";
-import * as Raw from "effect-build-node-sea/Raw";
+import * as Nfpm from "effect-build-nfpm/Package";
+import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
+import * as PythonBuild from "effect-build-python/Build";
 import * as Rolldown from "effect-build-rolldown/Build";
 import type * as RolldownWatch from "effect-build-rolldown/Watch";
+import * as Sbom from "effect-build-sbom/Generate";
+import * as SignMsix from "effect-build-windows/SignMsix";
 import type * as Artifact from "effect-build/Artifact";
 import type * as BuildError from "effect-build/BuildError";
-import * as NodeMain from "effect-build/Author/NodeMain";
 import * as Target from "effect-build/Target";
 
+const roots = [
+  CoreRoot,
+  AppleRoot,
+  ArchivesRoot,
+  BunRoot,
+  DenoRoot,
+  EsbuildRoot,
+  NfpmRoot,
+  NodeSeaRoot,
+  PythonRoot,
+  RolldownRoot,
+  SbomRoot,
+  WindowsRoot,
+];
+const appleArchitecture: AppleModel.Architecture = "arm64";
+const archiveFormat: BinaryArchive.Format = "zip";
+const sourceArchiveFormat: SourceArchive.Format = "tar.gz";
+const nfpmFormat: Nfpm.Format = "deb";
+const pythonBuilder: typeof PythonBuild.build = PythonBuild.build;
+const sbomFormat: Sbom.OutputFormat = "spdx-json";
+const msixSigner: typeof SignMsix.signMsix = SignMsix.signMsix;
 const marker: DenoCompile.Permissions = { read: true };
-const main: Raw.Main = { _tag: "Bytes", contents: new Uint8Array(), format: "commonjs" };
-const assembler: typeof Raw.assembleExecutable = Raw.assembleExecutable;
-const portableNodeVersion: typeof NodeMainExecutable.nodeVersion = "26.7.0";
-const bunBundleInput: BunBundle.DirectWriteInput = { entrypoints: ["main.ts"], outdir: "dist" };
-const explicitTarget: BunCompile.Target = process.platform === "darwin"
-  ? (process.arch === "arm64" ? "macos-aarch64" : "macos-x64")
-  : process.platform === "win32"
-  ? "windows-x64"
-  : process.arch === "arm64"
-  ? "linux-aarch64-gnu"
-  : "linux-x64-gnu";
+const main: AssembleExecutable.Main = { _tag: "Bytes", contents: new Uint8Array(), format: "commonjs" };
+const assembler: typeof AssembleExecutable.assembleExecutable = AssembleExecutable.assembleExecutable;
+const bunBundleInput: BunBundle.BundleInput = { entrypoints: ["main.ts"], outdir: "dist" };
 const denoPlatform: DenoBundle.Platform = "browser";
 const watching: typeof Watch.changes = Watch.changes;
-const watcherEvent: RolldownWatch.Event = { code: "BUNDLE_END", duration: 0, output: [], superseded: 0 };
-const appleNamespaces = [
-  Apple.Artifact,
-  Apple.CodeSign,
-  Apple.AppBundle,
-  Apple.Zip,
-  Apple.DiskImage,
-  Apple.InstallerPackage,
-  Apple.Notary,
-  Apple.Staple,
-  Apple.Assess,
-] as const;
-const appleOperations = [
-  AppleArtifact.observeExecutable,
-  AppleCodeSign.sign,
-  AppleAppBundle.create,
-  AppleZip.create,
-  AppleDiskImage.create,
-  AppleInstallerPackage.create,
-  AppleNotary.submit,
-  AppleNotary.reconcile,
-  AppleStaple.staple,
-  AppleAssess.assess,
-] as const;
+const watcherEvent: RolldownWatch.Event = { code: "START" };
 void marker;
 void main;
 void assembler;
-void portableNodeVersion;
 void bunBundleInput;
 void denoPlatform;
 void watching;
 void watcherEvent;
-void appleNamespaces;
-void appleOperations;
-
-if (adapterProducerTag === NodeMain.Producer) {
-  throw new Error("external author did not exercise a duplicate effect-build runtime graph");
-}
-
-const callsBeforeRejectedRequest = getCalls();
-const rejected = await Effect.runPromiseExit(
-  Effect.scoped(NodeMain.seal({
-    protocol: "effect-build/profile/node-main@2" as typeof NodeMain.profile,
-    entrypoint: "external-entry.js",
-    format: "module",
-  })).pipe(Effect.provide(externalAuthorLayer), Effect.provide(NodeServices.layer)),
-);
-if (rejected._tag !== "Failure" || getCalls() !== callsBeforeRejectedRequest) {
-  throw new Error("unknown portable protocol reached the external provider");
-}
-
-const externalMain = await Effect.runPromise(
-  Effect.scoped(NodeMain.seal({
-    protocol: NodeMain.profile,
-    entrypoint: "external-entry.js",
-    format: "module",
-  })).pipe(Effect.provide(externalAuthorLayer), Effect.provide(NodeServices.layer)),
-);
-if (getCalls() !== callsBeforeRejectedRequest + 1) {
-  throw new Error("external portable provider call count mismatch");
-}
+void appleArchitecture;
+void archiveFormat;
+void sourceArchiveFormat;
+void nfpmFormat;
+void pythonBuilder;
+void sbomFormat;
+void msixSigner;
 
 const rolled = await Effect.runPromise(
   Rolldown.generate({ input: "rolldown-entry.js", cwd: process.cwd() }, { format: "esm" }).pipe(
@@ -277,7 +195,7 @@ let artifact: Artifact.Executable | undefined;
 const fakeBun = process.argv[2];
 if (fakeBun !== undefined) {
   artifact = await Effect.runPromise(
-    BunCompile.compileExecutable({ entrypoint: "main.ts", outfile: "dist/consumer-app", target: explicitTarget }).pipe(
+    BunCompile.compileExecutable({ entrypoint: "main.ts", outfile: "dist/consumer-app" }).pipe(
       Effect.provide(BunCompile.layer({ executable: fakeBun })),
       Effect.provide(NodeServices.layer),
     ),
@@ -287,10 +205,9 @@ if (fakeBun !== undefined) {
 }
 
 console.log(JSON.stringify({
+  rootPackages: roots.length,
   outputs: bundle.outputFiles.length,
   rolldownChunks: rolled.output.length,
-  externalDigestLength: externalMain.digest.value.length,
-  externalProducer: externalMain.producer.package,
   target: artifact?.target ?? null,
   digestLength: artifact?.sha256?.length ?? null,
   nativeFormat: artifact === undefined ? null : Target.info(artifact.target).nativeFormat,
@@ -299,32 +216,15 @@ console.log(JSON.stringify({
   );
 
   // Windows ships npm as npm.cmd, which node can only spawn through a shell.
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const npmEnvironment = { ...process.env, npm_config_audit: "false", npm_config_fund: "false" };
   const npmOptions = { cwd: consumerRoot, env: npmEnvironment, shell: process.platform === "win32" };
-  await execute(
-    npm,
-    ["install", "--no-audit", "--no-fund", "--strict-peer-deps", "--install-strategy=nested"],
-    npmOptions,
-  );
+  await execute(npm, ["install", "--no-audit", "--no-fund"], npmOptions);
 
   for (const name of packageNames) {
     const installed = JSON.parse(await readFile(join(consumerRoot, "node_modules", name, "package.json"), "utf8"));
     if (installed.name !== name) throw new Error(`consumer resolved ${name} to ${installed.name}`);
   }
-  const installedAdapterRoot = join(consumerRoot, "node_modules", "@fixture", "effect-build-author");
-  await execute(
-    npm,
-    ["install", tarballs["effect-build"], "--no-save", "--no-audit", "--no-fund", "--strict-peer-deps"],
-    { ...npmOptions, cwd: installedAdapterRoot },
-  );
-  const nestedCore = join(
-    installedAdapterRoot,
-    "node_modules",
-    "effect-build",
-    "package.json",
-  );
-  const nestedManifest = JSON.parse(await readFile(nestedCore, "utf8"));
-  if (nestedManifest.name !== "effect-build") throw new Error("external author nested core graph was not installed");
 
   await execute(npm, ["exec", "--no", "tsc", "--", "-p", "tsconfig.json"], npmOptions);
 
@@ -337,11 +237,11 @@ console.log(JSON.stringify({
   }
   const { stdout } = await execute("node", runArguments, { cwd: consumerRoot });
   const report = JSON.parse(stdout.trim());
+  if (report.rootPackages !== packageNames.length) {
+    throw new Error(`consumer loaded ${report.rootPackages} root packages; expected ${packageNames.length}`);
+  }
   if (report.outputs !== 1) throw new Error(`consumer esbuild build produced ${report.outputs} outputs`);
   if (report.rolldownChunks !== 1) throw new Error(`consumer rolldown build produced ${report.rolldownChunks} chunks`);
-  if (report.externalDigestLength !== 64 || report.externalProducer !== "@fixture/effect-build-author") {
-    throw new Error(`external author boundary failed: ${stdout}`);
-  }
   if (process.platform !== "win32") {
     if (report.digestLength !== 64) throw new Error(`consumer artifact digest length ${report.digestLength}`);
     if (typeof report.target !== "string" || report.nativeFormat === null) {

@@ -1,6 +1,6 @@
 {
   "name": "effect-build-rolldown",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Effect-native Rolldown Build and Watch operations.",
   "type": "module",
   "license": "MIT",
@@ -32,7 +32,6 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./Build": { "types": "./dist/Build.d.ts", "import": "./dist/Build.js" },
-    "./Profile": { "types": "./dist/Profile.d.ts", "import": "./dist/Profile.js" },
     "./Watch": { "types": "./dist/Watch.d.ts", "import": "./dist/Watch.js" }
   },
   "scripts": {

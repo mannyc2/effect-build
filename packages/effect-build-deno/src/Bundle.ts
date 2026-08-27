@@ -1,9 +1,7 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path } from "effect";
-import type { Digest } from "effect-build/Artifact";
-import type * as Tool from "effect-build/Author/Tool";
-import * as Toolchain from "effect-build/Author/Tool";
-import * as TreeSnapshot from "effect-build/Author/TreeSnapshot";
-import { ArtifactInvalid, type SelectedToolChanged, type ToolFailed, type ToolNotFound } from "effect-build/BuildError";
+import type * as Artifact from "effect-build/Artifact";
+import type { PublishFailed, ToolFailed, ToolNotFound } from "effect-build/BuildError";
+import * as Toolchain from "effect-build/Toolchain";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 /** Where the bundle is meant to run; deno's own `--platform` values. */
@@ -11,7 +9,7 @@ export type Platform = "browser" | "deno";
 
 export type Sourcemap = "linked" | "inline" | "external";
 
-export interface DirectWriteInput {
+export interface BundleInput {
   readonly entrypoints: readonly [string, ...string[]];
   readonly outdir: string;
   readonly cwd?: string;
@@ -28,25 +26,10 @@ export interface LayerOptions {
   readonly executable?: string;
 }
 
-export interface BundleFile {
-  readonly path: string;
-  readonly relativePath: string;
-  readonly bytes: number;
-  readonly digest: Digest;
-}
-
-/** Truthful provider-native outcome: the caller destination may be partially changed on failure. */
-export interface Bundle {
-  readonly _tag: "DirectWriteOutcome";
-  readonly outdir: string;
-  readonly files: readonly BundleFile[];
-  readonly tool: Tool.SelectedTool;
-}
-
-export type DirectWriteError = ToolFailed | ArtifactInvalid | SelectedToolChanged;
+export type BundleError = ToolFailed | PublishFailed;
 
 interface Service {
-  readonly directWrite: (input: DirectWriteInput) => Effect.Effect<Bundle, DirectWriteError>;
+  readonly bundle: (input: BundleInput) => Effect.Effect<Artifact.Bundle, BundleError>;
 }
 
 export class Bundler extends Context.Service<Bundler, Service>()(
@@ -56,10 +39,10 @@ export class Bundler extends Context.Service<Bundler, Service>()(
 /** Deno releases with `deno bundle` exercised by this repository's CI; others proceed with a warning. */
 const tested: Toolchain.TestedRange = { minimum: "2.4.0", before: "3.0.0" };
 
-const renderArgv = (input: DirectWriteInput, outdir: string): readonly string[] => [
+const renderArgv = (input: BundleInput, stagedDirectory: string): readonly string[] => [
   "bundle",
   "--outdir",
-  outdir,
+  stagedDirectory,
   ...(input.platform === undefined ? [] : ["--platform", input.platform]),
   ...(input.minify === true ? ["--minify"] : []),
   ...(input.codeSplitting === true ? ["--code-splitting"] : []),
@@ -71,7 +54,7 @@ const renderArgv = (input: DirectWriteInput, outdir: string): readonly string[] 
 /** `deno --version` reports e.g. `deno 2.4.0 (stable, release, x86_64-unknown-linux-gnu)`. */
 const parseDenoVersion = (stdout: string): string | undefined => /^deno (\S+)/.exec(stdout.trim())?.[1];
 
-type LayerError = ToolNotFound | ToolFailed | ArtifactInvalid | SelectedToolChanged;
+type LayerError = ToolNotFound | ToolFailed;
 
 const makeService = (
   options?: LayerOptions,
@@ -85,50 +68,43 @@ const makeService = (
     const path = yield* Path.Path;
     const crypto = yield* Crypto.Crypto;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const tool: Tool.SelectedTool = yield* Toolchain.select({
-      name: "deno",
-      executable: options?.executable,
-      versionArgs: ["--version"],
-      parseVersion: parseDenoVersion,
+    const executable = yield* Toolchain.resolveExecutable({ name: "deno", executable: options?.executable });
+    const version = yield* Toolchain.probeVersion({
+      tool: "deno",
+      executable,
+      args: ["--version"],
+      parse: parseDenoVersion,
     });
-    yield* Toolchain.warnIfUntested({ tool: "deno", version: tool.version, tested });
+    yield* Toolchain.warnIfUntested({ tool: "deno", version, tested });
+    const tool: Artifact.Tool = { name: "deno", version };
     const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
       Context.add(Path.Path, path),
       Context.add(Crypto.Crypto, crypto),
       Context.add(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
 
-    const directWrite = (input: DirectWriteInput): Effect.Effect<Bundle, DirectWriteError> =>
-      Effect.gen(function*() {
-        const outdir = path.normalize(path.resolve(input.cwd ?? "", input.outdir));
-        yield* fileSystem.makeDirectory(outdir, { recursive: true }).pipe(
-          Effect.mapError(() =>
-            new ArtifactInvalid({
-              path: outdir,
-              reason: "unable to create provider-owned output directory",
-            })
+    const bundle = (input: BundleInput): Effect.Effect<Artifact.Bundle, BundleError> =>
+      Toolchain.publishBundle({
+        tool,
+        outdir: input.outdir,
+        cwd: input.cwd,
+        produce: (stagedDirectory) =>
+          Effect.asVoid(
+            Toolchain.runOrFail({
+              tool: "deno",
+              executable,
+              args: renderArgv(input, stagedDirectory),
+              cwd: input.cwd,
+            }),
           ),
-        );
-        yield* Toolchain.runOrFailSelected({
-          selected: tool,
-          args: renderArgv(input, outdir),
-          cwd: input.cwd,
-        });
-        const snapshot = yield* TreeSnapshot.observe(outdir);
-        return {
-          _tag: "DirectWriteOutcome" as const,
-          outdir: snapshot.root,
-          files: snapshot.files.map(({ path, relativePath, bytes, digest }) => ({ path, relativePath, bytes, digest })),
-          tool,
-        };
       }).pipe(Effect.provide(services));
 
-    return { directWrite };
+    return { bundle };
   });
 
-export const directWrite = (
-  input: DirectWriteInput,
-): Effect.Effect<Bundle, DirectWriteError, Bundler> => Bundler.use((service) => service.directWrite(input));
+export const bundle = (
+  input: BundleInput,
+): Effect.Effect<Artifact.Bundle, BundleError, Bundler> => Bundler.use((service) => service.bundle(input));
 
 export const layer = (
   options?: LayerOptions,

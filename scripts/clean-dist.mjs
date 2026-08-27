@@ -7,11 +7,16 @@ const targets = [
   "dist",
   "packages/effect-build/dist",
   "packages/effect-build-apple/dist",
+  "packages/effect-build-archives/dist",
   "packages/effect-build-bun/dist",
   "packages/effect-build-deno/dist",
   "packages/effect-build-esbuild/dist",
+  "packages/effect-build-nfpm/dist",
   "packages/effect-build-node-sea/dist",
+  "packages/effect-build-python/dist",
   "packages/effect-build-rolldown/dist",
+  "packages/effect-build-sbom/dist",
+  "packages/effect-build-windows/dist",
 ];
 
 for (const targetPath of targets) {

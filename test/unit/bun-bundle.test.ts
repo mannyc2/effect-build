@@ -42,17 +42,18 @@ describeUnix("Bun Bundle", () => {
   it("bundles multiple entrypoints with hashed, sorted files", async () => {
     const outdir = join(root, "dist-hashed");
     const exit = await run(
-      BunBundle.directWrite({ entrypoints: ["src/main.ts", "src/worker.ts"], outdir }),
+      BunBundle.bundle({ entrypoints: ["src/main.ts", "src/worker.ts"], outdir }),
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value._tag).toBe("DirectWriteOutcome");
-      expect(exit.value.outdir).toBe(await realpath(outdir));
-      expect(exit.value.tool).toMatchObject({ name: "bun", version: "1.3.14" });
-      expect(exit.value.files.map((file) => file.relativePath)).toEqual(["main.js", "worker.js"]);
-      for (const file of exit.value.files) {
+      expect(exit.value._tag).toBe("Bundle");
+      expect(exit.value.outdir).toBe(outdir);
+      expect(exit.value.tool).toEqual({ name: "bun", version: "1.3.14" });
+      const files = exit.value.entries.filter((entry) => entry._tag === "File");
+      expect(files.map((file) => file.path)).toEqual([join(outdir, "main.js"), join(outdir, "worker.js")]);
+      for (const file of files) {
         expect(file.bytes).toBeGreaterThan(0);
-        expect(file.digest.value).toMatch(/^[0-9a-f]{64}$/);
+        expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
       }
     }
   });
@@ -60,7 +61,7 @@ describeUnix("Bun Bundle", () => {
   it("records split chunks and sourcemaps with mandatory digests", async () => {
     const outdir = join(root, "dist-split");
     const exit = await run(
-      BunBundle.directWrite({
+      BunBundle.bundle({
         entrypoints: ["src/main.ts"],
         outdir,
         splitting: true,
@@ -69,12 +70,13 @@ describeUnix("Bun Bundle", () => {
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value.files.map((file) => file.relativePath)).toEqual([
-        "chunks/chunk-fake.js",
-        "main.js",
-        "main.js.map",
+      const files = exit.value.entries.filter((entry) => entry._tag === "File");
+      expect(files.map((file) => file.path)).toEqual([
+        join(outdir, "chunks", "chunk-fake.js"),
+        join(outdir, "main.js"),
+        join(outdir, "main.js.map"),
       ]);
-      expect(exit.value.files.every((file) => file.digest.value.length === 64)).toBe(true);
+      expect(files.every((file) => /^[0-9a-f]{64}$/.test(file.sha256))).toBe(true);
     }
   });
 
@@ -86,7 +88,7 @@ describeUnix("Bun Bundle", () => {
     process.env.FAKE_BUN_LOG = log;
     try {
       const exit = await run(
-        BunBundle.directWrite({
+        BunBundle.bundle({
           entrypoints: ["main.ts"],
           outdir: "dist",
           cwd: root,
@@ -98,7 +100,7 @@ describeUnix("Bun Bundle", () => {
         }),
       );
       expect(Exit.isSuccess(exit)).toBe(true);
-      if (Exit.isSuccess(exit)) expect(exit.value.outdir).toBe(await realpath(join(root, "dist")));
+      if (Exit.isSuccess(exit)) expect(exit.value.outdir).toBe(join(root, "dist"));
       const lines = (await readFile(log, "utf8")).trim().split("\n");
       const invocation = JSON.parse(lines.at(-1) ?? "") as { readonly argv: readonly string[]; readonly cwd: string };
       expect(invocation.cwd).toBe(await realpath(root));
@@ -118,14 +120,15 @@ describeUnix("Bun Bundle", () => {
 
   it("surfaces tool failures and empty production as typed errors", async () => {
     process.env.FAKE_BUN_MODE = "fail";
-    const failed = await run(BunBundle.directWrite({ entrypoints: ["main.ts"], outdir: join(root, "dist-fail") }));
+    const failed = await run(BunBundle.bundle({ entrypoints: ["main.ts"], outdir: join(root, "dist-fail") }));
     const failure = failureOf(failed) as { readonly _tag: string; readonly exitCode: number };
     expect(failure._tag).toBe("ToolFailed");
     expect(failure.exitCode).toBe(17);
     process.env.FAKE_BUN_MODE = "missing";
-    const missing = await run(BunBundle.directWrite({ entrypoints: ["main.ts"], outdir: join(root, "dist-missing") }));
+    const missing = await run(BunBundle.bundle({ entrypoints: ["main.ts"], outdir: join(root, "dist-missing") }));
     const missingFailure = failureOf(missing) as { readonly _tag: string; readonly reason: string };
-    expect(missingFailure._tag).toBe("ArtifactInvalid");
+    expect(missingFailure._tag).toBe("PublishFailed");
+    expect(missingFailure.reason).toContain("did not produce any entries");
     delete process.env.FAKE_BUN_MODE;
   });
 });

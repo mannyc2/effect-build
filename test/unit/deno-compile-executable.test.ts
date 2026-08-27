@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as DenoCompile from "../../packages/effect-build-deno/src/CompileExecutable.js";
-import { hostTarget } from "../host-target.js";
+import * as Target from "../../packages/effect-build/src/Target.js";
 
 const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-deno.mjs", import.meta.url)));
 let root = "";
@@ -42,7 +42,6 @@ const input = (name: string, overrides: Partial<DenoCompile.CompileExecutableInp
   ({
     entrypoint: "main.ts",
     outfile: join(root, name),
-    target: hostTarget() as DenoCompile.Target,
     ...overrides,
   }) as DenoCompile.CompileExecutableInput;
 
@@ -70,8 +69,8 @@ describeUnix("Deno CompileExecutable", () => {
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
       expect(exit.value._tag).toBe("Executable");
-      expect(exit.value.tool).toMatchObject({ name: "deno", version: "2.9.3" });
-      expect(exit.value.target).toBe(hostTarget());
+      expect(exit.value.tool).toEqual({ name: "deno", version: "2.9.3" });
+      expect(exit.value.target).toBe(Target.host());
       expect(exit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
     }
   });

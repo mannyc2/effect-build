@@ -1,46 +1,25 @@
 # effect-build
 
-effect-build expresses native build tools as composable Effect programs. This
-integration branch provides Bun, Deno, esbuild, raw Node SEA, Rolldown, and the
-new direct-Developer-ID Apple distribution family with typed errors and scoped
-resource ownership.
+Turn an Effect application into finalized release artifacts. effect-build
+wraps compilers, archivers, package builders, signing tools, notarization,
+and SBOM generation as Effect programs: typed errors, scoped child processes
+and native handles, interruption that kills the owned tool, and artifacts
+that carry their final byte length and digest.
 
-The approved v0.5 target remains a coordinated hard cut. Its durable contract is
-[`effect-build/v0.5-contract@1`](docs/v0.5-contract.md): keep the native lanes,
-add one sealed Node-main profile and one static-browser-application profile,
-publish immutable directory generations, and require exact evidence. The Apple
-source/API track is implemented locally; its credential-backed and clean-host
-certification is not earned. The core hard cut, portable author boundary, and
-Bun/esbuild/Rolldown profile adapters and the Node SEA public hard cut are
-implemented and frozen. Target-finalizer evidence, compatibility certification,
-and the recoverable release coordinator remain.
-
-The private Node target-finalizer implementation is present in `ci.yml` behind
-an explicit `workflow_dispatch` boolean. It authenticates the pinned Node
-manifest, signature, signer key, and archives; constructs all 108 frozen
-coordinates; admits only the exact target host before download; and returns
-structurally inspected, executed, digest-bound receipts. The matrix has not been
-dispatched, so those receipts are implemented capability, not earned evidence.
-
-The 84 non-Apple compatibility coordinates are likewise materialized behind a
-separate manual dispatch: 27 provider/browser/host cells with Playwright 1.62.1
-and revisions 1234/1538/2336, 15 provider-native tool/host cells, and 42 strict
-packed-consumer package/Effect/host cells. Their aggregation reauthenticates the
-successful jobs and exact receipt artifacts. Local sampling has executed all
-three browser providers in Chromium and a packed oldest-Effect coordinate; the
-full hosted matrix has not run and is not claimed as evidence.
-
-| Package                 | Current candidate                                                                    | v0.5 target                                                               |
-| ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `effect-build`          | canonical artifacts and role-specific Author/Profile subpaths; no public `Toolchain` | same frozen API with exact compatibility evidence                         |
-| `effect-build-apple`    | selected direct Developer ID operation family                                        | same API plus complete credential-backed and clean-host evidence          |
-| `effect-build-bun`      | native operations plus exact-1.3.14 Node-main and browser profile adapters           | same API with exact compatibility evidence                                |
-| `effect-build-deno`     | executable compile and native directory bundle                                       | exact 2.9.5 native evidence; no portable Profile until metadata proves it |
-| `effect-build-esbuild`  | bounded native build/context/watch plus Node-main and browser profiles               | same API with exact compatibility evidence                                |
-| `effect-build-node-sea` | honest `Raw` lane plus evidence-only `NodeMainExecutable` types                      | same API plus complete authenticated target-finalizer evidence            |
-| `effect-build-rolldown` | bounded native build/watch plus Node-main and browser profiles                       | same API with exact compatibility evidence                                |
-
-The current executable API remains usable while the cut is implemented:
+| Package                 | Operations                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `effect-build`          | `Target`, finalized `Artifact` values, `BuildError`, and the `Toolchain` process/publish kernel |
+| `effect-build-apple`    | `.app`, UDZO DMG, flat pkg, Developer ID signing, notary submit/observe, staple, assess         |
+| `effect-build-archives` | Deterministic ZIP/tar.gz plus source archives projected from one exact Git tree                 |
+| `effect-build-bun`      | Native executables and browser/bun/node bundles                                                 |
+| `effect-build-deno`     | Native executables, typed permissions, and browser/deno bundles                                 |
+| `effect-build-esbuild`  | Build/transform/analyze, scoped contexts, and watch streams                                     |
+| `effect-build-nfpm`     | deb, rpm, apk, Arch Linux, and unsigned MSIX packages through nFPM 2.47.x                       |
+| `effect-build-node-sea` | Direct Node `--build-sea` single executables                                                    |
+| `effect-build-python`   | Wheel and sdist production through one uv 0.12.x PEP 517 frontend                               |
+| `effect-build-rolldown` | Scoped in-process bundles and watcher-event streams                                             |
+| `effect-build-sbom`     | SPDX JSON 2.3 and CycloneDX JSON 1.6 generation through Syft 1.50.x                             |
+| `effect-build-windows`  | SHA-256/RFC 3161 Authenticode signing and verification for MSIX                                 |
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
@@ -57,42 +36,51 @@ const artifact = await Effect.runPromise(
     Effect.provide(NodeServices.layer),
   ),
 );
+// { _tag: "Executable", path, bytes, target, tool: { name: "bun", version }, sha256 }
 ```
 
-Current Bun and Deno bundle publication is incremental: a failure can leave a
-mixed destination. The v0.5 durable path instead observes a complete
-`TreeSnapshot`, seals an immutable content-addressed `DirectoryGeneration`, and
-atomically changes only `CurrentGeneration`. A native `target: "browser"` or
-`platform: "browser"` selector remains provider-specific and does not produce a
-portable `StaticBrowserApplication`.
+Layers resolve each tool once (explicit path or one PATH walk — never an
+install, retry, or fallback), probe its version, and warn once if it is
+outside the CI-tested range; operations then run with the tool's native
+options and surface its native diagnostics as typed errors. Outputs are
+staged privately and committed with one atomic rename under a single
+release-machine writer. A pending interruption is reasserted after an
+indivisible commit, so callers must observe/adopt or deliberately rebuild a
+complete destination rather than infer non-commit.
 
-Hard interruption is a portable-profile guarantee only for schema-serializable
-work inside an owned OS process tree. Native callbacks, plugins, contexts, and
-watchers retain their provider-specific lifecycle semantics.
+Bundles and ordinary release files work the same way. `bun build` and `deno bundle` publish an
+`Artifact.Bundle` describing every committed file, and esbuild's watch mode
+is an Effect `Stream` whose end stops the watcher:
 
-Apple distribution is a separate closed provider family, not a portable build
-profile or generic deployer. Node SEA owns only the ad-hoc signature needed to
-make its mutated Mach-O runnable. `effect-build-apple` owns Developer ID
-Application/Installer distinctions, explicit hardened-runtime and entitlement
-policy, `.app`/ZIP/DMG/flat-PKG forms, notarization, stapling, and digest-bound
-assessment over its own digest-authenticated `Artifact` type. The initial flat
-PKG is deliberately one authenticated `.app` component with explicit
-identifier, version, and install location, built by `pkgbuild` with a mandatory
-timestamp under an exact Developer ID Installer identity and verified by
-`pkgutil`. `productbuild`, `productsign`, multi-component packages, and installer
-scripts require a later API. Mac App Store and universal-binary construction
-are outside v0.5. Its selected operation/service inventory and non-Notary
-input/result structures are implemented and asserted by the public-surface
-snapshot. Exact Notary JSON/status decoding and detailed receipt and evidence
-shapes remain provisional through the credential-backed A7 fixtures. Local
-implementation evidence does not earn A0, A1, or A9 without retained exact-head
-receipts; A2–A8 and all eight clean-host G coordinates remain unearned. The
-release is blocked until its credential-backed macOS x64 and arm64 matrix and
-clean-host Gatekeeper exercises pass. See
-[Apple distribution](docs/apple-distribution.md).
+```ts
+import * as Bundle from "effect-build-bun/Bundle";
+import * as Watch from "effect-build-esbuild/Watch";
 
-The exact current exports are generated in
-[`tooling/public-api.json`](tooling/public-api.json). Frozen target subpaths,
-profile IDs, canonical generation bytes, lifecycle bounds, exact evidence
-points, and the fixed-seven manual release protocol live in
-[`tooling/v05-contract.json`](tooling/v05-contract.json).
+Bundle.bundle({ entrypoints: ["src/main.ts"], outdir: "dist", target: "browser", splitting: true });
+// { _tag: "Bundle", outdir, entries: [
+//   { _tag: "File", path, bytes, mode, sha256 },
+//   { _tag: "Directory", path, mode },
+//   { _tag: "SymbolicLink", path, target },
+// ], tool }
+
+Watch.changes({ entryPoints: ["src/main.ts"], bundle: true, write: false }).pipe(
+  Stream.runForEach((result) => serveFromMemory(result.outputFiles)),
+);
+```
+
+Cross-compile by passing `target`; fan out with plain Effect combinators:
+
+```ts
+Effect.forEach(
+  targets,
+  (target) => Effect.exit(CompileExecutable.compileExecutable({ entrypoint, outfile: `dist/app-${target}`, target })),
+  {
+    concurrency: 2,
+  },
+);
+```
+
+Runnable programs live in [`examples/`](examples). The exact public surface
+is asserted against [`tooling/public-api.json`](tooling/public-api.json);
+all twelve packages are packed, installed, typechecked, imported, and run by
+the clean-consumer gate. Docs are in [`docs/`](docs/README.md).

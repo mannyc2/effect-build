@@ -3,21 +3,8 @@ name: effect-build
 on:
   push: {}
   pull_request: {}
-  workflow_dispatch:
-    inputs:
-      run_node_target_matrix:
-        description: Run all 108 private Node target-finalizer coordinates
-        required: true
-        type: boolean
-        default: false
-      run_compatibility_matrix:
-        description: Run all 84 non-Apple compatibility coordinates
-        required: true
-        type: boolean
-        default: false
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
@@ -83,7 +70,7 @@ jobs:
           bun-version: 1.3.14
       - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
         with:
-          deno-version: 2.9.5
+          deno-version: v2.4.0
       - run: bun install --frozen-lockfile
       - run: bun run test:integration:deno
 
@@ -108,42 +95,25 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run test:integration:node-sea
 
-  integration-apple-local:
-    name: Real Apple tools (non-credentialed)
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24.14.1
-          package-manager-cache: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: 1.3.14
-      - run: bun install --frozen-lockfile
-      - run: bun run test:integration:apple
-
   target-cells:
-    name: Target ${{ matrix.compiler }}/${{ matrix.target }}
+    name: Target ${{ matrix.compiler }}/${{ matrix.target }} / build+run
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { compiler: bun, target: macos-x64 }
-          - { compiler: bun, target: macos-aarch64 }
-          - { compiler: bun, target: linux-x64-gnu }
-          - { compiler: bun, target: linux-x64-musl }
-          - { compiler: bun, target: linux-aarch64-gnu }
-          - { compiler: bun, target: windows-x64 }
-          - { compiler: deno, target: macos-x64 }
-          - { compiler: deno, target: macos-aarch64 }
-          - { compiler: deno, target: linux-x64-gnu }
-          - { compiler: deno, target: linux-aarch64-gnu }
-          - { compiler: deno, target: windows-x64 }
-          - { compiler: deno, target: windows-aarch64 }
-    runs-on: ubuntu-24.04
+          - { compiler: bun, target: macos-x64, os: macos-15-intel, execution: native }
+          - { compiler: bun, target: macos-aarch64, os: macos-15, execution: native }
+          - { compiler: bun, target: linux-x64-gnu, os: ubuntu-24.04, execution: native }
+          - { compiler: bun, target: linux-x64-musl, os: ubuntu-24.04, execution: alpine }
+          - { compiler: bun, target: linux-aarch64-gnu, os: ubuntu-24.04-arm, execution: native }
+          - { compiler: bun, target: windows-x64, os: windows-2025, execution: native }
+          - { compiler: deno, target: macos-x64, os: macos-15-intel, execution: native }
+          - { compiler: deno, target: macos-aarch64, os: macos-15, execution: native }
+          - { compiler: deno, target: linux-x64-gnu, os: ubuntu-24.04, execution: native }
+          - { compiler: deno, target: linux-aarch64-gnu, os: ubuntu-24.04-arm, execution: native }
+          - { compiler: deno, target: windows-x64, os: windows-2025, execution: native }
+          - { compiler: deno, target: windows-aarch64, os: windows-11-arm, execution: native }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -158,7 +128,7 @@ jobs:
       - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
         if: matrix.compiler == 'deno'
         with:
-          deno-version: 2.9.5
+          deno-version: v2.9.6
       - run: bun install --frozen-lockfile
       - name: Compile and validate the cell with independent oracles
         shell: bash
@@ -166,33 +136,19 @@ jobs:
           set -euo pipefail
           export EFFECT_BUILD_TARGET_COMPILER='${{ matrix.compiler }}'
           export EFFECT_BUILD_TARGET='${{ matrix.target }}'
-          export EFFECT_BUILD_BUN_BIN="$(command -v bun)"
+          export EFFECT_BUILD_TARGET_EXECUTION='${{ matrix.execution }}'
+          export EFFECT_BUILD_BUN_BIN="$(bun -e 'console.log(process.execPath)')"
           if [[ '${{ matrix.compiler }}' == 'deno' ]]; then
-            export EFFECT_BUILD_DENO_BIN="$(command -v deno)"
+            export EFFECT_BUILD_DENO_BIN="$(deno eval 'console.log(Deno.execPath())')"
+          fi
+          if [[ '${{ matrix.execution }}' == 'alpine' ]]; then
+            export EFFECT_BUILD_DOCKER_BIN="$(command -v docker)"
           fi
           bun run test:integration:target
 
-  node-main-construct:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_node_target_matrix
-    name: construct--node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction.token }}--to-${{ matrix.target }}
-    strategy:
-      fail-fast: false
-      max-parallel: 12
-      matrix:
-        producer: [bun-cli, esbuild-api, rolldown-api]
-        format: [commonjs, module]
-        construction:
-          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
-          - { token: macos-aarch64, runner: macos-15 }
-          - { token: windows-x64, runner: windows-2025 }
-        target:
-          - macos-x64
-          - macos-aarch64
-          - linux-x64-gnu
-          - linux-aarch64-gnu
-          - windows-x64
-          - windows-aarch64
-    runs-on: ${{ matrix.construction.runner }}
+  acceptance-archives:
+    name: Acceptance / deterministic archives and exact Git tree
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -204,324 +160,249 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
-      - name: Install GnuPG on macOS
-        if: runner.os == 'macOS'
-        run: brew install gnupg
-      - name: Install GnuPG on Windows
-        if: runner.os == 'Windows'
+      - run: bun install --frozen-lockfile
+      - name: Bind exact host tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EFFECT_BUILD_GIT_BIN=$(command -v git)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_UNZIP_BIN=$(command -v unzip)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_ZIPINFO_BIN=$(command -v zipinfo)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_TAR_BIN=$(command -v tar)" >> "$GITHUB_ENV"
+      - run: bun run acceptance:archives
+
+  acceptance-python:
+    name: Acceptance / uv 0.12.0 / ${{ matrix.backend }}
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [uv-build, poetry-core]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: 3.12.11
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Install checksum-verified uv 0.12.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv_bin="$(bash scripts/acceptance/install-unix-tool.sh uv "$RUNNER_TEMP/effect-build-tools")"
+          echo "EFFECT_BUILD_UV_BIN=$uv_bin" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_PYTHON_BIN=$(command -v python)" >> "$GITHUB_ENV"
+      - name: Build both backends and run independent wheel/sdist oracles
+        run: bun run acceptance:python -- -t "${{ matrix.backend }} fixture"
+
+  acceptance-nfpm-linux:
+    name: Acceptance / nFPM 2.47.0 / ${{ matrix.format }} lifecycle
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { format: deb, file: effect-build-acceptance.deb }
+          - { format: rpm, file: effect-build-acceptance.rpm }
+          - { format: apk, file: effect-build-acceptance.apk }
+          - { format: archlinux, file: effect-build-acceptance.pkg.tar.zst }
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Install checksum-verified nFPM 2.47.0 and bind the cell
+        shell: bash
+        run: |
+          set -euo pipefail
+          nfpm_bin="$(bash scripts/acceptance/install-unix-tool.sh nfpm "$RUNNER_TEMP/effect-build-tools")"
+          echo "EFFECT_BUILD_NFPM_BIN=$nfpm_bin" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_DOCKER_BIN=$(command -v docker)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_NFPM_FORMAT=${{ matrix.format }}" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_ACCEPTANCE_OUTDIR=$RUNNER_TEMP/effect-build-package" >> "$GITHUB_ENV"
+      - run: bun run acceptance:nfpm:linux
+      - name: Inspect, clean-install, execute, and remove in an immutable distribution image
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/acceptance/assert-linux-package.sh \
+            '${{ matrix.format }}' \
+            "$EFFECT_BUILD_ACCEPTANCE_OUTDIR/${{ matrix.file }}"
+
+  acceptance-sbom:
+    name: Acceptance / Syft 1.50.0 / SPDX and CycloneDX
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Install checksum-verified Syft 1.50.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          syft_bin="$(bash scripts/acceptance/install-unix-tool.sh syft "$RUNNER_TEMP/effect-build-tools")"
+          sbom_utility_bin="$(bash scripts/acceptance/install-unix-tool.sh sbom-utility "$RUNNER_TEMP/effect-build-tools")"
+          echo "EFFECT_BUILD_SYFT_BIN=$syft_bin" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_SBOM_UTILITY_BIN=$sbom_utility_bin" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_BASH_BIN=$(command -v bash)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_DOCKER_BIN=$(command -v docker)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_ACCEPTANCE_OUTDIR=$RUNNER_TEMP/effect-build-sbom" >> "$GITHUB_ENV"
+      - run: bun run acceptance:sbom
+
+  # This is deliberately credential-free AppBundle and direct-tool mechanics
+  # evidence. The Developer-ID-gated DMG/pkg release APIs, notarization, stapling,
+  # Gatekeeper, and clean-host distribution remain external acceptance.
+  acceptance-apple-native:
+    name: Acceptance / Apple credential-free mechanics / ${{ matrix.architecture }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, architecture: arm64 }
+          - { os: macos-15-intel, architecture: x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Bind exact Xcode and macOS native tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EFFECT_BUILD_CLANG_BIN=$(xcrun --find clang)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_PLUTIL_BIN=$(command -v plutil)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_LIPO_BIN=$(xcrun --find lipo)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_CODESIGN_BIN=$(xcrun --find codesign)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_HDIUTIL_BIN=$(command -v hdiutil)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_PKGBUILD_BIN=$(command -v pkgbuild)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_PRODUCTBUILD_BIN=$(command -v productbuild)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_PKGUTIL_BIN=$(command -v pkgutil)" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_XCODEBUILD_BIN=$(command -v xcodebuild)" >> "$GITHUB_ENV"
+          sdkroot="$(xcrun --sdk macosx --show-sdk-path)"
+          xcode_version="$(xcodebuild -version | awk '/^Xcode / { print $2 }')"
+          macos_version="$(sw_vers -productVersion)"
+          macos_build="$(sw_vers -buildVersion)"
+          test -d "$sdkroot"
+          test -n "$xcode_version"
+          test -n "$macos_version"
+          test -n "$macos_build"
+          echo "SDKROOT=$sdkroot" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_XCODE_VERSION=$xcode_version" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_APPLE_TOOL_VERSION=$macos_version+$macos_build" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_APPLE_HOST_ARCH=${{ matrix.architecture }}" >> "$GITHUB_ENV"
+      - run: bun run acceptance:apple
+
+  acceptance-windows-msix:
+    name: Acceptance / nFPM MSIX and test-certificate Authenticode
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Bind checksum-verified nFPM and exact Windows SDK tools
         shell: pwsh
-        run: choco install gnupg --no-progress -y
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - name: Authenticate exact builder and target base distributions
-        shell: bash
         run: |
-          set -euo pipefail
-          mkdir -p .node-finalizer/tools
-          node scripts/node-finalizer/verify-node-base.mjs \
-            --target '${{ matrix.construction.token }}' \
-            --output '.node-finalizer/tools/builder${{ startsWith(matrix.construction.token, 'windows-') && '.exe' || '' }}' \
-            > .node-finalizer/builder.json
-          node scripts/node-finalizer/verify-node-base.mjs \
-            --target '${{ matrix.target }}' \
-            --output '.node-finalizer/tools/base${{ startsWith(matrix.target, 'windows-') && '.exe' || '' }}' \
-            > .node-finalizer/base.json
-      - name: Produce, seal, and construct the private coordinate
-        shell: bash
+          $ErrorActionPreference = "Stop"
+          $nfpm = & scripts/acceptance/install-windows-nfpm.ps1 -Destination "$env:RUNNER_TEMP\effect-build-tools"
+          $sdk = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.26100.0\x64"
+          $signTool = Join-Path $sdk "signtool.exe"
+          $makeAppx = Join-Path $sdk "makeappx.exe"
+          foreach ($tool in @($nfpm, $signTool, $makeAppx)) {
+            if (-not [System.IO.Path]::IsPathRooted($tool) -or -not (Test-Path -LiteralPath $tool -PathType Leaf)) {
+              throw "required acceptance tool is missing: $tool"
+            }
+          }
+          $signToolBanner = & $signTool /? 2>&1
+          if ($LASTEXITCODE -ne 0) { throw "SignTool /? failed: $($signToolBanner -join [Environment]::NewLine)" }
+          $signToolVersion = (Get-Item -LiteralPath $signTool).VersionInfo.FileVersionRaw.ToString()
+          if ($signToolVersion -notmatch '^10\.0\.26100\.[0-9]+$') {
+            throw "the exact Windows SDK SignTool file version is not 10.0.26100.x: $signToolVersion"
+          }
+          Write-Host "Bound Windows SDK SignTool $signToolVersion at $signTool"
+          "EFFECT_BUILD_NFPM_BIN=$nfpm" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EFFECT_BUILD_SIGNTOOL_BIN=$signTool" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EFFECT_BUILD_SIGNTOOL_VERSION=$signToolVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EFFECT_BUILD_MAKEAPPX_BIN=$makeAppx" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EFFECT_BUILD_ACCEPTANCE_OUTDIR=$env:RUNNER_TEMP\effect-build-msix" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build the Windows x64 fixture executable
+        shell: pwsh
         run: |
-          set -euo pipefail
-          node scripts/node-finalizer/construct.mjs \
-            --producer '${{ matrix.producer }}' \
-            --format '${{ matrix.format }}' \
-            --construction-host '${{ matrix.construction.token }}' \
-            --target '${{ matrix.target }}' \
-            --builder "$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('.node-finalizer/builder.json')).executable)")" \
-            --base "$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('.node-finalizer/base.json')).executable)")" \
-            --output .node-finalizer/constructed
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction.token }}--to-${{ matrix.target }}--constructed
-          path: |
-            .node-finalizer/constructed/*--constructed
-            .node-finalizer/constructed/*--constructed.exe
-            .node-finalizer/constructed/*--assembler-offer.json
-          if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
-
-  node-main-finalize:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_node_target_matrix
-    needs: node-main-construct
-    name: finalize--node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}
-    strategy:
-      fail-fast: false
-      max-parallel: 12
-      matrix:
-        producer: [bun-cli, esbuild-api, rolldown-api]
-        format: [commonjs, module]
-        construction_host: [linux-x64-gnu, macos-aarch64, windows-x64]
-        target:
-          - { token: macos-x64, runner: macos-15-intel }
-          - { token: macos-aarch64, runner: macos-15 }
-          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
-          - { token: linux-aarch64-gnu, runner: ubuntu-24.04-arm }
-          - { token: windows-x64, runner: windows-2025 }
-          - { token: windows-aarch64, runner: windows-11-arm }
-    runs-on: ${{ matrix.target.runner }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24.14.1
-          package-manager-cache: false
-      - name: Authenticate input, finalize, inspect, and execute on the exact target
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+          $ErrorActionPreference = "Stop"
+          $executable = "$env:RUNNER_TEMP\effect-build-acceptance.exe"
+          bun build test/integration/fixtures/windows-cli.ts --compile --outfile $executable
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+            throw "Bun did not produce the Windows acceptance executable"
+          }
+          "EFFECT_BUILD_WINDOWS_EXE=$executable" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Create and trust a runner-local mechanics-only certificate
+        shell: pwsh
         run: |
-          set -euo pipefail
-          node scripts/node-finalizer/finalize.mjs \
-            --producer '${{ matrix.producer }}' \
-            --format '${{ matrix.format }}' \
-            --construction-host '${{ matrix.construction_host }}' \
-            --target '${{ matrix.target.token }}' \
-            --output .node-finalizer/finalized
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}--finalized
-          path: .node-finalizer/finalized/*--finalized${{ startsWith(matrix.target.token, 'windows-') && '.exe' || '' }}
-          if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
-      - name: Bind authoritative output artifact into the canonical receipt
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+          $ErrorActionPreference = "Stop"
+          $password = "effect-build-acceptance-only"
+          $pfx = "$env:RUNNER_TEMP\effect-build-acceptance.pfx"
+          $thumbprint = & scripts/acceptance/make-test-certificate.ps1 -OutFile $pfx -Password $password
+          "EFFECT_BUILD_TEST_PFX=$pfx" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EFFECT_BUILD_TEST_PFX_PASSWORD=$password" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EFFECT_BUILD_TEST_CERT_THUMBPRINT=$thumbprint" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EFFECT_BUILD_TIMESTAMP_URL=http://timestamp.digicert.com" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - run: bun run acceptance:windows
+      - name: MakeAppx, timestamp, clean-install, execute, and remove oracles
+        shell: pwsh
         run: |
-          set -euo pipefail
-          coordinate='node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}'
-          node scripts/node-finalizer/complete-receipt.mjs \
-            --producer '${{ matrix.producer }}' \
-            --format '${{ matrix.format }}' \
-            --construction-host '${{ matrix.construction_host }}' \
-            --target '${{ matrix.target.token }}' \
-            --pending ".node-finalizer/finalized/${coordinate}--pending.json" \
-            --request ".node-finalizer/finalized/${coordinate}--request.json" \
-            --output ".node-finalizer/receipt/${coordinate}--target-finalizer-receipt.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: node-main--${{ matrix.producer }}--${{ matrix.format }}--from-${{ matrix.construction_host }}--to-${{ matrix.target.token }}--receipt
-          path: .node-finalizer/receipt/*--target-finalizer-receipt.json
-          if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
-
-  node-main-aggregate:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_node_target_matrix
-    needs: node-main-finalize
-    name: Aggregate 108 Node target-finalizer receipts
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24.14.1
-          package-manager-cache: false
-      - name: Reauthenticate all jobs, wrappers, layouts, controls, and returned bytes
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/node-finalizer/aggregate.mjs node-main-target-finalizer-evidence.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: node-main-target-finalizer-evidence
-          path: node-main-target-finalizer-evidence.json
-          if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
-
-  browser-compatibility:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_compatibility_matrix
-    name: browser--${{ matrix.provider }}--${{ matrix.browser.token }}--${{ matrix.host.token }}
-    strategy:
-      fail-fast: false
-      max-parallel: 9
-      matrix:
-        provider: [bun-cli, esbuild-api, rolldown-api]
-        browser:
-          - { token: chromium@1234, engine: chromium, revision: '1234' }
-          - { token: firefox@1538, engine: firefox, revision: '1538' }
-          - { token: webkit@2336, engine: webkit, revision: '2336' }
-        host:
-          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
-          - { token: macos-aarch64, runner: macos-15 }
-          - { token: windows-x64, runner: windows-2025 }
-    runs-on: ${{ matrix.host.runner }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24.14.1
-          package-manager-cache: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: 1.3.14
-      - run: bun install --frozen-lockfile
-      - name: Install the exact browser revision and Linux system dependencies
-        if: runner.os == 'Linux'
-        run: bunx playwright install --with-deps '${{ matrix.browser.engine }}'
-      - name: Install the exact browser revision
-        if: runner.os != 'Linux'
-        run: bunx playwright install '${{ matrix.browser.engine }}'
-      - name: Build, serve, and execute the generation-qualified application
-        shell: bash
-        env:
-          EFFECT_BUILD_BROWSER_PROVIDER: ${{ matrix.provider }}
-          EFFECT_BUILD_BROWSER_ENGINE: ${{ matrix.browser.engine }}
-          EFFECT_BUILD_BROWSER_REVISION: ${{ matrix.browser.revision }}
-          EFFECT_BUILD_CERTIFICATION_HOST: ${{ matrix.host.token }}
+          scripts/acceptance/assert-windows-msix.ps1 `
+            -Unsigned "$env:EFFECT_BUILD_ACCEPTANCE_OUTDIR\effect-build-acceptance-unsigned.msix" `
+            -Signed "$env:EFFECT_BUILD_ACCEPTANCE_OUTDIR\effect-build-acceptance-signed.msix" `
+            -MakeAppx $env:EFFECT_BUILD_MAKEAPPX_BIN `
+            -SignTool $env:EFFECT_BUILD_SIGNTOOL_BIN `
+            -CertificateThumbprint $env:EFFECT_BUILD_TEST_CERT_THUMBPRINT
+      - name: Remove the runner-local test identity
+        if: always()
+        shell: pwsh
         run: |
-          set -euo pipefail
-          coordinate='browser--${{ matrix.provider }}--${{ matrix.browser.token }}--${{ matrix.host.token }}'
-          export EFFECT_BUILD_COMPAT_RECEIPT=".compat/${coordinate}.json"
-          bunx vitest run test/integration/static-browser-compatibility.test.ts
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: browser--${{ matrix.provider }}--${{ matrix.browser.token }}--${{ matrix.host.token }}--receipt
-          path: .compat/browser--${{ matrix.provider }}--${{ matrix.browser.token }}--${{ matrix.host.token }}.json
-          if-no-files-found: error
-          retention-days: 30
-
-  provider-native-compatibility:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_compatibility_matrix
-    name: native--${{ matrix.tool }}--${{ matrix.host.token }}
-    strategy:
-      fail-fast: false
-      matrix:
-        tool: [bun@1.3.14, deno@2.9.5, node@26.7.0, esbuild@0.28.2, rolldown@1.2.5]
-        host:
-          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
-          - { token: macos-aarch64, runner: macos-15 }
-          - { token: windows-x64, runner: windows-2025 }
-    runs-on: ${{ matrix.host.runner }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: ${{ matrix.tool == 'node@26.7.0' && '26.7.0' || '24.14.1' }}
-          package-manager-cache: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: 1.3.14
-      - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
-        if: matrix.tool == 'deno@2.9.5'
-        with:
-          deno-version: 2.9.5
-      - run: bun install --frozen-lockfile
-      - name: Execute the exact provider-native public contract
-        shell: bash
-        env:
-          TOOL_CELL: ${{ matrix.tool }}
-          CERTIFICATION_HOST: ${{ matrix.host.token }}
-        run: |
-          set -euo pipefail
-          case "$TOOL_CELL" in
-            bun@1.3.14) bun run test:integration:bun ;;
-            deno@2.9.5) bun run test:integration:deno ;;
-            node@26.7.0) bun run test:integration:node-sea ;;
-            esbuild@0.28.2) bunx vitest run test/unit/esbuild-build.test.ts test/unit/esbuild-context.test.ts test/unit/esbuild-watch.test.ts ;;
-            rolldown@1.2.5) bunx vitest run test/unit/rolldown.test.ts ;;
-            *) exit 2 ;;
-          esac
-          coordinate="native--${TOOL_CELL}--${CERTIFICATION_HOST}"
-          mkdir -p .compat
-          TOOL_CELL="$TOOL_CELL" CERTIFICATION_HOST="$CERTIFICATION_HOST" RECEIPT=".compat/${coordinate}.json" node --input-type=module -e \
-            'import { writeFileSync } from "node:fs"; writeFileSync(process.env.RECEIPT, JSON.stringify({ toolCell: process.env.TOOL_CELL, certificationHost: process.env.CERTIFICATION_HOST }) + "\n", { flag: "wx" })'
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: native--${{ matrix.tool }}--${{ matrix.host.token }}--receipt
-          path: .compat/native--${{ matrix.tool }}--${{ matrix.host.token }}.json
-          if-no-files-found: error
-          retention-days: 30
-
-  packed-consumer-compatibility:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_compatibility_matrix
-    name: packed--${{ matrix.package }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}
-    strategy:
-      fail-fast: false
-      max-parallel: 12
-      matrix:
-        package:
-          - effect-build
-          - effect-build-apple
-          - effect-build-bun
-          - effect-build-deno
-          - effect-build-esbuild
-          - effect-build-node-sea
-          - effect-build-rolldown
-        effect: [4.0.0-beta.104, 4.0.0-rc.108]
-        host:
-          - { token: linux-x64-gnu, runner: ubuntu-24.04 }
-          - { token: macos-aarch64, runner: macos-15 }
-          - { token: windows-x64, runner: windows-2025 }
-    runs-on: ${{ matrix.host.runner }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24.14.1
-          package-manager-cache: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: 1.3.14
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - name: Pack once and install the exact candidate coordinate with strict peers
-        shell: bash
-        run: |
-          set -euo pipefail
-          coordinate='packed--${{ matrix.package }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}'
-          node scripts/test-packed-coordinate.mjs \
-            --package '${{ matrix.package }}' \
-            --effect '${{ matrix.effect }}' \
-            --host '${{ matrix.host.token }}' \
-            --receipt ".compat/${coordinate}.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: packed--${{ matrix.package }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}--receipt
-          path: .compat/packed--${{ matrix.package }}--effect-${{ matrix.effect }}--${{ matrix.host.token }}.json
-          if-no-files-found: error
-          retention-days: 30
-
-  compatibility-aggregate:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_compatibility_matrix
-    needs: [browser-compatibility, provider-native-compatibility, packed-consumer-compatibility]
-    name: Aggregate 84 non-Apple compatibility receipts
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24.14.1
-          package-manager-cache: false
-      - name: Reauthenticate every coordinate job, wrapper, layout, and receipt
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/aggregate-compatibility.mjs compatibility-evidence.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: compatibility-evidence
-          path: compatibility-evidence.json
-          if-no-files-found: error
-          retention-days: 30
+          if ($env:EFFECT_BUILD_TEST_CERT_THUMBPRINT) {
+            Remove-Item "Cert:\CurrentUser\My\$env:EFFECT_BUILD_TEST_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+            Remove-Item "Cert:\LocalMachine\TrustedPeople\$env:EFFECT_BUILD_TEST_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+          }
+          if ($env:EFFECT_BUILD_TEST_PFX) {
+            Remove-Item -LiteralPath $env:EFFECT_BUILD_TEST_PFX -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath ([System.IO.Path]::ChangeExtension($env:EFFECT_BUILD_TEST_PFX, ".cer")) -Force -ErrorAction SilentlyContinue
+          }
