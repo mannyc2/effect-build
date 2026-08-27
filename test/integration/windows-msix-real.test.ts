@@ -159,7 +159,7 @@ describe("real nFPM MSIX and Windows SDK Authenticode mechanics", () => {
           descriptionUrl: "https://github.com/mannyc2/effect-build",
         }),
       ).pipe(
-        Effect.provide(Sign.layer({ executable: signTool }).pipe(Layer.provide(credential))),
+        Effect.provide(Sign.layer({ executable: signTool, version: signToolVersion }).pipe(Layer.provide(credential))),
         Effect.provide(NodeServices.layer),
       ),
     );

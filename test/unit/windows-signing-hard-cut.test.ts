@@ -3,7 +3,7 @@ import { Cause, Effect, Exit, Layer, Redacted, Schema } from "effect";
 import { createHash } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as Sign from "../../packages/effect-build-windows/src/SignMsix.js";
@@ -154,7 +154,8 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
       "/p",
       "pfx-local-secret",
     ]);
-    expect(sign.at(-1)).toContain("/.effect-build-");
+    const stagedPath = sign.at(-1) ?? "";
+    expect(basename(dirname(stagedPath))).toMatch(/^\.effect-build-/);
     expect(invocations[2]?.argv).toEqual([
       "verify",
       "/pa",
@@ -296,6 +297,23 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
       reason: "source and output must both use the .msix extension",
     });
     expect(await absent(destination)).toBe(true);
+  });
+
+  it("uses an externally validated SDK file version when SignTool help omits it", async () => {
+    const source = await unsigned("explicit-version");
+    const log = join(root, "explicit-version.log");
+    process.env.FAKE_SIGNTOOL_LOG = log;
+    const exit = await run(
+      Sign.signMsix(input(source, "explicit-version.msix")),
+      pfx(),
+      { executable, version: "10.0.26100.8249" },
+    );
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) expect(exit.value.tool.version).toBe("10.0.26100.8249");
+    const invocations = await logLines(log);
+    expect(invocations.filter(({ argv }) => argv[0] === "/?")).toHaveLength(0);
+    expect(invocations.filter(({ argv }) => argv[0] === "sign")).toHaveLength(1);
+    expect(invocations.filter(({ argv }) => argv[0] === "verify")).toHaveLength(1);
   });
 
   it("probes once, allows an untested SDK with a warning, and always hashes output", async () => {

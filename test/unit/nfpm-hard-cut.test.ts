@@ -3,7 +3,7 @@ import { Cause, Effect, Exit, Schema } from "effect";
 import { createHash } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as Nfpm from "../../packages/effect-build-nfpm/src/Package.js";
@@ -178,17 +178,25 @@ describe.sequential("nFPM hard-cut package operations", () => {
         "package",
         "--config",
       ]);
-      expect(packageArgv[2]).toContain("/.effect-build-");
-      expect(packageArgv[2]?.endsWith("/nfpm.json")).toBe(true);
+      const configPath = packageArgv[2] ?? "";
+      expect(basename(dirname(configPath))).toMatch(/^\.effect-build-/);
+      expect(basename(configPath)).toBe("nfpm.json");
       expect(packageArgv.slice(3, 5)).toEqual([
         "--packager",
         format,
       ]);
       expect(packageArgv[5]).toBe("--target");
-      expect(packageArgv[6]).toContain(`/.effect-build-`);
-      expect(packageArgv[6]?.endsWith(name)).toBe(true);
+      const targetPath = packageArgv[6] ?? "";
+      expect(basename(dirname(targetPath))).toMatch(/^\.effect-build-/);
+      expect(basename(targetPath)).toBe(name);
       expect(invocations[1]?.marker).toBe("preserved");
       const configuration = invocations[1]?.configuration;
+      const contentSource = (
+        configuration?.contents as ReadonlyArray<{ readonly src?: string }> | undefined
+      )?.[0]?.src ?? "";
+      expect(basename(contentSource)).toBe("0");
+      expect(basename(dirname(contentSource))).toBe("inputs");
+      expect(basename(dirname(dirname(contentSource)))).toMatch(/^\.effect-build-/);
       expect(configuration).toMatchObject({
         name: "fixture-cli",
         version: "1.2.3",
@@ -200,7 +208,6 @@ describe.sequential("nFPM hard-cut package operations", () => {
         depends: ["ca-certificates"],
         release: "1",
         contents: [{
-          src: expect.stringMatching(/\/\.effect-build-[^/]+\/inputs\/0$/),
           dst: "/usr/bin/fixture-cli",
           type: "file",
           expand: false,

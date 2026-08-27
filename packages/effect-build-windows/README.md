@@ -28,7 +28,10 @@ const artifact = await Effect.runPromise(
     }),
   ).pipe(
     Effect.provide(
-      SignMsix.layer({ executable: "C:/Windows Kits/signtool.exe" }).pipe(
+      SignMsix.layer({
+        executable: "C:/Windows Kits/signtool.exe",
+        version: "10.0.26100.0", // validated from the executable's FileVersionRaw
+      }).pipe(
         Layer.provide(credential),
       ),
     ),
@@ -39,6 +42,8 @@ const artifact = await Effect.runPromise(
 
 The alternative certificate-store layer selects one certificate by exact
 thumbprint and supports the native store name and machine-store switches.
+When the installed SDK's `signtool /?` output omits its version, bind an
+externally validated executable file version with the layer's `version` option.
 The unsigned input is re-verified against its finalized byte identity before
 SignTool receives a private copy. PFX paths/passwords and certificate-store coordinates remain process-local
 and are scrubbed from typed tool diagnostics. The integration never installs,

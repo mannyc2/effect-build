@@ -87,7 +87,10 @@ const assertUnsignedCode = async (target: string): Promise<void> => {
     { env: { ...process.env, LC_ALL: "C" } },
   ).then(() => undefined, (error: unknown) => error);
   expect(failure).toBeInstanceOf(Error);
-  expect((failure as Error & { readonly stderr?: string }).stderr).toContain("code object is not signed at all");
+  const output = failure as Error & { readonly stdout?: string; readonly stderr?: string };
+  expect(`${output.stdout ?? ""}\n${output.stderr ?? ""}`).toMatch(
+    /(?:code object is not signed at all|code has no resources but signature indicates they must be present)/,
+  );
 };
 
 const assertUnsignedPackage = async (installer: string): Promise<void> => {

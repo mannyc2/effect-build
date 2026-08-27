@@ -25,7 +25,7 @@ export type _Sign = Assert<
   Same<typeof signed, Effect.Effect<Artifact.FileArtifact, Sign.SignMsixError, Sign.Signer>>
 >;
 
-const signerLayer = Sign.layer({ executable: "C:/Windows Kits/signtool.exe" });
+const signerLayer = Sign.layer({ executable: "C:/Windows Kits/signtool.exe", version: "10.0.26100.8249" });
 export type _LayerError = Assert<
   Same<LayerError<typeof signerLayer>, BuildError.ToolNotFound | BuildError.ToolFailed>
 >;

@@ -144,6 +144,8 @@ export const certificateStoreCredentialLayer = (
 export interface LayerOptions {
   /** Explicit SignTool executable; otherwise one deterministic PATH search. */
   readonly executable?: string;
+  /** Externally validated file version for SDKs whose SignTool help omits it. */
+  readonly version?: string;
 }
 
 export type SignMsixError = ArtifactVerificationFailed | ToolFailed | PublishFailed | SignMsixInputRejected;
@@ -220,12 +222,12 @@ const makeService = (
     const credentialService = yield* SigningCredential;
     const credential = yield* credentialService.arguments;
     const executable = yield* Toolchain.resolveExecutable({ name: "signtool", executable: options?.executable });
-    const version = yield* Toolchain.probeVersion({
+    const version = options?.version ?? (yield* Toolchain.probeVersion({
       tool: "signtool",
       executable,
       args: ["/?"],
       parse: parseSignToolVersion,
-    });
+    }));
     yield* Toolchain.warnIfUntested({ tool: "signtool", version, tested });
     const tool: Artifact.Tool = { name: "signtool", version };
     const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
