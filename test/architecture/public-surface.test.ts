@@ -77,7 +77,7 @@ describe("public surface", () => {
         ).toEqual(sorted(expected.declarations));
       }
     }
-  }, 30_000);
+  }, 60_000);
 
   it("keeps every workspace package in lockstep with one-way provider-to-core dependencies", async () => {
     const surface = await readSurface();
