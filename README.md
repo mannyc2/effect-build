@@ -82,7 +82,9 @@ must produce exact-head receipts before their gates close. In particular:
 
 - the Node-finalizer contract accounts for all 180 coordinates as 150
   applicable positive receipts plus 30 explicit Node 26.7.0 direct-SEA macOS
-  x64 rejections; its runnable matrix is derived from that contract and still
+  x64 rejections (2 observed `SIGSEGV` finalizations, 28 inferred from upstream
+  evidence, bound to the exact assembler cell and re-adjudicated when it
+  changes); its runnable matrix is derived from that contract and still
   requires an exact-head run;
 - provider lifecycle, host, offline, cross-target, and reproducibility gates
   remain open where the contract names them;

@@ -241,6 +241,68 @@ test("rejects invented Node target applicability and preserves all 180 accounted
   );
 });
 
+test("binds the macOS x64 rejection to the current assembler cell and forces re-adjudication on change", () => {
+  const contract = buildContract(inputs);
+  const rule = contract.evidenceControl.coordinateRules.nodeMainExecutable;
+  assert.deepEqual(
+    rule.explicitUnsupportedTargets.map(({ assemblerCell, mechanism, classification, revisitTrigger }) => ({
+      assemblerCell,
+      mechanism,
+      classification,
+      revisitTrigger,
+    })),
+    [{
+      assemblerCell: contract.evidenceControl.nodeMainExecutable.assemblerCell,
+      mechanism: "direct-node-build-sea",
+      classification: "upstream-blocked",
+      revisitTrigger: "assembler-cell-change",
+    }],
+  );
+
+  const stale = structuredClone(contract);
+  stale.evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedTargets[0].assemblerCell = "node@26.6.0";
+  assert.throws(() => validateContract(stale, inputs), /re-adjudicate it on the current assembler/u);
+});
+
+test("separates observed macOS x64 crashes from inferred rejections and refuses inference-only rejection", () => {
+  const contract = buildContract(inputs);
+  const rule = contract.evidenceControl.coordinateRules.nodeMainExecutable;
+  const observed = rule.explicitUnsupportedCoordinates.filter(({ observation }) =>
+    observation === "observed-sigsegv-on-exact-target-runner"
+  );
+  const inferred = rule.explicitUnsupportedCoordinates.filter(({ observation }) =>
+    observation === "inferred-from-upstream-evidence-not-executed"
+  );
+  assert.equal(observed.length, 2);
+  assert.equal(inferred.length, 28);
+  assert.equal(observed.length, rule.explicitUnsupportedTargets[0].observation.observedCoordinateCount);
+  assert.equal(inferred.length, rule.explicitUnsupportedTargets[0].observation.inferredCoordinateCount);
+  assert.deepEqual(
+    observed.map(({ producerGroup, mainFormat, constructionHost }) => ({ producerGroup, mainFormat, constructionHost })),
+    [
+      { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "linux-x64" },
+      { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "linux-arm64" },
+    ],
+  );
+  assert.ok(inferred.some(({ constructionHost }) => constructionHost === "macos-x64"));
+
+  const relabelled = structuredClone(contract);
+  relabelled.evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedCoordinates
+    .find(({ observation }) => observation === "observed-sigsegv-on-exact-target-runner")
+    .observation = "inferred-from-upstream-evidence-not-executed";
+  assert.throws(() => validateContract(relabelled, inputs), /observation accounting changed/u);
+
+  const inferenceOnly = structuredClone(contract);
+  const inferenceOnlyRule = inferenceOnly.evidenceControl.coordinateRules.nodeMainExecutable;
+  for (const coordinate of inferenceOnlyRule.explicitUnsupportedCoordinates) {
+    coordinate.observation = "inferred-from-upstream-evidence-not-executed";
+  }
+  inferenceOnlyRule.explicitUnsupportedTargets[0].observation.observedCoordinates = [];
+  inferenceOnlyRule.explicitUnsupportedTargets[0].observation.observedCoordinateCount = 0;
+  inferenceOnlyRule.explicitUnsupportedTargets[0].observation.inferredCoordinateCount = 30;
+  assert.throws(() => validateContract(inferenceOnly, inputs), /no first-hand observed failure/u);
+});
+
 test("rejects weakened current directory-generation authority", () => {
   const changedActivation = structuredClone(inputs);
   changedActivation.policy.evidenceControl.directoryGeneration.activation = "replace-output-directory";

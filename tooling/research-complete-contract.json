@@ -32,7 +32,7 @@
     "sources": [
       {
         "path": "docs/v0.5-contract.md",
-        "sha256": "074f754d0b06ee4677a08a6983880ec7eab46c0d135fe53b4f847f6429ed9318"
+        "sha256": "178da88349f22cb9c6ad89cab8bfbff4ffd4b548284d139aaa7b29719597b83c"
       },
       {
         "path": "plans/039-establish-core-capability-boundaries.md",
@@ -112,7 +112,7 @@
       },
       {
         "path": "tooling/research-complete-policy.json",
-        "sha256": "672d7972d6745fc353538ae0e8a6a644b2bf080a9e93254947ff3b1e55499724"
+        "sha256": "2ac80d9c1bd4fd65b02419c42c99bd0cfd7a0ac310cd61817da004cc86580029"
       }
     ],
     "deterministicGeneration": true,
@@ -546,14 +546,42 @@
             "assemblerCell": "node@26.7.0",
             "mechanism": "direct-node-build-sea",
             "disposition": "rejected",
+            "classification": "upstream-blocked",
+            "revisitTrigger": "assembler-cell-change",
             "adjudicatedAt": "2026-08-26",
             "platformSupportObservation": "node-26.7.0-macos-x64-not-currently-supported",
             "observedFailure": "process-terminated-by-signal-SIGSEGV",
             "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": {
+              "workflowRunId": "32925986358",
+              "workflowRunConclusion": "cancelled",
+              "observedCoordinateCount": 2,
+              "inferredCoordinateCount": 28,
+              "observedCoordinates": [
+                {
+                  "producerGroup": "bun-cli",
+                  "mainFormat": "commonjs",
+                  "constructionHost": "linux-x64",
+                  "jobId": "98055230349"
+                },
+                {
+                  "producerGroup": "bun-cli",
+                  "mainFormat": "commonjs",
+                  "constructionHost": "linux-arm64",
+                  "jobId": "98055230325"
+                }
+              ],
+              "unobservedReason": "run 32925986358 was cancelled before any other macos-x64 finalization executed, including every native from-macos-x64 coordinate",
+              "inferenceBasis": [
+                "https://nodejs.org/api/single-executable-applications.html#platform-support",
+                "https://github.com/nodejs/node/issues/65479"
+              ]
+            },
             "evidence": [
               "https://nodejs.org/api/single-executable-applications.html#platform-support",
               "https://github.com/nodejs/node/issues/65479",
-              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349"
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349",
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230325"
             ]
           }
         ],
@@ -569,7 +597,8 @@
             "constructionHost": "linux-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "observed-sigsegv-on-exact-target-runner"
           },
           {
             "producerGroup": "bun-cli",
@@ -577,7 +606,8 @@
             "constructionHost": "linux-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "observed-sigsegv-on-exact-target-runner"
           },
           {
             "producerGroup": "bun-cli",
@@ -585,7 +615,8 @@
             "constructionHost": "macos-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "bun-cli",
@@ -593,7 +624,8 @@
             "constructionHost": "macos-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "bun-cli",
@@ -601,7 +633,8 @@
             "constructionHost": "windows-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "bun-cli",
@@ -609,7 +642,8 @@
             "constructionHost": "linux-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "bun-cli",
@@ -617,7 +651,8 @@
             "constructionHost": "linux-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "bun-cli",
@@ -625,7 +660,8 @@
             "constructionHost": "macos-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "bun-cli",
@@ -633,7 +669,8 @@
             "constructionHost": "macos-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "bun-cli",
@@ -641,7 +678,8 @@
             "constructionHost": "windows-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -649,7 +687,8 @@
             "constructionHost": "linux-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -657,7 +696,8 @@
             "constructionHost": "linux-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -665,7 +705,8 @@
             "constructionHost": "macos-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -673,7 +714,8 @@
             "constructionHost": "macos-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -681,7 +723,8 @@
             "constructionHost": "windows-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -689,7 +732,8 @@
             "constructionHost": "linux-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -697,7 +741,8 @@
             "constructionHost": "linux-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -705,7 +750,8 @@
             "constructionHost": "macos-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -713,7 +759,8 @@
             "constructionHost": "macos-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "esbuild-api",
@@ -721,7 +768,8 @@
             "constructionHost": "windows-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -729,7 +777,8 @@
             "constructionHost": "linux-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -737,7 +786,8 @@
             "constructionHost": "linux-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -745,7 +795,8 @@
             "constructionHost": "macos-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -753,7 +804,8 @@
             "constructionHost": "macos-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -761,7 +813,8 @@
             "constructionHost": "windows-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -769,7 +822,8 @@
             "constructionHost": "linux-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -777,7 +831,8 @@
             "constructionHost": "linux-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -785,7 +840,8 @@
             "constructionHost": "macos-arm64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -793,7 +849,8 @@
             "constructionHost": "macos-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           },
           {
             "producerGroup": "rolldown-api",
@@ -801,7 +858,8 @@
             "constructionHost": "windows-x64",
             "target": "macos-x64",
             "disposition": "rejected",
-            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv"
+            "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": "inferred-from-upstream-evidence-not-executed"
           }
         ]
       },

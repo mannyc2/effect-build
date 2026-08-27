@@ -183,19 +183,42 @@ const exactReleaseCandidatePublicNodeSeaEvidenceFields = [
   "executionExitCode",
   "executionStdoutSha256",
 ];
+const observedUnsupportedObservation = "observed-sigsegv-on-exact-target-runner";
+const inferredUnsupportedObservation = "inferred-from-upstream-evidence-not-executed";
+const unsupportedCoordinateKey = ({ producerGroup, mainFormat, constructionHost, target }) =>
+  `${producerGroup}\0${mainFormat}\0${constructionHost}\0${target}`;
 const exactNodeUnsupportedTargets = [{
   target: "macos-x64",
   assemblerCell: "node@26.7.0",
   mechanism: "direct-node-build-sea",
   disposition: "rejected",
+  classification: "upstream-blocked",
+  revisitTrigger: "assembler-cell-change",
   adjudicatedAt: "2026-08-26",
   platformSupportObservation: "node-26.7.0-macos-x64-not-currently-supported",
   observedFailure: "process-terminated-by-signal-SIGSEGV",
   reason: "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+  observation: {
+    workflowRunId: "32925986358",
+    workflowRunConclusion: "cancelled",
+    observedCoordinateCount: 2,
+    inferredCoordinateCount: 28,
+    observedCoordinates: [
+      { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "linux-x64", jobId: "98055230349" },
+      { producerGroup: "bun-cli", mainFormat: "commonjs", constructionHost: "linux-arm64", jobId: "98055230325" },
+    ],
+    unobservedReason:
+      "run 32925986358 was cancelled before any other macos-x64 finalization executed, including every native from-macos-x64 coordinate",
+    inferenceBasis: [
+      "https://nodejs.org/api/single-executable-applications.html#platform-support",
+      "https://github.com/nodejs/node/issues/65479",
+    ],
+  },
   evidence: [
     "https://nodejs.org/api/single-executable-applications.html#platform-support",
     "https://github.com/nodejs/node/issues/65479",
     "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349",
+    "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230325",
   ],
 }];
 // Freeze the complete policy-owned Apple schema without duplicating its runtime constants here.
@@ -625,18 +648,27 @@ export const buildContract = (inputs) => {
   const unsupportedByTarget = new Map(
     nodeRule.explicitUnsupportedTargets.map((entry) => [entry.target, entry]),
   );
+  const observedUnsupportedKeys = new Set(
+    nodeRule.explicitUnsupportedTargets.flatMap((entry) =>
+      (entry.observation?.observedCoordinates ?? []).map((observed) =>
+        unsupportedCoordinateKey({ ...observed, target: entry.target })
+      )
+    ),
+  );
   nodeRule.explicitUnsupportedCoordinates = nodeRule.axes.producerGroup.flatMap((producerGroup) =>
     nodeRule.axes.mainFormat.flatMap((mainFormat) =>
       nodeRule.axes.constructionHost.flatMap((constructionHost) =>
         nodeRule.axes.target.flatMap((target) => {
           const unsupported = unsupportedByTarget.get(target);
-          return unsupported === undefined ? [] : [{
-            producerGroup,
-            mainFormat,
-            constructionHost,
-            target,
+          if (unsupported === undefined) return [];
+          const coordinate = { producerGroup, mainFormat, constructionHost, target };
+          return [{
+            ...coordinate,
             disposition: unsupported.disposition,
             reason: unsupported.reason,
+            observation: observedUnsupportedKeys.has(unsupportedCoordinateKey(coordinate))
+              ? observedUnsupportedObservation
+              : inferredUnsupportedObservation,
           }];
         })
       )
@@ -977,6 +1009,61 @@ export const validateContract = (contract, inputs) => {
     throw new Error("Node finalizer targets differ from current target execution hosts");
   }
   const nodeRule = evidenceRules.nodeMainExecutable;
+  for (const unsupported of nodeRule.explicitUnsupportedTargets) {
+    if (unsupported.assemblerCell !== evidence.nodeMainExecutable.assemblerCell) {
+      throw new Error(
+        `Node unsupported target ${unsupported.target} was adjudicated against ${unsupported.assemblerCell}, not the current assembler cell ${evidence.nodeMainExecutable.assemblerCell}; re-adjudicate it on the current assembler before changing the cell`,
+      );
+    }
+    if (
+      unsupported.mechanism !== "direct-node-build-sea"
+      || unsupported.classification !== "upstream-blocked"
+      || unsupported.revisitTrigger !== "assembler-cell-change"
+    ) {
+      throw new Error(
+        `Node unsupported target ${unsupported.target} must be an upstream-blocked direct-SEA rejection revisited on assembler-cell change`,
+      );
+    }
+    const observation = unsupported.observation;
+    const coordinatesForTarget = nodeRule.explicitUnsupportedCoordinates.filter(({ target }) => target === unsupported.target);
+    const observed = coordinatesForTarget.filter((coordinate) => coordinate.observation === observedUnsupportedObservation);
+    const inferred = coordinatesForTarget.filter((coordinate) => coordinate.observation === inferredUnsupportedObservation);
+    if (observed.length === 0) {
+      throw new Error(
+        `Node unsupported target ${unsupported.target} has no first-hand observed failure; a rejection requires at least one executed crash receipt`,
+      );
+    }
+    if (
+      !/^\d+$/u.test(observation.workflowRunId)
+      || observed.length !== observation.observedCoordinateCount
+      || inferred.length !== observation.inferredCoordinateCount
+      || observed.length + inferred.length !== coordinatesForTarget.length
+      || observation.observedCoordinates.length !== observation.observedCoordinateCount
+    ) throw new Error(`Node unsupported target ${unsupported.target} observation accounting changed`);
+    requireText(observation.workflowRunConclusion, `${unsupported.target}.observation.workflowRunConclusion`);
+    requireText(observation.unobservedReason, `${unsupported.target}.observation.unobservedReason`);
+    unique(
+      observation.observedCoordinates.map((observedCoordinate) =>
+        unsupportedCoordinateKey({ ...observedCoordinate, target: unsupported.target })
+      ),
+      `${unsupported.target} observed coordinates`,
+    );
+    for (const observedCoordinate of observation.observedCoordinates) {
+      const jobUrl =
+        `https://github.com/mannyc2/effect-build/actions/runs/${observation.workflowRunId}/job/${observedCoordinate.jobId}`;
+      if (
+        !nodeRule.axes.producerGroup.includes(observedCoordinate.producerGroup)
+        || !nodeRule.axes.mainFormat.includes(observedCoordinate.mainFormat)
+        || !nodeRule.axes.constructionHost.includes(observedCoordinate.constructionHost)
+        || !/^\d+$/u.test(observedCoordinate.jobId)
+        || !unsupported.evidence.includes(jobUrl)
+      ) throw new Error(`Node unsupported target ${unsupported.target} cites an observed coordinate outside its evidence`);
+    }
+    if (
+      observation.inferenceBasis.length === 0
+      || !observation.inferenceBasis.every((reference) => unsupported.evidence.includes(reference))
+    ) throw new Error(`Node unsupported target ${unsupported.target} inference basis is not part of its evidence`);
+  }
   const unsupportedNodeCoordinateKeys = nodeRule.explicitUnsupportedCoordinates.map(
     ({ producerGroup, mainFormat, constructionHost, target }) =>
       `${producerGroup}\0${mainFormat}\0${constructionHost}\0${target}`,
@@ -1002,6 +1089,7 @@ export const validateContract = (contract, inputs) => {
       || coordinate.target !== "macos-x64"
       || coordinate.disposition !== "rejected"
       || coordinate.reason !== exactNodeUnsupportedTargets[0].reason
+      || ![observedUnsupportedObservation, inferredUnsupportedObservation].includes(coordinate.observation)
     ) throw new Error("Node unsupported coordinate is outside current evidence authority");
   }
   if (!sameJson(evidenceRules.packedConsumers.axes.package, exactFirstPartyPackages)) {
