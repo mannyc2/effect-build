@@ -12,9 +12,14 @@ describe("Apple certification trust boundary", () => {
       readonly jobs: Readonly<
         Record<string, {
           readonly environment?: string;
+          readonly needs?: string | ReadonlyArray<string>;
+          readonly outputs?: Readonly<Record<string, string>>;
           readonly steps?: ReadonlyArray<{
             readonly env?: Readonly<Record<string, string>>;
+            readonly id?: string;
             readonly run?: string;
+            readonly uses?: string;
+            readonly with?: Readonly<Record<string, string | boolean>>;
           }>;
         }>
       >;
@@ -25,17 +30,45 @@ describe("Apple certification trust boundary", () => {
       "EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER",
       "EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER_SHA256",
     ];
+    expect(workflow.jobs.admission?.outputs?.candidateSourceSha).toBe(
+      "${{ steps.candidate_source.outputs.sourceSha }}",
+    );
+    expect(workflow.jobs.admission?.steps?.find(({ id }) => id === "candidate_source")?.run).toContain(
+      "scripts/apple-certification/resolve-candidate-source.mjs",
+    );
     for (const name of ["distribution", "clean-host", "certification-cells", "aggregate"]) {
       const job = workflow.jobs[name];
       expect(job?.environment).toBe("apple-certification");
+      expect(Array.isArray(job?.needs) ? job.needs : [job?.needs]).toContain("admission");
+      const checkout = job?.steps?.find(({ uses }) => uses?.startsWith("actions/checkout@") === true);
+      expect(checkout?.with?.ref).toBe("${{ needs.admission.outputs.candidateSourceSha }}");
       const execution = job?.steps?.find(({ run }) => run?.includes("scripts/apple-certification/") === true);
       expect(execution).toBeDefined();
+      expect(execution?.env?.AUTHENTICATED_CANDIDATE_SOURCE_SHA).toBe(
+        "${{ needs.admission.outputs.candidateSourceSha }}",
+      );
       for (const variable of protectedVariables) {
         expect(execution?.env?.[variable]).toBe(`\${{ vars.${variable} }}`);
       }
     }
     expect(source).toContain("${{ runner.temp }}/apple-coordinate/*");
     expect(source).toContain("${{ runner.temp }}/prior-evidence");
+  });
+
+  it("keeps candidate source identity distinct from the workflow control-plane head", async () => {
+    const [harness, build, authenticate] = await Promise.all([
+      readFile(resolve(root, "scripts/apple-certification/run-harness.mjs"), "utf8"),
+      readFile(resolve(root, "scripts/apple-certification/build.mjs"), "utf8"),
+      readFile(resolve(root, "scripts/apple-certification/authenticate.mjs"), "utf8"),
+    ]);
+    for (const source of [harness, build]) {
+      expect(source).toContain('requireEnvironment("AUTHENTICATED_CANDIDATE_SOURCE_SHA")');
+      expect(source).toContain('requireEnvironment("GITHUB_SHA")');
+    }
+    expect(build).toContain("certificationWorkflowRunHeadSha,");
+    expect(authenticate).toContain("index.certificationWorkflowRunHeadSha !== subject.workflowRunHeadSha");
+    expect(authenticate).toContain("artifact.workflow_run?.head_sha !== workflowRunHeadSha");
+    expect(authenticate).not.toContain("run.head_sha !== candidate.descriptor.sourceSha");
   });
 
   it("executes only a reauthenticated snapshot and admits only canonical @2 evidence", async () => {
@@ -47,6 +80,7 @@ describe("Apple certification trust boundary", () => {
       readFile(resolve(root, "tooling/research-complete-policy.json"), "utf8"),
     ]);
     const protocols = JSON.parse(policyBytes).evidenceControl.appleCertification.protocols;
+    const sourceIdentity = JSON.parse(policyBytes).evidenceControl.appleCertification.sourceIdentity;
     expect(harness).toContain("snapshotApprovedCertifier");
     expect(harness).toContain("reauthenticateCertifierSnapshot(certifier)");
     expect(harness).toContain("execute(certifier.snapshotPath");
@@ -59,6 +93,12 @@ describe("Apple certification trust boundary", () => {
       bundle: "effect-build/apple-certification-bundle@2",
       priorEvidenceManifest: "effect-build/apple-certification-prior-evidence@1",
       index: "effect-build/apple-certification-index@1",
+    });
+    expect(sourceIdentity).toEqual({
+      candidateFields: ["sourceSha", "checkedOutSourceSha"],
+      workflowControlPlaneField: "certificationWorkflowRunHeadSha",
+      rule:
+        "candidate-fields-equal-the-authenticated-candidate-source-while-the-workflow-control-plane-field-equals-the-authoritative-certification-run-and-artifact-head-and-may-differ-after-main-advances",
     });
     expect(receipt).toContain("appleCertification.protocols.request");
     expect(receipt).toContain("appleCertification.protocols.receipt");

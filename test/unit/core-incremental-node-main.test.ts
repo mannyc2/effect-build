@@ -141,6 +141,33 @@ describe("package-private IncrementalNodeMain candidate", () => {
     expect(acquisitions).toBe(0);
   });
 
+  it("rejects an unknown producer system target before acquiring provider state", async () => {
+    let acquisitions = 0;
+    const producer: Incremental.ProducerDriver<never> = {
+      rebuild: () => Effect.die("unknown target acquired the provider"),
+      release: Effect.void,
+    };
+    const incompatible = { ...offer, target: "plan9-x64" } as unknown as NodeMain.AssemblerOffer;
+    const exit = await Effect.runPromiseExit(
+      Effect.scoped(
+        Incremental.makeFromProducer(
+          program,
+          incompatible,
+          Effect.sync(() => {
+            acquisitions += 1;
+            return producer;
+          }),
+        ),
+      ).pipe(
+        Effect.provide(BorrowedOutput.CleanupReporter.layer),
+        Effect.provide(NodeServices.layer),
+      ),
+    );
+
+    expect(failureOf(exit)).toBeInstanceOf(Incremental.IncrementalOfferRejected);
+    expect(acquisitions).toBe(0);
+  });
+
   it("serializes authenticated borrowed snapshots and advances source/output identity", async () => {
     const releases = { value: 0 };
     const observations = await Effect.runPromise(

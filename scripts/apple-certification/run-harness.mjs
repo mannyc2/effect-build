@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { authenticateCandidate, candidateRequestFromEnvironment } from "../release/candidate.mjs";
-import { canonicalBytes, requireEnvironment, sha256 } from "../node-finalizer/common.mjs";
+import { canonicalBytes, hex, requireEnvironment, sha256 } from "../node-finalizer/common.mjs";
 import {
   reauthenticateCertifierSnapshot,
   snapshotApprovedCertifier,
@@ -69,8 +69,14 @@ const candidate = await authenticateCandidate({
   token,
   inputs: candidateRequestFromEnvironment(),
 });
-const checkedOutSourceSha = requireEnvironment("CHECKED_OUT_SOURCE_SHA");
-if (checkedOutSourceSha !== candidate.descriptor.sourceSha || requireEnvironment("GITHUB_SHA") !== candidate.descriptor.sourceSha) {
+const candidateSourceSha = hex(
+  requireEnvironment("AUTHENTICATED_CANDIDATE_SOURCE_SHA"),
+  40,
+  "AUTHENTICATED_CANDIDATE_SOURCE_SHA",
+);
+const checkedOutSourceSha = hex(requireEnvironment("CHECKED_OUT_SOURCE_SHA"), 40, "CHECKED_OUT_SOURCE_SHA");
+hex(requireEnvironment("GITHUB_SHA"), 40, "GITHUB_SHA");
+if (candidateSourceSha !== candidate.descriptor.sourceSha || checkedOutSourceSha !== candidateSourceSha) {
   throw new Error("Apple certification checkout does not match candidate source");
 }
 const source = await authenticateCertificationSource({
@@ -212,6 +218,11 @@ try {
   const candidateMetadata = await lstat(candidateRoot).catch(() => undefined);
   if (candidateMetadata?.isDirectory() === true && !candidateMetadata.isSymbolicLink()) {
     await chmod(candidateRoot, 0o700);
+  }
+  const priorEvidenceSnapshotRoot = join(temporaryRoot, "authenticated-prior-evidence");
+  const priorEvidenceMetadata = await lstat(priorEvidenceSnapshotRoot).catch(() => undefined);
+  if (priorEvidenceMetadata?.isDirectory() === true && !priorEvidenceMetadata.isSymbolicLink()) {
+    await chmod(priorEvidenceSnapshotRoot, 0o700);
   }
   await rm(temporaryRoot, { recursive: true, force: true });
 }

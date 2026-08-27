@@ -26,11 +26,15 @@ export type DirectEvent =
 
 export type SkipWriteEvent = DirectEvent;
 
-const events = <A>(
+type UncountedEvent =
+  | { readonly code: "BUNDLE_END"; readonly duration: number; readonly output: readonly string[] }
+  | { readonly code: "ERROR"; readonly error: Error };
+
+const events = (
   options: rolldown.WatchOptions,
-  consume: (event: Completed, superseded: number) => Promise<A>,
-): Stream.Stream<A, RolldownFailed> =>
-  Stream.callback<A, RolldownFailed>(
+  consume: (event: Completed) => Promise<UncountedEvent>,
+): Stream.Stream<DirectEvent, RolldownFailed> =>
+  Stream.callback<DirectEvent, RolldownFailed>(
     (queue) =>
       Effect.acquireRelease(
         Effect.try({
@@ -43,10 +47,10 @@ const events = <A>(
               if (event.code !== "BUNDLE_END" && event.code !== "ERROR") return listenerChain;
               listenerChain = listenerChain.then(async () => {
                 try {
+                  const value = await consume(event);
                   const next = Queue.sizeUnsafe(queue) === 0 ? 0 : superseded + 1;
-                  const value = await consume(event, next);
                   superseded = next;
-                  Queue.offerUnsafe(queue, value);
+                  Queue.offerUnsafe(queue, { ...value, superseded: next });
                 } catch (cause) {
                   listenerFailure = cause;
                   Queue.failCauseUnsafe(queue, Cause.die(cause));
@@ -86,11 +90,11 @@ const closeResult = async (event: Completed): Promise<void> => event.result.clos
 
 /** Repeated provider-direct writes; result handles are closed before metadata delivery. */
 export const direct = (options: DirectOptions): Stream.Stream<DirectEvent, RolldownFailed> =>
-  events(options, async (event, superseded) => {
+  events(options, async (event) => {
     await closeResult(event);
     return event.code === "BUNDLE_END"
-      ? { code: "BUNDLE_END", duration: event.duration, output: event.output, superseded }
-      : { code: "ERROR", error: event.error, superseded };
+      ? { code: "BUNDLE_END", duration: event.duration, output: event.output }
+      : { code: "ERROR", error: event.error };
   });
 
 /**
@@ -99,9 +103,9 @@ export const direct = (options: DirectOptions): Stream.Stream<DirectEvent, Rolld
  * completion metadata rather than inventing unavailable in-memory output.
  */
 export const skipWrite = (options: MemoryOptions): Stream.Stream<SkipWriteEvent, RolldownFailed> =>
-  events(options, async (event, superseded) => {
+  events(options, async (event) => {
     await closeResult(event);
     return event.code === "BUNDLE_END"
-      ? { code: "BUNDLE_END", duration: event.duration, output: event.output, superseded }
-      : { code: "ERROR", error: event.error, superseded };
+      ? { code: "BUNDLE_END", duration: event.duration, output: event.output }
+      : { code: "ERROR", error: event.error };
   });

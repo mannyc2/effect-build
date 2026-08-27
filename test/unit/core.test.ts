@@ -44,12 +44,16 @@ describe("research-complete core vocabulary", () => {
     expect(SystemTarget.SystemTarget.literals).toHaveLength(8);
     for (const target of SystemTarget.SystemTarget.literals) {
       const descriptor = SystemTarget.describe(target);
+      expect(Object.isFrozen(descriptor)).toBe(true);
       expect(descriptor.target).toBe(target);
       expect(descriptor.nativeFormat).toBe(
         descriptor.os === "windows" ? "pe" : descriptor.os === "macos" ? "mach-o" : "elf",
       );
       expect(descriptor.executableSuffix).toBe(descriptor.os === "windows" ? ".exe" : "");
       expect(descriptor.os === "linux" ? descriptor.abi !== null : descriptor.abi === null).toBe(true);
+      const originalOs = descriptor.os;
+      expect(Reflect.set(descriptor, "os", "poisoned")).toBe(false);
+      expect(SystemTarget.describe(target).os).toBe(originalOs);
     }
   });
 });
@@ -80,6 +84,122 @@ describe.skipIf(process.platform === "win32")("Author Tool exact selection", () 
     }
     expect("run" in Tool).toBe(false);
     expect("runOrFail" in Tool).toBe(false);
+  });
+
+  it("validates, copies, and recursively freezes observer-owned tool facts", async () => {
+    const root = await makeRoot();
+    const executable = join(root, "tool");
+    await writeFile(executable, "#!/bin/sh\nexit 0\n");
+    await chmod(executable, 0o755);
+    let raw: {
+      name: string;
+      participants: Array<{
+        role: string;
+        name: string;
+        version: string;
+        revision: string;
+        channel: string;
+        content: { bytes: string; digest: { algorithm: string; value: string } };
+      }>;
+      capabilities: Array<{ _tag: string; id: string; evidence: string }>;
+    } | undefined;
+
+    const selected = await Effect.runPromise(
+      Tool.select({
+        name: "fixture",
+        executable,
+        observe: (candidate) => {
+          raw = {
+            name: "fixture",
+            participants: [{
+              role: "provider-cli",
+              name: "fixture",
+              version: "1.0.0",
+              revision: "fixture",
+              channel: "test",
+              content: {
+                bytes: candidate.content.bytes,
+                digest: { algorithm: "sha256", value: candidate.content.digest.value },
+              },
+            }],
+            capabilities: [{ _tag: "Present", id: "fixture", evidence: "unit" }],
+          };
+          return Effect.succeed(raw as unknown as Tool.Observation<"fixture">);
+        },
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    if (raw === undefined) throw new Error("fixture observer did not run");
+    raw.name = "mutated";
+    raw.participants[0]!.version = "mutated";
+    raw.participants[0]!.content.digest.value = "b".repeat(64);
+    raw.capabilities[0]!.evidence = "mutated";
+    raw.participants.push({ ...raw.participants[0]!, name: "extra" });
+    raw.capabilities.push({ _tag: "Present", id: "extra", evidence: "mutated" });
+
+    expect(selected.observation.name).toBe("fixture");
+    expect(selected.observation.participants).toHaveLength(1);
+    expect(selected.observation.participants[0].version).toBe("1.0.0");
+    expect(selected.observation.participants[0].content.digest.value).toBe(selected.content.digest.value);
+    expect(selected.observation.capabilities).toEqual([{ _tag: "Present", id: "fixture", evidence: "unit" }]);
+    expect(Object.isFrozen(selected.observation)).toBe(true);
+    expect(Object.isFrozen(selected.observation.participants)).toBe(true);
+    expect(Object.isFrozen(selected.observation.participants[0])).toBe(true);
+    expect(Object.isFrozen(selected.observation.participants[0].content)).toBe(true);
+    expect(Object.isFrozen(selected.observation.participants[0].content.digest)).toBe(true);
+    expect(Object.isFrozen(selected.observation.capabilities)).toBe(true);
+    expect(Object.isFrozen(selected.observation.capabilities[0])).toBe(true);
+  });
+
+  it("fails closed on incomplete or malformed observer-owned tool facts", async () => {
+    const root = await makeRoot();
+    const executable = join(root, "tool");
+    await writeFile(executable, "#!/bin/sh\nexit 0\n");
+    await chmod(executable, 0o755);
+
+    const invalidObservations: ReadonlyArray<(candidate: Tool.Candidate<"fixture">) => unknown> = [
+      (candidate) => ({ ...observation("fixture", candidate), name: "other" }),
+      (candidate) => ({ ...observation("fixture", candidate), participants: [] }),
+      (candidate) => {
+        const valid = observation("fixture", candidate);
+        return { ...valid, participants: [{ ...valid.participants[0], version: "" }] };
+      },
+      (candidate) => {
+        const valid = observation("fixture", candidate);
+        return {
+          ...valid,
+          participants: [{
+            ...valid.participants[0],
+            content: { ...valid.participants[0].content, digest: { algorithm: "sha256", value: "invalid" } },
+          }],
+        };
+      },
+      (candidate) => ({
+        ...observation("fixture", candidate),
+        capabilities: [{ _tag: "Unknown", id: "fixture", evidence: "unit" }],
+      }),
+      (candidate) => ({
+        ...observation("fixture", candidate),
+        capabilities: [{ _tag: "Present", id: "fixture", evidence: "" }],
+      }),
+    ];
+
+    for (const invalid of invalidObservations) {
+      const exit = await Effect.runPromiseExit(
+        Tool.select({
+          name: "fixture",
+          executable,
+          observe: (candidate) => Effect.succeed(invalid(candidate) as Tool.Observation<"fixture">),
+        }).pipe(Effect.provide(NodeServices.layer)),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const error = Cause.findErrorOption(exit.cause);
+        expect(error._tag).toBe("Some");
+        if (error._tag === "Some") expect(error.value).toBeInstanceOf(Tool.ToolSelectionInvalid);
+      }
+    }
   });
 
   it("fails closed when PATH identifies more than one canonical executable", async () => {

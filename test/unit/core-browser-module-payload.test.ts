@@ -178,6 +178,61 @@ describe("BrowserModulePayload semantic candidate", () => {
     expect(called).toBe(false);
   });
 
+  it("rejects incomplete provider identities before provider work", async () => {
+    for (const field of ["package", "version", "engine", "engineVersion"] as const) {
+      let called = false;
+      const invalid = Layer.succeed(BrowserModulePayload.Provider, {
+        identity: { ...identity, [field]: "" },
+        produce: () => {
+          called = true;
+          return Effect.die("invalid provider identity reached provider work");
+        },
+      });
+      const exit = await Effect.runPromiseExit(
+        BrowserModulePayload.withPayload(request, () => Effect.void).pipe(Effect.provide(services(invalid))),
+      );
+      const error = errorOf(exit);
+      expect(error).toBeInstanceOf(BrowserModulePayload.BrowserModulePayloadRejected);
+      expect((error as BrowserModulePayload.BrowserModulePayloadRejected).reason).toContain("identity is incomplete");
+      expect(called).toBe(false);
+    }
+  });
+
+  it("copies and freezes the provider identity before producing bytes", async () => {
+    const mutableIdentity = {
+      package: "@fixture/mutable-provider",
+      version: "1.0.0",
+      engine: "fixture",
+      engineVersion: "1.0.0",
+    };
+    const mutable = Layer.succeed(BrowserModulePayload.Provider, {
+      identity: mutableIdentity,
+      produce: (_request, root) =>
+        Effect.promise(async () => {
+          mutableIdentity.version = "mutated-during-produce";
+          await writeTree(root);
+          return produced(root);
+        }),
+    });
+    const captured = await Effect.runPromise(
+      BrowserModulePayload.withPayload(request, (payload) =>
+        Effect.sync(() => {
+          expect(payload.producer).not.toBe(mutableIdentity);
+          expect(Object.isFrozen(payload.producer)).toBe(true);
+          expect(Reflect.set(payload.producer, "version", "mutated-by-consumer")).toBe(false);
+          return payload.producer;
+        })).pipe(Effect.provide(services(mutable))),
+    );
+
+    expect(mutableIdentity.version).toBe("mutated-during-produce");
+    expect(captured).toEqual({
+      package: "@fixture/mutable-provider",
+      version: "1.0.0",
+      engine: "fixture",
+      engineVersion: "1.0.0",
+    });
+  });
+
   it("rejects metadata that does not exactly cover the borrowed tree", async () => {
     const exit = await Effect.runPromiseExit(
       BrowserModulePayload.withPayload(

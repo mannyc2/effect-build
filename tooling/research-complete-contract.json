@@ -112,7 +112,7 @@
       },
       {
         "path": "tooling/research-complete-policy.json",
-        "sha256": "f7a36d153821d8e5a88874816ced5fd9cb1ef99c07ff4a79c2bd1c2345eaf4aa"
+        "sha256": "672d7972d6745fc353538ae0e8a6a644b2bf080a9e93254947ff3b1e55499724"
       }
     ],
     "deterministicGeneration": true,
@@ -1090,6 +1090,14 @@
       "workflowPath": ".github/workflows/apple-certification.yml",
       "workflowRef": "refs/heads/main",
       "workflowEvent": "workflow_dispatch",
+      "sourceIdentity": {
+        "candidateFields": [
+          "sourceSha",
+          "checkedOutSourceSha"
+        ],
+        "workflowControlPlaneField": "certificationWorkflowRunHeadSha",
+        "rule": "candidate-fields-equal-the-authenticated-candidate-source-while-the-workflow-control-plane-field-equals-the-authoritative-certification-run-and-artifact-head-and-may-differ-after-main-advances"
+      },
       "releaseInputFields": [
         "appleCertificationWorkflowRunId",
         "appleCertificationWorkflowRunAttempt",

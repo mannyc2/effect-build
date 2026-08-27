@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, Result, Scope, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Result, Scope, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import * as TypedWatch from "../../packages/effect-build/src/Profile/internal/TypedWatch.js";
 
@@ -94,6 +94,130 @@ describe("package-private product-owned TypedWatch candidate", () => {
           { _tag: "Removed", path: "src/old.ts" },
         ]);
       }
+    }
+  });
+
+  it("reprojects bounded in-flight changes after a successful dependency update", async () => {
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const releaseInitial = yield* Deferred.make<void>();
+          const handle = yield* TypedWatch.make(
+            {
+              sourceId: "fixture-host-events",
+              initialWatchSet: watchSet([{ path: "src/entry.ts", mode: "exact" }]),
+              limits: { ...limits, maxPendingChanges: 1, maxPendingTriggers: 2 },
+            },
+            (request) =>
+              (request.cycle === 1 ? Deferred.await(releaseInitial) : Effect.void).pipe(
+                Effect.as({
+                  result: request.cycle,
+                  watchSet: request.cycle === 1
+                    ? watchSet([
+                      { path: "src/entry.ts", mode: "exact" },
+                      { path: "src/new-dependency.ts", mode: "exact" },
+                    ])
+                    : request.watchSet,
+                }),
+              ),
+          );
+          const started = yield* take(handle, 1);
+          const retained = yield* handle.submit({
+            sourceId: "fixture-host-events",
+            sequence: 1,
+            changes: [{ _tag: "Modified", path: "src/new-dependency.ts" }],
+          });
+          const overflow = yield* Effect.exit(handle.submit({
+            sourceId: "fixture-host-events",
+            sequence: 2,
+            changes: [{ _tag: "Modified", path: "src/another-dependency.ts" }],
+          }));
+          yield* Deferred.succeed(releaseInitial, undefined);
+          const trailing = yield* take(handle, 3);
+          return { started, retained, overflow, trailing };
+        }),
+      ),
+    );
+
+    expect(result.started.map(({ _tag }) => _tag)).toEqual(["BuildStarted"]);
+    expect(result.retained).toEqual({ _tag: "Ignored", sequence: 1, reason: "unwatched" });
+    const overflow = failureOf(result.overflow);
+    expect(overflow).toBeInstanceOf(TypedWatch.WatchTriggerRejected);
+    if (overflow instanceof TypedWatch.WatchTriggerRejected) {
+      expect(overflow.reason).toBe("pending change bound exceeded");
+    }
+    expect(result.trailing.map(({ _tag }) => _tag)).toEqual([
+      "BuildSucceeded",
+      "BuildStarted",
+      "BuildSucceeded",
+    ]);
+    const rebuilt = result.trailing[1];
+    expect(rebuilt?._tag).toBe("BuildStarted");
+    if (rebuilt?._tag === "BuildStarted") {
+      expect(rebuilt.watchSetRevision).toBe(2);
+      expect(rebuilt.batch).toEqual({
+        _tag: "Changes",
+        coalescedTriggers: 1,
+        changes: [{ _tag: "Modified", path: "src/new-dependency.ts" }],
+      });
+    }
+  });
+
+  it("reprojects an in-flight old output when the successful watch set makes it an input", async () => {
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const releaseInitial = yield* Deferred.make<void>();
+          const handle = yield* TypedWatch.make(
+            configuration(
+              watchSet(
+                [{ path: "src/entry.ts", mode: "exact" }],
+                [{ path: "generated", mode: "subtree" }],
+              ),
+            ),
+            (request) =>
+              (request.cycle === 1 ? Deferred.await(releaseInitial) : Effect.void).pipe(
+                Effect.as({
+                  result: request.cycle,
+                  watchSet: request.cycle === 1
+                    ? watchSet(
+                      [
+                        { path: "generated/data.json", mode: "exact" },
+                        { path: "src/entry.ts", mode: "exact" },
+                      ],
+                      [{ path: "dist", mode: "subtree" }],
+                    )
+                    : request.watchSet,
+                }),
+              ),
+          );
+          yield* take(handle, 1);
+          const disposition = yield* handle.submit({
+            sourceId: "fixture-host-events",
+            sequence: 1,
+            changes: [{ _tag: "Modified", path: "generated/data.json" }],
+          });
+          yield* Deferred.succeed(releaseInitial, undefined);
+          const trailing = yield* take(handle, 3);
+          return { disposition, trailing };
+        }),
+      ),
+    );
+
+    expect(result.disposition).toEqual({ _tag: "Ignored", sequence: 1, reason: "output" });
+    expect(result.trailing.map(({ _tag }) => _tag)).toEqual([
+      "BuildSucceeded",
+      "BuildStarted",
+      "BuildSucceeded",
+    ]);
+    const rebuilt = result.trailing[1];
+    expect(rebuilt?._tag).toBe("BuildStarted");
+    if (rebuilt?._tag === "BuildStarted") {
+      expect(rebuilt.batch).toEqual({
+        _tag: "Changes",
+        coalescedTriggers: 1,
+        changes: [{ _tag: "Modified", path: "generated/data.json" }],
+      });
     }
   });
 
@@ -283,6 +407,51 @@ describe("package-private product-owned TypedWatch candidate", () => {
     expect(failureOf(result.afterClose)).toBeInstanceOf(TypedWatch.TypedWatchClosed);
     expect(interrupted).toBe(true);
     expect(leaked).toBeDefined();
+  });
+
+  it("preserves a finalizer defect combined with Scope-close interruption in the event Cause", async () => {
+    const defect = new Error("fixture finalizer defect");
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function*() {
+          const owner = yield* Scope.make();
+          const releaseBuild = yield* Deferred.make<void>();
+          const mixedCause = Cause.combine(Cause.interrupt(123), Cause.die(defect));
+          const handle = yield* TypedWatch.make<never, never, never>(
+            configuration(watchSet([{ path: "src", mode: "subtree" }])),
+            () =>
+              Effect.uninterruptible(
+                Deferred.await(releaseBuild).pipe(Effect.andThen(Effect.failCause(mixedCause))),
+              ),
+          ).pipe(Scope.provide(owner));
+          const started = yield* take(handle, 1);
+          const closeFiber = yield* Scope.close(owner, Exit.void).pipe(
+            Effect.forkScoped({ startImmediately: true }),
+          );
+          const afterClose = yield* Effect.exit(handle.submit({
+            sourceId: "fixture-host-events",
+            sequence: 1,
+            changes: [{ _tag: "Modified", path: "src/a.ts" }],
+          }));
+          yield* Deferred.succeed(releaseBuild, undefined);
+          const closeExit = yield* Fiber.await(closeFiber);
+          const eventsExit = yield* Effect.exit(Stream.runCollect(handle.events));
+          return { started, closeExit, eventsExit, afterClose };
+        }),
+      ),
+    );
+
+    expect(result.started.map(({ _tag }) => _tag)).toEqual(["BuildStarted"]);
+    expect(Exit.isSuccess(result.closeExit)).toBe(true);
+    expect(Exit.isFailure(result.eventsExit)).toBe(true);
+    if (Exit.isFailure(result.eventsExit)) {
+      expect(Cause.hasInterrupts(result.eventsExit.cause)).toBe(true);
+      expect(Cause.hasInterruptsOnly(result.eventsExit.cause)).toBe(false);
+      const observed = Cause.findDefect(result.eventsExit.cause);
+      expect(Result.isSuccess(observed)).toBe(true);
+      if (Result.isSuccess(observed)) expect(observed.success).toBe(defect);
+    }
+    expect(failureOf(result.afterClose)).toBeInstanceOf(TypedWatch.TypedWatchClosed);
   });
 
   it("preserves build defects in the event Cause and permanently closes trigger admission", async () => {

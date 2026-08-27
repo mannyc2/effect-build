@@ -24,7 +24,12 @@ if (workflowRunAttempt !== "1" || requireEnvironment("GITHUB_EVENT_NAME") !== "w
   throw new Error("Apple certification authority requires first-attempt workflow_dispatch");
 }
 const candidate = await authenticateCandidate({ repository, token, inputs: candidateRequestFromEnvironment() });
-const sourceSha = hex(requireEnvironment("GITHUB_SHA"), 40, "GITHUB_SHA");
+const sourceSha = hex(
+  requireEnvironment("AUTHENTICATED_CANDIDATE_SOURCE_SHA"),
+  40,
+  "AUTHENTICATED_CANDIDATE_SOURCE_SHA",
+);
+const certificationWorkflowRunHeadSha = hex(requireEnvironment("GITHUB_SHA"), 40, "GITHUB_SHA");
 const checkedOutSourceSha = hex(requireEnvironment("CHECKED_OUT_SOURCE_SHA"), 40, "CHECKED_OUT_SOURCE_SHA");
 const apple = appleCertification;
 if (
@@ -71,7 +76,7 @@ const index = {
   certificationWorkflowRef: apple.workflowRef,
   certificationWorkflowRunId: workflowRunId,
   certificationWorkflowRunAttempt: workflowRunAttempt,
-  certificationWorkflowRunHeadSha: sourceSha,
+  certificationWorkflowRunHeadSha,
   certificationWorkflowEvent: apple.workflowEvent,
   checkedOutSourceSha,
   bundleFileName: apple.bundleFileName,

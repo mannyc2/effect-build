@@ -1,4 +1,4 @@
-import { lstat, mkdir, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { canonicalBytes, sha256 } from "../node-finalizer/common.mjs";
 import { approvedCertifierIdentity } from "./certifier.mjs";
@@ -24,11 +24,82 @@ const exactFiles = (records) => records.flatMap((record) => [
   record.evidenceName,
 ]).sort();
 
-const requireReadOnlyRegularFile = async (path, subject) => {
-  const metadata = await lstat(path);
-  if (!metadata.isFile() || (metadata.mode & 0o222) !== 0) {
-    throw new Error(`${subject} must remain a read-only regular file`);
+const snapshotBytes = new WeakMap();
+const snapshotDirectoryMode = 0o500;
+const snapshotFileMode = 0o400;
+const compareUtf16 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+
+const requirePosixSnapshotModes = () => {
+  if (process.platform === "win32") {
+    throw new Error("Apple certification prior-evidence snapshots require POSIX read-only mode semantics");
   }
+};
+
+const exactMode = (metadata) => Number(metadata.mode & 0o777n);
+
+const filesystemIdentity = (metadata) => Object.freeze({
+  device: String(metadata.dev),
+  inode: String(metadata.ino),
+  size: String(metadata.size),
+  mtimeNs: String(metadata.mtimeNs),
+  ctimeNs: String(metadata.ctimeNs),
+});
+
+const requireCapturedIdentity = (metadata, captured, subject) => {
+  if (
+    String(metadata.dev) !== captured.device || String(metadata.ino) !== captured.inode
+    || String(metadata.size) !== captured.size || String(metadata.mtimeNs) !== captured.mtimeNs
+    || String(metadata.ctimeNs) !== captured.ctimeNs
+  ) throw new Error(`${subject} no longer has its captured filesystem identity`);
+};
+
+const requireSnapshotDirectory = async (root, captured) => {
+  const metadata = await lstat(root, { bigint: true });
+  if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+    throw new Error("prior-evidence snapshot root must remain a directory and must not be a symbolic link");
+  }
+  if (exactMode(metadata) !== snapshotDirectoryMode) {
+    throw new Error("prior-evidence snapshot root must remain mode 0500");
+  }
+  if (captured !== undefined) requireCapturedIdentity(metadata, captured, "prior-evidence snapshot root");
+  return metadata;
+};
+
+const collectSnapshotFiles = async (identity) => {
+  await requireSnapshotDirectory(identity.snapshotRoot, identity.filesystem);
+  const entries = await readdir(identity.snapshotRoot, { withFileTypes: true });
+  const names = entries.map(({ name }) => name).sort(compareUtf16);
+  if (JSON.stringify(names) !== JSON.stringify(identity.expectedFiles)) {
+    throw new Error("prior-evidence snapshot exact file set changed after capture");
+  }
+  const files = new Map();
+  for (const entry of entries) {
+    if (entry.isSymbolicLink() || !entry.isFile()) {
+      throw new Error(`prior-evidence snapshot entry must remain a regular file and must not be a symbolic link: ${entry.name}`);
+    }
+    files.set(entry.name, join(identity.snapshotRoot, entry.name));
+  }
+  return files;
+};
+
+const readExactSnapshotFile = async ({ path, originalBytes, maximumBytes, captured, subject }) => {
+  const before = await lstat(path, { bigint: true });
+  if (before.isSymbolicLink() || !before.isFile()) {
+    throw new Error(`${subject} must remain a regular file and must not be a symbolic link`);
+  }
+  if (exactMode(before) !== snapshotFileMode) throw new Error(`${subject} must remain mode 0400`);
+  if (captured !== undefined) requireCapturedIdentity(before, captured, subject);
+  const bytes = await readBoundedRegularFile({ path, maximumBytes, subject });
+  const after = await lstat(path, { bigint: true });
+  if (after.isSymbolicLink() || !after.isFile() || exactMode(after) !== snapshotFileMode) {
+    throw new Error(`${subject} mode or file type changed while it was authenticated`);
+  }
+  if (captured !== undefined) requireCapturedIdentity(after, captured, subject);
+  if (
+    before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size
+    || bytes.length !== originalBytes.length || sha256(bytes) !== sha256(originalBytes) || !bytes.equals(originalBytes)
+  ) throw new Error(`${subject} length, digest, or bytes changed after capture`);
+  return Object.freeze({ filesystem: filesystemIdentity(after) });
 };
 
 const readDependency = async ({ files, dependency, environment, expected }) => {
@@ -120,6 +191,7 @@ export const snapshotPriorEvidence = async ({
   environment = process.env,
   expected,
 }) => {
+  requirePosixSnapshotModes();
   const dependencies = priorEvidenceDependencies(category, coordinate);
   if (dependencies.length > 0 && inputRoot === undefined) {
     throw new Error(`${category}/${coordinate} requires authenticated prior evidence`);
@@ -154,47 +226,88 @@ export const snapshotPriorEvidence = async ({
   validatePriorEvidenceManifest({ manifestBytes, expected: { ...expected, category, coordinate, entries } });
   const manifestPath = join(temporaryRoot, "prior-evidence-manifest.json");
   await writeFile(manifestPath, manifestBytes, { flag: "wx", mode: 0o400 });
-  return Object.freeze({
-    category,
-    coordinate,
+  await chmod(snapshotRoot, snapshotDirectoryMode);
+  const expectedFiles = exactFiles(records);
+  const provisional = {
     snapshotRoot,
-    manifestPath,
-    manifestBytes,
-    manifestSha256: sha256(manifestBytes),
-    entries,
-    records,
-    expectedFiles: exactFiles(records),
-  });
-};
-
-export const reauthenticatePriorEvidenceSnapshot = async (identity) => {
-  await requireReadOnlyRegularFile(identity.manifestPath, "prior-evidence manifest snapshot");
-  const manifestBytes = await readBoundedRegularFile({
-    path: identity.manifestPath,
-    maximumBytes: maximumPriorEvidenceManifestBytes,
-    subject: `${identity.coordinate} prior-evidence manifest snapshot`,
-  });
-  if (!manifestBytes.equals(identity.manifestBytes) || sha256(manifestBytes) !== identity.manifestSha256) {
-    throw new Error("prior-evidence manifest snapshot changed before execution");
-  }
-  const files = await collectEvidenceFiles(identity.snapshotRoot);
-  if (JSON.stringify([...files.keys()].sort()) !== JSON.stringify(identity.expectedFiles)) {
-    throw new Error("prior-evidence snapshot file set changed before execution");
-  }
-  for (const record of identity.records) {
-    for (const [name, originalBytes, maximumBytes] of [
+    expectedFiles,
+    filesystem: filesystemIdentity(await requireSnapshotDirectory(snapshotRoot)),
+  };
+  const paths = await collectSnapshotFiles(provisional);
+  const originals = new Map();
+  const filesIdentity = [];
+  for (const record of records) {
+    for (const [name, bytes, maximumBytes] of [
       [record.priorEvidenceManifestName, record.priorEvidenceManifestBytes, maximumPriorEvidenceManifestBytes],
       [record.receiptName, record.receiptBytes, maximumReceiptBytes],
       [record.evidenceName, record.evidenceBytes, maximumEvidenceBytes],
     ]) {
-      await requireReadOnlyRegularFile(files.get(name), `prior-evidence snapshot ${name}`);
-      const bytes = await readBoundedRegularFile({
-        path: files.get(name),
+      const originalBytes = Buffer.from(bytes);
+      originals.set(name, originalBytes);
+      const captured = await readExactSnapshotFile({
+        path: paths.get(name),
+        originalBytes,
         maximumBytes,
-        subject: `${record.coordinate} snapshotted ${name}`,
+        subject: `prior-evidence snapshot ${name}`,
       });
-      if (!bytes.equals(originalBytes)) throw new Error(`prior-evidence snapshot changed before execution: ${name}`);
+      filesIdentity.push(Object.freeze({
+        name,
+        path: paths.get(name),
+        mode: "0400",
+        maximumBytes,
+        bytes: String(originalBytes.length),
+        sha256: sha256(originalBytes),
+        filesystem: captured.filesystem,
+      }));
     }
   }
+  const manifestOriginalBytes = Buffer.from(manifestBytes);
+  const manifestCaptured = await readExactSnapshotFile({
+    path: manifestPath,
+    originalBytes: manifestOriginalBytes,
+    maximumBytes: maximumPriorEvidenceManifestBytes,
+    subject: "prior-evidence manifest snapshot",
+  });
+  await collectSnapshotFiles(provisional);
+  const identity = Object.freeze({
+    category,
+    coordinate,
+    snapshotRoot,
+    mode: "0500",
+    filesystem: provisional.filesystem,
+    manifestPath,
+    manifestBytes,
+    manifestSha256: sha256(manifestBytes),
+    manifestFilesystem: manifestCaptured.filesystem,
+    entries,
+    expectedFiles,
+    files: Object.freeze(filesIdentity),
+  });
+  snapshotBytes.set(identity, Object.freeze({ manifest: manifestOriginalBytes, files: originals }));
+  await reauthenticatePriorEvidenceSnapshot(identity);
+  return identity;
+};
+
+export const reauthenticatePriorEvidenceSnapshot = async (identity) => {
+  const originals = snapshotBytes.get(identity);
+  if (originals === undefined) throw new Error("prior-evidence snapshot identity was not captured by this verifier");
+  await readExactSnapshotFile({
+    path: identity.manifestPath,
+    originalBytes: originals.manifest,
+    maximumBytes: maximumPriorEvidenceManifestBytes,
+    subject: `${identity.coordinate} prior-evidence manifest snapshot`,
+    captured: identity.manifestFilesystem,
+  });
+  const files = await collectSnapshotFiles(identity);
+  for (const record of identity.files) {
+    await readExactSnapshotFile({
+      path: files.get(record.name),
+      originalBytes: originals.files.get(record.name),
+      maximumBytes: record.maximumBytes,
+      captured: record.filesystem,
+      subject: `prior-evidence snapshot ${record.name}`,
+    });
+  }
+  await collectSnapshotFiles(identity);
   return identity;
 };

@@ -544,6 +544,11 @@
       "workflowPath": ".github/workflows/apple-certification.yml",
       "workflowRef": "refs/heads/main",
       "workflowEvent": "workflow_dispatch",
+      "sourceIdentity": {
+        "candidateFields": ["sourceSha", "checkedOutSourceSha"],
+        "workflowControlPlaneField": "certificationWorkflowRunHeadSha",
+        "rule": "candidate-fields-equal-the-authenticated-candidate-source-while-the-workflow-control-plane-field-equals-the-authoritative-certification-run-and-artifact-head-and-may-differ-after-main-advances"
+      },
       "releaseInputFields": [
         "appleCertificationWorkflowRunId",
         "appleCertificationWorkflowRunAttempt",

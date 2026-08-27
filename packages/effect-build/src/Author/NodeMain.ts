@@ -1,7 +1,7 @@
 import { Context, Crypto, Effect, FileSystem, Path, Schema } from "effect";
 import type * as Artifact from "../Artifact.js";
 import { ArtifactInvalid, decimalBytes, sha256Digest } from "../Artifact.js";
-import type { SystemTarget } from "../SystemTarget.js";
+import { SystemTarget } from "../SystemTarget.js";
 import * as BorrowedOutput from "./BorrowedOutput.js";
 import * as NodeMainLease from "./internal/NodeMainLease.js";
 
@@ -185,6 +185,8 @@ const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toStrin
 const reject = (phase: "request" | "analysis", reason: string): PortableRejected =>
   new PortableRejected({ profile, phase, reason });
 
+const systemTargets: ReadonlySet<unknown> = new Set(SystemTarget.literals);
+
 const normalizeBuiltins = (values: readonly string[]): readonly string[] | undefined => {
   const normalized = values.map((value) => value.startsWith("node:") ? value : `node:${value}`);
   if (normalized.some((value) => !/^node:[a-z0-9_./-]+$/u.test(value))) return undefined;
@@ -228,6 +230,9 @@ const validateOffer = (offer: AssemblerOffer, request: Request): Effect.Effect<v
   }
   if (offer.nodeVersion !== nodeVersion) {
     return Effect.fail(reject("request", `assembler must offer exact Node ${nodeVersion}`));
+  }
+  if (!systemTargets.has(offer.target)) {
+    return Effect.fail(reject("request", "assembler offered an unknown system target"));
   }
   if (!offer.formats.includes(request.format)) {
     return Effect.fail(reject("request", `assembler does not accept ${request.format}`));

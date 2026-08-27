@@ -381,6 +381,8 @@ export const githubJson = async (path, token) => {
 const runJobs = new Map();
 const runArtifacts = new Map();
 const runKey = ({ repository, runId }) => `${repository}\0${runId}`;
+const runResourceKey = (options) =>
+  `${runKey(options)}\0${options.resource}\0${options.query ?? ""}`;
 
 const listRunResources = async ({ repository, runId, token, resource, query = "" }) => {
   const values = [];
@@ -406,7 +408,7 @@ const listRunResources = async ({ repository, runId, token, resource, query = ""
 };
 
 const cachedRunResources = (cache, options) => {
-  const key = `${runKey(options)}\0${options.resource}\0${options.query ?? ""}`;
+  const key = runResourceKey(options);
   let pending = cache.get(key);
   if (pending === undefined) {
     pending = listRunResources(options);
@@ -419,19 +421,20 @@ const cachedRunResources = (cache, options) => {
 };
 
 export const observeArtifact = async ({ repository, runId, name, token }) => {
+  const options = {
+    repository,
+    runId,
+    token,
+    resource: "artifacts",
+    query: `name=${encodeURIComponent(name)}&`,
+  };
   for (const delay of [0, 1000, 3000]) {
     if (delay > 0) {
       await new Promise((resolve) => setTimeout(resolve, delay));
-      runArtifacts.delete(runKey({ repository, runId }));
+      runArtifacts.delete(runResourceKey(options));
     }
     try {
-      const artifacts = await cachedRunResources(runArtifacts, {
-        repository,
-        runId,
-        token,
-        resource: "artifacts",
-        query: `name=${encodeURIComponent(name)}&`,
-      });
+      const artifacts = await cachedRunResources(runArtifacts, options);
       const matches = artifacts.filter((artifact) => artifact.name === name);
       if (matches.length !== 1) throw new Error(`expected exactly one artifact named ${name}, observed ${matches.length}`);
       const artifact = matches[0];

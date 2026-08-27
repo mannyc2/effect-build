@@ -113,6 +113,19 @@ export const renderWatchArgv = (input: WatchInput): readonly string[] => [
 
 export const valuesWithPrefix = values;
 
+export const validateWatchOutput = (
+  operation: "watch" | "serve",
+  output: WatchInput["output"],
+): Effect.Effect<void, EsbuildCommandInputInvalid> =>
+  output._tag === "Outfile" || output._tag === "Outdir"
+    ? validateValue(operation, output.path, "output path")
+    : Effect.fail(
+      new EsbuildCommandInputInvalid({
+        operation,
+        reason: "output._tag must be Outfile or Outdir",
+      }),
+    );
+
 export const validateValue = (
   operation: "build" | "buildToDirectory" | "watch" | "serve",
   value: string,

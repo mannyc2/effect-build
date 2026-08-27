@@ -154,6 +154,15 @@ interface Pending {
   readonly changes: ReadonlyMap<string, Change>;
 }
 
+interface ActiveCycle {
+  readonly cycle: number;
+  /**
+   * Normalized raw observations retained by trigger so a successful watch-set
+   * update can reproject both output filtering and input relevance.
+   */
+  readonly triggers: ReadonlyMap<number, ReadonlyMap<string, Change>>;
+}
+
 interface State {
   closed: boolean;
   lastSequence: number;
@@ -161,6 +170,7 @@ interface State {
   watchSetRevision: number;
   watchSet: WatchSet;
   pending: Pending | undefined;
+  active: ActiveCycle | undefined;
 }
 
 const portablePath = (path: string): boolean => {
@@ -282,6 +292,33 @@ const toBatch = (pending: Pending): BuildBatch => {
   });
 };
 
+const reprojectActive = (active: ActiveCycle, watchSet: WatchSet): Pending | undefined => {
+  const changes = new Map<string, Change>();
+  let triggerCount = 0;
+  for (const observed of active.triggers.values()) {
+    let relevant = false;
+    for (const change of observed.values()) {
+      const projected = withoutOutputSide(watchSet.outputs, change);
+      if (projected !== undefined && touches(watchSet.inputs, projected)) {
+        changes.set(changeKey(projected), projected);
+        relevant = true;
+      }
+    }
+    if (relevant) triggerCount += 1;
+  }
+  return triggerCount === 0
+    ? undefined
+    : Object.freeze({ triggerCount, changes });
+};
+
+const distinctActiveChanges = (triggers: ReadonlyMap<number, ReadonlyMap<string, Change>>): number => {
+  const keys = new Set<string>();
+  for (const changes of triggers.values()) {
+    for (const key of changes.keys()) keys.add(key);
+  }
+  return keys.size;
+};
+
 /**
  * Runs a product-owned one-shot build loop. Host adapters submit already-typed
  * filesystem observations; provider stdout and stderr are never inputs. The
@@ -309,6 +346,7 @@ export const make = <Result, Failure, Requirements>(
       watchSetRevision: 1,
       watchSet: initialWatchSet,
       pending: undefined,
+      active: Object.freeze({ cycle: 1, triggers: new Map() }),
     };
     const initialRequest: BuildRequest = Object.freeze({
       protocol,
@@ -330,6 +368,7 @@ export const make = <Result, Failure, Requirements>(
           batch: toBatch(pending),
         });
         state.pending = undefined;
+        state.active = Object.freeze({ cycle: request.cycle, triggers: new Map() });
         state.nextCycle += 1;
         return request;
       }),
@@ -356,7 +395,12 @@ export const make = <Result, Failure, Requirements>(
           ),
           Effect.matchEffect({
             onFailure: (error) =>
-              Clock.currentTimeMillis.pipe(
+              mutex.withPermit(
+                Effect.sync(() => {
+                  if (state.active?.cycle === request.cycle) state.active = undefined;
+                }),
+              ).pipe(
+                Effect.andThen(Clock.currentTimeMillis),
                 Effect.flatMap((finishedAtMillis) =>
                   Queue.offer(
                     eventQueue,
@@ -375,8 +419,15 @@ export const make = <Result, Failure, Requirements>(
               Effect.gen(function*() {
                 const watchSetRevision = yield* mutex.withPermit(
                   Effect.sync(() => {
+                    const active = state.active?.cycle === request.cycle ? state.active : undefined;
                     if (!sameWatchSet(state.watchSet, watchSet)) state.watchSetRevision += 1;
                     state.watchSet = watchSet;
+                    if (active !== undefined) {
+                      const wasEmpty = state.pending === undefined;
+                      state.pending = reprojectActive(active, watchSet);
+                      if (wasEmpty && state.pending !== undefined) Queue.offerUnsafe(wake, undefined);
+                    }
+                    state.active = undefined;
                     return state.watchSetRevision;
                   }),
                 );
@@ -409,11 +460,12 @@ export const make = <Result, Failure, Requirements>(
       Effect.andThen(loop),
       Effect.onExit((exit) => {
         if (Exit.isSuccess(exit)) return Effect.void;
-        if (state.closed && Cause.hasInterrupts(exit.cause)) return Effect.void;
+        if (state.closed && Cause.hasInterruptsOnly(exit.cause)) return Effect.void;
         return mutex.withPermit(
           Effect.sync(() => {
             state.closed = true;
             state.pending = undefined;
+            state.active = undefined;
           }),
         ).pipe(
           Effect.andThen(Queue.failCause(eventQueue, exit.cause)),
@@ -428,6 +480,7 @@ export const make = <Result, Failure, Requirements>(
       mutex.withPermit(Effect.sync(() => {
         state.closed = true;
         state.pending = undefined;
+        state.active = undefined;
       })).pipe(
         Effect.andThen(Fiber.interrupt(worker)),
         Effect.andThen(Queue.end(eventQueue)),
@@ -476,11 +529,33 @@ export const make = <Result, Failure, Requirements>(
             const projected = withoutOutputSide(state.watchSet.outputs, change);
             if (projected === undefined) {
               outputChanges += 1;
-            } else if (touches(state.watchSet.inputs, projected)) {
-              relevant.set(changeKey(projected), projected);
+            } else {
+              if (touches(state.watchSet.inputs, projected)) {
+                relevant.set(changeKey(projected), projected);
+              }
             }
           }
+
+          let nextActive: ActiveCycle | undefined;
+          if (state.active !== undefined) {
+            const triggers = new Map(state.active.triggers);
+            triggers.set(trigger.sequence, unique);
+            if (triggers.size > limits.maxPendingTriggers) {
+              return yield* new WatchTriggerRejected({
+                sequence: trigger.sequence,
+                reason: "pending trigger bound exceeded",
+              });
+            }
+            if (distinctActiveChanges(triggers) > limits.maxPendingChanges) {
+              return yield* new WatchTriggerRejected({
+                sequence: trigger.sequence,
+                reason: "pending change bound exceeded",
+              });
+            }
+            nextActive = Object.freeze({ cycle: state.active.cycle, triggers });
+          }
           if (relevant.size === 0) {
+            if (nextActive !== undefined) state.active = nextActive;
             state.lastSequence = trigger.sequence;
             return Object.freeze({
               _tag: "Ignored" as const,
@@ -508,6 +583,7 @@ export const make = <Result, Failure, Requirements>(
             triggerCount: pending.triggerCount + 1,
             changes: merged,
           });
+          if (nextActive !== undefined) state.active = nextActive;
           state.lastSequence = trigger.sequence;
           if (wasEmpty) Queue.offerUnsafe(wake, undefined);
           return Object.freeze({

@@ -99,7 +99,15 @@ const macho = (bytes: Uint8Array): NativeObservation => {
       if (ordered[index]!.offset < ordered[index - 1]!.end) throw new Error("overlapping-fat-slices");
     }
     if (architectures.size !== 1) throw new Error("ambiguous-fat-architecture");
-    return { nativeFormat: "mach-o", os: "macos", architecture: [...architectures][0]! };
+    const architecture = [...architectures][0]!;
+    const cpu = architecture === "x64" ? 0x01000007 : 0x0100000c;
+    const selected = slices.find((slice) => slice.cpu === cpu)!;
+    if (
+      bytes[selected.offset] !== 0xcf || bytes[selected.offset + 1] !== 0xfa
+      || bytes[selected.offset + 2] !== 0xed || bytes[selected.offset + 3] !== 0xfe
+      || u32(bytes, selected.offset + 4, true) !== cpu
+    ) throw new Error("invalid-fat-slice");
+    return { nativeFormat: "mach-o", os: "macos", architecture };
   }
   const cpu = u32(bytes, 4, true);
   const architecture = cpu === 0x01000007 ? "x64" : cpu === 0x0100000c ? "aarch64" : undefined;

@@ -131,10 +131,36 @@ const validatePermissionLists = (
     yield* validatePermission(operation, "allowScripts", input.allowScripts);
   });
 
-const validateDirect = (input: DirectInput): Effect.Effect<void, DenoCommandInputInvalid> =>
+const validateDestination = (
+  destination: Destination,
+  outdirOnly: boolean,
+): Effect.Effect<void, DenoCommandInputInvalid> => {
+  if (destination._tag !== "Output" && destination._tag !== "Outdir") {
+    return Effect.fail(
+      new DenoCommandInputInvalid({
+        operation: "bundle",
+        reason: "destination._tag must be Output or Outdir",
+      }),
+    );
+  }
+  if (outdirOnly && destination._tag !== "Outdir") {
+    return Effect.fail(
+      new DenoCommandInputInvalid({
+        operation: "bundle",
+        reason: "destination._tag must be Outdir for declarations",
+      }),
+    );
+  }
+  return validatePath("bundle", "destination", destination.path);
+};
+
+const validateDirect = (
+  input: DirectInput,
+  outdirOnly = false,
+): Effect.Effect<void, DenoCommandInputInvalid> =>
   Effect.gen(function*() {
     yield* validatePermissionLists("bundle", input);
-    yield* validatePath("bundle", "destination", input.destination.path);
+    yield* validateDestination(input.destination, outdirOnly);
     for (const entrypoint of input.entrypoints) yield* validatePath("bundle", "entrypoint", entrypoint);
   });
 
@@ -183,7 +209,7 @@ export const declarations = (
   input: DeclarationsInput,
 ): Effect.Effect<DirectResult, RunError | DenoCommandInputInvalid, Runtime> =>
   Effect.gen(function*() {
-    yield* validateDirect(input);
+    yield* validateDirect(input, true);
     const runtime = yield* Runtime;
     const completion = yield* runtime.run(
       "bundleDeclarations",

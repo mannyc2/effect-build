@@ -142,6 +142,112 @@ const observeContent = (
 const sameContent = (left: ContentIdentity, right: ContentIdentity): boolean =>
   left.bytes === right.bytes && left.digest.value === right.digest.value;
 
+const nonEmptyObservationString = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && !value.includes("\0");
+
+const copyContentIdentity = (value: unknown): ContentIdentity | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const content = value as { readonly bytes?: unknown; readonly digest?: unknown };
+  if (typeof content.bytes !== "string" || !/^(?:0|[1-9][0-9]*)$/u.test(content.bytes)) return undefined;
+  if (typeof content.digest !== "object" || content.digest === null) return undefined;
+  const digest = content.digest as { readonly algorithm?: unknown; readonly value?: unknown };
+  if (digest.algorithm !== "sha256" || typeof digest.value !== "string" || !/^[0-9a-f]{64}$/u.test(digest.value)) {
+    return undefined;
+  }
+  return Object.freeze({
+    bytes: decimalBytes(content.bytes),
+    digest: sha256Digest(digest.value),
+  });
+};
+
+const invalidObservation = (tool: string, reason: string): ToolSelectionInvalid =>
+  new ToolSelectionInvalid({ tool, reason });
+
+const copyObservation = <const Name extends string>(
+  name: Name,
+  value: unknown,
+): Effect.Effect<Observation<Name>, ToolSelectionInvalid> =>
+  Effect.gen(function*() {
+    if (typeof value !== "object" || value === null) {
+      return yield* invalidObservation(name, "tool observation must be an object");
+    }
+    const observation = value as {
+      readonly name?: unknown;
+      readonly participants?: unknown;
+      readonly capabilities?: unknown;
+    };
+    if (observation.name !== name) {
+      return yield* invalidObservation(name, "tool observation name does not match the selected tool");
+    }
+    if (!Array.isArray(observation.participants) || observation.participants.length === 0) {
+      return yield* invalidObservation(name, "tool observation requires at least one participant");
+    }
+    const participants: ParticipantIdentity[] = [];
+    for (const value of observation.participants) {
+      if (typeof value !== "object" || value === null) {
+        return yield* invalidObservation(name, "tool observation contains an invalid participant");
+      }
+      const participant = value as Partial<Record<keyof ParticipantIdentity, unknown>>;
+      if (
+        !nonEmptyObservationString(participant.role)
+        || !nonEmptyObservationString(participant.name)
+        || !nonEmptyObservationString(participant.version)
+        || !nonEmptyObservationString(participant.revision)
+        || !nonEmptyObservationString(participant.channel)
+      ) {
+        return yield* invalidObservation(name, "tool observation contains an incomplete participant identity");
+      }
+      const content = copyContentIdentity(participant.content);
+      if (content === undefined) {
+        return yield* invalidObservation(name, "tool observation contains an invalid participant content identity");
+      }
+      participants.push(Object.freeze({
+        role: participant.role,
+        name: participant.name,
+        version: participant.version,
+        revision: participant.revision,
+        channel: participant.channel,
+        content,
+      }));
+    }
+    if (!Array.isArray(observation.capabilities)) {
+      return yield* invalidObservation(name, "tool observation capabilities must be an array");
+    }
+    const capabilities: CapabilityObservation[] = [];
+    for (const value of observation.capabilities) {
+      if (typeof value !== "object" || value === null) {
+        return yield* invalidObservation(name, "tool observation contains an invalid capability");
+      }
+      const capability = value as {
+        readonly _tag?: unknown;
+        readonly id?: unknown;
+        readonly evidence?: unknown;
+        readonly reason?: unknown;
+      };
+      if (!nonEmptyObservationString(capability.id)) {
+        return yield* invalidObservation(name, "tool observation contains a capability without an id");
+      }
+      if (capability._tag === "Present") {
+        if (!nonEmptyObservationString(capability.evidence)) {
+          return yield* invalidObservation(name, "present capability observation requires evidence");
+        }
+        capabilities.push(Object.freeze({ _tag: "Present", id: capability.id, evidence: capability.evidence }));
+      } else if (capability._tag === "Missing" || capability._tag === "Indeterminate") {
+        if (!nonEmptyObservationString(capability.reason)) {
+          return yield* invalidObservation(name, `${capability._tag} capability observation requires a reason`);
+        }
+        capabilities.push(Object.freeze({ _tag: capability._tag, id: capability.id, reason: capability.reason }));
+      } else {
+        return yield* invalidObservation(name, "tool observation contains an unknown capability tag");
+      }
+    }
+    return Object.freeze({
+      name,
+      participants: Object.freeze(participants) as readonly [ParticipantIdentity, ...ParticipantIdentity[]],
+      capabilities: Object.freeze(capabilities),
+    });
+  });
+
 const makeCommand =
   (executablePath: AbsolutePath) => (argv: readonly string[], options: CommandOptions = {}): ChildProcess.Command =>
     ChildProcess.make(executablePath, argv, { ...options, shell: false });
@@ -231,12 +337,13 @@ export const select = <const Name extends string, ObserveError, Requirements = n
     const executablePath = yield* resolve(options.name, options.executable);
     const before = yield* observeContent(executablePath);
     const command = makeCommand(executablePath);
-    const observation = yield* options.observe(Object.freeze({
+    const observed = yield* options.observe(Object.freeze({
       name: options.name,
       executablePath,
       content: before,
       command,
     }));
+    const observation = yield* copyObservation(options.name, observed);
     const after = yield* observeContent(executablePath);
     if (!sameContent(before, after)) return yield* changed(options.name, executablePath, before, after);
 
@@ -254,7 +361,7 @@ export const select = <const Name extends string, ObserveError, Requirements = n
       name: options.name,
       executablePath,
       content: before,
-      observation: Object.freeze(observation),
+      observation,
       command,
       reauthenticate,
     });

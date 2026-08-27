@@ -36,6 +36,47 @@ const workspace = async (): Promise<
 };
 
 describe("package-private immutable directory generations", () => {
+  it("rejects overlapping roots before creating any publication directory", async () => {
+    const paths = await workspace();
+    const publicationParent = join(paths.provider, "nested-publication");
+    try {
+      await writeFile(join(paths.provider, "index.js"), "export {};\n");
+      const exit = await runExit(DirectoryGeneration.seal({
+        providerRoot: paths.provider,
+        publicationRoot: join(publicationParent, "output"),
+        subject: DirectoryGeneration.unprofiledSubject,
+      }));
+
+      expect(errorOf(exit).reason).toContain("must not overlap");
+      expect(await exists(publicationParent)).toBe(false);
+    } finally {
+      await rm(paths.root, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "rejects a publication path beneath a symlink alias before mutating the provider tree",
+    async () => {
+      const paths = await workspace();
+      const alias = join(paths.root, "provider-alias");
+      const createdInsideProvider = join(paths.provider, "publication-through-alias");
+      try {
+        await writeFile(join(paths.provider, "index.js"), "export {};\n");
+        await symlink(paths.provider, alias);
+        const exit = await runExit(DirectoryGeneration.seal({
+          providerRoot: paths.provider,
+          publicationRoot: join(alias, "publication-through-alias", "output"),
+          subject: DirectoryGeneration.unprofiledSubject,
+        }));
+
+        expect(errorOf(exit).reason).toContain("must not overlap");
+        expect(await exists(createdInsideProvider)).toBe(false);
+      } finally {
+        await rm(paths.root, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("requires index.html before installing or activating a static-browser generation", async () => {
     const paths = await workspace();
     try {

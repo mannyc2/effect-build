@@ -181,6 +181,36 @@ const validatePortablePath = (relativePath: string): string | undefined => {
 const reject = (phase: "request" | "analysis", reason: string): BrowserModulePayloadRejected =>
   new BrowserModulePayloadRejected({ phase, reason });
 
+const copyProviderIdentity = (
+  value: unknown,
+): Effect.Effect<ProviderIdentity, BrowserModulePayloadRejected> =>
+  Effect.gen(function*() {
+    if (typeof value !== "object" || value === null) {
+      return yield* reject("analysis", "provider identity is incomplete");
+    }
+    const identity = value as Partial<Record<keyof ProviderIdentity, unknown>>;
+    const packageName = identity.package;
+    const version = identity.version;
+    const engine = identity.engine;
+    const engineVersion = identity.engineVersion;
+    if (
+      typeof packageName !== "string"
+      || packageName.length === 0
+      || typeof version !== "string"
+      || version.length === 0
+      || typeof engine !== "string"
+      || engine.length === 0
+      || typeof engineVersion !== "string"
+      || engineVersion.length === 0
+    ) return yield* reject("analysis", "provider identity is incomplete");
+    return Object.freeze({
+      package: packageName,
+      version,
+      engine,
+      engineVersion,
+    });
+  });
+
 const nonEmptyUnique = (
   values: readonly string[] | undefined,
   field: string,
@@ -482,24 +512,28 @@ export const withPayload = <A, UseError, UseRequirements>(
   | Path.Path
   | Exclude<UseRequirements, Scope.Scope>
 > =>
-  Effect.flatMap(validateRequest(request), (validated) =>
-    Effect.flatMap(Provider, (provider) => {
-      let produced: ProducedPayload | undefined;
-      return BorrowedOutput.withTree(
-        {
-          prefix: "effect-build-browser-module-payload-",
-          produce: (ownedRoot) =>
-            Effect.tap(provider.produce(validated, ownedRoot), (value) =>
-              Effect.sync(() => {
-                produced = value;
-              })).pipe(Effect.map((value) => value.root)),
-        },
-        "hashed",
-        (tree) => {
-          const value = produced;
-          return value === undefined
-            ? Effect.fail(reject("analysis", "provider completed without a result"))
-            : Effect.flatMap(validateProduced(validated, value, tree, provider.identity), use);
-        },
-      );
-    }));
+  Effect.flatMap(
+    validateRequest(request),
+    (validated) =>
+      Effect.flatMap(Provider, (provider) =>
+        Effect.flatMap(copyProviderIdentity(provider.identity), (identity) => {
+          let produced: ProducedPayload | undefined;
+          return BorrowedOutput.withTree(
+            {
+              prefix: "effect-build-browser-module-payload-",
+              produce: (ownedRoot) =>
+                Effect.tap(provider.produce(validated, ownedRoot), (value) =>
+                  Effect.sync(() => {
+                    produced = value;
+                  })).pipe(Effect.map((value) => value.root)),
+            },
+            "hashed",
+            (tree) => {
+              const value = produced;
+              return value === undefined
+                ? Effect.fail(reject("analysis", "provider completed without a result"))
+                : Effect.flatMap(validateProduced(validated, value, tree, identity), use);
+            },
+          );
+        })),
+  );

@@ -29,6 +29,21 @@ const elf = (interpreter?: string): Uint8Array => {
   return bytes;
 };
 
+const fatMacho = (slice: "valid" | "invalid-magic" | "invalid-cpu"): Uint8Array => {
+  const cpu = 0x01000007;
+  const offset = 32;
+  const bytes = new Uint8Array(48);
+  const view = new DataView(bytes.buffer);
+  bytes.set([0xca, 0xfe, 0xba, 0xbe], 0);
+  view.setUint32(4, 1, false);
+  view.setUint32(8, cpu, false);
+  view.setUint32(16, offset, false);
+  view.setUint32(20, 16, false);
+  bytes.set(slice === "invalid-magic" ? [0, 0, 0, 0] : [0xcf, 0xfa, 0xed, 0xfe], offset);
+  view.setUint32(offset + 4, slice === "invalid-cpu" ? 0x0100000c : cpu, true);
+  return bytes;
+};
+
 const inspect = (provider: Provider, path: AbsolutePath, target: SystemTarget) =>
   provider === "bun"
     ? BunExecutable.inspect(path, "bun", "1.3.14", target)
@@ -44,6 +59,34 @@ const errorOf = <A, E>(exit: Exit.Exit<A, E>): E => {
 };
 
 describe("Bun and Deno native executable inspection", () => {
+  it("Bun structurally validates the selected fat Mach-O slice", async () => {
+    const root = await mkdtemp(join(tmpdir(), "effect-build-bun-fat-macho-"));
+    try {
+      const validPath = join(root, "valid") as AbsolutePath;
+      await writeFile(validPath, fatMacho("valid"));
+      await chmod(validPath, 0o755);
+      const valid = await Effect.runPromiseExit(
+        inspect("bun", validPath, "macos-x64").pipe(Effect.provide(NodeServices.layer)),
+      );
+      expect(Exit.isSuccess(valid)).toBe(true);
+
+      for (const malformed of ["invalid-magic", "invalid-cpu"] as const) {
+        const path = join(root, malformed) as AbsolutePath;
+        await writeFile(path, fatMacho(malformed));
+        await chmod(path, 0o755);
+        const exit = await Effect.runPromiseExit(
+          inspect("bun", path, "macos-x64").pipe(Effect.provide(NodeServices.layer)),
+        );
+        expect(errorOf(exit)).toMatchObject({
+          _tag: "NativeExecutableInspectionFailed",
+          reason: "invalid-fat-slice",
+        });
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   for (const provider of ["bun", "deno"] as const) {
     it(`${provider} rejects Linux artifacts whose ABI is absent or unknown`, async () => {
       const root = await mkdtemp(join(tmpdir(), `effect-build-${provider}-abi-`));

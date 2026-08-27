@@ -156,6 +156,40 @@ test("run aggregation snapshots every job and artifact page once", async () => {
   }
 });
 
+test("artifact observation evicts a completed empty snapshot before retrying", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    const artifacts = calls === 1
+      ? []
+      : [{
+        id: 42,
+        name: "eventually-visible",
+        workflow_run: { id: 999999996 },
+        expired: false,
+        expires_at: "2100-01-01T00:00:00Z",
+        digest: `sha256:${"0".repeat(64)}`,
+      }];
+    return new Response(JSON.stringify({ total_count: artifacts.length, artifacts }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const artifact = await observeArtifact({
+      repository: "effect-build/retry-test",
+      runId: "999999996",
+      name: "eventually-visible",
+      token: "test-token",
+    });
+    assert.equal(artifact.id, 42);
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("artifact ZIP validation admits only exact regular top-level entries", () => {
   const entries = readArtifactZip(zip([["payload.bin", "payload"], ["offer.json", "{}\n"]]));
   requireEntries(entries, ["offer.json", "payload.bin"]);

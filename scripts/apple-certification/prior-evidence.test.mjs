@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -16,6 +16,8 @@ import {
   priorEvidenceManifestProtocol,
   receiptProtocol,
 } from "./receipt.mjs";
+
+const testPosixModes = process.platform === "win32" ? test.skip : test;
 
 const sourceSha = "1".repeat(40);
 const candidateWorkflowRunId = "2";
@@ -134,7 +136,7 @@ const writeDistributionTriple = async (root, coordinate) => {
   return { evidenceBytes, slug };
 };
 
-test("prior evidence is verifier-authenticated, dependency-mapped, and privately snapshotted", async () => {
+testPosixModes("prior evidence is verifier-authenticated, dependency-mapped, and privately snapshotted", async () => {
   const root = await mkdtemp(join(tmpdir(), "effect-build-apple-prior-"));
   try {
     const inputRoot = join(root, "input");
@@ -160,13 +162,79 @@ test("prior evidence is verifier-authenticated, dependency-mapped, and privately
     await reauthenticatePriorEvidenceSnapshot(identity);
     const snapshottedEvidence = join(identity.snapshotRoot, `${slug}.evidence.json`);
     await chmod(snapshottedEvidence, 0o600);
-    await assert.rejects(() => reauthenticatePriorEvidenceSnapshot(identity), /read-only|changed before execution/u);
+    await assert.rejects(() => reauthenticatePriorEvidenceSnapshot(identity), /mode 0400|changed after capture/u);
   } finally {
+    await chmod(join(root, "temporary", "authenticated-prior-evidence"), 0o700).catch(() => undefined);
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("prior evidence rejects a syntactically valid but semantically unrelated coordinate", async () => {
+testPosixModes("prior evidence rejects restored bytes, replacement files, and root mutations", async (context) => {
+  const withSnapshot = async (run) => {
+    const root = await mkdtemp(join(tmpdir(), "effect-build-apple-prior-identity-"));
+    const inputRoot = join(root, "input");
+    const temporaryRoot = join(root, "temporary");
+    await mkdir(inputRoot);
+    await mkdir(temporaryRoot);
+    const coordinate = "notarized-stapled-app-bundle|macos-x64";
+    const { evidenceBytes, slug } = await writeDistributionTriple(inputRoot, coordinate);
+    const identity = await snapshotPriorEvidence({
+      category: "clean-host",
+      coordinate: "G-App|macos-x64",
+      inputRoot,
+      temporaryRoot,
+      environment,
+      expected,
+    });
+    try {
+      await run({ root, identity, evidenceBytes, slug });
+    } finally {
+      await chmod(identity.snapshotRoot, 0o700).catch(() => undefined);
+      await rm(root, { recursive: true, force: true });
+    }
+  };
+
+  await context.test("same-byte regular-file replacement", async () =>
+    withSnapshot(async ({ root, identity, evidenceBytes, slug }) => {
+      const path = join(identity.snapshotRoot, `${slug}.evidence.json`);
+      await chmod(identity.snapshotRoot, 0o700);
+      await rename(path, join(root, "evidence-before-replacement.json"));
+      await writeFile(path, evidenceBytes, { mode: 0o400, flag: "wx" });
+      await chmod(identity.snapshotRoot, 0o500);
+      await assert.rejects(() => reauthenticatePriorEvidenceSnapshot(identity), /captured filesystem identity/u);
+    }));
+
+  await context.test("restored manifest bytes and mode", async () =>
+    withSnapshot(async ({ identity }) => {
+      await chmod(identity.manifestPath, 0o600);
+      await writeFile(identity.manifestPath, Buffer.alloc(identity.manifestBytes.length, "x"));
+      await writeFile(identity.manifestPath, identity.manifestBytes);
+      await chmod(identity.manifestPath, 0o400);
+      await assert.rejects(() => reauthenticatePriorEvidenceSnapshot(identity), /captured filesystem identity/u);
+    }));
+
+  await context.test("same-content directory replacement", async () =>
+    withSnapshot(async ({ root, identity }) => {
+      const copies = await Promise.all((await readdir(identity.snapshotRoot)).map(async (name) =>
+        [name, await readFile(join(identity.snapshotRoot, name))]));
+      await chmod(identity.snapshotRoot, 0o700);
+      await rename(identity.snapshotRoot, join(root, "prior-evidence-before-replacement"));
+      await mkdir(identity.snapshotRoot, { mode: 0o700 });
+      for (const [name, bytes] of copies) {
+        await writeFile(join(identity.snapshotRoot, name), bytes, { mode: 0o400, flag: "wx" });
+      }
+      await chmod(identity.snapshotRoot, 0o500);
+      await assert.rejects(() => reauthenticatePriorEvidenceSnapshot(identity), /captured filesystem identity/u);
+    }));
+
+  await context.test("directory mode", async () =>
+    withSnapshot(async ({ identity }) => {
+      await chmod(identity.snapshotRoot, 0o700);
+      await assert.rejects(() => reauthenticatePriorEvidenceSnapshot(identity), /mode 0500/u);
+    }));
+});
+
+testPosixModes("prior evidence rejects a syntactically valid but semantically unrelated coordinate", async () => {
   const root = await mkdtemp(join(tmpdir(), "effect-build-apple-prior-hostile-"));
   try {
     const inputRoot = join(root, "input");
@@ -188,4 +256,20 @@ test("prior evidence rejects a syntactically valid but semantically unrelated co
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("prior-evidence snapshot capture fails closed without POSIX mode semantics", {
+  skip: process.platform !== "win32",
+}, async () => {
+  await assert.rejects(
+    () => snapshotPriorEvidence({
+      category: "distribution",
+      coordinate: categoryCoordinates.distribution[0],
+      inputRoot: undefined,
+      temporaryRoot: "C:\\temporary",
+      environment,
+      expected,
+    }),
+    /require POSIX read-only mode semantics/u,
+  );
 });

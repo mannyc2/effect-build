@@ -243,6 +243,70 @@ describe("provider command lanes", () => {
     ]);
   });
 
+  it("rejects erased provider-direct tags before acquiring esbuild or Deno", async () => {
+    const unknownOutput = { _tag: "Unknown", path: "dist" };
+
+    const watchExit = await Effect.runPromiseExit(
+      Effect.scoped(
+        EsbuildWatch.watch({
+          entrypoints: ["src/main.ts"],
+          output: unknownOutput,
+        } as never),
+      ) as Effect.Effect<unknown, unknown>,
+    );
+    expect(failure(watchExit)).toMatchObject({
+      _tag: "EsbuildCommandInputInvalid",
+      operation: "watch",
+      reason: "output._tag must be Outfile or Outdir",
+    });
+
+    const serveExit = await Effect.runPromiseExit(
+      Effect.scoped(
+        EsbuildServe.serve({
+          entrypoints: ["src/main.ts"],
+          output: unknownOutput,
+        } as never),
+      ) as Effect.Effect<unknown, unknown>,
+    );
+    expect(failure(serveExit)).toMatchObject({
+      _tag: "EsbuildCommandInputInvalid",
+      operation: "serve",
+      reason: "output._tag must be Outfile or Outdir",
+    });
+
+    for (const operation of ["direct", "watch", "declarations"] as const) {
+      const input = {
+        entrypoints: ["src/main.ts"],
+        destination: { _tag: "Unknown", path: "dist" },
+      } as never;
+      const candidate = operation === "direct"
+        ? DenoBundle.direct(input)
+        : operation === "watch"
+        ? Effect.scoped(DenoBundle.watch(input))
+        : DenoBundle.declarations(input);
+      const exit = await Effect.runPromiseExit(
+        candidate as Effect.Effect<unknown, unknown>,
+      );
+      expect(failure(exit)).toMatchObject({
+        _tag: "DenoCommandInputInvalid",
+        operation: "bundle",
+        reason: "destination._tag must be Output or Outdir",
+      });
+    }
+
+    const declarationOutput = await Effect.runPromiseExit(
+      DenoBundle.declarations({
+        entrypoints: ["src/main.ts"],
+        destination: { _tag: "Output", path: "dist/index.d.ts" },
+      } as never) as Effect.Effect<unknown, unknown>,
+    );
+    expect(failure(declarationOutput)).toMatchObject({
+      _tag: "DenoCommandInputInvalid",
+      operation: "bundle",
+      reason: "destination._tag must be Outdir for declarations",
+    });
+  });
+
   it("runs bounded exact Rolldown stdout and provider-direct directory candidates", async () => {
     const root = makeRoot();
     const binary = executable(root, "rolldown");

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import type * as Tool from "effect-build/Author/Tool";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import type { Format, Options, Platform, ServeInput, Sourcemap } from "../internal/Command.js";
-import { renderWatchArgv, validateValue, valuesWithPrefix } from "../internal/Command.js";
+import { renderWatchArgv, validateValue, validateWatchOutput, valuesWithPrefix } from "../internal/Command.js";
 import type { EsbuildCommandInputInvalid } from "../internal/CommandError.js";
 import { EsbuildCommandInputInvalid as InputInvalid } from "../internal/CommandError.js";
 import type { ProcessError } from "../internal/Runtime.js";
@@ -22,7 +22,7 @@ export const serve = (
   input: Input,
 ): Effect.Effect<Server, ProcessError | EsbuildCommandInputInvalid, Runtime | import("effect").Scope.Scope> =>
   Effect.gen(function*() {
-    yield* validateValue("serve", input.output.path, "output path");
+    yield* validateWatchOutput("serve", input.output);
     for (const entrypoint of input.entrypoints) yield* validateValue("serve", entrypoint, "entrypoint");
     if (input.port !== undefined && (!Number.isSafeInteger(input.port) || input.port < 0 || input.port > 65_535)) {
       return yield* new InputInvalid({ operation: "serve", reason: "port must be an integer from 0 through 65535" });

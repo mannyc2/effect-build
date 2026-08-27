@@ -469,8 +469,16 @@ export const withFile = <
   | Path.Path
   | Exclude<ProduceRequirements, Scope.Scope>
   | Exclude<UseRequirements, Scope.Scope>
-> =>
-  withOwnedRoot(
+> => {
+  if (mode !== "hashed" && mode !== "unhashed") {
+    return Effect.fail(
+      new BorrowedOutputObservationFailed({
+        leaseId: "unallocated",
+        reason: "observation mode must be hashed or unhashed",
+      }),
+    );
+  }
+  return withOwnedRoot(
     producer,
     (leaseId, root, candidate, state, semaphore) =>
       Effect.gen(function*() {
@@ -502,6 +510,7 @@ export const withFile = <
       }),
     use,
   );
+};
 
 export const withTree = <
   Mode extends ObservationMode,
@@ -523,8 +532,16 @@ export const withTree = <
   | Path.Path
   | Exclude<ProduceRequirements, Scope.Scope>
   | Exclude<UseRequirements, Scope.Scope>
-> =>
-  withOwnedRoot(
+> => {
+  if (mode !== "hashed" && mode !== "unhashed") {
+    return Effect.fail(
+      new BorrowedOutputObservationFailed({
+        leaseId: "unallocated",
+        reason: "observation mode must be hashed or unhashed",
+      }),
+    );
+  }
+  return withOwnedRoot(
     producer,
     (leaseId, root, candidate, state, semaphore) =>
       Effect.gen(function*() {
@@ -553,3 +570,4 @@ export const withTree = <
       }),
     use,
   );
+};

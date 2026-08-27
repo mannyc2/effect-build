@@ -48,6 +48,8 @@ jobs:
   admission:
     name: Admit an exact first-attempt main run
     runs-on: ubuntu-24.04
+    outputs:
+      candidateSourceSha: ${{ steps.candidate_source.outputs.sourceSha }}
     steps:
       - name: Reject reruns, non-main refs, and malformed immutable inputs
         shell: bash
@@ -61,6 +63,23 @@ jobs:
           [[ "$DESCRIPTOR_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$PAYLOAD_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$PAYLOAD_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - id: candidate_source
+        name: Authenticate the candidate and resolve its immutable source commit
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          candidate_source_sha="$(node scripts/apple-certification/resolve-candidate-source.mjs)"
+          [[ "$candidate_source_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'sourceSha=%s\n' "$candidate_source_sha" >> "$GITHUB_OUTPUT"
 
   distribution:
     needs: admission
@@ -88,6 +107,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+          ref: ${{ needs.admission.outputs.candidateSourceSha }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24.14.1
@@ -96,6 +116,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          AUTHENTICATED_CANDIDATE_SOURCE_SHA: ${{ needs.admission.outputs.candidateSourceSha }}
           EFFECT_BUILD_APPLE_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER }}
           EFFECT_BUILD_APPLE_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER_SHA256 }}
           EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER }}
@@ -120,7 +141,7 @@ jobs:
           compression-level: 0
 
   clean-host:
-    needs: distribution
+    needs: [admission, distribution]
     name: Clean host ${{ matrix.product }} | ${{ matrix.target.token }}
     environment: apple-certification
     strategy:
@@ -138,6 +159,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+          ref: ${{ needs.admission.outputs.candidateSourceSha }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24.14.1
@@ -150,6 +172,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          AUTHENTICATED_CANDIDATE_SOURCE_SHA: ${{ needs.admission.outputs.candidateSourceSha }}
           EFFECT_BUILD_APPLE_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER }}
           EFFECT_BUILD_APPLE_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER_SHA256 }}
           EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER }}
@@ -171,7 +194,7 @@ jobs:
           compression-level: 0
 
   certification-cells:
-    needs: [distribution, clean-host]
+    needs: [admission, distribution, clean-host]
     name: Certification cell ${{ matrix.cell }}
     environment: apple-certification
     strategy:
@@ -184,6 +207,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+          ref: ${{ needs.admission.outputs.candidateSourceSha }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24.14.1
@@ -200,6 +224,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          AUTHENTICATED_CANDIDATE_SOURCE_SHA: ${{ needs.admission.outputs.candidateSourceSha }}
           EFFECT_BUILD_APPLE_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER }}
           EFFECT_BUILD_APPLE_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER_SHA256 }}
           EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER }}
@@ -225,7 +250,7 @@ jobs:
           compression-level: 0
 
   aggregate:
-    needs: certification-cells
+    needs: [admission, certification-cells]
     name: Authenticate all 32 receipts and retain the exact certification envelope
     runs-on: ubuntu-24.04
     environment: apple-certification
@@ -233,6 +258,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+          ref: ${{ needs.admission.outputs.candidateSourceSha }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24.14.1
@@ -245,6 +271,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          AUTHENTICATED_CANDIDATE_SOURCE_SHA: ${{ needs.admission.outputs.candidateSourceSha }}
           EFFECT_BUILD_APPLE_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER }}
           EFFECT_BUILD_APPLE_CERTIFIER_SHA256: ${{ vars.EFFECT_BUILD_APPLE_CERTIFIER_SHA256 }}
           EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER: ${{ vars.EFFECT_BUILD_APPLE_CLEAN_HOST_CERTIFIER }}

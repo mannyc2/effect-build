@@ -23,6 +23,46 @@ const fileProducer = (contents: string): BorrowedOutput.Producer<never> => ({
 });
 
 describe("BorrowedOutput ownership laws", () => {
+  it("rejects unknown file and tree observation modes before producer work", async () => {
+    let produced = 0;
+    const producer: BorrowedOutput.Producer<never> = {
+      prefix: "effect-build-invalid-observation-mode-",
+      produce: () => {
+        produced += 1;
+        return Effect.die("invalid observation mode reached producer work");
+      },
+    };
+    const fileExit = await Effect.runPromiseExit(
+      BorrowedOutput.withFile(
+        producer,
+        "digest" as unknown as "hashed",
+        () => Effect.void,
+      ).pipe(Effect.provide(layer)),
+    );
+    const treeExit = await Effect.runPromiseExit(
+      BorrowedOutput.withTree(
+        producer,
+        "digest" as unknown as "unhashed",
+        () => Effect.void,
+      ).pipe(Effect.provide(layer)),
+    );
+
+    for (const exit of [fileExit, treeExit]) {
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const error = Cause.findErrorOption(exit.cause);
+        expect(error._tag).toBe("Some");
+        if (error._tag === "Some") {
+          expect(error.value).toBeInstanceOf(BorrowedOutput.BorrowedOutputObservationFailed);
+          expect((error.value as BorrowedOutput.BorrowedOutputObservationFailed).reason).toContain(
+            "hashed or unhashed",
+          );
+        }
+      }
+    }
+    expect(produced).toBe(0);
+  });
+
   it("keeps authoritative observation inside one continuation and expires escaped handles deterministically", async () => {
     let escaped: BorrowedOutput.File<"hashed"> | undefined;
     let locator = "";

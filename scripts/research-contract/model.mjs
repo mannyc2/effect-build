@@ -199,7 +199,7 @@ const exactNodeUnsupportedTargets = [{
   ],
 }];
 // Freeze the complete policy-owned Apple schema without duplicating its runtime constants here.
-const exactAppleCertificationAuthoritySha256 = "7d77a73cd9153cff9a4aaf47707fa7886c426ae9b3ad877c0bba8f08c89ec6b5";
+const exactAppleCertificationAuthoritySha256 = "42dc8e394a13c3a59208b68a7f6a9927eeeea2e600a74509f1e911335bd9420c";
 
 export const parseCsv = (source) => {
   const records = [];

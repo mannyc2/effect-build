@@ -434,6 +434,54 @@ const resolveRoot = (
     return canonical as AbsolutePath;
   });
 
+const requestedRoot = (
+  phase: string,
+  candidate: string,
+  cwd: string | undefined,
+): Effect.Effect<AbsolutePath, DirectoryGenerationFailed, Path.Path> =>
+  Effect.gen(function*() {
+    const path = yield* Path.Path;
+    if (candidate.length === 0) return yield* failure(phase, candidate, "root must not be empty");
+    const requested = path.normalize(path.resolve(cwd ?? "", candidate));
+    if (!path.isAbsolute(requested)) return yield* failure(phase, candidate, "root must resolve to an absolute path");
+    return requested as AbsolutePath;
+  });
+
+const projectCanonicalRoot = (
+  phase: string,
+  requested: AbsolutePath,
+): Effect.Effect<AbsolutePath, DirectoryGenerationFailed, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    let ancestor: string = requested;
+    const missingComponents: string[] = [];
+    while (
+      !(yield* fileSystem.exists(ancestor).pipe(
+        Effect.mapError((error) => failure(phase, ancestor, describe(error))),
+      ))
+    ) {
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) {
+        return yield* failure(phase, requested, "unable to resolve an existing publication ancestor");
+      }
+      missingComponents.unshift(path.basename(ancestor));
+      ancestor = parent;
+    }
+    const canonicalAncestor = path.normalize(
+      yield* fileSystem.realPath(ancestor).pipe(
+        Effect.mapError((error) => failure(phase, ancestor, describe(error))),
+      ),
+    );
+    const information = yield* fileSystem.stat(canonicalAncestor).pipe(
+      Effect.mapError((error) => failure(phase, canonicalAncestor, describe(error))),
+    );
+    if (information.type !== "Directory") {
+      return yield* failure(phase, canonicalAncestor, "nearest existing publication ancestor must be a directory");
+    }
+    return path.normalize(path.join(canonicalAncestor, ...missingComponents)) as AbsolutePath;
+  });
+
 const normalizeNames = (
   path: Path.Path,
   names: readonly string[],
@@ -837,6 +885,22 @@ export const seal = (
       const subject = canonicalSubject(request.subject);
       if (typeof subject === "string") return yield* failure("preflight", request.providerRoot, subject);
       const providerRoot = yield* resolveRoot("preflight", request.providerRoot, request.cwd, false);
+      const requestedPublicationRoot = yield* requestedRoot(
+        "preflight",
+        request.publicationRoot,
+        request.cwd,
+      );
+      const projectedPublicationRoot = yield* projectCanonicalRoot("preflight", requestedPublicationRoot);
+      if (
+        contains(path, providerRoot, projectedPublicationRoot)
+        || contains(path, projectedPublicationRoot, providerRoot)
+      ) {
+        return yield* failure(
+          "preflight",
+          requestedPublicationRoot,
+          "provider and publication roots must not overlap",
+        );
+      }
       const publicationRoot = yield* resolveRoot("preflight", request.publicationRoot, request.cwd, true);
       if (contains(path, providerRoot, publicationRoot) || contains(path, publicationRoot, providerRoot)) {
         return yield* failure("preflight", publicationRoot, "provider and publication roots must not overlap");

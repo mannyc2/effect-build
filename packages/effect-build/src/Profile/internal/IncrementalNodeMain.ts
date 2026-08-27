@@ -3,6 +3,7 @@ import type * as Artifact from "../../Artifact.js";
 import * as BorrowedOutput from "../../Author/BorrowedOutput.js";
 import * as NodeMainLease from "../../Author/internal/NodeMainLease.js";
 import * as NodeMain from "../../Author/NodeMain.js";
+import { SystemTarget } from "../../SystemTarget.js";
 
 export const profile = "effect-build/profile/incremental-node-main@1" as const;
 
@@ -141,6 +142,8 @@ const canonicalBuiltins = (values: readonly string[]): readonly string[] | undef
     : undefined;
 };
 
+const systemTargets: ReadonlySet<unknown> = new Set(SystemTarget.literals);
+
 const validateOffer = (
   program: NodeMain.Request,
   offer: NodeMain.AssemblerOffer,
@@ -151,6 +154,7 @@ const validateOffer = (
   if (
     offer.agreementId.length === 0
     || offer.nodeVersion !== NodeMain.nodeVersion
+    || !systemTargets.has(offer.target)
     || !offer.formats.includes(program.format)
   ) {
     return Effect.fail(new IncrementalOfferRejected({ reason: "assembler offer does not admit the requested main" }));
