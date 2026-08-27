@@ -12,6 +12,9 @@ interface ResearchContract {
       readonly runner: string;
       readonly systemTarget: string;
     }[];
+    readonly nodeMainExecutable: {
+      readonly assemblerCell: string;
+    };
     readonly coordinateRules: {
       readonly compilerTargets: {
         readonly coordinates: readonly { readonly compiler: string; readonly target: string }[];
@@ -25,10 +28,18 @@ interface ResearchContract {
         readonly explicitUnsupportedTargets: readonly {
           readonly target: string;
           readonly disposition: string;
+          readonly assemblerCell: string;
+          readonly classification: string;
+          readonly revisitTrigger: string;
+          readonly observation: {
+            readonly observedCoordinateCount: number;
+            readonly inferredCoordinateCount: number;
+          };
         }[];
         readonly explicitUnsupportedCoordinates: readonly {
           readonly target: string;
           readonly disposition: string;
+          readonly observation: string;
         }[];
       };
       readonly providerNativeLanes: {
@@ -249,13 +260,28 @@ describe("research-complete target surface", () => {
     expect(rule.expectedCoordinateCount).toBe(150);
     expect(rule.expectedUnsupportedCoordinateCount).toBe(30);
     expect(rule.explicitUnsupportedTargets).toHaveLength(1);
-    expect(rule.explicitUnsupportedTargets[0]).toMatchObject({ target: "macos-x64", disposition: "rejected" });
+    expect(rule.explicitUnsupportedTargets[0]).toMatchObject({
+      target: "macos-x64",
+      disposition: "rejected",
+      classification: "upstream-blocked",
+      revisitTrigger: "assembler-cell-change",
+      assemblerCell: contract.evidenceControl.nodeMainExecutable.assemblerCell,
+      observation: { observedCoordinateCount: 2, inferredCoordinateCount: 28 },
+    });
     expect(rule.explicitUnsupportedCoordinates).toHaveLength(30);
     expect(
       rule.explicitUnsupportedCoordinates.every(({ target, disposition }) =>
         target === "macos-x64" && disposition === "rejected"
       ),
     ).toBe(true);
+    const observationCounts = new Map<string, number>();
+    for (const { observation } of rule.explicitUnsupportedCoordinates) {
+      observationCounts.set(observation, (observationCounts.get(observation) ?? 0) + 1);
+    }
+    expect([...observationCounts.entries()].sort(([left], [right]) => left.localeCompare(right))).toEqual([
+      ["inferred-from-upstream-evidence-no-recorded-execution-outcome", 28],
+      ["observed-sigsegv-on-exact-target-runner", 2],
+    ]);
     const plan = workflow.jobs["node-main-plan"]!;
     const construct = workflow.jobs["node-main-construct"]!;
     const finalize = workflow.jobs["node-main-finalize"]!;

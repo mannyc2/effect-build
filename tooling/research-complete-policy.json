@@ -272,14 +272,59 @@
             "assemblerCell": "node@26.7.0",
             "mechanism": "direct-node-build-sea",
             "disposition": "rejected",
+            "classification": "upstream-blocked",
+            "revisitTrigger": "assembler-cell-change",
             "adjudicatedAt": "2026-08-26",
             "platformSupportObservation": "node-26.7.0-macos-x64-not-currently-supported",
             "observedFailure": "process-terminated-by-signal-SIGSEGV",
             "reason": "node-26.7.0-direct-sea-macos-x64-upstream-unsupported-and-sigsegv",
+            "observation": {
+              "workflowRunId": "32925986358",
+              "workflowRunConclusion": "cancelled",
+              "observedCoordinateCount": 2,
+              "inferredCoordinateCount": 28,
+              "observedCoordinates": [
+                {
+                  "producerGroup": "bun-cli",
+                  "mainFormat": "commonjs",
+                  "constructionHost": "linux-x64",
+                  "jobId": "98055230349"
+                },
+                {
+                  "producerGroup": "bun-cli",
+                  "mainFormat": "commonjs",
+                  "constructionHost": "linux-arm64",
+                  "jobId": "98055230325"
+                }
+              ],
+              "cancelledAfterFinalizationStartedCount": 2,
+              "cancelledAfterFinalizationStartedCoordinates": [
+                {
+                  "producerGroup": "bun-cli",
+                  "mainFormat": "commonjs",
+                  "constructionHost": "macos-x64",
+                  "jobId": "98055230443"
+                },
+                {
+                  "producerGroup": "bun-cli",
+                  "mainFormat": "commonjs",
+                  "constructionHost": "macos-arm64",
+                  "jobId": "98055230455"
+                }
+              ],
+              "unobservedReason": "run 32925986358 was cancelled before any other macos-x64 coordinate produced a recorded executable outcome or target-finalizer receipt; two additional finalization jobs entered the combined finalization step but concluded cancelled without producing either, including one coordinate whose JavaScript main was constructed on macOS x64",
+              "inferenceBasis": [
+                "https://nodejs.org/download/release/v26.7.0/docs/api/single-executable-applications.html#platform-support",
+                "https://github.com/nodejs/node/issues/65479"
+              ]
+            },
             "evidence": [
-              "https://nodejs.org/api/single-executable-applications.html#platform-support",
+              "https://nodejs.org/download/release/v26.7.0/docs/api/single-executable-applications.html#platform-support",
               "https://github.com/nodejs/node/issues/65479",
-              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349"
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230349",
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230325",
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230443",
+              "https://github.com/mannyc2/effect-build/actions/runs/32925986358/job/98055230455"
             ]
           }
         ],

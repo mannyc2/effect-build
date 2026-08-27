@@ -232,6 +232,12 @@ test("the private finalizer accounts for 150 applicable and 30 rejected coordina
     180,
   );
   assert.ok(nodeMainApplicableCoordinates.every(({ target }) => target !== "macos-x64"));
+  assert.ok(
+    evidenceControl.coordinateRules.nodeMainExecutable.explicitUnsupportedCoordinates.every(({ observation }) =>
+      observation === "observed-sigsegv-on-exact-target-runner"
+      || observation === "inferred-from-upstream-evidence-no-recorded-execution-outcome"
+    ),
+  );
 });
 
 test("GitHub Node matrices are generated only from applicable contract coordinates", () => {
