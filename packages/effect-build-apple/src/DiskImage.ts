@@ -297,7 +297,7 @@ const makeService = (
                       })
                     ),
                   );
-                  if (target !== "/Applications") {
+                  if (path.normalize(target) !== path.normalize(path.resolve("/Applications"))) {
                     return yield* new BundleInspectionFailed({
                       path: applications,
                       reason: `mounted Applications link targeted ${target}`,

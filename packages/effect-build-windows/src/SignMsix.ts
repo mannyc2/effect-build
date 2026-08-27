@@ -27,6 +27,28 @@ const HttpsUrl = Schema.String.check(
   ),
 );
 
+const TimestampUrl = Schema.String.check(
+  Schema.makeFilter(
+    (value) => {
+      if (/\s/.test(value) || value.includes("?") || value.includes("#")) {
+        return "URL contains whitespace, a query, or a fragment";
+      }
+      try {
+        const parsed = new URL(value);
+        return (parsed.protocol === "http:" || parsed.protocol === "https:")
+            && parsed.hostname.length > 0
+            && parsed.username === ""
+            && parsed.password === ""
+          ? undefined
+          : "URL is not a credential-free absolute HTTP(S) timestamp authority";
+      } catch {
+        return "URL cannot be parsed as an absolute HTTP(S) timestamp URL";
+      }
+    },
+    { expected: "a parsed credential-free absolute HTTP(S) timestamp URL with no query, fragment, or whitespace" },
+  ),
+);
+
 /** Closed SHA-1 certificate thumbprint used for exact certificate-store selection. */
 export const CertificateThumbprint = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{40}$/i, { expected: "a 40-character SHA-1 certificate thumbprint" }),
@@ -39,7 +61,7 @@ export class SignMsixInput extends Schema.Class<SignMsixInput>(
 )({
   source: Artifact.FinalizedFile,
   outfile: Schema.NonEmptyString,
-  timestampUrl: HttpsUrl,
+  timestampUrl: TimestampUrl,
   cwd: Schema.optionalKey(Schema.NonEmptyString),
   description: Schema.optionalKey(Schema.NonEmptyString),
   descriptionUrl: Schema.optionalKey(HttpsUrl),

@@ -383,7 +383,7 @@ jobs:
           "EFFECT_BUILD_TEST_PFX=$pfx" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EFFECT_BUILD_TEST_PFX_PASSWORD=$password" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EFFECT_BUILD_TEST_CERT_THUMBPRINT=$thumbprint" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "EFFECT_BUILD_TIMESTAMP_URL=https://timestamp.digicert.com" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EFFECT_BUILD_TIMESTAMP_URL=http://timestamp.digicert.com" | Out-File -FilePath $env:GITHUB_ENV -Append
       - run: bun run acceptance:windows
       - name: MakeAppx, timestamp, clean-install, execute, and remove oracles
         shell: pwsh

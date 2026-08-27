@@ -52,7 +52,7 @@ const input = (
   new Sign.SignMsixInput({
     source,
     outfile: join(root, outfile),
-    timestampUrl: "https://timestamp.example.test/rfc3161",
+    timestampUrl: "http://timestamp.example.test/rfc3161",
     ...overrides,
   });
 
@@ -140,7 +140,7 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
       "/fd",
       "SHA256",
       "/tr",
-      "https://timestamp.example.test/rfc3161",
+      "http://timestamp.example.test/rfc3161",
       "/td",
       "SHA256",
       "/d",
@@ -284,6 +284,20 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
       expect(failure.reason).toContain("SignMsixInput schema");
       expect(await absent(valid.outfile)).toBe(true);
     }
+  });
+
+  it("keeps the optional artifact description URL HTTPS-only", async () => {
+    const source = await unsigned("insecure-description");
+    const destination = join(root, "insecure-description.msix");
+    const valid = input(source, "insecure-description.msix");
+    const failure = failureOf(
+      await run(
+        Sign.signMsix({ ...valid, descriptionUrl: "http://example.test/application" } as unknown as Sign.SignMsixInput),
+      ),
+    ) as { readonly _tag: string; readonly reason: string };
+    expect(failure._tag).toBe("SignMsixInputRejected");
+    expect(failure.reason).toContain("SignMsixInput schema");
+    expect(await absent(destination)).toBe(true);
   });
 
   it("rejects non-MSIX source and output names before SignTool can run", async () => {

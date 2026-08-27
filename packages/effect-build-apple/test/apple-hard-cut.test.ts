@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import * as AppBundle from "../src/AppBundle.js";
 import * as Assess from "../src/Assess.js";
@@ -293,7 +293,8 @@ describe("effect-build-apple hard cut", () => {
     for (const invocation of invocations.slice(1)) {
       expect(invocation.command).toBe(realpathSync(plutil));
       expect(invocation.args.slice(0, 2)).toEqual(["-lint", "--"]);
-      expect(invocation.args[2]).toMatch(/Contents\/Info\.plist$/);
+      expect(basename(invocation.args[2] ?? "")).toBe("Info.plist");
+      expect(basename(dirname(invocation.args[2] ?? ""))).toBe("Contents");
     }
   });
 
@@ -742,7 +743,8 @@ describe("effect-build-apple hard cut", () => {
     )!;
     const packagedApp = build.args[1]!;
     expect(packagedApp).not.toBe(armApp);
-    expect(packagedApp).toMatch(/\.effect-build-installer-app-.*\/Fixture-arm64\.app$/);
+    expect(basename(packagedApp)).toBe("Fixture-arm64.app");
+    expect(basename(dirname(packagedApp))).toMatch(/^\.effect-build-installer-app-/);
     expect(build.args.slice(0, 10)).toEqual([
       "--component",
       packagedApp,
@@ -837,11 +839,11 @@ describe("effect-build-apple hard cut", () => {
     expect(signed.entries).toContainEqual(expect.objectContaining({
       _tag: "SymbolicLink",
       path: join(root, "Signed.app/Contents/Frameworks/Chained.framework/Chained"),
-      target: "Versions/Current/Chained",
+      target: join("Versions", "Current", "Chained"),
     }));
     expect(readlinkSync(join(root, "Signed.app/Contents/Frameworks/Chained.framework/Versions/Current"))).toBe("A");
     expect(readlinkSync(join(root, "Signed.app/Contents/Frameworks/Chained.framework/Resources"))).toBe(
-      "Versions/Current/Resources",
+      join("Versions", "Current", "Resources"),
     );
     expect(lstatSync(join(root, "Signed.app/Contents/Frameworks/Chained.framework/Versions/A/Resources")).mode & 0o777)
       .toBe(0o555);
@@ -861,15 +863,21 @@ describe("effect-build-apple hard cut", () => {
       "--options",
       "runtime",
     ]);
-    expect(appCommands[0]!.at(-1)).toMatch(/Contents\/Frameworks\/Nested\.framework$/);
+    const nestedFramework = appCommands[0]!.at(-1) ?? "";
+    expect(basename(nestedFramework)).toBe("Nested.framework");
+    expect(basename(dirname(nestedFramework))).toBe("Frameworks");
+    expect(basename(dirname(dirname(nestedFramework)))).toBe("Contents");
     expect(appCommands[1]).toContain("--entitlements");
     expect(appCommands[2]!.slice(0, 4)).toEqual(["--verify", "--deep", "--strict", "--verbose=2"]);
+    const stagedDmg = appCommands[3]!.at(-1) ?? "";
+    expect(basename(stagedDmg)).toBe("signed.dmg");
+    expect(basename(dirname(stagedDmg))).toMatch(/^\.effect-build-/);
     expect(appCommands[3]).toEqual([
       "--force",
       "--sign",
       appIdentity,
       "--timestamp",
-      expect.stringMatching(/\.effect-build-.*\/signed\.dmg$/),
+      stagedDmg,
     ]);
     expect(appCommands[4]).toEqual(["--verify", "--strict", "--verbose=2", appCommands[3]!.at(-1)]);
     expect(readFileSync(signedDmg.path, "utf8")).toBe("unsigned-dmg:developer-id-signed");
@@ -923,7 +931,8 @@ describe("effect-build-apple hard cut", () => {
     )!;
     expect(productCommand.args.slice(0, 3)).toEqual(["--sign", installerIdentity, "--timestamp"]);
     expect(productCommand.args[3]).not.toBe(unsignedPackage);
-    expect(productCommand.args[3]).toMatch(/\.effect-build-.*\/signed\.pkg\.unsigned\.pkg$/);
+    expect(basename(productCommand.args[3] ?? "")).toBe("signed.pkg.unsigned.pkg");
+    expect(basename(dirname(productCommand.args[3] ?? ""))).toMatch(/^\.effect-build-/);
 
     const [failureSpawner] = makeSpawner(({ args }) =>
       args[0] === "--force"
@@ -1001,7 +1010,8 @@ describe("effect-build-apple hard cut", () => {
     expect(JSON.stringify(submitted)).not.toContain(profile);
     const stagedSubmission = runnerOneInvocations[5]!.args[2]!;
     expect(stagedSubmission).not.toBe(artifact);
-    expect(stagedSubmission).toMatch(/\.effect-build-notary-.*\/signed\.pkg$/);
+    expect(basename(stagedSubmission)).toBe("signed.pkg");
+    expect(basename(dirname(stagedSubmission))).toMatch(/^\.effect-build-notary-/);
     expect(submittedSnapshot).toBe("signed");
     expect(runnerOneInvocations[5]!.args).toEqual([
       "notarytool",
@@ -1304,10 +1314,10 @@ describe("effect-build-apple hard cut", () => {
     }));
     expect(readlinkSync(join(root, "Stapled.app/Contents/Frameworks/Fixture.framework/Versions/Current"))).toBe("A");
     expect(readlinkSync(join(root, "Stapled.app/Contents/Frameworks/Fixture.framework/Fixture"))).toBe(
-      "Versions/Current/Fixture",
+      join("Versions", "Current", "Fixture"),
     );
     expect(readlinkSync(join(root, "Stapled.app/Contents/Frameworks/Fixture.framework/Resources"))).toBe(
-      "Versions/Current/Resources",
+      join("Versions", "Current", "Resources"),
     );
     expect(readFileSync(join(root, "Stapled.app/Contents/_CodeSignature/NotaryTicket"), "utf8")).toBe("ticket");
 
@@ -1518,9 +1528,12 @@ describe("effect-build-apple hard cut", () => {
     const assessedApp = commands[0]!.at(-1)!;
     const assessedDmg = commands[2]!.at(-1)!;
     const assessedPkg = commands[4]!.at(-1)!;
-    expect(assessedApp).toMatch(/\.effect-build-assess-.*\/Final\.app$/);
-    expect(assessedDmg).toMatch(/\.effect-build-assess-.*\/final\.dmg$/);
-    expect(assessedPkg).toMatch(/\.effect-build-assess-.*\/Final\.pkg$/);
+    expect(basename(assessedApp)).toBe("Final.app");
+    expect(basename(assessedDmg)).toBe("final.dmg");
+    expect(basename(assessedPkg)).toBe("Final.pkg");
+    for (const assessed of [assessedApp, assessedDmg, assessedPkg]) {
+      expect(basename(dirname(assessed))).toMatch(/^\.effect-build-assess-/);
+    }
     expect(commands).toEqual([
       ["spctl", "--assess", "--type", "execute", "--verbose=4", assessedApp],
       ["codesign", "--verify", "--deep", "--strict", "--verbose=2", assessedApp],

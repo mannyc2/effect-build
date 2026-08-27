@@ -360,11 +360,29 @@ const writeVerifiedBundleTree = <E>(
         Effect.mapError((error) => fail(`set file mode ${item.relative}: ${describe(error)}`)),
       );
     }
-    for (const item of entries.filter(({ entry }) => entry._tag === "SymbolicLink")) {
-      const destination = path.join(root, ...item.relative.split("/"));
-      if (item.entry._tag === "SymbolicLink") {
+    const pendingLinks = entries.filter(({ entry }) => entry._tag === "SymbolicLink");
+    while (pendingLinks.length > 0) {
+      let progressed = false;
+      for (let index = pendingLinks.length - 1; index >= 0; index--) {
+        const item = pendingLinks[index]!;
+        if (item.entry._tag !== "SymbolicLink") continue;
+        const destination = path.join(root, ...item.relative.split("/"));
+        const target = path.resolve(path.dirname(destination), item.entry.target);
+        if (Option.isNone(yield* Effect.option(fileSystem.stat(target)))) continue;
         yield* fileSystem.symlink(item.entry.target, destination).pipe(
           Effect.mapError((error) => fail(`write symbolic link ${item.relative}: ${describe(error)}`)),
+        );
+        pendingLinks.splice(index, 1);
+        progressed = true;
+      }
+      if (!progressed) {
+        const item = pendingLinks[0]!;
+        return yield* Effect.fail(
+          fail(
+            `symbolic link is broken or cyclic: ${item.relative} -> ${
+              item.entry._tag === "SymbolicLink" ? item.entry.target : ""
+            }`,
+          ),
         );
       }
     }

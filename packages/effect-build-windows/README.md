@@ -24,7 +24,7 @@ const artifact = await Effect.runPromise(
     new SignMsix.SignMsixInput({
       source: unsignedMsix,
       outfile: "dist/app.msix",
-      timestampUrl: "https://timestamp.example.test/rfc3161",
+      timestampUrl: "http://timestamp.digicert.com",
     }),
   ).pipe(
     Effect.provide(
@@ -42,6 +42,9 @@ const artifact = await Effect.runPromise(
 
 The alternative certificate-store layer selects one certificate by exact
 thumbprint and supports the native store name and machine-store switches.
+RFC 3161 authorities may use HTTP because the response token is TSA-signed and
+verified; the timestamp URL accepts credential-free absolute HTTP or HTTPS,
+while the optional artifact description URL remains HTTPS-only.
 When the installed SDK's `signtool /?` output omits its version, bind an
 externally validated executable file version with the layer's `version` option.
 The unsigned input is re-verified against its finalized byte identity before
