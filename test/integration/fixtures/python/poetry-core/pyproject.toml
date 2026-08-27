@@ -1,0 +1,12 @@
+[build-system]
+requires = ["poetry-core==2.2.1"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "effect-build-poetry-fixture"
+version = "1.0.0"
+requires-python = ">=3.11"
+description = "poetry-core acceptance fixture"
+
+[tool.poetry]
+packages = [{ include = "effect_build_poetry_fixture", from = "src" }]

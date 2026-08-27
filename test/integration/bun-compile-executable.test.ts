@@ -59,9 +59,8 @@ describe("real Bun CompileExecutable", () => {
       entrypoint: "entry.ts",
       outfile: join(root, "configured"),
       cwd: project,
-      hash: false,
     }));
-    expect("sha256" in artifact).toBe(false);
+    expect(artifact.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect((await execute(artifact.path, [])).stdout).toBe("bun-config-ok\n");
     await expect(run(BunCompile.compileExecutable({
       entrypoint: join(project, "missing.ts"),

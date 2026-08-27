@@ -1,4 +1,4 @@
-// Packs the six built packages and proves a fresh npm consumer can install,
+// Packs every package in the generated public surface and proves a fresh npm consumer can install,
 // typecheck, and run them: a real fake-bun compile plus in-memory esbuild and
 // rolldown builds, with type-level use of every public module.
 import { execFile } from "node:child_process";
@@ -11,14 +11,8 @@ import { gunzipSync } from "node:zlib";
 
 const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const packageNames = [
-  "effect-build",
-  "effect-build-bun",
-  "effect-build-deno",
-  "effect-build-esbuild",
-  "effect-build-node-sea",
-  "effect-build-rolldown",
-];
+const publicSurface = JSON.parse(await readFile(join(root, "tooling/public-api.json"), "utf8"));
+const packageNames = Object.keys(publicSurface.packages).sort();
 
 const workspaceManifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const effectVersion = workspaceManifest.devDependencies.effect;
@@ -107,19 +101,59 @@ try {
     join(consumerRoot, "main.ts"),
     `import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import * as CoreRoot from "effect-build";
+import * as AppleRoot from "effect-build-apple";
+import * as ArchivesRoot from "effect-build-archives";
+import * as BunRoot from "effect-build-bun";
+import * as DenoRoot from "effect-build-deno";
+import * as EsbuildRoot from "effect-build-esbuild";
+import * as NfpmRoot from "effect-build-nfpm";
+import * as NodeSeaRoot from "effect-build-node-sea";
+import * as PythonRoot from "effect-build-python";
+import * as RolldownRoot from "effect-build-rolldown";
+import * as SbomRoot from "effect-build-sbom";
+import * as WindowsRoot from "effect-build-windows";
+import * as AppleModel from "effect-build-apple/Model";
+import * as BinaryArchive from "effect-build-archives/Archive";
+import * as SourceArchive from "effect-build-archives/SourceArchive";
 import * as BunBundle from "effect-build-bun/Bundle";
 import * as BunCompile from "effect-build-bun/CompileExecutable";
 import * as DenoBundle from "effect-build-deno/Bundle";
 import * as DenoCompile from "effect-build-deno/CompileExecutable";
 import * as Build from "effect-build-esbuild/Build";
 import * as Watch from "effect-build-esbuild/Watch";
+import * as Nfpm from "effect-build-nfpm/Package";
 import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
+import * as PythonBuild from "effect-build-python/Build";
 import * as Rolldown from "effect-build-rolldown/Build";
 import type * as RolldownWatch from "effect-build-rolldown/Watch";
+import * as Sbom from "effect-build-sbom/Generate";
+import * as SignMsix from "effect-build-windows/SignMsix";
 import type * as Artifact from "effect-build/Artifact";
 import type * as BuildError from "effect-build/BuildError";
 import * as Target from "effect-build/Target";
 
+const roots = [
+  CoreRoot,
+  AppleRoot,
+  ArchivesRoot,
+  BunRoot,
+  DenoRoot,
+  EsbuildRoot,
+  NfpmRoot,
+  NodeSeaRoot,
+  PythonRoot,
+  RolldownRoot,
+  SbomRoot,
+  WindowsRoot,
+];
+const appleArchitecture: AppleModel.Architecture = "arm64";
+const archiveFormat: BinaryArchive.Format = "zip";
+const sourceArchiveFormat: SourceArchive.Format = "tar.gz";
+const nfpmFormat: Nfpm.Format = "deb";
+const pythonBuilder: typeof PythonBuild.build = PythonBuild.build;
+const sbomFormat: Sbom.OutputFormat = "spdx-json";
+const msixSigner: typeof SignMsix.signMsix = SignMsix.signMsix;
 const marker: DenoCompile.Permissions = { read: true };
 const main: AssembleExecutable.Main = { _tag: "Bytes", contents: new Uint8Array(), format: "commonjs" };
 const assembler: typeof AssembleExecutable.assembleExecutable = AssembleExecutable.assembleExecutable;
@@ -134,6 +168,13 @@ void bunBundleInput;
 void denoPlatform;
 void watching;
 void watcherEvent;
+void appleArchitecture;
+void archiveFormat;
+void sourceArchiveFormat;
+void nfpmFormat;
+void pythonBuilder;
+void sbomFormat;
+void msixSigner;
 
 const rolled = await Effect.runPromise(
   Rolldown.generate({ input: "rolldown-entry.js", cwd: process.cwd() }, { format: "esm" }).pipe(
@@ -164,6 +205,7 @@ if (fakeBun !== undefined) {
 }
 
 console.log(JSON.stringify({
+  rootPackages: roots.length,
   outputs: bundle.outputFiles.length,
   rolldownChunks: rolled.output.length,
   target: artifact?.target ?? null,
@@ -195,6 +237,9 @@ console.log(JSON.stringify({
   }
   const { stdout } = await execute("node", runArguments, { cwd: consumerRoot });
   const report = JSON.parse(stdout.trim());
+  if (report.rootPackages !== packageNames.length) {
+    throw new Error(`consumer loaded ${report.rootPackages} root packages; expected ${packageNames.length}`);
+  }
   if (report.outputs !== 1) throw new Error(`consumer esbuild build produced ${report.outputs} outputs`);
   if (report.rolldownChunks !== 1) throw new Error(`consumer rolldown build produced ${report.rolldownChunks} chunks`);
   if (process.platform !== "win32") {

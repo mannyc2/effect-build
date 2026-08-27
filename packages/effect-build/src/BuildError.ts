@@ -42,3 +42,16 @@ export class PublishFailed extends Schema.TaggedError<PublishFailed>()("PublishF
     return `failed to publish ${this.destination}: ${this.reason}`;
   }
 }
+
+/** A path no longer contains the exact bytes named by its finalized artifact record. */
+export class ArtifactVerificationFailed extends Schema.TaggedError<ArtifactVerificationFailed>()(
+  "ArtifactVerificationFailed",
+  {
+    path: Schema.String,
+    reason: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `finalized artifact verification failed for ${this.path}: ${this.reason}`;
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "effect-build-node-sea",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Effect-native Node SEA executable assembler.",
   "type": "module",
   "license": "MIT",

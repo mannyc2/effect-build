@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.6.0
+
+Research-scope-complete implementation hard cut. All twelve packages move in
+lockstep; this is breaking throughout. Formal cross-repository launch evidence
+is tracked separately and is not implied by this implementation changelog.
+
+- New `Artifact.FileArtifact` and `Artifact.FinalizedArtifact`, backed by
+  `Toolchain.publishFile`: private same-parent staging, regular-file
+  admission, final byte length/SHA-256 observation, and one atomic rename under
+  the release machine's single-writer invariant. A pending interruption is
+  reasserted only after the commit; higher layers must observe/adopt or
+  deliberately rebuild a complete destination instead of assuming non-commit.
+- Every finalized regular-file identity now requires a canonical lowercase
+  SHA-256 digest; the hash-disable path and optional digest states are gone.
+  `Artifact.Bundle` is an exact file/directory/symbolic-link manifest with
+  byte identities and permission modes. Bundles reject existing destinations
+  and commit the entire staged directory with one rename, so publication can
+  neither overlay stale bytes nor expose a partial tree.
+- New `effect-build-archives`: deterministic ZIP/tar.gz layouts and exact
+  Git-tree source archives, with typed traversal, duplicate, case/Unicode,
+  and invalid-prefix rejection.
+- New `effect-build-python`: exactly one wheel and one sdist through one
+  resolved uv frontend, a required `uv.lock`, forced PEP 517, no Python
+  downloads, and a private scoped cache.
+- New `effect-build-nfpm`: deb, rpm, apk, Arch Linux, and unsigned MSIX from
+  typed metadata, verified payload artifacts, and private native nFPM
+  configuration whose override/script/signing escape hatches are rejected.
+- New `effect-build-windows`: SignTool MSIX signing and `/pa` verification
+  with SHA-256 digests, RFC 3161 SHA-256 timestamps, PFX and certificate-store
+  credential backends, and credential-scrubbed failures.
+- New `effect-build-sbom`: explicit directory/file scan subjects and
+  exact finalized scan subjects and schema-decoded SPDX JSON 2.3 and
+  CycloneDX JSON 1.6 output from Syft.
+- New `effect-build-apple`: exact arm64/x64 app, UDZO DMG, and flat-pkg
+  products; Developer ID app/pkg signing; credential-free durable notary
+  references with fresh-runner info/log; stapling; and Gatekeeper assessment.
+- The process kernel drains stdout and stderr concurrently before observing
+  exit, retaining independent bounded diagnostics even for immediate and
+  high-volume children.
+- The generated public-surface and packed-consumer gates discover the package
+  set instead of maintaining a second handwritten allowlist.
+- npm publication is no longer triggered by a green push. It requires a
+  manual exact-SHA dispatch and the repository's production environment
+  approval.
+
 ## 0.5.0
 
 A ground-up simplification and broadening of the 0.4 candidate. Breaking

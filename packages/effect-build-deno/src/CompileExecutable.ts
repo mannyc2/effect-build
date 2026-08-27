@@ -40,8 +40,6 @@ interface BaseInput {
   readonly cwd?: string;
   /** Defaults to the host target. */
   readonly target?: Target;
-  /** Record a SHA-256 digest on the artifact (default true). */
-  readonly hash?: boolean;
   readonly permissions?: Permissions;
 }
 
@@ -155,7 +153,6 @@ const makeService = (
           outfile: input.outfile,
           cwd: input.cwd,
           target: requested,
-          hash: input.hash ?? true,
           produce: (stagedPath) =>
             Effect.asVoid(
               Toolchain.runOrFail({

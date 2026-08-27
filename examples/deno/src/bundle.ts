@@ -15,4 +15,6 @@ const artifact = await Effect.runPromise(
   ),
 );
 
-for (const file of artifact.files) console.log(`${file.path} ${file.bytes} sha256=${file.sha256}`);
+for (const entry of artifact.entries) {
+  if (entry._tag === "File") console.log(`${entry.path} ${entry.bytes} sha256=${entry.sha256}`);
+}

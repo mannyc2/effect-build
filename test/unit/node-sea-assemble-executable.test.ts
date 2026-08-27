@@ -226,10 +226,9 @@ describe("Node SEA AssembleExecutable", () => {
         format: "module",
       },
       outfile: join(harness.root, "bytes-app"),
-      hash: false,
     }));
     expect(Exit.isSuccess(bytesExit)).toBe(true);
-    if (Exit.isSuccess(bytesExit)) expect("sha256" in bytesExit.value).toBe(false);
+    if (Exit.isSuccess(bytesExit)) expect(bytesExit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
     const bytesConfig = harness.control.configs[1]!;
     expect(String(bytesConfig.main).endsWith("main.mjs")).toBe(true);
     expect(bytesConfig.mainFormat).toBe("module");

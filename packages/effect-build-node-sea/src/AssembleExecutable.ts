@@ -16,8 +16,6 @@ export interface AssembleExecutableInput {
   readonly main: Main;
   readonly outfile: string;
   readonly cwd?: string;
-  /** Record a SHA-256 digest on the artifact (default true). */
-  readonly hash?: boolean;
   /** Embedded assets by key; each value is a file path resolved against cwd. */
   readonly assets?: Readonly<Record<string, string>>;
   readonly disableExperimentalSEAWarning?: boolean;
@@ -149,7 +147,6 @@ const makeService = (
           outfile: input.outfile,
           cwd,
           target,
-          hash: input.hash ?? true,
           produce: (stagedPath) => produce(input, cwd, stagedPath),
         });
       }).pipe(Effect.provide(services));

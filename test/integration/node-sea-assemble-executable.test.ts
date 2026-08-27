@@ -69,11 +69,10 @@ describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
     const artifact = await run(AssembleExecutable.assembleExecutable({
       main: { _tag: "File", path: join(fixture, "main.mjs"), format: "module" },
       outfile,
-      hash: false,
       assets: { message: join(fixture, "message.txt") },
       disableExperimentalSEAWarning: true,
     }));
-    expect("sha256" in artifact).toBe(false);
+    expect(artifact.sha256).toMatch(/^[0-9a-f]{64}$/);
     const completion = await execute(artifact.path, []);
     expect(completion.stdout).toContain("node-sea-esm-ok");
     expect(completion.stdout).toContain("node-sea-asset-ok");
@@ -83,7 +82,6 @@ describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
     await expect(run(AssembleExecutable.assembleExecutable({
       main: { _tag: "Bytes", contents: new TextEncoder().encode("this is not (javascript"), format: "commonjs" },
       outfile: join(root, "broken"),
-      hash: false,
     }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "node" });
   }, 300_000);
 });

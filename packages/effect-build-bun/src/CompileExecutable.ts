@@ -24,8 +24,6 @@ export interface CompileExecutableInput {
   readonly cwd?: string;
   /** Defaults to the host target. */
   readonly target?: Target;
-  /** Record a SHA-256 digest on the artifact (default true). */
-  readonly hash?: boolean;
   readonly minify?: boolean;
   readonly sourcemap?: "linked" | "inline";
   readonly bytecode?: boolean;
@@ -116,7 +114,6 @@ const makeService = (
           outfile: input.outfile,
           cwd: input.cwd,
           target: requested,
-          hash: input.hash ?? true,
           produce: (stagedPath) =>
             Effect.asVoid(
               Toolchain.runOrFail({

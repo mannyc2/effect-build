@@ -13,7 +13,6 @@ const published = Toolchain.publishExecutable({
   tool: { name: "bun", version: "1.3.14" },
   outfile: "dist/app",
   target: "linux-x64-gnu",
-  hash: true,
   produce,
 });
 
@@ -32,7 +31,6 @@ export type _Publish = Assert<
 const publishedBundle = Toolchain.publishBundle({
   tool: { name: "bun", version: "1.3.14" },
   outdir: "dist",
-  hash: false,
   produce,
 });
 

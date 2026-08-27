@@ -1,6 +1,6 @@
 {
   "name": "effect-build-rolldown",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Effect-native Rolldown Build and Watch operations.",
   "type": "module",
   "license": "MIT",

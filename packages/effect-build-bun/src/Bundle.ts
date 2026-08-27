@@ -15,8 +15,6 @@ export interface BundleInput {
   readonly entrypoints: readonly [string, ...string[]];
   readonly outdir: string;
   readonly cwd?: string;
-  /** Record a SHA-256 digest on every artifact file (default true). */
-  readonly hash?: boolean;
   /** Defaults to bun's own default, `browser`. */
   readonly target?: Target;
   readonly format?: Format;
@@ -88,7 +86,6 @@ const makeService = (
         tool,
         outdir: input.outdir,
         cwd: input.cwd,
-        hash: input.hash ?? true,
         produce: (stagedDirectory) =>
           Effect.asVoid(
             Toolchain.runOrFail({

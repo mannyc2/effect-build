@@ -5,6 +5,12 @@
       "path": "./packages/effect-build"
     },
     {
+      "path": "./packages/effect-build-apple"
+    },
+    {
+      "path": "./packages/effect-build-archives"
+    },
+    {
       "path": "./packages/effect-build-bun"
     },
     {
@@ -14,10 +20,22 @@
       "path": "./packages/effect-build-esbuild"
     },
     {
+      "path": "./packages/effect-build-nfpm"
+    },
+    {
       "path": "./packages/effect-build-node-sea"
     },
     {
+      "path": "./packages/effect-build-python"
+    },
+    {
       "path": "./packages/effect-build-rolldown"
+    },
+    {
+      "path": "./packages/effect-build-sbom"
+    },
+    {
+      "path": "./packages/effect-build-windows"
     }
   ]
 }

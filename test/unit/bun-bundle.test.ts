@@ -49,33 +49,34 @@ describeUnix("Bun Bundle", () => {
       expect(exit.value._tag).toBe("Bundle");
       expect(exit.value.outdir).toBe(outdir);
       expect(exit.value.tool).toEqual({ name: "bun", version: "1.3.14" });
-      expect(exit.value.files.map((file) => file.path)).toEqual([join(outdir, "main.js"), join(outdir, "worker.js")]);
-      for (const file of exit.value.files) {
+      const files = exit.value.entries.filter((entry) => entry._tag === "File");
+      expect(files.map((file) => file.path)).toEqual([join(outdir, "main.js"), join(outdir, "worker.js")]);
+      for (const file of files) {
         expect(file.bytes).toBeGreaterThan(0);
         expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
       }
     }
   });
 
-  it("records split chunks and sourcemaps, without digests when hashing is disabled", async () => {
+  it("records split chunks and sourcemaps with mandatory digests", async () => {
     const outdir = join(root, "dist-split");
     const exit = await run(
       BunBundle.bundle({
         entrypoints: ["src/main.ts"],
         outdir,
-        hash: false,
         splitting: true,
         sourcemap: "linked",
       }),
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value.files.map((file) => file.path)).toEqual([
+      const files = exit.value.entries.filter((entry) => entry._tag === "File");
+      expect(files.map((file) => file.path)).toEqual([
         join(outdir, "chunks", "chunk-fake.js"),
         join(outdir, "main.js"),
         join(outdir, "main.js.map"),
       ]);
-      expect(exit.value.files.some((file) => "sha256" in file)).toBe(false);
+      expect(files.every((file) => /^[0-9a-f]{64}$/.test(file.sha256))).toBe(true);
     }
   });
 
@@ -127,7 +128,7 @@ describeUnix("Bun Bundle", () => {
     const missing = await run(BunBundle.bundle({ entrypoints: ["main.ts"], outdir: join(root, "dist-missing") }));
     const missingFailure = failureOf(missing) as { readonly _tag: string; readonly reason: string };
     expect(missingFailure._tag).toBe("PublishFailed");
-    expect(missingFailure.reason).toContain("did not produce any files");
+    expect(missingFailure.reason).toContain("did not produce any entries");
     delete process.env.FAKE_BUN_MODE;
   });
 });

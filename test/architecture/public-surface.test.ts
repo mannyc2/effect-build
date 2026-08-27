@@ -79,20 +79,15 @@ describe("public surface", () => {
     }
   }, 30_000);
 
-  it("keeps six lockstep packages with one-way provider-to-core dependencies", async () => {
+  it("keeps every workspace package in lockstep with one-way provider-to-core dependencies", async () => {
     const surface = await readSurface();
     const names = Object.keys(surface.packages);
-    expect(names).toEqual([
-      "effect-build",
-      "effect-build-bun",
-      "effect-build-deno",
-      "effect-build-esbuild",
-      "effect-build-node-sea",
-      "effect-build-rolldown",
-    ]);
+    const packageDirectories = (await readdir(resolve(root, "packages"))).sort();
+    expect(names).toEqual(packageDirectories);
     const versions = new Set<string>();
     for (const name of names) {
       const manifest = await readManifest(name);
+      expect(manifest.name).toBe(name);
       versions.add(manifest.version);
       const dependencies = Object.keys(manifest.dependencies ?? {});
       if (name === "effect-build") expect(dependencies).toEqual([]);

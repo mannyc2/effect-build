@@ -1,7 +1,7 @@
-import { Cause, Config, Crypto, Effect, FileSystem, Option, Path, Stream } from "effect";
+import { Cause, Config, Crypto, Effect, FileSystem, Option, Path, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import type { Bundle, BundleFile, Executable, Tool } from "./Artifact.js";
-import { PublishFailed, ToolFailed, ToolNotFound } from "./BuildError.js";
+import type { Bundle, BundleEntry, Executable, FileArtifact, FinalizedFile, Tool } from "./Artifact.js";
+import { ArtifactVerificationFailed, PublishFailed, ToolFailed, ToolNotFound } from "./BuildError.js";
 import * as Target from "./Target.js";
 
 export interface Output {
@@ -13,6 +13,13 @@ export interface Completion {
   readonly exitCode: number;
   readonly stdout: Output;
   readonly stderr: Output;
+}
+
+/** Exact unbounded process bytes for protocols whose stdout is data, not diagnostics. */
+export interface BinaryCompletion {
+  readonly exitCode: number;
+  readonly stdout: Uint8Array;
+  readonly stderr: Uint8Array;
 }
 
 const outputLimit = 1024 * 1024;
@@ -40,6 +47,27 @@ const collectOutput = (stream: Stream.Stream<Uint8Array, unknown>): Effect.Effec
         offset += chunk.byteLength;
       }
       return { text: new TextDecoder().decode(bytes), truncated: state.truncated };
+    }),
+  );
+
+const collectAllBytes = (stream: Stream.Stream<Uint8Array, unknown>): Effect.Effect<Uint8Array, unknown> =>
+  Stream.runFold(
+    stream,
+    () => ({ chunks: [] as Uint8Array[], bytes: 0 }),
+    (state, chunk) => {
+      state.chunks.push(chunk);
+      state.bytes += chunk.byteLength;
+      return state;
+    },
+  ).pipe(
+    Effect.map((state) => {
+      const output = new Uint8Array(state.bytes);
+      let offset = 0;
+      for (const chunk of state.chunks) {
+        output.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return output;
     }),
   );
 
@@ -73,10 +101,16 @@ export const run = (
           forceKillAfter: "2 seconds",
           ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
         });
-        const [stdout, stderr, exitCode] = yield* Effect.all(
-          [collectOutput(handle.stdout), collectOutput(handle.stderr), handle.exitCode] as const,
+        // Drain both pipes before observing the cached exit status. In rc108 a
+        // fast child's `exitCode` may resolve before its pipe streams deliver
+        // their final chunks; racing all three loses otherwise-successful
+        // probe diagnostics. Concurrent pipe draining also prevents either
+        // bounded collector from back-pressuring the other stream.
+        const [stdout, stderr] = yield* Effect.all(
+          [collectOutput(handle.stdout), collectOutput(handle.stderr)] as const,
           { concurrency: "unbounded" },
         );
+        const exitCode = yield* handle.exitCode;
         return { exitCode: Number(exitCode), stdout, stderr };
       }),
     ),
@@ -96,6 +130,48 @@ export const runOrFail = (
           exitCode: completion.exitCode,
           stdout: completion.stdout.text,
           stderr: completion.stderr.text,
+        }),
+      ));
+
+/**
+ * Spawns one tool and drains stdout/stderr as exact, unbounded bytes. Use only
+ * when stdout is a finite protocol payload whose truncation would be unsound.
+ */
+export const runBytes = (
+  options: RunOptions,
+): Effect.Effect<BinaryCompletion, ToolFailed, ChildProcessSpawner.ChildProcessSpawner> =>
+  mapFailureCause(
+    Effect.scoped(
+      Effect.gen(function*() {
+        const handle = yield* ChildProcess.make(options.executable, options.args, {
+          shell: false,
+          forceKillAfter: "2 seconds",
+          ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+        });
+        const [stdout, stderr] = yield* Effect.all(
+          [collectAllBytes(handle.stdout), collectAllBytes(handle.stderr)] as const,
+          { concurrency: "unbounded" },
+        );
+        const exitCode = yield* handle.exitCode;
+        return { exitCode: Number(exitCode), stdout, stderr };
+      }),
+    ),
+    (error) => new ToolFailed({ tool: options.tool, exitCode: -1, stdout: "", stderr: describe(error) }),
+  );
+
+/** Exact-byte counterpart to {@link runOrFail}. */
+export const runBytesOrFail = (
+  options: RunOptions,
+): Effect.Effect<BinaryCompletion, ToolFailed, ChildProcessSpawner.ChildProcessSpawner> =>
+  Effect.flatMap(runBytes(options), (completion) =>
+    completion.exitCode === 0
+      ? Effect.succeed(completion)
+      : Effect.fail(
+        new ToolFailed({
+          tool: options.tool,
+          exitCode: completion.exitCode,
+          stdout: new TextDecoder().decode(completion.stdout),
+          stderr: new TextDecoder().decode(completion.stderr),
         }),
       ));
 
@@ -221,21 +297,266 @@ const sniffFormat = (bytes: Uint8Array): Target.NativeFormat | undefined => {
 
 const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
+interface VerifiedBundleEntry {
+  readonly entry: BundleEntry;
+  readonly relative: string;
+  readonly folded: string;
+  readonly contents?: Uint8Array;
+}
+
+/** Make owned temporary directories removable without following their links. */
+const removePrivateTree = (
+  fileSystem: FileSystem.FileSystem,
+  path: Path.Path,
+  root: string,
+): Effect.Effect<void> => {
+  const prepare = Effect.gen(function*() {
+    const directories = [root];
+    while (directories.length > 0) {
+      const directory = directories.shift();
+      if (directory === undefined) continue;
+      yield* fileSystem.chmod(directory, 0o700);
+      for (const child of yield* fileSystem.readDirectory(directory)) {
+        const entry = path.join(directory, child);
+        if (Option.isSome(yield* Effect.option(fileSystem.readLink(entry)))) continue;
+        const information = yield* fileSystem.stat(entry);
+        if (information.type === "Directory") directories.push(entry);
+      }
+    }
+  });
+  return prepare.pipe(
+    Effect.ignore,
+    Effect.andThen(fileSystem.remove(root, { recursive: true, force: true }).pipe(Effect.ignore)),
+  );
+};
+
+/** Rebuild one already-validated manifest from held bytes, never source paths. */
+const writeVerifiedBundleTree = <E>(
+  root: string,
+  entries: readonly VerifiedBundleEntry[],
+  fail: (reason: string) => E,
+): Effect.Effect<void, E, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directories = entries
+      .filter(({ entry }) => entry._tag === "Directory")
+      .sort((left, right) =>
+        left.relative.split("/").length - right.relative.split("/").length
+        || left.relative.localeCompare(right.relative)
+      );
+    for (const item of directories) {
+      const destination = path.join(root, ...item.relative.split("/"));
+      yield* fileSystem.makeDirectory(destination).pipe(
+        Effect.mapError((error) => fail(`create directory ${item.relative}: ${describe(error)}`)),
+      );
+    }
+    for (const item of entries.filter(({ entry }) => entry._tag === "File")) {
+      const destination = path.join(root, ...item.relative.split("/"));
+      yield* fileSystem.writeFile(destination, item.contents ?? new Uint8Array()).pipe(
+        Effect.mapError((error) => fail(`write file ${item.relative}: ${describe(error)}`)),
+      );
+      yield* fileSystem.chmod(destination, item.entry._tag === "File" ? item.entry.mode : 0o644).pipe(
+        Effect.mapError((error) => fail(`set file mode ${item.relative}: ${describe(error)}`)),
+      );
+    }
+    for (const item of entries.filter(({ entry }) => entry._tag === "SymbolicLink")) {
+      const destination = path.join(root, ...item.relative.split("/"));
+      if (item.entry._tag === "SymbolicLink") {
+        yield* fileSystem.symlink(item.entry.target, destination).pipe(
+          Effect.mapError((error) => fail(`write symbolic link ${item.relative}: ${describe(error)}`)),
+        );
+      }
+    }
+    const canonicalRoot = yield* fileSystem.realPath(root).pipe(
+      Effect.mapError((error) => fail(`resolve reconstructed root: ${describe(error)}`)),
+    );
+    for (const item of entries.filter(({ entry }) => entry._tag === "SymbolicLink")) {
+      const destination = path.join(root, ...item.relative.split("/"));
+      const canonicalTarget = yield* fileSystem.realPath(destination).pipe(
+        Effect.mapError((error) =>
+          fail(
+            `symbolic link is broken or cyclic: ${item.relative} -> ${
+              item.entry._tag === "SymbolicLink" ? item.entry.target : ""
+            }: ${describe(error)}`,
+          )
+        ),
+      );
+      const relativeTarget = path.relative(canonicalRoot, canonicalTarget);
+      if (
+        path.isAbsolute(relativeTarget)
+        || relativeTarget === ".."
+        || relativeTarget.startsWith(`..${path.sep}`)
+      ) {
+        return yield* Effect.fail(fail(`symbolic link resolves outside the reconstructed root: ${item.relative}`));
+      }
+    }
+    for (const item of [...directories].reverse()) {
+      const destination = path.join(root, ...item.relative.split("/"));
+      yield* fileSystem.chmod(destination, item.entry._tag === "Directory" ? item.entry.mode : 0o755).pipe(
+        Effect.mapError((error) => fail(`set directory mode ${item.relative}: ${describe(error)}`)),
+      );
+    }
+    yield* fileSystem.chmod(root, 0o755).pipe(
+      Effect.mapError((error) => fail(`normalize root mode: ${describe(error)}`)),
+    );
+    if (path.sep !== "\\") {
+      const rootMode = Number(
+        (yield* fileSystem.stat(root).pipe(
+          Effect.mapError((error) => fail(`verify root mode: ${describe(error)}`)),
+        )).mode,
+      ) & 0o7777;
+      if (rootMode !== 0o755) {
+        return yield* Effect.fail(fail(`root mode mismatch: expected 0755, observed 0${rootMode.toString(8)}`));
+      }
+      for (const item of entries) {
+        if (item.entry._tag === "SymbolicLink") continue;
+        const destination = path.join(root, ...item.relative.split("/"));
+        const observed = Number(
+          (yield* fileSystem.stat(destination).pipe(
+            Effect.mapError((error) => fail(`verify mode ${item.relative}: ${describe(error)}`)),
+          )).mode,
+        ) & 0o7777;
+        if (observed !== item.entry.mode) {
+          return yield* Effect.fail(
+            fail(
+              `mode mismatch ${item.relative}: expected 0${item.entry.mode.toString(8)}, observed 0${
+                observed.toString(8)
+              }`,
+            ),
+          );
+        }
+      }
+    }
+  });
+
 export interface PublishOptions<E, R> {
   readonly tool: Tool;
   readonly outfile: string;
   readonly cwd?: string | undefined;
   readonly target: Target.Target;
-  /** Record a SHA-256 digest on the artifact. */
-  readonly hash: boolean;
   /** Writes the executable at the private staged path. */
   readonly produce: (stagedPath: string) => Effect.Effect<void, E, R>;
 }
 
+export interface PublishFileOptions<E, R, ValidationError = never, ValidationServices = never> {
+  readonly tool: Tool;
+  readonly outfile: string;
+  readonly cwd?: string | undefined;
+  /** Writes one regular file at the private staged path. */
+  readonly produce: (stagedPath: string) => Effect.Effect<void, E, R>;
+  /** Validates the exact held bytes that will be copied into the atomic commit. */
+  readonly validate?:
+    | (
+      (contents: Uint8Array) => Effect.Effect<void, ValidationError, ValidationServices>
+    )
+    | undefined;
+}
+
+/**
+ * Stages one tool-produced regular file beside its destination, observes its
+ * final size/digest once, and commits it with one atomic rename. Publication
+ * assumes one release-machine writer for the destination.
+ *
+ * The commit itself is uninterruptible, but a pending interruption is
+ * reasserted immediately afterwards. The destination can therefore contain the
+ * complete committed file even when the caller receives interruption instead
+ * of the returned artifact; higher layers must observe/adopt that exact output
+ * or rebuild deliberately rather than retrying a mutation blindly.
+ */
+export const publishFile = <E, R, ValidationError = never, ValidationServices = never>(
+  options: PublishFileOptions<E, R, ValidationError, ValidationServices>,
+): Effect.Effect<
+  FileArtifact,
+  PublishFailed | E | ValidationError,
+  FileSystem.FileSystem | Path.Path | Crypto.Crypto | R | ValidationServices
+> =>
+  Effect.scoped(
+    Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const crypto = yield* Crypto.Crypto;
+      const destination = path.normalize(path.resolve(options.cwd ?? "", options.outfile));
+      const parent = path.dirname(destination);
+      const failWith = (reason: string) => new PublishFailed({ destination, reason });
+      yield* mapFailureCause(
+        fileSystem.makeDirectory(parent, { recursive: true }),
+        (error) => failWith(`make-directory: ${describe(error)}`),
+      );
+      const staging = yield* mapFailureCause(
+        fileSystem.makeTempDirectoryScoped({ directory: parent, prefix: ".effect-build-" }),
+        (error) => failWith(`make-staging: ${describe(error)}`),
+      );
+      const staged = path.join(staging, path.basename(destination));
+      yield* options.produce(staged);
+      if (Option.isSome(yield* Effect.option(fileSystem.readLink(staged)))) {
+        return yield* Effect.fail(failWith("the staged output is a symbolic link, not a regular file"));
+      }
+      const information = yield* fileSystem.stat(staged).pipe(
+        Effect.mapError((error) =>
+          error.reason._tag === "NotFound"
+            ? failWith("the tool did not produce an output file at the staged path")
+            : failWith(`stat: ${describe(error)}`)
+        ),
+      );
+      if (information.type !== "File") {
+        return yield* Effect.fail(failWith("the staged output is not a regular file"));
+      }
+      const contents = yield* fileSystem.readFile(staged).pipe(
+        Effect.mapError((error) => failWith(`read: ${describe(error)}`)),
+      );
+      const bytes = contents.byteLength;
+      if (Number(information.size) !== bytes) {
+        return yield* Effect.fail(
+          failWith(`staged file changed while captured: stat=${information.size}, read=${bytes}`),
+        );
+      }
+      // A validator observes an exact defensive copy. It cannot mutate the
+      // held buffer whose digest and committed bytes are derived below.
+      if (options.validate !== undefined) yield* options.validate(Uint8Array.from(contents));
+      const digest = yield* crypto.digest("SHA-256", contents).pipe(
+        Effect.mapError(() => failWith("sha-256 digest unavailable")),
+      );
+      const sha256 = hex(new Uint8Array(digest));
+      const verified = yield* mapFailureCause(
+        fileSystem.makeTempFile({ directory: staging, prefix: ".effect-build-verified-" }),
+        (error) => failWith(`make verified file: ${describe(error)}`),
+      );
+      yield* fileSystem.writeFile(verified, contents).pipe(
+        Effect.mapError((error) => failWith(`write verified file: ${describe(error)}`)),
+      );
+      yield* fileSystem.chmod(verified, Number(information.mode) & 0o7777).pipe(
+        Effect.mapError((error) => failWith(`set verified file mode: ${describe(error)}`)),
+      );
+      const artifact: FileArtifact = {
+        _tag: "File" as const,
+        path: destination,
+        bytes,
+        tool: options.tool,
+        sha256,
+      };
+      return yield* Effect.uninterruptible(
+        Effect.gen(function*() {
+          yield* mapFailureCause(
+            fileSystem.rename(verified, destination),
+            (error) => failWith(`rename: ${describe(error)}`),
+          );
+          return artifact;
+        }),
+      );
+    }),
+  );
+
 /**
  * Stages in a private same-parent temp directory, lets `produce` write the
  * executable, sanity-checks the native magic against the target, and commits
- * with one atomic rename. Windows targets gain a missing `.exe` suffix.
+ * with one atomic rename. Publication assumes one release-machine writer for
+ * the destination. Windows targets gain a missing `.exe` suffix.
+ *
+ * The commit itself is uninterruptible, but a pending interruption is
+ * reasserted immediately afterwards. The destination can therefore contain the
+ * complete committed executable even when the caller receives interruption;
+ * higher layers must observe/adopt or deliberately rebuild it.
  */
 export const publishExecutable = <E, R>(
   options: PublishOptions<E, R>,
@@ -266,6 +587,9 @@ export const publishExecutable = <E, R>(
       );
       const staged = path.join(staging, path.basename(destination));
       yield* options.produce(staged);
+      if (Option.isSome(yield* Effect.option(fileSystem.readLink(staged)))) {
+        return yield* Effect.fail(failWith("the staged output is a symbolic link, not a regular executable"));
+      }
       const information = yield* fileSystem.stat(staged).pipe(
         Effect.mapError((error) =>
           error.reason._tag === "NotFound"
@@ -279,27 +603,20 @@ export const publishExecutable = <E, R>(
       if (path.sep !== "\\" && (Number(information.mode) & 0o111) === 0) {
         return yield* Effect.fail(failWith("the staged output is not executable"));
       }
-      const bytes = Number(information.size);
-      let sha256: string | undefined;
-      let magic: Uint8Array;
-      if (options.hash) {
-        const contents = yield* fileSystem.readFile(staged).pipe(
-          Effect.mapError((error) => failWith(`read: ${describe(error)}`)),
+      const contents = yield* fileSystem.readFile(staged).pipe(
+        Effect.mapError((error) => failWith(`read: ${describe(error)}`)),
+      );
+      const bytes = contents.byteLength;
+      if (Number(information.size) !== bytes) {
+        return yield* Effect.fail(
+          failWith(`staged executable changed while captured: stat=${information.size}, read=${bytes}`),
         );
-        magic = contents.subarray(0, 4);
-        const digest = yield* crypto.digest("SHA-256", contents).pipe(
-          Effect.mapError(() => failWith("sha-256 digest unavailable")),
-        );
-        sha256 = hex(new Uint8Array(digest));
-      } else {
-        magic = yield* Effect.scoped(
-          Effect.gen(function*() {
-            const file = yield* fileSystem.open(staged);
-            const chunk = yield* file.readAlloc(FileSystem.Size(4));
-            return Option.getOrElse(chunk, () => new Uint8Array());
-          }),
-        ).pipe(Effect.mapError((error) => failWith(`read: ${describe(error)}`)));
       }
+      const magic = contents.subarray(0, 4);
+      const digest = yield* crypto.digest("SHA-256", contents).pipe(
+        Effect.mapError(() => failWith("sha-256 digest unavailable")),
+      );
+      const sha256 = hex(new Uint8Array(digest));
       const format = sniffFormat(magic);
       const expected = Target.info(options.target).nativeFormat;
       if (format !== expected) {
@@ -307,18 +624,33 @@ export const publishExecutable = <E, R>(
           failWith(`native format mismatch: expected ${expected}, found ${format ?? "unknown"}`),
         );
       }
-      yield* mapFailureCause(
-        fileSystem.rename(staged, destination),
-        (error) => failWith(`rename: ${describe(error)}`),
+      const verified = yield* mapFailureCause(
+        fileSystem.makeTempFile({ directory: staging, prefix: ".effect-build-verified-" }),
+        (error) => failWith(`make verified executable: ${describe(error)}`),
       );
-      return {
+      yield* fileSystem.writeFile(verified, contents).pipe(
+        Effect.mapError((error) => failWith(`write verified executable: ${describe(error)}`)),
+      );
+      yield* fileSystem.chmod(verified, Number(information.mode) & 0o7777).pipe(
+        Effect.mapError((error) => failWith(`set verified executable mode: ${describe(error)}`)),
+      );
+      const artifact: Executable = {
         _tag: "Executable" as const,
         path: destination,
         bytes,
         target: options.target,
         tool: options.tool,
-        ...(sha256 === undefined ? {} : { sha256 }),
+        sha256,
       };
+      return yield* Effect.uninterruptible(
+        Effect.gen(function*() {
+          yield* mapFailureCause(
+            fileSystem.rename(verified, destination),
+            (error) => failWith(`rename: ${describe(error)}`),
+          );
+          return artifact;
+        }),
+      );
     }),
   );
 
@@ -326,17 +658,18 @@ export interface PublishBundleOptions<E, R> {
   readonly tool: Tool;
   readonly outdir: string;
   readonly cwd?: string | undefined;
-  /** Record a SHA-256 digest on every artifact file. */
-  readonly hash: boolean;
   /** Writes the bundle files into the private staged directory. */
   readonly produce: (stagedDirectory: string) => Effect.Effect<void, E, R>;
 }
 
 /**
- * Stages in a private same-parent temp directory, lets `produce` fill it, and
- * commits every produced file into `outdir` with per-file renames — matching
- * the native tools, which overwrite the files they emit and leave the rest of
- * the directory alone.
+ * Stages in a private same-parent temp directory, records an exact
+ * symlink-aware manifest, rebuilds it from held bytes, and commits the whole
+ * verified directory with one rename. Under the release machine's single
+ * writer invariant, an existing destination is rejected rather than overlaid.
+ * The rename is uninterruptible, but a pending interruption is reasserted after
+ * the complete tree commits, so higher layers must observe/adopt or deliberately
+ * rebuild an output found at the destination.
  */
 export const publishBundle = <E, R>(
   options: PublishBundleOptions<E, R>,
@@ -353,53 +686,275 @@ export const publishBundle = <E, R>(
       const outdir = path.normalize(path.resolve(options.cwd ?? "", options.outdir));
       const failWith = (reason: string) => new PublishFailed({ destination: outdir, reason });
       yield* mapFailureCause(
-        fileSystem.makeDirectory(outdir, { recursive: true }),
+        fileSystem.makeDirectory(path.dirname(outdir), { recursive: true }),
         (error) => failWith(`make-directory: ${describe(error)}`),
       );
-      const staging = yield* mapFailureCause(
-        fileSystem.makeTempDirectoryScoped({ directory: path.dirname(outdir), prefix: ".effect-build-" }),
-        (error) => failWith(`make-staging: ${describe(error)}`),
+      const existingLink = yield* Effect.option(fileSystem.readLink(outdir));
+      const existingEntry = Option.isSome(existingLink)
+        ? true
+        : yield* mapFailureCause(fileSystem.exists(outdir), (error) =>
+          failWith(`inspect destination: ${describe(error)}`));
+      if (existingEntry) {
+        return yield* Effect.fail(failWith("destination already exists; exact bundles never overlay"));
+      }
+      const staging = yield* Effect.acquireRelease(
+        mapFailureCause(
+          fileSystem.makeTempDirectory({ directory: path.dirname(outdir), prefix: ".effect-build-bundle-" }),
+          (error) =>
+            failWith(`make-staging: ${describe(error)}`),
+        ),
+        (directory) => removePrivateTree(fileSystem, path, directory),
       );
       yield* options.produce(staging);
-      const entries = yield* mapFailureCause(
-        fileSystem.readDirectory(staging, { recursive: true }),
-        (error) => failWith(`read-staging: ${describe(error)}`),
-      );
-      const produced: { readonly entry: string; readonly bytes: number }[] = [];
-      for (const entry of [...entries].sort()) {
-        const information = yield* mapFailureCause(
-          fileSystem.stat(path.join(staging, entry)),
-          (error) => failWith(`stat: ${describe(error)}`),
+      const manifest: BundleEntry[] = [];
+      const captured: VerifiedBundleEntry[] = [];
+      const directories = [""];
+      const seen = new Set<string>();
+      while (directories.length > 0) {
+        const directory = directories.shift() ?? "";
+        const children = yield* mapFailureCause(
+          fileSystem.readDirectory(path.join(staging, directory)),
+          (error) => failWith(`read-staging: ${describe(error)}`),
         );
-        if (information.type === "File") produced.push({ entry, bytes: Number(information.size) });
-      }
-      if (produced.length === 0) {
-        return yield* Effect.fail(failWith("the tool did not produce any files in the staged directory"));
-      }
-      const files: BundleFile[] = [];
-      for (const { bytes, entry } of produced) {
-        const staged = path.join(staging, entry);
-        const destination = path.join(outdir, entry);
-        let sha256: string | undefined;
-        if (options.hash) {
+        for (const child of [...children].sort()) {
+          const entry = directory.length === 0 ? child : path.join(directory, child);
+          const portable = entry.split(path.sep).join("/");
+          const folded = portable.normalize("NFC").toLowerCase();
+          if (seen.has(folded)) {
+            return yield* Effect.fail(
+              failWith(`duplicate, case-colliding, or Unicode-colliding bundle entry: ${portable}`),
+            );
+          }
+          seen.add(folded);
+          const staged = path.join(staging, entry);
+          const destination = path.join(outdir, entry);
+          const link = yield* Effect.option(fileSystem.readLink(staged));
+          if (Option.isSome(link)) {
+            const target = link.value;
+            const resolvedTarget = path.normalize(path.resolve(path.dirname(staged), target));
+            const relativeTarget = path.relative(staging, resolvedTarget);
+            if (
+              path.isAbsolute(target)
+              || relativeTarget === ".."
+              || relativeTarget.startsWith(`..${path.sep}`)
+            ) {
+              return yield* Effect.fail(failWith(`symbolic link escapes the bundle: ${entry} -> ${target}`));
+            }
+            if (Option.isNone(yield* Effect.option(fileSystem.stat(resolvedTarget)))) {
+              return yield* Effect.fail(failWith(`symbolic link target is absent: ${entry} -> ${target}`));
+            }
+            const bundleEntry: BundleEntry = { _tag: "SymbolicLink", path: destination, target };
+            manifest.push(bundleEntry);
+            captured.push({ entry: bundleEntry, relative: portable, folded });
+            continue;
+          }
+          const information = yield* mapFailureCause(
+            fileSystem.stat(staged),
+            (error) => failWith(`stat: ${describe(error)}`),
+          );
+          if (information.type === "Directory") {
+            const bundleEntry: BundleEntry = {
+              _tag: "Directory",
+              path: destination,
+              mode: Number(information.mode) & 0o7777,
+            };
+            manifest.push(bundleEntry);
+            captured.push({ entry: bundleEntry, relative: portable, folded });
+            directories.push(entry);
+            continue;
+          }
+          if (information.type !== "File") {
+            return yield* Effect.fail(failWith(`unsupported bundle entry type ${information.type}: ${entry}`));
+          }
           const contents = yield* fileSystem.readFile(staged).pipe(
             Effect.mapError((error) => failWith(`read: ${describe(error)}`)),
           );
+          if (Number(information.size) !== contents.byteLength) {
+            return yield* Effect.fail(
+              failWith(
+                `bundle file changed while captured: ${entry} stat=${information.size}, read=${contents.byteLength}`,
+              ),
+            );
+          }
           const digest = yield* crypto.digest("SHA-256", contents).pipe(
             Effect.mapError(() => failWith("sha-256 digest unavailable")),
           );
-          sha256 = hex(new Uint8Array(digest));
+          const bundleEntry: BundleEntry = {
+            _tag: "File",
+            path: destination,
+            bytes: contents.byteLength,
+            mode: Number(information.mode) & 0o7777,
+            sha256: hex(new Uint8Array(digest)),
+          };
+          manifest.push(bundleEntry);
+          captured.push({ entry: bundleEntry, relative: portable, folded, contents });
         }
-        yield* mapFailureCause(
-          fileSystem.makeDirectory(path.dirname(destination), { recursive: true }),
-          (error) => failWith(`make-directory: ${describe(error)}`),
-        );
-        yield* mapFailureCause(
-          fileSystem.rename(staged, destination),
-          (error) => failWith(`rename: ${describe(error)}`),
-        );
-        files.push({ path: destination, bytes, ...(sha256 === undefined ? {} : { sha256 }) });
       }
-      return { _tag: "Bundle" as const, outdir, files, tool: options.tool };
+      if (manifest.length === 0) {
+        return yield* Effect.fail(failWith("the tool did not produce any entries in the staged directory"));
+      }
+      const verified = yield* mapFailureCause(
+        fileSystem.makeTempDirectory({ directory: staging, prefix: ".effect-build-verified-" }),
+        (error) => failWith(`create verified bundle: ${describe(error)}`),
+      );
+      yield* writeVerifiedBundleTree(verified, captured, (reason) => failWith(`rebuild verified bundle: ${reason}`));
+      const artifact: Bundle = {
+        _tag: "Bundle" as const,
+        outdir,
+        entries: manifest.sort((left, right) => left.path.localeCompare(right.path)),
+        tool: options.tool,
+      };
+      return yield* Effect.uninterruptible(
+        Effect.gen(function*() {
+          yield* mapFailureCause(
+            fileSystem.rename(verified, outdir),
+            (error) => failWith(`rename: ${describe(error)}`),
+          );
+          return artifact;
+        }),
+      );
     }),
   );
+
+/**
+ * Reads one finalized file once and verifies that the exact bytes match its
+ * recorded regular-file type, length, and SHA-256. Consumers must operate on
+ * the returned bytes, never reopen the caller-controlled path after this
+ * boundary. The release-machine single-writer law excludes a concurrent path
+ * replacement during this admission; the portable Effect filesystem has no
+ * no-follow file-handle primitive.
+ */
+export const readVerifiedFile = (
+  artifact: FinalizedFile,
+): Effect.Effect<Uint8Array, ArtifactVerificationFailed, FileSystem.FileSystem | Crypto.Crypto> =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const crypto = yield* Crypto.Crypto;
+    const fail = (reason: string) => new ArtifactVerificationFailed({ path: artifact.path, reason });
+    const admitRegularFile = (phase: string) =>
+      Effect.gen(function*() {
+        if (Option.isSome(yield* Effect.option(fileSystem.readLink(artifact.path)))) {
+          return yield* Effect.fail(fail(`${phase}: finalized path is a symbolic link`));
+        }
+        const information = yield* fileSystem.stat(artifact.path).pipe(
+          Effect.mapError((error) => fail(`${phase} stat: ${describe(error)}`)),
+        );
+        if (information.type !== "File") {
+          return yield* Effect.fail(fail(`${phase}: finalized path is ${information.type}, not a regular file`));
+        }
+        if (Number(information.size) !== artifact.bytes) {
+          return yield* Effect.fail(
+            fail(`${phase} length mismatch: expected ${artifact.bytes}, observed ${information.size}`),
+          );
+        }
+      });
+    if (!/^[0-9a-f]{64}$/.test(artifact.sha256)) {
+      return yield* Effect.fail(fail("recorded SHA-256 is not canonical lowercase hex"));
+    }
+    yield* admitRegularFile("before read");
+    const contents = yield* fileSystem.readFile(artifact.path).pipe(
+      Effect.mapError((error) => fail(`read: ${describe(error)}`)),
+    );
+    yield* admitRegularFile("after read");
+    if (contents.byteLength !== artifact.bytes) {
+      return yield* Effect.fail(
+        fail(`read length mismatch: expected ${artifact.bytes}, observed ${contents.byteLength}`),
+      );
+    }
+    const digest = yield* crypto.digest("SHA-256", contents).pipe(
+      Effect.mapError(() => fail("sha-256 digest unavailable")),
+    );
+    const observed = hex(new Uint8Array(digest));
+    if (observed !== artifact.sha256) {
+      return yield* Effect.fail(
+        fail(`SHA-256 mismatch: expected ${artifact.sha256}, observed ${observed}`),
+      );
+    }
+    return contents;
+  });
+
+/**
+ * Reconstructs exactly the files named by a finalized Bundle in a private,
+ * scoped directory. Unlisted source-directory bytes are never admitted.
+ */
+export const materializeVerifiedBundle = (
+  bundle: Bundle,
+): Effect.Effect<
+  string,
+  ArtifactVerificationFailed,
+  FileSystem.FileSystem | Path.Path | Crypto.Crypto | Scope.Scope
+> =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = path.normalize(path.resolve(bundle.outdir));
+    const fail = (reason: string) => new ArtifactVerificationFailed({ path: root, reason });
+    if (bundle.entries.length === 0) return yield* Effect.fail(fail("bundle manifest is empty"));
+    const entries: VerifiedBundleEntry[] = [];
+    const seen = new Set<string>();
+    for (const entry of bundle.entries) {
+      if (
+        (entry._tag === "File" || entry._tag === "Directory")
+        && (!Number.isInteger(entry.mode) || entry.mode < 0 || entry.mode > 0o7777)
+      ) {
+        return yield* Effect.fail(fail(`manifest mode is outside 0..07777: ${entry.path}`));
+      }
+      const resolved = path.normalize(path.resolve(entry.path));
+      const relative = path.relative(root, resolved);
+      if (
+        relative.length === 0
+        || path.isAbsolute(relative)
+        || relative === ".."
+        || relative.startsWith(`..${path.sep}`)
+      ) {
+        return yield* Effect.fail(fail(`manifest path escapes the bundle root: ${entry.path}`));
+      }
+      const portable = relative.split(path.sep).join("/");
+      const folded = portable.normalize("NFC").toLowerCase();
+      if (seen.has(folded)) {
+        return yield* Effect.fail(fail(`duplicate, case-colliding, or Unicode-colliding manifest path: ${portable}`));
+      }
+      seen.add(folded);
+      const contents = entry._tag === "File" ? yield* readVerifiedFile(entry) : undefined;
+      entries.push({ entry, relative: portable, folded, ...(contents === undefined ? {} : { contents }) });
+    }
+    const ordered = [...entries].sort((left, right) => left.folded.localeCompare(right.folded));
+    const byFolded = new Map(ordered.map((item) => [item.folded, item] as const));
+    for (const item of ordered) {
+      const segments = item.relative.split("/");
+      for (let depth = 1; depth < segments.length; depth++) {
+        const expected = segments.slice(0, depth).join("/");
+        const ancestor = byFolded.get(expected.normalize("NFC").toLowerCase());
+        if (ancestor === undefined) {
+          return yield* Effect.fail(fail(`manifest omits directory ancestor ${expected} for ${item.relative}`));
+        }
+        if (ancestor.relative !== expected || ancestor.entry._tag !== "Directory") {
+          return yield* Effect.fail(
+            fail(`manifest ancestor is not the exact directory ${expected} for ${item.relative}`),
+          );
+        }
+      }
+    }
+    for (const item of ordered) {
+      if (item.entry._tag !== "SymbolicLink") continue;
+      const resolvedTarget = path.normalize(path.resolve(root, path.dirname(item.relative), item.entry.target));
+      const relativeTarget = path.relative(root, resolvedTarget).split(path.sep).join("/");
+      if (
+        path.isAbsolute(item.entry.target)
+        || relativeTarget === ".."
+        || relativeTarget.startsWith("../")
+      ) {
+        return yield* Effect.fail(
+          fail(`symbolic link target escapes the bundle: ${item.relative} -> ${item.entry.target}`),
+        );
+      }
+    }
+    const snapshot = yield* Effect.acquireRelease(
+      fileSystem.makeTempDirectory({ prefix: "effect-build-bundle-snapshot-" }).pipe(
+        Effect.mapError((error) => fail(`create private snapshot: ${describe(error)}`)),
+      ),
+      (directory) => removePrivateTree(fileSystem, path, directory),
+    );
+    yield* writeVerifiedBundleTree(snapshot, ordered, fail);
+    return snapshot;
+  });

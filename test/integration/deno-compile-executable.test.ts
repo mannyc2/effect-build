@@ -68,7 +68,6 @@ describe.skipIf(!enabled)("real Deno CompileExecutable", () => {
     await expect(run(DenoCompile.compileExecutable({
       entrypoint: join(root, "missing.ts"),
       outfile: join(root, "failure"),
-      hash: false,
     }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "deno" });
   }, 300_000);
 });

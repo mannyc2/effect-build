@@ -1,11 +1,12 @@
 #!/usr/bin/env node
+import { writeSync } from "node:fs";
 import { appendFile, chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const argv = process.argv.slice(2);
 
 if (argv[0] === "--version") {
-  process.stdout.write(`${process.env.FAKE_BUN_VERSION ?? "1.3.14"}\n`);
+  writeSync(1, `${process.env.FAKE_BUN_VERSION ?? "1.3.14"}\n`);
   process.exit(0);
 }
 
@@ -15,8 +16,8 @@ if (log !== undefined) {
 }
 
 if (process.env.FAKE_BUN_MODE === "fail") {
-  process.stdout.write("fake stdout diagnostic");
-  process.stderr.write("fake stderr diagnostic");
+  writeSync(1, "fake stdout diagnostic");
+  writeSync(2, "fake stderr diagnostic");
   process.exit(17);
 }
 

@@ -1,17 +1,19 @@
 # Releases
 
-Merging requires `bun run verify` (build, typecheck, typetests, unit
-suites, packed-consumer proof, public-surface gate, lint, format).
-Releasing requires the CI matrix: verify on ubuntu/macos/windows plus
-real-tool integration lanes (bun everywhere; deno and Node SEA where
-provisioned) and independent binary oracles for cross-target cells.
+Merging requires `bun run verify` (build, typecheck, typetests, unit and
+package-boundary suites, a twelve-package packed-consumer proof, public-surface
+gate, lint, format). The CI matrix repeats that gate on Ubuntu, macOS, and
+Windows, then runs real compiler and selected producer lanes with independent
+oracles. Credentialed Apple notarization, Developer ID signing, clean-host
+Gatekeeper, and install/launch acceptance remain external evidence gates;
+fake tools never satisfy them.
 
-Publication is automated: when main is green and the lockstep package
-version is not yet on npm, the release workflow publishes all five
-packages with `npm publish --provenance`, producing verifiable SLSA
-build attestation tied to the exact workflow run. There are no bespoke
-receipts, certificates, or trust anchors — npm provenance is the
-supply-chain story.
+Publication is not a consequence of a green push. The release workflow is a
+manual exact-commit dispatch, rejects a mismatched checkout, rebuilds and
+packs all twelve lockstep packages, and requires the repository's npm
+production environment before `npm publish --provenance`. Dispatching and
+approving that environment are the explicit release authority. A normal CI
+run only produces evidence and package data.
 
 Version policy is plain 0.x semver with honest release notes in
 [`CHANGELOG.md`](../CHANGELOG.md); breaking changes bump the minor

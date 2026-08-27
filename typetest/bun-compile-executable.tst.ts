@@ -57,7 +57,6 @@ export type _Input = Assert<
       readonly outfile: string;
       readonly cwd?: string;
       readonly target?: CompileExecutable.Target;
-      readonly hash?: boolean;
       readonly minify?: boolean;
       readonly sourcemap?: "linked" | "inline";
       readonly bytecode?: boolean;

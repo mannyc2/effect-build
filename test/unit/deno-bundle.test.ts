@@ -49,30 +49,31 @@ describeUnix("Deno Bundle", () => {
       expect(exit.value._tag).toBe("Bundle");
       expect(exit.value.outdir).toBe(outdir);
       expect(exit.value.tool).toEqual({ name: "deno", version: "2.9.3" });
-      expect(exit.value.files.map((file) => file.path)).toEqual([join(outdir, "main.js"), join(outdir, "worker.js")]);
-      for (const file of exit.value.files) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
+      const files = exit.value.entries.filter((entry) => entry._tag === "File");
+      expect(files.map((file) => file.path)).toEqual([join(outdir, "main.js"), join(outdir, "worker.js")]);
+      for (const file of files) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 
-  it("records split chunks and sourcemaps, without digests when hashing is disabled", async () => {
+  it("records split chunks and sourcemaps with mandatory digests", async () => {
     const outdir = join(root, "dist-split");
     const exit = await run(
       DenoBundle.bundle({
         entrypoints: ["src/main.ts"],
         outdir,
-        hash: false,
         codeSplitting: true,
         sourcemap: "external",
       }),
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value.files.map((file) => file.path)).toEqual([
+      const files = exit.value.entries.filter((entry) => entry._tag === "File");
+      expect(files.map((file) => file.path)).toEqual([
         join(outdir, "chunks", "chunk-fake.js"),
         join(outdir, "main.js"),
         join(outdir, "main.js.map"),
       ]);
-      expect(exit.value.files.some((file) => "sha256" in file)).toBe(false);
+      expect(files.every((file) => /^[0-9a-f]{64}$/.test(file.sha256))).toBe(true);
     }
   });
 
@@ -120,7 +121,7 @@ describeUnix("Deno Bundle", () => {
     const missing = await run(DenoBundle.bundle({ entrypoints: ["main.ts"], outdir: join(root, "dist-missing") }));
     const missingFailure = failureOf(missing) as { readonly _tag: string; readonly reason: string };
     expect(missingFailure._tag).toBe("PublishFailed");
-    expect(missingFailure.reason).toContain("did not produce any files");
+    expect(missingFailure.reason).toContain("did not produce any entries");
     delete process.env.FAKE_DENO_MODE;
   });
 });

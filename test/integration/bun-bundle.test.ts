@@ -43,8 +43,9 @@ describe("real Bun Bundle", () => {
     expect(artifact._tag).toBe("Bundle");
     expect(artifact.outdir).toBe(outdir);
     expect(artifact.tool.name).toBe("bun");
-    expect(artifact.files).toHaveLength(1);
-    const [file] = artifact.files;
+    const files = artifact.entries.filter((entry) => entry._tag === "File");
+    expect(files).toHaveLength(1);
+    const [file] = files;
     expect(file).toBeDefined();
     if (file === undefined) return;
     const bytes = await readFile(file.path);
@@ -65,10 +66,11 @@ describe("real Bun Bundle", () => {
         outdir: join(root, "dist-external"),
         target: "node",
         external: ["an-unresolvable-external-for-effect-build"],
-        hash: false,
       }),
     );
-    const entry = artifact.files.find((file) => file.path.endsWith("bundle-external.js"));
+    const entry = artifact.entries.find((candidate) =>
+      candidate._tag === "File" && candidate.path.endsWith("bundle-external.js")
+    );
     expect(entry).toBeDefined();
     if (entry === undefined) return;
     expect(await readFile(entry.path, "utf8")).toContain("an-unresolvable-external-for-effect-build");

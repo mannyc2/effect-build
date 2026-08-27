@@ -38,6 +38,43 @@ with `Build.generate`/`Build.write` as one-shot forms. `Watch.events`
 streams sanitized watcher events and closes rollup-convention result
 handles itself.
 
+**Archives** (`effect-build-archives/Archive`, `.../SourceArchive`) encodes
+ZIP and tar.gz deterministically from explicit layouts and rejects unsafe or
+ambiguous names. Source archives ask one resolved Git executable for one
+exact tree, honor `export-ignore`, preserve executable/symlink modes and LFS
+pointer bytes, and exclude `.git`, build output, and unsupplied gitlinks.
+
+**Python** (`effect-build-python/Build`) resolves and probes one uv frontend,
+requires `pyproject.toml` plus a valid `uv.lock`, disables Python downloads,
+forces PEP 517, gives the tool one private cache, and admits exactly one wheel
+and one sdist. The acceptance matrix fixes uv 0.12.x and both `uv_build` and
+`poetry-core` fixtures.
+
+**nFPM** (`effect-build-nfpm/Package`) projects typed metadata/content into a
+private native configuration and drives nFPM 2.47.x for deb, rpm, apk, Arch
+Linux, and unsigned MSIX. Release, timestamp, payload modes, and the selected
+MSIX metadata are closed schema fields; there is no arbitrary native
+configuration escape hatch.
+
+**Windows** (`effect-build-windows/SignMsix`) copies an unsigned MSIX to
+private staging, drives SignTool with SHA-256 and an RFC 3161 SHA-256
+timestamp, verifies with `/pa /tw` (warnings fail), and then publishes. Credentials are supplied
+as a PFX service or an exact certificate-store thumbprint and are scrubbed
+from failures.
+
+**SBOM** (`effect-build-sbom/Generate`) makes the scan subject explicit:
+directories use Syft `--from dir`, finalized files use `--from file`. Output
+is either SPDX JSON 2.3 or CycloneDX JSON 1.6 and is schema-decoded before
+publication from the exact held commit bytes using fatal UTF-8 decoding; the
+tested tool line is Syft 1.50.x.
+
+**Apple** (`effect-build-apple`) owns the selected direct-distribution path:
+exact arm64/x64 `.app` bundles, UDZO DMGs, unsigned flat packages, Developer
+ID application/installer signing, notary submit/info/log, stapling, and
+Gatekeeper assessment. Apple tools are resolved/probed once. Notary
+credentials remain services; returned submission references contain only
+the provider ID, product kind, byte length, and artifact digest.
+
 All selected-command layers accept an explicit executable path and
 otherwise perform one deterministic PATH search. Untested tool versions
 warn once and proceed; there is no version or host refusal.

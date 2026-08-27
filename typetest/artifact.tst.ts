@@ -13,7 +13,7 @@ export type _Executable = Assert<
       readonly bytes: number;
       readonly target: Target.Target;
       readonly tool: Artifact.Tool;
-      readonly sha256?: string;
+      readonly sha256: string;
     }
   >
 >;

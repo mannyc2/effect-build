@@ -90,15 +90,6 @@ describeUnix("Bun CompileExecutable", () => {
     }
   });
 
-  it("omits the digest when hashing is disabled", async () => {
-    const exit = await run(BunCompile.compileExecutable(input("unhashed", { hash: false })));
-    expect(Exit.isSuccess(exit)).toBe(true);
-    if (Exit.isSuccess(exit)) {
-      expect("sha256" in exit.value).toBe(false);
-      expect(exit.value.bytes).toBeGreaterThan(0);
-    }
-  });
-
   it("compiles every supported target and appends .exe for windows outputs", async () => {
     for (const target of BunCompile.Target.literals) {
       const exit = await run(BunCompile.compileExecutable(input(`target-${target}`, { target })));

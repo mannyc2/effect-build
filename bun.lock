@@ -12,11 +12,17 @@
         "dprint": "0.49.1",
         "effect": "4.0.0-rc.108",
         "effect-build": "workspace:*",
+        "effect-build-apple": "workspace:*",
+        "effect-build-archives": "workspace:*",
         "effect-build-bun": "workspace:*",
         "effect-build-deno": "workspace:*",
         "effect-build-esbuild": "workspace:*",
+        "effect-build-nfpm": "workspace:*",
         "effect-build-node-sea": "workspace:*",
+        "effect-build-python": "workspace:*",
         "effect-build-rolldown": "workspace:*",
+        "effect-build-sbom": "workspace:*",
+        "effect-build-windows": "workspace:*",
         "esbuild": "0.28.2",
         "oxlint": "0.15.1",
         "rolldown": "1.2.5",
@@ -68,7 +74,35 @@
     },
     "packages/effect-build": {
       "name": "effect-build",
-      "version": "0.5.0",
+      "version": "0.6.0",
+      "devDependencies": {
+        "effect": "4.0.0-rc.108",
+      },
+      "peerDependencies": {
+        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+      },
+    },
+    "packages/effect-build-apple": {
+      "name": "effect-build-apple",
+      "version": "0.6.0",
+      "dependencies": {
+        "effect-build": "workspace:^",
+      },
+      "devDependencies": {
+        "@effect/platform-node": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.108",
+        "vitest": "3.2.6",
+      },
+      "peerDependencies": {
+        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+      },
+    },
+    "packages/effect-build-archives": {
+      "name": "effect-build-archives",
+      "version": "0.6.0",
+      "dependencies": {
+        "effect-build": "workspace:^",
+      },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
       },
@@ -78,7 +112,7 @@
     },
     "packages/effect-build-bun": {
       "name": "effect-build-bun",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },
@@ -91,7 +125,7 @@
     },
     "packages/effect-build-deno": {
       "name": "effect-build-deno",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },
@@ -104,7 +138,7 @@
     },
     "packages/effect-build-esbuild": {
       "name": "effect-build-esbuild",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "effect-build": "workspace:^",
         "esbuild": "0.28.2",
@@ -116,9 +150,35 @@
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
       },
     },
+    "packages/effect-build-nfpm": {
+      "name": "effect-build-nfpm",
+      "version": "0.6.0",
+      "dependencies": {
+        "effect-build": "workspace:^",
+      },
+      "devDependencies": {
+        "effect": "4.0.0-rc.108",
+      },
+      "peerDependencies": {
+        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+      },
+    },
     "packages/effect-build-node-sea": {
       "name": "effect-build-node-sea",
-      "version": "0.5.0",
+      "version": "0.6.0",
+      "dependencies": {
+        "effect-build": "workspace:^",
+      },
+      "devDependencies": {
+        "effect": "4.0.0-rc.108",
+      },
+      "peerDependencies": {
+        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+      },
+    },
+    "packages/effect-build-python": {
+      "name": "effect-build-python",
+      "version": "0.6.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },
@@ -131,10 +191,36 @@
     },
     "packages/effect-build-rolldown": {
       "name": "effect-build-rolldown",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "effect-build": "workspace:^",
         "rolldown": "1.2.5",
+      },
+      "devDependencies": {
+        "effect": "4.0.0-rc.108",
+      },
+      "peerDependencies": {
+        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+      },
+    },
+    "packages/effect-build-sbom": {
+      "name": "effect-build-sbom",
+      "version": "0.6.0",
+      "dependencies": {
+        "effect-build": "workspace:^",
+      },
+      "devDependencies": {
+        "effect": "4.0.0-rc.108",
+      },
+      "peerDependencies": {
+        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+      },
+    },
+    "packages/effect-build-windows": {
+      "name": "effect-build-windows",
+      "version": "0.6.0",
+      "dependencies": {
+        "effect-build": "workspace:^",
       },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
@@ -423,6 +509,10 @@
 
     "effect-build": ["effect-build@workspace:packages/effect-build"],
 
+    "effect-build-apple": ["effect-build-apple@workspace:packages/effect-build-apple"],
+
+    "effect-build-archives": ["effect-build-archives@workspace:packages/effect-build-archives"],
+
     "effect-build-bun": ["effect-build-bun@workspace:packages/effect-build-bun"],
 
     "effect-build-deno": ["effect-build-deno@workspace:packages/effect-build-deno"],
@@ -435,9 +525,17 @@
 
     "effect-build-example-rolldown": ["effect-build-example-rolldown@workspace:examples/rolldown"],
 
+    "effect-build-nfpm": ["effect-build-nfpm@workspace:packages/effect-build-nfpm"],
+
     "effect-build-node-sea": ["effect-build-node-sea@workspace:packages/effect-build-node-sea"],
 
+    "effect-build-python": ["effect-build-python@workspace:packages/effect-build-python"],
+
     "effect-build-rolldown": ["effect-build-rolldown@workspace:packages/effect-build-rolldown"],
+
+    "effect-build-sbom": ["effect-build-sbom@workspace:packages/effect-build-sbom"],
+
+    "effect-build-windows": ["effect-build-windows@workspace:packages/effect-build-windows"],
 
     "es-module-lexer": ["es-module-lexer@1.7.0", "", {}, "sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA=="],
 

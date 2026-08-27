@@ -10,22 +10,48 @@
       ],
       "subpaths": {
         "./Artifact": {
-          "runtime": [],
+          "runtime": [
+            "BundleDirectorySchema",
+            "BundleEntrySchema",
+            "BundleFileSchema",
+            "BundleSchema",
+            "BundleSymbolicLinkSchema",
+            "FinalizedFile",
+            "Mode",
+            "Sha256",
+            "ToolSchema"
+          ],
           "declarations": [
             "Bundle",
+            "BundleDirectory",
+            "BundleDirectorySchema",
+            "BundleEntry",
+            "BundleEntrySchema",
             "BundleFile",
+            "BundleFileSchema",
+            "BundleSchema",
+            "BundleSymbolicLink",
+            "BundleSymbolicLinkSchema",
             "Executable",
-            "Tool"
+            "FileArtifact",
+            "FinalizedArtifact",
+            "FinalizedFile",
+            "Mode",
+            "Sha256",
+            "Tool",
+            "ToolSchema"
           ]
         },
         "./BuildError": {
           "runtime": [
+            "ArtifactVerificationFailed",
             "PublishFailed",
             "ToolFailed",
             "ToolNotFound",
             "UnsupportedTarget"
           ],
           "declarations": [
+            "ArtifactVerificationFailed",
             "PublishFailed",
             "ToolFailed",
             "ToolNotFound",
@@ -51,30 +77,398 @@
         },
         "./Toolchain": {
           "runtime": [
+            "materializeVerifiedBundle",
             "probeVersion",
             "publishBundle",
             "publishExecutable",
+            "publishFile",
+            "readVerifiedFile",
             "resolveExecutable",
             "run",
+            "runBytes",
+            "runBytesOrFail",
             "runOrFail",
             "warnIfUntested"
           ],
           "declarations": [
+            "BinaryCompletion",
             "Completion",
             "Output",
             "ProbeOptions",
             "PublishBundleOptions",
+            "PublishFileOptions",
             "PublishOptions",
             "ResolveOptions",
             "RunOptions",
             "TestedRange",
+            "materializeVerifiedBundle",
             "probeVersion",
             "publishBundle",
             "publishExecutable",
+            "publishFile",
+            "readVerifiedFile",
             "resolveExecutable",
             "run",
+            "runBytes",
+            "runBytesOrFail",
             "runOrFail",
             "warnIfUntested"
+          ]
+        }
+      }
+    },
+    "effect-build-apple": {
+      "namespaces": [
+        "AppBundle",
+        "Assess",
+        "CodeSign",
+        "DiskImage",
+        "InstallerPackage",
+        "Model",
+        "Notary",
+        "Staple"
+      ],
+      "subpaths": {
+        "./AppBundle": {
+          "runtime": [
+            "Builder",
+            "ExecutableArchitectureMismatch",
+            "buildAppBundles",
+            "layer"
+          ],
+          "declarations": [
+            "AppBundles",
+            "AppResource",
+            "AppVariantInput",
+            "BuildAppBundlesError",
+            "BuildAppBundlesInput",
+            "Builder",
+            "ExecutableArchitectureMismatch",
+            "LayerOptions",
+            "buildAppBundles",
+            "layer"
+          ]
+        },
+        "./Assess": {
+          "runtime": [
+            "ArtifactChangedDuringAssessment",
+            "ArtifactInspectionFailed",
+            "Assessor",
+            "GatekeeperAccepted",
+            "assess",
+            "layer"
+          ],
+          "declarations": [
+            "ArtifactChangedDuringAssessment",
+            "ArtifactInspectionFailed",
+            "AssessAppInput",
+            "AssessDiskImageInput",
+            "AssessError",
+            "AssessInput",
+            "AssessInstallerPackageInput",
+            "Assessor",
+            "GatekeeperAccepted",
+            "LayerOptions",
+            "assess",
+            "layer"
+          ]
+        },
+        "./CodeSign": {
+          "runtime": [
+            "AppSigner",
+            "CertificateSha1",
+            "DeveloperIdApplicationIdentity",
+            "DeveloperIdInstallerIdentity",
+            "InstallerSigner",
+            "appLayer",
+            "developerIdApplicationIdentityLayer",
+            "developerIdInstallerIdentityLayer",
+            "installerLayer",
+            "signApp",
+            "signDiskImage",
+            "signInstallerPackage"
+          ],
+          "declarations": [
+            "AppLayerOptions",
+            "AppSigner",
+            "CertificateSha1",
+            "DeveloperIdApplicationBundle",
+            "DeveloperIdApplicationIdentity",
+            "DeveloperIdDiskImage",
+            "DeveloperIdInstallerIdentity",
+            "DeveloperIdInstallerPackage",
+            "InstallerLayerOptions",
+            "InstallerSigner",
+            "NestedCode",
+            "SignAppInput",
+            "SignDiskImageInput",
+            "SignError",
+            "SignInstallerPackageInput",
+            "appLayer",
+            "developerIdApplicationIdentityLayer",
+            "developerIdInstallerIdentityLayer",
+            "installerLayer",
+            "signApp",
+            "signDiskImage",
+            "signInstallerPackage"
+          ]
+        },
+        "./DiskImage": {
+          "runtime": [
+            "Creator",
+            "createDiskImages",
+            "layer"
+          ],
+          "declarations": [
+            "CreateDiskImagesError",
+            "CreateDiskImagesInput",
+            "Creator",
+            "DiskImageVariantInput",
+            "DiskImages",
+            "LayerOptions",
+            "LayoutItem",
+            "createDiskImages",
+            "layer"
+          ]
+        },
+        "./InstallerPackage": {
+          "runtime": [
+            "Builder",
+            "buildInstallerPackages",
+            "layer"
+          ],
+          "declarations": [
+            "BuildInstallerPackagesError",
+            "BuildInstallerPackagesInput",
+            "Builder",
+            "InstallerPackages",
+            "InstallerVariantInput",
+            "LayerOptions",
+            "buildInstallerPackages",
+            "layer"
+          ]
+        },
+        "./Model": {
+          "runtime": [
+            "AppleToolFact",
+            "Architecture",
+            "BundleInspectionFailed",
+            "CertificateSha1",
+            "DeveloperIdApplicationSignature",
+            "DeveloperIdDiskImageSignature",
+            "DeveloperIdInstallerSignature",
+            "FileArtifactIdentityMismatch",
+            "NotarizationTicket",
+            "ProductKind",
+            "ProductStateInvalid",
+            "Sha256",
+            "hasDeveloperIdApplicationSignature",
+            "hasDeveloperIdDiskImageSignature",
+            "hasDeveloperIdInstallerSignature"
+          ],
+          "declarations": [
+            "AppleToolFact",
+            "AppleToolOptions",
+            "ApplicationBundle",
+            "Architecture",
+            "BundleInspectionFailed",
+            "CertificateSha1",
+            "DeveloperIdApplicationBundle",
+            "DeveloperIdApplicationSignature",
+            "DeveloperIdDiskImage",
+            "DeveloperIdDiskImageSignature",
+            "DeveloperIdInstallerPackage",
+            "DeveloperIdInstallerSignature",
+            "FileArtifactIdentityMismatch",
+            "NotarizationTicket",
+            "ProductKind",
+            "ProductStateInvalid",
+            "Sha256",
+            "StapledApplicationBundle",
+            "StapledDiskImage",
+            "StapledInstallerPackage",
+            "UdzoDiskImage",
+            "UnsignedInstallerPackage",
+            "hasDeveloperIdApplicationSignature",
+            "hasDeveloperIdDiskImageSignature",
+            "hasDeveloperIdInstallerSignature"
+          ]
+        },
+        "./Notary": {
+          "runtime": [
+            "Accepted",
+            "AcceptedReference",
+            "ArtifactIdentityMismatch",
+            "Client",
+            "CorrelationFailed",
+            "Credential",
+            "Log",
+            "LogIssue",
+            "Observation",
+            "Pending",
+            "Rejected",
+            "ResponseInvalid",
+            "ResultHasNoStapleTarget",
+            "ResultNotAccepted",
+            "StapleTarget",
+            "Status",
+            "Submission",
+            "SubmissionId",
+            "SubmissionKind",
+            "SubmissionOutcomeUnknown",
+            "SubmissionPreparationFailed",
+            "SubmissionReference",
+            "acceptedReference",
+            "apiKeyCredentialLayer",
+            "info",
+            "keychainProfileCredentialLayer",
+            "layer",
+            "log",
+            "submit",
+            "submitApp"
+          ],
+          "declarations": [
+            "Accepted",
+            "AcceptedReference",
+            "ApiKeyOptions",
+            "ArtifactIdentityMismatch",
+            "Client",
+            "CorrelationFailed",
+            "Credential",
+            "KeychainProfileOptions",
+            "LayerOptions",
+            "Log",
+            "LogIssue",
+            "Observation",
+            "ObserveError",
+            "Pending",
+            "Rejected",
+            "ResponseInvalid",
+            "Result",
+            "ResultHasNoStapleTarget",
+            "ResultNotAccepted",
+            "StapleTarget",
+            "Status",
+            "Submission",
+            "SubmissionId",
+            "SubmissionKind",
+            "SubmissionOutcomeUnknown",
+            "SubmissionPreparationFailed",
+            "SubmissionReference",
+            "SubmitAppError",
+            "SubmitAppInput",
+            "SubmitDiskImageInput",
+            "SubmitError",
+            "SubmitInput",
+            "SubmitInstallerPackageInput",
+            "acceptedReference",
+            "apiKeyCredentialLayer",
+            "info",
+            "keychainProfileCredentialLayer",
+            "layer",
+            "log",
+            "submit",
+            "submitApp"
+          ]
+        },
+        "./Staple": {
+          "runtime": [
+            "AcceptanceMismatch",
+            "Stapler",
+            "layer",
+            "stapleApp",
+            "stapleFile"
+          ],
+          "declarations": [
+            "AcceptanceMismatch",
+            "LayerOptions",
+            "StapleAppError",
+            "StapleAppInput",
+            "StapleDiskImageInput",
+            "StapleError",
+            "StapleFileInput",
+            "StapleInstallerPackageInput",
+            "Stapler",
+            "layer",
+            "stapleApp",
+            "stapleFile"
+          ]
+        }
+      }
+    },
+    "effect-build-archives": {
+      "namespaces": [
+        "Archive",
+        "ArchiveError",
+        "Model",
+        "SourceArchive"
+      ],
+      "subpaths": {
+        "./Archive": {
+          "runtime": [
+            "ArchiveEntry",
+            "ArchiveInput",
+            "Archiver",
+            "Format",
+            "archive",
+            "layer"
+          ],
+          "declarations": [
+            "ArchiveEntry",
+            "ArchiveError",
+            "ArchiveInput",
+            "Archiver",
+            "Format",
+            "FormatType",
+            "archive",
+            "layer"
+          ]
+        },
+        "./ArchiveError": {
+          "runtime": [
+            "ArchiveFailed",
+            "SourceArchiveFailed",
+            "UnsafeArchiveLayout"
+          ],
+          "declarations": [
+            "ArchiveFailed",
+            "SourceArchiveFailed",
+            "UnsafeArchiveLayout"
+          ]
+        },
+        "./Model": {
+          "runtime": [
+            "ArchiveEntry",
+            "ArchiveInput",
+            "Format",
+            "GitObjectId",
+            "SourceArchiveInput"
+          ],
+          "declarations": [
+            "ArchiveEntry",
+            "ArchiveInput",
+            "Format",
+            "GitObjectId",
+            "SourceArchiveInput"
+          ]
+        },
+        "./SourceArchive": {
+          "runtime": [
+            "Format",
+            "SourceArchiveInput",
+            "SourceArchiver",
+            "layer",
+            "sourceArchive"
+          ],
+          "declarations": [
+            "Format",
+            "FormatType",
+            "LayerOptions",
+            "SourceArchiveError",
+            "SourceArchiveInput",
+            "SourceArchiver",
+            "layer",
+            "sourceArchive"
           ]
         }
       }
@@ -224,6 +618,72 @@
         }
       }
     },
+    "effect-build-nfpm": {
+      "namespaces": [
+        "NfpmConfigurationRejected",
+        "Package"
+      ],
+      "subpaths": {
+        "./Package": {
+          "runtime": [
+            "Format",
+            "FormatProjection",
+            "MsixApplication",
+            "MsixDependencies",
+            "MsixOptions",
+            "MsixProperties",
+            "MsixTargetDeviceFamily",
+            "MsixVisualElements",
+            "NfpmConfigurationRejected",
+            "PackageContent",
+            "PackageInput",
+            "PackageMetadata",
+            "Packager",
+            "buildApk",
+            "buildArchLinux",
+            "buildDeb",
+            "buildMsix",
+            "buildPackage",
+            "buildRpm",
+            "formatProjection",
+            "layer"
+          ],
+          "declarations": [
+            "Format",
+            "FormatProjection",
+            "LayerOptions",
+            "MsixApplication",
+            "MsixDependencies",
+            "MsixOptions",
+            "MsixProperties",
+            "MsixTargetDeviceFamily",
+            "MsixVisualElements",
+            "NfpmConfigurationRejected",
+            "PackageContent",
+            "PackageError",
+            "PackageInput",
+            "PackageMetadata",
+            "Packager",
+            "buildApk",
+            "buildArchLinux",
+            "buildDeb",
+            "buildMsix",
+            "buildPackage",
+            "buildRpm",
+            "formatProjection",
+            "layer"
+          ]
+        },
+        "./NfpmConfigurationRejected": {
+          "runtime": [
+            "NfpmConfigurationRejected"
+          ],
+          "declarations": [
+            "NfpmConfigurationRejected"
+          ]
+        }
+      }
+    },
     "effect-build-node-sea": {
       "namespaces": [
         "AssembleExecutable"
@@ -244,6 +704,39 @@
             "MainFormat",
             "assembleExecutable",
             "layer"
+          ]
+        }
+      }
+    },
+    "effect-build-python": {
+      "namespaces": [
+        "Build",
+        "PythonBuildError"
+      ],
+      "subpaths": {
+        "./Build": {
+          "runtime": [
+            "BuildInput",
+            "Builder",
+            "build",
+            "layer"
+          ],
+          "declarations": [
+            "BuildError",
+            "BuildInput",
+            "Builder",
+            "LayerOptions",
+            "PythonArtifacts",
+            "build",
+            "layer"
+          ]
+        },
+        "./PythonBuildError": {
+          "runtime": [
+            "PythonBuildFailed"
+          ],
+          "declarations": [
+            "PythonBuildFailed"
           ]
         }
       }
@@ -282,6 +775,99 @@
             "Event",
             "RolldownFailed",
             "events"
+          ]
+        }
+      }
+    },
+    "effect-build-sbom": {
+      "namespaces": [
+        "Generate"
+      ],
+      "subpaths": {
+        "./Generate": {
+          "runtime": [
+            "CycloneDxComponent",
+            "CycloneDxComponentType",
+            "CycloneDxJsonDocument",
+            "DirectorySubject",
+            "FileSubject",
+            "FormatProjection",
+            "GenerateInput",
+            "Generator",
+            "OutputFormat",
+            "SbomInvalid",
+            "ScanSubject",
+            "SpdxCreationInfo",
+            "SpdxJsonDocument",
+            "SpdxPackage",
+            "formatProjection",
+            "generate",
+            "generateCycloneDxJson",
+            "generateSpdxJson",
+            "layer"
+          ],
+          "declarations": [
+            "CycloneDxComponent",
+            "CycloneDxComponentType",
+            "CycloneDxJsonDocument",
+            "DirectorySubject",
+            "FileSubject",
+            "FormatProjection",
+            "GenerateError",
+            "GenerateInput",
+            "Generator",
+            "LayerOptions",
+            "OutputFormat",
+            "SbomInvalid",
+            "ScanSubject",
+            "SpdxCreationInfo",
+            "SpdxJsonDocument",
+            "SpdxPackage",
+            "formatProjection",
+            "generate",
+            "generateCycloneDxJson",
+            "generateSpdxJson",
+            "layer"
+          ]
+        }
+      }
+    },
+    "effect-build-windows": {
+      "namespaces": [
+        "SignMsix"
+      ],
+      "subpaths": {
+        "./SignMsix": {
+          "runtime": [
+            "AuthenticodePolicy",
+            "CertificateStoreOptions",
+            "CertificateThumbprint",
+            "SignMsixInput",
+            "SignMsixInputRejected",
+            "Signer",
+            "SigningCredential",
+            "certificateStoreCredentialLayer",
+            "layer",
+            "pfxCredentialLayer",
+            "policy",
+            "signMsix"
+          ],
+          "declarations": [
+            "AuthenticodePolicy",
+            "CertificateStoreOptions",
+            "CertificateThumbprint",
+            "LayerOptions",
+            "PfxOptions",
+            "SignMsixError",
+            "SignMsixInput",
+            "SignMsixInputRejected",
+            "Signer",
+            "SigningCredential",
+            "certificateStoreCredentialLayer",
+            "layer",
+            "pfxCredentialLayer",
+            "policy",
+            "signMsix"
           ]
         }
       }

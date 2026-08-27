@@ -56,9 +56,11 @@ describe.skipIf(!enabled)("real Deno Bundle", () => {
     expect(artifact._tag).toBe("Bundle");
     expect(artifact.outdir).toBe(outdir);
     expect(artifact.tool.name).toBe("deno");
-    const entry = artifact.files.find((file) => file.path.endsWith("bundle-entry.js"));
+    const entry = artifact.entries.find((candidate) =>
+      candidate._tag === "File" && candidate.path.endsWith("bundle-entry.js")
+    );
     expect(entry).toBeDefined();
-    if (entry === undefined) return;
+    if (entry === undefined || entry._tag !== "File") return;
     const bytes = await readFile(entry.path);
     expect(entry.bytes).toBe(bytes.byteLength);
     expect(entry.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
@@ -71,7 +73,6 @@ describe.skipIf(!enabled)("real Deno Bundle", () => {
     await expect(run(DenoBundle.bundle({
       entrypoints: [join(root, "missing.ts")],
       outdir: join(root, "dist-failure"),
-      hash: false,
     }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "deno" });
   }, 300_000);
 });
