@@ -128,7 +128,7 @@ jobs:
       - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
         if: matrix.compiler == 'deno'
         with:
-          deno-version: v2.4.0
+          deno-version: v2.9.6
       - run: bun install --frozen-lockfile
       - name: Compile and validate the cell with independent oracles
         shell: bash
@@ -309,12 +309,15 @@ jobs:
           echo "EFFECT_BUILD_PRODUCTBUILD_BIN=$(command -v productbuild)" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_PKGUTIL_BIN=$(command -v pkgutil)" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_XCODEBUILD_BIN=$(command -v xcodebuild)" >> "$GITHUB_ENV"
+          sdkroot="$(xcrun --sdk macosx --show-sdk-path)"
           xcode_version="$(xcodebuild -version | awk '/^Xcode / { print $2 }')"
           macos_version="$(sw_vers -productVersion)"
           macos_build="$(sw_vers -buildVersion)"
+          test -d "$sdkroot"
           test -n "$xcode_version"
           test -n "$macos_version"
           test -n "$macos_build"
+          echo "SDKROOT=$sdkroot" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_XCODE_VERSION=$xcode_version" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_APPLE_TOOL_VERSION=$macos_version+$macos_build" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_APPLE_HOST_ARCH=${{ matrix.architecture }}" >> "$GITHUB_ENV"
@@ -350,14 +353,10 @@ jobs:
           }
           $signToolBanner = & $signTool /? 2>&1
           if ($LASTEXITCODE -ne 0) { throw "SignTool /? failed: $($signToolBanner -join [Environment]::NewLine)" }
-          $signToolMatch = [regex]::Match(
-            ($signToolBanner -join [Environment]::NewLine),
-            "(?im)^Version\s*:?\s*(10\.0\.26100\.[0-9]+)\s*$"
-          )
-          if (-not $signToolMatch.Success) {
-            throw "the exact Windows SDK SignTool banner did not expose a 10.0.26100.x version"
+          $signToolVersion = (Get-Item -LiteralPath $signTool).VersionInfo.FileVersionRaw.ToString()
+          if ($signToolVersion -notmatch '^10\.0\.26100\.[0-9]+$') {
+            throw "the exact Windows SDK SignTool file version is not 10.0.26100.x: $signToolVersion"
           }
-          $signToolVersion = $signToolMatch.Groups[1].Value
           Write-Host "Bound Windows SDK SignTool $signToolVersion at $signTool"
           "EFFECT_BUILD_NFPM_BIN=$nfpm" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EFFECT_BUILD_SIGNTOOL_BIN=$signTool" | Out-File -FilePath $env:GITHUB_ENV -Append

@@ -62,11 +62,10 @@ const headerOracle = async (path: string, target: string): Promise<void> => {
     throw new Error("/usr/bin/file is required for the independent target-support oracle");
   }
   const options = { env: { ...process.env, LC_ALL: "C" }, maxBuffer: 8 * 1024 * 1024 } as const;
-  const { stdout: fileOutput } = await execute(
-    "/usr/bin/file",
-    ["--brief", "-P", "elf_shsize=268435456", "--", path],
-    options,
-  );
+  const fileArguments = process.platform === "darwin"
+    ? ["--brief", "--", path]
+    : ["--brief", "-P", "elf_shsize=268435456", "--", path];
+  const { stdout: fileOutput } = await execute("/usr/bin/file", fileArguments, options);
   if (target.startsWith("macos-")) {
     expect(fileOutput).toMatch(/Mach-O/);
     expect(fileOutput).toMatch(target === "macos-x64" ? /\bx86_64\b/ : /\barm64\b/);

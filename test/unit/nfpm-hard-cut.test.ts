@@ -1,13 +1,14 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { createHash } from "node:crypto";
-import { chmod, copyFile, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as Nfpm from "../../packages/effect-build-nfpm/src/Package.js";
 import type * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-nfpm-hard-cut.mjs", import.meta.url)));
 let root = "";
@@ -16,9 +17,7 @@ let payload: Artifact.FinalizedFile;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-nfpm-hard-cut-"));
-  executable = join(root, "nfpm");
-  await copyFile(fixture, executable);
-  await chmod(executable, 0o755);
+  executable = await installFixtureExecutable({ fixture, root, name: "nfpm" });
   const payloadPath = join(root, "fixture-cli");
   const contents = new TextEncoder().encode("#!/bin/sh\nprintf 'fixture-cli-ok\\n'\n");
   await writeFile(payloadPath, contents);

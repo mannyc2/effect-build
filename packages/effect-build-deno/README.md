@@ -28,6 +28,12 @@ at the type level. `Bundle.bundle` runs `deno bundle` (Deno ≥ 2.4) with
 `platform` (browser/deno), `minify`, `codeSplitting`, `sourcemap`, and
 `external`, returning an `Artifact.Bundle` listing every committed file.
 
+`CompileExecutable` supports the native target triples exposed by Deno.
+The `windows-aarch64` compiler target requires Deno 2.9.6 or newer; older
+releases return Deno's native diagnostic as `ToolFailed`. CI retains an exact
+Deno 2.4.0 compatibility lane and uses exact Deno 2.9.6 for the native target
+matrix.
+
 Each layer selects and probes Deno once — an explicit `executable` path
 wins, otherwise one deterministic PATH walk — and warns once outside the
 CI-tested range; it never installs or substitutes. See the

@@ -55,7 +55,7 @@ esac
 staging="$(mktemp -d)"
 trap 'rm -rf -- "$staging"' EXIT
 curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 "$url" --output "$staging/$asset"
-printf '%s  %s\n' "$sha256" "$staging/$asset" | sha256sum --check --strict
+printf '%s  %s\n' "$sha256" "$staging/$asset" | sha256sum --check --strict --status
 mkdir -p "$staging/extract" "$destination"
 tar -xzf "$staging/$asset" -C "$staging/extract" -- "$member"
 install -m 0755 "$staging/extract/$member" "$destination/$binary"

@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { createHash } from "node:crypto";
-import { chmod, copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as Sbom from "../../packages/effect-build-sbom/src/Generate.js";
 import type * as Artifact from "../../packages/effect-build/src/Artifact.js";
 import { finalizedBundle } from "../fixtures/finalized-artifacts.js";
+import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-syft-hard-cut.mjs", import.meta.url)));
 let root = "";
@@ -18,9 +19,7 @@ let directorySubject: Artifact.Bundle;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-sbom-hard-cut-"));
-  executable = join(root, "syft");
-  await copyFile(fixture, executable);
-  await chmod(executable, 0o755);
+  executable = await installFixtureExecutable({ fixture, root, name: "syft" });
   const subjectPath = join(root, "release.tar.gz");
   const contents = new TextEncoder().encode("finalized archive bytes");
   await writeFile(subjectPath, contents);

@@ -74,6 +74,8 @@ const nativeTarget: Record<Target, string> = {
   "linux-x64-gnu": "x86_64-unknown-linux-gnu",
   "linux-aarch64-gnu": "aarch64-unknown-linux-gnu",
   "windows-x64": "x86_64-pc-windows-msvc",
+  // Deno added this compiler target in 2.9.6. Earlier releases surface their
+  // own diagnostic as ToolFailed; the provider deliberately remains warn-only.
   "windows-aarch64": "aarch64-pc-windows-msvc",
 };
 

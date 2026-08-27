@@ -13,6 +13,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -290,7 +291,7 @@ describe("effect-build-apple hard cut", () => {
     expect(info).toContain("<string>13.0</string>");
     expect(invocations.map(({ args }) => args[0])).toEqual(["-help", "-lint", "-lint"]);
     for (const invocation of invocations.slice(1)) {
-      expect(invocation.command).toBe(plutil);
+      expect(invocation.command).toBe(realpathSync(plutil));
       expect(invocation.args.slice(0, 2)).toEqual(["-lint", "--"]);
       expect(invocation.args[2]).toMatch(/Contents\/Info\.plist$/);
     }

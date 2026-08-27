@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit } from "effect";
 import type * as Artifact from "effect-build/Artifact";
 import { createHash } from "node:crypto";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Archive from "../../packages/effect-build-archives/src/Archive.js";
 import { decodeGitTar, encodeTar } from "../../packages/effect-build-archives/src/internal/archive.js";
 import * as SourceArchive from "../../packages/effect-build-archives/src/SourceArchive.js";
+import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const decoder = new TextDecoder();
 
@@ -124,9 +125,7 @@ let git = "";
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-archives-hard-cut-"));
-  git = join(root, "git");
-  await copyFile(fixture, git);
-  await chmod(git, 0o755);
+  git = await installFixtureExecutable({ fixture, root, name: "git" });
 });
 
 afterAll(async () => {

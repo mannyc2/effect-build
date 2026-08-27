@@ -1,13 +1,14 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Layer, Redacted, Schema } from "effect";
 import { createHash } from "node:crypto";
-import { chmod, copyFile, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as Sign from "../../packages/effect-build-windows/src/SignMsix.js";
 import type * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const fixture = resolve(
   fileURLToPath(new URL("../fixtures/tools/fake-signtool-hard-cut.mjs", import.meta.url)),
@@ -17,9 +18,7 @@ let executable = "";
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-windows-hard-cut-"));
-  executable = join(root, "signtool");
-  await copyFile(fixture, executable);
-  await chmod(executable, 0o755);
+  executable = await installFixtureExecutable({ fixture, root, name: "signtool" });
 });
 
 afterEach(() => {

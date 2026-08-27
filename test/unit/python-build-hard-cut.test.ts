@@ -1,12 +1,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit } from "effect";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as PythonBuild from "../../packages/effect-build-python/src/Build.js";
 import { finalizedBundle } from "../fixtures/finalized-artifacts.js";
+import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const executableFixture = resolve(
   fileURLToPath(new URL("../fixtures/tools/fake-uv-build-hard-cut.mjs", import.meta.url)),
@@ -19,9 +20,7 @@ let poetryCoreSource: Awaited<ReturnType<typeof finalizedBundle>>;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-python-hard-cut-"));
-  uv = join(root, "uv");
-  await copyFile(executableFixture, uv);
-  await chmod(uv, 0o755);
+  uv = await installFixtureExecutable({ fixture: executableFixture, root, name: "uv" });
   uvBuildSource = await finalizedBundle(join(pythonFixtures, "uv-build"));
   poetryCoreSource = await finalizedBundle(join(pythonFixtures, "poetry-core"));
 });
