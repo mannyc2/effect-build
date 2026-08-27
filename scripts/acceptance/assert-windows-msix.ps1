@@ -22,6 +22,30 @@ $unpacked = Join-Path ([System.IO.Path]::GetTempPath()) ("effect-build-msix-" + 
 $signedUnpacked = Join-Path ([System.IO.Path]::GetTempPath()) ("effect-build-msix-signed-" + [guid]::NewGuid())
 $installed = $null
 try {
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($Unsigned)
+  try {
+    $expectedArchiveFiles = @(
+      "[Content_Types].xml",
+      "AppxBlockMap.xml",
+      "AppxManifest.xml",
+      "Assets/logo.png",
+      "Assets/logo150.png",
+      "Assets/logo44.png",
+      "effect-build-acceptance.exe"
+    ) | Sort-Object
+    $archiveFiles = @($archive.Entries | Where-Object { $_.Name.Length -ne 0 } | ForEach-Object {
+      $_.FullName.Replace("\\", "/")
+    }) | Sort-Object
+    $archiveDifference = @(
+      Compare-Object -CaseSensitive -ReferenceObject $expectedArchiveFiles -DifferenceObject $archiveFiles
+    )
+    if ($archiveDifference.Count -ne 0) {
+      throw "unexpected exact unsigned MSIX archive file set: $($archiveDifference | Out-String)"
+    }
+  } finally {
+    $archive.Dispose()
+  }
+
   & $MakeAppx unpack /p $Unsigned /d $unpacked /o
   if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed to unpack the unsigned MSIX" }
   [xml] $manifest = Get-Content -LiteralPath (Join-Path $unpacked "AppxManifest.xml")
@@ -37,7 +61,6 @@ try {
     throw "unexpected MSIX block-map digest algorithm"
   }
   $expectedFiles = @(
-    "[Content_Types].xml",
     "AppxBlockMap.xml",
     "AppxManifest.xml",
     "Assets/logo.png",

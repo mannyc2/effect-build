@@ -846,7 +846,7 @@ describe("effect-build-apple hard cut", () => {
       join("Versions", "Current", "Resources"),
     );
     expect(lstatSync(join(root, "Signed.app/Contents/Frameworks/Chained.framework/Versions/A/Resources")).mode & 0o777)
-      .toBe(0o555);
+      .toBe(lstatSync(join(chainedFramework, "Versions/A/Resources")).mode & 0o777);
     expect(signed.signature).toMatchObject({
       _tag: "DeveloperIdApplicationSignature",
       certificateSha1: appIdentity,
