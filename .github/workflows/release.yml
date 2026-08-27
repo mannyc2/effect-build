@@ -1,7 +1,7 @@
 name: Release
 
 # Publishing requires two explicit acts: dispatch with one full commit SHA and
-# approval of the npm-production environment. Ordinary CI never mutates npm.
+# approval of the protected npm environment. Ordinary CI never mutates npm.
 on:
   workflow_dispatch:
     inputs:
@@ -28,9 +28,54 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  environment-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require the pre-existing protected npm environment
+        shell: bash
+        env:
+          API_ROOT: ${{ github.api_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          curl --fail --silent --show-error \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "$API_ROOT/repos/$REPOSITORY/environments/npm" \
+            > "$stage/environment.json"
+          curl --fail --silent --show-error \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "$API_ROOT/repos/$REPOSITORY/environments/npm/deployment-branch-policies" \
+            > "$stage/branch-policies.json"
+          node --input-type=module - "$stage/environment.json" "$stage/branch-policies.json" <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const environment = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          const policies = JSON.parse(readFileSync(process.argv[3], "utf8"));
+          const reviewers = environment.protection_rules
+            ?.filter((rule) => rule.type === "required_reviewers")
+            .flatMap((rule) => rule.reviewers ?? [])
+            .map(({ reviewer }) => reviewer?.login);
+          const branches = policies.branch_policies?.map(({ name, type }) => ({ name, type }));
+          if (
+            environment.name !== "npm"
+            || environment.deployment_branch_policy?.protected_branches !== false
+            || environment.deployment_branch_policy?.custom_branch_policies !== true
+            || !reviewers?.includes("mannyc2")
+            || JSON.stringify(branches) !== JSON.stringify([{ name: "main", type: "branch" }])
+          ) {
+            console.error("npm environment is absent or does not have the required reviewer/main-only policy");
+            process.exit(1);
+          }
+          NODE
+
   publish:
     if: inputs.approval == 'publish-exact-sha'
-    environment: npm-production
+    needs: environment-contract
+    environment: npm
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd

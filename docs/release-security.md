@@ -10,10 +10,13 @@ fake tools never satisfy them.
 
 Publication is not a consequence of a green push. The release workflow is a
 manual exact-commit dispatch, rejects a mismatched checkout, rebuilds and
-packs all twelve lockstep packages, and requires the repository's npm
-production environment before `npm publish --provenance`. Dispatching and
-approving that environment are the explicit release authority. A normal CI
-run only produces evidence and package data.
+packs all twelve lockstep packages, and requires the repository's protected
+`npm` environment before `npm publish --provenance`. A fail-closed preflight
+requires that environment to exist already with the `mannyc2` reviewer and a
+`main`-only deployment policy, so a missing environment cannot be silently
+created without its protections. Dispatching and approving that environment
+are the explicit release authority. A normal CI run only produces evidence
+and package data.
 
 Version policy is plain 0.x semver with honest release notes in
 [`CHANGELOG.md`](../CHANGELOG.md); breaking changes bump the minor
