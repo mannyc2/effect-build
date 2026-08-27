@@ -31,5 +31,7 @@ describe("release workflow", () => {
     expect(contractScript).toContain("required_reviewers");
     expect(contractScript).toContain('reviewers?.includes("mannyc2")');
     expect(contractScript).toContain('JSON.stringify([{ name: "main", type: "branch" }])');
+    expect(source).toContain("git ls-remote --exit-code origin refs/heads/main");
+    expect(source).toContain('echo "prepublish-sri $name@$version ${integrities[$name]}"');
   });
 });
