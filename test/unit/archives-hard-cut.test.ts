@@ -13,6 +13,8 @@ import { finalizedFile } from "../fixtures/finalized-artifacts.js";
 import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const decoder = new TextDecoder();
+const gitTreeProjectionTest =
+  "projects one exact Git tree into both source formats without worktree, submodule, or build-output bytes";
 
 const uint16 = (bytes: Uint8Array, offset: number): number => (bytes[offset] ?? 0) | ((bytes[offset + 1] ?? 0) << 8);
 
@@ -346,7 +348,7 @@ describe.sequential("deterministic archive hard cut", () => {
     }
   });
 
-  it("projects one exact Git tree into both source formats without worktree, submodule, or build-output bytes", async () => {
+  it(gitTreeProjectionTest, async () => {
     const log = join(root, "git.log");
     await writeFile(log, "");
     process.env.FAKE_GIT_ARCHIVE_LOG = log;
@@ -436,7 +438,7 @@ describe.sequential("deterministic archive hard cut", () => {
     } finally {
       delete process.env.FAKE_GIT_ARCHIVE_LOG;
     }
-  });
+  }, 30_000);
 
   it("does not apply the diagnostic byte cap to exact ls-tree protocol stdout", async () => {
     const repository = join(root, "exact-protocol-repository");

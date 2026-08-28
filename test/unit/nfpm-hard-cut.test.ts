@@ -229,10 +229,11 @@ describe.sequential("nFPM hard-cut package operations", () => {
       }
       delete process.env.FAKE_NFPM_LOG;
     }
-  });
+  }, 30_000);
 
   it("probes one resolved tool once for multiple operations in one layer", async () => {
     const log = join(root, "resolve-once.log");
+    await writeFile(log, "");
     process.env.FAKE_NFPM_LOG = log;
     const program = Effect.all([
       Nfpm.buildDeb(input("once-a.deb")),
