@@ -7,6 +7,7 @@ import {
   contractPath,
   coreCapabilityRegister,
   denoPrivateOperationIds,
+  exactToolEvidenceRegister,
   expectedDispositionCounts,
   fixedPublicSurface,
   mandatoryOperationIds,
@@ -349,6 +350,10 @@ export const buildContract = (inputs) => {
         "Effect FileSystem has no portable atomic no-replace directory rename; tree finalizers use process-local claims plus start/precommit destination rejection, and external writers must coordinate",
       hardCut: "no compatibility layer or legacy fallback",
     },
+    exactToolEvidenceRegister: {
+      count: exactToolEvidenceRegister.length,
+      tools: exactToolEvidenceRegister,
+    },
     coreCapabilityRegister: {
       count: coreCapabilityRegister.length,
       capabilities: coreCapabilityRegister,
@@ -457,6 +462,23 @@ const validateOwners = (contract) => {
 
 export const validateContract = (contract, inputs) => {
   if (contract.schema !== "effect-build/combined-contract@1") throw new Error("unexpected combined contract schema");
+  if (
+    contract.exactToolEvidenceRegister.count !== exactToolEvidenceRegister.length
+    || !sameJson(contract.exactToolEvidenceRegister.tools, exactToolEvidenceRegister)
+  ) {
+    throw new Error("exact tool evidence register does not match canonical policy");
+  }
+  requireUnique(contract.exactToolEvidenceRegister.tools.map((entry) => entry.id), "exact tool evidence ids");
+  requireUnique(contract.exactToolEvidenceRegister.tools.map((entry) => entry.name), "exact tool evidence names");
+  for (const tool of contract.exactToolEvidenceRegister.tools) {
+    requireText(tool.name, `${tool.id}.name`);
+    requireText(tool.version, `${tool.id}.version`);
+    requireUnique(tool.executableBindings, `${tool.id}.executableBindings`);
+    requireUnique(tool.evidenceCells, `${tool.id}.evidenceCells`);
+    if (tool.executableBindings.length === 0 || tool.evidenceCells.length === 0) {
+      throw new Error(`${tool.id} must bind an executable and at least one evidence cell`);
+    }
+  }
   if (contract.providerOperationRegister.count !== 67) throw new Error("provider operation register must contain 67 rows");
   if (contract.nonOperationRegister.count !== 46) throw new Error("non-operation register must contain 46 rows");
   if (!sameJson(contract.providerOperationRegister.dispositionCounts, expectedDispositionCounts)) {

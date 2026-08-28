@@ -42,6 +42,11 @@ const exactCell = (): { readonly enabled: boolean; readonly executable?: string 
 };
 
 const cell = exactCell();
+if (!cell.enabled || (process.env.CI === "true" && process.env.EFFECT_BUILD_NODE === undefined)) {
+  throw new Error(
+    "real Node SEA evidence requires the exact Node 26.7.0 linux-x64-gnu cell and an explicit hosted binding",
+  );
+}
 let root = "";
 
 beforeAll(async () => {
@@ -62,7 +67,7 @@ const run = <A, E>(
     ),
   );
 
-describe.skipIf(!cell.enabled).sequential("real Node SEA Command.AssembleExecutable exact cell", () => {
+describe.sequential("real Node SEA Command.AssembleExecutable exact cell", () => {
   it("assembles, hashes, atomically publishes, and executes a CJS file main", async () => {
     const outfile = join(root, "cjs-app");
     const artifact = await run(AssembleExecutable.assembleDirect({

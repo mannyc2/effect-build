@@ -13,8 +13,7 @@ import * as Runtime from "../../packages/effect-build-bun/src/internal/Runtime.j
 import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
-const bundledBun = "/Users/cjpher/.codex/toolchains/bun-1.3.14-arm64/bun-darwin-aarch64/bun";
-const selectedBun = process.env.EFFECT_BUILD_BUN ?? bundledBun;
+const selectedBun = process.env.EFFECT_BUILD_BUN ?? process.execPath;
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 const fullStackEntrypoint = fileURLToPath(
   new URL("../fixtures/bun-positive-findings/fullstack/server.ts", import.meta.url),
@@ -28,6 +27,11 @@ const exactBunAvailable = (): boolean => {
     return false;
   }
 };
+
+const exactBun = exactBunAvailable();
+if (!exactBun || (process.env.CI === "true" && process.env.EFFECT_BUILD_BUN === undefined)) {
+  throw new Error("real Bun evidence requires exact Bun 1.3.14 and an explicit hosted EFFECT_BUILD_BUN binding");
+}
 
 const hostTarget = (): Compile.Target => {
   if (process.platform === "darwin") return process.arch === "arm64" ? "bun-darwin-arm64" : "bun-darwin-x64";
@@ -60,7 +64,7 @@ const run = <A, E>(
     ) as Effect.Effect<A, E>,
   );
 
-describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 compileExecutable", () => {
+describe("real Bun 1.3.14 compileExecutable", () => {
   it("compiles, authenticates, atomically publishes, hashes, and executes the host artifact", async () => {
     const outfile = executablePath("app");
     const artifact = await run(Compile.compileExecutable({

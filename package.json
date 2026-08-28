@@ -23,7 +23,7 @@
     "test:architecture": "vitest run test/architecture",
     "test:consumer": "bun scripts/test-built-consumer.mjs",
     "test:consumer:fresh": "bun scripts/test-built-consumer.mjs --fresh-install",
-    "test:integration:bun": "vitest run test/integration/bun-compile-executable.test.ts test/integration/bun-bundle.test.ts",
+    "test:integration:bun": "bun --bun node_modules/vitest/vitest.mjs run test/integration/bun-compile-executable.test.ts test/integration/bun-bundle.test.ts",
     "test:integration:deno": "vitest run test/integration/deno-compile-executable.test.ts test/integration/deno-bundle.test.ts",
     "test:integration:node-sea": "vitest run test/integration/node-sea-assemble-executable.test.ts",
     "test:integration:target": "vitest run test/integration/target-support.test.ts",

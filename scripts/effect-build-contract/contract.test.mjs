@@ -60,6 +60,48 @@ test("accounts for every research operation and non-operation finding", () => {
   ]);
 });
 
+test("materializes exact provider and producer evidence tools in the canonical contract", () => {
+  assert.deepEqual(
+    contract.exactToolEvidenceRegister.tools.map(({ name, version, evidenceCells }) => ({
+      name,
+      version,
+      evidenceCells,
+    })),
+    [
+      {
+        name: "bun",
+        version: "1.3.14",
+        evidenceCells: [
+          "host-native",
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-x64-musl",
+          "linux-aarch64-gnu",
+          "windows-x64",
+        ],
+      },
+      {
+        name: "deno",
+        version: "2.9.5",
+        evidenceCells: [
+          "host-native",
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-aarch64-gnu",
+          "windows-x64",
+          "windows-aarch64",
+        ],
+      },
+      { name: "node", version: "26.7.0", evidenceCells: ["linux-x64-gnu"] },
+      { name: "uv", version: "0.12.0", evidenceCells: ["uv-build", "poetry-core"] },
+      { name: "nfpm", version: "2.47.0", evidenceCells: ["deb", "rpm", "apk", "archlinux", "msix"] },
+      { name: "syft", version: "1.50.0", evidenceCells: ["spdx-json", "cyclonedx-json"] },
+    ],
+  );
+});
+
 test("binds every live operation, private support, producer capability, and core capability to source", async () => {
   await validateImplementationCoordinates(contract, repositoryRoot);
 });

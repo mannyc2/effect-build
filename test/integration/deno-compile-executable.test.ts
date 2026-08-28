@@ -14,7 +14,13 @@ import * as Runtime from "../../packages/effect-build-deno/src/internal/Runtime.
 import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
-const selectedDeno = process.env.EFFECT_BUILD_DENO ?? "/opt/homebrew/bin/deno";
+const selectedDeno = process.env.EFFECT_BUILD_DENO ?? (() => {
+  try {
+    return execFileSync("deno", ["eval", "console.log(Deno.execPath())"], { encoding: "utf8" }).trim();
+  } catch {
+    return "deno-unavailable";
+  }
+})();
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 const capabilityEntrypoint = fileURLToPath(new URL("../fixtures/app/deno-bundle-capability.ts", import.meta.url));
 const executablePath = (name: string): string => join(root, process.platform === "win32" ? `${name}.exe` : name);
@@ -26,6 +32,11 @@ const exactDenoAvailable = (): boolean => {
     return false;
   }
 };
+
+const exactDeno = exactDenoAvailable();
+if (!exactDeno || (process.env.CI === "true" && process.env.EFFECT_BUILD_DENO === undefined)) {
+  throw new Error("real Deno evidence requires exact Deno 2.9.5 and an explicit hosted EFFECT_BUILD_DENO binding");
+}
 
 const waitForFile = async (path: string): Promise<void> => {
   const deadline = Date.now() + 60_000;
@@ -75,7 +86,7 @@ const run = <A, E>(
     ) as Effect.Effect<A, E>,
   );
 
-describe.skipIf(!exactDenoAvailable())("real Deno 2.9.5 compileExecutable", () => {
+describe("real Deno 2.9.5 compileExecutable", () => {
   it("compiles, authenticates, atomically publishes, hashes, and executes the host artifact", async () => {
     const outfile = executablePath("app");
     const artifact = await run(Compile.compileExecutable({

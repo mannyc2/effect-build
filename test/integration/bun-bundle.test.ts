@@ -14,8 +14,7 @@ import * as Runtime from "../../packages/effect-build-bun/src/internal/Runtime.j
 import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
-const bundledBun = "/Users/cjpher/.codex/toolchains/bun-1.3.14-arm64/bun-darwin-aarch64/bun";
-const selectedBun = process.env.EFFECT_BUILD_BUN ?? bundledBun;
+const selectedBun = process.env.EFFECT_BUILD_BUN ?? process.execPath;
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 const findings = fileURLToPath(new URL("../fixtures/bun-positive-findings/", import.meta.url));
 const executablePath = (path: string): string => process.platform === "win32" ? `${path}.exe` : path;
@@ -28,6 +27,11 @@ const exactBunAvailable = (): boolean => {
     return false;
   }
 };
+
+const exactBun = exactBunAvailable();
+if (!exactBun || (process.env.CI === "true" && process.env.EFFECT_BUILD_BUN === undefined)) {
+  throw new Error("real Bun evidence requires exact Bun 1.3.14 and an explicit hosted EFFECT_BUILD_BUN binding");
+}
 
 const waitForText = async (path: string, expected: string): Promise<string> => {
   const deadline = Date.now() + 10_000;
@@ -55,7 +59,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, Runtime.Runtime>) =>
     ) as Effect.Effect<A, E>,
   );
 
-describe.skipIf(!exactBunAvailable())("real Bun 1.3.14 provider breadth", () => {
+describe("real Bun 1.3.14 provider breadth", () => {
   it("executes command stdout and provider-direct directory build without synthetic output", async () => {
     const stdout = await run(Build.build({ entrypoint, target: "bun" }));
     expect(new TextDecoder().decode(stdout.output)).toContain("effect-build-ok");

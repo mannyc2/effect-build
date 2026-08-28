@@ -15,7 +15,13 @@ import * as Runtime from "../../packages/effect-build-deno/src/internal/Runtime.
 import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
-const selectedDeno = process.env.EFFECT_BUILD_DENO ?? "/opt/homebrew/bin/deno";
+const selectedDeno = process.env.EFFECT_BUILD_DENO ?? (() => {
+  try {
+    return execFileSync("deno", ["eval", "console.log(Deno.execPath())"], { encoding: "utf8" }).trim();
+  } catch {
+    return "deno-unavailable";
+  }
+})();
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 
 const exactDenoAvailable = (): boolean => {
@@ -25,6 +31,11 @@ const exactDenoAvailable = (): boolean => {
     return false;
   }
 };
+
+const exactDeno = exactDenoAvailable();
+if (!exactDeno || (process.env.CI === "true" && process.env.EFFECT_BUILD_DENO === undefined)) {
+  throw new Error("real Deno evidence requires exact Deno 2.9.5 and an explicit hosted EFFECT_BUILD_DENO binding");
+}
 
 const waitForFile = async (path: string): Promise<void> => {
   const deadline = Date.now() + 30_000;
@@ -55,7 +66,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, Runtime.Runtime>) =>
     ) as Effect.Effect<A, E>,
   );
 
-describe.skipIf(!exactDenoAvailable())("real Deno 2.9.5 provider breadth", () => {
+describe("real Deno 2.9.5 provider breadth", () => {
   it("executes every one-shot bundle and transpile command shape", async () => {
     const bundled = await run(Bundle.stdout({ entrypoint, noRemote: true }));
     expect(new TextDecoder().decode(bundled.output)).toContain("effect-build-ok");

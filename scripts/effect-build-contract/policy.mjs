@@ -12,6 +12,73 @@ export const expectedDispositionCounts = {
   superseded: 2,
 };
 
+export const exactToolEvidenceRegister = [
+  {
+    id: "EVIDENCE-BUN",
+    kind: "provider",
+    name: "bun",
+    version: "1.3.14",
+    executableBindings: ["EFFECT_BUILD_BUN", "EFFECT_BUILD_BUN_BIN"],
+    evidenceCells: [
+      "host-native",
+      "macos-x64",
+      "macos-aarch64",
+      "linux-x64-gnu",
+      "linux-x64-musl",
+      "linux-aarch64-gnu",
+      "windows-x64",
+    ],
+  },
+  {
+    id: "EVIDENCE-DENO",
+    kind: "provider",
+    name: "deno",
+    version: "2.9.5",
+    executableBindings: ["EFFECT_BUILD_DENO", "EFFECT_BUILD_DENO_BIN"],
+    evidenceCells: [
+      "host-native",
+      "macos-x64",
+      "macos-aarch64",
+      "linux-x64-gnu",
+      "linux-aarch64-gnu",
+      "windows-x64",
+      "windows-aarch64",
+    ],
+  },
+  {
+    id: "EVIDENCE-NODE-SEA",
+    kind: "provider",
+    name: "node",
+    version: "26.7.0",
+    executableBindings: ["EFFECT_BUILD_NODE"],
+    evidenceCells: ["linux-x64-gnu"],
+  },
+  {
+    id: "EVIDENCE-UV",
+    kind: "producer",
+    name: "uv",
+    version: "0.12.0",
+    executableBindings: ["EFFECT_BUILD_UV_BIN"],
+    evidenceCells: ["uv-build", "poetry-core"],
+  },
+  {
+    id: "EVIDENCE-NFPM",
+    kind: "producer",
+    name: "nfpm",
+    version: "2.47.0",
+    executableBindings: ["EFFECT_BUILD_NFPM_BIN"],
+    evidenceCells: ["deb", "rpm", "apk", "archlinux", "msix"],
+  },
+  {
+    id: "EVIDENCE-SYFT",
+    kind: "producer",
+    name: "syft",
+    version: "1.50.0",
+    executableBindings: ["EFFECT_BUILD_SYFT_BIN"],
+    evidenceCells: ["spdx-json", "cyclonedx-json"],
+  },
+];
+
 export const mandatoryOperationIds = new Set([
   "CAN-BUN-012",
   "CAN-DENO-010",
