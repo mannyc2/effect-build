@@ -51,6 +51,28 @@ interface CombinedContract {
     readonly packages: Readonly<Record<string, ProjectedPackage>>;
     readonly privatePackages: ReadonlyArray<string>;
   };
+  readonly npmRegistryBoundary: {
+    readonly purpose: string;
+    readonly productReleaseOwnership: string;
+    readonly candidateHandoff: {
+      readonly identity: ReadonlyArray<string>;
+      readonly repositoryCodeInOidcJob: string;
+    };
+    readonly bootstrap: {
+      readonly architectureEvidence: boolean;
+      readonly placeholderAtHandoffPackages: ReadonlyArray<string>;
+    };
+    readonly publicationAdmission: {
+      readonly packages: ReadonlyArray<string>;
+      readonly target: {
+        readonly version: string;
+        readonly expectedLatestBeforePublication: ReadonlyArray<{ readonly name: string; readonly version: string }>;
+      };
+    };
+    readonly reservation: {
+      readonly packages: ReadonlyArray<string>;
+    };
+  };
 }
 
 const isOwnerSurface = (surface: ReadonlyArray<string> | OwnerSurface): surface is OwnerSurface =>
@@ -109,5 +131,33 @@ describe("authoritative combined contract", () => {
         expect(ownerIds.some((ownerId) => nonPublicOperationIds.has(ownerId))).toBe(false);
       }
     }
+  });
+
+  it("does not let registry placeholders widen the admitted package surface", async () => {
+    const contract = await readJson<CombinedContract>("tooling/effect-build-contract.json");
+    const admitted = sorted(Object.keys(contract.publicApiProjection.packages));
+    const reservedOnly = sorted(contract.publicApiProjection.privatePackages);
+
+    expect(contract.npmRegistryBoundary.purpose).toBe("repository-package-distribution-only");
+    expect(contract.npmRegistryBoundary.productReleaseOwnership).toBe("unchanged-ts-release-boundary");
+    expect(contract.npmRegistryBoundary.candidateHandoff.identity).toEqual(["logicalName", "digest"]);
+    expect(contract.npmRegistryBoundary.candidateHandoff.repositoryCodeInOidcJob).toBe("forbidden");
+    expect(contract.npmRegistryBoundary.bootstrap.architectureEvidence).toBe(false);
+    expect(sorted(contract.npmRegistryBoundary.bootstrap.placeholderAtHandoffPackages)).toEqual([
+      "effect-build-apple",
+      "effect-build-archives",
+      "effect-build-nfpm",
+      "effect-build-python",
+      "effect-build-rolldown",
+      "effect-build-sbom",
+      "effect-build-windows",
+    ]);
+    expect(sorted(contract.npmRegistryBoundary.publicationAdmission.packages)).toEqual(admitted);
+    expect(contract.npmRegistryBoundary.publicationAdmission.target.version).toBe("0.6.0");
+    expect(sorted(
+      contract.npmRegistryBoundary.publicationAdmission.target.expectedLatestBeforePublication.map(({ name }) => name),
+    )).toEqual(admitted);
+    expect(sorted(contract.npmRegistryBoundary.reservation.packages)).toEqual(reservedOnly);
+    expect(contract.npmRegistryBoundary.publicationAdmission.packages).not.toContain("effect-build-rolldown");
   });
 });

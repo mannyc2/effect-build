@@ -169,3 +169,134 @@ test("assigns durable publication to effect-build and release state to ts-releas
   assert.ok(contract.releaseOwnershipBoundary.tsReleaseOwns.includes("continuation"));
   assert.ok(contract.releaseOwnershipBoundary.tsReleaseOwns.includes("publication"));
 });
+
+test("keeps npm namespace bootstrap separate from architectural release admission", () => {
+  const npm = contract.npmRegistryBoundary;
+  const admittedPackages = Object.keys(contract.publicApiProjection.packages).sort();
+  const reservedOnlyPackages = [...contract.publicApiProjection.privatePackages].sort();
+
+  assert.deepEqual(npm.trustedPublisher, {
+    repository: "mannyc2/effect-build",
+    workflow: "release.yml",
+    environment: "npm",
+    permission: "publish",
+  });
+  assert.equal(npm.purpose, "repository-package-distribution-only");
+  assert.equal(npm.productReleaseOwnership, "unchanged-ts-release-boundary");
+  assert.deepEqual(npm.candidateHandoff, {
+    producer: "unprivileged-verified-pack-job",
+    consumer: "protected-npm-distribution-job",
+    identity: ["logicalName", "digest"],
+    content: "immutable-package-tarball-bytes",
+    repositoryCodeInOidcJob: "forbidden",
+  });
+  assert.deepEqual(npm.client, { node: "24.14.1", npm: "11.11.0" });
+  assert.equal(npm.bootstrap.purpose, "namespace-and-trusted-publisher-bootstrap-only");
+  assert.equal(npm.bootstrap.architectureEvidence, false);
+  assert.equal(npm.bootstrap.placeholderVersion, "0.0.0-reserved.0");
+  assert.equal(npm.bootstrap.placeholderTag, "reserved");
+  assert.deepEqual(npm.bootstrap.establishedPackages, [
+    "effect-build",
+    "effect-build-bun",
+    "effect-build-deno",
+    "effect-build-esbuild",
+    "effect-build-node-sea",
+  ]);
+  assert.deepEqual(npm.bootstrap.placeholderAtHandoffPackages, [
+    "effect-build-apple",
+    "effect-build-archives",
+    "effect-build-nfpm",
+    "effect-build-python",
+    "effect-build-rolldown",
+    "effect-build-sbom",
+    "effect-build-windows",
+  ]);
+  assert.deepEqual(
+    npm.bootstrap.placeholderLedger.map(({ name, version, bootstrapTags }) => ({ name, version, bootstrapTags })),
+    npm.bootstrap.placeholderAtHandoffPackages.map((name) => ({
+      name,
+      version: "0.0.0-reserved.0",
+      bootstrapTags: { reserved: "0.0.0-reserved.0", latest: "0.0.0-reserved.0" },
+    })),
+  );
+  assert.equal(npm.publicationAdmission.source, "publicApiProjection.packages");
+  assert.deepEqual(npm.publicationAdmission.packages, admittedPackages);
+  assert.deepEqual(npm.publicationAdmission.target, {
+    version: "0.6.0",
+    presenceAtHandoff: "absent-for-all-admitted-packages",
+    expectedLatestBeforePublication: [
+      { name: "effect-build", version: "0.3.0" },
+      { name: "effect-build-apple", version: "0.0.0-reserved.0" },
+      { name: "effect-build-archives", version: "0.0.0-reserved.0" },
+      { name: "effect-build-bun", version: "0.3.0" },
+      { name: "effect-build-deno", version: "0.3.0" },
+      { name: "effect-build-esbuild", version: "0.3.0" },
+      { name: "effect-build-nfpm", version: "0.0.0-reserved.0" },
+      { name: "effect-build-node-sea", version: "0.3.0" },
+      { name: "effect-build-python", version: "0.0.0-reserved.0" },
+      { name: "effect-build-sbom", version: "0.0.0-reserved.0" },
+      { name: "effect-build-windows", version: "0.0.0-reserved.0" },
+    ],
+  });
+  assert.equal(npm.publicationAdmission.command, "npm-publish");
+  assert.equal(npm.publicationAdmission.tag, "latest");
+  assert.equal(npm.publicationAdmission.postPublishProof, "downloaded-tarball-integrity");
+  assert.equal(npm.publicationAdmission.existingVersionPolicy, "exact-bytes-and-latest-or-stop");
+  assert.equal(npm.publicationAdmission.priorLatestPolicy, "exact-contract-ledger-or-target-on-resume");
+  assert.equal(npm.publicationAdmission.registryObservation, "isolated-cache-prefer-online");
+  assert.equal(npm.publicationAdmission.lifecycleScripts, "disabled");
+  assert.equal(npm.reservation.source, "publicApiProjection.privatePackages");
+  assert.deepEqual(npm.reservation.packages, reservedOnlyPackages);
+  assert.equal(npm.reservation.policy, "placeholder-version-and-tags-remain-unchanged");
+
+  const widened = structuredClone(contract);
+  widened.npmRegistryBoundary.publicationAdmission.packages.push("effect-build-rolldown");
+  assert.throws(() => validateContract(widened, inputs), /npm release admission must be the public package projection/u);
+
+  const droppedReservation = structuredClone(contract);
+  droppedReservation.npmRegistryBoundary.reservation.packages = [];
+  assert.throws(() => validateContract(droppedReservation, inputs), /private package names must remain registry placeholders/u);
+
+  const changedBytes = structuredClone(contract);
+  changedBytes.npmRegistryBoundary.bootstrap.placeholderLedger[0].bytes += 1;
+  assert.throws(
+    () => validateContract(changedBytes, inputs),
+    /npm namespace placeholders must remain non-architectural bootstrap evidence/u,
+  );
+
+  const changedTags = structuredClone(contract);
+  changedTags.npmRegistryBoundary.bootstrap.placeholderLedger[0].bootstrapTags.latest = "0.6.0";
+  assert.throws(
+    () => validateContract(changedTags, inputs),
+    /npm namespace placeholders must remain non-architectural bootstrap evidence/u,
+  );
+
+  const duplicatedPlaceholder = structuredClone(contract);
+  duplicatedPlaceholder.npmRegistryBoundary.bootstrap.placeholderAtHandoffPackages.push("effect-build-apple");
+  assert.throws(
+    () => validateContract(duplicatedPlaceholder, inputs),
+    /npm namespace placeholders must remain non-architectural bootstrap evidence/u,
+  );
+
+  const widenedOidcJob = structuredClone(contract);
+  widenedOidcJob.npmRegistryBoundary.candidateHandoff.repositoryCodeInOidcJob = "allowed";
+  assert.throws(
+    () => validateContract(widenedOidcJob, inputs),
+    /npm distribution must remain outside the effect-build product release boundary/u,
+  );
+
+  const changedTarget = structuredClone(contract);
+  changedTarget.npmRegistryBoundary.publicationAdmission.target.version = "0.7.0";
+  assert.throws(
+    () => validateContract(changedTarget, inputs),
+    /npm release target or prior-latest ledger changed/u,
+  );
+
+  const changedPriorLatest = structuredClone(contract);
+  changedPriorLatest.npmRegistryBoundary.publicationAdmission.target.expectedLatestBeforePublication[0].version =
+    "0.2.0";
+  assert.throws(
+    () => validateContract(changedPriorLatest, inputs),
+    /npm release target or prior-latest ledger changed/u,
+  );
+});

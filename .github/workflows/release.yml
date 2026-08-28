@@ -17,35 +17,45 @@ on:
           - do-not-publish
           - publish-exact-sha
 
-permissions:
-  contents: read
-  id-token: write
+permissions: {}
 
-# One release observes and mutates the lockstep namespace at a time. A queued
-# dispatch is never allowed to cancel an in-flight publication attempt.
 concurrency:
   group: effect-build-npm-release
   cancel-in-progress: false
 
 jobs:
   environment-contract:
+    if: inputs.approval == 'publish-exact-sha'
+    permissions:
+      actions: read
+      contents: read
     runs-on: ubuntu-24.04
     steps:
-      - name: Require the pre-existing protected npm environment
+      - name: Require the exact protected npm environment
         shell: bash
         env:
           API_ROOT: ${{ github.api_url }}
+          EXPECTED_REPOSITORY: mannyc2/effect-build
+          EXPECTED_WORKFLOW_REF: mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main
+          GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
+          if [[ "$REPOSITORY" != "$EXPECTED_REPOSITORY" || "$WORKFLOW_REF" != "$EXPECTED_WORKFLOW_REF" ]]; then
+            echo "trusted publishing is bound only to $EXPECTED_WORKFLOW_REF" >&2
+            exit 1
+          fi
           stage="$(mktemp -d)"
           trap 'rm -rf "$stage"' EXIT
           curl --fail --silent --show-error \
+            --header "Authorization: Bearer $GH_TOKEN" \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             "$API_ROOT/repos/$REPOSITORY/environments/npm" \
             > "$stage/environment.json"
           curl --fail --silent --show-error \
+            --header "Authorization: Bearer $GH_TOKEN" \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             "$API_ROOT/repos/$REPOSITORY/environments/npm/deployment-branch-policies" \
@@ -55,28 +65,36 @@ jobs:
 
           const environment = JSON.parse(readFileSync(process.argv[2], "utf8"));
           const policies = JSON.parse(readFileSync(process.argv[3], "utf8"));
+          const ruleTypes = environment.protection_rules?.map(({ type }) => type).sort();
           const reviewers = environment.protection_rules
             ?.filter((rule) => rule.type === "required_reviewers")
             .flatMap((rule) => rule.reviewers ?? [])
-            .map(({ reviewer }) => reviewer?.login);
-          const branches = policies.branch_policies?.map(({ name, type }) => ({ name, type }));
+            .map(({ reviewer, type }) => ({ login: reviewer?.login, type }))
+            .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+          const branches = policies.branch_policies
+            ?.map(({ name, type }) => ({ name, type }))
+            .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
           if (
             environment.name !== "npm"
             || environment.deployment_branch_policy?.protected_branches !== false
             || environment.deployment_branch_policy?.custom_branch_policies !== true
-            || !reviewers?.includes("mannyc2")
+            || JSON.stringify(ruleTypes) !== JSON.stringify(["branch_policy", "required_reviewers"])
+            || JSON.stringify(reviewers) !== JSON.stringify([{ login: "mannyc2", type: "User" }])
             || JSON.stringify(branches) !== JSON.stringify([{ name: "main", type: "branch" }])
           ) {
-            console.error("npm environment is absent or does not have the required reviewer/main-only policy");
+            console.error("npm environment does not have the exact reviewer and main-only policy");
             process.exit(1);
           }
           NODE
 
-  publish:
+  prepare-candidate:
     if: inputs.approval == 'publish-exact-sha'
-    needs: environment-contract
-    environment: npm
+    permissions:
+      contents: read
     runs-on: ubuntu-24.04
+    outputs:
+      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -105,92 +123,506 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24.14.1
-          registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
       - run: bun run verify
-      - name: Pack, compare, and publish the lockstep surface
+      - name: Pack the immutable release-consumer handoff
+        env:
+          CANDIDATE_DIR: ${{ runner.temp }}/npm-release-candidate
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+        run: node scripts/release/prepare-npm-candidate.mjs "$CANDIDATE_DIR" "$EXPECTED_SHA"
+      - id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: npm-release-candidate-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/npm-release-candidate
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    if: inputs.approval == 'publish-exact-sha'
+    needs:
+      - environment-contract
+      - prepare-candidate
+    environment: npm
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Re-observe protected authority after environment approval
         shell: bash
+        env:
+          API_ROOT: ${{ github.api_url }}
+          EXPECTED_REPOSITORY: mannyc2/effect-build
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          EXPECTED_WORKFLOW_REF: mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_REF: ${{ github.ref }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
+          if [[ "$REPOSITORY" != "$EXPECTED_REPOSITORY" \
+            || "$RUN_REF" != "refs/heads/main" \
+            || "$WORKFLOW_REF" != "$EXPECTED_WORKFLOW_REF" ]]; then
+            echo "trusted publishing requires the exact main-branch workflow authority" >&2
+            exit 1
+          fi
           stage="$(mktemp -d)"
-          mapfile -t names < <(node -e '
-            const fs = require("node:fs");
-            const contract = JSON.parse(fs.readFileSync("tooling/effect-build-contract.json", "utf8"));
-            const surface = JSON.parse(fs.readFileSync("tooling/public-api.json", "utf8"));
-            if (contract.schema !== "effect-build/combined-contract@1") {
-              throw new Error("unsupported combined contract schema");
-            }
-            const names = Object.keys(contract.publicApiProjection.packages).sort();
-            const projected = Object.keys(surface.packages).sort();
-            const modules = (packages) => Object.entries(packages)
-              .sort(([left], [right]) => left.localeCompare(right))
-              .flatMap(([name, entry]) => [
-                name,
-                ...Object.keys(entry.subpaths).sort().map((subpath) => `${name}/${subpath.slice(2)}`),
-              ]);
-            const expectedModules = modules(contract.publicApiProjection.packages);
-            const projectedModules = modules(surface.packages);
-            const privatePackages = new Set(contract.publicApiProjection.privatePackages);
+          trap 'rm -rf "$stage"' EXIT
+          for endpoint in \
+            "environments/npm" \
+            "environments/npm/deployment-branch-policies" \
+            "git/ref/heads/main"; do
+            filename="${endpoint//\//-}.json"
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "$API_ROOT/repos/$REPOSITORY/$endpoint" \
+              > "$stage/$filename"
+          done
+          node --input-type=module - \
+            "$stage/environments-npm.json" \
+            "$stage/environments-npm-deployment-branch-policies.json" \
+            "$stage/git-ref-heads-main.json" \
+            "$EXPECTED_SHA" <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const environment = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          const policies = JSON.parse(readFileSync(process.argv[3], "utf8"));
+          const main = JSON.parse(readFileSync(process.argv[4], "utf8"));
+          const expectedSha = process.argv[5];
+          const ruleTypes = environment.protection_rules?.map(({ type }) => type).sort();
+          const reviewers = environment.protection_rules
+            ?.filter((rule) => rule.type === "required_reviewers")
+            .flatMap((rule) => rule.reviewers ?? [])
+            .map(({ reviewer, type }) => ({ login: reviewer?.login, type }))
+            .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+          const branches = policies.branch_policies
+            ?.map(({ name, type }) => ({ name, type }))
+            .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+          if (
+            environment.name !== "npm"
+            || environment.deployment_branch_policy?.protected_branches !== false
+            || environment.deployment_branch_policy?.custom_branch_policies !== true
+            || JSON.stringify(ruleTypes) !== JSON.stringify(["branch_policy", "required_reviewers"])
+            || JSON.stringify(reviewers) !== JSON.stringify([{ login: "mannyc2", type: "User" }])
+            || JSON.stringify(branches) !== JSON.stringify([{ name: "main", type: "branch" }])
+            || main.ref !== "refs/heads/main"
+            || main.object?.type !== "commit"
+            || main.object?.sha !== expectedSha
+          ) {
+            console.error("post-approval environment or exact-main authority changed");
+            process.exit(1);
+          }
+          NODE
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Adopt, compare, and publish only immutable admitted bytes
+        shell: bash
+        env:
+          API_ROOT: ${{ github.api_url }}
+          ARTIFACT_ID: ${{ needs.prepare-candidate.outputs.artifact-id }}
+          CANDIDATE_DIR: ${{ runner.temp }}/npm-release-candidate
+          EXPECTED_ARTIFACT_DIGEST: ${{ needs.prepare-candidate.outputs.artifact-digest }}
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          GH_TOKEN: ${{ github.token }}
+          NPM_CACHE: ${{ runner.temp }}/npm-release-cache
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ \
+            || ! "$EXPECTED_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "candidate artifact has no canonical ID and upload digest" >&2
+            exit 1
+          fi
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          mkdir "$CANDIDATE_DIR" "$NPM_CACHE"
+          curl --fail --silent --show-error --location \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "$API_ROOT/repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
+            > "$stage/release-candidate.zip"
+          actual_artifact_digest="$(openssl dgst -sha256 "$stage/release-candidate.zip" | awk '{ print $2 }')"
+          if [[ "$actual_artifact_digest" != "$EXPECTED_ARTIFACT_DIGEST" ]]; then
+            echo "downloaded artifact digest changed: expected $EXPECTED_ARTIFACT_DIGEST, observed $actual_artifact_digest" >&2
+            exit 1
+          fi
+          while IFS= read -r entry; do
+            if [[ -z "$entry" || "$entry" == */* || "$entry" == .* ]]; then
+              echo "unsafe or non-flat release artifact entry: $entry" >&2
+              exit 1
+            fi
+          done < <(unzip -Z1 "$stage/release-candidate.zip")
+          unzip -qq "$stage/release-candidate.zip" -d "$CANDIDATE_DIR"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github.raw+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "$API_ROOT/repos/$REPOSITORY/contents/tooling/effect-build-contract.json?ref=$EXPECTED_SHA" \
+            > "$stage/authorized-contract.json"
+          node --input-type=module - \
+            "$CANDIDATE_DIR" \
+            "$stage" \
+            "$EXPECTED_SHA" \
+            "$stage/authorized-contract.json" <<'NODE'
+          import { createHash } from "node:crypto";
+          import { basename } from "node:path";
+          import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+          import { isDeepStrictEqual } from "node:util";
+
+          const [candidateDirectory, stage, expectedSha, authorizedContractPath] = process.argv.slice(2);
+          const manifestPath = candidateDirectory + "/release-candidate.json";
+          const candidate = JSON.parse(readFileSync(manifestPath, "utf8"));
+          const authorizedContract = JSON.parse(readFileSync(authorizedContractPath, "utf8"));
+          const registry = candidate.registry;
+          const names = [...registry.publicationAdmission.packages].sort();
+          const reservedOnly = [...registry.reservation.packages].sort();
+          const placeholders = [...registry.bootstrap.placeholderAtHandoffPackages].sort();
+          const expectedLatest = [...registry.publicationAdmission.target.expectedLatestBeforePublication]
+            .sort((left, right) => left.name.localeCompare(right.name));
+          const packageEntries = [...candidate.packages].sort((left, right) => left.name.localeCompare(right.name));
+          const files = readdirSync(candidateDirectory).sort();
+          const expectedFiles = ["release-candidate.json", ...packageEntries.map(({ file }) => file)].sort();
+          const namespacePackages = [
+            ...registry.bootstrap.establishedPackages,
+            ...registry.bootstrap.placeholderAtHandoffPackages,
+          ].sort();
+          const accountedPackages = [...names, ...reservedOnly].sort();
+          const authorizedPublic = Object.keys(authorizedContract.publicApiProjection.packages).sort();
+          const authorizedPrivate = [...authorizedContract.publicApiProjection.privatePackages].sort();
+          const authorizedBun = authorizedContract.exactToolEvidenceRegister.tools.find(({ name }) => name === "bun");
+          const ledgerNames = registry.bootstrap.placeholderLedger.map(({ name }) => name).sort();
+          const placeholderLedgerValid = registry.bootstrap.placeholderLedger.every((entry) =>
+            entry.version === registry.bootstrap.placeholderVersion
+            && entry.bootstrapTags?.[registry.bootstrap.placeholderTag] === registry.bootstrap.placeholderVersion
+            && entry.bootstrapTags?.[registry.publicationAdmission.tag] === registry.bootstrap.placeholderVersion
+            && Number.isInteger(entry.bytes)
+            && entry.bytes > 0
+            && /^[0-9a-f]{64}$/u.test(entry.sha256)
+            && /^sha512-[A-Za-z0-9+/]+={0,2}$/u.test(entry.integrity)
+          );
+          if (
+            authorizedContract.schema !== "effect-build/combined-contract@1"
+            || !isDeepStrictEqual(registry, authorizedContract.npmRegistryBoundary)
+            || JSON.stringify(names) !== JSON.stringify(authorizedPublic)
+            || JSON.stringify(reservedOnly) !== JSON.stringify(authorizedPrivate)
+            || candidate.schema !== "effect-build/npm-release-candidate@1"
+            || candidate.sourceSha !== expectedSha
+            || candidate.version !== registry.publicationAdmission.target.version
+            || candidate.publicModuleCount !== 42
+            || !isDeepStrictEqual(candidate.packer, { name: "bun", version: authorizedBun?.version })
+            || authorizedBun?.version !== "1.3.14"
+            || registry.purpose !== "repository-package-distribution-only"
+            || registry.productReleaseOwnership !== "unchanged-ts-release-boundary"
+            || registry.registry !== "https://registry.npmjs.org"
+            || registry.trustedPublisher.repository !== "mannyc2/effect-build"
+            || registry.trustedPublisher.workflow !== "release.yml"
+            || registry.trustedPublisher.environment !== "npm"
+            || registry.trustedPublisher.permission !== "publish"
+            || registry.candidateHandoff.producer !== "unprivileged-verified-pack-job"
+            || registry.candidateHandoff.consumer !== "protected-npm-distribution-job"
+            || JSON.stringify(registry.candidateHandoff.identity) !== JSON.stringify(["logicalName", "digest"])
+            || registry.candidateHandoff.content !== "immutable-package-tarball-bytes"
+            || registry.candidateHandoff.repositoryCodeInOidcJob !== "forbidden"
+            || registry.bootstrap.architectureEvidence !== false
+            || registry.bootstrap.placeholderVersion !== "0.0.0-reserved.0"
+            || registry.bootstrap.placeholderTag !== "reserved"
+            || registry.publicationAdmission.source !== "publicApiProjection.packages"
+            || registry.publicationAdmission.command !== "npm-publish"
+            || registry.publicationAdmission.tag !== "latest"
+            || registry.publicationAdmission.postPublishProof !== "downloaded-tarball-integrity"
+            || registry.publicationAdmission.existingVersionPolicy !== "exact-bytes-and-latest-or-stop"
+            || registry.publicationAdmission.priorLatestPolicy !== "exact-contract-ledger-or-target-on-resume"
+            || registry.publicationAdmission.registryObservation !== "isolated-cache-prefer-online"
+            || registry.publicationAdmission.lifecycleScripts !== "disabled"
+            || registry.publicationAdmission.target.presenceAtHandoff !== "absent-for-all-admitted-packages"
+            || registry.reservation.source !== "publicApiProjection.privatePackages"
+            || registry.reservation.policy !== "placeholder-version-and-tags-remain-unchanged"
+            || process.version !== "v" + registry.client.node
+            || names.length !== 11
+            || new Set(names).size !== names.length
+            || names.includes("effect-build-rolldown")
+            || JSON.stringify(reservedOnly) !== JSON.stringify(["effect-build-rolldown"])
+            || placeholders.length !== 7
+            || registry.bootstrap.establishedPackages.length !== 5
+            || JSON.stringify(namespacePackages) !== JSON.stringify(accountedPackages)
+            || JSON.stringify(ledgerNames) !== JSON.stringify(placeholders)
+            || !placeholderLedgerValid
+            || JSON.stringify(expectedLatest.map(({ name }) => name)) !== JSON.stringify(names)
+            || JSON.stringify(packageEntries.map(({ name }) => name)) !== JSON.stringify(names)
+            || JSON.stringify(files) !== JSON.stringify(expectedFiles)
+          ) {
+            throw new Error("candidate does not match the fixed protected distribution boundary");
+          }
+          for (const entry of packageEntries) {
             if (
-              JSON.stringify(names) !== JSON.stringify(projected)
-              || JSON.stringify(expectedModules) !== JSON.stringify(projectedModules)
-              || expectedModules.length !== 42
-              || names.some((name) => privatePackages.has(name))
+              entry.file !== basename(entry.file)
+              || entry.file !== `${entry.name}-${candidate.version}.tgz`
+              || !entry.file.endsWith(".tgz")
+              || !/^sha512-[A-Za-z0-9+/]+={0,2}$/u.test(entry.integrity)
+              || !/^[0-9a-f]{64}$/u.test(entry.sha256)
+              || !Number.isInteger(entry.bytes)
+              || entry.bytes <= 0
             ) {
-              throw new Error("public package projection does not match the combined contract");
+              throw new Error(`invalid candidate ledger entry for ${entry.name}`);
             }
-            process.stdout.write(names.join("\n") + "\n");
-          ')
-          if [[ "${#names[@]}" -ne 11 || "${names[0]}" != "effect-build" ]] \
-            || [[ " ${names[*]} " == *" effect-build-rolldown "* ]]; then
-            echo "refusing non-canonical package surface" >&2
+            const tarball = candidateDirectory + "/" + entry.file;
+            const bytes = readFileSync(tarball);
+            const integrity = "sha512-" + createHash("sha512").update(bytes).digest("base64");
+            const sha256 = createHash("sha256").update(bytes).digest("hex");
+            if (statSync(tarball).size !== entry.bytes || integrity !== entry.integrity || sha256 !== entry.sha256) {
+              throw new Error(`candidate bytes changed for ${entry.name}`);
+            }
+          }
+          writeFileSync(stage + "/registry.json", JSON.stringify(registry));
+          writeFileSync(
+            stage + "/packages.tsv",
+            packageEntries.map(({ name, file, integrity, sha256, bytes }) =>
+              [name, file, integrity, sha256, bytes].join("\t")
+            ).join("\n") + "\n",
+          );
+          writeFileSync(
+            stage + "/expected-latest.tsv",
+            expectedLatest.map(({ name, version }) => name + "\t" + version).join("\n") + "\n",
+          );
+          writeFileSync(stage + "/reserved-only.txt", reservedOnly.join("\n") + "\n");
+          writeFileSync(stage + "/placeholders.txt", placeholders.join("\n") + "\n");
+          writeFileSync(stage + "/npm-version.txt", registry.client.npm + "\n");
+          writeFileSync(stage + "/publication-tag.txt", registry.publicationAdmission.tag + "\n");
+          writeFileSync(stage + "/reservation-tag.txt", registry.bootstrap.placeholderTag + "\n");
+          writeFileSync(stage + "/registry-url.txt", registry.registry + "\n");
+          writeFileSync(stage + "/version.txt", candidate.version + "\n");
+          NODE
+
+          npm_version="$(< "$stage/npm-version.txt")"
+          publication_tag="$(< "$stage/publication-tag.txt")"
+          reservation_tag="$(< "$stage/reservation-tag.txt")"
+          registry_url="$(< "$stage/registry-url.txt")"
+          version="$(< "$stage/version.txt")"
+          export npm_config_cache="$NPM_CACHE"
+          export npm_config_ignore_scripts=true
+          export npm_config_prefer_online=true
+          export npm_config_registry="$registry_url"
+          if [[ "$(npm --version)" != "$npm_version" ]]; then
+            echo "trusted-publish npm client identity changed" >&2
             exit 1
           fi
 
-          version="$(node -p 'JSON.parse(require("node:fs").readFileSync("packages/effect-build/package.json", "utf8")).version')"
+          declare -a names=()
           declare -A tarballs
           declare -A integrities
+          declare -A sha256s
+          declare -A sizes
+          while IFS=$'\t' read -r name file integrity sha256 bytes; do
+            names+=("$name")
+            tarballs[$name]="$CANDIDATE_DIR/$file"
+            integrities[$name]="$integrity"
+            sha256s[$name]="$sha256"
+            sizes[$name]="$bytes"
+          done < "$stage/packages.tsv"
+          mapfile -t reserved_only < "$stage/reserved-only.txt"
+          mapfile -t placeholder_names < "$stage/placeholders.txt"
+          declare -A expected_latest
+          while IFS=$'\t' read -r name prior_version; do
+            expected_latest[$name]="$prior_version"
+          done < "$stage/expected-latest.tsv"
+
           for name in "${names[@]}"; do
-            package_name="$(node -p "JSON.parse(require('node:fs').readFileSync('packages/${name}/package.json', 'utf8')).name")"
-            if [[ "$package_name" != "$name" ]]; then
-              echo "package directory/public identity mismatch: $name declares $package_name" >&2
+            tarball="${tarballs[$name]}"
+            while IFS= read -r entry; do
+              if [[ "$entry" != package/* \
+                || "$entry" == /* \
+                || "$entry" == *"/../"* \
+                || "$entry" == *"/.." ]]; then
+                echo "unsafe package entry for $name: $entry" >&2
+                exit 1
+              fi
+            done < <(tar -tzf "$tarball")
+            if [[ "$(tar -tzf "$tarball" | grep -Fxc 'package/package.json')" -ne 1 ]]; then
+              echo "$name candidate has no unique package/package.json" >&2
               exit 1
             fi
-            package_version="$(node -p "JSON.parse(require('node:fs').readFileSync('packages/${name}/package.json', 'utf8')).version")"
-            if [[ "$package_version" != "$version" ]]; then
-              echo "$name is $package_version; expected lockstep $version" >&2
+            package_json="$(tar -xOzf "$tarball" package/package.json)"
+            node -e '
+              const pkg = JSON.parse(process.argv[1]);
+              const [name, version, registry, tag] = process.argv.slice(2);
+              if (
+                pkg.name !== name
+                || pkg.version !== version
+                || (pkg.publishConfig?.registry !== undefined && pkg.publishConfig.registry !== registry)
+                || (pkg.publishConfig?.tag !== undefined && pkg.publishConfig.tag !== tag)
+              ) process.exit(1);
+            ' "$package_json" "$name" "$version" "$registry_url" "$publication_tag" || {
+              echo "embedded npm identity changed for admitted slot $name@$version" >&2
               exit 1
-            fi
-            output="$(bun pm pack --destination "$stage" --cwd "packages/$name")"
-            tarball_name="$(printf '%s\n' "$output" | awk '/\.tgz$/ { print $NF }' | tail -n 1)"
-            if [[ -z "$tarball_name" || ! -f "$stage/${tarball_name##*/}" ]]; then
-              echo "packing $name produced no tarball" >&2
-              exit 1
-            fi
-            tarballs[$name]="$stage/${tarball_name##*/}"
-            integrities[$name]="sha512-$(openssl dgst -sha512 -binary "${tarballs[$name]}" | openssl base64 -A)"
+            }
           done
 
-          # Capture the complete immutable ledger before the first registry
-          # mutation. Postpublication verification compares downloads to these
-          # exact values, rather than to a shortened npm notice.
-          for name in "${names[@]}"; do
-            echo "prepublish-sri $name@$version ${integrities[$name]}"
+          read_tag() {
+            local name="$1"
+            local tag="$2"
+            local tags
+            tags="$(npm view "$name" dist-tags --json --registry "$registry_url")"
+            node -e '
+              const tags = JSON.parse(process.argv[1]);
+              const value = tags[process.argv[2]];
+              if (typeof value !== "string") process.exit(1);
+              process.stdout.write(value);
+            ' "$tags" "$tag"
+          }
+
+          placeholder_field() {
+            node -e '
+              const fs = require("node:fs");
+              const registry = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              const entry = registry.bootstrap.placeholderLedger.find(({ name }) => name === process.argv[2]);
+              if (entry === undefined || entry[process.argv[3]] === undefined) process.exit(1);
+              process.stdout.write(String(entry[process.argv[3]]));
+            ' "$stage/registry.json" "$1" "$2"
+          }
+
+          download_root="$stage/downloaded"
+          mkdir "$download_root"
+          verify_download() {
+            local name="$1"
+            local candidate_version="$2"
+            local expected_integrity="$3"
+            local expected_sha256="$4"
+            local expected_size="$5"
+            local destination="$download_root/${name//\//_}-$candidate_version"
+            local output
+            local filename
+            local tarball
+            local actual_integrity
+            local actual_sha256
+            local actual_size
+            mkdir "$destination"
+            output="$(npm pack "$name@$candidate_version" \
+              --pack-destination "$destination" \
+              --ignore-scripts \
+              --registry "$registry_url" \
+              --json)"
+            filename="$(node -e '
+              const result = JSON.parse(process.argv[1]);
+              if (!Array.isArray(result) || result.length !== 1 || typeof result[0]?.filename !== "string") {
+                process.exit(1);
+              }
+              process.stdout.write(result[0].filename);
+            ' "$output")"
+            tarball="$destination/${filename##*/}"
+            actual_integrity="sha512-$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)"
+            actual_sha256="$(openssl dgst -sha256 "$tarball" | awk '{ print $2 }')"
+            actual_size="$(wc -c < "$tarball" | tr -d '[:space:]')"
+            if [[ "$actual_integrity" != "$expected_integrity" \
+              || "$actual_sha256" != "$expected_sha256" \
+              || "$actual_size" != "$expected_size" ]]; then
+              echo "downloaded bytes do not match the frozen ledger for $name@$candidate_version" >&2
+              exit 1
+            fi
+          }
+
+          assert_only_placeholder_version() {
+            local name="$1"
+            local placeholder_version="$2"
+            local versions
+            versions="$(npm view "$name" versions --json --registry "$registry_url")"
+            node -e '
+              const observed = JSON.parse(process.argv[1]);
+              const versions = Array.isArray(observed) ? observed : [observed];
+              if (JSON.stringify(versions) !== JSON.stringify([process.argv[2]])) process.exit(1);
+            ' "$versions" "$placeholder_version" || {
+              echo "reserved-only package $name must remain at the namespace placeholder" >&2
+              exit 1
+            }
+          }
+
+          assert_no_newer_version() {
+            local name="$1"
+            local candidate_version="$2"
+            local versions
+            versions="$(npm view "$name" versions --json --registry "$registry_url")"
+            node -e '
+              const parse = (value) => {
+                const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(value);
+                if (match === null) throw new Error(`invalid semantic version: ${value}`);
+                return { core: match.slice(1, 4).map(BigInt), pre: match[4]?.split(".") ?? [] };
+              };
+              const compare = (left, right) => {
+                for (let index = 0; index < 3; index += 1) {
+                  if (left.core[index] !== right.core[index]) return left.core[index] < right.core[index] ? -1 : 1;
+                }
+                if (left.pre.length === 0 || right.pre.length === 0) {
+                  return left.pre.length === right.pre.length ? 0 : left.pre.length === 0 ? 1 : -1;
+                }
+                for (let index = 0; index < Math.max(left.pre.length, right.pre.length); index += 1) {
+                  const a = left.pre[index];
+                  const b = right.pre[index];
+                  if (a === undefined || b === undefined) return a === b ? 0 : a === undefined ? -1 : 1;
+                  if (a === b) continue;
+                  const aNumeric = /^\d+$/.test(a);
+                  const bNumeric = /^\d+$/.test(b);
+                  if (aNumeric && bNumeric) return BigInt(a) < BigInt(b) ? -1 : 1;
+                  if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;
+                  return a < b ? -1 : 1;
+                }
+                return 0;
+              };
+              const observed = JSON.parse(process.argv[1]);
+              const versions = Array.isArray(observed) ? observed : [observed];
+              const candidate = parse(process.argv[2]);
+              if (versions.some((version) => compare(parse(version), candidate) > 0)) process.exit(1);
+            ' "$versions" "$candidate_version" || {
+              echo "$name has a version newer than the contract release target $candidate_version" >&2
+              exit 1
+            }
+          }
+
+          for name in "${placeholder_names[@]}"; do
+            placeholder_version="$(placeholder_field "$name" version)"
+            placeholder_integrity="$(placeholder_field "$name" integrity)"
+            placeholder_sha256="$(placeholder_field "$name" sha256)"
+            placeholder_size="$(placeholder_field "$name" bytes)"
+            verify_download \
+              "$name" \
+              "$placeholder_version" \
+              "$placeholder_integrity" \
+              "$placeholder_sha256" \
+              "$placeholder_size"
+            if [[ "$(read_tag "$name" "$reservation_tag")" != "$placeholder_version" ]]; then
+              echo "$reservation_tag tag changed for $name" >&2
+              exit 1
+            fi
+            if [[ " ${reserved_only[*]} " == *" $name "* ]]; then
+              assert_only_placeholder_version "$name" "$placeholder_version"
+              if [[ "$(read_tag "$name" "$publication_tag")" != "$placeholder_version" ]]; then
+                echo "reserved-only package $name must remain at the namespace placeholder" >&2
+                exit 1
+              fi
+            fi
           done
 
-          # Read-only preflight the entire lockstep namespace before the first
-          # mutation. A conflict or an inconclusive read anywhere aborts with
-          # every still-missing package untouched.
           missing=()
           for name in "${names[@]}"; do
-            view_error="$stage/npm-view-error"
+            assert_no_newer_version "$name" "$version"
+            view_error="$stage/npm-view-error-$name"
             : > "$view_error"
             set +e
-            remote_output="$(npm view "$name@$version" dist.integrity --json 2>"$view_error")"
+            remote_output="$(npm view "$name@$version" dist.integrity \
+              --json \
+              --registry "$registry_url" \
+              2>"$view_error")"
             view_status=$?
             set -e
             if [[ $view_status -eq 0 ]]; then
@@ -206,7 +638,11 @@ jobs:
                 echo "$name@$version already exists with different bytes" >&2
                 exit 1
               fi
-              echo "$name@$version already has the exact packed integrity"
+              if [[ "$(read_tag "$name" "$publication_tag")" != "$version" ]]; then
+                echo "$name@$version exists with exact bytes but $publication_tag is not repairable by publish-only OIDC" >&2
+                exit 1
+              fi
+              echo "$name@$version already has the exact packed integrity and $publication_tag tag"
               continue
             fi
             if ! grep -Eiq 'E404|404 Not Found' "$view_error"; then
@@ -214,11 +650,69 @@ jobs:
               sed -n '1,40p' "$view_error" >&2
               exit 1
             fi
+            observed_latest="$(read_tag "$name" "$publication_tag")"
+            if [[ "$observed_latest" != "${expected_latest[$name]}" ]]; then
+              echo "$publication_tag for $name drifted: expected ${expected_latest[$name]}, observed $observed_latest" >&2
+              exit 1
+            fi
             missing+=("$name")
-            echo "$name@$version is explicitly absent"
+            echo "$name@$version is explicitly absent with exact prior $publication_tag=$observed_latest"
           done
 
           echo "lockstep preflight admitted ${#missing[@]} missing package(s)"
+          if [[ "${#missing[@]}" -gt 0 ]]; then
+            current_main="$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "$API_ROOT/repos/$REPOSITORY/git/ref/heads/main" \
+              | node -e '
+                const value = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+                if (value.ref !== "refs/heads/main" || value.object?.type !== "commit") process.exit(1);
+                process.stdout.write(value.object.sha);
+              ')"
+            if [[ "$current_main" != "$EXPECTED_SHA" ]]; then
+              echo "main advanced before publication: expected $EXPECTED_SHA, observed $current_main" >&2
+              exit 1
+            fi
+          fi
           for name in "${missing[@]}"; do
-            npm publish "${tarballs[$name]}" --provenance --access public
+            npm publish "${tarballs[$name]}" \
+              --provenance \
+              --access public \
+              --tag "$publication_tag" \
+              --ignore-scripts \
+              --registry "$registry_url"
+            if [[ "$(read_tag "$name" "$publication_tag")" != "$version" ]]; then
+              echo "$publication_tag tag for $name@$version was not set by its explicit trusted publish" >&2
+              exit 1
+            fi
+          done
+
+          for name in "${names[@]}"; do
+            verify_download \
+              "$name" \
+              "$version" \
+              "${integrities[$name]}" \
+              "${sha256s[$name]}" \
+              "${sizes[$name]}"
+            if [[ "$(read_tag "$name" "$publication_tag")" != "$version" ]]; then
+              echo "$publication_tag tag for $name@$version was not set by its explicit trusted publish" >&2
+              exit 1
+            fi
+          done
+
+          for name in "${placeholder_names[@]}"; do
+            placeholder_version="$(placeholder_field "$name" version)"
+            if [[ "$(read_tag "$name" "$reservation_tag")" != "$placeholder_version" ]]; then
+              echo "$reservation_tag tag changed for $name" >&2
+              exit 1
+            fi
+            if [[ " ${reserved_only[*]} " == *" $name "* ]]; then
+              assert_only_placeholder_version "$name" "$placeholder_version"
+              if [[ "$(read_tag "$name" "$publication_tag")" != "$placeholder_version" ]]; then
+                echo "reserved-only package $name must remain at the namespace placeholder" >&2
+                exit 1
+              fi
+            fi
           done

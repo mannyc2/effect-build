@@ -12,6 +12,11 @@ import {
   fixedPublicSurface,
   mandatoryOperationIds,
   nonOperationRegisterPath,
+  npmReleaseTarget,
+  npmRegistryBootstrap,
+  npmRegistryUrl,
+  npmTrustedPublishClient,
+  npmTrustedPublisher,
   operationRegisterPath,
   operationTargets,
   privateSupportRegister,
@@ -322,6 +327,9 @@ const buildPublicSurfaceProjection = (operations) => {
 export const buildContract = (inputs) => {
   const operations = inputs.operationRows.map(buildOperation);
   const nonOperations = inputs.nonOperationRows.map(buildNonOperation);
+  const publicApiProjection = buildPublicSurfaceProjection(operations);
+  const admittedPackages = Object.keys(publicApiProjection.packages).sort();
+  const reservedOnlyPackages = [...publicApiProjection.privatePackages].sort();
   return {
     schema: "effect-build/combined-contract@1",
     status: "authoritative-hard-cut-contract",
@@ -402,7 +410,39 @@ export const buildContract = (inputs) => {
       ],
       forbiddenInEffectBuild: ["release-plan", "durable-notarization-journal", "continuation", "publication"],
     },
-    publicApiProjection: buildPublicSurfaceProjection(operations),
+    npmRegistryBoundary: {
+      purpose: "repository-package-distribution-only",
+      productReleaseOwnership: "unchanged-ts-release-boundary",
+      registry: npmRegistryUrl,
+      trustedPublisher: npmTrustedPublisher,
+      client: npmTrustedPublishClient,
+      bootstrap: npmRegistryBootstrap,
+      candidateHandoff: {
+        producer: "unprivileged-verified-pack-job",
+        consumer: "protected-npm-distribution-job",
+        identity: ["logicalName", "digest"],
+        content: "immutable-package-tarball-bytes",
+        repositoryCodeInOidcJob: "forbidden",
+      },
+      publicationAdmission: {
+        source: "publicApiProjection.packages",
+        packages: admittedPackages,
+        target: npmReleaseTarget,
+        command: "npm-publish",
+        tag: "latest",
+        postPublishProof: "downloaded-tarball-integrity",
+        existingVersionPolicy: "exact-bytes-and-latest-or-stop",
+        priorLatestPolicy: "exact-contract-ledger-or-target-on-resume",
+        registryObservation: "isolated-cache-prefer-online",
+        lifecycleScripts: "disabled",
+      },
+      reservation: {
+        source: "publicApiProjection.privatePackages",
+        packages: reservedOnlyPackages,
+        policy: "placeholder-version-and-tags-remain-unchanged",
+      },
+    },
+    publicApiProjection,
     verification: {
       operationAccounting: "exact-67",
       nonOperationAccounting: "exact-46",
@@ -556,6 +596,100 @@ export const validateContract = (contract, inputs) => {
   }
   if (!contract.releaseOwnershipBoundary.tsReleaseOwns.includes("mutation-journals-including-apple-notarization")) {
     throw new Error("ts-release must own the durable Apple notarization journal");
+  }
+  const npm = contract.npmRegistryBoundary;
+  const admittedPackages = sorted(Object.keys(contract.publicApiProjection.packages));
+  const reservedOnlyPackages = sorted(contract.publicApiProjection.privatePackages);
+  const namespacePackages = sorted([...admittedPackages, ...reservedOnlyPackages]);
+  const bootstrapPackages = sorted([
+    ...npmRegistryBootstrap.establishedPackages,
+    ...npmRegistryBootstrap.placeholderAtHandoffPackages,
+  ]);
+  if (!sameJson(npm.trustedPublisher, npmTrustedPublisher)) {
+    throw new Error("npm trusted-publisher identity changed");
+  }
+  if (
+    npm.purpose !== "repository-package-distribution-only"
+    || npm.productReleaseOwnership !== "unchanged-ts-release-boundary"
+    || !sameJson(npm.candidateHandoff, {
+      producer: "unprivileged-verified-pack-job",
+      consumer: "protected-npm-distribution-job",
+      identity: ["logicalName", "digest"],
+      content: "immutable-package-tarball-bytes",
+      repositoryCodeInOidcJob: "forbidden",
+    })
+  ) {
+    throw new Error("npm distribution must remain outside the effect-build product release boundary");
+  }
+  if (npm.registry !== npmRegistryUrl || !sameJson(npm.client, npmTrustedPublishClient)) {
+    throw new Error("npm trusted-publish client identity changed");
+  }
+  if (!sameJson(npm.bootstrap, npmRegistryBootstrap) || npm.bootstrap.architectureEvidence !== false) {
+    throw new Error("npm namespace placeholders must remain non-architectural bootstrap evidence");
+  }
+  if (!sameJson(bootstrapPackages, namespacePackages)) {
+    throw new Error("npm bootstrap accounting must cover the exact public and private package namespace");
+  }
+  requireUnique(npm.bootstrap.placeholderAtHandoffPackages, "npm placeholder-at-handoff packages");
+  requireUnique(npm.bootstrap.placeholderLedger.map((entry) => entry.name), "npm placeholder ledger names");
+  if (!sameJson(
+    sorted(npm.bootstrap.placeholderLedger.map((entry) => entry.name)),
+    sorted(npm.bootstrap.placeholderAtHandoffPackages),
+  )) {
+    throw new Error("npm placeholder ledger must cover the exact placeholder-at-handoff cohort");
+  }
+  for (const entry of npm.bootstrap.placeholderLedger) {
+    if (
+      entry.version !== npm.bootstrap.placeholderVersion
+      || entry.bootstrapTags.reserved !== npm.bootstrap.placeholderVersion
+      || entry.bootstrapTags.latest !== npm.bootstrap.placeholderVersion
+      || !Number.isInteger(entry.bytes)
+      || entry.bytes <= 0
+      || !/^[0-9a-f]{64}$/u.test(entry.sha256)
+      || !/^sha512-[A-Za-z0-9+/]+={0,2}$/u.test(entry.integrity)
+    ) {
+      throw new Error(`invalid npm placeholder ledger entry: ${entry.name}`);
+    }
+  }
+  if (
+    npm.publicationAdmission.source !== "publicApiProjection.packages"
+    || !sameJson(sorted(npm.publicationAdmission.packages), admittedPackages)
+  ) {
+    throw new Error("npm release admission must be the public package projection");
+  }
+  if (!sameJson(npm.publicationAdmission.target, npmReleaseTarget)) {
+    throw new Error("npm release target or prior-latest ledger changed");
+  }
+  const expectedLatest = npm.publicationAdmission.target.expectedLatestBeforePublication;
+  requireUnique(expectedLatest.map((entry) => entry.name), "npm expected prior-latest package names");
+  if (
+    !sameJson(sorted(expectedLatest.map((entry) => entry.name)), admittedPackages)
+    || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(
+      npm.publicationAdmission.target.version,
+    )
+    || expectedLatest.some((entry) =>
+      !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(entry.version)
+    )
+  ) {
+    throw new Error("npm prior-latest ledger must cover the exact admitted package set with semantic versions");
+  }
+  if (
+    npm.reservation.source !== "publicApiProjection.privatePackages"
+    || !sameJson(sorted(npm.reservation.packages), reservedOnlyPackages)
+  ) {
+    throw new Error("private package names must remain registry placeholders");
+  }
+  if (
+    npm.publicationAdmission.command !== "npm-publish"
+    || npm.publicationAdmission.tag !== "latest"
+    || npm.publicationAdmission.postPublishProof !== "downloaded-tarball-integrity"
+    || npm.publicationAdmission.existingVersionPolicy !== "exact-bytes-and-latest-or-stop"
+    || npm.publicationAdmission.priorLatestPolicy !== "exact-contract-ledger-or-target-on-resume"
+    || npm.publicationAdmission.registryObservation !== "isolated-cache-prefer-online"
+    || npm.publicationAdmission.lifecycleScripts !== "disabled"
+    || npm.reservation.policy !== "placeholder-version-and-tags-remain-unchanged"
+  ) {
+    throw new Error("npm release tag promotion policy changed");
   }
   validateOwners(contract);
   return contract;

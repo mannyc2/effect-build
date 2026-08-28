@@ -4,6 +4,109 @@ export const nonOperationRegisterPath = "research/post-0.3/reconciliation/r1/NON
 export const adjudicationPath = "research/post-0.3/freeze/SURFACE-ADJUDICATION.json";
 export const publicApiPath = "tooling/public-api.json";
 
+export const npmTrustedPublisher = {
+  repository: "mannyc2/effect-build",
+  workflow: "release.yml",
+  environment: "npm",
+  permission: "publish",
+};
+
+export const npmRegistryUrl = "https://registry.npmjs.org";
+export const npmTrustedPublishClient = { node: "24.14.1", npm: "11.11.0" };
+
+export const npmReleaseTarget = {
+  version: "0.6.0",
+  presenceAtHandoff: "absent-for-all-admitted-packages",
+  expectedLatestBeforePublication: [
+    { name: "effect-build", version: "0.3.0" },
+    { name: "effect-build-apple", version: "0.0.0-reserved.0" },
+    { name: "effect-build-archives", version: "0.0.0-reserved.0" },
+    { name: "effect-build-bun", version: "0.3.0" },
+    { name: "effect-build-deno", version: "0.3.0" },
+    { name: "effect-build-esbuild", version: "0.3.0" },
+    { name: "effect-build-nfpm", version: "0.0.0-reserved.0" },
+    { name: "effect-build-node-sea", version: "0.3.0" },
+    { name: "effect-build-python", version: "0.0.0-reserved.0" },
+    { name: "effect-build-sbom", version: "0.0.0-reserved.0" },
+    { name: "effect-build-windows", version: "0.0.0-reserved.0" },
+  ],
+};
+
+export const npmPlaceholderLedger = [
+  {
+    name: "effect-build-apple",
+    version: "0.0.0-reserved.0",
+    bytes: 334,
+    sha256: "07c5d7377a5ca1e741af7eda9e5c2743b6587d60014abb1f8c99bdf4bc9f3b3b",
+    integrity: "sha512-T2F2RYz0N9Me48SDs8BEvbVeifxhElcVEvmwMd9zRyPJr9JxcTpRFM5CRasCGyExXYBsqobcn5d2CU22v110FQ==",
+    bootstrapTags: { reserved: "0.0.0-reserved.0", latest: "0.0.0-reserved.0" },
+  },
+  {
+    name: "effect-build-archives",
+    version: "0.0.0-reserved.0",
+    bytes: 334,
+    sha256: "492062edd992a7a2942c095f0d6cd54c19f26dca1d1ac96a77f389f8dcf8872f",
+    integrity: "sha512-9v/xjMJVBw3hzK0onHwR7m7tnL5YnUnOeIoxzuanAZ1v3v/7CUcMiqJKRFqt+5D4DUBn5XWUb1lnV6lYiAMnBQ==",
+    bootstrapTags: { reserved: "0.0.0-reserved.0", latest: "0.0.0-reserved.0" },
+  },
+  {
+    name: "effect-build-nfpm",
+    version: "0.0.0-reserved.0",
+    bytes: 332,
+    sha256: "10ffdcf4a5dd69305bd6f9055b3022ef7290416879786236b4cd7d74c6f887da",
+    integrity: "sha512-/TKk/e7Ng68RBNusrUpIreYFUvebu8/wERoZLUAmyVB7CTVxs2JfZFmxeIjedDSQqKplOoVW9QPyqnhIUcIXhQ==",
+    bootstrapTags: { reserved: "0.0.0-reserved.0", latest: "0.0.0-reserved.0" },
+  },
+  {
+    name: "effect-build-python",
+    version: "0.0.0-reserved.0",
+    bytes: 334,
+    sha256: "a14369ae0eeb3fc17a020267c8887596a3879590ed4f51da8f41ed4c14bfd394",
+    integrity: "sha512-3B6GEFCN9ixneGkIMGky4uE71TvT1iTyJVTkFNbtbZWRd+/TBAIKuyu8AgdbL0qS7sSGL70jM6ehiDEr4Z6UiQ==",
+    bootstrapTags: { reserved: "0.0.0-reserved.0", latest: "0.0.0-reserved.0" },
+  },
+  {
+    name: "effect-build-rolldown",
+    version: "0.0.0-reserved.0",
+    bytes: 334,
+    sha256: "eda4638f7eaab55dede0ee5d34954efb88786a645396d91a2a9b04175fb103ff",
+    integrity: "sha512-mkI+ekPBY2Y6CyEqXRjnHB2F7RWxn6nTcXuL4C+KoIXL5BFvUu73JY9/JWqGIHLlLdvy4wPm0vnlNIg77KxdAg==",
+    bootstrapTags: { reserved: "0.0.0-reserved.0", latest: "0.0.0-reserved.0" },
+  },
+  {
+    name: "effect-build-sbom",
+    version: "0.0.0-reserved.0",
+    bytes: 333,
+    sha256: "5b463d54484692d39c70ddd5feb804ce3e8af03b4b7793da3e7fca8bb1fa773d",
+    integrity: "sha512-BjY7ar/5gx2QGasd4mjm1UPKTMws4AY6b4OmqZRJg4dyd4WUap/R68sGMfHXgbyOGiyTiClEuvwPWfa6KrdhuA==",
+    bootstrapTags: { reserved: "0.0.0-reserved.0", latest: "0.0.0-reserved.0" },
+  },
+  {
+    name: "effect-build-windows",
+    version: "0.0.0-reserved.0",
+    bytes: 335,
+    sha256: "2743a73f902e3ddc4fcf35ed7b902a79766f5b1ccbbfa80bb5588eeede2c2289",
+    integrity: "sha512-s5zCwCD1hhO2+O8LniXoJjELfSnolJhxdDbQYZrwS9T82E6tclUy3yWikXW1XduYYvKxz+WThwvfHhMVQ7TX1A==",
+    bootstrapTags: { reserved: "0.0.0-reserved.0", latest: "0.0.0-reserved.0" },
+  },
+];
+
+export const npmRegistryBootstrap = {
+  purpose: "namespace-and-trusted-publisher-bootstrap-only",
+  architectureEvidence: false,
+  placeholderVersion: "0.0.0-reserved.0",
+  placeholderTag: "reserved",
+  establishedPackages: [
+    "effect-build",
+    "effect-build-bun",
+    "effect-build-deno",
+    "effect-build-esbuild",
+    "effect-build-node-sea",
+  ],
+  placeholderAtHandoffPackages: npmPlaceholderLedger.map(({ name }) => name),
+  placeholderLedger: npmPlaceholderLedger,
+};
+
 export const expectedDispositionCounts = {
   mandatory: 5,
   "positive-proof-gated": 22,
