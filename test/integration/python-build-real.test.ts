@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as PythonBuild from "../../packages/effect-build-python/src/Build.js";
-import { finalizedBundle } from "../fixtures/finalized-artifacts.js";
+import { finalizedTree } from "../fixtures/finalized-artifacts.js";
 import { requiredExecutable } from "./acceptance-support.js";
 
 const execute = promisify(execFile);
@@ -37,12 +37,12 @@ const run = <A, E>(effect: Effect.Effect<A, E, PythonBuild.Builder>) =>
 
 const verifyPublishedArtifact = async (artifact: {
   readonly path: string;
-  readonly bytes: number;
-  readonly sha256: string;
+  readonly bytes: string;
+  readonly digest: { readonly value: string };
 }) => {
   const contents = await readFile(artifact.path);
-  expect(artifact.bytes).toBe(contents.byteLength);
-  expect(artifact.sha256).toBe(createHash("sha256").update(contents).digest("hex"));
+  expect(artifact.bytes).toBe(String(contents.byteLength));
+  expect(artifact.digest.value).toBe(createHash("sha256").update(contents).digest("hex"));
 };
 
 describe.sequential("real uv 0.12.0 Python build acceptance", () => {
@@ -54,11 +54,15 @@ describe.sequential("real uv 0.12.0 Python build acceptance", () => {
   )("builds, inspects, clean-installs, and imports the %s fixture", async (fixture, module, backend, distribution) => {
     const artifacts = await run(PythonBuild.build(
       new PythonBuild.BuildInput({
-        source: await finalizedBundle(join(fixtures, fixture)),
+        source: await finalizedTree(join(fixtures, fixture)),
         outdir: join(root, fixture),
       }),
     ));
-    expect(artifacts.tool).toEqual({ name: "uv", version: "0.12.0" });
+    expect(artifacts.wheel.provenance).toMatchObject({
+      name: "uv",
+      participants: [{ name: "uv", version: "0.12.0" }],
+    });
+    expect(artifacts.sdist.provenance).toEqual(artifacts.wheel.provenance);
     await verifyPublishedArtifact(artifacts.wheel);
     await verifyPublishedArtifact(artifacts.sdist);
     const completion = await execute(python, [

@@ -1,0 +1,4 @@
+body {
+  --topology-style-marker: "topology-style-ok";
+  background-image: url("./payload.asset");
+}

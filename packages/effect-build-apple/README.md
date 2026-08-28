@@ -7,14 +7,15 @@ Apple semantics behind a generic signing or packaging function.
 ## Operations
 
 - `AppBundle.buildAppBundles` constructs exactly one arm64 and one x64 `.app`,
-  from finalized `Executable` and resource artifacts. It rejects wrong-target,
+  from canonical `HashedExecutable` and `HashedFile` inputs. It rejects wrong-target,
   swapped, non-Mach-O, universal/fat, mutable, and colliding inputs before
   publication, then validates each `Info.plist` with `plutil`.
 - `DiskImage.createDiskImages` constructs exactly one arm64 and one x64 UDZO
   disk image from exact `DeveloperIdApplicationBundle` manifests and finalized
   layout files. It strictly re-verifies each private app snapshot with
   `codesign`, rejects layout collisions, and performs verify plus read-only
-  attach checks with `hdiutil`; detach failure rejects publication.
+  attach checks with `hdiutil`, including exact mounted app-manifest and layout-file
+  revalidation; detach failure rejects publication.
 - `InstallerPackage.buildInstallerPackages` uses `pkgbuild` and `productbuild`
   to construct exactly two unsigned installer packages from private,
   manifest-verified Developer-ID app snapshots under their original `.app`
@@ -46,12 +47,14 @@ Apple semantics behind a generic signing or packaging function.
   the first newly published result if the second tool operation fails. Callers
   must still choose distinct, non-existing output paths.
 
-Every tool executable is resolved once. Layer options also require an exact
-tool version fact because several Apple system tools do not expose independent
-semantic versions; use the exact Xcode Command Line Tools or macOS tool build
-selected by the release acceptance matrix. Native tools are probed once when a
-layer is constructed. Tools outside the package's tested version range warn
-but are not rejected.
+Every tool executable is resolved once, observed, and reauthenticated
+immediately before every launch. Notarization and stapling select the actual
+`notarytool` and `stapler` executables rather than trusting `xcrun` to route to
+an unauthenticated binary. Layer options require an exact caller-adjudicated
+version fact because several Apple system tools do not expose independent
+semantic versions. The package probes tools when constructing a layer but has
+no hidden version registry, admission range, or warning policy; the release
+acceptance matrix owns supported-build evidence.
 
 ## Credentials and durable state
 

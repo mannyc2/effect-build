@@ -1,32 +1,22 @@
 # effect-build-bun
 
-Effect-native Bun operations: native executables from
-`effect-build-bun/CompileExecutable` and directory bundles from
-`effect-build-bun/Bundle`.
+Provider-native Bun operations in permanent `Api` and `Command` lanes.
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as CompileExecutable from "effect-build-bun/CompileExecutable";
+import { Command } from "effect-build-bun";
 
 const artifact = await Effect.runPromise(
-  CompileExecutable.compileExecutable({
-    entrypoint: "src/main.ts",
+  Command.CompileExecutable.compileExecutable({
+    entrypoints: ["src/main.ts"],
     outfile: "dist/app",
-    minify: true,
+    observation: "hashed",
   }).pipe(
-    Effect.provide(CompileExecutable.layer()),
+    Effect.provide(Command.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
-// { _tag: "Executable", path, bytes, target, tool, sha256 }
 ```
 
-`Bundle.bundle` runs `bun build` with `target` (browser/bun/node),
-`format`, `minify`, `sourcemap`, `splitting`, `packages`, and `external`,
-and returns an `Artifact.Bundle` listing every committed file.
-
-Each layer selects and probes Bun once — an explicit `executable` path
-wins, otherwise one deterministic PATH walk — and warns once outside the
-CI-tested range; it never installs or substitutes. See the
-[repository](https://github.com/mannyc2/effect-build) for the full toolkit.
+`Api` preserves native in-memory results and provider-direct directories. `Command` selects exact Bun bytes, applies Bun-owned admission, and reauthenticates immediately before launch. Only executable compilation uses core atomic finalization.

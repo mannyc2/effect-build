@@ -1,7 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit } from "effect";
-import type * as Artifact from "effect-build/Artifact";
-import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Archive from "../../packages/effect-build-archives/src/Archive.js";
 import { decodeGitTar, encodeTar } from "../../packages/effect-build-archives/src/internal/archive.js";
 import * as SourceArchive from "../../packages/effect-build-archives/src/SourceArchive.js";
+import { finalizedFile } from "../fixtures/finalized-artifacts.js";
 import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const decoder = new TextDecoder();
@@ -132,17 +131,11 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const regularArtifact = async (name: string, contents: string): Promise<Artifact.FileArtifact> => {
+const regularArtifact = async (name: string, contents: string) => {
   const path = join(root, name);
   await mkdir(resolve(path, ".."), { recursive: true });
   await writeFile(path, contents);
-  return {
-    _tag: "File",
-    path,
-    bytes: Buffer.byteLength(contents),
-    tool: { name: "fixture", version: "1" },
-    sha256: createHash("sha256").update(contents).digest("hex"),
-  };
+  return finalizedFile(path);
 };
 
 const runArchive = <A, E>(effect: Effect.Effect<A, E, Archive.Archiver>) =>
@@ -162,7 +155,7 @@ describe.sequential("deterministic archive hard cut", () => {
   it("round-trips trailing spaces and byte-counted non-ASCII PAX path/link fields", () => {
     const longPart = `pax-${"é".repeat(60)}`;
     const longTarget = `${"目标".repeat(45)}/payload.txt`;
-    const decoded = decodeGitTar(encodeTar([
+    const encoded = encodeTar([
       {
         path: "trailing-name ",
         kind: "file",
@@ -183,7 +176,8 @@ describe.sequential("deterministic archive hard cut", () => {
         contents: new Uint8Array(),
         linkTarget: "target ",
       },
-    ]));
+    ]);
+    const decoded = decodeGitTar(encoded);
     expect(decoded.map(({ path }) => path)).toEqual([
       `${longPart}/payload.link`,
       "trailing-link",
@@ -191,6 +185,12 @@ describe.sequential("deterministic archive hard cut", () => {
     ]);
     expect(decoded.find(({ path }) => path.endsWith("payload.link"))?.linkTarget).toBe(longTarget);
     expect(decoded.find(({ path }) => path === "trailing-link")?.linkTarget).toBe("target ");
+
+    const paxSize = tarNumber(encoded.subarray(0, 512), 124, 12);
+    const symlinkHeaderOffset = 512 + Math.ceil(paxSize / 512) * 512;
+    const symlinkHeader = encoded.subarray(symlinkHeaderOffset, symlinkHeaderOffset + 512);
+    expect(tarField(symlinkHeader, 156, 1)).toBe("2");
+    expect(tarField(symlinkHeader, 157, 100)).toBe("././@LongSymLink");
   });
 
   it("emits byte-identical ZIP and tar.gz with normalized metadata and independent listings", async () => {
@@ -276,7 +276,7 @@ describe.sequential("deterministic archive hard cut", () => {
         outfile: join(root, "mutated.zip"),
       }),
     ));
-    expect((failureOf(exit) as { readonly _tag: string })._tag).toBe("ArtifactVerificationFailed");
+    expect((failureOf(exit) as { readonly _tag: string })._tag).toBe("FileVerificationFailed");
     await expect(readFile(join(root, "mutated.zip"))).rejects.toThrow();
   });
 
@@ -318,6 +318,32 @@ describe.sequential("deterministic archive hard cut", () => {
     ));
     expect(failureOf(source)).toMatchObject({ _tag: "SourceArchiveFailed" });
     await expect(readFile(sourceOutfile)).rejects.toThrow();
+  });
+
+  it("reauthenticates the selected Git bytes immediately before every Git launch", async () => {
+    const original = await readFile(git);
+    const program = Effect.gen(function*() {
+      yield* Effect.promise(() => writeFile(git, "#!/bin/sh\nexit 0\n"));
+      return yield* SourceArchive.sourceArchive(
+        new SourceArchive.SourceArchiveInput({
+          repository: join(root, "changed-tool-repository"),
+          tree,
+          project: "project",
+          version: "1.0.0",
+          format: "zip",
+          outfile: join(root, "changed-tool.zip"),
+        }),
+      );
+    }).pipe(
+      Effect.provide(SourceArchive.layer({ executable: git })),
+      Effect.provide(NodeServices.layer),
+    );
+    try {
+      const failure = failureOf(await Effect.runPromiseExit(program)) as { readonly _tag: string };
+      expect(failure._tag).toBe("GitToolChanged");
+    } finally {
+      await writeFile(git, original);
+    }
   });
 
   it("projects one exact Git tree into both source formats without worktree, submodule, or build-output bytes", async () => {
@@ -410,6 +436,30 @@ describe.sequential("deterministic archive hard cut", () => {
     } finally {
       delete process.env.FAKE_GIT_ARCHIVE_LOG;
     }
+  });
+
+  it("does not apply the diagnostic byte cap to exact ls-tree protocol stdout", async () => {
+    const repository = join(root, "exact-protocol-repository");
+    await mkdir(repository, { recursive: true });
+    const outfile = join(root, "exact-protocol.zip");
+    const exit = await Effect.runPromiseExit(
+      SourceArchive.sourceArchive(
+        new SourceArchive.SourceArchiveInput({
+          repository,
+          tree,
+          project: "project",
+          version: "1.0.0",
+          format: "zip",
+          outfile,
+        }),
+      ).pipe(
+        Effect.provide(SourceArchive.layer({ executable: git, outputLimitBytes: 32 })),
+        Effect.provide(NodeServices.layer),
+      ),
+    );
+
+    expect(Exit.isSuccess(exit), Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "").toBe(true);
+    expect((await readFile(outfile)).byteLength).toBeGreaterThan(0);
   });
 
   it("rejects symbolic and non-tree sources", async () => {

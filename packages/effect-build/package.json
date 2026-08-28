@@ -1,7 +1,7 @@
 {
   "name": "effect-build",
   "version": "0.6.0",
-  "description": "Effect-native build toolkit: targets, artifacts, build errors, and the external-tool kernel.",
+  "description": "Portable Effect-native artifact, ownership, matrix, and provider-authoring contracts.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -33,9 +33,16 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./Artifact": { "types": "./dist/Artifact.d.ts", "import": "./dist/Artifact.js" },
-    "./BuildError": { "types": "./dist/BuildError.d.ts", "import": "./dist/BuildError.js" },
-    "./Target": { "types": "./dist/Target.d.ts", "import": "./dist/Target.js" },
-    "./Toolchain": { "types": "./dist/Toolchain.d.ts", "import": "./dist/Toolchain.js" }
+    "./Author/BorrowedOutput": {
+      "types": "./dist/Author/BorrowedOutput.d.ts",
+      "import": "./dist/Author/BorrowedOutput.js"
+    },
+    "./Author/Executable": { "types": "./dist/Author/Executable.d.ts", "import": "./dist/Author/Executable.js" },
+    "./Author/File": { "types": "./dist/Author/File.d.ts", "import": "./dist/Author/File.js" },
+    "./Author/Tool": { "types": "./dist/Author/Tool.d.ts", "import": "./dist/Author/Tool.js" },
+    "./Author/Tree": { "types": "./dist/Author/Tree.d.ts", "import": "./dist/Author/Tree.js" },
+    "./Matrix": { "types": "./dist/Matrix.d.ts", "import": "./dist/Matrix.js" },
+    "./SystemTarget": { "types": "./dist/SystemTarget.d.ts", "import": "./dist/SystemTarget.js" }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",

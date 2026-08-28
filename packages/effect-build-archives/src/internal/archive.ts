@@ -10,6 +10,8 @@ export interface Entry {
 
 const encoder = new TextEncoder();
 
+const paxLongSymlinkPlaceholder = "././@LongSymLink";
+
 const bytes = (...values: readonly number[]): Uint8Array => Uint8Array.from(values);
 
 const concat = (chunks: readonly Uint8Array[]): Uint8Array => {
@@ -229,7 +231,7 @@ export const encodeTar = (unsorted: readonly Entry[]): Uint8Array => {
     }
     if (entry.kind === "symlink" && encoder.encode(entry.linkTarget ?? "").byteLength > 100) {
       records.push(paxRecord("linkpath", entry.linkTarget ?? ""));
-      headerLink = "";
+      headerLink = paxLongSymlinkPlaceholder;
     }
     if (records.length > 0) {
       const pax = concat(records);

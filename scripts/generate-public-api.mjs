@@ -26,7 +26,23 @@ const declarationExports = (file) => {
 
 const runtimeExports = async (file) => Object.keys(await import(pathToFileURL(file).href)).sort();
 
-const packages = (await readdir(resolve(root, "packages"))).sort();
+const contract = JSON.parse(await readFile(resolve(root, "tooling/effect-build-contract.json"), "utf8"));
+if (contract.schema !== "effect-build/combined-contract@1") {
+  throw new Error("tooling/effect-build-contract.json has an unsupported schema");
+}
+const packageDirectories = (await readdir(resolve(root, "packages"))).sort();
+const packages = Object.keys(contract.publicApiProjection.packages).sort();
+const accountedPackages = [...packages, ...contract.publicApiProjection.privatePackages].sort();
+if (JSON.stringify(accountedPackages) !== JSON.stringify(packageDirectories)) {
+  throw new Error("combined contract does not account for every workspace package");
+}
+const moduleCount = packages.reduce(
+  (count, name) => count + 1 + Object.keys(contract.publicApiProjection.packages[name].subpaths).length,
+  0,
+);
+if (packages.length !== 11 || moduleCount !== 42) {
+  throw new Error(`combined contract projects ${packages.length} public packages and ${moduleCount} modules`);
+}
 const surface = { schema: "effect-build/public-surface@3", packages: {} };
 
 for (const name of packages) {
@@ -44,4 +60,4 @@ for (const name of packages) {
 }
 
 await writeFile(resolve(root, "tooling/public-api.json"), `${JSON.stringify(surface, null, 2)}\n`);
-console.log(`wrote tooling/public-api.json for ${packages.length} packages`);
+console.log(`wrote tooling/public-api.json for ${packages.length} public packages`);

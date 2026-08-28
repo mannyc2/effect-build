@@ -1,59 +1,107 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import { chmod, copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
+import type * as Artifact from "effect-build/Artifact";
+import { chmod, copyFile, mkdtemp, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import * as DenoCompile from "../../packages/effect-build-deno/src/CompileExecutable.js";
-import * as Target from "../../packages/effect-build/src/Target.js";
+import * as Compile from "../../packages/effect-build-deno/src/Command/CompileExecutable.js";
+import * as CompileWatch from "../../packages/effect-build-deno/src/Command/CompileWatch.js";
+import * as Runtime from "../../packages/effect-build-deno/src/internal/Runtime.js";
 
 const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-deno.mjs", import.meta.url)));
 let root = "";
 let executable = "";
+let denort = "";
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "effect-build-deno-"));
+  root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-deno-compile-")));
   executable = join(root, "deno");
+  denort = join(root, "denort");
   await copyFile(fixture, executable);
+  await copyFile(fixture, denort);
   await chmod(executable, 0o755);
+  await chmod(denort, 0o755);
 });
 
 afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const run = <A, E>(effect: Effect.Effect<A, E, DenoCompile.Compiler>) =>
+const hostTarget = (): Compile.Target => {
+  if (process.platform === "darwin") return process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin";
+  if (process.platform === "win32") {
+    return process.arch === "arm64"
+      ? "aarch64-pc-windows-msvc"
+      : "x86_64-pc-windows-msvc";
+  }
+  return process.arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu";
+};
+
+const systemTarget = (): string => {
+  if (process.platform === "darwin") return process.arch === "arm64" ? "macos-aarch64" : "macos-x64";
+  if (process.platform === "win32") return process.arch === "arm64" ? "windows-aarch64" : "windows-x64";
+  return process.arch === "arm64" ? "linux-aarch64-gnu" : "linux-x64-gnu";
+};
+
+const input = (name: string, overrides: Partial<Compile.Input<"hashed">> = {}): Compile.Input<"hashed"> => ({
+  entrypoint: "main.ts",
+  outfile: join(root, name),
+  target: hostTarget(),
+  observation: "hashed",
+  ...overrides,
+});
+
+const permissionFields = [
+  "allowRead",
+  "allowWrite",
+  "allowNet",
+  "allowEnv",
+  "allowRun",
+  "allowFfi",
+  "allowSys",
+  "allowImport",
+  "denyRead",
+  "denyWrite",
+  "denyNet",
+  "denyEnv",
+  "denyRun",
+  "denyFfi",
+  "denySys",
+  "denyImport",
+  "ignoreRead",
+  "ignoreEnv",
+  "allowScripts",
+] as const satisfies readonly (keyof Compile.Options)[];
+
+const run = <A, E>(
+  effect: Effect.Effect<
+    A,
+    E,
+    | Runtime.Runtime
+    | import("effect").FileSystem.FileSystem
+    | import("effect").Path.Path
+    | import("effect").Crypto.Crypto
+  >,
+) =>
   Effect.runPromiseExit(
     effect.pipe(
-      Effect.provide(DenoCompile.layer({ executable })),
+      Effect.provide(Runtime.layer({ executable: executable as Artifact.AbsolutePath })),
       Effect.provide(NodeServices.layer),
     ) as Effect.Effect<A, E>,
   );
 
-const failureOf = <A, E>(exit: Exit.Exit<A, E>): E => {
+const errorOf = <A, E>(exit: Exit.Exit<A, E>): E => {
   expect(Exit.isFailure(exit)).toBe(true);
   const found = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : undefined;
   expect(found?._tag).toBe("Some");
   return (found as { readonly value: E }).value;
 };
 
-const input = (name: string, overrides: Partial<DenoCompile.CompileExecutableInput> = {}) =>
-  ({
-    entrypoint: "main.ts",
-    outfile: join(root, name),
-    ...overrides,
-  }) as DenoCompile.CompileExecutableInput;
-
-const absent = async (path: string): Promise<boolean> => {
-  try {
-    await stat(path);
-    return false;
-  } catch (error) {
-    return (error as { readonly code?: string }).code === "ENOENT";
-  }
-};
-
+const absent = (path: string): Promise<boolean> => stat(path).then(() => false, () => true);
+const noStaging = async (): Promise<boolean> =>
+  !(await readdir(root)).some((name) => name.startsWith(".effect-build-"));
 const waitForFile = async (path: string): Promise<void> => {
   const deadline = Date.now() + 5_000;
   while (await absent(path)) {
@@ -63,162 +111,302 @@ const waitForFile = async (path: string): Promise<void> => {
 };
 
 const describeUnix = process.platform === "win32" ? describe.skip : describe.sequential;
-describeUnix("Deno CompileExecutable", () => {
-  it("parses the deno version banner and records it on the artifact", async () => {
-    const exit = await run(DenoCompile.compileExecutable(input("hashed")));
-    expect(Exit.isSuccess(exit)).toBe(true);
-    if (Exit.isSuccess(exit)) {
-      expect(exit.value._tag).toBe("Executable");
-      expect(exit.value.tool).toEqual({ name: "deno", version: "2.9.3" });
-      expect(exit.value.target).toBe(Target.host());
-      expect(exit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
-    }
-  });
-
-  it("compiles every supported target with rust triples and .exe for windows", async () => {
-    const log = join(root, "targets.log");
+describeUnix("Deno compileExecutable", () => {
+  it("preserves config/cache/permission authority and atomically publishes an authenticated executable", async () => {
+    const log = join(root, "compile.log");
+    const denoDir = join(root, "deno-cache-authority");
     process.env.FAKE_DENO_LOG = log;
     try {
-      for (const target of DenoCompile.Target.literals) {
-        const exit = await run(DenoCompile.compileExecutable(input(`target-${target}`, { target })));
-        expect(Exit.isSuccess(exit), target).toBe(true);
-        if (Exit.isSuccess(exit)) {
-          expect(exit.value.target).toBe(target);
-          if (target.startsWith("windows")) expect(exit.value.path.endsWith(".exe")).toBe(true);
-        }
-      }
-      const lines = (await readFile(log, "utf8")).trim().split("\n");
-      const triples = lines.map((line) => {
-        const { argv } = JSON.parse(line) as { readonly argv: readonly string[] };
-        return argv[argv.indexOf("--target") + 1];
-      });
-      expect(triples).toEqual([
-        "x86_64-apple-darwin",
-        "aarch64-apple-darwin",
-        "x86_64-unknown-linux-gnu",
-        "aarch64-unknown-linux-gnu",
-        "x86_64-pc-windows-msvc",
-        "aarch64-pc-windows-msvc",
-      ]);
-    } finally {
-      delete process.env.FAKE_DENO_LOG;
-    }
-  });
-
-  it("renders bundle, minify, and permission flags in the closed deno argv", async () => {
-    const project = join(root, "project");
-    const log = join(root, "argv.log");
-    await mkdir(project, { recursive: true });
-    process.env.FAKE_DENO_LOG = log;
-    try {
-      const exit = await run(
-        DenoCompile.compileExecutable(input("flags", {
-          cwd: project,
-          outfile: "dist/app",
+      const exit = await Effect.runPromiseExit(
+        Compile.compileExecutable(input("hashed", {
+          config: "deno.json",
+          importMap: "imports.json",
+          lock: "deno.lock",
+          frozen: true,
+          cachedOnly: true,
+          noRemote: true,
+          allowRead: true,
+          allowNet: ["example.com:443"],
+          denyEnv: ["SECRET"],
+          include: ["assets"],
           bundle: true,
           minify: true,
-          permissions: { read: true, net: ["example.com:443"], env: ["HOME"] },
-        })),
+        })).pipe(
+          Effect.provide(Runtime.layer({
+            executable: executable as Artifact.AbsolutePath,
+            denoDir: denoDir as Artifact.AbsolutePath,
+          })),
+          Effect.provide(NodeServices.layer),
+        ),
       );
       expect(Exit.isSuccess(exit)).toBe(true);
-      const invocation = JSON.parse((await readFile(log, "utf8")).trim()) as {
-        readonly argv: readonly string[];
-        readonly cwd: string;
-      };
-      expect(invocation.cwd).toBe(await realpath(project));
-      expect(invocation.argv[0]).toBe("compile");
-      expect(invocation.argv).toContain("--bundle");
-      expect(invocation.argv).toContain("--minify");
-      expect(invocation.argv).toContain("--allow-read");
-      expect(invocation.argv).toContain("--allow-net=example.com:443");
-      expect(invocation.argv).toContain("--allow-env=HOME");
-      expect(invocation.argv.at(-1)).toBe("main.ts");
-      expect(invocation.argv.indexOf("--output")).toBeGreaterThan(-1);
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value).toMatchObject({
+          _tag: "HashedExecutable",
+          provider: "deno",
+          target: systemTarget(),
+          denoTarget: hostTarget(),
+          publication: { scope: "file", commit: "same-parent-no-replace-link", committed: true },
+          runtime: { name: "deno", version: "2.9.5" },
+          runtimeAcquisition: {
+            _tag: "ProviderManagedDenort",
+            denoDir,
+            evidenceGate: "cold-warm-corrupt-offline-target-relation-open",
+          },
+        });
+        expect(exit.value.digest.value).toMatch(/^[0-9a-f]{64}$/u);
+        expect(exit.value.provenance).toEqual(exit.value.tool);
+      }
+      const invocations = (await readFile(log, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0].denoDir).toBe(denoDir);
+      expect(invocations[0].argv).toEqual(expect.arrayContaining([
+        "compile",
+        "--config",
+        "deno.json",
+        "--import-map",
+        "imports.json",
+        "--lock",
+        "deno.lock",
+        "--frozen",
+        "--cached-only",
+        "--no-remote",
+        "--allow-read",
+        "--allow-net=example.com:443",
+        "--deny-env=SECRET",
+        "--include",
+        "assets",
+        "--bundle",
+        "--minify",
+        "--target",
+        hostTarget(),
+      ]));
     } finally {
       delete process.env.FAKE_DENO_LOG;
     }
   });
 
-  it("renders --allow-all alone for full permissions", async () => {
-    const log = join(root, "allow-all.log");
-    process.env.FAKE_DENO_LOG = log;
+  it("returns ordered matrix cells while preserving independently committed siblings", async () => {
+    const reportExit = await run(Compile.compileExecutableMatrix({
+      concurrency: 2,
+      inputs: [
+        input("matrix-success"),
+        ...permissionFields.map((field, index) =>
+          input(
+            `matrix-invalid-${index}`,
+            { [field]: [] } as unknown as Partial<Compile.Input<"hashed">>,
+          )
+        ),
+      ],
+    }));
+    expect(Exit.isSuccess(reportExit)).toBe(true);
+    if (Exit.isSuccess(reportExit)) {
+      expect(reportExit.value).toMatchObject({ provider: "deno", operation: "compileExecutable", rollback: "none" });
+      expect(reportExit.value.cells.map((cell) => [cell.identity.index, cell._tag])).toEqual([
+        [0, "Success"],
+        ...permissionFields.map((_, index) => [index + 1, "Failure"]),
+      ]);
+      for (const [index, field] of permissionFields.entries()) {
+        expect(reportExit.value.cells[index + 1]).toMatchObject({
+          error: {
+            _tag: "DenoCommandInputInvalid",
+            reason: `${field} must be true or a non-empty list`,
+          },
+        });
+      }
+    }
+  });
+
+  it("rejects every present empty compile-watch permission list", async () => {
+    for (const [index, field] of permissionFields.entries()) {
+      const failure = errorOf(
+        await run(Effect.scoped(CompileWatch.watch({
+          entrypoint: "main.ts",
+          outfile: join(root, `invalid-watch-permission-${index}`),
+          [field]: [],
+        } as never))),
+      ) as Runtime.DenoCommandInputInvalid;
+      expect(failure).toMatchObject({
+        _tag: "DenoCommandInputInvalid",
+        operation: "compileWatch",
+        reason: `${field} must be true or a non-empty list`,
+      });
+    }
+  });
+
+  it("reserves DENORT_BIN for authenticated layer selection", async () => {
+    const inheritedLog = join(root, "inherited-denort.log");
+    const previousDenort = process.env.DENORT_BIN;
+    process.env.DENORT_BIN = join(root, "unauthenticated-denort");
+    process.env.FAKE_DENO_LOG = inheritedLog;
     try {
-      const exit = await run(
-        DenoCompile.compileExecutable(input("allow-all", { permissions: { all: true } })),
+      const inherited = await run(Compile.compileExecutable(input("inherited-denort")));
+      expect(Exit.isSuccess(inherited)).toBe(true);
+      const inheritedInvocation = JSON.parse((await readFile(inheritedLog, "utf8")).trim());
+      expect(inheritedInvocation).not.toHaveProperty("denort");
+
+      const injected = errorOf(
+        await run(Compile.compileExecutable(input("injected-denort", {
+          environment: { values: { DENORT_BIN: denort } },
+        }))),
+      ) as Runtime.DenoCommandInputInvalid;
+      expect(injected).toMatchObject({
+        _tag: "DenoCommandInputInvalid",
+        operation: "compileExecutable",
+        reason: "environment.values.DENORT_BIN is reserved for authenticated layer selection",
+      });
+      expect(await absent(join(root, "injected-denort"))).toBe(true);
+    } finally {
+      if (previousDenort === undefined) delete process.env.DENORT_BIN;
+      else process.env.DENORT_BIN = previousDenort;
+      delete process.env.FAKE_DENO_LOG;
+    }
+
+    const selectedLog = join(root, "selected-denort.log");
+    process.env.FAKE_DENO_LOG = selectedLog;
+    try {
+      const selected = await Effect.runPromiseExit(
+        Effect.gen(function*() {
+          const runtime = yield* Runtime.Runtime;
+          const compile = yield* runtime.run(
+            "compileExecutable",
+            "none",
+            ["compile", "--output", join(root, "selected-denort-output"), "main.ts"],
+          );
+          const watchOutput = join(root, "selected-denort-watch-output");
+          yield* Effect.scoped(
+            runtime.watch(
+              "compileWatch",
+              ["compile", "--watch", "--output", watchOutput, "main.ts"],
+            ).pipe(Effect.andThen(Effect.promise(() => waitForFile(watchOutput)))),
+          );
+          const bundle = yield* runtime.run(
+            "bundleDirect",
+            "provider-direct-durable",
+            ["bundle", "--output", join(root, "selected-denort-bundle-output.js"), "main.ts"],
+          );
+          return { compile, bundle };
+        }).pipe(
+          Effect.provide(Runtime.layer({
+            executable: executable as Artifact.AbsolutePath,
+            denort: denort as Artifact.AbsolutePath,
+          })),
+          Effect.provide(NodeServices.layer),
+        ),
       );
-      expect(Exit.isSuccess(exit)).toBe(true);
-      const { argv } = JSON.parse((await readFile(log, "utf8")).trim()) as { readonly argv: readonly string[] };
-      expect(argv).toContain("--allow-all");
-      expect(argv.some((value) => value.startsWith("--allow-") && value !== "--allow-all")).toBe(false);
+      expect(Exit.isSuccess(selected)).toBe(true);
+      const selectedInvocations = (await readFile(selectedLog, "utf8")).trim().split("\n").map((line) =>
+        JSON.parse(line)
+      );
+      expect(selectedInvocations).toHaveLength(3);
+      expect(selectedInvocations[0].denort).toBe(denort);
+      expect(selectedInvocations[1].denort).toBe(denort);
+      expect(selectedInvocations[2]).not.toHaveProperty("denort");
     } finally {
       delete process.env.FAKE_DENO_LOG;
     }
   });
 
-  it("proceeds with a warning for untested deno versions", async () => {
-    process.env.FAKE_DENO_VERSION = "9.0.0";
+  it("refuses a non-pinned selected Deno rather than warning or falling back", async () => {
+    process.env.FAKE_DENO_VERSION = "2.9.4";
     try {
-      const exit = await run(DenoCompile.compileExecutable(input("untested")));
-      expect(Exit.isSuccess(exit)).toBe(true);
-      if (Exit.isSuccess(exit)) expect(exit.value.tool.version).toBe("9.0.0");
+      const failure = errorOf(await run(Compile.compileExecutable(input("refused")))) as Runtime.DenoCommandUnsupported;
+      expect(failure).toMatchObject({ _tag: "DenoCommandUnsupported", version: "2.9.4" });
+      expect(await absent(join(root, "refused"))).toBe(true);
     } finally {
       delete process.env.FAKE_DENO_VERSION;
     }
   });
 
-  it("rejects targets deno does not support before spawning", async () => {
-    const exit = await run(
-      DenoCompile.compileExecutable(input("unsupported", { target: "linux-x64-musl" as DenoCompile.Target })),
-    );
-    const failure = failureOf(exit) as { readonly _tag: string; readonly requested: string };
-    expect(failure._tag).toBe("UnsupportedTarget");
-    expect(failure.requested).toBe("linux-x64-musl");
-  });
-
-  it("surfaces deno diagnostics on failure and cleans staging", async () => {
+  it("preserves bounded provider diagnostics and removes unpublished staging", async () => {
     process.env.FAKE_DENO_MODE = "fail";
     try {
-      const exit = await run(DenoCompile.compileExecutable(input("failed")));
-      const failure = failureOf(exit) as {
-        readonly _tag: string;
-        readonly exitCode: number;
-        readonly stderr: string;
-      };
-      expect(failure._tag).toBe("ToolFailed");
-      expect(failure.exitCode).toBe(17);
-      expect(failure.stderr).toBe("fake stderr diagnostic");
+      const failure = errorOf(await run(Compile.compileExecutable(input("failed")))) as Runtime.DenoCommandFailed;
+      expect(failure).toMatchObject({
+        _tag: "DenoCommandFailed",
+        operation: "compileExecutable",
+        publication: "none",
+        exitCode: 17,
+      });
+      expect(new TextDecoder().decode(failure.stderr)).toBe("fake stderr diagnostic");
       expect(await absent(join(root, "failed"))).toBe(true);
-      expect((await readdir(root)).some((name) => name.startsWith(".effect-build-"))).toBe(false);
+      expect(await noStaging()).toBe(true);
     } finally {
       delete process.env.FAKE_DENO_MODE;
     }
   });
 
-  it("preserves interruption Cause, terminates the child, and removes private staging", async () => {
+  it("preserves interruption Cause, kills the scoped child, and removes private staging", async () => {
     const started = join(root, "started");
     process.env.FAKE_DENO_MODE = "delay";
     process.env.FAKE_DENO_STARTED = started;
     try {
-      const program = Effect.gen(function*() {
-        const fiber = yield* Effect.forkChild(DenoCompile.compileExecutable(input("interrupted")));
-        yield* Effect.promise(() => waitForFile(started));
-        yield* Fiber.interrupt(fiber);
-        return yield* Fiber.await(fiber);
-      }).pipe(
-        Effect.provide(DenoCompile.layer({ executable })),
-        Effect.provide(NodeServices.layer),
+      const outer = await Effect.runPromiseExit(
+        Effect.gen(function*() {
+          const fiber = yield* Effect.forkChild(Compile.compileExecutable(input("interrupted")));
+          yield* Effect.promise(() => waitForFile(started));
+          yield* Fiber.interrupt(fiber);
+          return yield* Fiber.await(fiber);
+        }).pipe(
+          Effect.provide(Runtime.layer({ executable: executable as Artifact.AbsolutePath })),
+          Effect.provide(NodeServices.layer),
+        ),
       );
-      const outer = await Effect.runPromiseExit(program);
       expect(Exit.isSuccess(outer)).toBe(true);
-      if (Exit.isSuccess(outer)) {
-        expect(Exit.isFailure(outer.value)).toBe(true);
-        if (Exit.isFailure(outer.value)) expect(Cause.hasInterrupts(outer.value.cause)).toBe(true);
+      if (Exit.isSuccess(outer) && Exit.isFailure(outer.value)) {
+        expect(Cause.hasInterrupts(outer.value.cause)).toBe(true);
       }
       expect(await absent(join(root, "interrupted"))).toBe(true);
-      expect((await readdir(root)).some((name) => name.startsWith(".effect-build-"))).toBe(false);
+      expect(await noStaging()).toBe(true);
     } finally {
       delete process.env.FAKE_DENO_MODE;
       delete process.env.FAKE_DENO_STARTED;
+    }
+  });
+
+  it("keeps compile watch provider-direct/scoped and preserves interruption Cause", async () => {
+    const started = join(root, "compile-watch-started");
+    const log = join(root, "compile-watch.log");
+    process.env.FAKE_DENO_MODE = "delay";
+    process.env.FAKE_DENO_STARTED = started;
+    process.env.FAKE_DENO_LOG = log;
+    try {
+      const outer = await Effect.runPromiseExit(
+        Effect.gen(function*() {
+          const fiber = yield* Effect.forkChild(
+            Effect.scoped(
+              CompileWatch.watch({
+                entrypoint: "main.ts",
+                outfile: join(root, "watched-app"),
+                target: hostTarget(),
+                noClearScreen: true,
+                watchExclude: ["generated/**"],
+              }).pipe(Effect.andThen(Effect.never)),
+            ),
+          );
+          yield* Effect.promise(() => waitForFile(started));
+          yield* Fiber.interrupt(fiber);
+          return yield* Fiber.await(fiber);
+        }).pipe(
+          Effect.provide(Runtime.layer({ executable: executable as Artifact.AbsolutePath })),
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+      expect(Exit.isSuccess(outer)).toBe(true);
+      if (Exit.isSuccess(outer) && Exit.isFailure(outer.value)) {
+        expect(Cause.hasInterrupts(outer.value.cause)).toBe(true);
+      }
+      const invocation = JSON.parse((await readFile(log, "utf8")).trim());
+      expect(invocation.argv).toEqual(expect.arrayContaining([
+        "compile",
+        "--watch",
+        "--no-clear-screen",
+        "--watch-exclude=generated/**",
+      ]));
+    } finally {
+      delete process.env.FAKE_DENO_MODE;
+      delete process.env.FAKE_DENO_STARTED;
+      delete process.env.FAKE_DENO_LOG;
     }
   });
 });

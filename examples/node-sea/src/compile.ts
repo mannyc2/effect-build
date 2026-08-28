@@ -1,12 +1,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
+import * as Command from "effect-build-node-sea/Command";
 
-const program = AssembleExecutable.assembleExecutable({
+const program = Command.AssembleExecutable.assembleDirect({
   main: { _tag: "File", path: "src/main.cjs", format: "commonjs" },
   outfile: "dist/app",
+  observation: "hashed",
 }).pipe(
-  Effect.provide(AssembleExecutable.layer()),
+  Effect.provide(Command.layer()),
   Effect.provide(NodeServices.layer),
 );
 

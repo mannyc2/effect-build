@@ -1,8 +1,8 @@
-// Packs every package in the generated public surface and proves a fresh npm consumer can install,
-// typecheck, and run them: a real fake-bun compile plus in-memory esbuild and
-// rolldown builds, with type-level use of every public module.
+// Packs every contract-public package and proves a fresh npm consumer can
+// install and typecheck every public module, run an in-memory provider API,
+// finalize immutable bytes, and adopt their path-free identity by logical name.
 import { execFile } from "node:child_process";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,8 +11,45 @@ import { gunzipSync } from "node:zlib";
 
 const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const combinedContract = JSON.parse(await readFile(join(root, "tooling/effect-build-contract.json"), "utf8"));
 const publicSurface = JSON.parse(await readFile(join(root, "tooling/public-api.json"), "utf8"));
-const packageNames = Object.keys(publicSurface.packages).sort();
+if (combinedContract.schema !== "effect-build/combined-contract@1") {
+  throw new Error("unsupported combined contract schema");
+}
+if (publicSurface.schema !== "effect-build/public-surface@3") {
+  throw new Error("unsupported public surface schema");
+}
+
+const moduleSpecifiers = (packages) =>
+  Object.entries(packages).sort(([left], [right]) => left.localeCompare(right)).flatMap(([name, surface]) => [
+    name,
+    ...Object.keys(surface.subpaths).sort().map((subpath) => `${name}/${subpath.slice(2)}`),
+  ]);
+
+const packageNames = Object.keys(combinedContract.publicApiProjection.packages).sort();
+const projectedPackageNames = Object.keys(publicSurface.packages).sort();
+const publicModuleSpecifiers = moduleSpecifiers(combinedContract.publicApiProjection.packages);
+const projectedModuleSpecifiers = moduleSpecifiers(publicSurface.packages);
+const privatePackages = new Set(combinedContract.publicApiProjection.privatePackages);
+if (
+  JSON.stringify(packageNames) !== JSON.stringify(projectedPackageNames)
+  || JSON.stringify(publicModuleSpecifiers) !== JSON.stringify(projectedModuleSpecifiers)
+) {
+  throw new Error("tooling/public-api.json is not the exact combined-contract topology");
+}
+if (packageNames.length !== 11 || publicModuleSpecifiers.length !== 42) {
+  throw new Error(
+    `combined contract projects ${packageNames.length} public packages and ${publicModuleSpecifiers.length} modules; expected 11 and 42`,
+  );
+}
+if (packageNames.some((name) => privatePackages.has(name))) {
+  throw new Error("combined contract projects a private package into the packed consumer");
+}
+const publicModuleImports = publicModuleSpecifiers
+  .map((specifier, index) => `import * as PublicModule${index} from ${JSON.stringify(specifier)};`)
+  .join("\n");
+const publicModuleBindings = publicModuleSpecifiers.map((_, index) => `PublicModule${index}`).join(",\n  ");
+const bunExecutable = process.versions.bun === undefined ? "bun" : process.execPath;
 
 const workspaceManifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const effectVersion = workspaceManifest.devDependencies.effect;
@@ -43,13 +80,16 @@ try {
   for (const name of packageNames) {
     const packDirectory = join(consumerRoot, "tarballs");
     await mkdir(packDirectory, { recursive: true });
-    const { stdout } = await execute("bun", ["pm", "pack", "--destination", packDirectory], {
+    const { stdout } = await execute(bunExecutable, ["pm", "pack", "--destination", packDirectory], {
       cwd: join(root, "packages", name),
     });
     const line = stdout.split("\n").find((candidate) => candidate.trim().endsWith(".tgz"));
     if (line === undefined) throw new Error(`bun pm pack produced no tarball for ${name}:\n${stdout}`);
     const tarball = join(packDirectory, line.trim().split("/").at(-1));
     const manifest = await packedManifest(tarball);
+    if (manifest.name !== name || manifest.private === true) {
+      throw new Error(`${name} packed with invalid public identity`);
+    }
     for (const [dependency, specifier] of Object.entries(manifest.dependencies ?? {})) {
       if (disallowedSpecifier.test(specifier)) {
         throw new Error(`${name} packed with unresolved specifier ${dependency}: ${specifier}`);
@@ -96,121 +136,71 @@ try {
       2,
     ),
   );
-  await writeFile(join(consumerRoot, "rolldown-entry.js"), "export const consumed = 1;\n");
   await writeFile(
     join(consumerRoot, "main.ts"),
     `import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import * as CoreRoot from "effect-build";
-import * as AppleRoot from "effect-build-apple";
-import * as ArchivesRoot from "effect-build-archives";
-import * as BunRoot from "effect-build-bun";
-import * as DenoRoot from "effect-build-deno";
-import * as EsbuildRoot from "effect-build-esbuild";
-import * as NfpmRoot from "effect-build-nfpm";
-import * as NodeSeaRoot from "effect-build-node-sea";
-import * as PythonRoot from "effect-build-python";
-import * as RolldownRoot from "effect-build-rolldown";
-import * as SbomRoot from "effect-build-sbom";
-import * as WindowsRoot from "effect-build-windows";
-import * as AppleModel from "effect-build-apple/Model";
-import * as BinaryArchive from "effect-build-archives/Archive";
-import * as SourceArchive from "effect-build-archives/SourceArchive";
-import * as BunBundle from "effect-build-bun/Bundle";
-import * as BunCompile from "effect-build-bun/CompileExecutable";
-import * as DenoBundle from "effect-build-deno/Bundle";
-import * as DenoCompile from "effect-build-deno/CompileExecutable";
-import * as Build from "effect-build-esbuild/Build";
-import * as Watch from "effect-build-esbuild/Watch";
-import * as Nfpm from "effect-build-nfpm/Package";
-import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
-import * as PythonBuild from "effect-build-python/Build";
-import * as Rolldown from "effect-build-rolldown/Build";
-import type * as RolldownWatch from "effect-build-rolldown/Watch";
-import * as Sbom from "effect-build-sbom/Generate";
-import * as SignMsix from "effect-build-windows/SignMsix";
-import type * as Artifact from "effect-build/Artifact";
-import type * as BuildError from "effect-build/BuildError";
-import * as Target from "effect-build/Target";
+import { Cause, Effect, FileSystem } from "effect";
+import * as Artifact from "effect-build/Artifact";
+import * as FinalizedFile from "effect-build/Author/File";
+import * as EsbuildApi from "effect-build-esbuild/Api";
+${publicModuleImports}
 
-const roots = [
-  CoreRoot,
-  AppleRoot,
-  ArchivesRoot,
-  BunRoot,
-  DenoRoot,
-  EsbuildRoot,
-  NfpmRoot,
-  NodeSeaRoot,
-  PythonRoot,
-  RolldownRoot,
-  SbomRoot,
-  WindowsRoot,
+const publicModules = [
+  ${publicModuleBindings},
 ];
-const appleArchitecture: AppleModel.Architecture = "arm64";
-const archiveFormat: BinaryArchive.Format = "zip";
-const sourceArchiveFormat: SourceArchive.Format = "tar.gz";
-const nfpmFormat: Nfpm.Format = "deb";
-const pythonBuilder: typeof PythonBuild.build = PythonBuild.build;
-const sbomFormat: Sbom.OutputFormat = "spdx-json";
-const msixSigner: typeof SignMsix.signMsix = SignMsix.signMsix;
-const marker: DenoCompile.Permissions = { read: true };
-const main: AssembleExecutable.Main = { _tag: "Bytes", contents: new Uint8Array(), format: "commonjs" };
-const assembler: typeof AssembleExecutable.assembleExecutable = AssembleExecutable.assembleExecutable;
-const bunBundleInput: BunBundle.BundleInput = { entrypoints: ["main.ts"], outdir: "dist" };
-const denoPlatform: DenoBundle.Platform = "browser";
-const watching: typeof Watch.changes = Watch.changes;
-const watcherEvent: RolldownWatch.Event = { code: "START" };
-void marker;
-void main;
-void assembler;
-void bunBundleInput;
-void denoPlatform;
-void watching;
-void watcherEvent;
-void appleArchitecture;
-void archiveFormat;
-void sourceArchiveFormat;
-void nfpmFormat;
-void pythonBuilder;
-void sbomFormat;
-void msixSigner;
-
-const rolled = await Effect.runPromise(
-  Rolldown.generate({ input: "rolldown-entry.js", cwd: process.cwd() }, { format: "esm" }).pipe(
-    Effect.provide(Rolldown.layer),
-  ),
-);
 
 const bundle = await Effect.runPromise(
-  Build.build({
+  EsbuildApi.Build.build({
     stdin: { contents: "export const consumer = 1;", loader: "ts", resolveDir: process.cwd() },
     bundle: true,
     write: false,
     logLevel: "silent",
-  }).pipe(Effect.provide(Build.layer), Effect.provide(NodeServices.layer)),
+  }),
 );
 
-let artifact: Artifact.Executable | undefined;
-const fakeBun = process.argv[2];
-if (fakeBun !== undefined) {
-  artifact = await Effect.runPromise(
-    BunCompile.compileExecutable({ entrypoint: "main.ts", outfile: "dist/consumer-app" }).pipe(
-      Effect.provide(BunCompile.layer({ executable: fakeBun })),
-      Effect.provide(NodeServices.layer),
-    ),
-  );
-  const error: BuildError.ToolFailed | undefined = undefined;
-  void error;
-}
+const artifact = await Effect.runPromise(
+  FinalizedFile.publish(
+    {
+      destination: "dist/adopt-me.txt",
+      observation: "hashed",
+      provenance: Artifact.intrinsicProvenance("packed-consumer"),
+    },
+    (candidate) => FileSystem.FileSystem.use((fileSystem) => fileSystem.writeFileString(candidate, "immutable bytes\\n")),
+  ).pipe(Effect.provide(NodeServices.layer)),
+);
+const adoption = Artifact.adoptFile("consumer/adopt-me.txt", artifact);
+const verified = await Effect.runPromise(
+  FinalizedFile.withVerifiedBytes(
+    artifact,
+    (bytes) => Effect.succeed(new TextDecoder().decode(bytes)),
+  ).pipe(Effect.provide(NodeServices.layer)),
+);
+const mutationExit = await Effect.runPromise(
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* fileSystem.writeFileString(artifact.path, "mutated\\n");
+    return yield* Effect.exit(FinalizedFile.withVerifiedBytes(artifact, () => Effect.void));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+const mutationError = mutationExit._tag === "Failure" ? Cause.findErrorOption(mutationExit.cause) : undefined;
+const mutationErrorTag = mutationError?._tag === "Some" ? mutationError.value._tag : null;
 
 console.log(JSON.stringify({
-  rootPackages: roots.length,
+  publicModules: publicModules.length,
   outputs: bundle.outputFiles.length,
-  rolldownChunks: rolled.output.length,
-  target: artifact?.target ?? null,
-  digestLength: artifact?.sha256?.length ?? null,
-  nativeFormat: artifact === undefined ? null : Target.info(artifact.target).nativeFormat,
+  protocol: adoption.protocol,
+  logicalName: adoption.logicalName,
+  digestLength: adoption.digest.value.length,
+  bytes: adoption.bytes,
+  pathFree: !("path" in adoption),
+  adoptionMatchesArtifact:
+    adoption.bytes === artifact.bytes
+    && adoption.digest.value === artifact.digest.value
+    && adoption.digest !== artifact.digest
+    && Object.isFrozen(adoption)
+    && Object.isFrozen(adoption.digest),
+  verified,
+  mutationErrorTag,
 }));
 `,
   );
@@ -228,25 +218,22 @@ console.log(JSON.stringify({
 
   await execute(npm, ["exec", "--no", "tsc", "--", "-p", "tsconfig.json"], npmOptions);
 
-  const runArguments = [join(consumerRoot, "dist-consumer", "main.js")];
-  if (process.platform !== "win32") {
-    const fakeBun = join(consumerRoot, "bun");
-    await copyFile(join(root, "test/fixtures/tools/fake-bun.mjs"), fakeBun);
-    await chmod(fakeBun, 0o755);
-    runArguments.push(fakeBun);
-  }
-  const { stdout } = await execute("node", runArguments, { cwd: consumerRoot });
+  const { stdout } = await execute("node", [join(consumerRoot, "dist-consumer", "main.js")], { cwd: consumerRoot });
   const report = JSON.parse(stdout.trim());
-  if (report.rootPackages !== packageNames.length) {
-    throw new Error(`consumer loaded ${report.rootPackages} root packages; expected ${packageNames.length}`);
-  }
+  if (report.publicModules !== 42) throw new Error(`consumer loaded ${report.publicModules} public modules; expected 42`);
   if (report.outputs !== 1) throw new Error(`consumer esbuild build produced ${report.outputs} outputs`);
-  if (report.rolldownChunks !== 1) throw new Error(`consumer rolldown build produced ${report.rolldownChunks} chunks`);
-  if (process.platform !== "win32") {
-    if (report.digestLength !== 64) throw new Error(`consumer artifact digest length ${report.digestLength}`);
-    if (typeof report.target !== "string" || report.nativeFormat === null) {
-      throw new Error(`consumer artifact target/format missing: ${stdout}`);
-    }
+  if (report.protocol !== "effect-build/artifact-adoption@1") throw new Error(`unexpected adoption protocol`);
+  if (
+    report.logicalName !== "consumer/adopt-me.txt"
+    || report.digestLength !== 64
+    || report.bytes !== "16"
+    || report.pathFree !== true
+    || report.adoptionMatchesArtifact !== true
+  ) {
+    throw new Error(`consumer adoption identity is invalid: ${stdout}`);
+  }
+  if (report.verified !== "immutable bytes\n" || report.mutationErrorTag !== "FileVerificationFailed") {
+    throw new Error(`consumer immutable-byte verification failed: ${stdout}`);
   }
   console.log("consumer install, typecheck, and runtime checks passed");
 } finally {

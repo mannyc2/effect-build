@@ -32,6 +32,11 @@ describe("release workflow", () => {
     expect(contractScript).toContain('reviewers?.includes("mannyc2")');
     expect(contractScript).toContain('JSON.stringify([{ name: "main", type: "branch" }])');
     expect(source).toContain("git ls-remote --exit-code origin refs/heads/main");
+    expect(source).toContain('fs.readFileSync("tooling/effect-build-contract.json"');
+    expect(source).toContain("contract.publicApiProjection.packages");
+    expect(source).toContain("expectedModules.length !== 42");
+    expect(source).toContain('[[ "${#names[@]}" -ne 11');
+    expect(source).toContain('[[ " ${names[*]} " == *" effect-build-rolldown "*');
     expect(source).toContain('echo "prepublish-sri $name@$version ${integrities[$name]}"');
   });
 });

@@ -1,11 +1,8 @@
 # Examples
 
-Each example imports the 0.4 candidate from its exact public subpath:
+- `bun` uses the permanent `Api` and `Command` lanes, including hashed executable finalization and bounded matrices.
+- `deno` uses admitted command transpilation and executable compilation; it does not expose conditional bundle breadth.
+- `esbuild` uses native in-memory build and scoped context operations from `Api`.
+- `node-sea` uses `Command.AssembleExecutable`.
 
-- `bun` uses `effect-build-bun/CompileExecutable`.
-- `deno` uses `effect-build-deno/CompileExecutable`.
-- `esbuild` uses `effect-build-esbuild/Build`.
-- `node-sea` uses `effect-build-node-sea/AssembleExecutable`.
-
-They demonstrate application composition with an official Effect platform
-layer. They do not use removed root operations or legacy subpaths.
+Examples compose provider programs with official Effect platform layers where required. There is no public Rolldown example while its package remains private.

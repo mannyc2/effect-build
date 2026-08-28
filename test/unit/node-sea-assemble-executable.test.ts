@@ -1,21 +1,14 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit, Fiber, Layer, PlatformError, Sink, Stream } from "effect";
+import { Cause, Crypto, Effect, Exit, Fiber, FileSystem, Layer, Path, PlatformError, Sink, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import {
-  chmodSync,
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
-import * as Target from "../../packages/effect-build/src/Target.js";
+import * as Assemble from "../../packages/effect-build-node-sea/src/Command/AssembleExecutable.js";
+import * as Command from "../../packages/effect-build-node-sea/src/Command/index.js";
+import * as AssembleModes from "../../packages/effect-build-node-sea/src/internal/AssembleModes.js";
+import { Runtime } from "../../packages/effect-build-node-sea/src/internal/Runtime.js";
 
 const roots: string[] = [];
 
@@ -29,12 +22,11 @@ const makeRoot = (): string => {
   return root;
 };
 
-const hostBinary = (): Uint8Array => {
-  const format = Target.info(Target.host() ?? "linux-x64-gnu").nativeFormat;
-  const bytes = new Uint8Array(8);
-  if (format === "elf") bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
-  else if (format === "pe") bytes.set([0x4d, 0x5a], 0);
-  else bytes.set([0xcf, 0xfa, 0xed, 0xfe], 0);
+const elfX64 = (): Uint8Array => {
+  const bytes = new Uint8Array(64);
+  bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1], 0);
+  bytes[18] = 62;
+  bytes[19] = 0;
   return bytes;
 };
 
@@ -55,13 +47,14 @@ interface Control {
 interface FakeNodeOptions {
   readonly mode?:
     | "success"
-    | "build-failure"
-    | "build-spawn-failure"
     | "syntax-failure"
+    | "build-failure"
+    | "spawn-failure"
     | "missing-output"
     | "invalid-output"
     | "delay";
   readonly version?: string;
+  readonly baseVersion?: string;
 }
 
 const makeSpawner = (
@@ -84,10 +77,7 @@ const makeSpawner = (
       all: Stream.fromIterable([new TextEncoder().encode(`${stdout}${stderr}`)]),
       exitCode: delayed ? Effect.never : Effect.succeed(ChildProcessSpawner.ExitCode(exitCode)),
       isRunning: Effect.succeed(delayed),
-      kill: () =>
-        Effect.sync(() => {
-          wasInterrupted = true;
-        }),
+      kill: () => Effect.sync(() => void (wasInterrupted = true)),
       getInputFd: () => Sink.drain,
       getOutputFd: () => Stream.empty,
       unref: Effect.succeed(Effect.void),
@@ -96,47 +86,50 @@ const makeSpawner = (
     if (
       ChildProcess.isStandardCommand(command)
       && command.args[0] === "--build-sea"
-      && options.mode === "build-spawn-failure"
+      && options.mode === "spawn-failure"
     ) {
       return Effect.fail(PlatformError.systemError({
         _tag: "Unknown",
         module: "test",
         method: "spawn",
-        description: "fake-build-spawn-failure",
+        description: "fake spawn failure",
       }));
     }
-    let delayedHandle = false;
+    let delayed = false;
     return Effect.sync(() => {
-      if (!ChildProcess.isStandardCommand(command)) throw new Error("expected a standard node command");
+      if (!ChildProcess.isStandardCommand(command)) throw new Error("expected standard command");
       invocations.push({ command: command.command, args: command.args, cwd: command.options.cwd });
-      const [first] = command.args;
+      const first = command.args[0];
       if (first === "--version") {
-        return handle(`v${options.version ?? "26.7.0"}\n`, "", 0);
+        const isBase = command.command.includes("base-node");
+        return handle(
+          `v${isBase ? options.baseVersion ?? options.version ?? "26.7.0" : options.version ?? "26.7.0"}\n`,
+          "",
+          0,
+        );
       }
+      if (first === "--help") return handle("Usage: node --build-sea CONFIG\n", "", 0);
+      if (first === "-p") return handle('{"platform":"linux","arch":"x64","glibc":true}\n', "", 0);
       if (first === "--check") {
-        return options.mode === "syntax-failure"
-          ? handle("syntax stdout", "syntax stderr", 7)
-          : handle("", "", 0);
+        return options.mode === "syntax-failure" ? handle("syntax-out", "syntax-error", 7) : handle("", "", 0);
       }
-      if (first !== "--build-sea") throw new Error(`unexpected node argv ${command.args.join(" ")}`);
+      if (first !== "--build-sea") throw new Error(`unexpected argv ${command.args.join(" ")}`);
       buildCount += 1;
       if (options.mode === "delay") {
         signalStarted();
-        delayedHandle = true;
+        delayed = true;
         return handle("", "", 0, true);
       }
       const config = JSON.parse(readFileSync(command.args[1]!, "utf8")) as Record<string, unknown>;
       configs.push(config);
-      if (options.mode === "build-failure") return handle("build stdout", "build stderr", 19);
+      if (options.mode === "build-failure") return handle("build-out", "build-error", 19);
       if (options.mode !== "missing-output") {
-        const output = String(config.output);
-        writeFileSync(output, options.mode === "invalid-output" ? "not-an-executable" : hostBinary());
-        chmodSync(output, options.mode === "invalid-output" ? 0o644 : 0o755);
+        writeFileSync(String(config.output), options.mode === "invalid-output" ? "bad" : elfX64());
       }
       return handle("", "", 0);
     }).pipe(
       Effect.flatMap((child) =>
-        delayedHandle
+        delayed
           ? Effect.acquireRelease(Effect.succeed(child), () => Effect.ignore(child.kill()))
           : Effect.succeed(child)
       ),
@@ -151,181 +144,240 @@ const makeSpawner = (
   }];
 };
 
-interface Harness {
-  readonly root: string;
-  readonly node: string;
-  readonly control: Control;
-  readonly run: <A, E>(
-    effect: Effect.Effect<A, E, AssembleExecutable.Assembler>,
-  ) => Promise<Exit.Exit<A, E | { readonly _tag: string }>>;
-}
-
-const makeHarness = (options: { readonly fake?: FakeNodeOptions } = {}): Harness => {
+const makeHarness = (
+  options: FakeNodeOptions & { readonly explicitBase?: boolean; readonly allowUntestedVersion?: boolean } = {},
+) => {
   const root = makeRoot();
   const node = join(root, "node");
-  writeFileSync(node, hostBinary());
+  const base = join(root, "base-node");
+  writeFileSync(node, elfX64());
+  writeFileSync(base, elfX64());
   chmodSync(node, 0o755);
-  const [spawner, control] = makeSpawner(options.fake);
-  const provider = AssembleExecutable.layer({ builderExecutable: node });
-  const provided = Layer.provide(
-    provider,
-    Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
-  );
-  const run = <A, E>(effect: Effect.Effect<A, E, AssembleExecutable.Assembler>) =>
-    Effect.runPromiseExit(effect.pipe(Effect.provide(provided)));
-  return { root, node, control, run };
+  chmodSync(base, 0o755);
+  const [spawner, control] = makeSpawner(options);
+  const provider = Command.layer({
+    builderExecutable: node as never,
+    ...(options.explicitBase ? { baseExecutable: base as never } : {}),
+    ...(options.allowUntestedVersion ? { allowUntestedVersion: true } : {}),
+  });
+  const platform = Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner));
+  const runtime = Layer.provide(provider, platform);
+  const provided = Layer.merge(runtime, platform);
+  const run = <A, E>(
+    effect: Effect.Effect<A, E, Runtime | Crypto.Crypto | FileSystem.FileSystem | Path.Path>,
+  ) => Effect.runPromiseExit(effect.pipe(Effect.provide(provided)));
+  return { root, node, base, control, provider, provided, run };
 };
 
 const failure = <A, E>(exit: Exit.Exit<A, E>): E => {
-  if (!Exit.isFailure(exit)) throw new Error("expected a typed failure");
+  if (!Exit.isFailure(exit)) throw new Error("expected failure");
   const found = Cause.findErrorOption(exit.cause);
-  if (found._tag === "None") throw new Error("expected a typed failure in the Cause");
+  if (found._tag === "None") throw new Error("expected typed error");
   return found.value;
 };
 
-describe("Node SEA AssembleExecutable", () => {
-  it("assembles file and bytes mains with assets through --check and --build-sea", async () => {
-    const harness = makeHarness();
-    const fileMain = join(harness.root, "main.cjs");
-    const assetPath = join(harness.root, "message.txt");
-    writeFileSync(fileMain, "require('node:fs'); console.log('cjs');\n");
-    writeFileSync(assetPath, "asset\n");
-    const fileExit = await harness.run(AssembleExecutable.assembleExecutable({
-      main: { _tag: "File", path: fileMain, format: "commonjs" },
-      outfile: join(harness.root, "file-app"),
-      assets: { message: assetPath },
+const input = (root: string, name: string, observation: "hashed" | "unhashed" = "hashed") => ({
+  main: {
+    _tag: "Bytes" as const,
+    contents: new TextEncoder().encode("console.log('ok')"),
+    format: "commonjs" as const,
+  },
+  outfile: join(root, name),
+  observation,
+});
+
+describe("Node SEA Command.AssembleExecutable", () => {
+  it("preflights, privately snapshots main/assets, and atomically commits hashed or unhashed ELF", async () => {
+    const harness = makeHarness({ explicitBase: true });
+    const main = join(harness.root, "main.mjs");
+    const asset = join(harness.root, "asset.txt");
+    writeFileSync(main, "console.log('esm')\n");
+    writeFileSync(asset, "asset\n");
+    const first = await harness.run(Assemble.assembleDirect({
+      main: { _tag: "File", path: main, format: "module" },
+      outfile: join(harness.root, "app"),
+      observation: "hashed",
+      assets: [{ key: "message", path: asset }],
       disableExperimentalSEAWarning: true,
     }));
-    expect(Exit.isSuccess(fileExit)).toBe(true);
-    if (Exit.isSuccess(fileExit)) {
-      expect(fileExit.value._tag).toBe("Executable");
-      expect(fileExit.value.tool).toEqual({ name: "node", version: "26.7.0" });
-      expect(fileExit.value.target).toBe(Target.host());
-      expect(fileExit.value.sha256).toHaveLength(64);
+    expect(Exit.isSuccess(first)).toBe(true);
+    if (Exit.isSuccess(first)) {
+      expect(first.value).toMatchObject({
+        _tag: "HashedExecutable",
+        nativeFormat: "elf",
+        runtime: { name: "node", version: "26.7.0" },
+        target: "linux-x64-gnu",
+        publication: { scope: "file", commit: "same-parent-no-replace-link", committed: true },
+      });
+      expect(first.value.digest.value).toHaveLength(64);
+      expect(first.value.provenance).toMatchObject({
+        name: "node",
+        participants: [{ role: "builder" }, { role: "base" }],
+      });
     }
     const config = harness.control.configs[0]!;
-    expect(config.executable).toBe(realpathSync(harness.node));
-    expect(config.main).toBe(fileMain);
-    expect((config.assets as Record<string, string>).message).toBe(assetPath);
-    expect(config.mainFormat).toBe("commonjs");
+    expect(config.mainFormat).toBe("module");
+    expect(config.executable).toContain("base-node");
     expect(config.useSnapshot).toBe(false);
     expect(config.useCodeCache).toBe(false);
     expect(config.disableExperimentalSEAWarning).toBe(true);
-    const build = harness.control.invocations.find(({ args }) => args[0] === "--build-sea");
-    expect(build).toBeDefined();
-    expect(build!.args).toHaveLength(2);
-    expect(isAbsolute(build!.args[1]!)).toBe(true);
-    expect(config.output).not.toBe(join(harness.root, "file-app"));
-    expect(isAbsolute(String(config.output))).toBe(true);
-    expect(dirname(String(config.output))).not.toBe(harness.root);
+    expect(config.output).not.toBe(join(harness.root, "app"));
+    expect(String(config.main)).not.toBe(main);
+    expect((config.assets as Record<string, string>).message).not.toBe(asset);
+    expect(harness.control.invocations.filter(({ args }) => args[0] === "--check")).toHaveLength(1);
 
-    const bytesExit = await harness.run(AssembleExecutable.assembleExecutable({
-      main: {
-        _tag: "Bytes",
-        contents: new TextEncoder().encode("import 'node:fs'; console.log('esm');\n"),
-        format: "module",
-      },
-      outfile: join(harness.root, "bytes-app"),
-    }));
-    expect(Exit.isSuccess(bytesExit)).toBe(true);
-    if (Exit.isSuccess(bytesExit)) expect(bytesExit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
-    const bytesConfig = harness.control.configs[1]!;
-    expect(String(bytesConfig.main).endsWith("main.mjs")).toBe(true);
-    expect(bytesConfig.mainFormat).toBe("module");
-    expect(harness.control.builds()).toBe(2);
-  });
-
-  it("proceeds with a warning for untested node versions", async () => {
-    const harness = makeHarness({ fake: { version: "27.1.0" } });
-    const exit = await harness.run(AssembleExecutable.assembleExecutable({
-      main: { _tag: "Bytes", contents: new TextEncoder().encode("console.log('x')"), format: "commonjs" },
-      outfile: join(harness.root, "untested-app"),
-    }));
-    expect(Exit.isSuccess(exit)).toBe(true);
-    if (Exit.isSuccess(exit)) expect(exit.value.tool.version).toBe("27.1.0");
-  });
-
-  it("maps syntax, spawn, build, and candidate failures while preserving atomic replacement", async () => {
-    const input = (root: string, name: string) =>
-      ({
-        main: {
-          _tag: "Bytes" as const,
-          contents: new TextEncoder().encode("console.log('x')"),
-          format: "commonjs" as const,
-        },
-        outfile: join(root, name),
-      }) satisfies AssembleExecutable.AssembleExecutableInput;
-
-    const syntax = makeHarness({ fake: { mode: "syntax-failure" } });
-    expect(failure(await syntax.run(AssembleExecutable.assembleExecutable(input(syntax.root, "syntax")))))
-      .toMatchObject({ _tag: "ToolFailed", exitCode: 7, stdout: "syntax stdout", stderr: "syntax stderr" });
-    expect(syntax.control.builds()).toBe(0);
-
-    const spawn = makeHarness({ fake: { mode: "build-spawn-failure" } });
-    expect(failure(await spawn.run(AssembleExecutable.assembleExecutable(input(spawn.root, "spawn")))))
-      .toMatchObject({ _tag: "ToolFailed", exitCode: -1 });
-
-    const build = makeHarness({ fake: { mode: "build-failure" } });
-    expect(failure(await build.run(AssembleExecutable.assembleExecutable(input(build.root, "build")))))
-      .toMatchObject({ _tag: "ToolFailed", exitCode: 19, stdout: "build stdout", stderr: "build stderr" });
-
-    const missing = makeHarness({ fake: { mode: "missing-output" } });
-    const missingFailure = failure(
-      await missing.run(AssembleExecutable.assembleExecutable(input(missing.root, "missing"))),
-    ) as { readonly _tag: string; readonly reason: string };
-    expect(missingFailure._tag).toBe("PublishFailed");
-    expect(missingFailure.reason).toContain("did not produce");
-
-    const invalid = makeHarness({ fake: { mode: "invalid-output" } });
-    expect(failure(await invalid.run(AssembleExecutable.assembleExecutable(input(invalid.root, "invalid")))))
-      .toMatchObject({ _tag: "PublishFailed" });
-
-    // The committed path gains the host's executable suffix on windows.
-    const suffix = process.platform === "win32" ? ".exe" : "";
-    const preserved = makeHarness({ fake: { mode: "invalid-output" } });
-    const preservedDestination = join(preserved.root, "preserved") + suffix;
-    writeFileSync(preservedDestination, "old-public-artifact");
-    expect(failure(await preserved.run(AssembleExecutable.assembleExecutable(input(preserved.root, "preserved")))))
-      .toMatchObject({ _tag: "PublishFailed" });
-    expect(readFileSync(preservedDestination, "utf8")).toBe("old-public-artifact");
-
-    const replacement = makeHarness();
-    const destination = join(replacement.root, "replacement") + suffix;
-    writeFileSync(destination, "old-public-artifact");
-    const replaced = await replacement.run(
-      AssembleExecutable.assembleExecutable(input(replacement.root, "replacement")),
-    );
-    expect(Exit.isSuccess(replaced)).toBe(true);
-    expect(readFileSync(destination, "utf8")).not.toBe("old-public-artifact");
-    for (
-      const root of [syntax.root, spawn.root, build.root, missing.root, invalid.root, preserved.root, replacement.root]
-    ) {
-      expect(readdirSync(root).some((entry) => entry.startsWith(".effect-build-"))).toBe(false);
+    const second = await harness.run(Assemble.assembleDirect(input(harness.root, "plain", "unhashed")));
+    expect(Exit.isSuccess(second)).toBe(true);
+    if (Exit.isSuccess(second)) {
+      expect(second.value._tag).toBe("UnhashedExecutable");
+      expect("digest" in second.value).toBe(false);
     }
   });
 
-  it("preserves interruption Cause, kills the child, and removes the private candidate", async () => {
-    const root = makeRoot();
-    const node = join(root, "node");
-    writeFileSync(node, hostBinary());
-    chmodSync(node, 0o755);
-    const [spawner, control] = makeSpawner({ mode: "delay" });
-    const provider = AssembleExecutable.layer({ builderExecutable: node });
-    const provided = Layer.provide(
-      provider,
-      Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
-    );
-    const outfile = join(root, "interrupted", "app");
+  it("enforces exact version and builder/base equality before provider work", async () => {
+    const unsupported = makeHarness({ version: "27.1.0" });
+    expect(failure(await unsupported.run(Assemble.assembleDirect(input(unsupported.root, "app")))))
+      .toMatchObject({ _tag: "NodeSeaUnsupported", version: "27.1.0" });
+    expect(unsupported.control.builds()).toBe(0);
+
+    const overridden = makeHarness({ version: "27.1.0", allowUntestedVersion: true });
+    expect(Exit.isSuccess(await overridden.run(Assemble.assembleDirect(input(overridden.root, "app"))))).toBe(true);
+
+    const mismatch = makeHarness({ explicitBase: true, baseVersion: "26.6.0" });
+    expect(failure(await mismatch.run(Assemble.assembleDirect(input(mismatch.root, "app")))))
+      .toMatchObject({ _tag: "NodeSeaRelationRejected", relation: "node-builder-base" });
+    expect(mismatch.control.builds()).toBe(0);
+  });
+
+  it("materializes the package-private cache, snapshot, and explicit execArgv policies", async () => {
+    const harness = makeHarness();
+    const cached = await harness.run(AssembleModes.assembleDirect({
+      ...input(harness.root, "cached"),
+      useCodeCache: true,
+      execArgv: ["--no-warnings", "--stack-trace-limit=31"],
+      execArgvExtension: "none",
+    }));
+    expect(Exit.isSuccess(cached)).toBe(true);
+    expect(harness.control.configs[0]).toMatchObject({
+      mainFormat: "commonjs",
+      useSnapshot: false,
+      useCodeCache: true,
+      execArgv: ["--no-warnings", "--stack-trace-limit=31"],
+      execArgvExtension: "none",
+    });
+
+    const snapshotted = await harness.run(AssembleModes.assembleDirect({
+      ...input(harness.root, "snapshotted"),
+      useSnapshot: true,
+      execArgvExtension: "env",
+    }));
+    expect(Exit.isSuccess(snapshotted)).toBe(true);
+    expect(harness.control.configs[1]).toMatchObject({
+      useSnapshot: true,
+      useCodeCache: false,
+      execArgvExtension: "env",
+    });
+
+    const esmCached = await harness.run(AssembleModes.assembleDirect({
+      ...input(harness.root, "esm-cached"),
+      main: {
+        _tag: "Bytes",
+        contents: new TextEncoder().encode("console.log('esm-cache')"),
+        format: "module",
+      },
+      useCodeCache: true,
+      execArgvExtension: "cli",
+    }));
+    expect(Exit.isSuccess(esmCached)).toBe(true);
+    expect(harness.control.configs[2]).toMatchObject({
+      mainFormat: "module",
+      useSnapshot: false,
+      useCodeCache: true,
+      execArgvExtension: "cli",
+    });
+  });
+
+  it("rejects invalid private mode relations and argument policy before provider work", async () => {
+    const harness = makeHarness();
+    const esmSnapshot = AssembleModes.assembleDirect({
+      ...input(harness.root, "esm-snapshot"),
+      main: {
+        _tag: "Bytes" as const,
+        contents: new TextEncoder().encode("console.log('no')"),
+        format: "module" as const,
+      },
+      useSnapshot: true,
+    });
+    expect(failure(await harness.run(esmSnapshot))).toMatchObject({
+      _tag: "NodeSeaInputInvalid",
+      reason: "ESM main is incompatible with startup snapshots",
+    });
+    expect(failure(
+      await harness.run(AssembleModes.assembleDirect({
+        ...input(harness.root, "ambiguous"),
+        useSnapshot: true,
+        useCodeCache: true,
+      })),
+    )).toMatchObject({
+      _tag: "NodeSeaInputInvalid",
+      reason: "startup snapshot and code cache cannot be enabled together",
+    });
+    expect(failure(
+      await harness.run(AssembleModes.assembleDirect({
+        ...input(harness.root, "implicit-policy"),
+        execArgv: ["--no-warnings"],
+      })),
+    )).toMatchObject({
+      _tag: "NodeSeaInputInvalid",
+      reason: "execArgv requires an explicit execArgvExtension policy",
+    });
+    expect(harness.control.builds()).toBe(0);
+  });
+
+  it("rejects forbidden or malformed request modes without running assembly", async () => {
+    const harness = makeHarness();
+    const forbidden = { ...input(harness.root, "app"), target: "linux-x64-gnu" };
+    expect(failure(await harness.run(Assemble.assembleDirect(forbidden as never))))
+      .toMatchObject({ _tag: "NodeSeaInputInvalid", reason: "unknown input field target" });
+    expect(failure(
+      await harness.run(Assemble.assembleDirect({
+        ...input(harness.root, "cache"),
+        useCodeCache: true,
+      } as never)),
+    ))
+      .toMatchObject({ _tag: "NodeSeaInputInvalid", reason: "unknown input field useCodeCache" });
+    const duplicateAssets = {
+      ...input(harness.root, "assets"),
+      assets: [{ key: "x", path: "a" }, { key: "x", path: "b" }],
+    };
+    expect(failure(await harness.run(Assemble.assembleDirect(duplicateAssets))))
+      .toMatchObject({ _tag: "NodeSeaInputInvalid" });
+    expect(harness.control.builds()).toBe(0);
+  });
+
+  it("keeps the destination unchanged across syntax, spawn, provider, missing-output, and inspection failures", async () => {
+    for (
+      const mode of ["syntax-failure", "spawn-failure", "build-failure", "missing-output", "invalid-output"] as const
+    ) {
+      const harness = makeHarness({ mode });
+      const destination = join(harness.root, "app");
+      writeFileSync(destination, "old");
+      const exit = await harness.run(Assemble.assembleDirect(input(harness.root, "app")));
+      expect(Exit.isFailure(exit), mode).toBe(true);
+      expect(readFileSync(destination, "utf8"), mode).toBe("old");
+      expect(readdirSync(harness.root).some((entry) => entry.startsWith(".effect-build-file-")), mode).toBe(false);
+    }
+  });
+
+  it("preserves interruption, terminates the child, and removes private staging", async () => {
+    const harness = makeHarness({ mode: "delay" });
     const outer = await Effect.runPromiseExit(
       Effect.scoped(Effect.gen(function*() {
-        const context = yield* Layer.build(provided);
+        const context = yield* Layer.build(harness.provided);
         const fiber = yield* Effect.forkChild(
-          AssembleExecutable.assembleExecutable({
-            main: { _tag: "Bytes", contents: new TextEncoder().encode("console.log('x')"), format: "commonjs" },
-            outfile,
-          }).pipe(Effect.provide(context)),
+          Assemble.assembleDirect(input(harness.root, "app")).pipe(Effect.provide(context)),
         );
-        yield* Effect.promise(control.started);
+        yield* Effect.promise(harness.control.started);
         yield* Fiber.interrupt(fiber);
         return yield* Fiber.await(fiber);
       })),
@@ -335,8 +387,8 @@ describe("Node SEA AssembleExecutable", () => {
       expect(Exit.isFailure(outer.value)).toBe(true);
       if (Exit.isFailure(outer.value)) expect(Cause.hasInterrupts(outer.value.cause)).toBe(true);
     }
-    expect(control.interrupted()).toBe(true);
-    expect(existsSync(outfile)).toBe(false);
-    expect(readdirSync(join(root, "interrupted")).some((entry) => entry.startsWith(".effect-build-"))).toBe(false);
+    expect(harness.control.interrupted()).toBe(true);
+    expect(existsSync(join(harness.root, "app"))).toBe(false);
+    expect(readdirSync(harness.root).some((entry) => entry.startsWith(".effect-build-file-"))).toBe(false);
   });
 });

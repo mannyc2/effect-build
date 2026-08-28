@@ -1,35 +1,27 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
-import type * as Artifact from "effect-build/Artifact";
-import { ToolFailed } from "effect-build/BuildError";
-import type { PublishFailed, ToolNotFound } from "effect-build/BuildError";
-import * as Toolchain from "effect-build/Toolchain";
+import * as Artifact from "effect-build/Artifact";
+import * as BorrowedOutput from "effect-build/Author/BorrowedOutput";
+import * as File from "effect-build/Author/File";
+import type * as Tool from "effect-build/Author/Tool";
+import * as Tree from "effect-build/Author/Tree";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
+  AppleOperationInvalid,
+  AppleToolChanged,
+  AppleToolFailed,
+  AppleToolUnavailable,
   capturePlatformServices,
+  copyTreeSnapshot,
   describe,
-  resolveAppleTool,
-  scrub,
-  scrubToolFailure,
-  verifyFileArtifact,
+  selectAppleTool,
 } from "./internal.js";
 import {
-  captureBundle,
-  captureBundlePath,
-  identityEquals,
-  makeBundleRemovable,
-  materializeBundle,
-} from "./internal/BundleIdentity.js";
-import {
-  AppleToolFact,
   Architecture,
-  BundleInspectionFailed,
-  FileArtifactIdentityMismatch,
   hasDeveloperIdApplicationSignature,
   hasDeveloperIdDiskImageSignature,
   hasDeveloperIdInstallerSignature,
   ProductKind,
   ProductStateInvalid,
-  Sha256,
 } from "./Model.js";
 import type {
   AppleToolOptions,
@@ -38,37 +30,27 @@ import type {
   DeveloperIdInstallerPackage,
 } from "./Model.js";
 
-export { FileArtifactIdentityMismatch as ArtifactIdentityMismatch } from "./Model.js";
+export { AppleOperationInvalid, AppleToolChanged, AppleToolFailed, AppleToolUnavailable } from "./internal.js";
 
-/** Apple accepts UDIF images, signed flat installers, and ZIP archives, not raw `.app` directories. */
 export const SubmissionKind = Schema.Literals(["dmg", "pkg", "zip"] as const);
 export type SubmissionKind = typeof SubmissionKind.Type;
 
-/** Canonical lowercase Apple submission UUID. */
 export const SubmissionId = Schema.String.check(
   Schema.isPattern(
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
     { expected: "a lowercase UUID submission identifier" },
   ),
 );
 export type SubmissionId = typeof SubmissionId.Type;
 
-/** Submission exists but has not reached an Apple terminal state. */
-export class Pending extends Schema.TaggedClass<Pending>()("Pending", {
-  providerStatus: Schema.NonEmptyString,
-}) {}
-
-/** Apple accepted the exact submitted bytes. */
-export class Accepted extends Schema.TaggedClass<Accepted>()("Accepted", {
-  providerStatus: Schema.Literal("Accepted"),
-}) {}
-
-/** Apple reached a negative terminal state (`Invalid` or `Rejected`). */
+export class Pending extends Schema.TaggedClass<Pending>()("Pending", { providerStatus: Schema.NonEmptyString }) {}
+export class Accepted
+  extends Schema.TaggedClass<Accepted>()("Accepted", { providerStatus: Schema.Literal("Accepted") })
+{}
 export class Rejected extends Schema.TaggedClass<Rejected>()("Rejected", {
   providerStatus: Schema.NonEmptyString,
   summary: Schema.optionalKey(Schema.NonEmptyString),
 }) {}
-
 export const Status = Schema.Union([Pending, Accepted, Rejected]);
 export type Status = typeof Status.Type;
 
@@ -82,78 +64,74 @@ export interface SubmitInstallerPackageInput {
   readonly artifact: DeveloperIdInstallerPackage;
 }
 
-/** Closed public file-submission family; app ZIP transports are created only by `submitApp`. */
 export type SubmitInput = SubmitDiskImageInput | SubmitInstallerPackageInput;
 
-interface PreparedSubmissionInput {
-  readonly kind: SubmissionKind;
-  readonly artifact: Artifact.FileArtifact;
-  readonly architecture: Architecture;
-}
-
-/** Signed `.app` bundle to package into, verify from, and submit as an Apple ZIP transport. */
 export interface SubmitAppInput {
   readonly bundle: DeveloperIdApplicationBundle;
 }
 
-/** Exact local product identity to which an accepted Apple ticket may be stapled. */
-export class StapleTarget extends Schema.Class<StapleTarget>(
-  "effect-build-apple/StapleTarget",
-)({
+const NotarytoolObservation = Schema.declare<Tool.Observation<"notarytool">>(
+  (value): value is Tool.Observation<"notarytool"> =>
+    Artifact.isProvenance(value) && "name" in value && value.name === "notarytool",
+  { title: "NotarytoolObservation" },
+);
+const DittoObservation = Schema.declare<Tool.Observation<"ditto">>(
+  (value): value is Tool.Observation<"ditto"> =>
+    Artifact.isProvenance(value) && "name" in value && value.name === "ditto",
+  { title: "DittoObservation" },
+);
+
+export class StapleTarget extends Schema.Class<StapleTarget>("effect-build-apple/StapleTarget")({
   kind: ProductKind,
-  identityKind: Schema.Literals(["file-bytes", "bundle-manifest"] as const),
-  artifactBytes: Schema.Natural,
-  artifactSha256: Sha256,
+  identityKind: Schema.Literals(["file-bytes", "tree-manifest"] as const),
+  artifactBytes: Artifact.DecimalBytesSchema,
+  artifactDigest: Artifact.DigestSchema,
   bundleName: Schema.optionalKey(Schema.NonEmptyString),
 }) {}
 
-/** Durable identity required to resume on a fresh runner. */
 export class SubmissionReference extends Schema.Class<SubmissionReference>(
   "effect-build-apple/SubmissionReference",
 )({
   submissionId: SubmissionId,
   kind: SubmissionKind,
   architecture: Architecture,
-  artifactBytes: Schema.Natural,
-  artifactSha256: Sha256,
-  submissionTool: AppleToolFact,
+  artifactBytes: Artifact.DecimalBytesSchema,
+  artifactDigest: Artifact.DigestSchema,
+  submissionTool: NotarytoolObservation,
   stapleTarget: Schema.optionalKey(StapleTarget),
-  transportTool: Schema.optionalKey(AppleToolFact),
+  transportTool: Schema.optionalKey(DittoObservation),
 }) {}
 
-/** Credential-free provider-native result suitable for the release journal. */
 export class Submission extends Schema.Class<Submission>("effect-build-apple/Submission")({
   submissionId: SubmissionId,
   kind: SubmissionKind,
   architecture: Architecture,
-  artifactBytes: Schema.Natural,
-  artifactSha256: Sha256,
+  artifactBytes: Artifact.DecimalBytesSchema,
+  artifactDigest: Artifact.DigestSchema,
   status: Status,
   message: Schema.optionalKey(Schema.NonEmptyString),
-  submissionTool: AppleToolFact,
-  tool: AppleToolFact,
+  submissionTool: NotarytoolObservation,
+  tool: NotarytoolObservation,
   stapleTarget: Schema.optionalKey(StapleTarget),
-  transportTool: Schema.optionalKey(AppleToolFact),
+  transportTool: Schema.optionalKey(DittoObservation),
 }) {}
 
-/** Credential-free status observation correlated to the recorded submission ID. */
 export class Observation extends Schema.Class<Observation>("effect-build-apple/Observation")({
   submissionId: SubmissionId,
   kind: SubmissionKind,
   architecture: Architecture,
-  artifactBytes: Schema.Natural,
-  artifactSha256: Sha256,
+  artifactBytes: Artifact.DecimalBytesSchema,
+  artifactDigest: Artifact.DigestSchema,
   status: Status,
   message: Schema.optionalKey(Schema.NonEmptyString),
   name: Schema.optionalKey(Schema.NonEmptyString),
   createdDate: Schema.optionalKey(Schema.NonEmptyString),
-  submissionTool: AppleToolFact,
-  tool: AppleToolFact,
+  submissionTool: NotarytoolObservation,
+  tool: NotarytoolObservation,
   stapleTarget: Schema.optionalKey(StapleTarget),
-  transportTool: Schema.optionalKey(AppleToolFact),
+  transportTool: Schema.optionalKey(DittoObservation),
 }) {}
 
-/** Typed issue projection from Apple's notarization log. */
 export class LogIssue extends Schema.Class<LogIssue>("effect-build-apple/LogIssue")({
   severity: Schema.NonEmptyString,
   message: Schema.NonEmptyString,
@@ -162,67 +140,54 @@ export class LogIssue extends Schema.Class<LogIssue>("effect-build-apple/LogIssu
   docUrl: Schema.optionalKey(Schema.NonEmptyString),
 }) {}
 
-/** Credential-free notarization log correlated to the same durable reference. */
 export class Log extends Schema.Class<Log>("effect-build-apple/Log")({
   submissionId: SubmissionId,
   kind: SubmissionKind,
   architecture: Architecture,
-  artifactBytes: Schema.Natural,
-  artifactSha256: Sha256,
+  artifactBytes: Artifact.DecimalBytesSchema,
+  artifactDigest: Artifact.DigestSchema,
   status: Status,
   statusSummary: Schema.optionalKey(Schema.NonEmptyString),
   statusCode: Schema.optionalKey(Schema.Number),
   archiveFilename: Schema.optionalKey(Schema.NonEmptyString),
   issues: Schema.Array(LogIssue),
-  submissionTool: AppleToolFact,
-  tool: AppleToolFact,
+  submissionTool: NotarytoolObservation,
+  tool: NotarytoolObservation,
   stapleTarget: Schema.optionalKey(StapleTarget),
-  transportTool: Schema.optionalKey(AppleToolFact),
+  transportTool: Schema.optionalKey(DittoObservation),
 }) {}
 
-/** Any provider result carrying the exact submission identity and a notarization status. */
 export type Result = Submission | Observation | Log;
 
-/** Durable proof that Apple accepted one exact submitted file identity. */
 export class AcceptedReference extends Schema.Class<AcceptedReference>(
   "effect-build-apple/AcceptedReference",
 )({
   submissionId: SubmissionId,
   kind: SubmissionKind,
   architecture: Architecture,
-  artifactBytes: Schema.Natural,
-  artifactSha256: Sha256,
+  artifactBytes: Artifact.DecimalBytesSchema,
+  artifactDigest: Artifact.DigestSchema,
   providerStatus: Schema.Literal("Accepted"),
-  submissionTool: AppleToolFact,
-  tool: AppleToolFact,
+  submissionTool: NotarytoolObservation,
+  tool: NotarytoolObservation,
   stapleTarget: StapleTarget,
-  transportTool: Schema.optionalKey(AppleToolFact),
+  transportTool: Schema.optionalKey(DittoObservation),
 }) {}
 
-/** A pending or rejected result cannot authorize stapling. */
-export class ResultNotAccepted extends Schema.TaggedError<ResultNotAccepted>()(
-  "NotaryResultNotAccepted",
-  {
-    submissionId: SubmissionId,
-    providerStatus: Schema.NonEmptyString,
-  },
-) {
+export class ResultNotAccepted extends Schema.TaggedError<ResultNotAccepted>()("NotaryResultNotAccepted", {
+  submissionId: SubmissionId,
+  providerStatus: Schema.NonEmptyString,
+}) {
   override get message(): string {
     return `Apple notarization ${this.submissionId} is ${this.providerStatus}, not Accepted`;
   }
 }
 
-/** Accepted generic ZIP submissions do not prove a staplable product identity. */
 export class ResultHasNoStapleTarget extends Schema.TaggedError<ResultHasNoStapleTarget>()(
   "NotaryResultHasNoStapleTarget",
   { submissionId: SubmissionId },
-) {
-  override get message(): string {
-    return `Apple notarization ${this.submissionId} has no verified stapling target`;
-  }
-}
+) {}
 
-/** Narrow a provider result into the only evidence type accepted by the stapling boundary. */
 export const acceptedReference = (
   result: Result,
 ): Effect.Effect<AcceptedReference, ResultNotAccepted | ResultHasNoStapleTarget> => {
@@ -243,7 +208,7 @@ export const acceptedReference = (
       kind: result.kind,
       architecture: result.architecture,
       artifactBytes: result.artifactBytes,
-      artifactSha256: result.artifactSha256,
+      artifactDigest: result.artifactDigest,
       providerStatus: "Accepted",
       submissionTool: result.submissionTool,
       tool: result.tool,
@@ -253,58 +218,30 @@ export const acceptedReference = (
   );
 };
 
-/** The command may have committed remotely but no submission ID was recovered. Never blind-retry. */
 export class SubmissionOutcomeUnknown extends Schema.TaggedError<SubmissionOutcomeUnknown>()(
   "SubmissionOutcomeUnknown",
-  {
-    artifactSha256: Sha256,
-    reason: Schema.NonEmptyString,
-  },
+  { artifactDigest: Schema.String, reason: Schema.NonEmptyString },
 ) {
   override get message(): string {
-    return `Apple submission outcome is unknown for ${this.artifactSha256}: ${this.reason}`;
+    return `Apple submission outcome is unknown for ${this.artifactDigest}: ${this.reason}`;
   }
 }
 
-/** Local private snapshot preparation failed before any Apple submission was dispatched. */
 export class SubmissionPreparationFailed extends Schema.TaggedError<SubmissionPreparationFailed>()(
   "SubmissionPreparationFailed",
-  {
-    path: Schema.NonEmptyString,
-    reason: Schema.NonEmptyString,
-  },
-) {
-  override get message(): string {
-    return `could not prepare notarization input ${this.path}: ${this.reason}`;
-  }
-}
+  { path: Schema.NonEmptyString, reason: Schema.NonEmptyString },
+) {}
 
-/** Apple returned JSON that cannot be interpreted as the requested operation. */
-export class ResponseInvalid extends Schema.TaggedError<ResponseInvalid>()(
-  "NotaryResponseInvalid",
-  {
-    operation: Schema.Literals(["submit", "info", "log"] as const),
-    reason: Schema.NonEmptyString,
-  },
-) {
-  override get message(): string {
-    return `invalid notarytool ${this.operation} response: ${this.reason}`;
-  }
-}
+export class ResponseInvalid extends Schema.TaggedError<ResponseInvalid>()("NotaryResponseInvalid", {
+  operation: Schema.Literals(["submit", "info", "log"] as const),
+  reason: Schema.NonEmptyString,
+}) {}
 
-/** Apple returned a different job identity than the one requested on this runner. */
-export class CorrelationFailed extends Schema.TaggedError<CorrelationFailed>()(
-  "NotaryCorrelationFailed",
-  {
-    operation: Schema.Literals(["info", "log"] as const),
-    expectedSubmissionId: Schema.NonEmptyString,
-    observedSubmissionId: Schema.NonEmptyString,
-  },
-) {
-  override get message(): string {
-    return `notarytool ${this.operation} returned ${this.observedSubmissionId}; expected ${this.expectedSubmissionId}`;
-  }
-}
+export class CorrelationFailed extends Schema.TaggedError<CorrelationFailed>()("NotaryCorrelationFailed", {
+  operation: Schema.Literals(["info", "log"] as const),
+  expectedSubmissionId: Schema.NonEmptyString,
+  observedSubmissionId: Schema.NonEmptyString,
+}) {}
 
 interface CredentialArguments {
   readonly args: readonly string[];
@@ -315,7 +252,6 @@ interface CredentialService {
   readonly arguments: Effect.Effect<CredentialArguments>;
 }
 
-/** Process-local Apple notary credential coordinates. No operation returns this service. */
 export class Credential extends Context.Service<Credential, CredentialService>()(
   "effect-build-apple/Notary/Credential",
 ) {}
@@ -325,10 +261,7 @@ export interface KeychainProfileOptions {
   readonly keychain?: string | undefined;
 }
 
-/** A pre-created notarytool keychain profile; secret values remain in the keychain. */
-export const keychainProfileCredentialLayer = (
-  options: KeychainProfileOptions,
-): Layer.Layer<Credential> =>
+export const keychainProfileCredentialLayer = (options: KeychainProfileOptions): Layer.Layer<Credential> =>
   Layer.succeed(Credential, {
     arguments: Effect.succeed({
       args: [
@@ -346,7 +279,6 @@ export interface ApiKeyOptions {
   readonly issuer: string;
 }
 
-/** App Store Connect API-key coordinates; private key bytes never enter this API. */
 export const apiKeyCredentialLayer = (options: ApiKeyOptions): Layer.Layer<Credential> =>
   Layer.succeed(Credential, {
     arguments: Effect.succeed({
@@ -356,20 +288,22 @@ export const apiKeyCredentialLayer = (options: ApiKeyOptions): Layer.Layer<Crede
   });
 
 export interface LayerOptions {
-  readonly xcrun: AppleToolOptions;
+  readonly notarytool: AppleToolOptions;
   readonly ditto: AppleToolOptions;
   readonly codesign: AppleToolOptions;
   readonly pkgutil: AppleToolOptions;
 }
 
 export type SubmitError =
-  | FileArtifactIdentityMismatch
+  | AppleOperationInvalid
+  | AppleToolChanged
+  | AppleToolFailed
+  | File.FileVerificationFailed
   | SubmissionPreparationFailed
   | SubmissionOutcomeUnknown
-  | ProductStateInvalid
-  | ToolFailed;
-export type SubmitAppError = SubmitError | ToolFailed | PublishFailed | BundleInspectionFailed;
-export type ObserveError = ToolFailed | ResponseInvalid | CorrelationFailed;
+  | ProductStateInvalid;
+export type SubmitAppError = SubmitError | Tree.TreeVerificationFailed;
+export type ObserveError = AppleToolChanged | AppleToolFailed | ResponseInvalid | CorrelationFailed;
 
 interface Service {
   readonly submit: (input: SubmitInput) => Effect.Effect<Submission, SubmitError>;
@@ -378,16 +312,14 @@ interface Service {
   readonly log: (reference: SubmissionReference) => Effect.Effect<Log, ObserveError>;
 }
 
-export class Client extends Context.Service<Client, Service>()(
-  "effect-build-apple/Notary/Client",
-) {}
+export class Client extends Context.Service<Client, Service>()("effect-build-apple/Notary/Client") {}
 
 type JsonObject = Record<string, unknown>;
 
-const parseObject = (
-  operation: "submit" | "info" | "log",
-  text: string,
-): Effect.Effect<JsonObject, ResponseInvalid> =>
+const scrub = (text: string, values: readonly string[]): string =>
+  values.reduce((redacted, value) => value.length === 0 ? redacted : redacted.split(value).join("<redacted>"), text);
+
+const parseObject = (operation: "submit" | "info" | "log", text: string): Effect.Effect<JsonObject, ResponseInvalid> =>
   Effect.try({
     try: () => {
       const parsed: unknown = JSON.parse(text);
@@ -396,21 +328,13 @@ const parseObject = (
       }
       return parsed as JsonObject;
     },
-    catch: (error) =>
-      new ResponseInvalid({
-        operation,
-        reason: error instanceof Error ? error.message : String(error),
-      }),
+    catch: (error) => new ResponseInvalid({ operation, reason: describe(error) }),
   });
 
 const nonEmpty = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
 
-const requireText = (
-  operation: "submit" | "info" | "log",
-  object: JsonObject,
-  key: string,
-): Effect.Effect<string, ResponseInvalid> => {
+const requireText = (operation: "submit" | "info" | "log", object: JsonObject, key: string) => {
   const value = nonEmpty(object[key]);
   return value === undefined
     ? Effect.fail(new ResponseInvalid({ operation, reason: `missing non-empty ${key}` }))
@@ -428,7 +352,7 @@ const requireSubmissionId = (
     if (sensitiveValues.some((sensitive) => sensitive.length > 0 && canonical.includes(sensitive.toLowerCase()))) {
       return Effect.fail(new ResponseInvalid({ operation, reason: `${key} overlaps credential material` }));
     }
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(canonical)
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(canonical)
       ? Effect.succeed(canonical as SubmissionId)
       : Effect.fail(new ResponseInvalid({ operation, reason: `${key} is not a submission UUID` }));
   });
@@ -436,22 +360,15 @@ const requireSubmissionId = (
 const normalizeStatus = (
   operation: "submit" | "info" | "log",
   providerStatus: string,
-  summary?: string | undefined,
+  summary?: string,
 ): Effect.Effect<Status, ResponseInvalid> => {
   const normalized = providerStatus.trim().toLowerCase();
-  if (normalized === "accepted") {
-    return Effect.succeed(new Accepted({ providerStatus: "Accepted" }));
-  }
+  if (normalized === "accepted") return Effect.succeed(new Accepted({ providerStatus: "Accepted" }));
   if (normalized === "in progress" || normalized === "in-progress" || normalized === "submitted") {
     return Effect.succeed(new Pending({ providerStatus }));
   }
   if (normalized === "invalid" || normalized === "rejected") {
-    return Effect.succeed(
-      new Rejected({
-        providerStatus,
-        ...(summary === undefined ? {} : { summary }),
-      }),
-    );
+    return Effect.succeed(new Rejected({ providerStatus, ...(summary === undefined ? {} : { summary }) }));
   }
   return Effect.fail(new ResponseInvalid({ operation, reason: `unknown status ${providerStatus}` }));
 };
@@ -475,292 +392,264 @@ const issue = (value: unknown, sensitiveValues: readonly string[]): LogIssue | u
   });
 };
 
-type LayerError = ToolNotFound | ToolFailed;
+const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+type LayerError = AppleToolUnavailable | AppleToolFailed;
 
 const makeService = (
   options: LayerOptions,
 ): Effect.Effect<
   Service,
   LayerError,
-  | Crypto.Crypto
-  | FileSystem.FileSystem
-  | Path.Path
-  | ChildProcessSpawner.ChildProcessSpawner
-  | Credential
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Credential
 > =>
   Effect.gen(function*() {
     const { fileSystem, path, services } = yield* capturePlatformServices;
+    const crypto = yield* Crypto.Crypto;
     const credentialService = yield* Credential;
-    const credential = yield* credentialService.arguments;
-    const safeText = (value: unknown): string | undefined => {
-      const text = nonEmpty(value);
-      return text === undefined ? undefined : scrub(text, credential.sensitiveValues);
-    };
-    const xcrun = yield* resolveAppleTool("xcrun", options.xcrun, ["notarytool", "--version"], "notarytool");
-    const ditto = yield* resolveAppleTool("ditto", options.ditto, ["--help"]);
-    const codesign = yield* resolveAppleTool("codesign", options.codesign, ["--version"]);
-    const pkgutil = yield* resolveAppleTool("pkgutil", options.pkgutil, ["--help"]);
-    const tool = new AppleToolFact({ name: "notarytool", version: xcrun.tool.version });
-    const transportTool = new AppleToolFact({ name: "ditto", version: ditto.tool.version });
+    const notarytool = yield* selectAppleTool("notarytool", options.notarytool, ["--version"], "notarization");
+    const ditto = yield* selectAppleTool("ditto", options.ditto, ["--help"], "archive-transport");
+    const codesign = yield* selectAppleTool("codesign", options.codesign, ["--version"], "signature-verification");
+    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, ["--help"], "package-signature-verification");
+
     const run = (operation: "submit" | "info" | "log", args: readonly string[]) =>
-      Toolchain.runBytesOrFail({
-        tool: "notarytool",
-        executable: xcrun.executable,
-        args: ["notarytool", operation, ...args, "--output-format", "json", ...credential.args],
-      }).pipe(
-        Effect.mapError((failure) => scrubToolFailure(failure, credential.sensitiveValues)),
-        Effect.flatMap((completion) =>
-          Effect.try({
-            try: () => new TextDecoder("utf-8", { fatal: true }).decode(completion.stdout),
-            catch: (error) =>
-              new ResponseInvalid({
-                operation,
-                reason: `stdout was not valid UTF-8: ${scrub(String(error), credential.sensitiveValues)}`,
-              }),
-          })
-        ),
-      );
+      Effect.gen(function*() {
+        const credential = yield* credentialService.arguments;
+        const completion = yield* notarytool.run(
+          [operation, ...args, "--output-format", "json", ...credential.args],
+          { redact: credential.sensitiveValues },
+        );
+        const text = yield* Effect.try({
+          try: () => new TextDecoder("utf-8", { fatal: true }).decode(completion.stdout),
+          catch: (error) =>
+            new ResponseInvalid({
+              operation,
+              reason: `stdout was not UTF-8: ${scrub(describe(error), credential.sensitiveValues)}`,
+            }),
+        });
+        return { text, sensitiveValues: credential.sensitiveValues } as const;
+      });
 
-    const snapshot = Effect.fn("effect-build-apple.snapshotNotaryInput")(function*(input: PreparedSubmissionInput) {
-      const verified = yield* verifyFileArtifact("notary submit", input.artifact);
-      const staging = yield* fileSystem.makeTempDirectoryScoped({ prefix: ".effect-build-notary-" }).pipe(
-        Effect.mapError((error) =>
-          new SubmissionPreparationFailed({
-            path: verified.source,
-            reason: `create private snapshot failed: ${describe(error)}`,
-          })
-        ),
-      );
-      const staged = path.join(staging, path.basename(verified.source));
-      yield* fileSystem.writeFile(staged, verified.contents).pipe(
-        Effect.mapError((error) =>
-          new SubmissionPreparationFailed({
-            path: verified.source,
-            reason: `write private snapshot failed: ${describe(error)}`,
-          })
-        ),
-      );
-      return { staged, bytes: verified.bytes, sha256: verified.sha256 } as const;
-    });
-
-    const submitPrepared = Effect.fn("effect-build-apple.notarySubmitPrepared")(function*(
-      input: PreparedSubmissionInput,
-      stapleTarget: StapleTarget | undefined,
-      appTransportTool: AppleToolFact | undefined,
-    ) {
-      return yield* Effect.scoped(
+    const submitBytes = (
+      kind: SubmissionKind,
+      architecture: typeof Architecture.Type,
+      name: string,
+      bytes: Uint8Array,
+      digest: Artifact.Digest,
+      stapleTarget?: StapleTarget,
+      transportTool?: Tool.Observation<"ditto">,
+    ): Effect.Effect<Submission, SubmitError> =>
+      Effect.scoped(
         Effect.gen(function*() {
-          const verified = yield* snapshot(input);
-          if (input.kind === "dmg") {
-            yield* Toolchain.runOrFail({
-              tool: "codesign",
-              executable: codesign.executable,
-              args: ["--verify", "--strict", "--verbose=2", verified.staged],
-            });
-          } else if (input.kind === "pkg") {
-            yield* Toolchain.runOrFail({
-              tool: "pkgutil",
-              executable: pkgutil.executable,
-              args: ["--check-signature", verified.staged],
-            });
-          }
-          const response = yield* run("submit", [verified.staged]).pipe(
+          const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: ".effect-build-notary-" }).pipe(
+            Effect.mapError((error) => new SubmissionPreparationFailed({ path: name, reason: describe(error) })),
+          );
+          const staged = path.join(directory, name);
+          yield* fileSystem.writeFile(staged, bytes).pipe(
+            Effect.mapError((error) => new SubmissionPreparationFailed({ path: name, reason: describe(error) })),
+          );
+          if (kind === "dmg") yield* codesign.run(["--verify", "--strict", "--verbose=2", staged]);
+          if (kind === "pkg") yield* pkgutil.run(["--check-signature", staged]);
+          const response = yield* run("submit", [staged]).pipe(
             Effect.mapError((failure) =>
-              new SubmissionOutcomeUnknown({
-                artifactSha256: verified.sha256,
-                reason: scrub(failure.message, credential.sensitiveValues),
-              })
+              failure instanceof AppleToolChanged
+                ? failure
+                : new SubmissionOutcomeUnknown({
+                  artifactDigest: digest.value,
+                  reason: failure.message,
+                })
             ),
           );
-          return yield* Effect.gen(function*() {
-            const object = yield* parseObject("submit", response);
-            const submissionId = yield* requireSubmissionId("submit", object, "id", credential.sensitiveValues);
+          const parsed = yield* Effect.gen(function*() {
+            const object = yield* parseObject("submit", response.text);
+            const submissionId = yield* requireSubmissionId("submit", object, "id", response.sensitiveValues);
+            const safeText = (value: unknown) => {
+              const text = nonEmpty(value);
+              return text === undefined ? undefined : scrub(text, response.sensitiveValues);
+            };
             const providerStatus = safeText(object.status) ?? "Submitted";
             const message = safeText(object.message);
             const status = yield* normalizeStatus("submit", providerStatus, message);
             return new Submission({
               submissionId,
-              kind: input.kind,
-              architecture: input.architecture,
-              artifactBytes: verified.bytes,
-              artifactSha256: verified.sha256,
+              kind,
+              architecture,
+              artifactBytes: Artifact.decimalBytes(`${bytes.byteLength}`),
+              artifactDigest: digest,
               status,
               ...(message === undefined ? {} : { message }),
-              submissionTool: tool,
-              tool,
+              submissionTool: notarytool.observation,
+              tool: notarytool.observation,
               ...(stapleTarget === undefined ? {} : { stapleTarget }),
-              ...(appTransportTool === undefined ? {} : { transportTool: appTransportTool }),
+              ...(transportTool === undefined ? {} : { transportTool }),
             });
           }).pipe(
             Effect.mapError((failure) =>
               new SubmissionOutcomeUnknown({
-                artifactSha256: verified.sha256,
-                reason: scrub(failure.message, credential.sensitiveValues),
+                artifactDigest: digest.value,
+                reason: scrub(
+                  failure instanceof ResponseInvalid
+                    ? failure.reason
+                    : describe(failure) || "provider response could not be correlated",
+                  response.sensitiveValues,
+                ),
               })
             ),
           );
+          return parsed;
         }),
       );
-    });
 
     const submit = Effect.fn("effect-build-apple.notarySubmit")(function*(input: SubmitInput) {
-      const artifactPath = path.resolve(input.artifact.path);
-      if (!path.basename(artifactPath).endsWith(input.kind === "dmg" ? ".dmg" : ".pkg")) {
+      const expectedSuffix = input.kind === "dmg" ? ".dmg" : ".pkg";
+      if (!path.basename(input.artifact.path).endsWith(expectedSuffix)) {
         return yield* new ProductStateInvalid({
           operation: `submit ${input.kind} for notarization`,
-          path: artifactPath,
-          expected: `a .${input.kind} product path`,
+          path: input.artifact.path,
+          expected: `a ${expectedSuffix} product path`,
         });
       }
-      if (input.kind === "dmg") {
-        if (!hasDeveloperIdDiskImageSignature(input.artifact)) {
-          return yield* new ProductStateInvalid({
-            operation: "submit disk image for notarization",
-            path: artifactPath,
-            expected: "a native-verified Developer ID disk image",
-          });
-        }
-      } else if (!hasDeveloperIdInstallerSignature(input.artifact)) {
+      if (
+        input.kind === "dmg"
+          ? !hasDeveloperIdDiskImageSignature(input.artifact)
+          : !hasDeveloperIdInstallerSignature(input.artifact)
+      ) {
         return yield* new ProductStateInvalid({
-          operation: "submit installer package for notarization",
-          path: artifactPath,
-          expected: "a native-verified Developer ID installer package",
+          operation: `submit ${input.kind} for notarization`,
+          path: input.artifact.path,
+          expected: "a native-verified Developer ID product",
         });
       }
-      return yield* submitPrepared(
-        { ...input, architecture: input.artifact.architecture },
-        new StapleTarget({
-          kind: input.kind,
-          identityKind: "file-bytes",
-          artifactBytes: input.artifact.bytes,
-          artifactSha256: input.artifact.sha256 as Sha256,
-        }),
-        undefined,
-      );
+      return yield* File.withVerifiedBytes(input.artifact, (bytes) =>
+        submitBytes(
+          input.kind,
+          input.artifact.architecture,
+          path.basename(input.artifact.path),
+          bytes,
+          input.artifact.digest,
+          new StapleTarget({
+            kind: input.kind,
+            identityKind: "file-bytes",
+            artifactBytes: input.artifact.bytes,
+            artifactDigest: input.artifact.digest,
+          }),
+        ));
     });
 
     const submitApp = Effect.fn("effect-build-apple.notarySubmitApp")(function*(input: SubmitAppInput) {
-      return yield* Effect.scoped(Effect.gen(function*() {
-        const sourceAppPath = path.resolve(input.bundle.outdir);
-        if (!hasDeveloperIdApplicationSignature(input.bundle)) {
-          return yield* new ProductStateInvalid({
-            operation: "submit app for notarization",
-            path: sourceAppPath,
-            expected: "a native-verified Developer ID Application bundle",
-          });
-        }
-        const captured = yield* captureBundle(input.bundle);
-        if (!captured.identity.bundleName.endsWith(".app")) {
-          return yield* new BundleInspectionFailed({
-            path: captured.source,
-            reason: "notary app transport requires a .app bundle directory",
-          });
-        }
-        const staging = yield* fileSystem.makeTempDirectoryScoped({ prefix: ".effect-build-notary-app-" }).pipe(
-          Effect.mapError((error) =>
-            new BundleInspectionFailed({
-              path: captured.source,
-              reason: `create private app-transport directory failed: ${describe(error)}`,
-            })
-          ),
-        );
-        const stagedApp = path.join(staging, captured.identity.bundleName);
-        yield* Effect.addFinalizer(() => makeBundleRemovable(captured, stagedApp));
-        yield* materializeBundle(captured, stagedApp);
-        yield* Toolchain.runOrFail({
-          tool: "codesign",
-          executable: codesign.executable,
-          args: ["--verify", "--deep", "--strict", "--verbose=2", stagedApp],
+      if (!hasDeveloperIdApplicationSignature(input.bundle) || !path.basename(input.bundle.root).endsWith(".app")) {
+        return yield* new ProductStateInvalid({
+          operation: "submit app for notarization",
+          path: input.bundle.root,
+          expected: "a native-verified Developer ID Application .app bundle",
         });
-        const stagedIdentity = (yield* captureBundlePath(stagedApp)).identity;
-        if (!identityEquals(captured.identity, stagedIdentity)) {
-          return yield* new BundleInspectionFailed({
-            path: stagedApp,
-            reason: `private app snapshot differs from ${captured.identity.artifactSha256}`,
-          });
-        }
-        const zipName = `${captured.identity.bundleName.slice(0, -4)}.zip`;
-        const zipPath = path.join(staging, zipName);
-        const transport = yield* Toolchain.publishFile({
-          tool: ditto.tool,
-          outfile: zipPath,
-          produce: (privateZip) =>
-            Toolchain.runOrFail({
-              tool: "ditto",
-              executable: ditto.executable,
-              args: ["-c", "-k", "--keepParent", stagedApp, privateZip],
-            }),
-        });
-        const extracted = path.join(staging, "extracted");
-        yield* fileSystem.makeDirectory(extracted, { recursive: true }).pipe(
-          Effect.mapError((error) =>
-            new BundleInspectionFailed({
-              path: extracted,
-              reason: `create extraction directory failed: ${describe(error)}`,
-            })
-          ),
-        );
-        const extractedApp = path.join(extracted, captured.identity.bundleName);
-        yield* Effect.addFinalizer(() => makeBundleRemovable(captured, extractedApp));
-        yield* Toolchain.runOrFail({
-          tool: "ditto",
-          executable: ditto.executable,
-          args: ["-x", "-k", transport.path, extracted],
-        });
-        const extractedEntries = (yield* fileSystem.readDirectory(extracted).pipe(
-          Effect.mapError((error) =>
-            new BundleInspectionFailed({
-              path: extracted,
-              reason: `read extraction directory failed: ${describe(error)}`,
-            })
-          ),
-        )).sort();
-        if (
-          extractedEntries.length !== 1
-          || extractedEntries[0] !== captured.identity.bundleName
-        ) {
-          return yield* new BundleInspectionFailed({
-            path: extracted,
-            reason: `verified ZIP extraction must contain exactly ${captured.identity.bundleName}`,
-          });
-        }
-        const extractedIdentity = (yield* captureBundlePath(extractedApp)).identity;
-        if (!identityEquals(captured.identity, extractedIdentity)) {
-          return yield* new BundleInspectionFailed({
-            path: transport.path,
-            reason:
-              `ZIP projection mismatch: expected ${captured.identity.artifactSha256}, observed ${extractedIdentity.artifactSha256}`,
-          });
-        }
-        yield* Toolchain.runOrFail({
-          tool: "codesign",
-          executable: codesign.executable,
-          args: [
-            "--verify",
-            "--deep",
-            "--strict",
-            "--verbose=2",
-            extractedApp,
-          ],
-        });
-        return yield* submitPrepared(
-          { kind: "zip", artifact: transport, architecture: input.bundle.architecture },
-          new StapleTarget({
-            kind: "app",
-            identityKind: "bundle-manifest",
-            artifactBytes: captured.identity.artifactBytes,
-            artifactSha256: captured.identity.artifactSha256,
-            bundleName: captured.identity.bundleName,
+      }
+      return yield* Tree.withVerifiedSnapshot(input.bundle, (snapshot) =>
+        Effect.scoped(
+          Effect.gen(function*() {
+            const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: ".effect-build-notary-app-" }).pipe(
+              Effect.mapError((error) =>
+                new SubmissionPreparationFailed({ path: input.bundle.root, reason: describe(error) })
+              ),
+            );
+            const bundleName = path.basename(input.bundle.root);
+            const stagedApp = path.join(directory, bundleName);
+            yield* copyTreeSnapshot(snapshot, stagedApp).pipe(
+              Effect.mapError((error) =>
+                new SubmissionPreparationFailed({ path: input.bundle.root, reason: error.message })
+              ),
+            );
+            yield* codesign.run(["--verify", "--deep", "--strict", "--verbose=2", stagedApp]);
+            const zipName = `${bundleName.slice(0, -4)}.zip`;
+            const zipPath = path.join(directory, zipName);
+            yield* ditto.run(["-c", "-k", "--keepParent", stagedApp, zipPath]);
+            yield* BorrowedOutput.withTree(
+              {
+                prefix: "effect-build-notary-extracted-",
+                produce: (ownedRoot) =>
+                  Effect.gen(function*() {
+                    const extracted = path.join(ownedRoot, "payload");
+                    yield* fileSystem.makeDirectory(extracted);
+                    yield* ditto.run(["-x", "-k", zipPath, extracted]);
+                    const entries = (yield* fileSystem.readDirectory(extracted)).sort();
+                    if (entries.length !== 1 || entries[0] !== bundleName) {
+                      return yield* new SubmissionPreparationFailed({
+                        path: zipPath,
+                        reason: `ZIP extraction must contain exactly ${bundleName}`,
+                      });
+                    }
+                    return path.join(extracted, bundleName);
+                  }),
+              },
+              "hashed",
+              (tree) =>
+                Effect.gen(function*() {
+                  if (
+                    tree.initial.manifestDigest.value !== input.bundle.manifestDigest.value
+                    || tree.initial.totalBytes !== input.bundle.totalBytes
+                    || tree.initial.rootMode !== input.bundle.rootMode
+                  ) {
+                    const entryCount = Math.max(input.bundle.entries.length, tree.initial.entries.length);
+                    let firstEntryMismatch = "none";
+                    for (let index = 0; index < entryCount; index++) {
+                      const expected = JSON.stringify(input.bundle.entries[index]);
+                      const observed = JSON.stringify(tree.initial.entries[index]);
+                      if (expected !== observed) {
+                        firstEntryMismatch = `${index}: ${expected} -> ${observed}`.slice(0, 1024);
+                        break;
+                      }
+                    }
+                    return yield* new SubmissionPreparationFailed({
+                      path: zipPath,
+                      reason: [
+                        "ZIP projection changed bundle identity",
+                        `manifest ${input.bundle.manifestDigest.value} -> ${tree.initial.manifestDigest.value}`,
+                        `bytes ${input.bundle.totalBytes} -> ${tree.initial.totalBytes}`,
+                        `root mode ${input.bundle.rootMode} -> ${tree.initial.rootMode}`,
+                        `first entry mismatch ${firstEntryMismatch}`,
+                      ].join("; "),
+                    });
+                  }
+                  yield* codesign.run(["--verify", "--deep", "--strict", "--verbose=2", tree.root]);
+                  yield* tree.observe;
+                }),
+            ).pipe(
+              Effect.provide(BorrowedOutput.CleanupReporter.layer),
+              Effect.mapError((error) =>
+                error instanceof SubmissionPreparationFailed
+                  ? error
+                  : new SubmissionPreparationFailed({ path: zipPath, reason: describe(error) })
+              ),
+            );
+            const zipBytes = yield* fileSystem.readFile(zipPath).pipe(
+              Effect.mapError((error) => new SubmissionPreparationFailed({ path: zipPath, reason: describe(error) })),
+            );
+            const hashed = yield* crypto.digest("SHA-256", zipBytes).pipe(
+              Effect.mapError((error) => new SubmissionPreparationFailed({ path: zipPath, reason: describe(error) })),
+            );
+            return yield* submitBytes(
+              "zip",
+              input.bundle.architecture,
+              zipName,
+              zipBytes,
+              Artifact.sha256Digest(hex(new Uint8Array(hashed))),
+              new StapleTarget({
+                kind: "app",
+                identityKind: "tree-manifest",
+                artifactBytes: input.bundle.totalBytes,
+                artifactDigest: input.bundle.manifestDigest,
+                bundleName,
+              }),
+              ditto.observation,
+            );
           }),
-          transportTool,
-        );
-      }));
+        ));
     });
 
     const info = Effect.fn("effect-build-apple.notaryInfo")(function*(reference: SubmissionReference) {
       const response = yield* run("info", [reference.submissionId]);
-      const object = yield* parseObject("info", response);
-      const submissionId = yield* requireSubmissionId("info", object, "id", credential.sensitiveValues);
+      const object = yield* parseObject("info", response.text);
+      const submissionId = yield* requireSubmissionId("info", object, "id", response.sensitiveValues);
       if (submissionId !== reference.submissionId) {
         return yield* new CorrelationFailed({
           operation: "info",
@@ -768,9 +657,13 @@ const makeService = (
           observedSubmissionId: submissionId,
         });
       }
+      const safeText = (value: unknown) => {
+        const text = nonEmpty(value);
+        return text === undefined ? undefined : scrub(text, response.sensitiveValues);
+      };
       const providerStatus = safeText(object.status);
       if (providerStatus === undefined) {
-        return yield* new ResponseInvalid({ operation: "info", reason: "missing non-empty status" });
+        return yield* new ResponseInvalid({ operation: "info", reason: "missing status" });
       }
       const message = safeText(object.message);
       const status = yield* normalizeStatus("info", providerStatus, message);
@@ -781,13 +674,13 @@ const makeService = (
         kind: reference.kind,
         architecture: reference.architecture,
         artifactBytes: reference.artifactBytes,
-        artifactSha256: reference.artifactSha256,
+        artifactDigest: reference.artifactDigest,
         status,
         ...(message === undefined ? {} : { message }),
         ...(name === undefined ? {} : { name }),
         ...(createdDate === undefined ? {} : { createdDate }),
         submissionTool: reference.submissionTool,
-        tool,
+        tool: notarytool.observation,
         ...(reference.stapleTarget === undefined ? {} : { stapleTarget: reference.stapleTarget }),
         ...(reference.transportTool === undefined ? {} : { transportTool: reference.transportTool }),
       });
@@ -795,8 +688,8 @@ const makeService = (
 
     const log = Effect.fn("effect-build-apple.notaryLog")(function*(reference: SubmissionReference) {
       const response = yield* run("log", [reference.submissionId]);
-      const object = yield* parseObject("log", response);
-      const submissionId = yield* requireSubmissionId("log", object, "jobId", credential.sensitiveValues);
+      const object = yield* parseObject("log", response.text);
+      const submissionId = yield* requireSubmissionId("log", object, "jobId", response.sensitiveValues);
       if (submissionId !== reference.submissionId) {
         return yield* new CorrelationFailed({
           operation: "log",
@@ -804,41 +697,42 @@ const makeService = (
           observedSubmissionId: submissionId,
         });
       }
+      const safeText = (value: unknown) => {
+        const text = nonEmpty(value);
+        return text === undefined ? undefined : scrub(text, response.sensitiveValues);
+      };
       const providerStatus = safeText(object.status);
       if (providerStatus === undefined) {
-        return yield* new ResponseInvalid({ operation: "log", reason: "missing non-empty status" });
+        return yield* new ResponseInvalid({ operation: "log", reason: "missing status" });
       }
       const statusSummary = safeText(object.statusSummary);
       const status = yield* normalizeStatus("log", providerStatus, statusSummary);
-      const statusCode = typeof object.statusCode === "number" ? object.statusCode : undefined;
-      const archiveFilename = safeText(object.archiveFilename);
       if (object.issues !== undefined && !Array.isArray(object.issues)) {
-        return yield* new ResponseInvalid({ operation: "log", reason: "issues must be an array when present" });
+        return yield* new ResponseInvalid({ operation: "log", reason: "issues must be an array" });
       }
       const issues: LogIssue[] = [];
       for (const [index, value] of (object.issues ?? []).entries()) {
-        const parsed = issue(value, credential.sensitiveValues);
+        const parsed = issue(value, response.sensitiveValues);
         if (parsed === undefined) {
-          return yield* new ResponseInvalid({
-            operation: "log",
-            reason: `issues[${index}] was not a complete notarization issue`,
-          });
+          return yield* new ResponseInvalid({ operation: "log", reason: `issues[${index}] is incomplete` });
         }
         issues.push(parsed);
       }
+      const statusCode = typeof object.statusCode === "number" ? object.statusCode : undefined;
+      const archiveFilename = safeText(object.archiveFilename);
       return new Log({
         submissionId,
         kind: reference.kind,
         architecture: reference.architecture,
         artifactBytes: reference.artifactBytes,
-        artifactSha256: reference.artifactSha256,
+        artifactDigest: reference.artifactDigest,
         status,
         ...(statusSummary === undefined ? {} : { statusSummary }),
         ...(statusCode === undefined ? {} : { statusCode }),
         ...(archiveFilename === undefined ? {} : { archiveFilename }),
         issues,
         submissionTool: reference.submissionTool,
-        tool,
+        tool: notarytool.observation,
         ...(reference.stapleTarget === undefined ? {} : { stapleTarget: reference.stapleTarget }),
         ...(reference.transportTool === undefined ? {} : { transportTool: reference.transportTool }),
       });
@@ -852,30 +746,19 @@ const makeService = (
     };
   });
 
-export const submit = (
-  input: SubmitInput,
-): Effect.Effect<Submission, SubmitError, Client> => Client.use((service) => service.submit(input));
-
-export const submitApp = (
-  input: SubmitAppInput,
-): Effect.Effect<Submission, SubmitAppError, Client> => Client.use((service) => service.submitApp(input));
-
-export const info = (
-  reference: SubmissionReference,
-): Effect.Effect<Observation, ObserveError, Client> => Client.use((service) => service.info(reference));
-
-export const log = (
-  reference: SubmissionReference,
-): Effect.Effect<Log, ObserveError, Client> => Client.use((service) => service.log(reference));
+export const submit = (input: SubmitInput): Effect.Effect<Submission, SubmitError, Client> =>
+  Client.use((service) => service.submit(input));
+export const submitApp = (input: SubmitAppInput): Effect.Effect<Submission, SubmitAppError, Client> =>
+  Client.use((service) => service.submitApp(input));
+export const info = (reference: SubmissionReference): Effect.Effect<Observation, ObserveError, Client> =>
+  Client.use((service) => service.info(reference));
+export const log = (reference: SubmissionReference): Effect.Effect<Log, ObserveError, Client> =>
+  Client.use((service) => service.log(reference));
 
 export const layer = (
   options: LayerOptions,
 ): Layer.Layer<
   Client,
   LayerError,
-  | Crypto.Crypto
-  | FileSystem.FileSystem
-  | Path.Path
-  | ChildProcessSpawner.ChildProcessSpawner
-  | Credential
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Credential
 > => Layer.effect(Client, makeService(options));

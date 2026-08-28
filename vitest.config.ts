@@ -8,9 +8,13 @@ export default defineConfig({
   resolve: {
     alias: {
       "effect-build/Artifact": core("Artifact"),
-      "effect-build/BuildError": core("BuildError"),
-      "effect-build/Target": core("Target"),
-      "effect-build/Toolchain": core("Toolchain"),
+      "effect-build/Author/BorrowedOutput": core("Author/BorrowedOutput"),
+      "effect-build/Author/Executable": core("Author/Executable"),
+      "effect-build/Author/File": core("Author/File"),
+      "effect-build/Author/Tool": core("Author/Tool"),
+      "effect-build/Author/Tree": core("Author/Tree"),
+      "effect-build/Matrix": core("Matrix"),
+      "effect-build/SystemTarget": core("SystemTarget"),
     },
   },
   test: {

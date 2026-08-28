@@ -1,27 +1,14 @@
 # effect-build-esbuild
 
-Effect-native esbuild operations, in-process and in-memory: one-shot
-builds from `effect-build-esbuild/Build`, scoped incremental contexts from
-`effect-build-esbuild/Context`, and watch mode as a `Stream` from
-`effect-build-esbuild/Watch`.
+Provider-native esbuild `Api` and `Command` lanes. The API lane preserves in-memory builds, transforms, analysis, formatting, and scoped contexts. The command lane preserves selected-command stdout builds, provider-direct directories, and scoped watch behavior.
 
 ```ts
 import { Effect } from "effect";
-import * as Build from "effect-build-esbuild/Build";
+import { Build } from "effect-build-esbuild/Api";
 
 const result = await Effect.runPromise(
-  Build.build({ entryPoints: ["src/main.ts"], bundle: true, write: false }).pipe(
-    Effect.provide(Build.layer),
-  ),
+  Build.build({ entryPoints: ["src/main.ts"], bundle: true, write: false }),
 );
 ```
 
-Options are esbuild's own with one refinement: `write` must be the literal
-`false` — outputs stay in memory. `Build.transform` transpiles one file,
-`Build.analyzeMetafile` renders the native size report, `Context.make`
-returns a scoped context whose native `dispose` is owned by the Scope
-(cancel-then-dispose), and `Watch.changes` emits every completed build —
-broken rebuilds arrive as values on `result.errors`, and ending the
-stream stops the watcher. Failures are `EsbuildFailed`, exposing the
-native `errors`/`warnings` by reference. See the
-[repository](https://github.com/mannyc2/effect-build) for the full toolkit.
+Provider-direct directories may be partial after failure or interruption and are not represented as core finalized trees.

@@ -1,28 +1,28 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as CompileExecutable from "effect-build-bun/CompileExecutable";
+import { Command } from "effect-build-bun";
 
-// Fan out over targets with plain Effect combinators; each cell settles
-// independently as an Exit, so one failure never rolls back the others.
-const targets = ["linux-x64-gnu", "macos-aarch64", "windows-x64"] as const;
+const targets = ["bun-linux-x64", "bun-darwin-arm64", "bun-windows-x64"] as const;
 
-const results = await Effect.runPromise(
-  Effect.forEach(
-    targets,
-    (target) =>
-      Effect.exit(CompileExecutable.compileExecutable({
-        entrypoint: "src/main.ts",
-        outfile: `dist/app-${target}`,
-        target,
-        minify: true,
-      })),
-    { concurrency: 2 },
-  ).pipe(
-    Effect.provide(CompileExecutable.layer()),
+const report = await Effect.runPromise(
+  Command.CompileExecutable.compileExecutableMatrix({
+    inputs: targets.map((target) => ({
+      entrypoints: ["src/main.ts"],
+      outfile: `dist/app-${target}${target.startsWith("bun-windows-") ? ".exe" : ""}`,
+      target,
+      observation: "hashed" as const,
+      options: { minify: true },
+    })) as unknown as readonly [
+      Command.CompileExecutable.Input<"hashed">,
+      ...Command.CompileExecutable.Input<"hashed">[],
+    ],
+    concurrency: 2,
+  }).pipe(
+    Effect.provide(Command.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
 
-for (const [index, exit] of results.entries()) {
-  console.log(targets[index], exit._tag);
+for (const cell of report.cells) {
+  console.log(targets[cell.identity.index], cell._tag);
 }

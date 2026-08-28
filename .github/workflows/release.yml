@@ -119,10 +119,34 @@ jobs:
           stage="$(mktemp -d)"
           mapfile -t names < <(node -e '
             const fs = require("node:fs");
+            const contract = JSON.parse(fs.readFileSync("tooling/effect-build-contract.json", "utf8"));
             const surface = JSON.parse(fs.readFileSync("tooling/public-api.json", "utf8"));
-            process.stdout.write(Object.keys(surface.packages).sort().join("\n") + "\n");
+            if (contract.schema !== "effect-build/combined-contract@1") {
+              throw new Error("unsupported combined contract schema");
+            }
+            const names = Object.keys(contract.publicApiProjection.packages).sort();
+            const projected = Object.keys(surface.packages).sort();
+            const modules = (packages) => Object.entries(packages)
+              .sort(([left], [right]) => left.localeCompare(right))
+              .flatMap(([name, entry]) => [
+                name,
+                ...Object.keys(entry.subpaths).sort().map((subpath) => `${name}/${subpath.slice(2)}`),
+              ]);
+            const expectedModules = modules(contract.publicApiProjection.packages);
+            const projectedModules = modules(surface.packages);
+            const privatePackages = new Set(contract.publicApiProjection.privatePackages);
+            if (
+              JSON.stringify(names) !== JSON.stringify(projected)
+              || JSON.stringify(expectedModules) !== JSON.stringify(projectedModules)
+              || expectedModules.length !== 42
+              || names.some((name) => privatePackages.has(name))
+            ) {
+              throw new Error("public package projection does not match the combined contract");
+            }
+            process.stdout.write(names.join("\n") + "\n");
           ')
-          if [[ "${#names[@]}" -ne 12 || "${names[0]}" != "effect-build" ]]; then
+          if [[ "${#names[@]}" -ne 11 || "${names[0]}" != "effect-build" ]] \
+            || [[ " ${names[*]} " == *" effect-build-rolldown "* ]]; then
             echo "refusing non-canonical package surface" >&2
             exit 1
           fi

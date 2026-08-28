@@ -1,13 +1,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Layer, Redacted, Schema } from "effect";
-import { createHash } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as Sign from "../../packages/effect-build-windows/src/SignMsix.js";
-import type * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import { finalizedFile } from "../fixtures/finalized-artifacts.js";
 import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const fixture = resolve(
@@ -17,7 +17,7 @@ let root = "";
 let executable = "";
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "effect-build-windows-hard-cut-"));
+  root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-windows-hard-cut-")));
   executable = await installFixtureExecutable({ fixture, root, name: "signtool" });
 });
 
@@ -33,19 +33,15 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const unsigned = async (name: string): Promise<Artifact.FinalizedFile> => {
+const unsigned = async (name: string): Promise<Artifact.HashedFile> => {
   const path = join(root, `${name}-unsigned.msix`);
   const contents = new TextEncoder().encode(`MSIX:${name}\n`);
   await writeFile(path, contents);
-  return {
-    path,
-    bytes: contents.byteLength,
-    sha256: createHash("sha256").update(contents).digest("hex"),
-  };
+  return finalizedFile(path);
 };
 
 const input = (
-  source: Artifact.FinalizedFile,
+  source: Artifact.HashedFile,
   outfile: string,
   overrides: Partial<Sign.SignMsixInput> = {},
 ) =>
@@ -101,9 +97,9 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
     const exit = await run(Sign.signMsix(input(source, "missing-tool.msix")), pfx(), {
       executable: join(root, "not-signtool"),
     });
-    const failure = failureOf(exit) as { readonly _tag: string; readonly tool: string };
-    expect(failure._tag).toBe("ToolNotFound");
-    expect(failure.tool).toBe("signtool");
+    const failure = failureOf(exit) as { readonly _tag: string; readonly reason: string };
+    expect(failure._tag).toBe("SignToolUnavailable");
+    expect(failure.reason).toContain("not-signtool");
     expect(await absent(join(root, "missing-tool.msix"))).toBe(true);
   });
 
@@ -122,11 +118,11 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
       expect(exit.value).toMatchObject({
-        _tag: "File",
+        _tag: "HashedFile",
         path: join(root, "pfx.msix"),
-        tool: { name: "signtool", version: "10.0.26100.0" },
+        provenance: { name: "signtool", participants: [{ version: "10.0.26100.0" }] },
       });
-      expect(exit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(exit.value.digest.value).toMatch(/^[0-9a-f]{64}$/);
     }
     expect(await readFile(source.path, "utf8")).toBe("MSIX:pfx\n");
     expect(await readFile(join(root, "pfx.msix"), "utf8"))
@@ -191,6 +187,62 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
     ]);
   });
 
+  it("acquires fresh credential arguments immediately for each signing launch", async () => {
+    const first = await unsigned("credential-a");
+    const second = await unsigned("credential-b");
+    let acquisitions = 0;
+    const issued: string[] = [];
+    const credential = Layer.succeed(Sign.SigningCredential, {
+      arguments: Effect.sync(() => {
+        const password = `rotating-password-${++acquisitions}`;
+        issued.push(password);
+        return {
+          args: ["/f", join(root, "certificate.pfx"), "/p", password],
+          sensitiveValues: [join(root, "certificate.pfx"), password],
+        };
+      }),
+    });
+    const log = join(root, "rotating-credential.log");
+    process.env.FAKE_SIGNTOOL_LOG = log;
+    await Effect.runPromise(
+      Effect.gen(function*() {
+        expect(acquisitions).toBe(0);
+        yield* Sign.signMsix(input(first, "credential-a.msix"));
+        expect(acquisitions).toBe(1);
+        yield* Sign.signMsix(input(second, "credential-b.msix"));
+        expect(acquisitions).toBe(2);
+      }).pipe(
+        Effect.provide(Sign.layer({ executable }).pipe(Layer.provide(credential))),
+        Effect.provide(NodeServices.layer),
+      ),
+    );
+    const signingInvocations = (await logLines(log)).filter(({ argv }) => argv[0] === "sign");
+    expect(signingInvocations).toHaveLength(2);
+    for (const [index, invocation] of signingInvocations.entries()) {
+      expect(invocation.argv).toContain(issued[index]);
+      expect(issued.filter((password) => invocation.argv.includes(password))).toEqual([issued[index]]);
+    }
+  });
+
+  it("rejects a changed selected SignTool before any signing launch", async () => {
+    const source = await unsigned("changed-tool");
+    const mutable = await installFixtureExecutable({ fixture, root, name: "signtool-mutable" });
+    const log = join(root, "changed-tool.log");
+    process.env.FAKE_SIGNTOOL_LOG = log;
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function*() {
+        yield* Effect.tryPromise(() => writeFile(mutable, "changed selected SignTool bytes\n"));
+        return yield* Sign.signMsix(input(source, "changed-tool.msix"));
+      }).pipe(
+        Effect.provide(Sign.layer({ executable: mutable }).pipe(Layer.provide(pfx()))),
+        Effect.provide(NodeServices.layer),
+      ),
+    );
+    expect(failureOf(exit)).toMatchObject({ _tag: "SignToolChanged", path: mutable });
+    expect((await logLines(log)).filter(({ argv }) => argv[0] === "sign")).toHaveLength(0);
+    expect(await absent(join(root, "changed-tool.msix"))).toBe(true);
+  });
+
   it("scrubs PFX secrets from typed native failures and never finalizes", async () => {
     const source = await unsigned("secret-failure");
     const secret = "never-return-this-password";
@@ -204,7 +256,7 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
       readonly stderr: string;
       readonly message: string;
     };
-    expect(failure._tag).toBe("ToolFailed");
+    expect(failure._tag).toBe("SignToolFailed");
     expect(failure.exitCode).toBe(31);
     expect(failure.stdout).toBe("native signtool stdout");
     expect(failure.stderr).toContain("<redacted>");
@@ -221,7 +273,7 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
       await run(Sign.signMsix(input(source, "verify-failure.msix"))),
     ) as { readonly _tag: string; readonly exitCode: number; readonly stderr: string };
     expect(failure).toMatchObject({
-      _tag: "ToolFailed",
+      _tag: "SignToolFailed",
       exitCode: 32,
       stderr: "native verify stderr",
     });
@@ -235,7 +287,7 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
       await run(Sign.signMsix(input(source, "timestamp-warning.msix"))),
     ) as { readonly _tag: string; readonly exitCode: number; readonly stderr: string };
     expect(failure).toMatchObject({
-      _tag: "ToolFailed",
+      _tag: "SignToolFailed",
       exitCode: 2,
       stderr: "signature is not timestamped",
     });
@@ -245,10 +297,17 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
   it("rejects an absent finalized source before signing and cleans private staging", async () => {
     const missing = join(root, "absent-unsigned.msix");
     const failure = failureOf(
-      await run(Sign.signMsix(input({ path: missing, bytes: 1, sha256: "0".repeat(64) }, "absent.msix"))),
+      await run(Sign.signMsix(input({
+        _tag: "HashedFile",
+        path: missing as Artifact.AbsolutePath,
+        bytes: Artifact.decimalBytes("1"),
+        digest: Artifact.sha256Digest("0".repeat(64)),
+        provenance: Artifact.intrinsicProvenance("missing-test-fixture"),
+        publication: { scope: "file", commit: "same-parent-no-replace-link", committed: true },
+      }, "absent.msix"))),
     ) as { readonly _tag: string; readonly reason: string };
-    expect(failure._tag).toBe("ArtifactVerificationFailed");
-    expect(failure.reason).toContain("read");
+    expect(failure._tag).toBe("FileVerificationFailed");
+    expect(failure.reason).toContain("resolve");
     expect((await readdir(root)).some((name) => name.startsWith(".effect-build-"))).toBe(false);
   });
 
@@ -323,9 +382,11 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
       { executable, version: "10.0.26100.8249" },
     );
     expect(Exit.isSuccess(exit)).toBe(true);
-    if (Exit.isSuccess(exit)) expect(exit.value.tool.version).toBe("10.0.26100.8249");
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value.provenance).toMatchObject({ participants: [{ version: "10.0.26100.8249" }] });
+    }
     const invocations = await logLines(log);
-    expect(invocations.filter(({ argv }) => argv[0] === "/?")).toHaveLength(0);
+    expect(invocations.filter(({ argv }) => argv[0] === "/?")).toHaveLength(1);
     expect(invocations.filter(({ argv }) => argv[0] === "sign")).toHaveLength(1);
     expect(invocations.filter(({ argv }) => argv[0] === "verify")).toHaveLength(1);
   });
@@ -346,8 +407,8 @@ describe.sequential("Windows MSIX Authenticode hard cut", () => {
     const exit = await Effect.runPromiseExit(program);
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value[0].sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(exit.value[0].tool.version).toBe("99.0.0");
+      expect(exit.value[0].digest.value).toMatch(/^[0-9a-f]{64}$/);
+      expect(exit.value[0].provenance).toMatchObject({ participants: [{ version: "99.0.0" }] });
     }
     const invocations = await logLines(log);
     expect(invocations.filter(({ argv }) => argv[0] === "/?")).toHaveLength(1);

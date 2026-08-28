@@ -1,19 +1,19 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Schema } from "effect";
-import { createHash } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as Nfpm from "../../packages/effect-build-nfpm/src/Package.js";
-import type * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import { finalizedFile } from "../fixtures/finalized-artifacts.js";
 import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-nfpm-hard-cut.mjs", import.meta.url)));
 let root = "";
 let executable = "";
-let payload: Artifact.FinalizedFile;
+let payload: Artifact.HashedFile;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-nfpm-hard-cut-"));
@@ -21,11 +21,7 @@ beforeAll(async () => {
   const payloadPath = join(root, "fixture-cli");
   const contents = new TextEncoder().encode("#!/bin/sh\nprintf 'fixture-cli-ok\\n'\n");
   await writeFile(payloadPath, contents);
-  payload = {
-    path: payloadPath,
-    bytes: contents.byteLength,
-    sha256: createHash("sha256").update(contents).digest("hex"),
-  };
+  payload = await finalizedFile(payloadPath);
 });
 
 afterEach(() => {
@@ -51,7 +47,7 @@ const input = (outfile: string, overrides: Partial<Nfpm.PackageInput> = {}) =>
         new Nfpm.PackageContent({
           artifact: payload,
           dst: "/usr/bin/fixture-cli",
-          mode: 493,
+          mode: Artifact.fileMode(493),
         }),
       ],
       license: "MIT",
@@ -140,9 +136,9 @@ describe.sequential("nFPM hard-cut package operations", () => {
     const exit = await run(Nfpm.buildDeb(input("missing-tool.deb")), {
       executable: join(root, "not-nfpm"),
     });
-    const failure = failureOf(exit) as { readonly _tag: string; readonly tool: string };
-    expect(failure._tag).toBe("ToolNotFound");
-    expect(failure.tool).toBe("nfpm");
+    const failure = failureOf(exit) as { readonly _tag: string; readonly reason: string };
+    expect(failure._tag).toBe("NfpmToolUnavailable");
+    expect(failure.reason).toContain("nfpm");
     expect(await absent(join(root, "missing-tool.deb"))).toBe(true);
   });
 
@@ -163,12 +159,15 @@ describe.sequential("nFPM hard-cut package operations", () => {
       expect(Exit.isSuccess(exit), format).toBe(true);
       if (Exit.isSuccess(exit)) {
         expect(exit.value).toMatchObject({
-          _tag: "File",
-          path: join(root, name),
-          tool: { name: "nfpm", version: "2.47.0" },
+          _tag: "HashedFile",
+          provenance: {
+            name: "nfpm",
+            participants: [{ name: "nfpm", version: "2.47.0" }],
+          },
         });
-        expect(exit.value.bytes).toBeGreaterThan(0);
-        expect(exit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
+        expect(basename(exit.value.path)).toBe(name);
+        expect(BigInt(exit.value.bytes)).toBeGreaterThan(0n);
+        expect(exit.value.digest.value).toMatch(/^[0-9a-f]{64}$/);
       }
       const invocations = await logLines(log);
       expect(invocations.map(({ argv }) => argv)).toHaveLength(2);
@@ -249,6 +248,23 @@ describe.sequential("nFPM hard-cut package operations", () => {
     expect(invocations.filter(({ argv }) => argv[0] === "package")).toHaveLength(2);
   });
 
+  it("reauthenticates the selected nFPM bytes immediately before package launch", async () => {
+    const original = await readFile(executable);
+    const program = Effect.gen(function*() {
+      yield* Effect.promise(() => writeFile(executable, "#!/bin/sh\nexit 0\n"));
+      return yield* Nfpm.buildDeb(input("changed-tool.deb"));
+    }).pipe(
+      Effect.provide(Nfpm.layer({ executable })),
+      Effect.provide(NodeServices.layer),
+    );
+    try {
+      const failure = failureOf(await Effect.runPromiseExit(program)) as { readonly _tag: string };
+      expect(failure._tag).toBe("NfpmToolChanged");
+    } finally {
+      await writeFile(executable, original);
+    }
+  });
+
   it("preserves native failure diagnostics and does not finalize output", async () => {
     process.env.FAKE_NFPM_MODE = "fail";
     const destination = join(root, "failed.deb");
@@ -259,7 +275,7 @@ describe.sequential("nFPM hard-cut package operations", () => {
       readonly stderr: string;
     };
     expect(failure).toMatchObject({
-      _tag: "ToolFailed",
+      _tag: "NfpmCommandFailed",
       exitCode: 19,
       stdout: "native nfpm stdout",
       stderr: "native nfpm stderr",
@@ -267,14 +283,14 @@ describe.sequential("nFPM hard-cut package operations", () => {
     expect(await absent(destination)).toBe(true);
   });
 
-  it("reports missing tool output as PublishFailed and cleans staging", async () => {
+  it("reports missing tool output as FileCandidateMissing and cleans staging", async () => {
     process.env.FAKE_NFPM_MODE = "missing";
     const failure = failureOf(await run(Nfpm.buildApk(input("missing.apk")))) as {
       readonly _tag: string;
-      readonly reason: string;
+      readonly stagedPath: string;
     };
-    expect(failure._tag).toBe("PublishFailed");
-    expect(failure.reason).toContain("did not produce");
+    expect(failure._tag).toBe("FileCandidateMissing");
+    expect(failure.stagedPath).toContain("missing.apk");
     expect((await readdir(root)).some((name) => name.startsWith(".effect-build-"))).toBe(false);
   });
 
@@ -283,8 +299,8 @@ describe.sequential("nFPM hard-cut package operations", () => {
     const exit = await run(Nfpm.buildRpm(input("untested.rpm")));
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value.tool.version).toBe("9.9.9");
-      expect(exit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(exit.value.provenance).toMatchObject({ participants: [{ version: "9.9.9" }] });
+      expect(exit.value.digest.value).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 
@@ -292,7 +308,7 @@ describe.sequential("nFPM hard-cut package operations", () => {
     await writeFile(payload.path, "mutated payload");
     const exit = await run(Nfpm.buildDeb(input("mutated.deb")));
     const failure = failureOf(exit) as { readonly _tag: string; readonly reason: string };
-    expect(failure._tag).toBe("ArtifactVerificationFailed");
+    expect(failure._tag).toBe("FileVerificationFailed");
     await writeFile(payload.path, "#!/bin/sh\nprintf 'fixture-cli-ok\\n'\n");
   });
 

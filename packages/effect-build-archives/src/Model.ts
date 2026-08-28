@@ -9,7 +9,7 @@ export type Format = typeof Format.Type;
 export class ArchiveEntry extends Schema.Class<ArchiveEntry>(
   "effect-build-archives/ArchiveEntry",
 )({
-  artifact: Artifact.FinalizedFile,
+  artifact: Artifact.HashedFileSchema,
   path: Schema.NonEmptyString,
   executable: Schema.optionalKey(Schema.Boolean),
 }) {}

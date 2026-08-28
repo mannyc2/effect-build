@@ -1,7 +1,7 @@
 {
   "name": "effect-build-esbuild",
   "version": "0.6.0",
-  "description": "Effect-native Esbuild Build and Context operations.",
+  "description": "Effect-native provider API and command access for esbuild.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -34,17 +34,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./Build": {
-      "types": "./dist/Build.d.ts",
-      "import": "./dist/Build.js"
+    "./Api": {
+      "types": "./dist/Api/index.d.ts",
+      "import": "./dist/Api/index.js"
     },
-    "./Context": {
-      "types": "./dist/Context.d.ts",
-      "import": "./dist/Context.js"
-    },
-    "./Watch": {
-      "types": "./dist/Watch.d.ts",
-      "import": "./dist/Watch.js"
+    "./Command": {
+      "types": "./dist/Command/index.d.ts",
+      "import": "./dist/Command/index.js"
     }
   },
   "scripts": {

@@ -1,0 +1,4674 @@
+{
+  "schema": "effect-build/combined-contract@1",
+  "status": "authoritative-hard-cut-contract",
+  "authority": {
+    "semanticAuthority": [
+      "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+      "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+      "research/post-0.3/freeze/SURFACE-ADJUDICATION.json"
+    ],
+    "implementationAuthority": "tooling/effect-build-contract.json",
+    "supersedes": [
+      "tooling/research-complete-contract.json",
+      "tooling/v05-contract.json"
+    ],
+    "rule": "one generated contract; source and public-surface snapshots are inputs or projections, never peer product authorities"
+  },
+  "provenance": {
+    "deterministicGeneration": true,
+    "generator": "scripts/effect-build-contract/generate.mjs",
+    "validator": "scripts/effect-build-contract/validate.mjs",
+    "sources": [
+      {
+        "path": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+        "sha256": "287f152b2c92e3f20d3923b5f2066e24f80c62dbc95f3a61d5f51d256fec96fc"
+      },
+      {
+        "path": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+        "sha256": "d6eef5b92a53a6e157c3b085cd786b5ca8a6f0a33e3f6ed86704e168693b373c"
+      },
+      {
+        "path": "research/post-0.3/freeze/SURFACE-ADJUDICATION.json",
+        "sha256": "91e16f34950e094854a1b89647d45e7db4b87cb9a4626f87843882f60d22222c"
+      },
+      {
+        "path": "scripts/effect-build-contract/policy.mjs",
+        "sha256": "3e14566b55cb75b655aee57cecfa6ac6f67dddffca340ab2d0de874a184f91cd"
+      },
+      {
+        "path": "scripts/effect-build-contract/model.mjs",
+        "sha256": "9fad107f761ccad4a62c1cd3248be58d00892000ce02a6561e46847f1be62135"
+      }
+    ]
+  },
+  "invariants": {
+    "providerSurface": "permanent operation-specific provider-native Api and Command lanes; no flat legacy surface",
+    "toolSelection": "explicit path or one deterministic PATH walk; no registry, fallback, raw argv, retry, or automatic installation",
+    "launch": "selected authenticated tool is reauthenticated immediately before every launch",
+    "identities": [
+      "construction-host",
+      "selected-authenticated-tool",
+      "artifact-target",
+      "target-runner"
+    ],
+    "lifecycle": "scoped ownership, interruption safety, and provider-owned typed errors",
+    "durableBoundary": "only explicit finalizing operations return canonical durable file, tree, or executable artifacts",
+    "nativeResults": "in-memory native results and provider-direct writes retain provider-native result types",
+    "artifactCanon": "one core artifact, digest, logical-name, tree, and selected-tool identity model",
+    "directoryNoReplaceBoundary": "Effect FileSystem has no portable atomic no-replace directory rename; tree finalizers use process-local claims plus start/precommit destination rejection, and external writers must coordinate",
+    "hardCut": "no compatibility layer or legacy fallback"
+  },
+  "coreCapabilityRegister": {
+    "count": 8,
+    "capabilities": [
+      {
+        "id": "CORE-ARTIFACT-IDENTITY",
+        "module": "Artifact",
+        "visibility": "public",
+        "owns": [
+          "logical-name",
+          "digest",
+          "immutable-file",
+          "immutable-tree",
+          "immutable-executable"
+        ]
+      },
+      {
+        "id": "CORE-BORROWED-OUTPUT",
+        "module": "Author/BorrowedOutput",
+        "visibility": "public",
+        "owns": [
+          "scoped-file-observation",
+          "scoped-tree-observation",
+          "interruption-safe-cleanup"
+        ]
+      },
+      {
+        "id": "CORE-FINALIZE-FILE",
+        "module": "Author/File",
+        "visibility": "public",
+        "owns": [
+          "same-parent-stage",
+          "revalidation",
+          "atomic-no-replace-file-commit",
+          "undelivered-commit-rollback",
+          "verified-byte-consumption"
+        ]
+      },
+      {
+        "id": "CORE-FINALIZE-TREE",
+        "module": "Author/Tree",
+        "visibility": "public",
+        "owns": [
+          "same-parent-stage",
+          "revalidation",
+          "process-local-destination-claim",
+          "precommit-destination-rejection",
+          "atomic-tree-rename",
+          "undelivered-commit-rollback",
+          "committed-file-projection",
+          "verified-tree-consumption"
+        ]
+      },
+      {
+        "id": "CORE-FINALIZE-EXECUTABLE",
+        "module": "Author/Executable",
+        "visibility": "public",
+        "owns": [
+          "same-parent-stage",
+          "native-inspection",
+          "revalidation",
+          "atomic-no-replace-executable-commit",
+          "undelivered-commit-rollback"
+        ]
+      },
+      {
+        "id": "CORE-SELECTED-TOOL",
+        "module": "Author/Tool",
+        "visibility": "public",
+        "owns": [
+          "deterministic-selection",
+          "content-identity",
+          "authentication",
+          "launch-reauthentication"
+        ]
+      },
+      {
+        "id": "CORE-MATRIX",
+        "module": "Matrix",
+        "visibility": "public",
+        "owns": [
+          "explicit-coordinate-identity",
+          "bounded-matrix-execution"
+        ]
+      },
+      {
+        "id": "CORE-SYSTEM-TARGET",
+        "module": "SystemTarget",
+        "visibility": "public",
+        "owns": [
+          "artifact-target-identity"
+        ]
+      }
+    ]
+  },
+  "providerOperationRegister": {
+    "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+    "count": 67,
+    "dispositionCounts": {
+      "mandatory": 5,
+      "positive-proof-gated": 22,
+      "conditional-private": 27,
+      "rejected": 11,
+      "superseded": 2
+    },
+    "operations": [
+      {
+        "operationId": "CAN-BUN-001",
+        "provider": "bun",
+        "semanticIdentity": "bun / create-transpiler / host-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Api",
+          "module": "Transpiler",
+          "export": "make",
+          "path": "packages/effect-build-bun/src/Api/Transpiler.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "GC/native backing lifetime and concurrency",
+          "unresolved": [
+            "GC/native backing lifetime and concurrency"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-002",
+        "provider": "bun",
+        "semanticIdentity": "bun / transpile-source-async / host-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Api",
+          "module": "Transpiler",
+          "export": "transform",
+          "path": "packages/effect-build-bun/src/Api/Transpiler.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "provider work after Effect interruption",
+          "unresolved": [
+            "provider work after Effect interruption"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-003",
+        "provider": "bun",
+        "semanticIdentity": "bun / transpile-source-sync / host-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Api",
+          "module": "Transpiler",
+          "export": "transformSync",
+          "path": "packages/effect-build-bun/src/Api/Transpiler.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "non-interruptible execution boundary",
+          "unresolved": [
+            "non-interruptible execution boundary"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-004",
+        "provider": "bun",
+        "semanticIdentity": "bun / scan-source / host-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Api",
+          "module": "Transpiler",
+          "export": "scan",
+          "path": "packages/effect-build-bun/src/Api/Transpiler.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "latency and adversarial accuracy",
+          "unresolved": [
+            "latency and adversarial accuracy"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-005",
+        "provider": "bun",
+        "semanticIdentity": "bun / scan-imports-fast / host-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Api",
+          "module": "Transpiler",
+          "export": "scanImports",
+          "path": "packages/effect-build-bun/src/Api/Transpiler.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "adversarial accuracy boundary",
+          "unresolved": [
+            "adversarial accuracy boundary"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-006",
+        "provider": "bun",
+        "semanticIdentity": "bun / build-memory / host-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Api",
+          "module": "Build",
+          "export": "build",
+          "path": "packages/effect-build-bun/src/Api/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "cancellation and retained artifact lifetime",
+          "unresolved": [
+            "cancellation and retained artifact lifetime"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-007",
+        "provider": "bun",
+        "semanticIdentity": "bun / build-direct-write / host-api / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Api",
+          "module": "Build",
+          "export": "buildToDirectory",
+          "path": "packages/effect-build-bun/src/Api/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "partial writes; pre-existing outputs; interruption remnants",
+          "unresolved": [
+            "partial writes",
+            " pre-existing outputs",
+            " interruption remnants"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "receipt-bounded-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-008",
+        "provider": "bun",
+        "semanticIdentity": "bun / build-stdout / selected-command / one-shot / {caller-owned-value, none}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Command",
+          "module": "Build",
+          "export": "build",
+          "path": "packages/effect-build-bun/src/Command/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "collection bounds and signal outcome",
+          "unresolved": [
+            "collection bounds and signal outcome"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-009",
+        "provider": "bun",
+        "semanticIdentity": "bun / build-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Command",
+          "module": "Build",
+          "export": "buildToDirectory",
+          "path": "packages/effect-build-bun/src/Command/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "partial writes; replacement; signal remnants",
+          "unresolved": [
+            "partial writes",
+            " replacement",
+            " signal remnants"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "receipt-bounded-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-010",
+        "provider": "bun",
+        "semanticIdentity": "bun / build-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Command",
+          "module": "Watch",
+          "export": "watch",
+          "path": "packages/effect-build-bun/src/Command/Watch.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "readiness; recovery; subtree termination; remnants",
+          "unresolved": [
+            "readiness",
+            " recovery",
+            " subtree termination",
+            " remnants"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "receipt-bounded-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-011",
+        "provider": "bun",
+        "semanticIdentity": "bun / compile-executable / host-api / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Api",
+          "module": "CompileExecutable",
+          "export": "compileExecutableDirect",
+          "path": "packages/effect-build-bun/src/Api/CompileExecutable.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "target matrix; acquisition; interruption remnants",
+          "unresolved": [
+            "target matrix",
+            " acquisition",
+            " interruption remnants"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "receipt-bounded-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-012",
+        "provider": "bun",
+        "semanticIdentity": "bun / compile-executable / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "atomic-published-durable",
+          "identityOwner": "product-wrapper-over-provider-command"
+        },
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "semantic-authority"
+        },
+        "implementation": {
+          "package": "effect-build-bun",
+          "lane": "Command",
+          "module": "CompileExecutable",
+          "export": "compileExecutable",
+          "path": "packages/effect-build-bun/src/Command/CompileExecutable.ts"
+        },
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "implemented-0.3-predecessor",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-014",
+        "provider": "bun",
+        "semanticIdentity": "bun / plugin-register-global / host-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-BUN-015",
+        "provider": "bun",
+        "semanticIdentity": "bun / plugin-clear-global / host-api / one-shot / {none, none}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-001",
+        "provider": "deno",
+        "semanticIdentity": "deno / bundle-memory / host-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Api",
+          "module": "Bundle",
+          "export": "memory",
+          "path": "packages/effect-build-deno/src/Api/Bundle.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "permission and interruption execution"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-002",
+        "provider": "deno",
+        "semanticIdentity": "deno / bundle-direct-write / host-api / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "host-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Api",
+          "module": "Bundle",
+          "export": "direct",
+          "path": "packages/effect-build-deno/src/Api/Bundle.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "permission matrix",
+            " partial writes",
+            " remnants"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-003",
+        "provider": "deno",
+        "semanticIdentity": "deno / bundle-stdout / selected-command / one-shot / {caller-owned-value, none}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Command",
+          "module": "Bundle",
+          "export": "stdout",
+          "path": "packages/effect-build-deno/src/Command/Bundle.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "framing",
+            " stderr",
+            " bounds",
+            " interruption"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-004",
+        "provider": "deno",
+        "semanticIdentity": "deno / bundle-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Command",
+          "module": "Bundle",
+          "export": "direct",
+          "path": "packages/effect-build-deno/src/Command/Bundle.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "partial writes and project precedence execution"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-005",
+        "provider": "deno",
+        "semanticIdentity": "deno / bundle-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Command",
+          "module": "Bundle",
+          "export": "watch",
+          "path": "packages/effect-build-deno/src/Command/Bundle.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "rebuild recovery",
+            " termination",
+            " reaping",
+            " remnants"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-006",
+        "provider": "deno",
+        "semanticIdentity": "deno / bundle-declarations-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Command",
+          "module": "Bundle",
+          "export": "declarations",
+          "path": "packages/effect-build-deno/src/Command/Bundle.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "closure and output topology"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-007",
+        "provider": "deno",
+        "semanticIdentity": "deno / transpile-stdout / selected-command / one-shot / {caller-owned-value, none}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Command",
+          "module": "Transpile",
+          "export": "transpile",
+          "path": "packages/effect-build-deno/src/Command/Transpile.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "collection bounds and diagnostics execution",
+          "unresolved": [
+            "collection bounds and diagnostics execution"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-008",
+        "provider": "deno",
+        "semanticIdentity": "deno / transpile-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Command",
+          "module": "Transpile",
+          "export": "transpileToDirectory",
+          "path": "packages/effect-build-deno/src/Command/Transpile.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "interruption and map remnants",
+          "unresolved": [
+            "interruption and map remnants"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-009",
+        "provider": "deno",
+        "semanticIdentity": "deno / transpile-declarations-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Command",
+          "module": "Transpile",
+          "export": "emitDeclarations",
+          "path": "packages/effect-build-deno/src/Command/Transpile.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "declaration failure and topology",
+          "unresolved": [
+            "declaration failure and topology"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-010",
+        "provider": "deno",
+        "semanticIdentity": "deno / compile-executable / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "atomic-published-durable",
+          "identityOwner": "product-wrapper-over-provider-command"
+        },
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "semantic-authority"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Command",
+          "module": "CompileExecutable",
+          "export": "compileExecutable",
+          "path": "packages/effect-build-deno/src/Command/CompileExecutable.ts"
+        },
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "released-predecessor-0.4-not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-DENO-011",
+        "provider": "deno",
+        "semanticIdentity": "deno / compile-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-deno",
+          "lane": "Command",
+          "module": "CompileWatch",
+          "export": "watch",
+          "path": "packages/effect-build-deno/src/Command/CompileWatch.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "coalescing",
+            " termination",
+            " reaping",
+            " remnants"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-001",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / build-memory / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "semantic-authority"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Api",
+          "module": "Build",
+          "export": "build",
+          "path": "packages/effect-build-esbuild/src/Api/Build.ts"
+        },
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-002",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / build-direct-write / in-process-api / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Api",
+          "module": "BuildToDirectory",
+          "export": "buildToDirectory",
+          "path": "packages/effect-build-esbuild/src/Api/BuildToDirectory.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "partial writes and interruption remnants",
+          "unresolved": [
+            "partial writes and interruption remnants"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-003",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / transform / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Api",
+          "module": "Transform",
+          "export": "transform",
+          "path": "packages/effect-build-esbuild/src/Api/Transform.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "large-input temporary-file cleanup",
+          "unresolved": [
+            "large-input temporary-file cleanup"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-004",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / analyze-metafile / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Api",
+          "module": "AnalyzeMetafile",
+          "export": "analyzeMetafile",
+          "path": "packages/effect-build-esbuild/src/Api/AnalyzeMetafile.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "runtime rendering receipt",
+          "unresolved": [
+            "runtime rendering receipt"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-005",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / format-messages / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Api",
+          "module": "FormatMessages",
+          "export": "formatMessages",
+          "path": "packages/effect-build-esbuild/src/Api/FormatMessages.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "runtime rendering receipt",
+          "unresolved": [
+            "runtime rendering receipt"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-006",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / build-memory-sync / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-007",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / build-direct-write-sync / in-process-api / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-008",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / transform-sync / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-009",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / analyze-metafile-sync / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-010",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / format-messages-sync / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-011",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / context-memory / in-process-api / scoped-context / {long-lived-handle, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "semantic-authority"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Api",
+          "module": "Context",
+          "export": "make",
+          "path": "packages/effect-build-esbuild/src/Api/Context.ts"
+        },
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-012",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / context-direct-write / in-process-api / scoped-context / {long-lived-handle, provider-direct-durable}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Api",
+          "module": "ContextToDirectory",
+          "export": "make",
+          "path": "packages/effect-build-esbuild/src/Api/ContextToDirectory.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "context races and mixed-generation remnants",
+          "unresolved": [
+            "context races and mixed-generation remnants"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-013",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / stop-shared-service / in-process-api / one-shot / {none, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-014",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / initialize-shared-service / in-process-api / one-shot / {none, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-015",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / build-stdout / selected-command / one-shot / {caller-owned-value, none}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Command",
+          "module": "Build",
+          "export": "build",
+          "path": "packages/effect-build-esbuild/src/Command/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "bounds; bin form; signal and reaping",
+          "unresolved": [
+            "bounds",
+            " bin form",
+            " signal and reaping"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-016",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / build-direct-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Command",
+          "module": "BuildToDirectory",
+          "export": "buildToDirectory",
+          "path": "packages/effect-build-esbuild/src/Command/BuildToDirectory.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "partial writes; bin form; signal and reaping",
+          "unresolved": [
+            "partial writes",
+            " bin form",
+            " signal and reaping"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-017",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / build-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "positive-proof-gated",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "positive-proof-required"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Command",
+          "module": "Watch",
+          "export": "watch",
+          "path": "packages/effect-build-esbuild/src/Command/Watch.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "termination choice; descendants; remnants",
+          "unresolved": [
+            "termination choice",
+            " descendants",
+            " remnants"
+          ],
+          "failureAction": "block-freeze-or-record-explicit-pre-freeze-disposition-revision"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-018",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / serve / selected-command / scoped-process / {long-lived-handle, none}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-esbuild",
+          "lane": "Command",
+          "module": "Serve",
+          "export": "serve",
+          "path": "packages/effect-build-esbuild/src/Command/Serve.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "machine-readable address or fixed-port decision",
+            " lifecycle"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ESB-019",
+        "provider": "esbuild",
+        "semanticIdentity": "esbuild / build-host-stdout / in-process-api / one-shot / {none, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-NODE-001",
+        "provider": "node-sea",
+        "semanticIdentity": "node-sea / assemble-direct / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "atomic-published-durable",
+          "identityOwner": "product-wrapper-over-provider-command"
+        },
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required-public",
+          "surface": "public",
+          "test": "positive-and-lifecycle",
+          "evidence": "semantic-authority"
+        },
+        "implementation": {
+          "package": "effect-build-node-sea",
+          "lane": "Command",
+          "module": "AssembleExecutable",
+          "export": "assembleDirect",
+          "path": "packages/effect-build-node-sea/src/Command/AssembleExecutable.ts"
+        },
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-implemented",
+          "sourceCertificationStatus": "runtime-proof-pending"
+        }
+      },
+      {
+        "operationId": "CAN-NODE-002",
+        "provider": "node-sea",
+        "semanticIdentity": "node-sea / generate-preparation-blob / selected-command / one-shot / {scope-borrowed-value, none}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "product-wrapper-over-provider-command"
+        },
+        "disposition": "superseded",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "superseded"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-implemented",
+          "sourceCertificationStatus": "runtime-proof-pending"
+        }
+      },
+      {
+        "operationId": "CAN-NODE-003",
+        "provider": "node-sea",
+        "semanticIdentity": "node-sea / inject-preparation-blob / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "atomic-published-durable",
+          "identityOwner": "product-wrapper-over-provider-command"
+        },
+        "disposition": "superseded",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "superseded"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "ship",
+          "sourceImplementationStatus": "not-implemented",
+          "sourceCertificationStatus": "runtime-proof-pending"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-001",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / acquire-reusable-build / in-process-api / scoped-context / {long-lived-handle, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Build",
+          "export": "make",
+          "path": "packages/effect-build-rolldown/src/Api/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "concurrency and release law"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-002",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / generate / in-process-api / scoped-context / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Build",
+          "export": "generateScoped",
+          "path": "packages/effect-build-rolldown/src/Api/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "repeatability",
+            " concurrent use",
+            " external memory"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "narrow-receipt-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-003",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / write / in-process-api / scoped-context / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Build",
+          "export": "writeScoped",
+          "path": "packages/effect-build-rolldown/src/Api/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "collisions",
+            " interruption",
+            " remnants"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-005",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / build-one-shot-generate / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Build",
+          "export": "generate",
+          "path": "packages/effect-build-rolldown/src/Api/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "interruption cleanup"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-006",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / build-one-shot-write / in-process-api / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Build",
+          "export": "write",
+          "path": "packages/effect-build-rolldown/src/Api/Build.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "partial writes and interruption cleanup"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-007",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / watch-direct-write / in-process-api / scoped-context / {long-lived-handle, provider-direct-durable}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Watch",
+          "export": "direct",
+          "path": "packages/effect-build-rolldown/src/Api/Watch.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "event order",
+            " result close",
+            " interruption"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-008",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / watch-skip-write / in-process-api / scoped-context / {long-lived-handle, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Watch",
+          "export": "skipWrite",
+          "path": "packages/effect-build-rolldown/src/Api/Watch.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "event order",
+            " result close",
+            " interruption"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-010",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / cli-bundle-stdout / selected-command / one-shot / {caller-owned-value, none}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Command",
+          "module": "Bundle",
+          "export": "bundle",
+          "path": "packages/effect-build-rolldown/src/Command/Bundle.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "multi-output framing and collection bounds"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-011",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / cli-bundle-write / selected-command / one-shot / {caller-owned-value, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Command",
+          "module": "BundleToDirectory",
+          "export": "bundleToDirectory",
+          "path": "packages/effect-build-rolldown/src/Command/BundleToDirectory.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "partial writes and signal remnants"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-012",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / cli-watch / selected-command / scoped-process / {long-lived-handle, provider-direct-durable}",
+        "mechanism": "selected-command",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Command",
+          "module": "Watch",
+          "export": "watch",
+          "path": "packages/effect-build-rolldown/src/Command/Watch.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "termination",
+            " reaping",
+            " remnants"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-013",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / transform-source / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Transform",
+          "export": "transform",
+          "path": "packages/effect-build-rolldown/src/Api/Transform.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "runtime contract"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-014",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / parse-source / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Parse",
+          "export": "parse",
+          "path": "packages/effect-build-rolldown/src/Api/Parse.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "runtime contract"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-015",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / minify-source / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Minify",
+          "export": "minify",
+          "path": "packages/effect-build-rolldown/src/Api/Minify.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "runtime contract"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-016",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / resolve-module / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Resolve",
+          "export": "make",
+          "path": "packages/effect-build-rolldown/src/Api/Resolve.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "retention and release discovery"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-017",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / scan-graph / in-process-api / one-shot / {scope-borrowed-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Scan",
+          "export": "scan",
+          "path": "packages/effect-build-rolldown/src/Api/Scan.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "cleanup and interruption"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-018A",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / acquire-dev-engine-memory / in-process-api / scoped-context / {long-lived-handle, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "DevEngine",
+          "export": "makeMemory",
+          "path": "packages/effect-build-rolldown/src/Api/DevEngine.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "complete ownership and callback backpressure"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-018B",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / acquire-dev-engine-direct-write / in-process-api / scoped-context / {long-lived-handle, provider-direct-durable}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "provider-direct-durable",
+          "publishedContract": "provider-direct-durable",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "DevEngine",
+          "export": "makeToDirectory",
+          "path": "packages/effect-build-rolldown/src/Api/DevEngine.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "complete ownership",
+            " backpressure",
+            " remnants"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-020",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / emit-isolated-declaration / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Declaration",
+          "export": "emit",
+          "path": "packages/effect-build-rolldown/src/Api/Declaration.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "declaration correctness contract"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-021",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / module-runner-transform / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "surface": "absent",
+          "test": "negative-surface",
+          "evidence": "rejected"
+        },
+        "implementation": null,
+        "evidenceGate": null,
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "reject",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      },
+      {
+        "operationId": "CAN-ROL-022",
+        "provider": "rolldown",
+        "semanticIdentity": "rolldown / load-config / in-process-api / one-shot / {caller-owned-value, none}",
+        "mechanism": "in-process-api",
+        "resultSemantics": {
+          "providerPublication": "none",
+          "publishedContract": "none",
+          "identityOwner": "provider-native"
+        },
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "required-private",
+          "surface": "private",
+          "test": "private-implementation-and-gate",
+          "evidence": "named-gate-open"
+        },
+        "implementation": {
+          "package": "effect-build-rolldown",
+          "lane": "Api",
+          "module": "Config",
+          "export": "load",
+          "path": "packages/effect-build-rolldown/src/Api/Config.ts"
+        },
+        "evidenceGate": {
+          "preFreeze": "not-current-freeze-candidate",
+          "unresolved": [
+            "trust boundary and runtime behavior"
+          ],
+          "failureAction": "none-until-explicit-research-reopens-candidate"
+        },
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/SHIP-DEFER-REJECT.csv",
+          "sourceRecommendation": "defer",
+          "sourceImplementationStatus": "not-started",
+          "sourceCertificationStatus": "source-only-not-certified"
+        }
+      }
+    ]
+  },
+  "nonOperationRegister": {
+    "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+    "count": 46,
+    "dispositionCounts": {
+      "mandatory": 26,
+      "conditional-private": 16,
+      "rejected": 4
+    },
+    "findings": [
+      {
+        "atomId": "B02.1",
+        "provider": "bun",
+        "sourceSet": "original-54",
+        "sourceId": "B02",
+        "sourceLabel": "virtual-file build",
+        "classification": "request-mode",
+        "relatedOperationIds": [
+          "CAN-BUN-006",
+          "CAN-BUN-007"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "virtual and mixed graphs remain native request authority",
+        "evidenceRefs": [
+          "E-BUN-007",
+          "E-BUN-008"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "B06.1",
+        "provider": "bun",
+        "sourceSet": "original-54",
+        "sourceId": "B06",
+        "sourceLabel": "loaders",
+        "classification": "modifier",
+        "relatedOperationIds": [
+          "CAN-BUN-006",
+          "CAN-BUN-007",
+          "CAN-BUN-008",
+          "CAN-BUN-009"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-BUN-009"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "B06.2",
+        "provider": "bun",
+        "sourceSet": "original-54",
+        "sourceId": "B06",
+        "sourceLabel": "per-build plugin callbacks",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-BUN-006",
+          "CAN-BUN-007"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-BUN-010"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "B07.1",
+        "provider": "bun",
+        "sourceSet": "original-54",
+        "sourceId": "B07",
+        "sourceLabel": "HTML graph",
+        "classification": "request-mode",
+        "relatedOperationIds": [
+          "CAN-BUN-006",
+          "CAN-BUN-007",
+          "CAN-BUN-009"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-BUN-009",
+          "E-BUN-013"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "B08.1",
+        "provider": "bun",
+        "sourceSet": "original-54",
+        "sourceId": "B08",
+        "sourceLabel": "splitting/assets/maps",
+        "classification": "modifier",
+        "relatedOperationIds": [
+          "CAN-BUN-006",
+          "CAN-BUN-007",
+          "CAN-BUN-008",
+          "CAN-BUN-009"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-BUN-009",
+          "E-BUN-013"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "B08.2",
+        "provider": "bun",
+        "sourceSet": "original-54",
+        "sourceId": "B08",
+        "sourceLabel": "chunks/metafile/native artifacts",
+        "classification": "result-field",
+        "relatedOperationIds": [
+          "CAN-BUN-006",
+          "CAN-BUN-007",
+          "CAN-BUN-009"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-BUN-008",
+          "E-BUN-011"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "B10.1",
+        "provider": "bun",
+        "sourceSet": "original-54",
+        "sourceId": "B10",
+        "sourceLabel": "full-stack HTML executable",
+        "classification": "request-mode",
+        "relatedOperationIds": [
+          "CAN-BUN-011",
+          "CAN-BUN-012"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "provider-native compile request mode",
+        "evidenceRefs": [
+          "E-BUN-015",
+          "E-BUN-017"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "D06.1",
+        "provider": "deno",
+        "sourceSet": "original-54",
+        "sourceId": "D06",
+        "sourceLabel": "bundle --check",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-DENO-003",
+          "CAN-DENO-004",
+          "CAN-DENO-005",
+          "CAN-DENO-006"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "DENO-EV-002"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "D08.1",
+        "provider": "deno",
+        "sourceSet": "original-54",
+        "sourceId": "D08",
+        "sourceLabel": "denort runtime acquisition",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-DENO-010",
+          "CAN-DENO-011"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "no hidden fallback",
+        "evidenceRefs": [
+          "DENO-EV-004",
+          "DENO-EV-013"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "D09.1",
+        "provider": "deno",
+        "sourceSet": "original-54",
+        "sourceId": "D09",
+        "sourceLabel": "compiled runtime Deno.bundle",
+        "classification": "runtime-capability",
+        "relatedOperationIds": [],
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "publicSurface": "not-an-operation-export",
+          "test": "negative",
+          "evidence": "rejected"
+        },
+        "note": "unavailable at current exact source and historical coordinate",
+        "evidenceRefs": [
+          "DENO-EV-011"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "reject"
+        }
+      },
+      {
+        "atomId": "D10.1",
+        "provider": "deno",
+        "sourceSet": "original-54",
+        "sourceId": "D10",
+        "sourceLabel": "bundle permission authority",
+        "classification": "relation",
+        "relatedOperationIds": [
+          "CAN-DENO-001",
+          "CAN-DENO-002"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "DENO-EV-001",
+          "DENO-EV-012"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "E04.1",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E04",
+        "sourceLabel": "context.rebuild",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-ESB-011",
+          "CAN-ESB-012"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-003",
+          "EV-ESB-021"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "E05.1",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E05",
+        "sourceLabel": "context.watch",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-ESB-011",
+          "CAN-ESB-012"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-002",
+          "EV-ESB-003"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "E06.1",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E06",
+        "sourceLabel": "context.serve",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-ESB-011",
+          "CAN-ESB-012"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-002",
+          "EV-ESB-003"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "E07.1",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E07",
+        "sourceLabel": "context.cancel",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-ESB-011",
+          "CAN-ESB-012"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-002",
+          "EV-ESB-003"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "E08.1",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E08",
+        "sourceLabel": "context.dispose",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-ESB-011",
+          "CAN-ESB-012"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-002",
+          "EV-ESB-003"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "E09.1",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E09",
+        "sourceLabel": "loaders and plugin request authority",
+        "classification": "modifier",
+        "relatedOperationIds": [
+          "CAN-ESB-001",
+          "CAN-ESB-002",
+          "CAN-ESB-011",
+          "CAN-ESB-012"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-002",
+          "EV-ESB-003"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "E09.2",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E09",
+        "sourceLabel": "plugin hooks",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-ESB-001",
+          "CAN-ESB-002",
+          "CAN-ESB-011",
+          "CAN-ESB-012"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-003",
+          "EV-ESB-009"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "E10.1",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E10",
+        "sourceLabel": "metafile",
+        "classification": "result-field",
+        "relatedOperationIds": [
+          "CAN-ESB-001",
+          "CAN-ESB-002"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-002"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "E12.1",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E12",
+        "sourceLabel": "shared native child identity",
+        "classification": "runtime-capability",
+        "relatedOperationIds": [
+          "CAN-ESB-001",
+          "CAN-ESB-002",
+          "CAN-ESB-003",
+          "CAN-ESB-004",
+          "CAN-ESB-005",
+          "CAN-ESB-011",
+          "CAN-ESB-012"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-003",
+          "EV-ESB-013"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "E12.2",
+        "provider": "esbuild",
+        "sourceSet": "original-54",
+        "sourceId": "E12",
+        "sourceLabel": "process-global child ownership",
+        "classification": "architecture-law",
+        "relatedOperationIds": [
+          "CAN-ESB-013",
+          "CAN-ESB-014"
+        ],
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "publicSurface": "not-an-operation-export",
+          "test": "negative",
+          "evidence": "rejected"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "EV-ESB-003",
+          "EV-ESB-013"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "reject"
+        }
+      },
+      {
+        "atomId": "S02.1",
+        "provider": "node-sea",
+        "sourceSet": "original-54",
+        "sourceId": "S02",
+        "sourceLabel": "CommonJS main",
+        "classification": "request-mode",
+        "relatedOperationIds": [
+          "CAN-NODE-001",
+          "CAN-NODE-002",
+          "CAN-NODE-003"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-NODE-24-DOC",
+          "E-NODE-22-DOC",
+          "E-NODE-26-DOC-CONFIG"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "S03.1",
+        "provider": "node-sea",
+        "sourceSet": "original-54",
+        "sourceId": "S03",
+        "sourceLabel": "ESM main",
+        "classification": "request-mode",
+        "relatedOperationIds": [
+          "CAN-NODE-001",
+          "CAN-NODE-002",
+          "CAN-NODE-003"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-NODE-ESM",
+          "E-NODE-ESM-CACHE"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "S04.1",
+        "provider": "node-sea",
+        "sourceSet": "original-54",
+        "sourceId": "S04",
+        "sourceLabel": "asset embedding",
+        "classification": "request-mode",
+        "relatedOperationIds": [
+          "CAN-NODE-001",
+          "CAN-NODE-002",
+          "CAN-NODE-003"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-NODE-ASSETS",
+          "E-NODE-26-DOC-CONFIG"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "S04.2",
+        "provider": "node-sea",
+        "sourceSet": "original-54",
+        "sourceId": "S04",
+        "sourceLabel": "node:sea asset lookup APIs",
+        "classification": "runtime-capability",
+        "relatedOperationIds": [],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "copied values and raw borrowed view remain distinct",
+        "evidenceRefs": [
+          "E-NODE-ASSETS",
+          "E-NODE-ASSET-KEYS"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "S05.1",
+        "provider": "node-sea",
+        "sourceSet": "original-54",
+        "sourceId": "S05",
+        "sourceLabel": "code cache",
+        "classification": "modifier",
+        "relatedOperationIds": [
+          "CAN-NODE-001",
+          "CAN-NODE-002",
+          "CAN-NODE-003"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-NODE-CACHE",
+          "E-NODE-ESM-CACHE"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "S06.1",
+        "provider": "node-sea",
+        "sourceSet": "original-54",
+        "sourceId": "S06",
+        "sourceLabel": "startup snapshot",
+        "classification": "modifier",
+        "relatedOperationIds": [
+          "CAN-NODE-001",
+          "CAN-NODE-002",
+          "CAN-NODE-003"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-NODE-SNAPSHOT"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "S07.1",
+        "provider": "node-sea",
+        "sourceSet": "original-54",
+        "sourceId": "S07",
+        "sourceLabel": "execArgv policy",
+        "classification": "request-mode",
+        "relatedOperationIds": [
+          "CAN-NODE-001",
+          "CAN-NODE-002",
+          "CAN-NODE-003"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "",
+        "evidenceRefs": [
+          "E-NODE-ARGV",
+          "E-NODE-ARGVEXT"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "S09.1",
+        "provider": "node-sea",
+        "sourceSet": "original-54",
+        "sourceId": "S09",
+        "sourceLabel": "candidate correctness repair",
+        "classification": "post-production-mutation",
+        "relatedOperationIds": [
+          "CAN-NODE-001",
+          "CAN-NODE-003"
+        ],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "inside assembler; no distribution trust claim",
+        "evidenceRefs": [
+          "E-CORPUS-APPLE"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "S09.2",
+        "provider": "apple",
+        "sourceSet": "original-54",
+        "sourceId": "S09",
+        "sourceLabel": "distribution signing and verification",
+        "classification": "external-platform-primitive",
+        "relatedOperationIds": [],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "R9 family; not Node SEA",
+        "evidenceRefs": [
+          "E-CORPUS-APPLE"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "S10.1",
+        "provider": "node-sea",
+        "sourceSet": "original-54",
+        "sourceId": "S10",
+        "sourceLabel": "builder/base identity",
+        "classification": "relation",
+        "relatedOperationIds": [
+          "CAN-NODE-001",
+          "CAN-NODE-002",
+          "CAN-NODE-003"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "equality wherever participants are separate",
+        "evidenceRefs": [
+          "E-NODE-26-DOC-CONFIG",
+          "E-CORPUS-ADMISS"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "F01.1",
+        "provider": "effect",
+        "sourceSet": "original-54",
+        "sourceId": "F01",
+        "sourceLabel": "ChildProcess command",
+        "classification": "external-platform-primitive",
+        "relatedOperationIds": [],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "use official Effect primitive directly; no effect-build wrapper operation",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "F02.1",
+        "provider": "effect",
+        "sourceSet": "original-54",
+        "sourceId": "F02",
+        "sourceLabel": "Scope",
+        "classification": "external-platform-primitive",
+        "relatedOperationIds": [],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "use official Effect primitive directly; no effect-build wrapper operation",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "F03.1",
+        "provider": "effect",
+        "sourceSet": "original-54",
+        "sourceId": "F03",
+        "sourceLabel": "Stream/Sink",
+        "classification": "external-platform-primitive",
+        "relatedOperationIds": [],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "use official Effect primitive directly; no effect-build wrapper operation",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "F04.1",
+        "provider": "effect",
+        "sourceSet": "original-54",
+        "sourceId": "F04",
+        "sourceLabel": "FileSystem/Path",
+        "classification": "external-platform-primitive",
+        "relatedOperationIds": [],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "use official Effect primitive directly; no effect-build wrapper operation",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "F05.1",
+        "provider": "effect",
+        "sourceSet": "original-54",
+        "sourceId": "F05",
+        "sourceLabel": "Context/Layer",
+        "classification": "external-platform-primitive",
+        "relatedOperationIds": [],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "use official Effect primitive directly; no effect-build wrapper operation",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "F06.1",
+        "provider": "effect",
+        "sourceSet": "original-54",
+        "sourceId": "F06",
+        "sourceLabel": "Cause/interruption",
+        "classification": "external-platform-primitive",
+        "relatedOperationIds": [],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "use official Effect primitive directly; no effect-build wrapper operation",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "F07.1",
+        "provider": "effect",
+        "sourceSet": "original-54",
+        "sourceId": "F07",
+        "sourceLabel": "logging/tracing",
+        "classification": "external-platform-primitive",
+        "relatedOperationIds": [],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "use official Effect primitive directly; no effect-build wrapper operation",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "R01.1",
+        "provider": "cross-provider",
+        "sourceSet": "original-54",
+        "sourceId": "R01",
+        "sourceLabel": "Node sealed-main producer role",
+        "classification": "portable-role",
+        "relatedOperationIds": [],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "R5 ship-if-pass; not a provider operation",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "R02.1",
+        "provider": "cross-provider",
+        "sourceSet": "original-54",
+        "sourceId": "R02",
+        "sourceLabel": "BrowserModulePayload",
+        "classification": "portable-role",
+        "relatedOperationIds": [],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "R5 ship-if-pass; narrower successor to imported graph application",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "R03.1",
+        "provider": "cross-provider",
+        "sourceSet": "original-54",
+        "sourceId": "R03",
+        "sourceLabel": "RuntimeExecutable",
+        "classification": "portable-role",
+        "relatedOperationIds": [],
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "publicSurface": "not-an-operation-export",
+          "test": "negative",
+          "evidence": "rejected"
+        },
+        "note": "runtime-neutral executable erases provider/runtime identity",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "reject"
+        }
+      },
+      {
+        "atomId": "R04.1",
+        "provider": "cross-provider",
+        "sourceSet": "original-54",
+        "sourceId": "R04",
+        "sourceLabel": "CLI-derived TypedWatchEvents",
+        "classification": "portable-role",
+        "relatedOperationIds": [],
+        "disposition": "rejected",
+        "accounting": {
+          "implementation": "prohibited",
+          "publicSurface": "not-an-operation-export",
+          "test": "negative",
+          "evidence": "rejected"
+        },
+        "note": "current text-derived role falsified; future product-owned protocol is distinct",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "reject"
+        }
+      },
+      {
+        "atomId": "R05.1",
+        "provider": "cross-provider",
+        "sourceSet": "original-54",
+        "sourceId": "R05",
+        "sourceLabel": "operation-owned surface boundary",
+        "classification": "architecture-law",
+        "relatedOperationIds": [],
+        "disposition": "mandatory",
+        "accounting": {
+          "implementation": "required",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "mandatory"
+        },
+        "note": "adopted canonicalization law",
+        "evidenceRefs": [],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "ship"
+        }
+      },
+      {
+        "atomId": "OP-ROL-004.release",
+        "provider": "rolldown",
+        "sourceSet": "r2-rolldown",
+        "sourceId": "OP-ROL-004",
+        "sourceLabel": "RolldownBuild.close",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-ROL-001"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "release is the lifecycle boundary of the reusable-build owner",
+        "evidenceRefs": [
+          "E-ROL-HANDLE",
+          "E-EB-RECEIPT",
+          "E-EB-PROBE",
+          "E-EB-LIFE"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "OP-ROL-009.release",
+        "provider": "rolldown",
+        "sourceSet": "r2-rolldown",
+        "sourceId": "OP-ROL-009",
+        "sourceLabel": "RolldownWatcher.close",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-ROL-007",
+          "CAN-ROL-008"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "release is the lifecycle boundary of both watcher publication modes",
+        "evidenceRefs": [
+          "E-ROL-WATCH-IMPL",
+          "E-ROL-WATCH-EVENT",
+          "E-EB-LIFE"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      },
+      {
+        "atomId": "OP-ROL-019.release",
+        "provider": "rolldown",
+        "sourceSet": "r2-rolldown",
+        "sourceId": "OP-ROL-019",
+        "sourceLabel": "DevEngine.close",
+        "classification": "sub-operation",
+        "relatedOperationIds": [
+          "CAN-ROL-018A",
+          "CAN-ROL-018B"
+        ],
+        "disposition": "conditional-private",
+        "accounting": {
+          "implementation": "conditional-private",
+          "publicSurface": "not-an-operation-export",
+          "test": "required",
+          "evidence": "named-gate-open"
+        },
+        "note": "release is the lifecycle boundary of both DevEngine publication modes",
+        "evidenceRefs": [
+          "E-ROL-DEV",
+          "E-ROL-EXPERIMENTAL"
+        ],
+        "provenance": {
+          "source": "research/post-0.3/reconciliation/r1/NON-OPERATION-REGISTER.csv",
+          "sourceRecommendation": "defer"
+        }
+      }
+    ]
+  },
+  "privateImplementationRegister": {
+    "count": 1,
+    "capabilities": [
+      {
+        "id": "PRIVATE-NODE-SEA-MODES",
+        "atomIds": [
+          "S05.1",
+          "S06.1",
+          "S07.1"
+        ],
+        "package": "effect-build-node-sea",
+        "module": "internal/AssembleModes",
+        "path": "packages/effect-build-node-sea/src/internal/AssembleModes.ts",
+        "exports": [
+          "assembleDirect"
+        ],
+        "visibility": "private"
+      }
+    ]
+  },
+  "producerCapabilityRegister": {
+    "families": [
+      "apple",
+      "archives",
+      "nfpm",
+      "python",
+      "sbom",
+      "windows"
+    ],
+    "count": 19,
+    "capabilities": [
+      {
+        "id": "PROD-ARCHIVES-001",
+        "family": "archives",
+        "package": "effect-build-archives",
+        "module": "Archive",
+        "exports": [
+          "archive"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-ARCHIVES-002",
+        "family": "archives",
+        "package": "effect-build-archives",
+        "module": "SourceArchive",
+        "exports": [
+          "sourceArchive"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-PYTHON-001",
+        "family": "python",
+        "package": "effect-build-python",
+        "module": "Build",
+        "exports": [
+          "build"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file-set",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-NFPM-001",
+        "family": "nfpm",
+        "package": "effect-build-nfpm",
+        "module": "Package",
+        "exports": [
+          "buildPackage",
+          "buildDeb",
+          "buildRpm",
+          "buildApk",
+          "buildArchLinux",
+          "buildMsix"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-APPLE-001",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "AppBundle",
+        "exports": [
+          "buildAppBundles"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "tree-set",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-APPLE-002",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "CodeSign",
+        "exports": [
+          "signApp"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "tree",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-APPLE-003",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "CodeSign",
+        "exports": [
+          "signDiskImage"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-APPLE-004",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "CodeSign",
+        "exports": [
+          "signInstallerPackage"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-APPLE-005",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "DiskImage",
+        "exports": [
+          "createDiskImages"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file-set",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-APPLE-006",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "InstallerPackage",
+        "exports": [
+          "buildInstallerPackages"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file-set",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-APPLE-007",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "Notary",
+        "exports": [
+          "submit"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "provider-native-result",
+          "artifactKind": null,
+          "returnsDurableArtifact": false
+        }
+      },
+      {
+        "id": "PROD-APPLE-008",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "Notary",
+        "exports": [
+          "submitApp"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "provider-native-result",
+          "artifactKind": null,
+          "returnsDurableArtifact": false
+        }
+      },
+      {
+        "id": "PROD-APPLE-009",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "Notary",
+        "exports": [
+          "info"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "provider-native-result",
+          "artifactKind": null,
+          "returnsDurableArtifact": false
+        }
+      },
+      {
+        "id": "PROD-APPLE-010",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "Notary",
+        "exports": [
+          "log"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "provider-native-result",
+          "artifactKind": null,
+          "returnsDurableArtifact": false
+        }
+      },
+      {
+        "id": "PROD-APPLE-011",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "Staple",
+        "exports": [
+          "stapleApp"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "tree",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-APPLE-012",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "Staple",
+        "exports": [
+          "stapleFile"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-APPLE-013",
+        "family": "apple",
+        "package": "effect-build-apple",
+        "module": "Assess",
+        "exports": [
+          "assess"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "provider-native-result",
+          "artifactKind": null,
+          "returnsDurableArtifact": false
+        }
+      },
+      {
+        "id": "PROD-WINDOWS-001",
+        "family": "windows",
+        "package": "effect-build-windows",
+        "module": "SignMsix",
+        "exports": [
+          "signMsix"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file",
+          "returnsDurableArtifact": true
+        }
+      },
+      {
+        "id": "PROD-SBOM-001",
+        "family": "sbom",
+        "package": "effect-build-sbom",
+        "module": "Generate",
+        "exports": [
+          "generate",
+          "generateSpdxJson",
+          "generateCycloneDxJson"
+        ],
+        "visibility": "public",
+        "finalization": {
+          "mode": "canonical-finalizing",
+          "artifactKind": "file",
+          "returnsDurableArtifact": true
+        }
+      }
+    ]
+  },
+  "releaseOwnershipBoundary": {
+    "effectBuildOwns": [
+      "provider-operation-execution",
+      "artifact-production",
+      "same-parent-staging",
+      "artifact-revalidation",
+      "atomic-commit",
+      "artifact-digest-and-logical-name",
+      "apple-notarization-operations"
+    ],
+    "handoff": {
+      "identity": [
+        "logicalName",
+        "digest"
+      ],
+      "content": "immutable-bytes-or-tree-snapshot",
+      "mutationAfterHandoff": "forbidden"
+    },
+    "tsReleaseOwns": [
+      "release-plans",
+      "mutation-journals-including-apple-notarization",
+      "continuation",
+      "publication"
+    ],
+    "forbiddenInEffectBuild": [
+      "release-plan",
+      "durable-notarization-journal",
+      "continuation",
+      "publication"
+    ]
+  },
+  "publicApiProjection": {
+    "artifact": "tooling/public-api.json",
+    "authority": "derived-projection-only",
+    "direction": "effect-build-contract-to-public-api",
+    "ownershipGranularity": "package-root-and-subpath; every symbol inherits its admitted subpath owners",
+    "packages": {
+      "effect-build": {
+        "rootNamespaces": [
+          "Artifact",
+          "BorrowedOutput",
+          "Executable",
+          "File",
+          "Matrix",
+          "SystemTarget",
+          "Tool",
+          "Tree"
+        ],
+        "subpaths": {
+          "./Artifact": [
+            "CORE-ARTIFACT-IDENTITY"
+          ],
+          "./Author/BorrowedOutput": [
+            "CORE-BORROWED-OUTPUT"
+          ],
+          "./Author/Executable": [
+            "CORE-FINALIZE-EXECUTABLE"
+          ],
+          "./Author/File": [
+            "CORE-FINALIZE-FILE"
+          ],
+          "./Author/Tool": [
+            "CORE-SELECTED-TOOL"
+          ],
+          "./Author/Tree": [
+            "CORE-FINALIZE-TREE"
+          ],
+          "./Matrix": [
+            "CORE-MATRIX"
+          ],
+          "./SystemTarget": [
+            "CORE-SYSTEM-TARGET"
+          ]
+        },
+        "rootOwners": {
+          "Artifact": [
+            "CORE-ARTIFACT-IDENTITY"
+          ],
+          "BorrowedOutput": [
+            "CORE-BORROWED-OUTPUT"
+          ],
+          "Executable": [
+            "CORE-FINALIZE-EXECUTABLE"
+          ],
+          "File": [
+            "CORE-FINALIZE-FILE"
+          ],
+          "Matrix": [
+            "CORE-MATRIX"
+          ],
+          "SystemTarget": [
+            "CORE-SYSTEM-TARGET"
+          ],
+          "Tool": [
+            "CORE-SELECTED-TOOL"
+          ],
+          "Tree": [
+            "CORE-FINALIZE-TREE"
+          ]
+        }
+      },
+      "effect-build-apple": {
+        "rootNamespaces": [
+          "AppBundle",
+          "Assess",
+          "CodeSign",
+          "DiskImage",
+          "InstallerPackage",
+          "Model",
+          "Notary",
+          "Staple"
+        ],
+        "subpaths": {
+          "./AppBundle": [
+            "PROD-APPLE-001"
+          ],
+          "./Assess": [
+            "PROD-APPLE-013"
+          ],
+          "./CodeSign": [
+            "PROD-APPLE-002",
+            "PROD-APPLE-003",
+            "PROD-APPLE-004"
+          ],
+          "./DiskImage": [
+            "PROD-APPLE-005"
+          ],
+          "./InstallerPackage": [
+            "PROD-APPLE-006"
+          ],
+          "./Model": [
+            "PROD-APPLE-001",
+            "PROD-APPLE-002",
+            "PROD-APPLE-003",
+            "PROD-APPLE-004",
+            "PROD-APPLE-005",
+            "PROD-APPLE-006",
+            "PROD-APPLE-007",
+            "PROD-APPLE-008",
+            "PROD-APPLE-009",
+            "PROD-APPLE-010",
+            "PROD-APPLE-011",
+            "PROD-APPLE-012",
+            "PROD-APPLE-013"
+          ],
+          "./Notary": [
+            "PROD-APPLE-007",
+            "PROD-APPLE-008",
+            "PROD-APPLE-009",
+            "PROD-APPLE-010"
+          ],
+          "./Staple": [
+            "PROD-APPLE-011",
+            "PROD-APPLE-012"
+          ]
+        },
+        "rootOwners": {
+          "AppBundle": [
+            "PROD-APPLE-001"
+          ],
+          "Assess": [
+            "PROD-APPLE-013"
+          ],
+          "CodeSign": [
+            "PROD-APPLE-002",
+            "PROD-APPLE-003",
+            "PROD-APPLE-004"
+          ],
+          "DiskImage": [
+            "PROD-APPLE-005"
+          ],
+          "InstallerPackage": [
+            "PROD-APPLE-006"
+          ],
+          "Model": [
+            "PROD-APPLE-001",
+            "PROD-APPLE-002",
+            "PROD-APPLE-003",
+            "PROD-APPLE-004",
+            "PROD-APPLE-005",
+            "PROD-APPLE-006",
+            "PROD-APPLE-007",
+            "PROD-APPLE-008",
+            "PROD-APPLE-009",
+            "PROD-APPLE-010",
+            "PROD-APPLE-011",
+            "PROD-APPLE-012",
+            "PROD-APPLE-013"
+          ],
+          "Notary": [
+            "PROD-APPLE-007",
+            "PROD-APPLE-008",
+            "PROD-APPLE-009",
+            "PROD-APPLE-010"
+          ],
+          "Staple": [
+            "PROD-APPLE-011",
+            "PROD-APPLE-012"
+          ]
+        }
+      },
+      "effect-build-archives": {
+        "rootNamespaces": [
+          "Archive",
+          "ArchiveError",
+          "Model",
+          "SourceArchive"
+        ],
+        "subpaths": {
+          "./Archive": [
+            "PROD-ARCHIVES-001"
+          ],
+          "./ArchiveError": [
+            "PROD-ARCHIVES-001",
+            "PROD-ARCHIVES-002"
+          ],
+          "./Model": [
+            "PROD-ARCHIVES-001",
+            "PROD-ARCHIVES-002"
+          ],
+          "./SourceArchive": [
+            "PROD-ARCHIVES-002"
+          ]
+        },
+        "rootOwners": {
+          "Archive": [
+            "PROD-ARCHIVES-001"
+          ],
+          "ArchiveError": [
+            "PROD-ARCHIVES-001",
+            "PROD-ARCHIVES-002"
+          ],
+          "Model": [
+            "PROD-ARCHIVES-001",
+            "PROD-ARCHIVES-002"
+          ],
+          "SourceArchive": [
+            "PROD-ARCHIVES-002"
+          ]
+        }
+      },
+      "effect-build-bun": {
+        "rootNamespaces": [
+          "Api",
+          "Command"
+        ],
+        "subpaths": {
+          "./Api": {
+            "ownerIds": [
+              "CAN-BUN-001",
+              "CAN-BUN-002",
+              "CAN-BUN-003",
+              "CAN-BUN-004",
+              "CAN-BUN-005",
+              "CAN-BUN-006",
+              "CAN-BUN-007",
+              "CAN-BUN-011"
+            ],
+            "operationNamespaces": [
+              "Build",
+              "CompileExecutable",
+              "Transpiler"
+            ],
+            "supportExports": {
+              "runtime": [
+                "layer"
+              ],
+              "declarations": [
+                "layer"
+              ]
+            }
+          },
+          "./Command": {
+            "ownerIds": [
+              "CAN-BUN-008",
+              "CAN-BUN-009",
+              "CAN-BUN-010",
+              "CAN-BUN-012"
+            ],
+            "operationNamespaces": [
+              "Build",
+              "CompileExecutable",
+              "Watch"
+            ],
+            "supportExports": {
+              "runtime": [
+                "layer"
+              ],
+              "declarations": [
+                "LayerError",
+                "LayerOptions",
+                "layer"
+              ]
+            }
+          }
+        },
+        "rootOwners": {
+          "Api": [
+            "CAN-BUN-001",
+            "CAN-BUN-002",
+            "CAN-BUN-003",
+            "CAN-BUN-004",
+            "CAN-BUN-005",
+            "CAN-BUN-006",
+            "CAN-BUN-007",
+            "CAN-BUN-011"
+          ],
+          "Command": [
+            "CAN-BUN-008",
+            "CAN-BUN-009",
+            "CAN-BUN-010",
+            "CAN-BUN-012"
+          ]
+        }
+      },
+      "effect-build-deno": {
+        "rootNamespaces": [
+          "Command"
+        ],
+        "subpaths": {
+          "./Command": {
+            "ownerIds": [
+              "CAN-DENO-007",
+              "CAN-DENO-008",
+              "CAN-DENO-009",
+              "CAN-DENO-010"
+            ],
+            "operationNamespaces": [
+              "CompileExecutable",
+              "Transpile"
+            ],
+            "supportExports": {
+              "runtime": [
+                "layer"
+              ],
+              "declarations": [
+                "LayerError",
+                "LayerOptions",
+                "layer"
+              ]
+            }
+          }
+        },
+        "rootOwners": {
+          "Command": [
+            "CAN-DENO-007",
+            "CAN-DENO-008",
+            "CAN-DENO-009",
+            "CAN-DENO-010"
+          ]
+        }
+      },
+      "effect-build-esbuild": {
+        "rootNamespaces": [
+          "Api",
+          "Command"
+        ],
+        "subpaths": {
+          "./Api": {
+            "ownerIds": [
+              "CAN-ESB-001",
+              "CAN-ESB-002",
+              "CAN-ESB-003",
+              "CAN-ESB-004",
+              "CAN-ESB-005",
+              "CAN-ESB-011",
+              "CAN-ESB-012"
+            ],
+            "operationNamespaces": [
+              "AnalyzeMetafile",
+              "Build",
+              "BuildToDirectory",
+              "Context",
+              "ContextToDirectory",
+              "FormatMessages",
+              "Transform"
+            ],
+            "supportExports": {
+              "runtime": [],
+              "declarations": []
+            }
+          },
+          "./Command": {
+            "ownerIds": [
+              "CAN-ESB-015",
+              "CAN-ESB-016",
+              "CAN-ESB-017"
+            ],
+            "operationNamespaces": [
+              "Build",
+              "BuildToDirectory",
+              "Watch"
+            ],
+            "supportExports": {
+              "runtime": [
+                "layer"
+              ],
+              "declarations": [
+                "LayerError",
+                "LayerOptions",
+                "layer"
+              ]
+            }
+          }
+        },
+        "rootOwners": {
+          "Api": [
+            "CAN-ESB-001",
+            "CAN-ESB-002",
+            "CAN-ESB-003",
+            "CAN-ESB-004",
+            "CAN-ESB-005",
+            "CAN-ESB-011",
+            "CAN-ESB-012"
+          ],
+          "Command": [
+            "CAN-ESB-015",
+            "CAN-ESB-016",
+            "CAN-ESB-017"
+          ]
+        }
+      },
+      "effect-build-nfpm": {
+        "rootNamespaces": [
+          "NfpmConfigurationRejected",
+          "Package"
+        ],
+        "subpaths": {
+          "./Package": [
+            "PROD-NFPM-001"
+          ]
+        },
+        "rootOwners": {
+          "NfpmConfigurationRejected": [
+            "PROD-NFPM-001"
+          ],
+          "Package": [
+            "PROD-NFPM-001"
+          ]
+        }
+      },
+      "effect-build-node-sea": {
+        "rootNamespaces": [
+          "Command"
+        ],
+        "subpaths": {
+          "./Command": {
+            "ownerIds": [
+              "CAN-NODE-001"
+            ],
+            "operationNamespaces": [
+              "AssembleExecutable"
+            ],
+            "supportExports": {
+              "runtime": [
+                "layer"
+              ],
+              "declarations": [
+                "LayerError",
+                "LayerOptions",
+                "layer"
+              ]
+            }
+          }
+        },
+        "rootOwners": {
+          "Command": [
+            "CAN-NODE-001"
+          ]
+        }
+      },
+      "effect-build-python": {
+        "rootNamespaces": [
+          "Build",
+          "PythonBuildError"
+        ],
+        "subpaths": {
+          "./Build": [
+            "PROD-PYTHON-001"
+          ],
+          "./PythonBuildError": [
+            "PROD-PYTHON-001"
+          ]
+        },
+        "rootOwners": {
+          "Build": [
+            "PROD-PYTHON-001"
+          ],
+          "PythonBuildError": [
+            "PROD-PYTHON-001"
+          ]
+        }
+      },
+      "effect-build-sbom": {
+        "rootNamespaces": [
+          "Generate"
+        ],
+        "subpaths": {
+          "./Generate": [
+            "PROD-SBOM-001"
+          ]
+        },
+        "rootOwners": {
+          "Generate": [
+            "PROD-SBOM-001"
+          ]
+        }
+      },
+      "effect-build-windows": {
+        "rootNamespaces": [
+          "SignMsix"
+        ],
+        "subpaths": {
+          "./SignMsix": [
+            "PROD-WINDOWS-001"
+          ]
+        },
+        "rootOwners": {
+          "SignMsix": [
+            "PROD-WINDOWS-001"
+          ]
+        }
+      }
+    },
+    "privatePackages": [
+      "effect-build-rolldown"
+    ],
+    "forbiddenProviderSubpaths": [
+      "./AssembleExecutable",
+      "./Build",
+      "./Bundle",
+      "./CompileExecutable",
+      "./Context",
+      "./Profile",
+      "./Raw",
+      "./Watch"
+    ]
+  },
+  "verification": {
+    "operationAccounting": "exact-67",
+    "nonOperationAccounting": "exact-46",
+    "publicSurface": "bidirectional-topology-and-owner-validation",
+    "privateSurface": "conditional-packages-and-modules-unreachable-from-package-exports",
+    "consumer": "packed-ts-release-adopter-validates-logical-name-digest-and-immutable-bytes"
+  }
+}

@@ -40,10 +40,6 @@
     "./Package": {
       "types": "./dist/Package.d.ts",
       "import": "./dist/Package.js"
-    },
-    "./NfpmConfigurationRejected": {
-      "types": "./dist/NfpmConfigurationRejected.d.ts",
-      "import": "./dist/NfpmConfigurationRejected.js"
     }
   },
   "scripts": {
