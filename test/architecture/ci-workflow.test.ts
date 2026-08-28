@@ -125,6 +125,14 @@ describe("CI workflow", () => {
     );
 
     for (const source of sources) expect(source).not.toContain("describe.skipIf");
+
+    const [packageSource, runner] = await Promise.all([
+      readFile(resolve(root, "package.json"), "utf8"),
+      readFile(resolve(root, "scripts/run-real-bun-integration.mjs"), "utf8"),
+    ]);
+    expect(packageSource).toContain('"test:integration:bun": "bun scripts/run-real-bun-integration.mjs"');
+    expect(runner).toContain("EFFECT_BUILD_BUN: process.execPath");
+    expect(runner).toContain('spawnSync(\n  "node"');
   });
 
   it("derives producer acceptance pins and executable bindings from the combined contract", async () => {
