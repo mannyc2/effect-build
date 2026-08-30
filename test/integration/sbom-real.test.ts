@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import * as Sbom from "../../packages/effect-build-sbom/src/Generate.js";
-import { finalizedBundle } from "../fixtures/finalized-artifacts.js";
+import { finalizedFile, finalizedTree } from "../fixtures/finalized-artifacts.js";
 import { requiredEnvironment, requiredExecutable } from "./acceptance-support.js";
 
 const execute = promisify(execFile);
@@ -30,12 +30,12 @@ const run = <A, E>(effect: Effect.Effect<A, E, Sbom.Generator>) =>
 
 const verifyPublishedArtifact = async (artifact: {
   readonly path: string;
-  readonly bytes: number;
-  readonly sha256: string;
+  readonly bytes: string;
+  readonly digest: { readonly value: string };
 }) => {
   const contents = await readFile(artifact.path);
-  expect(artifact.bytes).toBe(contents.byteLength);
-  expect(artifact.sha256).toBe(createHash("sha256").update(contents).digest("hex"));
+  expect(artifact.bytes).toBe(String(contents.byteLength));
+  expect(artifact.digest.value).toBe(createHash("sha256").update(contents).digest("hex"));
 };
 
 describe("real Syft 1.50.0 SBOM acceptance", () => {
@@ -43,7 +43,7 @@ describe("real Syft 1.50.0 SBOM acceptance", () => {
     await mkdir(outdir, { recursive: true });
     const spdxPath = join(outdir, "acceptance.spdx.json");
     const cyclonedxPath = join(outdir, "acceptance.cdx.json");
-    const snapshot = await finalizedBundle(subject);
+    const snapshot = await finalizedTree(subject);
     const input = (outfile: string) =>
       new Sbom.GenerateInput({
         subject: new Sbom.DirectorySubject({ snapshot }),
@@ -53,8 +53,11 @@ describe("real Syft 1.50.0 SBOM acceptance", () => {
       Sbom.generateSpdxJson(input(spdxPath)),
       Sbom.generateCycloneDxJson(input(cyclonedxPath)),
     ], { concurrency: 1 }));
-    expect(spdxArtifact.tool).toEqual({ name: "syft", version: "1.50.0" });
-    expect(cyclonedxArtifact.tool).toEqual({ name: "syft", version: "1.50.0" });
+    expect(spdxArtifact.provenance).toMatchObject({
+      name: "syft",
+      participants: [{ name: "syft", version: "1.50.0" }],
+    });
+    expect(cyclonedxArtifact.provenance).toEqual(spdxArtifact.provenance);
     await verifyPublishedArtifact(spdxArtifact);
     await verifyPublishedArtifact(cyclonedxArtifact);
 
@@ -83,21 +86,19 @@ describe("real Syft 1.50.0 SBOM acceptance", () => {
     });
 
     const lockfile = join(subject, "package-lock.json");
-    const lockfileBytes = await readFile(lockfile);
     const fileSpdxPath = join(outdir, "file-subject.spdx.json");
     const fileSpdxArtifact = await run(Sbom.generateSpdxJson(
       new Sbom.GenerateInput({
         subject: new Sbom.FileSubject({
-          artifact: {
-            path: lockfile,
-            bytes: lockfileBytes.byteLength,
-            sha256: createHash("sha256").update(lockfileBytes).digest("hex"),
-          },
+          artifact: await finalizedFile(lockfile),
         }),
         outfile: fileSpdxPath,
       }),
     ));
-    expect(fileSpdxArtifact.tool).toEqual({ name: "syft", version: "1.50.0" });
+    expect(fileSpdxArtifact.provenance).toMatchObject({
+      name: "syft",
+      participants: [{ name: "syft", version: "1.50.0" }],
+    });
     await verifyPublishedArtifact(fileSpdxArtifact);
     const fileSpdxUnknown: unknown = JSON.parse(await readFile(fileSpdxPath, "utf8"));
     const fileSpdx = Schema.decodeUnknownSync(Sbom.SpdxJsonDocument)(fileSpdxUnknown);

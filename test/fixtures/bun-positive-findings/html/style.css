@@ -1,0 +1,4 @@
+body {
+  --html-style-marker: "html-style-ok";
+  background-image: url("./logo.svg");
+}

@@ -1,40 +1,21 @@
 # effect-build-deno
 
-Effect-native Deno operations: native executables from
-`effect-build-deno/CompileExecutable` and directory bundles from
-`effect-build-deno/Bundle`.
+The public `Command` lane exposes Deno transpilation and executable compilation. Bundle memory, stdout, direct-directory, watch, declaration-bundle, and compile-watch candidates remain package-private under their evidence gates.
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as CompileExecutable from "effect-build-deno/CompileExecutable";
+import { Command } from "effect-build-deno";
 
 const artifact = await Effect.runPromise(
-  CompileExecutable.compileExecutable({
+  Command.CompileExecutable.compileExecutable({
     entrypoint: "src/main.ts",
     outfile: "dist/app",
+    observation: "hashed",
     bundle: true,
-    minify: true,
-    permissions: { read: true, net: ["example.com"] },
   }).pipe(
-    Effect.provide(CompileExecutable.layer()),
+    Effect.provide(Command.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
 ```
-
-`permissions` renders to `--allow-*` flags, and `minify` requires `bundle`
-at the type level. `Bundle.bundle` runs `deno bundle` (Deno ≥ 2.4) with
-`platform` (browser/deno), `minify`, `codeSplitting`, `sourcemap`, and
-`external`, returning an `Artifact.Bundle` listing every committed file.
-
-`CompileExecutable` supports the native target triples exposed by Deno.
-The `windows-aarch64` compiler target requires Deno 2.9.6 or newer; older
-releases return Deno's native diagnostic as `ToolFailed`. CI retains an exact
-Deno 2.4.0 compatibility lane and uses exact Deno 2.9.6 for the native target
-matrix.
-
-Each layer selects and probes Deno once — an explicit `executable` path
-wins, otherwise one deterministic PATH walk — and warns once outside the
-CI-tested range; it never installs or substitutes. See the
-[repository](https://github.com/mannyc2/effect-build) for the full toolkit.

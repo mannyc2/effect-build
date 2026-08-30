@@ -1,10 +1,18 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import type * as Artifact from "effect-build/Artifact";
-import type { PublishFailed, ToolFailed, ToolNotFound } from "effect-build/BuildError";
-import * as Toolchain from "effect-build/Toolchain";
+import * as FileAuthor from "effect-build/Author/File";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { SourceArchiveFailed, type UnsafeArchiveLayout } from "./ArchiveError.js";
+import {
+  type GitCommandFailed,
+  type GitOutputTruncated,
+  type GitToolChanged,
+  type GitToolUnavailable,
+  type GitTransportFailed,
+  SourceArchiveFailed,
+  type UnsafeArchiveLayout,
+} from "./ArchiveError.js";
 import { decodeGitTar, encodeTarGzip, encodeZip, type Entry } from "./internal/archive.js";
+import * as GitRuntime from "./internal/GitRuntime.js";
 import { normalizeEntryPath, validateLayout } from "./internal/layout.js";
 import { SourceArchiveInput } from "./Model.js";
 
@@ -14,21 +22,28 @@ export type { Format as FormatType } from "./Model.js";
 export interface LayerOptions {
   /** Explicit Git executable; otherwise one deterministic PATH search. */
   readonly executable?: string;
+  /** Maximum retained diagnostic bytes; exact `ls-tree -z` stdout is uncapped protocol data. */
+  readonly outputLimitBytes?: number;
 }
 
-export type SourceArchiveError = ToolFailed | PublishFailed | UnsafeArchiveLayout | SourceArchiveFailed;
+export type SourceArchiveError =
+  | GitToolChanged
+  | GitTransportFailed
+  | GitCommandFailed
+  | GitOutputTruncated
+  | FileAuthor.PublicationFailure
+  | UnsafeArchiveLayout
+  | SourceArchiveFailed;
 
 interface Service {
   readonly sourceArchive: (
     input: SourceArchiveInput,
-  ) => Effect.Effect<Artifact.FileArtifact, SourceArchiveError>;
+  ) => Effect.Effect<Artifact.HashedFile, SourceArchiveError>;
 }
 
 export class SourceArchiver extends Context.Service<SourceArchiver, Service>()(
   "effect-build-archives/SourceArchive/SourceArchiver",
 ) {}
-
-const tested: Toolchain.TestedRange = { minimum: "2.40.0", before: "3.0.0" };
 
 const builtOutputs = ["dist", "build", "out", "target", ".output", ".next"] as const;
 
@@ -54,7 +69,12 @@ const gitlinksFrom = (listing: Uint8Array): readonly string[] => {
   return gitlinks;
 };
 
-type LayerError = ToolNotFound | ToolFailed;
+export type LayerError =
+  | GitToolUnavailable
+  | GitToolChanged
+  | GitTransportFailed
+  | GitCommandFailed
+  | GitOutputTruncated;
 
 const makeService = (
   options?: LayerOptions,
@@ -68,15 +88,7 @@ const makeService = (
     const path = yield* Path.Path;
     const crypto = yield* Crypto.Crypto;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const executable = yield* Toolchain.resolveExecutable({ name: "git", executable: options?.executable });
-    const version = yield* Toolchain.probeVersion({
-      tool: "git",
-      executable,
-      args: ["--version"],
-      parse: (stdout) => /^git version\s+(\S+)/.exec(stdout.trim())?.[1],
-    });
-    yield* Toolchain.warnIfUntested({ tool: "git", version, tested });
-    const tool: Artifact.Tool = { name: "git", version };
+    const runtime = yield* GitRuntime.make(options);
     const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
       Context.add(Path.Path, path),
       Context.add(Crypto.Crypto, crypto),
@@ -107,39 +119,35 @@ const makeService = (
         if (typeof normalized !== "string") return yield* Effect.fail(normalized);
         excludes.add(normalized);
       }
-      const type = yield* Toolchain.runOrFail({
-        tool: "git",
-        executable,
-        args: ["cat-file", "-t", input.tree],
-        cwd: repository,
-      }).pipe(Effect.provide(services));
+      const type = yield* runtime.run("cat-file", ["cat-file", "-t", input.tree], repository);
       if (type.stdout.text.trim() !== "tree") {
         return yield* Effect.fail(failWith(`object is ${JSON.stringify(type.stdout.text.trim())}, not a tree`));
       }
-      const listing = yield* Toolchain.runBytesOrFail({
-        tool: "git",
-        executable,
-        args: ["ls-tree", "-rz", "--full-tree", input.tree],
-        cwd: repository,
-      }).pipe(Effect.provide(services));
+      const listing = yield* runtime.runExactProtocol(
+        "ls-tree",
+        ["ls-tree", "-rz", "--full-tree", input.tree],
+        repository,
+      );
       const gitlinks = yield* Effect.try({
-        try: () => new Set(gitlinksFrom(listing.stdout)),
+        try: () => new Set(gitlinksFrom(listing.stdout.bytes)),
         catch: (error) => failWith(`decode git ls-tree: ${describe(error)}`),
       });
 
-      return yield* Toolchain.publishFile({
-        tool,
-        outfile: input.outfile,
-        cwd: input.cwd,
-        produce: (stagedPath) =>
+      return yield* FileAuthor.publish(
+        {
+          destination: input.outfile,
+          cwd: input.cwd,
+          observation: "hashed",
+          provenance: runtime.tool,
+        },
+        (stagedPath) =>
           Effect.gen(function*() {
             const exported = path.join(path.dirname(stagedPath), ".effect-build-git-tree.tar");
-            yield* Toolchain.runOrFail({
-              tool: "git",
-              executable,
-              args: ["archive", "--format=tar", `--prefix=${root}/`, `--output=${exported}`, input.tree],
-              cwd: repository,
-            });
+            yield* runtime.run(
+              "archive",
+              ["archive", "--format=tar", `--prefix=${root}/`, `--output=${exported}`, input.tree],
+              repository,
+            );
             const tar = yield* fileSystem.readFile(exported).pipe(
               Effect.mapError((error) => failWith(`read Git archive: ${describe(error)}`)),
             );
@@ -180,15 +188,15 @@ const makeService = (
               Effect.mapError((error) => failWith(`write staged archive: ${describe(error)}`)),
             );
           }),
-      }).pipe(Effect.provide(services));
+      );
     });
 
-    return { sourceArchive };
+    return { sourceArchive: (input) => sourceArchive(input).pipe(Effect.provide(services)) };
   });
 
 export const sourceArchive = (
   input: SourceArchiveInput,
-): Effect.Effect<Artifact.FileArtifact, SourceArchiveError, SourceArchiver> =>
+): Effect.Effect<Artifact.HashedFile, SourceArchiveError, SourceArchiver> =>
   SourceArchiver.use((service) => service.sourceArchive(input));
 
 export const layer = (

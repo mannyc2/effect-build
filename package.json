@@ -9,20 +9,21 @@
     "examples/bun",
     "examples/deno",
     "examples/esbuild",
-    "examples/node-sea",
-    "examples/rolldown"
+    "examples/node-sea"
   ],
   "scripts": {
     "clean": "node scripts/clean-dist.mjs",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
     "build": "bun run clean && tsc -b tsconfig.packages.json --force",
+    "generate:contract": "node scripts/effect-build-contract/generate.mjs",
     "generate:surface": "node scripts/generate-public-api.mjs",
+    "check:contract": "node scripts/effect-build-contract/generate.mjs --check && node --test scripts/effect-build-contract/contract.test.mjs && node scripts/effect-build-contract/validate.mjs",
     "test:types": "tstyche",
     "test:unit": "vitest run test/unit && bun run --cwd packages/effect-build-apple test",
     "test:architecture": "vitest run test/architecture",
-    "test:consumer": "node scripts/test-built-consumer.mjs",
-    "test:consumer:fresh": "node scripts/test-built-consumer.mjs --fresh-install",
-    "test:integration:bun": "vitest run test/integration/bun-compile-executable.test.ts test/integration/bun-bundle.test.ts",
+    "test:consumer": "bun scripts/test-built-consumer.mjs",
+    "test:consumer:fresh": "bun scripts/test-built-consumer.mjs --fresh-install",
+    "test:integration:bun": "bun scripts/run-real-bun-integration.mjs",
     "test:integration:deno": "vitest run test/integration/deno-compile-executable.test.ts test/integration/deno-bundle.test.ts",
     "test:integration:node-sea": "vitest run test/integration/node-sea-assemble-executable.test.ts",
     "test:integration:target": "vitest run test/integration/target-support.test.ts",
@@ -36,7 +37,7 @@
     "lint": "oxlint packages test typetest examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
-    "verify": "bun run build && bun run check && bun run test:types && bun run test:unit && node scripts/test-built-consumer.mjs --built && bun run test:architecture && bun run lint && bun run format:check",
+    "verify": "bun run build && bun run check:contract && bun run check && bun run test:types && bun run test:unit && bun scripts/test-built-consumer.mjs --built && bun run test:architecture && bun run lint && bun run format:check",
     "verify:real": "bun run test:integration:bun && bun run test:integration:deno"
   },
   "devDependencies": {

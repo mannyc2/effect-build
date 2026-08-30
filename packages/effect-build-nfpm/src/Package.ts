@@ -1,10 +1,18 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
-import * as Artifact from "effect-build/Artifact";
-import { PublishFailed } from "effect-build/BuildError";
-import type { ArtifactVerificationFailed, ToolFailed, ToolNotFound } from "effect-build/BuildError";
-import * as Toolchain from "effect-build/Toolchain";
+import type * as Artifact from "effect-build/Artifact";
+import * as ArtifactSchema from "effect-build/Artifact";
+import * as FileAuthor from "effect-build/Author/File";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { NfpmConfigurationRejected } from "./NfpmConfigurationRejected.js";
+import * as NfpmRuntime from "./internal/NfpmRuntime.js";
+import {
+  type NfpmCommandFailed,
+  NfpmConfigurationRejected,
+  type NfpmOutputTruncated,
+  NfpmPackageFailed,
+  type NfpmToolChanged,
+  type NfpmToolUnavailable,
+  type NfpmTransportFailed,
+} from "./NfpmConfigurationRejected.js";
 
 export { NfpmConfigurationRejected } from "./NfpmConfigurationRejected.js";
 
@@ -79,10 +87,10 @@ const CanonicalTimestamp = Schema.String.check(
 export class PackageContent extends Schema.Class<PackageContent>(
   "effect-build-nfpm/PackageContent",
 )({
-  artifact: Artifact.FinalizedFile,
+  artifact: ArtifactSchema.HashedFileSchema,
   dst: PackagePath,
   /** Exact portable permission mode rendered as nFPM `file_info.mode`. */
-  mode: Schema.optionalKey(Artifact.Mode),
+  mode: Schema.optionalKey(ArtifactSchema.FileModeSchema),
 }) {}
 
 /** Required package identity and metadata shared by all five nFPM formats. */
@@ -204,26 +212,30 @@ export const formatProjection = (candidate: Format): FormatProjection =>
 export interface LayerOptions {
   /** Explicit nFPM executable; otherwise one deterministic PATH search. */
   readonly executable?: string;
+  /** Maximum retained bytes for each nFPM stdout/stderr stream. */
+  readonly outputLimitBytes?: number;
 }
 
-export type PackageError = ArtifactVerificationFailed | ToolFailed | PublishFailed | NfpmConfigurationRejected;
+export type PackageError =
+  | FileAuthor.FileVerificationFailed
+  | FileAuthor.PublicationFailure
+  | NfpmToolChanged
+  | NfpmTransportFailed
+  | NfpmCommandFailed
+  | NfpmOutputTruncated
+  | NfpmPackageFailed
+  | NfpmConfigurationRejected;
 
 interface Service {
   readonly buildPackage: (
     format: Format,
     input: PackageInput,
-  ) => Effect.Effect<Artifact.FileArtifact, PackageError>;
+  ) => Effect.Effect<Artifact.HashedFile, PackageError>;
 }
 
 export class Packager extends Context.Service<Packager, Service>()(
   "effect-build-nfpm/Package/Packager",
 ) {}
-
-/** nFPM releases exercised by this integration; other versions warn once. */
-const tested: Toolchain.TestedRange = { minimum: "2.47.0", before: "2.48.0" };
-
-const parseNfpmVersion = (stdout: string): string | undefined =>
-  /(?:^|\s)(?:v)?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)(?:\s|$)/m.exec(stdout)?.[1];
 
 const renderArgv = (
   format: Format,
@@ -297,7 +309,12 @@ const renderConfiguration = (
   ...(format === "msix" && input.msix !== undefined ? { msix: renderMsix(input.msix) } : {}),
 });
 
-type LayerError = ToolNotFound | ToolFailed;
+export type LayerError =
+  | NfpmToolUnavailable
+  | NfpmToolChanged
+  | NfpmTransportFailed
+  | NfpmCommandFailed
+  | NfpmOutputTruncated;
 
 const makeService = (
   options?: LayerOptions,
@@ -311,15 +328,7 @@ const makeService = (
     const path = yield* Path.Path;
     const crypto = yield* Crypto.Crypto;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const executable = yield* Toolchain.resolveExecutable({ name: "nfpm", executable: options?.executable });
-    const version = yield* Toolchain.probeVersion({
-      tool: "nfpm",
-      executable,
-      args: ["--version"],
-      parse: parseNfpmVersion,
-    });
-    yield* Toolchain.warnIfUntested({ tool: "nfpm", version, tested });
-    const tool: Artifact.Tool = { name: "nfpm", version };
+    const runtime = yield* NfpmRuntime.make(options);
     const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
       Context.add(Path.Path, path),
       Context.add(Crypto.Crypto, crypto),
@@ -362,55 +371,51 @@ const makeService = (
             }),
           );
         }
-        return yield* Toolchain.publishFile({
-          tool,
-          outfile: input.outfile,
-          cwd: input.cwd,
-          produce: (stagedPath) =>
+        const failWith = (operation: string, error: unknown) =>
+          new NfpmPackageFailed({ operation, reason: error instanceof Error ? error.message : String(error) });
+        return yield* FileAuthor.publish(
+          {
+            destination: input.outfile,
+            cwd: input.cwd,
+            observation: "hashed",
+            provenance: runtime.tool,
+          },
+          (stagedPath) =>
             Effect.gen(function*() {
               const inputs = path.join(path.dirname(stagedPath), "inputs");
               yield* fileSystem.makeDirectory(inputs, { recursive: true }).pipe(
-                Effect.mapError((error) =>
-                  new PublishFailed({
-                    destination: path.resolve(input.cwd ?? "", input.outfile),
-                    reason: `create private nFPM inputs: ${String(error)}`,
-                  })
-                ),
+                Effect.mapError((error) => failWith("create private inputs", error)),
               );
-              const sources: string[] = [];
-              for (const [index, content] of input.metadata.contents.entries()) {
-                const bytes = yield* Toolchain.readVerifiedFile(content.artifact);
-                const source = path.join(inputs, String(index));
-                yield* fileSystem.writeFile(source, bytes).pipe(
-                  Effect.mapError((error) =>
-                    new PublishFailed({
-                      destination: path.resolve(input.cwd ?? "", input.outfile),
-                      reason: `materialize private nFPM input ${index}: ${String(error)}`,
-                    })
-                  ),
-                );
-                sources.push(source);
-              }
-              const configFile = path.join(path.dirname(stagedPath), "nfpm.json");
-              yield* fileSystem.writeFileString(
-                configFile,
-                `${JSON.stringify(renderConfiguration(format, input, sources), undefined, 2)}\n`,
-              ).pipe(
-                Effect.mapError((error) =>
-                  new PublishFailed({
-                    destination: path.resolve(input.cwd ?? "", input.outfile),
-                    reason: `write private nFPM configuration: ${String(error)}`,
-                  })
-                ),
-              );
-              yield* Toolchain.runOrFail({
-                tool: "nfpm",
-                executable,
-                args: renderArgv(format, configFile, stagedPath),
-                cwd: input.cwd,
-              });
+              const materialize = (
+                index: number,
+                sources: readonly string[],
+              ): Effect.Effect<
+                void,
+                FileAuthor.FileVerificationFailed | NfpmPackageFailed | NfpmRuntime.Failure,
+                Crypto.Crypto | FileSystem.FileSystem | Path.Path
+              > => {
+                const content = input.metadata.contents[index];
+                if (content === undefined) {
+                  const configFile = path.join(path.dirname(stagedPath), "nfpm.json");
+                  return fileSystem.writeFileString(
+                    configFile,
+                    `${JSON.stringify(renderConfiguration(format, input, sources), undefined, 2)}\n`,
+                  ).pipe(
+                    Effect.mapError((error) => failWith("write private configuration", error)),
+                    Effect.andThen(runtime.runPackage(format, renderArgv(format, configFile, stagedPath), input.cwd)),
+                  );
+                }
+                return FileAuthor.withVerifiedBytes(content.artifact, (bytes) => {
+                  const source = path.join(inputs, String(index));
+                  return fileSystem.writeFile(source, bytes).pipe(
+                    Effect.mapError((error) => failWith(`materialize private input ${index}`, error)),
+                    Effect.andThen(materialize(index + 1, [...sources, source])),
+                  );
+                });
+              };
+              yield* materialize(0, []);
             }),
-        });
+        );
       },
     );
 
@@ -422,7 +427,7 @@ const makeService = (
 export const buildPackage = (
   format: Format,
   input: PackageInput,
-): Effect.Effect<Artifact.FileArtifact, PackageError, Packager> =>
+): Effect.Effect<Artifact.HashedFile, PackageError, Packager> =>
   Packager.use((service) => service.buildPackage(format, input));
 
 export const buildDeb = (input: PackageInput) => buildPackage("deb", input);

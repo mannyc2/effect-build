@@ -1,7 +1,7 @@
 {
   "name": "effect-build-deno",
   "version": "0.6.0",
-  "description": "Deno executable compiler for effect-build.",
+  "description": "Provider-native Deno selected-command operations for effect-build.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -34,13 +34,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./Bundle": {
-      "types": "./dist/Bundle.d.ts",
-      "import": "./dist/Bundle.js"
-    },
-    "./CompileExecutable": {
-      "types": "./dist/CompileExecutable.d.ts",
-      "import": "./dist/CompileExecutable.js"
+    "./Command": {
+      "types": "./dist/Command/index.d.ts",
+      "import": "./dist/Command/index.js"
     }
   },
   "scripts": {

@@ -1,6 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Schema } from "effect";
-import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -8,14 +7,14 @@ import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as Sbom from "../../packages/effect-build-sbom/src/Generate.js";
 import type * as Artifact from "../../packages/effect-build/src/Artifact.js";
-import { finalizedBundle } from "../fixtures/finalized-artifacts.js";
+import { finalizedFile, finalizedTree } from "../fixtures/finalized-artifacts.js";
 import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const fixture = resolve(fileURLToPath(new URL("../fixtures/tools/fake-syft-hard-cut.mjs", import.meta.url)));
 let root = "";
 let executable = "";
-let fileSubject: Artifact.FinalizedFile;
-let directorySubject: Artifact.Bundle;
+let fileSubject: Artifact.HashedFile;
+let directorySubject: Artifact.HashedTree;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-sbom-hard-cut-"));
@@ -23,15 +22,11 @@ beforeAll(async () => {
   const subjectPath = join(root, "release.tar.gz");
   const contents = new TextEncoder().encode("finalized archive bytes");
   await writeFile(subjectPath, contents);
-  fileSubject = {
-    path: subjectPath,
-    bytes: contents.byteLength,
-    sha256: createHash("sha256").update(contents).digest("hex"),
-  };
+  fileSubject = await finalizedFile(subjectPath);
   const directory = join(root, "release-directory");
   await mkdir(directory);
   await writeFile(join(directory, "package.json"), '{"name":"fixture"}\n');
-  directorySubject = await finalizedBundle(directory);
+  directorySubject = await finalizedTree(directory);
 });
 
 afterEach(() => {
@@ -93,9 +88,9 @@ describe.sequential("Syft SBOM hard-cut operations", () => {
     const exit = await run(Sbom.generateSpdxJson(input("missing-tool.spdx.json")), {
       executable: join(root, "not-syft"),
     });
-    const failure = failureOf(exit) as { readonly _tag: string; readonly tool: string };
-    expect(failure._tag).toBe("ToolNotFound");
-    expect(failure.tool).toBe("syft");
+    const failure = failureOf(exit) as { readonly _tag: string; readonly reason: string };
+    expect(failure._tag).toBe("SyftToolUnavailable");
+    expect(failure.reason).toContain("syft");
     expect(await absent(join(root, "missing-tool.spdx.json"))).toBe(true);
   });
 
@@ -120,9 +115,12 @@ describe.sequential("Syft SBOM hard-cut operations", () => {
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
       for (const artifact of exit.value) {
-        expect(artifact._tag).toBe("File");
-        expect(artifact.tool).toEqual({ name: "syft", version: "1.50.0" });
-        expect(artifact.sha256).toMatch(/^[0-9a-f]{64}$/);
+        expect(artifact._tag).toBe("HashedFile");
+        expect(artifact.provenance).toMatchObject({
+          name: "syft",
+          participants: [{ name: "syft", version: "1.50.0" }],
+        });
+        expect(artifact.digest.value).toMatch(/^[0-9a-f]{64}$/);
       }
     }
 
@@ -131,7 +129,7 @@ describe.sequential("Syft SBOM hard-cut operations", () => {
     const scans = invocations.filter(({ argv }) => argv[0] === "scan");
     expect(scans).toHaveLength(2);
     expect(scans[0]?.argv[0]).toBe("scan");
-    expect(basename(scans[0]?.argv[1] ?? "")).toMatch(/^effect-build-bundle-snapshot-/);
+    expect(basename(scans[0]?.argv[1] ?? "")).toMatch(/^effect-build-tree-snapshot-/);
     expect(scans[0]?.argv.slice(2, 4)).toEqual(["--from", "dir"]);
     expect(scans[0]?.argv[4]).toBe("--output");
     const spdxOutput = scans[0]?.argv[5]?.replace(/^spdx-json@2\.3=/, "") ?? "";
@@ -139,7 +137,8 @@ describe.sequential("Syft SBOM hard-cut operations", () => {
     expect(scans[0]?.argv[6]).toBe("--quiet");
     expect(scans[1]?.argv[0]).toBe("scan");
     const fileSubjectPath = scans[1]?.argv[1] ?? "";
-    expect(basename(dirname(fileSubjectPath))).toMatch(/^effect-build-sbom-subject-/);
+    expect(basename(dirname(fileSubjectPath))).toBe("effect-build-sbom-subject");
+    expect(basename(dirname(dirname(fileSubjectPath)))).toMatch(/^\.effect-build-file-/);
     expect(basename(fileSubjectPath)).toBe("release.tar.gz");
     expect(scans[1]?.argv.slice(2, 4)).toEqual(["--from", "file"]);
     const cyclonedxOutput = scans[1]?.argv[5]?.replace(/^cyclonedx-json@1\.6=/, "") ?? "";
@@ -152,6 +151,23 @@ describe.sequential("Syft SBOM hard-cut operations", () => {
     expect(Schema.decodeUnknownSync(Sbom.CycloneDxJsonDocument)(cyclonedx).components).toHaveLength(1);
   });
 
+  it("reauthenticates the selected Syft bytes immediately before scan launch", async () => {
+    const original = await readFile(executable);
+    const program = Effect.gen(function*() {
+      yield* Effect.promise(() => writeFile(executable, "#!/bin/sh\nexit 0\n"));
+      return yield* Sbom.generateSpdxJson(input("changed-tool.spdx.json"));
+    }).pipe(
+      Effect.provide(Sbom.layer({ executable })),
+      Effect.provide(NodeServices.layer),
+    );
+    try {
+      const failure = failureOf(await Effect.runPromiseExit(program)) as { readonly _tag: string };
+      expect(failure._tag).toBe("SyftToolChanged");
+    } finally {
+      await writeFile(executable, original);
+    }
+  });
+
   it("preserves native Syft diagnostics and leaves no final file", async () => {
     process.env.FAKE_SYFT_MODE = "fail";
     const destination = join(root, "failed.spdx.json");
@@ -162,7 +178,7 @@ describe.sequential("Syft SBOM hard-cut operations", () => {
       readonly stderr: string;
     };
     expect(failure).toMatchObject({
-      _tag: "ToolFailed",
+      _tag: "SyftCommandFailed",
       exitCode: 23,
       stdout: "native syft stdout",
       stderr: "native syft stderr",
@@ -170,13 +186,13 @@ describe.sequential("Syft SBOM hard-cut operations", () => {
     expect(await absent(destination)).toBe(true);
   });
 
-  it("reports missing SBOM output as PublishFailed and cleans staging", async () => {
+  it("reports missing SBOM output as FileCandidateMissing and cleans staging", async () => {
     process.env.FAKE_SYFT_MODE = "missing";
     const failure = failureOf(
       await run(Sbom.generateCycloneDxJson(input("missing.cdx.json"))),
-    ) as { readonly _tag: string; readonly reason: string };
-    expect(failure._tag).toBe("PublishFailed");
-    expect(failure.reason).toContain("did not produce");
+    ) as { readonly _tag: string; readonly stagedPath: string };
+    expect(failure._tag).toBe("FileCandidateMissing");
+    expect(failure.stagedPath).toContain("missing.cdx.json");
     expect((await readdir(root)).some((name) => name.startsWith(".effect-build-"))).toBe(false);
   });
 
@@ -228,8 +244,8 @@ describe.sequential("Syft SBOM hard-cut operations", () => {
     const exit = await run(Sbom.generateSpdxJson(input("untested.spdx.json")));
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value.tool.version).toBe("9.9.9");
-      expect(exit.value.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(exit.value.provenance).toMatchObject({ participants: [{ version: "9.9.9" }] });
+      expect(exit.value.digest.value).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 

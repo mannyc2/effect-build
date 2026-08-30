@@ -4,115 +4,300 @@
     "effect-build": {
       "namespaces": [
         "Artifact",
-        "BuildError",
-        "Target",
-        "Toolchain"
+        "BorrowedOutput",
+        "Executable",
+        "File",
+        "Matrix",
+        "SystemTarget",
+        "Tool",
+        "Tree"
       ],
       "subpaths": {
         "./Artifact": {
           "runtime": [
-            "BundleDirectorySchema",
-            "BundleEntrySchema",
-            "BundleFileSchema",
-            "BundleSchema",
-            "BundleSymbolicLinkSchema",
-            "FinalizedFile",
-            "Mode",
-            "Sha256",
-            "ToolSchema"
+            "AbsolutePath",
+            "ArtifactInvalid",
+            "DecimalBytesSchema",
+            "DigestSchema",
+            "FileModeSchema",
+            "HashedExecutableSchema",
+            "HashedFileObservationSchema",
+            "HashedFileSchema",
+            "HashedTreeObservationSchema",
+            "HashedTreeSchema",
+            "PortableRelativePath",
+            "ProvenanceSchema",
+            "adoptFile",
+            "adoptTree",
+            "adoptionProtocol",
+            "decimalBytes",
+            "fileMode",
+            "intrinsicProvenance",
+            "isHashedExecutable",
+            "isHashedFile",
+            "isHashedFileObservation",
+            "isHashedTree",
+            "isHashedTreeObservation",
+            "isProvenance",
+            "portableRelativePath",
+            "sha256Digest"
           ],
           "declarations": [
-            "Bundle",
-            "BundleDirectory",
-            "BundleDirectorySchema",
-            "BundleEntry",
-            "BundleEntrySchema",
-            "BundleFile",
-            "BundleFileSchema",
-            "BundleSchema",
-            "BundleSymbolicLink",
-            "BundleSymbolicLinkSchema",
+            "AbsolutePath",
+            "Adoption",
+            "ArtifactInvalid",
+            "DecimalBytes",
+            "DecimalBytesSchema",
+            "Digest",
+            "DigestSchema",
             "Executable",
-            "FileArtifact",
-            "FinalizedArtifact",
-            "FinalizedFile",
-            "Mode",
-            "Sha256",
-            "Tool",
-            "ToolSchema"
+            "File",
+            "FileAdoption",
+            "FileMode",
+            "FileModeSchema",
+            "FileObservation",
+            "HashedExecutable",
+            "HashedExecutableSchema",
+            "HashedFile",
+            "HashedFileIdentity",
+            "HashedFileObservation",
+            "HashedFileObservationSchema",
+            "HashedFileSchema",
+            "HashedTree",
+            "HashedTreeEntry",
+            "HashedTreeFileEntry",
+            "HashedTreeObservation",
+            "HashedTreeObservationSchema",
+            "HashedTreeSchema",
+            "IntrinsicProvenance",
+            "ObservationMode",
+            "PortableRelativePath",
+            "Provenance",
+            "ProvenanceSchema",
+            "Publication",
+            "RuntimeObservation",
+            "Sha256Value",
+            "Tree",
+            "TreeAdoption",
+            "TreeDirectoryEntry",
+            "TreeObservation",
+            "TreeSymbolicLinkEntry",
+            "UnhashedExecutable",
+            "UnhashedFile",
+            "UnhashedFileIdentity",
+            "UnhashedFileObservation",
+            "UnhashedTree",
+            "UnhashedTreeEntry",
+            "UnhashedTreeFileEntry",
+            "UnhashedTreeObservation",
+            "adoptFile",
+            "adoptTree",
+            "adoptionProtocol",
+            "decimalBytes",
+            "fileMode",
+            "intrinsicProvenance",
+            "isHashedExecutable",
+            "isHashedFile",
+            "isHashedFileObservation",
+            "isHashedTree",
+            "isHashedTreeObservation",
+            "isProvenance",
+            "portableRelativePath",
+            "sha256Digest"
           ]
         },
-        "./BuildError": {
+        "./Author/BorrowedOutput": {
           "runtime": [
-            "ArtifactVerificationFailed",
-            "PublishFailed",
-            "ToolFailed",
-            "ToolNotFound",
-            "UnsupportedTarget"
+            "BorrowedOutputChanged",
+            "BorrowedOutputEscaped",
+            "BorrowedOutputExpired",
+            "BorrowedOutputMissing",
+            "BorrowedOutputObservationFailed",
+            "CleanupFailedAfterSuccessfulUse",
+            "CleanupReporter",
+            "withFile",
+            "withTree"
           ],
           "declarations": [
-            "ArtifactVerificationFailed",
-            "PublishFailed",
-            "ToolFailed",
-            "ToolNotFound",
-            "UnsupportedTarget"
+            "BorrowedOutputChanged",
+            "BorrowedOutputEscaped",
+            "BorrowedOutputExpired",
+            "BorrowedOutputMissing",
+            "BorrowedOutputObservationFailed",
+            "CleanupFailedAfterSuccessfulUse",
+            "CleanupObservation",
+            "CleanupReporter",
+            "DecimalBytes",
+            "Digest",
+            "Failure",
+            "File",
+            "FileObservation",
+            "HashedFileObservation",
+            "HashedTreeEntry",
+            "HashedTreeObservation",
+            "ObservationMode",
+            "Producer",
+            "Tree",
+            "TreeDirectoryEntry",
+            "TreeObservation",
+            "UnhashedFileObservation",
+            "UnhashedTreeEntry",
+            "UnhashedTreeFileEntry",
+            "UnhashedTreeObservation",
+            "withFile",
+            "withTree"
           ]
         },
-        "./Target": {
+        "./Author/Executable": {
           "runtime": [
-            "Target",
-            "host",
-            "info"
+            "ExecutableCandidateChanged",
+            "ExecutableCandidateMissing",
+            "ExecutableCommitFailed",
+            "ExecutableDestinationInvalid",
+            "ExecutableDestinationLocked",
+            "ExecutableInspectionFailed",
+            "publish"
+          ],
+          "declarations": [
+            "Artifact",
+            "ExecutableCandidateChanged",
+            "ExecutableCandidateMissing",
+            "ExecutableCommitFailed",
+            "ExecutableDestinationInvalid",
+            "ExecutableDestinationLocked",
+            "ExecutableInspectionFailed",
+            "Failure",
+            "HashedArtifact",
+            "Inspection",
+            "Request",
+            "UnhashedArtifact",
+            "publish"
+          ]
+        },
+        "./Author/File": {
+          "runtime": [
+            "FileCandidateChanged",
+            "FileCandidateMissing",
+            "FileCommitFailed",
+            "FileDestinationInvalid",
+            "FileDestinationLocked",
+            "FileVerificationFailed",
+            "publish",
+            "withVerifiedBytes"
+          ],
+          "declarations": [
+            "Artifact",
+            "Failure",
+            "FileCandidateChanged",
+            "FileCandidateMissing",
+            "FileCommitFailed",
+            "FileDestinationInvalid",
+            "FileDestinationLocked",
+            "FileVerificationFailed",
+            "PublicationFailure",
+            "Request",
+            "VerifiedInput",
+            "publish",
+            "withVerifiedBytes"
+          ]
+        },
+        "./Author/Tool": {
+          "runtime": [
+            "SelectedToolChanged",
+            "ToolNotFound",
+            "ToolSelectionAmbiguous",
+            "ToolSelectionInvalid",
+            "decimalBytes",
+            "define",
+            "select",
+            "sha256Digest"
+          ],
+          "declarations": [
+            "Admission",
+            "Candidate",
+            "CapabilityObservation",
+            "CommandOptions",
+            "ContentIdentity",
+            "DecimalBytes",
+            "Definition",
+            "Digest",
+            "Observation",
+            "ParticipantIdentity",
+            "SelectOptions",
+            "SelectedTool",
+            "SelectedToolChanged",
+            "Sha256Value",
+            "ToolNotFound",
+            "ToolSelectionAmbiguous",
+            "ToolSelectionInvalid",
+            "decimalBytes",
+            "define",
+            "select",
+            "sha256Digest"
+          ]
+        },
+        "./Author/Tree": {
+          "runtime": [
+            "TreeCandidateChanged",
+            "TreeCandidateMissing",
+            "TreeCommitFailed",
+            "TreeDestinationInvalid",
+            "TreeDestinationLocked",
+            "TreeFileProjectionFailed",
+            "TreeVerificationFailed",
+            "projectFile",
+            "publish",
+            "withVerifiedSnapshot"
+          ],
+          "declarations": [
+            "Artifact",
+            "Failure",
+            "PublicationFailure",
+            "Request",
+            "TreeCandidateChanged",
+            "TreeCandidateMissing",
+            "TreeCommitFailed",
+            "TreeDestinationInvalid",
+            "TreeDestinationLocked",
+            "TreeFileProjectionFailed",
+            "TreeVerificationFailed",
+            "projectFile",
+            "publish",
+            "withVerifiedSnapshot"
+          ]
+        },
+        "./Matrix": {
+          "runtime": [
+            "InvalidInput",
+            "run"
+          ],
+          "declarations": [
+            "CellIdentity",
+            "CellResult",
+            "Failure",
+            "Input",
+            "InvalidInput",
+            "Report",
+            "RunInput",
+            "Success",
+            "run"
+          ]
+        },
+        "./SystemTarget": {
+          "runtime": [
+            "Abi",
+            "Architecture",
+            "OperatingSystem",
+            "SystemTarget",
+            "describe"
           ],
           "declarations": [
             "Abi",
             "Architecture",
-            "Info",
-            "NativeFormat",
+            "Descriptor",
             "OperatingSystem",
-            "Target",
-            "host",
-            "info"
-          ]
-        },
-        "./Toolchain": {
-          "runtime": [
-            "materializeVerifiedBundle",
-            "probeVersion",
-            "publishBundle",
-            "publishExecutable",
-            "publishFile",
-            "readVerifiedFile",
-            "resolveExecutable",
-            "run",
-            "runBytes",
-            "runBytesOrFail",
-            "runOrFail",
-            "warnIfUntested"
-          ],
-          "declarations": [
-            "BinaryCompletion",
-            "Completion",
-            "Output",
-            "ProbeOptions",
-            "PublishBundleOptions",
-            "PublishFileOptions",
-            "PublishOptions",
-            "ResolveOptions",
-            "RunOptions",
-            "TestedRange",
-            "materializeVerifiedBundle",
-            "probeVersion",
-            "publishBundle",
-            "publishExecutable",
-            "publishFile",
-            "readVerifiedFile",
-            "resolveExecutable",
-            "run",
-            "runBytes",
-            "runBytesOrFail",
-            "runOrFail",
-            "warnIfUntested"
+            "SystemTarget",
+            "describe"
           ]
         }
       }
@@ -131,6 +316,10 @@
       "subpaths": {
         "./AppBundle": {
           "runtime": [
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "Builder",
             "ExecutableArchitectureMismatch",
             "buildAppBundles",
@@ -140,6 +329,10 @@
             "AppBundles",
             "AppResource",
             "AppVariantInput",
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "BuildAppBundlesError",
             "BuildAppBundlesInput",
             "Builder",
@@ -151,16 +344,20 @@
         },
         "./Assess": {
           "runtime": [
-            "ArtifactChangedDuringAssessment",
-            "ArtifactInspectionFailed",
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "Assessor",
             "GatekeeperAccepted",
             "assess",
             "layer"
           ],
           "declarations": [
-            "ArtifactChangedDuringAssessment",
-            "ArtifactInspectionFailed",
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "AssessAppInput",
             "AssessDiskImageInput",
             "AssessError",
@@ -176,6 +373,10 @@
         "./CodeSign": {
           "runtime": [
             "AppSigner",
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "CertificateSha1",
             "DeveloperIdApplicationIdentity",
             "DeveloperIdInstallerIdentity",
@@ -191,6 +392,10 @@
           "declarations": [
             "AppLayerOptions",
             "AppSigner",
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "CertificateSha1",
             "DeveloperIdApplicationBundle",
             "DeveloperIdApplicationIdentity",
@@ -215,11 +420,19 @@
         },
         "./DiskImage": {
           "runtime": [
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "Creator",
             "createDiskImages",
             "layer"
           ],
           "declarations": [
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "CreateDiskImagesError",
             "CreateDiskImagesInput",
             "Creator",
@@ -233,11 +446,19 @@
         },
         "./InstallerPackage": {
           "runtime": [
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "Builder",
             "buildInstallerPackages",
             "layer"
           ],
           "declarations": [
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "BuildInstallerPackagesError",
             "BuildInstallerPackagesInput",
             "Builder",
@@ -250,28 +471,22 @@
         },
         "./Model": {
           "runtime": [
-            "AppleToolFact",
             "Architecture",
-            "BundleInspectionFailed",
             "CertificateSha1",
             "DeveloperIdApplicationSignature",
             "DeveloperIdDiskImageSignature",
             "DeveloperIdInstallerSignature",
-            "FileArtifactIdentityMismatch",
             "NotarizationTicket",
             "ProductKind",
             "ProductStateInvalid",
-            "Sha256",
             "hasDeveloperIdApplicationSignature",
             "hasDeveloperIdDiskImageSignature",
             "hasDeveloperIdInstallerSignature"
           ],
           "declarations": [
-            "AppleToolFact",
             "AppleToolOptions",
             "ApplicationBundle",
             "Architecture",
-            "BundleInspectionFailed",
             "CertificateSha1",
             "DeveloperIdApplicationBundle",
             "DeveloperIdApplicationSignature",
@@ -279,11 +494,10 @@
             "DeveloperIdDiskImageSignature",
             "DeveloperIdInstallerPackage",
             "DeveloperIdInstallerSignature",
-            "FileArtifactIdentityMismatch",
             "NotarizationTicket",
+            "NotarizationTicketFields",
             "ProductKind",
             "ProductStateInvalid",
-            "Sha256",
             "StapledApplicationBundle",
             "StapledDiskImage",
             "StapledInstallerPackage",
@@ -298,7 +512,10 @@
           "runtime": [
             "Accepted",
             "AcceptedReference",
-            "ArtifactIdentityMismatch",
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "Client",
             "CorrelationFailed",
             "Credential",
@@ -331,7 +548,10 @@
             "Accepted",
             "AcceptedReference",
             "ApiKeyOptions",
-            "ArtifactIdentityMismatch",
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "Client",
             "CorrelationFailed",
             "Credential",
@@ -374,6 +594,10 @@
         "./Staple": {
           "runtime": [
             "AcceptanceMismatch",
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "Stapler",
             "layer",
             "stapleApp",
@@ -381,6 +605,10 @@
           ],
           "declarations": [
             "AcceptanceMismatch",
+            "AppleOperationInvalid",
+            "AppleToolChanged",
+            "AppleToolFailed",
+            "AppleToolUnavailable",
             "LayerOptions",
             "StapleAppError",
             "StapleAppInput",
@@ -427,11 +655,21 @@
         "./ArchiveError": {
           "runtime": [
             "ArchiveFailed",
+            "GitCommandFailed",
+            "GitOutputTruncated",
+            "GitToolChanged",
+            "GitToolUnavailable",
+            "GitTransportFailed",
             "SourceArchiveFailed",
             "UnsafeArchiveLayout"
           ],
           "declarations": [
             "ArchiveFailed",
+            "GitCommandFailed",
+            "GitOutputTruncated",
+            "GitToolChanged",
+            "GitToolUnavailable",
+            "GitTransportFailed",
             "SourceArchiveFailed",
             "UnsafeArchiveLayout"
           ]
@@ -463,6 +701,7 @@
           "declarations": [
             "Format",
             "FormatType",
+            "LayerError",
             "LayerOptions",
             "SourceArchiveError",
             "SourceArchiveInput",
@@ -475,42 +714,37 @@
     },
     "effect-build-bun": {
       "namespaces": [
-        "Bundle",
-        "CompileExecutable"
+        "Api",
+        "Command"
       ],
       "subpaths": {
-        "./Bundle": {
+        "./Api": {
           "runtime": [
-            "Bundler",
-            "bundle",
+            "Build",
+            "CompileExecutable",
+            "Transpiler",
             "layer"
           ],
           "declarations": [
-            "BundleError",
-            "BundleInput",
-            "Bundler",
-            "Format",
-            "LayerOptions",
-            "Sourcemap",
-            "Target",
-            "bundle",
+            "Build",
+            "CompileExecutable",
+            "Transpiler",
             "layer"
           ]
         },
-        "./CompileExecutable": {
+        "./Command": {
           "runtime": [
-            "Compiler",
-            "Target",
-            "compileExecutable",
+            "Build",
+            "CompileExecutable",
+            "Watch",
             "layer"
           ],
           "declarations": [
-            "CompileExecutableError",
-            "CompileExecutableInput",
-            "Compiler",
+            "Build",
+            "CompileExecutable",
+            "LayerError",
             "LayerOptions",
-            "Target",
-            "compileExecutable",
+            "Watch",
             "layer"
           ]
         }
@@ -518,43 +752,20 @@
     },
     "effect-build-deno": {
       "namespaces": [
-        "Bundle",
-        "CompileExecutable"
+        "Command"
       ],
       "subpaths": {
-        "./Bundle": {
+        "./Command": {
           "runtime": [
-            "Bundler",
-            "bundle",
+            "CompileExecutable",
+            "Transpile",
             "layer"
           ],
           "declarations": [
-            "BundleError",
-            "BundleInput",
-            "Bundler",
+            "CompileExecutable",
+            "LayerError",
             "LayerOptions",
-            "Platform",
-            "Sourcemap",
-            "bundle",
-            "layer"
-          ]
-        },
-        "./CompileExecutable": {
-          "runtime": [
-            "Compiler",
-            "Target",
-            "compileExecutable",
-            "layer"
-          ],
-          "declarations": [
-            "CompileExecutableError",
-            "CompileExecutableInput",
-            "Compiler",
-            "LayerOptions",
-            "PermissionValue",
-            "Permissions",
-            "Target",
-            "compileExecutable",
+            "Transpile",
             "layer"
           ]
         }
@@ -562,58 +773,44 @@
     },
     "effect-build-esbuild": {
       "namespaces": [
-        "Build",
-        "Context",
-        "Watch"
+        "Api",
+        "Command"
       ],
       "subpaths": {
-        "./Build": {
+        "./Api": {
           "runtime": [
-            "Esbuild",
-            "EsbuildFailed",
-            "analyzeMetafile",
-            "build",
-            "layer",
-            "transform"
-          ],
-          "declarations": [
-            "Artifact",
-            "BuildError",
-            "Esbuild",
-            "EsbuildFailed",
-            "Options",
-            "analyzeMetafile",
-            "build",
-            "layer",
-            "transform"
-          ]
-        },
-        "./Context": {
-          "runtime": [
-            "Esbuild",
-            "EsbuildFailed",
-            "layer",
-            "make"
-          ],
-          "declarations": [
+            "AnalyzeMetafile",
+            "Build",
+            "BuildToDirectory",
             "Context",
-            "ContextError",
-            "Esbuild",
-            "EsbuildFailed",
-            "Options",
-            "layer",
-            "make"
-          ]
-        },
-        "./Watch": {
-          "runtime": [
-            "EsbuildFailed",
-            "changes"
+            "ContextToDirectory",
+            "FormatMessages",
+            "Transform"
           ],
           "declarations": [
-            "EsbuildFailed",
-            "Options",
-            "changes"
+            "AnalyzeMetafile",
+            "Build",
+            "BuildToDirectory",
+            "Context",
+            "ContextToDirectory",
+            "FormatMessages",
+            "Transform"
+          ]
+        },
+        "./Command": {
+          "runtime": [
+            "Build",
+            "BuildToDirectory",
+            "Watch",
+            "layer"
+          ],
+          "declarations": [
+            "Build",
+            "BuildToDirectory",
+            "LayerError",
+            "LayerOptions",
+            "Watch",
+            "layer"
           ]
         }
       }
@@ -651,6 +848,7 @@
           "declarations": [
             "Format",
             "FormatProjection",
+            "LayerError",
             "LayerOptions",
             "MsixApplication",
             "MsixDependencies",
@@ -673,36 +871,23 @@
             "formatProjection",
             "layer"
           ]
-        },
-        "./NfpmConfigurationRejected": {
-          "runtime": [
-            "NfpmConfigurationRejected"
-          ],
-          "declarations": [
-            "NfpmConfigurationRejected"
-          ]
         }
       }
     },
     "effect-build-node-sea": {
       "namespaces": [
-        "AssembleExecutable"
+        "Command"
       ],
       "subpaths": {
-        "./AssembleExecutable": {
+        "./Command": {
           "runtime": [
-            "Assembler",
-            "assembleExecutable",
+            "AssembleExecutable",
             "layer"
           ],
           "declarations": [
-            "AssembleExecutableError",
-            "AssembleExecutableInput",
-            "Assembler",
+            "AssembleExecutable",
+            "LayerError",
             "LayerOptions",
-            "Main",
-            "MainFormat",
-            "assembleExecutable",
             "layer"
           ]
         }
@@ -725,6 +910,7 @@
             "BuildError",
             "BuildInput",
             "Builder",
+            "LayerError",
             "LayerOptions",
             "PythonArtifacts",
             "build",
@@ -733,48 +919,20 @@
         },
         "./PythonBuildError": {
           "runtime": [
-            "PythonBuildFailed"
+            "PythonBuildFailed",
+            "UvCommandFailed",
+            "UvOutputTruncated",
+            "UvToolChanged",
+            "UvToolUnavailable",
+            "UvTransportFailed"
           ],
           "declarations": [
-            "PythonBuildFailed"
-          ]
-        }
-      }
-    },
-    "effect-build-rolldown": {
-      "namespaces": [
-        "Build",
-        "Watch"
-      ],
-      "subpaths": {
-        "./Build": {
-          "runtime": [
-            "Rolldown",
-            "RolldownFailed",
-            "generate",
-            "layer",
-            "make",
-            "write"
-          ],
-          "declarations": [
-            "Build",
-            "Rolldown",
-            "RolldownFailed",
-            "generate",
-            "layer",
-            "make",
-            "write"
-          ]
-        },
-        "./Watch": {
-          "runtime": [
-            "RolldownFailed",
-            "events"
-          ],
-          "declarations": [
-            "Event",
-            "RolldownFailed",
-            "events"
+            "PythonBuildFailed",
+            "UvCommandFailed",
+            "UvOutputTruncated",
+            "UvToolChanged",
+            "UvToolUnavailable",
+            "UvTransportFailed"
           ]
         }
       }
@@ -795,11 +953,17 @@
             "GenerateInput",
             "Generator",
             "OutputFormat",
+            "SbomGenerationFailed",
             "SbomInvalid",
             "ScanSubject",
             "SpdxCreationInfo",
             "SpdxJsonDocument",
             "SpdxPackage",
+            "SyftCommandFailed",
+            "SyftOutputTruncated",
+            "SyftToolChanged",
+            "SyftToolUnavailable",
+            "SyftTransportFailed",
             "formatProjection",
             "generate",
             "generateCycloneDxJson",
@@ -816,13 +980,20 @@
             "GenerateError",
             "GenerateInput",
             "Generator",
+            "LayerError",
             "LayerOptions",
             "OutputFormat",
+            "SbomGenerationFailed",
             "SbomInvalid",
             "ScanSubject",
             "SpdxCreationInfo",
             "SpdxJsonDocument",
             "SpdxPackage",
+            "SyftCommandFailed",
+            "SyftOutputTruncated",
+            "SyftToolChanged",
+            "SyftToolUnavailable",
+            "SyftTransportFailed",
             "formatProjection",
             "generate",
             "generateCycloneDxJson",
@@ -842,8 +1013,12 @@
             "AuthenticodePolicy",
             "CertificateStoreOptions",
             "CertificateThumbprint",
+            "MsixStagingFailed",
             "SignMsixInput",
             "SignMsixInputRejected",
+            "SignToolChanged",
+            "SignToolFailed",
+            "SignToolUnavailable",
             "Signer",
             "SigningCredential",
             "certificateStoreCredentialLayer",
@@ -857,10 +1032,14 @@
             "CertificateStoreOptions",
             "CertificateThumbprint",
             "LayerOptions",
+            "MsixStagingFailed",
             "PfxOptions",
             "SignMsixError",
             "SignMsixInput",
             "SignMsixInputRejected",
+            "SignToolChanged",
+            "SignToolFailed",
+            "SignToolUnavailable",
             "Signer",
             "SigningCredential",
             "certificateStoreCredentialLayer",

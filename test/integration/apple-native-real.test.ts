@@ -1,14 +1,15 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import type * as Artifact from "effect-build/Artifact";
+import * as Artifact from "effect-build/Artifact";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as AppBundle from "../../packages/effect-build-apple/src/AppBundle.js";
+import { finalizedFile } from "../fixtures/finalized-artifacts.js";
 import { requiredEnvironment, requiredExecutable } from "./acceptance-support.js";
 
 const execute = promisify(execFile);
@@ -31,7 +32,7 @@ let root = "";
 let builtApplications: AppBundle.AppBundles | undefined;
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "effect-build-apple-acceptance-"));
+  root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-apple-acceptance-")));
 });
 
 afterAll(async () => {
@@ -45,7 +46,7 @@ const sha256 = async (path: string): Promise<string> => createHash("sha256").upd
 const compileFixture = async (
   architecture: "arm64" | "x86_64",
   outfile: string,
-): Promise<Artifact.Executable> => {
+): Promise<Artifact.HashedExecutable> => {
   const source = join(root, `fixture-${architecture}.c`);
   await writeFile(
     source,
@@ -59,14 +60,13 @@ const compileFixture = async (
     ].join("\n"),
   );
   await execute(clang, ["-arch", architecture, "-mmacosx-version-min=13.0", source, "-o", outfile]);
-  const contents = await readFile(outfile);
+  const finalized = await finalizedFile(outfile);
   return {
-    _tag: "Executable",
-    path: outfile,
-    bytes: contents.byteLength,
+    ...finalized,
+    _tag: "HashedExecutable",
     target: architecture === "arm64" ? "macos-aarch64" : "macos-x64",
-    tool: { name: "clang", version: xcodeVersion },
-    sha256: createHash("sha256").update(contents).digest("hex"),
+    nativeFormat: "mach-o",
+    runtime: { name: "native", version: xcodeVersion },
   };
 };
 
@@ -137,23 +137,24 @@ describe.sequential("real Apple-native artifact mechanics", () => {
       ),
     );
     builtApplications = output;
-    expect(output.arm64.outdir).toBe(arm64App);
-    expect(output.x64.outdir).toBe(x64App);
-    expect(output.arm64.tool).toEqual({ name: "plutil", version: toolVersion });
-    expect(output.x64.tool).toEqual({ name: "plutil", version: toolVersion });
+    expect(output.arm64.root).toBe(arm64App);
+    expect(output.x64.root).toBe(x64App);
+    expect(output.arm64.provenance).toMatchObject({ name: "plutil", participants: [{ version: toolVersion }] });
+    expect(output.x64.provenance).toMatchObject({ name: "plutil", participants: [{ version: toolVersion }] });
     for (const applicationBundle of [output.arm64, output.x64]) {
-      expect(applicationBundle.entries.map((entry) => relative(applicationBundle.outdir, entry.path))).toEqual([
+      expect(applicationBundle.entries.map((entry) => entry.relativePath)).toEqual([
         "Contents",
         "Contents/Info.plist",
         "Contents/MacOS",
         "Contents/MacOS/effect-build-acceptance",
         "Contents/Resources",
       ]);
-      for (const file of applicationBundle.entries.filter((entry) => entry._tag === "File")) {
-        const contents = await readFile(file.path);
-        expect(file.bytes).toBe(contents.byteLength);
-        expect(file.sha256).toBe(createHash("sha256").update(contents).digest("hex"));
-        expect(file.mode & 0o777).toBe(file.path.endsWith("/MacOS/effect-build-acceptance") ? 0o755 : 0o644);
+      for (const file of applicationBundle.entries.filter((entry) => entry.kind === "file")) {
+        const absolute = join(applicationBundle.root, ...file.relativePath.split("/"));
+        const contents = await readFile(absolute);
+        expect(file.bytes).toBe(`${contents.byteLength}`);
+        expect(file.digest.value).toBe(createHash("sha256").update(contents).digest("hex"));
+        expect(file.mode & 0o777).toBe(file.relativePath.endsWith("/MacOS/effect-build-acceptance") ? 0o755 : 0o644);
       }
     }
 
@@ -185,8 +186,8 @@ describe.sequential("real Apple-native artifact mechanics", () => {
     const x64Dmg = join(root, "EffectBuild-x64.dmg");
     for (
       const [architecture, sourceApp, outfile] of [
-        ["arm64", applications().arm64.outdir, arm64Dmg],
-        ["x64", applications().x64.outdir, x64Dmg],
+        ["arm64", applications().arm64.root, arm64Dmg],
+        ["x64", applications().x64.root, x64Dmg],
       ] as const
     ) {
       const layout = join(root, `direct-dmg-layout-${architecture}`);
@@ -238,8 +239,8 @@ describe.sequential("real Apple-native artifact mechanics", () => {
       const x64Package = join(root, "EffectBuild-x64.pkg");
       for (
         const [architecture, app, installer] of [
-          ["arm64", applications().arm64.outdir, arm64Package],
-          ["x86_64", applications().x64.outdir, x64Package],
+          ["arm64", applications().arm64.root, arm64Package],
+          ["x86_64", applications().x64.root, x64Package],
         ] as const
       ) {
         const identifierArchitecture = architecture === "arm64" ? "arm64" : "x64";

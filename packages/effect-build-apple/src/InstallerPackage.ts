@@ -1,22 +1,28 @@
 import { Context, Crypto, Effect, Exit, FileSystem, Layer, Path } from "effect";
-import type * as Artifact from "effect-build/Artifact";
-import { PublishFailed, ToolFailed } from "effect-build/BuildError";
-import type { ArtifactVerificationFailed, ToolNotFound } from "effect-build/BuildError";
-import * as Toolchain from "effect-build/Toolchain";
+import * as File from "effect-build/Author/File";
+import * as Tree from "effect-build/Author/Tree";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { capturePlatformServices, ensureNewDestination, resolveAppleTool } from "./internal.js";
-import { captureBundle, makeBundleRemovable, materializeBundle } from "./internal/BundleIdentity.js";
-import type { BundleSnapshot } from "./internal/BundleIdentity.js";
+import {
+  AppleOperationInvalid,
+  AppleToolChanged,
+  AppleToolFailed,
+  AppleToolUnavailable,
+  capturePlatformServices,
+  combineToolObservations,
+  copyTreeSnapshot,
+  ensureNewDestination,
+  selectAppleTool,
+} from "./internal.js";
 import { hasDeveloperIdApplicationSignature, ProductStateInvalid } from "./Model.js";
 import type {
   AppleToolOptions,
   Architecture,
-  BundleInspectionFailed,
   DeveloperIdApplicationBundle,
   UnsignedInstallerPackage,
 } from "./Model.js";
 
-/** One unsigned architecture-specific installer package. */
+export { AppleOperationInvalid, AppleToolChanged, AppleToolFailed, AppleToolUnavailable } from "./internal.js";
+
 export interface InstallerVariantInput<A extends Architecture = Architecture> {
   readonly sourceApp: DeveloperIdApplicationBundle & { readonly architecture: A };
   readonly outfile: string;
@@ -25,7 +31,6 @@ export interface InstallerVariantInput<A extends Architecture = Architecture> {
   readonly installLocation?: string;
 }
 
-/** Exact two-architecture unsigned installer request. */
 export interface BuildInstallerPackagesInput {
   readonly arm64: InstallerVariantInput<"arm64">;
   readonly x64: InstallerVariantInput<"x64">;
@@ -44,10 +49,11 @@ export interface LayerOptions {
 }
 
 export type BuildInstallerPackagesError =
-  | ToolFailed
-  | PublishFailed
-  | ArtifactVerificationFailed
-  | BundleInspectionFailed
+  | AppleOperationInvalid
+  | AppleToolChanged
+  | AppleToolFailed
+  | File.PublicationFailure
+  | Tree.TreeVerificationFailed
   | ProductStateInvalid;
 
 interface Service {
@@ -60,12 +66,10 @@ export class Builder extends Context.Service<Builder, Service>()(
   "effect-build-apple/InstallerPackage/Builder",
 ) {}
 
-type LayerError = ToolNotFound | ToolFailed;
+const invalid = (operation: string, path: string, reason: string): AppleOperationInvalid =>
+  new AppleOperationInvalid({ operation, path, reason });
 
-interface PreparedInstallerPackage {
-  readonly input: InstallerVariantInput;
-  readonly captured: BundleSnapshot;
-}
+type LayerError = AppleToolUnavailable | AppleToolFailed;
 
 const makeService = (
   options: LayerOptions,
@@ -76,193 +80,145 @@ const makeService = (
 > =>
   Effect.gen(function*() {
     const { fileSystem, path, services } = yield* capturePlatformServices;
-    const pkgbuild = yield* resolveAppleTool("pkgbuild", options.pkgbuild, ["--version"]);
-    const productbuild = yield* resolveAppleTool("productbuild", options.productbuild, ["--version"]);
-    const pkgutil = yield* resolveAppleTool("pkgutil", options.pkgutil, ["--help"]);
-    const codesign = yield* resolveAppleTool("codesign", options.codesign, ["--version"]);
-    const tool: Artifact.Tool = {
-      name: "pkgbuild+productbuild+pkgutil",
-      version: `${pkgbuild.tool.version};${productbuild.tool.version};${pkgutil.tool.version}`,
+    const pkgbuild = yield* selectAppleTool("pkgbuild", options.pkgbuild, ["--version"], "component-package");
+    const productbuild = yield* selectAppleTool("productbuild", options.productbuild, ["--version"], "flat-package");
+    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, ["--help"], "payload-verification");
+    const codesign = yield* selectAppleTool("codesign", options.codesign, ["--version"], "app-signature-verification");
+    const packageProvenance = combineToolObservations(
+      productbuild.observation,
+      pkgbuild.observation,
+      pkgutil.observation,
+    );
+
+    const validate = (input: InstallerVariantInput, architecture: Architecture) => {
+      const source = input.sourceApp.root;
+      if (!path.basename(path.resolve(input.outfile)).endsWith(".pkg")) {
+        return Effect.fail(invalid("build installer package", input.outfile, "output must end in .pkg"));
+      }
+      if (!hasDeveloperIdApplicationSignature(input.sourceApp) || !path.basename(source).endsWith(".app")) {
+        return Effect.fail(
+          new ProductStateInvalid({
+            operation: "build installer package",
+            path: source,
+            expected: "a verified Developer ID Application .app bundle",
+          }),
+        );
+      }
+      if (input.sourceApp.architecture !== architecture) {
+        return Effect.fail(
+          new ProductStateInvalid({
+            operation: "build installer package",
+            path: source,
+            expected: `a ${architecture} Developer ID Application bundle`,
+          }),
+        );
+      }
+      return Effect.void;
     };
 
-    const prepareOne = Effect.fn("effect-build-apple.prepareInstallerPackage")(function*(
-      input: InstallerVariantInput,
-      expectedArchitecture: Architecture,
-    ) {
-      const sourceAppPath = path.resolve(input.sourceApp.outdir);
-      if (!path.basename(path.resolve(input.outfile)).endsWith(".pkg")) {
-        return yield* new PublishFailed({
-          destination: path.resolve(input.outfile),
-          reason: "flat installer outputs must end in .pkg",
-        });
-      }
-      if (!hasDeveloperIdApplicationSignature(input.sourceApp)) {
-        return yield* new ProductStateInvalid({
-          operation: "build installer package",
-          path: sourceAppPath,
-          expected: "a strictly verified Developer ID Application bundle",
-        });
-      }
-      if (!path.basename(sourceAppPath).endsWith(".app")) {
-        return yield* new ProductStateInvalid({
-          operation: "build installer package",
-          path: sourceAppPath,
-          expected: "a Developer ID Application .app bundle",
-        });
-      }
-      if (input.sourceApp.architecture !== expectedArchitecture) {
-        return yield* new ProductStateInvalid({
-          operation: "build installer package",
-          path: sourceAppPath,
-          expected: `a ${expectedArchitecture} Developer ID Application bundle`,
-        });
-      }
-      return {
-        input,
-        captured: yield* captureBundle(input.sourceApp),
-      } satisfies PreparedInstallerPackage;
-    });
-
-    const buildOne = Effect.fn("effect-build-apple.buildInstallerPackage")(function*(
-      prepared: PreparedInstallerPackage,
-    ) {
-      const { captured, input } = prepared;
-      return yield* Toolchain.publishFile({
-        tool,
-        outfile: input.outfile,
-        produce: (stagedPath) =>
-          Effect.scoped(Effect.gen(function*() {
-            const appParent = yield* fileSystem.makeTempDirectoryScoped({
-              directory: path.dirname(stagedPath),
-              prefix: ".effect-build-installer-app-",
-            }).pipe(Effect.mapError((error) =>
-              new PublishFailed({
-                destination: path.resolve(input.outfile),
-                reason: `create private app directory: ${String(error)}`,
-              })
-            ));
-            const component = path.join(appParent, "component.pkg");
-            const sourceApp = path.join(appParent, captured.identity.bundleName);
-            yield* Effect.addFinalizer(() => makeBundleRemovable(captured, sourceApp));
-            yield* materializeBundle(captured, sourceApp);
-            yield* Toolchain.runOrFail({
-              tool: "codesign",
-              executable: codesign.executable,
-              args: ["--verify", "--deep", "--strict", "--verbose=2", sourceApp],
-            });
-            yield* Toolchain.runOrFail({
-              tool: "pkgbuild",
-              executable: pkgbuild.executable,
-              args: [
-                "--component",
-                sourceApp,
-                "--identifier",
-                input.identifier,
-                "--version",
-                input.version,
-                "--install-location",
-                input.installLocation ?? "/Applications",
-                component,
-              ],
-            });
-            yield* Toolchain.runOrFail({
-              tool: "productbuild",
-              executable: productbuild.executable,
-              args: ["--package", component, stagedPath],
-            });
-            const payload = yield* Toolchain.runBytesOrFail({
-              tool: "pkgutil",
-              executable: pkgutil.executable,
-              args: ["--payload-files", stagedPath],
-            });
-            const payloadText = yield* Effect.try({
-              try: () => new TextDecoder("utf-8", { fatal: true }).decode(payload.stdout),
-              catch: (error) =>
-                new ToolFailed({
-                  tool: "pkgutil",
-                  exitCode: payload.exitCode,
-                  stdout: "",
-                  stderr: `payload listing was not valid UTF-8: ${String(error)}`,
-                }),
-            });
-            const payloadRoots = payloadText
-              .split(/\r?\n/)
-              .map((line) => line.trim().replace(/^\.\//, "").split("/")[0])
-              .filter((root): root is string => root !== undefined && root.length > 0);
-            if (!payloadRoots.includes(captured.identity.bundleName)) {
-              return yield* new ToolFailed({
-                tool: "pkgutil",
-                exitCode: payload.exitCode,
-                stdout: payloadText,
-                stderr: `installer payload did not contain ${captured.identity.bundleName} at its exact root`,
-              });
-            }
-          })),
-      });
-    });
+    const buildOne = (input: InstallerVariantInput) =>
+      Tree.withVerifiedSnapshot(input.sourceApp, (snapshot) =>
+        File.publish(
+          { destination: input.outfile, observation: "hashed", provenance: packageProvenance },
+          (stagedPath) =>
+            Effect.scoped(
+              Effect.gen(function*() {
+                const workspace = yield* fileSystem.makeTempDirectoryScoped({
+                  directory: path.dirname(stagedPath),
+                  prefix: ".effect-build-installer-",
+                }).pipe(Effect.mapError((error) => invalid("create installer workspace", stagedPath, String(error))));
+                const bundleName = path.basename(input.sourceApp.root);
+                const sourceApp = path.join(workspace, bundleName);
+                const component = path.join(workspace, "component.pkg");
+                yield* copyTreeSnapshot(snapshot, sourceApp);
+                yield* codesign.run(["--verify", "--deep", "--strict", "--verbose=2", sourceApp]);
+                yield* pkgbuild.run([
+                  "--component",
+                  sourceApp,
+                  "--identifier",
+                  input.identifier,
+                  "--version",
+                  input.version,
+                  "--install-location",
+                  input.installLocation ?? "/Applications",
+                  component,
+                ]);
+                yield* productbuild.run(["--package", component, stagedPath]);
+                const payload = yield* pkgutil.run(["--payload-files", stagedPath]);
+                const payloadText = yield* Effect.try({
+                  try: () => new TextDecoder("utf-8", { fatal: true }).decode(payload.stdout),
+                  catch: (error) =>
+                    new AppleToolFailed({
+                      tool: "pkgutil",
+                      exitCode: payload.exitCode,
+                      stdout: "",
+                      stderr: `payload listing was not UTF-8: ${String(error)}`,
+                    }),
+                });
+                const payloadRoots = payloadText
+                  .split(/\r?\n/u)
+                  .map((line) => line.trim().replace(/^\.\//u, "").split("/")[0])
+                  .filter((root): root is string => root !== undefined && root.length > 0);
+                if (!payloadRoots.includes(bundleName)) {
+                  return yield* new AppleToolFailed({
+                    tool: "pkgutil",
+                    exitCode: payload.exitCode,
+                    stdout: payloadText,
+                    stderr: `installer payload did not contain ${bundleName} at its root`,
+                  });
+                }
+              }),
+            ),
+        ));
 
     const buildInstallerPackages = Effect.fn("effect-build-apple.buildInstallerPackages")(
       function*(input: BuildInstallerPackagesInput) {
-        if (path.resolve(input.arm64.outfile) === path.resolve(input.x64.outfile)) {
-          return yield* new PublishFailed({
-            destination: path.resolve(input.arm64.outfile),
-            reason: "arm64 and x64 installers require distinct output files",
-          });
+        const armDestination = path.resolve(input.arm64.outfile);
+        const x64Destination = path.resolve(input.x64.outfile);
+        if (armDestination === x64Destination) {
+          return yield* invalid("build installer packages", armDestination, "arm64 and x64 outputs must differ");
         }
-        yield* ensureNewDestination(input.arm64.outfile);
-        yield* ensureNewDestination(input.x64.outfile);
+        yield* ensureNewDestination(armDestination);
+        yield* ensureNewDestination(x64Destination);
         for (const variant of [input.arm64, input.x64]) {
-          if (!/^[A-Za-z0-9][A-Za-z0-9.-]+$/.test(variant.identifier)) {
-            return yield* new PublishFailed({
-              destination: path.resolve(variant.outfile),
-              reason: `invalid installer identifier: ${variant.identifier}`,
-            });
+          if (!/^[A-Za-z0-9][A-Za-z0-9.-]+$/u.test(variant.identifier)) {
+            return yield* invalid("build installer package", variant.outfile, "invalid package identifier");
           }
         }
-        const preparedArm64 = yield* prepareOne(input.arm64, "arm64");
-        const preparedX64 = yield* prepareOne(input.x64, "x64");
-        if (
-          input.arm64.sourceApp.signature.certificateSha1
-            !== input.x64.sourceApp.signature.certificateSha1
-        ) {
+        yield* validate(input.arm64, "arm64");
+        yield* validate(input.x64, "x64");
+        if (input.arm64.sourceApp.signature.certificateSha1 !== input.x64.sourceApp.signature.certificateSha1) {
           return yield* new ProductStateInvalid({
             operation: "build installer packages",
-            path: path.resolve(input.x64.sourceApp.outdir),
+            path: input.x64.sourceApp.root,
             expected: "the same Developer ID Application identity as the arm64 app",
           });
         }
-        let attemptedArm64 = false;
-        let attemptedX64 = false;
-        const pair = Effect.gen(function*() {
-          attemptedArm64 = true;
-          const arm64 = yield* buildOne(preparedArm64);
-          attemptedX64 = true;
-          const x64 = yield* buildOne(preparedX64);
+        let armCommitted = false;
+        let x64Committed = false;
+        return yield* Effect.gen(function*() {
+          const arm64 = yield* buildOne(input.arm64);
+          armCommitted = true;
+          const x64 = yield* buildOne(input.x64);
+          x64Committed = true;
           return {
-            arm64: { ...arm64, architecture: "arm64" as const },
-            x64: { ...x64, architecture: "x64" as const },
+            arm64: Object.freeze({ ...arm64, architecture: "arm64" as const }),
+            x64: Object.freeze({ ...x64, architecture: "x64" as const }),
           };
-        });
-        return yield* pair.pipe(
+        }).pipe(
           Effect.onExit((exit) =>
             Exit.isSuccess(exit)
               ? Effect.void
               : Effect.gen(function*() {
-                if (attemptedArm64) {
-                  yield* fileSystem.remove(path.resolve(input.arm64.outfile), { force: true }).pipe(Effect.ignore);
-                }
-                if (attemptedX64) {
-                  yield* fileSystem.remove(path.resolve(input.x64.outfile), { force: true }).pipe(Effect.ignore);
-                }
+                if (armCommitted) yield* fileSystem.remove(armDestination, { force: true }).pipe(Effect.ignore);
+                if (x64Committed) yield* fileSystem.remove(x64Destination, { force: true }).pipe(Effect.ignore);
               })
           ),
         );
       },
     );
 
-    return {
-      buildInstallerPackages: (input) => buildInstallerPackages(input).pipe(Effect.provide(services)),
-    };
+    return { buildInstallerPackages: (input) => buildInstallerPackages(input).pipe(Effect.provide(services)) };
   });
 
 export const buildInstallerPackages = (

@@ -6,9 +6,6 @@
   ],
   "references": [
     {
-      "path": "../../packages/effect-build-esbuild"
-    },
-    {
       "path": "../../packages/effect-build-node-sea"
     }
   ]

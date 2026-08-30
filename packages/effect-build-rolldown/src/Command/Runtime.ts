@@ -1,0 +1,319 @@
+import { Cause, Context, Crypto, Effect, FileSystem, Layer, Path, Stream } from "effect";
+import type * as Artifact from "effect-build/Artifact";
+import type { ArtifactInvalid } from "effect-build/Artifact";
+import type * as Tool from "effect-build/Author/Tool";
+import * as ToolAuthor from "effect-build/Author/Tool";
+import type {
+  SelectedToolChanged,
+  ToolNotFound,
+  ToolSelectionAmbiguous,
+  ToolSelectionInvalid,
+} from "effect-build/Author/Tool";
+import { type ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import {
+  type CommandOperation,
+  RolldownCommandFailed,
+  RolldownCommandInputInvalid,
+  RolldownCommandOutputTruncated,
+  RolldownCommandTransportFailed,
+  RolldownCommandUnsupported,
+} from "../internal/CommandError.js";
+
+export {
+  RolldownCommandFailed,
+  RolldownCommandInputInvalid,
+  RolldownCommandOutputTruncated,
+  RolldownCommandTransportFailed,
+  RolldownCommandUnsupported,
+} from "../internal/CommandError.js";
+
+export interface CapturedOutput {
+  readonly bytes: Uint8Array;
+  readonly text: string;
+  readonly truncated: boolean;
+}
+
+export interface Completion {
+  readonly tool: Tool.Observation<"rolldown">;
+  readonly exitCode: number;
+  readonly stdout: CapturedOutput;
+  readonly stderr: CapturedOutput;
+}
+
+export interface Environment {
+  readonly values: Readonly<Record<string, string | undefined>>;
+  readonly inherit?: boolean;
+}
+
+export interface InvocationOptions {
+  readonly cwd?: string;
+  readonly environment?: Environment;
+}
+
+export interface LayerOptions {
+  readonly executable?: Artifact.AbsolutePath;
+  readonly outputLimitBytes?: number;
+}
+
+export type LayerError =
+  | ToolNotFound
+  | ToolSelectionAmbiguous
+  | ToolSelectionInvalid
+  | ArtifactInvalid
+  | SelectedToolChanged
+  | RolldownCommandInputInvalid
+  | RolldownCommandUnsupported
+  | RolldownCommandTransportFailed
+  | RolldownCommandFailed;
+
+export type RunError =
+  | ArtifactInvalid
+  | SelectedToolChanged
+  | RolldownCommandUnsupported
+  | RolldownCommandTransportFailed
+  | RolldownCommandFailed
+  | RolldownCommandOutputTruncated;
+export type WatchError =
+  | ArtifactInvalid
+  | SelectedToolChanged
+  | RolldownCommandUnsupported
+  | RolldownCommandTransportFailed;
+
+interface Service {
+  readonly tool: Tool.SelectedTool<"rolldown">;
+  readonly version: string;
+  readonly run: (
+    operation: "bundleStdout" | "bundleDirect",
+    publication: "none" | "provider-direct-durable",
+    argv: readonly string[],
+    options?: InvocationOptions,
+  ) => Effect.Effect<Completion, RunError>;
+  readonly watch: (
+    argv: readonly string[],
+    options?: InvocationOptions,
+  ) => Effect.Effect<ChildProcessSpawner.ChildProcessHandle, WatchError, import("effect").Scope.Scope>;
+}
+
+export class Runtime extends Context.Service<Runtime, Service>()("effect-build-rolldown/Command/Runtime") {}
+
+interface Accumulator {
+  readonly chunks: readonly Uint8Array[];
+  readonly retained: number;
+  readonly truncated: boolean;
+}
+
+const collect = (stream: Stream.Stream<Uint8Array, unknown>, limit: number): Effect.Effect<CapturedOutput, unknown> =>
+  Stream.runFold(
+    stream,
+    (): Accumulator => ({ chunks: [], retained: 0, truncated: false }),
+    (state, chunk) => {
+      const available = Math.max(0, limit - state.retained);
+      const retained = chunk.byteLength <= available ? chunk : chunk.subarray(0, available);
+      return {
+        chunks: retained.byteLength === 0 ? state.chunks : [...state.chunks, retained],
+        retained: state.retained + retained.byteLength,
+        truncated: state.truncated || retained.byteLength !== chunk.byteLength,
+      };
+    },
+  ).pipe(
+    Effect.map((state) => {
+      const bytes = new Uint8Array(state.retained);
+      let offset = 0;
+      for (const chunk of state.chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return { bytes, text: new TextDecoder().decode(bytes), truncated: state.truncated };
+    }),
+  );
+
+const commandOptions = (options?: InvocationOptions): Tool.CommandOptions => ({
+  ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
+  ...(options?.environment === undefined
+    ? {}
+    : { env: { ...options.environment.values }, extendEnv: options.environment.inherit !== false }),
+  forceKillAfter: "2 seconds",
+});
+
+const invoke = (
+  command: ChildProcess.Command,
+  operation: CommandOperation,
+  tool: Tool.Observation<"rolldown">,
+  limit: number,
+): Effect.Effect<Completion, RolldownCommandTransportFailed, ChildProcessSpawner.ChildProcessSpawner> =>
+  Effect.scoped(
+    Effect.gen(function*() {
+      const handle = yield* command.pipe(
+        Effect.mapError((cause) => new RolldownCommandTransportFailed({ operation, cause })),
+      );
+      const [stdout, stderr, exitCode] = yield* Effect.all(
+        [collect(handle.stdout, limit), collect(handle.stderr, limit), handle.exitCode] as const,
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.catchCause((cause) =>
+          Effect.failCause(Cause.map(cause, (error) => new RolldownCommandTransportFailed({ operation, cause: error })))
+        ),
+      );
+      return { tool, exitCode: Number(exitCode), stdout, stderr };
+    }),
+  );
+
+const parseOptions = (raw?: LayerOptions) => {
+  const outputLimitBytes = raw?.outputLimitBytes ?? 1024 * 1024;
+  return Number.isSafeInteger(outputLimitBytes) && outputLimitBytes > 0
+    ? Effect.succeed({ outputLimitBytes, ...(raw?.executable === undefined ? {} : { executable: raw.executable }) })
+    : Effect.fail(
+      new RolldownCommandInputInvalid({
+        operation: "layer",
+        reason: "outputLimitBytes must be a positive safe integer",
+      }),
+    );
+};
+
+const observe = (
+  candidate: Tool.Candidate<"rolldown">,
+  limit: number,
+): Effect.Effect<
+  Tool.Observation<"rolldown">,
+  RolldownCommandTransportFailed | RolldownCommandFailed,
+  ChildProcessSpawner.ChildProcessSpawner
+> =>
+  Effect.gen(function*() {
+    const provisional: Tool.Observation<"rolldown"> = {
+      name: "rolldown",
+      participants: [{
+        role: "selected-command",
+        name: "rolldown",
+        version: "unobserved",
+        revision: "unreported",
+        channel: "release",
+        content: candidate.content,
+      }],
+      capabilities: [],
+    };
+    // Rolldown 1.2.5's CLI suppresses informational output, including
+    // `--version`, when an inherited NODE_ENV/TEST value selects its test
+    // logger level.  The probe owns only this provider-specific log override;
+    // build and watch commands continue to inherit the application environment
+    // unchanged.
+    const completion = yield* invoke(
+      candidate.command(["--version"], { env: { CONSOLA_LEVEL: "3" }, extendEnv: true }),
+      "probe",
+      provisional,
+      limit,
+    );
+    const match = /^(?:\[log\]\s+)?rolldown v([^\s]+)$/u.exec(completion.stdout.text.trim());
+    if (completion.exitCode !== 0 || match?.[1] === undefined) {
+      return yield* new RolldownCommandFailed({
+        operation: "probe",
+        publication: "none",
+        exitCode: completion.exitCode,
+        stdout: completion.stdout.bytes,
+        stderr: completion.stderr.bytes,
+        stdoutTruncated: completion.stdout.truncated,
+        stderrTruncated: completion.stderr.truncated,
+      });
+    }
+    return Object.freeze({
+      name: "rolldown" as const,
+      participants: Object.freeze([Object.freeze({
+        role: "selected-command",
+        name: "rolldown",
+        version: match[1],
+        revision: "unreported",
+        channel: "release",
+        content: candidate.content,
+      })]) as readonly [Tool.ParticipantIdentity],
+      capabilities: Object.freeze([
+        { _tag: "Present" as const, id: "rolldown-bundle-command", evidence: "source-exact:rolldown-1.2.5" },
+        { _tag: "Present" as const, id: "rolldown-watch-command", evidence: "source-exact:rolldown-1.2.5" },
+      ]),
+    });
+  });
+
+const makeService = (raw?: LayerOptions): Effect.Effect<
+  Service,
+  LayerError,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+> =>
+  Effect.gen(function*() {
+    const options = yield* parseOptions(raw);
+    const crypto = yield* Crypto.Crypto;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const services = Context.make(Crypto.Crypto, crypto).pipe(
+      Context.add(FileSystem.FileSystem, fileSystem),
+      Context.add(Path.Path, path),
+      Context.add(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    );
+    const selected = yield* ToolAuthor.select({
+      name: "rolldown",
+      ...(options.executable === undefined ? {} : { executable: options.executable }),
+      observe: (candidate) => observe(candidate, Math.min(options.outputLimitBytes, 64 * 1024)),
+    });
+    const version = selected.observation.participants[0].version;
+    const definition = ToolAuthor.define({
+      tool: selected,
+      evaluate: (operation: Exclude<CommandOperation, "probe">) =>
+        version === "1.2.5"
+          ? Effect.succeed({ _tag: "ReviewedAdmission" as const, admissionKey: `rolldown@1.2.5:${operation}` })
+          : Effect.fail(
+            new RolldownCommandUnsupported({
+              operation,
+              version,
+              reason: "only the exact Rolldown 1.2.5 command contract is admitted",
+            }),
+          ),
+    });
+    const run: Service["run"] = (operation, publication, argv, invocationOptions) =>
+      Effect.gen(function*() {
+        yield* definition.evaluate(operation);
+        yield* selected.reauthenticate;
+        const completion = yield* invoke(
+          selected.command(argv, commandOptions(invocationOptions)),
+          operation,
+          selected.observation,
+          options.outputLimitBytes,
+        );
+        if (completion.exitCode !== 0) {
+          return yield* new RolldownCommandFailed({
+            operation,
+            publication,
+            exitCode: completion.exitCode,
+            stdout: completion.stdout.bytes,
+            stderr: completion.stderr.bytes,
+            stdoutTruncated: completion.stdout.truncated,
+            stderrTruncated: completion.stderr.truncated,
+          });
+        }
+        if (operation === "bundleStdout" && completion.stdout.truncated) {
+          return yield* new RolldownCommandOutputTruncated({
+            operation,
+            publication: "none",
+            exitCode: completion.exitCode,
+            stdout: completion.stdout.bytes,
+            stderr: completion.stderr.bytes,
+            stdoutTruncated: true,
+            stderrTruncated: completion.stderr.truncated,
+            outputLimitBytes: options.outputLimitBytes,
+          });
+        }
+        return completion;
+      }).pipe(Effect.provide(services));
+    const watch: Service["watch"] = (argv, invocationOptions) =>
+      Effect.gen(function*() {
+        yield* definition.evaluate("bundleWatch");
+        yield* selected.reauthenticate;
+        return yield* selected.command(argv, commandOptions(invocationOptions)).pipe(
+          Effect.mapError((cause) => new RolldownCommandTransportFailed({ operation: "bundleWatch", cause })),
+        );
+      }).pipe(Effect.provide(services));
+    return { tool: selected, version, run, watch };
+  });
+
+export const layer = (options?: LayerOptions): Layer.Layer<
+  Runtime,
+  LayerError,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+> => Layer.effect(Runtime, makeService(options));

@@ -1,21 +1,16 @@
-import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as Bundle from "effect-build-bun/Bundle";
+import { Build } from "effect-build-bun/Api";
 
-const artifact = await Effect.runPromise(
-  Bundle.bundle({
+const result = await Effect.runPromise(
+  Build.build({
     entrypoints: ["src/main.ts", "src/worker.ts"],
-    outdir: "dist",
     target: "browser",
     minify: true,
     sourcemap: "linked",
     splitting: true,
-  }).pipe(
-    Effect.provide(Bundle.layer()),
-    Effect.provide(NodeServices.layer),
-  ),
+  }).pipe(Effect.provide(Build.layer)),
 );
 
-for (const entry of artifact.entries) {
-  if (entry._tag === "File") console.log(`${entry.path} ${entry.bytes} sha256=${entry.sha256}`);
+for (const output of result.outputs) {
+  console.log(`${output.path} ${output.size} bytes`);
 }

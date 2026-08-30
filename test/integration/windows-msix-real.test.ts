@@ -7,6 +7,7 @@ import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import * as Nfpm from "../../packages/effect-build-nfpm/src/Package.js";
 import * as Sign from "../../packages/effect-build-windows/src/SignMsix.js";
+import { finalizedFile } from "../fixtures/finalized-artifacts.js";
 import { requiredEnvironment, requiredExecutable } from "./acceptance-support.js";
 
 const nfpm = requiredExecutable("EFFECT_BUILD_NFPM_BIN");
@@ -60,15 +61,6 @@ const solidPng = (width: number, height: number): Buffer => {
     chunk("IDAT", deflateSync(rows, { level: 9 })),
     chunk("IEND", Buffer.alloc(0)),
   ]);
-};
-
-const finalizedFile = async (path: string) => {
-  const bytes = await readFile(path);
-  return {
-    path,
-    bytes: bytes.byteLength,
-    sha256: createHash("sha256").update(bytes).digest("hex"),
-  } as const;
 };
 
 describe("real nFPM MSIX and Windows SDK Authenticode mechanics", () => {
@@ -140,10 +132,10 @@ describe("real nFPM MSIX and Windows SDK Authenticode mechanics", () => {
         Effect.provide(NodeServices.layer),
       ),
     );
-    expect(unsignedArtifact.tool).toEqual({ name: "nfpm", version: "2.47.0" });
+    expect(unsignedArtifact.provenance).toMatchObject({ name: "nfpm", participants: [{ version: "2.47.0" }] });
     const unsignedBytes = await readFile(unsigned);
-    expect(unsignedArtifact.bytes).toBe(unsignedBytes.byteLength);
-    expect(unsignedArtifact.sha256).toBe(createHash("sha256").update(unsignedBytes).digest("hex"));
+    expect(unsignedArtifact.bytes).toBe(`${unsignedBytes.byteLength}`);
+    expect(unsignedArtifact.digest.value).toBe(createHash("sha256").update(unsignedBytes).digest("hex"));
 
     const credential = Sign.pfxCredentialLayer({
       file: pfxFile,
@@ -163,11 +155,10 @@ describe("real nFPM MSIX and Windows SDK Authenticode mechanics", () => {
         Effect.provide(NodeServices.layer),
       ),
     );
-    expect(signedArtifact.tool.name).toBe("signtool");
-    expect(signedArtifact.tool.version).toBe(signToolVersion);
+    expect(signedArtifact.provenance).toMatchObject({ name: "signtool", participants: [{ version: signToolVersion }] });
     const signedBytes = await readFile(signed);
-    expect(signedArtifact.bytes).toBe(signedBytes.byteLength);
-    expect(signedArtifact.sha256).toBe(createHash("sha256").update(signedBytes).digest("hex"));
+    expect(signedArtifact.bytes).toBe(`${signedBytes.byteLength}`);
+    expect(signedArtifact.digest.value).toBe(createHash("sha256").update(signedBytes).digest("hex"));
     expect(unsignedBytes).not.toEqual(signedBytes);
   }, 300_000);
 });

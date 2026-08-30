@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Crypto, Effect, FileSystem, Path } from "effect";
 import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -8,23 +8,45 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/AssembleExecutable.js";
-import * as Target from "../../packages/effect-build/src/Target.js";
+import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/Command/AssembleExecutable.js";
+import * as Command from "../../packages/effect-build-node-sea/src/Command/index.js";
+import * as AssembleModes from "../../packages/effect-build-node-sea/src/internal/AssembleModes.js";
+import { Runtime } from "../../packages/effect-build-node-sea/src/internal/Runtime.js";
+import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
 const fixture = fileURLToPath(new URL("../fixtures/tools/node-sea/", import.meta.url));
-
 const builder = process.env.EFFECT_BUILD_NODE ?? "node";
-const seaCapable = (): boolean => {
+
+const exactCell = (): { readonly enabled: boolean; readonly executable?: string } => {
   try {
-    const version = execFileSync(builder, ["--version"], { encoding: "utf8" }).trim().replace(/^v/, "");
-    const [major, minor] = version.split(".").map((part) => Number.parseInt(part, 10));
-    return (major ?? 0) > 26 || ((major ?? 0) === 26 && (minor ?? 0) >= 7);
+    const executable = execFileSync(builder, ["-p", "process.execPath"], { encoding: "utf8" }).trim();
+    const version = execFileSync(executable, ["--version"], { encoding: "utf8" }).trim();
+    const help = execFileSync(executable, ["--help"], { encoding: "utf8" });
+    const glibc = execFileSync(
+      executable,
+      ["-p", "Boolean(process.report?.getReport()?.header?.glibcVersionRuntime)"],
+      { encoding: "utf8" },
+    ).trim();
+    return {
+      enabled: version === "v26.7.0"
+        && process.platform === "linux"
+        && process.arch === "x64"
+        && glibc === "true"
+        && /(?:^|\s)--build-sea(?:[=\s]|$)/mu.test(help),
+      executable,
+    };
   } catch {
-    return false;
+    return { enabled: false };
   }
 };
-const enabled = seaCapable();
+
+const cell = exactCell();
+if (!cell.enabled || (process.env.CI === "true" && process.env.EFFECT_BUILD_NODE === undefined)) {
+  throw new Error(
+    "real Node SEA evidence requires the exact Node 26.7.0 linux-x64-gnu cell and an explicit hosted binding",
+  );
+}
 let root = "";
 
 beforeAll(async () => {
@@ -35,53 +57,160 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const run = <A, E>(effect: Effect.Effect<A, E, AssembleExecutable.Assembler>) =>
+const run = <A, E>(
+  effect: Effect.Effect<A, E, Runtime | Crypto.Crypto | FileSystem.FileSystem | Path.Path>,
+) =>
   Effect.runPromise(
     effect.pipe(
-      Effect.provide(AssembleExecutable.layer(
-        process.env.EFFECT_BUILD_NODE === undefined ? {} : { builderExecutable: process.env.EFFECT_BUILD_NODE },
-      )),
+      Effect.provide(Command.layer({ builderExecutable: cell.executable as never })),
       Effect.provide(NodeServices.layer),
     ),
   );
 
-describe.skipIf(!enabled).sequential("real Node SEA AssembleExecutable", () => {
-  it("assembles, hashes, publishes, and executes a CJS file main", async () => {
+describe.sequential("real Node SEA Command.AssembleExecutable exact cell", () => {
+  it("assembles, hashes, atomically publishes, and executes a CJS file main", async () => {
     const outfile = join(root, "cjs-app");
-    const artifact = await run(AssembleExecutable.assembleExecutable({
+    const artifact = await run(AssembleExecutable.assembleDirect({
       main: { _tag: "File", path: join(fixture, "main.cjs"), format: "commonjs" },
       outfile,
+      observation: "hashed",
     }));
     const bytes = await readFile(artifact.path);
     expect(artifact).toMatchObject({
-      _tag: "Executable",
-      path: process.platform === "win32" ? `${outfile}.exe` : outfile,
-      bytes: bytes.byteLength,
-      target: Target.host(),
+      _tag: "HashedExecutable",
+      path: outfile,
+      bytes: `${bytes.byteLength}`,
+      nativeFormat: "elf",
+      runtime: { name: "node", version: "26.7.0" },
+      target: "linux-x64-gnu",
+      publication: { scope: "file", commit: "same-parent-no-replace-link", committed: true },
     });
-    expect(artifact.tool.name).toBe("node");
-    expect(artifact.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+    expect(artifact.digest.value).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect((await execute(artifact.path, [])).stdout).toBe("node-sea-cjs-ok\n");
+    await observeProviderNativeEvidence("CAN-NODE-001", "S02.1", "S09.1", "S10.1");
   }, 300_000);
 
   it("assembles an ESM main with embedded assets", async () => {
-    const outfile = join(root, "esm-app");
-    const artifact = await run(AssembleExecutable.assembleExecutable({
+    const artifact = await run(AssembleExecutable.assembleDirect({
       main: { _tag: "File", path: join(fixture, "main.mjs"), format: "module" },
-      outfile,
-      assets: { message: join(fixture, "message.txt") },
+      outfile: join(root, "esm-app"),
+      observation: "hashed",
+      assets: [{ key: "message", path: join(fixture, "message.txt") }],
       disableExperimentalSEAWarning: true,
     }));
-    expect(artifact.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(artifact.digest.value).toHaveLength(64);
     const completion = await execute(artifact.path, []);
     expect(completion.stdout).toContain("node-sea-esm-ok");
     expect(completion.stdout).toContain("node-sea-asset-ok");
+    await observeProviderNativeEvidence("S03.1", "S04.1", "S04.2");
   }, 300_000);
 
-  it("surfaces node diagnostics as ToolFailed for a broken main", async () => {
-    await expect(run(AssembleExecutable.assembleExecutable({
+  it("surfaces exact Node diagnostics for a broken main", async () => {
+    await expect(run(AssembleExecutable.assembleDirect({
       main: { _tag: "Bytes", contents: new TextEncoder().encode("this is not (javascript"), format: "commonjs" },
       outfile: join(root, "broken"),
-    }))).rejects.toMatchObject({ _tag: "ToolFailed", tool: "node" });
+      observation: "hashed",
+    }))).rejects.toMatchObject({ _tag: "NodeSeaCommandFailed", operation: "check-main" });
+  }, 300_000);
+
+  it("executes the package-private CJS/ESM code-cache and CJS snapshot candidates", async () => {
+    const cjsCache = await run(AssembleModes.assembleDirect({
+      main: { _tag: "File", path: join(fixture, "main.cjs"), format: "commonjs" },
+      outfile: join(root, "cjs-cache-app"),
+      observation: "hashed",
+      useCodeCache: true,
+    }));
+    expect((await execute(cjsCache.path, [])).stdout).toBe("node-sea-cjs-ok\n");
+
+    const esmCache = await run(AssembleModes.assembleDirect({
+      main: { _tag: "File", path: join(fixture, "main.mjs"), format: "module" },
+      outfile: join(root, "esm-cache-app"),
+      observation: "hashed",
+      assets: [{ key: "message", path: join(fixture, "message.txt") }],
+      useCodeCache: true,
+    }));
+    expect((await execute(esmCache.path, [])).stdout).toContain("node-sea-esm-ok");
+
+    const snapshot = await run(AssembleModes.assembleDirect({
+      main: {
+        _tag: "Bytes",
+        contents: new TextEncoder().encode([
+          'const v8 = require("node:v8");',
+          'v8.startupSnapshot.setDeserializeMainFunction(() => console.log("node-sea-snapshot-ok"));',
+        ].join("\n")),
+        format: "commonjs",
+      },
+      outfile: join(root, "snapshot-app"),
+      observation: "hashed",
+      useSnapshot: true,
+    }));
+    expect((await execute(snapshot.path, [])).stdout).toBe("node-sea-snapshot-ok\n");
+    await observeProviderNativeEvidence("S05.1", "S06.1");
+  }, 300_000);
+
+  it("executes none, env, and cli embedded-argument extension policies", async () => {
+    const main = {
+      _tag: "Bytes" as const,
+      contents: new TextEncoder().encode(
+        [
+          "let prototypeAccessThrows = false;",
+          "try { void ({}).__proto__; } catch { prototypeAccessThrows = true; }",
+          "console.log(JSON.stringify({ execArgv: process.execArgv, argv: process.argv.slice(2), prototypeAccessThrows }))",
+        ].join("\n"),
+      ),
+      format: "commonjs" as const,
+    };
+    const build = (name: string, execArgvExtension: "none" | "env" | "cli") =>
+      run(AssembleModes.assembleDirect({
+        main,
+        outfile: join(root, `argv-${name}-app`),
+        observation: "hashed",
+        execArgv: ["--no-warnings"],
+        execArgvExtension,
+      }));
+
+    const none = await build("none", "none");
+    const noneOutput = JSON.parse(
+      (await execute(none.path, ["script-value"], {
+        env: { ...process.env, NODE_OPTIONS: "--disable-proto=throw" },
+      })).stdout,
+    ) as {
+      readonly execArgv: readonly string[];
+      readonly argv: readonly string[];
+      readonly prototypeAccessThrows: boolean;
+    };
+    expect(noneOutput.execArgv).toEqual(["--no-warnings"]);
+    expect(noneOutput.argv).toEqual(["script-value"]);
+    expect(noneOutput.prototypeAccessThrows).toBe(false);
+
+    const env = await build("env", "env");
+    const envOutput = JSON.parse(
+      (await execute(env.path, ["script-value"], {
+        env: { ...process.env, NODE_OPTIONS: "--disable-proto=throw" },
+      })).stdout,
+    ) as {
+      readonly execArgv: readonly string[];
+      readonly argv: readonly string[];
+      readonly prototypeAccessThrows: boolean;
+    };
+    expect(envOutput.execArgv).toEqual(["--no-warnings"]);
+    expect(envOutput.argv).toEqual(["script-value"]);
+    expect(envOutput.prototypeAccessThrows).toBe(true);
+
+    const cli = await build("cli", "cli");
+    const cliOutput = JSON.parse(
+      (await execute(
+        cli.path,
+        ["--node-options=--disable-proto=throw", "script-value"],
+      )).stdout,
+    ) as {
+      readonly execArgv: readonly string[];
+      readonly argv: readonly string[];
+      readonly prototypeAccessThrows: boolean;
+    };
+    expect(cliOutput.execArgv).toEqual(expect.arrayContaining(["--no-warnings", "--disable-proto=throw"]));
+    expect(cliOutput.argv).toEqual(["script-value"]);
+    expect(cliOutput.prototypeAccessThrows).toBe(true);
+    await observeProviderNativeEvidence("S07.1");
   }, 300_000);
 });

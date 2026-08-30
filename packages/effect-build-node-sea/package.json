@@ -1,7 +1,7 @@
 {
   "name": "effect-build-node-sea",
   "version": "0.6.0",
-  "description": "Effect-native Node SEA executable assembler.",
+  "description": "Effect-native provider command access for direct Node SEA assembly.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -17,9 +17,9 @@
   "publishConfig": { "access": "public", "provenance": true },
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./AssembleExecutable": {
-      "types": "./dist/AssembleExecutable.d.ts",
-      "import": "./dist/AssembleExecutable.js"
+    "./Command": {
+      "types": "./dist/Command/index.d.ts",
+      "import": "./dist/Command/index.js"
     }
   },
   "scripts": {

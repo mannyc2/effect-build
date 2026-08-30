@@ -1,29 +1,22 @@
 # effect-build-node-sea
 
-Effect-native Node single-executable-application assembly from
-`effect-build-node-sea/AssembleExecutable`, driving `node --check` and
-`node --build-sea` directly.
+Selected-command Node single-executable assembly through `effect-build-node-sea/Command`.
 
 ```ts
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as AssembleExecutable from "effect-build-node-sea/AssembleExecutable";
+import * as Command from "effect-build-node-sea/Command";
 
 const artifact = await Effect.runPromise(
-  AssembleExecutable.assembleExecutable({
+  Command.AssembleExecutable.assembleDirect({
     main: { _tag: "File", path: "dist/main.cjs", format: "commonjs" },
     outfile: "dist/app",
-    assets: { "config.json": "config/production.json" },
+    observation: "hashed",
   }).pipe(
-    Effect.provide(AssembleExecutable.layer()),
+    Effect.provide(Command.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
 ```
 
-Mains come from a file or raw bytes (commonjs or module), assets embed as
-a keyed record, and the output targets the host through a builder node
-(≥ 26.7) with an optional separate `baseExecutable`. The layer selects
-and probes node once and warns outside the CI-tested range; it never
-installs or substitutes. See the
-[repository](https://github.com/mannyc2/effect-build) for the full toolkit.
+The selected Node executable is reauthenticated before launch; core executable inspection establishes the artifact target and atomic handoff.

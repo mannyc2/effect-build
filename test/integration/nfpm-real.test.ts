@@ -1,10 +1,12 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Schema } from "effect";
+import * as Artifact from "effect-build/Artifact";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as Nfpm from "../../packages/effect-build-nfpm/src/Package.js";
+import { finalizedFile } from "../fixtures/finalized-artifacts.js";
 import { requiredEnvironment, requiredExecutable } from "./acceptance-support.js";
 
 const nfpm = requiredExecutable("EFFECT_BUILD_NFPM_BIN");
@@ -36,7 +38,6 @@ describe("real nFPM 2.47.0 package acceptance", () => {
     const payload = join(outdir, "effect-build-acceptance");
     await writeFile(payload, "#!/bin/sh\nprintf 'effect-build-package-ok\\n'\n");
     await chmod(payload, 0o755);
-    const payloadBytes = await readFile(payload);
     const outfile = join(outdir, `effect-build-acceptance${extension[format]}`);
     const input = new Nfpm.PackageInput({
       metadata: new Nfpm.PackageMetadata({
@@ -48,13 +49,9 @@ describe("real nFPM 2.47.0 package acceptance", () => {
         license: "MIT",
         contents: [
           new Nfpm.PackageContent({
-            artifact: {
-              path: payload,
-              bytes: payloadBytes.byteLength,
-              sha256: createHash("sha256").update(payloadBytes).digest("hex"),
-            },
+            artifact: await finalizedFile(payload),
             dst: "/usr/bin/effect-build-acceptance",
-            mode: 493,
+            mode: Artifact.fileMode(493),
           }),
         ],
       }),
@@ -68,15 +65,18 @@ describe("real nFPM 2.47.0 package acceptance", () => {
         Effect.provide(NodeServices.layer),
       ) as Effect.Effect<{
         readonly path: string;
-        readonly bytes: number;
-        readonly sha256: string;
-        readonly tool: { readonly name: string; readonly version: string };
+        readonly bytes: string;
+        readonly digest: { readonly value: string };
+        readonly provenance: Artifact.Provenance;
       }>,
     );
     expect(artifact.path).toBe(outfile);
-    expect(artifact.tool).toEqual({ name: "nfpm", version: "2.47.0" });
+    expect(artifact.provenance).toMatchObject({
+      name: "nfpm",
+      participants: [{ name: "nfpm", version: "2.47.0" }],
+    });
     const packageBytes = await readFile(outfile);
-    expect(artifact.bytes).toBe(packageBytes.byteLength);
-    expect(artifact.sha256).toBe(createHash("sha256").update(packageBytes).digest("hex"));
+    expect(artifact.bytes).toBe(String(packageBytes.byteLength));
+    expect(artifact.digest.value).toBe(createHash("sha256").update(packageBytes).digest("hex"));
   }, 120_000);
 });

@@ -1,18 +1,29 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
-import * as Artifact from "effect-build/Artifact";
-import { PublishFailed } from "effect-build/BuildError";
-import type { ArtifactVerificationFailed, ToolFailed, ToolNotFound } from "effect-build/BuildError";
-import * as Toolchain from "effect-build/Toolchain";
+import type * as Artifact from "effect-build/Artifact";
+import * as ArtifactSchema from "effect-build/Artifact";
+import * as FileAuthor from "effect-build/Author/File";
+import * as TreeAuthor from "effect-build/Author/Tree";
 import { ChildProcessSpawner } from "effect/unstable/process";
+import {
+  SbomGenerationFailed,
+  type SyftCommandFailed,
+  type SyftOutputTruncated,
+  type SyftToolChanged,
+  type SyftToolUnavailable,
+  type SyftTransportFailed,
+} from "./internal/SbomError.js";
+import * as SyftRuntime from "./internal/SyftRuntime.js";
+
+export * from "./internal/SbomError.js";
 
 /** Directory sources are always passed to Syft with `--from dir`. */
 export class DirectorySubject extends Schema.TaggedClass<DirectorySubject>()("Directory", {
-  snapshot: Artifact.BundleSchema,
+  snapshot: ArtifactSchema.HashedTreeSchema,
 }) {}
 
 /** Final artifact sources are always passed to Syft with `--from file`. */
 export class FileSubject extends Schema.TaggedClass<FileSubject>()("File", {
-  artifact: Artifact.FinalizedFile,
+  artifact: ArtifactSchema.HashedFileSchema,
 }) {}
 
 /**
@@ -142,29 +153,31 @@ export class SbomInvalid extends Schema.TaggedError<SbomInvalid>()("SbomInvalid"
 export interface LayerOptions {
   /** Explicit Syft executable; otherwise one deterministic PATH search. */
   readonly executable?: string;
+  /** Maximum retained bytes for each Syft stdout/stderr stream. */
+  readonly outputLimitBytes?: number;
 }
 
-export type GenerateError = ArtifactVerificationFailed | ToolFailed | PublishFailed | SbomInvalid;
+export type GenerateError =
+  | TreeAuthor.TreeVerificationFailed
+  | FileAuthor.FileVerificationFailed
+  | FileAuthor.PublicationFailure
+  | SyftToolChanged
+  | SyftTransportFailed
+  | SyftCommandFailed
+  | SyftOutputTruncated
+  | SbomGenerationFailed
+  | SbomInvalid;
 
 interface Service {
   readonly generate: (
     format: OutputFormat,
     input: GenerateInput,
-  ) => Effect.Effect<Artifact.FileArtifact, GenerateError>;
+  ) => Effect.Effect<Artifact.HashedFile, GenerateError>;
 }
 
 export class Generator extends Context.Service<Generator, Service>()(
   "effect-build-sbom/Generate/Generator",
 ) {}
-
-/** Syft releases exercised by this integration; other versions warn once. */
-const tested: Toolchain.TestedRange = { minimum: "1.50.0", before: "1.51.0" };
-
-const parseSyftVersion = (stdout: string): string | undefined =>
-  /^Version:\s*(\S+)\s*$/mi.exec(stdout)?.[1]
-    ?? /(?:^|\s)syft\s+v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)(?:\s|$)/mi.exec(stdout)?.[1];
-
-const subjectKind = (subject: ScanSubject): "dir" | "file" => subject._tag === "Directory" ? "dir" : "file";
 
 const nativeFormat: Readonly<Record<OutputFormat, string>> = {
   "spdx-json": "spdx-json@2.3",
@@ -188,7 +201,12 @@ const renderArgv = (
   "--quiet",
 ];
 
-type LayerError = ToolNotFound | ToolFailed;
+export type LayerError =
+  | SyftToolUnavailable
+  | SyftToolChanged
+  | SyftTransportFailed
+  | SyftCommandFailed
+  | SyftOutputTruncated;
 
 const makeService = (
   options?: LayerOptions,
@@ -202,15 +220,7 @@ const makeService = (
     const path = yield* Path.Path;
     const crypto = yield* Crypto.Crypto;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const executable = yield* Toolchain.resolveExecutable({ name: "syft", executable: options?.executable });
-    const version = yield* Toolchain.probeVersion({
-      tool: "syft",
-      executable,
-      args: ["version"],
-      parse: parseSyftVersion,
-    });
-    yield* Toolchain.warnIfUntested({ tool: "syft", version, tested });
-    const tool: Artifact.Tool = { name: "syft", version };
+    const runtime = yield* SyftRuntime.make(options);
     const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
       Context.add(Path.Path, path),
       Context.add(Crypto.Crypto, crypto),
@@ -259,46 +269,48 @@ const makeService = (
             new SbomInvalid({ format, reason: `${format} output must end with ${extension}` }),
           );
         }
-        return yield* Toolchain.publishFile({
-          tool,
-          outfile: input.outfile,
-          cwd: input.cwd,
-          produce: (stagedPath) =>
-            Effect.scoped(Effect.gen(function*() {
-              const kind = subjectKind(input.subject);
-              let subject: string;
-              if (input.subject._tag === "Directory") {
-                subject = yield* Toolchain.materializeVerifiedBundle(input.subject.snapshot);
-              } else {
-                const contents = yield* Toolchain.readVerifiedFile(input.subject.artifact);
-                const snapshot = yield* fileSystem.makeTempDirectoryScoped({ prefix: "effect-build-sbom-subject-" })
-                  .pipe(
-                    Effect.mapError((error) =>
-                      new PublishFailed({
-                        destination: path.normalize(path.resolve(input.cwd ?? "", input.outfile)),
-                        reason: `create private scan subject: ${String(error)}`,
-                      })
-                    ),
-                  );
-                subject = path.join(snapshot, path.basename(path.resolve(input.subject.artifact.path)));
-                yield* fileSystem.writeFile(subject, contents).pipe(
-                  Effect.mapError((error) =>
-                    new PublishFailed({
-                      destination: path.normalize(path.resolve(input.cwd ?? "", input.outfile)),
-                      reason: `materialize private scan subject: ${String(error)}`,
-                    })
-                  ),
-                );
-              }
-              yield* Toolchain.runOrFail({
-                tool: "syft",
-                executable,
-                args: renderArgv(format, subject, kind, stagedPath),
-                cwd: input.cwd,
-              });
-            })),
-          validate: (bytes) => validate(format, bytes),
-        });
+        const failWith = (operation: string, error: unknown) =>
+          new SbomGenerationFailed({ operation, reason: error instanceof Error ? error.message : String(error) });
+        type ProduceError =
+          | TreeAuthor.TreeVerificationFailed
+          | FileAuthor.FileVerificationFailed
+          | SbomGenerationFailed
+          | SyftRuntime.Failure;
+        const subject = input.subject;
+        const produce = (
+          stagedPath: Artifact.AbsolutePath,
+        ): Effect.Effect<void, ProduceError, Crypto.Crypto | FileSystem.FileSystem | Path.Path> => {
+          const run = (source: string, kind: "dir" | "file") =>
+            runtime.runScan(format, renderArgv(format, source, kind, stagedPath), input.cwd);
+          if (subject._tag === "Directory") {
+            return TreeAuthor.withVerifiedSnapshot(subject.snapshot, (source) => run(source, "dir"));
+          }
+          const artifact = subject.artifact;
+          return FileAuthor.withVerifiedBytes(artifact, (contents) => {
+            const subjectRoot = path.join(path.dirname(stagedPath), "effect-build-sbom-subject");
+            const source = path.join(subjectRoot, path.basename(path.resolve(artifact.path)));
+            return fileSystem.makeDirectory(subjectRoot).pipe(
+              Effect.mapError((error) => failWith("create private file subject", error)),
+              Effect.andThen(fileSystem.writeFile(source, contents)),
+              Effect.mapError((error) => failWith("materialize private file subject", error)),
+              Effect.andThen(run(source, "file")),
+            );
+          });
+        };
+        return yield* FileAuthor.publish(
+          {
+            destination: input.outfile,
+            cwd: input.cwd,
+            observation: "hashed",
+            provenance: runtime.tool,
+          },
+          produce,
+          (candidate) =>
+            fileSystem.readFile(candidate.path).pipe(
+              Effect.mapError((error) => failWith("read staged document for validation", error)),
+              Effect.flatMap((bytes) => validate(format, bytes)),
+            ),
+        );
       },
     );
 
@@ -308,7 +320,7 @@ const makeService = (
 export const generate = (
   format: OutputFormat,
   input: GenerateInput,
-): Effect.Effect<Artifact.FileArtifact, GenerateError, Generator> =>
+): Effect.Effect<Artifact.HashedFile, GenerateError, Generator> =>
   Generator.use((service) => service.generate(format, input));
 
 export const generateSpdxJson = (input: GenerateInput) => generate("spdx-json", input);

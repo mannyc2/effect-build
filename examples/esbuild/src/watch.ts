@@ -1,18 +1,17 @@
-import { Effect, Stream } from "effect";
-import * as Context from "effect-build-esbuild/Context";
-import * as Watch from "effect-build-esbuild/Watch";
+import { Effect } from "effect";
+import { Context } from "effect-build-esbuild/Api";
 
-// Serve every rebuild from memory until interrupted; broken intermediate
-// states arrive as values on `result.errors` and never end the loop.
+// The scoped API owner drains cancellation before disposal on interruption.
 await Effect.runPromise(
-  Watch.changes({ entryPoints: ["src/main.ts"], bundle: true, outdir: "dist", write: false }).pipe(
-    Stream.runForEach((result) =>
-      Effect.log(
-        result.errors.length > 0
-          ? `rebuild failed: ${result.errors[0]?.text}`
-          : `rebuilt ${result.outputFiles.length} files, ${result.outputFiles[0]?.contents.byteLength} bytes`,
-      )
-    ),
-    Effect.provide(Context.layer),
+  Effect.scoped(
+    Effect.gen(function*() {
+      const context = yield* Context.make({
+        entryPoints: ["src/main.ts"],
+        bundle: true,
+        write: false,
+      });
+      yield* context.watch();
+      return yield* Effect.never;
+    }),
   ),
 );

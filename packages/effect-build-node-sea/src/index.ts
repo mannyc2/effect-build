@@ -1,1 +1,1 @@
-export * as AssembleExecutable from "./AssembleExecutable.js";
+export * as Command from "./Command/index.js";

@@ -1,23 +1,17 @@
-# Releases
+# Release boundary and evidence
 
-Merging requires `bun run verify` (build, typecheck, typetests, unit and
-package-boundary suites, a twelve-package packed-consumer proof, public-surface
-gate, lint, format). The CI matrix repeats that gate on Ubuntu, macOS, and
-Windows, then runs real compiler and selected producer lanes with independent
-oracles. Credentialed Apple notarization, Developer ID signing, clean-host
-Gatekeeper, and install/launch acceptance remain external evidence gates;
-fake tools never satisfy them.
+The combined contract separates five states:
 
-Publication is not a consequence of a green push. The release workflow is a
-manual exact-commit dispatch, rejects a mismatched checkout, rebuilds and
-packs all twelve lockstep packages, and requires the repository's protected
-`npm` environment before `npm publish --provenance`. A fail-closed preflight
-requires that environment to exist already with the `mannyc2` reviewer and a
-`main`-only deployment policy, so a missing environment cannot be silently
-created without its protections. Dispatching and approving that environment
-are the explicit release authority. A normal CI run only produces evidence
-and package data.
+1. source implementation and local verification;
+2. exact-head hosted CI and platform receipts;
+3. credentialed or clean-host certification;
+4. merge and tag/release authority;
+5. registry publication and public availability.
 
-Version policy is plain 0.x semver with honest release notes in
-[`CHANGELOG.md`](../CHANGELOG.md); breaking changes bump the minor
-version and say what broke.
+None implies the next.
+
+effect-build produces native results and explicitly finalized artifacts. A downstream release owner adopts a finalized file or tree using the path-free `effect-build/artifact-adoption@1` projection: logical name, byte identity, and digest. That downstream owner is responsible for release plans, durable mutation journals (including Apple notarization), continuation after interruption, upload/publication, and registry state.
+
+Publishing this repository's own npm packages is a separate distribution concern, not an effect-build runtime capability and not a widening of ts-release's product-release authority. The release workflow verifies and packs the contract-admitted package set in a job without OIDC, then hands immutable tarballs by logical name and digest to a protected distribution job. That job executes no checked-out repository code, re-observes the exact main SHA and environment policy, compares the downloaded artifact archive to its upload digest, fetches the authoritative contract from that exact SHA, and may publish only the package names and target state admitted by that contract. Namespace placeholders remain non-architectural evidence; reservation-only names are rechecked before and after the admitted publication loop.
+
+The local `verify` gate builds all workspace packages, including private Rolldown evidence, validates the combined contract and its exact 11-package/42-module public projection, runs type and lifecycle tests, packs only those public packages into a fresh consumer, and proves immutable-byte adoption and mutation rejection. Credentialed Apple operations, target execution, offline/cold-host acquisition, platform matrices, merge, tag, and npm publication require their own exact-head evidence or authority.

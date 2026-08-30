@@ -1,31 +1,38 @@
-import type * as Artifact from "effect-build/Artifact";
-import { createHash } from "node:crypto";
-import { lstat, readdir, readFile, readlink } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { NodeServices } from "@effect/platform-node";
+import { Effect } from "effect";
+import * as Artifact from "effect-build/Artifact";
+import * as FileAuthor from "effect-build/Author/File";
+import * as TreeAuthor from "effect-build/Author/Tree";
+import { copyFile, cp, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
 
-const tool: Artifact.Tool = { name: "acceptance-snapshot", version: "1" };
+const provenance = Artifact.intrinsicProvenance("effect-build-test-fixture");
 
-/** Test-only adoption helper that records every regular file in one directory tree. */
-export const finalizedBundle = async (directory: string): Promise<Artifact.Bundle> => {
-  const outdir = resolve(directory);
-  const entries: Artifact.BundleEntry[] = [];
-  for (const entry of [...await readdir(outdir, { recursive: true })].sort()) {
-    const path = join(outdir, entry);
-    const information = await lstat(path);
-    if (information.isDirectory()) {
-      entries.push({ _tag: "Directory", path, mode: information.mode & 0o7777 });
-    } else if (information.isSymbolicLink()) {
-      entries.push({ _tag: "SymbolicLink", path, target: await readlink(path) });
-    } else if (information.isFile()) {
-      const contents = await readFile(path);
-      entries.push({
-        _tag: "File",
-        path,
-        bytes: contents.byteLength,
-        mode: information.mode & 0o7777,
-        sha256: createHash("sha256").update(contents).digest("hex"),
-      });
-    }
-  }
-  return { _tag: "Bundle", outdir, entries, tool };
+/** Test-only finalizer for one exact durable source file. */
+export const finalizedFile = async (source: string): Promise<FileAuthor.Artifact> => {
+  const holder = await mkdtemp(join(tmpdir(), "effect-build-finalized-file-"));
+  const program = FileAuthor.publish(
+    {
+      destination: join(holder, basename(resolve(source))),
+      observation: "hashed",
+      provenance,
+    },
+    (candidate) => Effect.tryPromise(() => copyFile(source, candidate)),
+  ).pipe(Effect.provide(NodeServices.layer));
+  return Effect.runPromise(program as Effect.Effect<FileAuthor.Artifact, unknown>);
+};
+
+/** Test-only finalizer for one exact durable directory tree. */
+export const finalizedTree = async (directory: string): Promise<Artifact.HashedTree> => {
+  const holder = await mkdtemp(join(tmpdir(), "effect-build-finalized-tree-"));
+  const program = TreeAuthor.publish(
+    {
+      outdir: join(holder, "tree"),
+      observation: "hashed",
+      provenance,
+    },
+    (candidate) => Effect.tryPromise(() => cp(directory, candidate, { recursive: true, force: false })),
+  ).pipe(Effect.provide(NodeServices.layer));
+  return Effect.runPromise(program as Effect.Effect<Artifact.HashedTree, unknown>);
 };

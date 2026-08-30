@@ -1,8 +1,9 @@
 import type { Crypto, Effect, FileSystem, Layer, Path } from "effect";
+import type * as FileAuthor from "effect-build/Author/File";
+import type * as TreeAuthor from "effect-build/Author/Tree";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import * as Sbom from "../packages/effect-build-sbom/src/Generate.js";
 import type * as Artifact from "../packages/effect-build/src/Artifact.js";
-import type * as BuildError from "../packages/effect-build/src/BuildError.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -14,19 +15,34 @@ export type _Format = Assert<Same<Sbom.OutputFormat, "spdx-json" | "cyclonedx-js
 export type _Error = Assert<
   Same<
     Sbom.GenerateError,
-    BuildError.ArtifactVerificationFailed | BuildError.ToolFailed | BuildError.PublishFailed | Sbom.SbomInvalid
+    | TreeAuthor.TreeVerificationFailed
+    | FileAuthor.FileVerificationFailed
+    | FileAuthor.PublicationFailure
+    | Sbom.SyftToolChanged
+    | Sbom.SyftTransportFailed
+    | Sbom.SyftCommandFailed
+    | Sbom.SyftOutputTruncated
+    | Sbom.SbomGenerationFailed
+    | Sbom.SbomInvalid
   >
 >;
 
 declare const input: Sbom.GenerateInput;
 const generated = Sbom.generateCycloneDxJson(input);
 export type _Generate = Assert<
-  Same<typeof generated, Effect.Effect<Artifact.FileArtifact, Sbom.GenerateError, Sbom.Generator>>
+  Same<typeof generated, Effect.Effect<Artifact.HashedFile, Sbom.GenerateError, Sbom.Generator>>
 >;
 
 const generatorLayer = Sbom.layer({ executable: "/opt/syft/syft" });
 export type _LayerError = Assert<
-  Same<LayerError<typeof generatorLayer>, BuildError.ToolNotFound | BuildError.ToolFailed>
+  Same<
+    LayerError<typeof generatorLayer>,
+    | Sbom.SyftToolUnavailable
+    | Sbom.SyftToolChanged
+    | Sbom.SyftTransportFailed
+    | Sbom.SyftCommandFailed
+    | Sbom.SyftOutputTruncated
+  >
 >;
 export type _LayerServices = Assert<
   Same<

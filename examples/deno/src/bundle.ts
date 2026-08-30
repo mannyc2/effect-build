@@ -1,20 +1,15 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as Bundle from "effect-build-deno/Bundle";
+import { Command } from "effect-build-deno";
 
-const artifact = await Effect.runPromise(
-  Bundle.bundle({
-    entrypoints: ["src/main.ts"],
-    outdir: "dist",
-    platform: "browser",
-    minify: true,
-    codeSplitting: true,
+const result = await Effect.runPromise(
+  Command.Transpile.transpile({
+    file: "src/main.ts",
+    sourceMap: "inline",
   }).pipe(
-    Effect.provide(Bundle.layer()),
+    Effect.provide(Command.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
 
-for (const entry of artifact.entries) {
-  if (entry._tag === "File") console.log(`${entry.path} ${entry.bytes} sha256=${entry.sha256}`);
-}
+console.log(new TextDecoder().decode(result.output));

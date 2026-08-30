@@ -1,6 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import type * as Artifact from "effect-build/Artifact";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
@@ -10,6 +9,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Archive from "../../packages/effect-build-archives/src/Archive.js";
 import * as SourceArchive from "../../packages/effect-build-archives/src/SourceArchive.js";
+import { finalizedFile } from "../fixtures/finalized-artifacts.js";
 import { requiredExecutable } from "./acceptance-support.js";
 
 const execute = promisify(execFile);
@@ -29,13 +29,7 @@ afterAll(async () => {
 
 const sha256 = async (path: string): Promise<string> => createHash("sha256").update(await readFile(path)).digest("hex");
 
-const fileArtifact = async (path: string): Promise<Artifact.FileArtifact> => ({
-  _tag: "File",
-  path,
-  bytes: (await readFile(path)).byteLength,
-  tool: { name: "acceptance-fixture", version: "1" },
-  sha256: await sha256(path),
-});
+const fileArtifact = finalizedFile;
 
 const runArchive = <A, E>(effect: Effect.Effect<A, E, Archive.Archiver>) =>
   Effect.runPromise(
@@ -45,10 +39,13 @@ const runArchive = <A, E>(effect: Effect.Effect<A, E, Archive.Archiver>) =>
     ) as Effect.Effect<A, E>,
   );
 
-const runSourceArchive = <A, E>(effect: Effect.Effect<A, E, SourceArchive.SourceArchiver>) =>
+const runSourceArchive = <A, E>(
+  effect: Effect.Effect<A, E, SourceArchive.SourceArchiver>,
+  options?: SourceArchive.LayerOptions,
+) =>
   Effect.runPromise(
     effect.pipe(
-      Effect.provide(SourceArchive.layer({ executable: git })),
+      Effect.provide(SourceArchive.layer({ executable: git, ...options })),
       Effect.provide(NodeServices.layer),
     ) as Effect.Effect<A, E>,
   );
@@ -124,9 +121,12 @@ describe.sequential("real archive and exact-Git-tree acceptance", () => {
     ], { concurrency: 1 }));
 
     for (const artifact of artifacts) {
-      expect(artifact.tool).toEqual({ name: "effect-build-archives", version: "1" });
-      expect(artifact.sha256).toBe(await sha256(artifact.path));
-      expect(artifact.bytes).toBe((await stat(artifact.path)).size);
+      expect(artifact.provenance).toEqual({
+        _tag: "IntrinsicProvenance",
+        producer: "effect-build-archives",
+      });
+      expect(artifact.digest.value).toBe(await sha256(artifact.path));
+      expect(artifact.bytes).toBe(String((await stat(artifact.path)).size));
     }
 
     expect(await sha256(join(outputs, "one.zip"))).toBe(await sha256(join(outputs, "two.zip")));
@@ -144,14 +144,16 @@ describe.sequential("real archive and exact-Git-tree acceptance", () => {
 
     const tarNames = (await execute(tar, ["-tzf", join(outputs, "one.tar.gz")])).stdout.trim().split("\n");
     expect(tarNames).toEqual(["bin/effect-build-acceptance", "share/doc/README.md"]);
-    const tarDetails = (await execute(tar, [
-      "--numeric-owner",
-      "--full-time",
-      "-tvzf",
-      join(outputs, "one.tar.gz"),
-    ])).stdout;
-    expect(tarDetails).toMatch(/-rwxr-xr-x\s+0\/0[^\n]*1970-01-01 00:00:00[^\n]*bin\/effect-build-acceptance/);
-    expect(tarDetails).toMatch(/-rw-r--r--\s+0\/0[^\n]*1970-01-01 00:00:00[^\n]*share\/doc\/README\.md/);
+    const tarDetails = (await execute(tar, ["-tvzf", join(outputs, "one.tar.gz")], {
+      env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+    })).stdout;
+    const epoch = String.raw`(?:Jan\s+1\s+1970|1970-01-01)`;
+    expect(tarDetails).toMatch(
+      new RegExp(String.raw`-rwxr-xr-x\s+(?:0\/0|0\s+0)[^\n]*${epoch}[^\n]*bin/effect-build-acceptance`),
+    );
+    expect(tarDetails).toMatch(
+      new RegExp(String.raw`-rw-r--r--\s+(?:0\/0|0\s+0)[^\n]*${epoch}[^\n]*share/doc/README\.md`),
+    );
   });
 
   it.each(
@@ -237,9 +239,12 @@ describe.sequential("real archive and exact-Git-tree acceptance", () => {
     const gitVersion = /^git version\s+(\S+)/.exec(await gitRun(repository, ["--version"]))?.[1];
     expect(gitVersion).toBeDefined();
     for (const artifact of artifacts) {
-      expect(artifact.tool).toEqual({ name: "git", version: gitVersion });
-      expect(artifact.sha256).toBe(await sha256(artifact.path));
-      expect(artifact.bytes).toBe((await stat(artifact.path)).size);
+      expect(artifact.provenance).toMatchObject({
+        name: "git",
+        participants: [{ name: "git", version: gitVersion }],
+      });
+      expect(artifact.digest.value).toBe(await sha256(artifact.path));
+      expect(artifact.bytes).toBe(String((await stat(artifact.path)).size));
     }
 
     expect(await sha256(join(outputs, "one.zip"))).toBe(await sha256(join(outputs, "two.zip")));
@@ -313,7 +318,7 @@ describe.sequential("real archive and exact-Git-tree acceptance", () => {
         }),
       );
     const zipArtifact = await runSourceArchive(request("zip", zipPath));
-    expect(zipArtifact.sha256).toBe(await sha256(zipPath));
+    expect(zipArtifact.digest.value).toBe(await sha256(zipPath));
 
     const prefix = "effect-build-pax-1.0.0/";
     const zipNames = (await execute(unzip, ["-Z1", zipPath])).stdout.trim().split("\n");
@@ -329,7 +334,9 @@ describe.sequential("real archive and exact-Git-tree acceptance", () => {
     expect((await execute(unzip, ["-p", zipPath, `${prefix}${paxLink}`])).stdout).toBe(paxPath);
 
     const tarArtifact = await runSourceArchive(request("tar.gz", tarPath));
-    expect(tarArtifact.sha256).toBe(await sha256(tarPath));
+    expect(tarArtifact.digest.value).toBe(await sha256(tarPath));
+    const tarPaxDetails = (await execute(tar, ["-tvzf", tarPath])).stdout.normalize("NFC");
+    expect(tarPaxDetails).toContain(`${paxLink} -> ${paxPath}`);
 
     const extractedZip = join(outputs, "extracted-zip");
     const extractedTar = join(outputs, "extracted-tar");
@@ -342,7 +349,7 @@ describe.sequential("real archive and exact-Git-tree acceptance", () => {
       expect(await readFile(join(projected, trailingName), "utf8")).toBe("trailing-space-name\n");
       expect(await readlink(join(projected, trailingLink))).toBe(trailingName);
       expect(await readFile(join(projected, paxPath), "utf8")).toBe("non-ascii-pax-path\n");
-      expect(await readlink(join(projected, paxLink))).toBe(paxPath);
+      expect((await readlink(join(projected, paxLink))).normalize("NFC")).toBe(paxPath);
     }
   }, 120_000);
 
@@ -376,17 +383,20 @@ describe.sequential("real archive and exact-Git-tree acceptance", () => {
     const outputs = join(root, "large-source-outputs");
     await mkdir(outputs, { recursive: true });
     const outfile = join(outputs, "large-tree.zip");
-    const artifact = await runSourceArchive(SourceArchive.sourceArchive(
-      new SourceArchive.SourceArchiveInput({
-        repository,
-        tree,
-        project: "effect-build-large",
-        version: "1.0.0",
-        format: "zip",
-        outfile,
-      }),
-    ));
-    expect(artifact.sha256).toBe(await sha256(outfile));
+    const artifact = await runSourceArchive(
+      SourceArchive.sourceArchive(
+        new SourceArchive.SourceArchiveInput({
+          repository,
+          tree,
+          project: "effect-build-large",
+          version: "1.0.0",
+          format: "zip",
+          outfile,
+        }),
+      ),
+      { outputLimitBytes: 1024 * 1024 },
+    );
+    expect(artifact.digest.value).toBe(await sha256(outfile));
 
     const prefix = "effect-build-large-1.0.0/";
     const names = (await execute(unzip, ["-Z1", outfile], { maxBuffer: 8 * 1024 * 1024 })).stdout.trim().split("\n");

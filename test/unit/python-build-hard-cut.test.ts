@@ -1,12 +1,12 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit } from "effect";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as PythonBuild from "../../packages/effect-build-python/src/Build.js";
-import { finalizedBundle } from "../fixtures/finalized-artifacts.js";
+import { finalizedTree } from "../fixtures/finalized-artifacts.js";
 import { installFixtureExecutable } from "../fixtures/tools/install-fixture-executable.js";
 
 const executableFixture = resolve(
@@ -15,14 +15,14 @@ const executableFixture = resolve(
 const pythonFixtures = resolve(fileURLToPath(new URL("../fixtures/python-hard-cut", import.meta.url)));
 let root = "";
 let uv = "";
-let uvBuildSource: Awaited<ReturnType<typeof finalizedBundle>>;
-let poetryCoreSource: Awaited<ReturnType<typeof finalizedBundle>>;
+let uvBuildSource: Awaited<ReturnType<typeof finalizedTree>>;
+let poetryCoreSource: Awaited<ReturnType<typeof finalizedTree>>;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-python-hard-cut-"));
   uv = await installFixtureExecutable({ fixture: executableFixture, root, name: "uv" });
-  uvBuildSource = await finalizedBundle(join(pythonFixtures, "uv-build"));
-  poetryCoreSource = await finalizedBundle(join(pythonFixtures, "poetry-core"));
+  uvBuildSource = await finalizedTree(join(pythonFixtures, "uv-build"));
+  poetryCoreSource = await finalizedTree(join(pythonFixtures, "poetry-core"));
 });
 
 afterAll(async () => {
@@ -68,15 +68,16 @@ describe.sequential("pinned uv Python build hard cut", () => {
       );
       expect(Exit.isSuccess(exit), Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "").toBe(true);
       if (Exit.isSuccess(exit)) {
-        expect(exit.value.map((outputs) => outputs.tool)).toEqual([
-          { name: "uv", version: "0.12.0" },
-          { name: "uv", version: "0.12.0" },
-        ]);
         for (const outputs of exit.value) {
+          expect(outputs.wheel.provenance).toMatchObject({
+            name: "uv",
+            participants: [{ name: "uv", version: "0.12.0" }],
+          });
+          expect(outputs.sdist.provenance).toEqual(outputs.wheel.provenance);
           expect(outputs.wheel.path).toMatch(/\.whl$/);
           expect(outputs.sdist.path).toMatch(/\.tar\.gz$/);
-          expect(outputs.wheel.sha256).toMatch(/^[0-9a-f]{64}$/);
-          expect(outputs.sdist.sha256).toMatch(/^[0-9a-f]{64}$/);
+          expect(outputs.wheel.digest.value).toMatch(/^[0-9a-f]{64}$/);
+          expect(outputs.sdist.digest.value).toMatch(/^[0-9a-f]{64}$/);
           expect(await readFile(outputs.wheel.path, "utf8")).toContain("wheel:effect_build_");
           expect(await readFile(outputs.sdist.path, "utf8")).toContain("sdist:effect_build_");
         }
@@ -109,13 +110,32 @@ describe.sequential("pinned uv Python build hard cut", () => {
     await writeFile(join(source, "pyproject.toml"), '[project]\nname = "missing-lock"\nversion = "1.0.0"\n');
     const exit = await run(PythonBuild.build(
       new PythonBuild.BuildInput({
-        source: await finalizedBundle(source),
+        source: await finalizedTree(source),
         outdir: join(root, "missing-lock-dist"),
       }),
     ));
     const failure = failureOf(exit) as { readonly _tag: string; readonly reason: string };
     expect(failure._tag).toBe("PythonBuildFailed");
     expect(failure.reason).toContain("uv.lock");
+  });
+
+  it("reauthenticates the selected uv bytes immediately before the first launch", async () => {
+    const original = await readFile(uv);
+    const program = Effect.gen(function*() {
+      yield* Effect.promise(() => writeFile(uv, "#!/bin/sh\nexit 0\n"));
+      return yield* PythonBuild.build(
+        new PythonBuild.BuildInput({ source: uvBuildSource, outdir: join(root, "changed-tool-dist") }),
+      );
+    }).pipe(
+      Effect.provide(PythonBuild.layer({ executable: uv })),
+      Effect.provide(NodeServices.layer),
+    );
+    try {
+      const failure = failureOf(await Effect.runPromiseExit(program)) as { readonly _tag: string };
+      expect(failure._tag).toBe("UvToolChanged");
+    } finally {
+      await writeFile(uv, original);
+    }
   });
 
   it("rejects source mutation before uv can consume caller-controlled bytes", async () => {
@@ -125,15 +145,15 @@ describe.sequential("pinned uv Python build hard cut", () => {
     await mkdir(source, { recursive: true });
     await writeFile(join(source, "pyproject.toml"), '[project]\nname = "exact"\nversion = "1.0.0"\n');
     await writeFile(join(source, "uv.lock"), 'version = 1\nrevision = 3\nrequires-python = ">=3.12"\n');
-    const snapshot = await finalizedBundle(source);
-    await writeFile(join(source, "pyproject.toml"), '[project]\nname = "mutated"\nversion = "9.9.9"\n');
+    const snapshot = await finalizedTree(source);
+    await writeFile(join(snapshot.root, "pyproject.toml"), '[project]\nname = "mutated"\nversion = "9.9.9"\n');
     await writeFile(log, "");
     process.env.FAKE_UV_BUILD_LOG = log;
     try {
       const exit = await run(PythonBuild.build(new PythonBuild.BuildInput({ source: snapshot, outdir })));
       const failure = failureOf(exit) as { readonly _tag: string; readonly reason: string };
-      expect(failure._tag).toBe("ArtifactVerificationFailed");
-      expect(failure.reason).toContain("mismatch");
+      expect(failure._tag).toBe("TreeVerificationFailed");
+      expect(failure.reason).toContain("does not match");
       const invocations = (await readFile(log, "utf8")).trim().split("\n").filter(Boolean).map((line) =>
         JSON.parse(line) as { readonly argv: readonly string[] }
       );
@@ -160,6 +180,19 @@ describe.sequential("pinned uv Python build hard cut", () => {
         delete process.env.FAKE_UV_BUILD_MODE;
       }
     }
+  });
+
+  it("commits the wheel and sdist as one exact directory generation", async () => {
+    const outdir = join(root, "existing-file-set");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "owner-marker"), "existing");
+    const exit = await run(
+      PythonBuild.build(new PythonBuild.BuildInput({ source: uvBuildSource, outdir })),
+    );
+    const failure = failureOf(exit) as { readonly _tag: string };
+    expect(failure._tag).toBe("TreeDestinationLocked");
+    expect(await readdir(outdir)).toEqual(["owner-marker"]);
+    expect(await readFile(join(outdir, "owner-marker"), "utf8")).toBe("existing");
   });
 
   it("rejects a uv output symlink before copying producer-external bytes", async () => {

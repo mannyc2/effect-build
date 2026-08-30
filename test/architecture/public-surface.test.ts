@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -21,8 +21,35 @@ interface Surface {
   readonly packages: Readonly<Record<string, SurfacePackage>>;
 }
 
+interface CombinedContract {
+  readonly schema: "effect-build/combined-contract@1";
+  readonly publicApiProjection: {
+    readonly packages: Readonly<Record<string, unknown>>;
+    readonly privatePackages: readonly string[];
+  };
+  readonly providerOperationRegister: {
+    readonly operations: readonly {
+      readonly accounting: { readonly surface: "public" | "private" | "absent" };
+      readonly implementation: null | {
+        readonly package: string;
+        readonly lane: string;
+        readonly path: string;
+      };
+    }[];
+  };
+  readonly privateImplementationRegister: {
+    readonly capabilities: readonly {
+      readonly package: string;
+      readonly path: string;
+    }[];
+  };
+}
+
 const readSurface = async (): Promise<Surface> =>
   JSON.parse(await readFile(resolve(root, "tooling/public-api.json"), "utf8")) as Surface;
+
+const readContract = async (): Promise<CombinedContract> =>
+  JSON.parse(await readFile(resolve(root, "tooling/effect-build-contract.json"), "utf8")) as CombinedContract;
 
 const declarationExports = (file: string): readonly string[] => {
   const program = ts.createProgram({
@@ -45,6 +72,7 @@ const sorted = (values: readonly string[]): readonly string[] => [...values].sor
 interface Manifest {
   readonly name: string;
   readonly version: string;
+  readonly private?: boolean;
   readonly exports: Record<string, { readonly types: string; readonly import: string }>;
   readonly dependencies?: Record<string, string>;
 }
@@ -52,10 +80,60 @@ interface Manifest {
 const readManifest = async (name: string): Promise<Manifest> =>
   JSON.parse(await readFile(resolve(root, `packages/${name}/package.json`), "utf8")) as Manifest;
 
+const normalized = (value: string): string => value.replaceAll("\\", "/");
+
+const moduleSpecifiers = (source: string, file: string): readonly string[] => {
+  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.ESNext, false);
+  const found: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node))
+      && node.moduleSpecifier !== undefined
+      && ts.isStringLiteral(node.moduleSpecifier)
+    ) found.push(node.moduleSpecifier.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  return found;
+};
+
+const reachableModules = async (
+  dist: string,
+  entrypoints: readonly string[],
+  kind: "runtime" | "declaration",
+): Promise<ReadonlySet<string>> => {
+  const pending = [...entrypoints];
+  const reachable = new Set<string>();
+  while (pending.length > 0) {
+    const module = normalized(pending.shift()!);
+    if (reachable.has(module)) continue;
+    reachable.add(module);
+    const absolute = resolve(dist, module);
+    const source = await readFile(absolute, "utf8");
+    for (const fileName of moduleSpecifiers(source, absolute)) {
+      if (!fileName.startsWith(".")) continue;
+      const target = kind === "declaration" && fileName.endsWith(".js")
+        ? `${fileName.slice(0, -3)}.d.ts`
+        : fileName;
+      const candidate = normalized(relative(dist, resolve(dirname(absolute), target)));
+      if (candidate === ".." || candidate.startsWith("../")) {
+        throw new Error(`${module} reaches outside its package dist through ${fileName}`);
+      }
+      pending.push(candidate);
+    }
+  }
+  return reachable;
+};
+
 describe("public surface", () => {
   it("matches tooling/public-api.json exactly at runtime and in declarations", async () => {
     const surface = await readSurface();
     expect(surface.schema).toBe("effect-build/public-surface@3");
+    expect(Object.keys(surface.packages)).toHaveLength(11);
+    expect(surface.packages["effect-build-rolldown"]).toBeUndefined();
+    expect(
+      Object.values(surface.packages).reduce((count, entry) => count + 1 + Object.keys(entry.subpaths).length, 0),
+    ).toBe(42);
     for (const [name, contract] of Object.entries(surface.packages)) {
       const manifest = await readManifest(name);
       expect(Object.keys(manifest.exports), name).toEqual([".", ...Object.keys(contract.subpaths)]);
@@ -79,15 +157,19 @@ describe("public surface", () => {
     }
   }, 60_000);
 
-  it("keeps every workspace package in lockstep with one-way provider-to-core dependencies", async () => {
-    const surface = await readSurface();
-    const names = Object.keys(surface.packages);
+  it("keeps every public or private workspace package in lockstep with one-way core dependencies", async () => {
+    const [surface, contract] = await Promise.all([readSurface(), readContract()]);
+    expect(contract.schema).toBe("effect-build/combined-contract@1");
+    const publicNames = Object.keys(surface.packages);
+    expect(sorted(publicNames)).toEqual(sorted(Object.keys(contract.publicApiProjection.packages)));
+    const names = [...publicNames, ...contract.publicApiProjection.privatePackages].sort();
     const packageDirectories = (await readdir(resolve(root, "packages"))).sort();
     expect(names).toEqual(packageDirectories);
     const versions = new Set<string>();
     for (const name of names) {
       const manifest = await readManifest(name);
       expect(manifest.name).toBe(name);
+      expect(manifest.private === true, name).toBe(!publicNames.includes(name));
       versions.add(manifest.version);
       const dependencies = Object.keys(manifest.dependencies ?? {});
       if (name === "effect-build") expect(dependencies).toEqual([]);
@@ -99,23 +181,66 @@ describe("public surface", () => {
     expect(versions.size).toBe(1);
   });
 
+  it("keeps contract-private packages import-inert", async () => {
+    const contract = await readContract();
+    for (const name of contract.publicApiProjection.privatePackages) {
+      const manifest = await readManifest(name);
+      expect(manifest.private, name).toBe(true);
+      expect(Object.keys(manifest.exports), name).toEqual(["."]);
+      const rootEntry = manifest.exports["."]!;
+      const runtime = await import(resolve(root, `packages/${name}`, rootEntry.import));
+      expect(Object.keys(runtime), `${name} runtime`).toEqual([]);
+      expect(declarationExports(resolve(root, `packages/${name}`, rootEntry.types)), `${name} types`).toEqual([]);
+    }
+  });
+
   it("ships only declared modules in every package dist", async () => {
-    const surface = await readSurface();
-    for (const [name, contract] of Object.entries(surface.packages)) {
-      const entries = await readdir(resolve(root, `packages/${name}/dist`), { recursive: true });
-      const declared = new Set(
-        ["index", ...Object.keys(contract.subpaths).map((subpath) => subpath.slice(2))].flatMap((module) => [
-          `${module}.js`,
-          `${module}.d.ts`,
-        ]),
+    const [surface, contract] = await Promise.all([readSurface(), readContract()]);
+    for (const name of Object.keys(surface.packages)) {
+      const manifest = await readManifest(name);
+      const dist = resolve(root, `packages/${name}/dist`);
+      const entries = (await readdir(dist, { recursive: true }))
+        .filter((entry): entry is string => typeof entry === "string")
+        .map(normalized);
+      const runtimeEntrypoints = Object.values(manifest.exports).map(({ import: target }) =>
+        normalized(target).replace(/^\.\/dist\//u, "")
       );
-      const undeclared = entries.filter((entry) =>
-        typeof entry === "string"
-        && (entry.endsWith(".js") || entry.endsWith(".d.ts"))
-        && !entry.includes("internal")
-        && !declared.has(entry.replaceAll("\\", "/"))
+      const declarationEntrypoints = Object.values(manifest.exports).map(({ types }) =>
+        normalized(types).replace(/^\.\/dist\//u, "")
       );
-      expect(undeclared, name).toEqual([]);
+      const privateOperations = contract.providerOperationRegister.operations.filter((operation) =>
+        operation.accounting.surface === "private" && operation.implementation?.package === name
+      );
+      const sourcePrefix = `packages/${name}/src/`;
+      const privateSupport = contract.privateImplementationRegister.capabilities.filter((capability) =>
+        capability.package === name && capability.path.startsWith(sourcePrefix)
+      );
+      const privateRuntimeEntrypoints = new Set(
+        [
+          ...privateOperations.flatMap(({ implementation }) => {
+            if (implementation === null || !implementation.path.startsWith(sourcePrefix)) return [];
+            const module = implementation.path.slice(sourcePrefix.length).replace(/\.ts$/u, ".js");
+            const laneIndex = `${implementation.lane}/index.js`;
+            return entries.includes(laneIndex) ? [module, laneIndex] : [module];
+          }),
+          ...privateSupport.map(({ path }) => path.slice(sourcePrefix.length).replace(/\.ts$/u, ".js")),
+        ],
+      );
+      const privateDeclarationEntrypoints = [...privateRuntimeEntrypoints].map((entry) => `${entry.slice(0, -3)}.d.ts`);
+      const [runtime, declarations] = await Promise.all([
+        reachableModules(dist, [...runtimeEntrypoints, ...privateRuntimeEntrypoints], "runtime"),
+        reachableModules(dist, [...declarationEntrypoints, ...privateDeclarationEntrypoints], "declaration"),
+      ]);
+      expect(entries.filter((entry) => entry.endsWith(".js") && !runtime.has(entry)), `${name} runtime`).toEqual([]);
+      const emittedDeclarations = new Set(
+        [...runtime].filter((entry) => entry.endsWith(".js")).map((entry) => `${entry.slice(0, -3)}.d.ts`),
+      );
+      expect(
+        entries.filter((entry) =>
+          entry.endsWith(".d.ts") && !declarations.has(entry) && !emittedDeclarations.has(entry)
+        ),
+        `${name} declarations`,
+      ).toEqual([]);
     }
   });
 });

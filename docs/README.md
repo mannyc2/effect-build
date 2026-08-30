@@ -1,15 +1,13 @@
 # effect-build documentation
 
-| Document                        | Covers                                                           |
-| ------------------------------- | ---------------------------------------------------------------- |
-| [API](api.md)                   | Twelve packages, subpaths, inputs, and finalized artifacts       |
-| [Architecture](architecture.md) | The core kernel, producer ownership, credentials, and boundaries |
-| [Integrations](drivers.md)      | Exact compiler, archive, package, signing, and SBOM toolchains   |
-| [Errors](errors.md)             | Core/provider errors and interruption behavior                   |
-| [Releases](release-security.md) | CI/evidence gates, explicit approval, provenance, version policy |
+The generated [`effect-build/combined-contract@1`](../tooling/effect-build-contract.json) is the scope authority. It records every provider operation and research finding, the six producer families, their visibility and finalization disposition, the public projection, and the boundary with a downstream release owner.
 
-Runnable examples are under [`examples/`](../examples). The exact public
-surface is asserted against [`tooling/public-api.json`](../tooling/public-api.json).
-`plans/` records implementation sequencing. `research/` defines the launch
-scope and required evidence for this hard cut; implementation is not complete
-merely because a narrower local slice is green.
+| Document                                | Covers                                                        |
+| --------------------------------------- | ------------------------------------------------------------- |
+| [API](api.md)                           | Public core, provider lanes, and producer packages            |
+| [Architecture](architecture.md)         | Tool identity, lifecycle, and durable finalization invariants |
+| [Drivers](drivers.md)                   | Provider-specific semantics and visibility                    |
+| [Errors](errors.md)                     | Core finalization and provider-owned failures                 |
+| [Release boundary](release-security.md) | Adoption, certification, and publication authority            |
+
+[`tooling/public-api.json`](../tooling/public-api.json) is generated from built declarations and validated as a projection of the combined contract. It is not an independent product contract.

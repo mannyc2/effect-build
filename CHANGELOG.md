@@ -6,18 +6,25 @@ Research-scope-complete implementation hard cut. All twelve packages move in
 lockstep; this is breaking throughout. Formal cross-repository launch evidence
 is tracked separately and is not implied by this implementation changelog.
 
-- New `Artifact.FileArtifact` and `Artifact.FinalizedArtifact`, backed by
-  `Toolchain.publishFile`: private same-parent staging, regular-file
-  admission, final byte length/SHA-256 observation, and one atomic rename under
-  the release machine's single-writer invariant. A pending interruption is
-  reasserted only after the commit; higher layers must observe/adopt or
-  deliberately rebuild a complete destination instead of assuming non-commit.
-- Every finalized regular-file identity now requires a canonical lowercase
-  SHA-256 digest; the hash-disable path and optional digest states are gone.
-  `Artifact.Bundle` is an exact file/directory/symbolic-link manifest with
-  byte identities and permission modes. Bundles reject existing destinations
-  and commit the entire staged directory with one rename, so publication can
-  neither overlay stale bytes nor expose a partial tree.
+- One generated `effect-build/combined-contract@1` accounts for 67 provider
+  operations, 46 non-operation findings, and 19 capabilities across archives,
+  Python, nFPM, Apple, Windows, and SBOM. The public API snapshot is a validated
+  projection of this contract rather than a second authority.
+- Core now owns the only hashed file, tree, executable, selected-tool, and
+  adoption identities. File/tree/executable finalizers stage privately,
+  observe, inspect, re-observe, reconstruct from held verified content, and
+  commit with one uninterruptible same-parent rename. Verified continuations
+  lend bytes or a private tree snapshot without promoting mutable paths.
+- Provider operations move to permanent native `Api` and `Command` lanes.
+  Flat `Build`, `Bundle`, `CompileExecutable`, `Context`, `Watch`, and
+  `AssembleExecutable` subpaths are removed without compatibility aliases.
+  Selected commands record exact executable content and reauthenticate it
+  immediately before every launch; providers own admission and typed errors.
+- Bun exposes admitted API/command breadth, Deno exposes admitted command
+  transpilation and executable compilation, esbuild exposes admitted API and
+  command breadth, and Node SEA exposes command assembly. All 19 live Rolldown
+  operations remain implemented package-private; its rejected row is absent,
+  its package is private, and its root is inert.
 - New `effect-build-archives`: deterministic ZIP/tar.gz layouts and exact
   Git-tree source archives, with typed traversal, duplicate, case/Unicode,
   and invalid-prefix rejection.
@@ -36,13 +43,17 @@ is tracked separately and is not implied by this implementation changelog.
 - New `effect-build-apple`: exact arm64/x64 app, UDZO DMG, and flat-pkg
   products; Developer ID app/pkg signing; credential-free durable notary
   references with fresh-runner info/log; stapling; and Gatekeeper assessment.
-- The process kernel drains stdout and stderr concurrently before observing
-  exit, retaining independent bounded diagnostics even for immediate and
-  high-volume children.
-- The generated public-surface and packed-consumer gates discover the package
-  set instead of maintaining a second handwritten allowlist.
+- Only explicit producer finalizers return canonical durable artifacts.
+  Provider-native memory results, scoped handles, notarization/assessment
+  evidence, and provider-direct directories retain their honest native shape.
+- `Artifact.adoptFile` and `adoptTree` provide path-free logical-name/digest
+  handoffs. effect-build owns production and finalization; downstream release
+  systems own plans, mutation journals, continuation, and publication.
+- The packed-consumer gate installs every public tarball, imports every public
+  module, runs a native in-memory provider API, finalizes immutable bytes,
+  adopts them by logical name/digest, and proves later mutation is rejected.
 - npm publication is no longer triggered by a green push. It requires a
-  manual exact-SHA dispatch and the repository's production environment
+  manual exact-SHA dispatch and the repository's protected npm environment
   approval.
 
 ## 0.5.0

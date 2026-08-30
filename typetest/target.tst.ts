@@ -1,11 +1,11 @@
-import * as Target from "../packages/effect-build/src/Target.js";
+import * as SystemTarget from "../packages/effect-build/src/SystemTarget.js";
 
 type Assert<T extends true> = T;
 type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 
-export type _Target = Assert<
+export type _SystemTarget = Assert<
   Same<
-    Target.Target,
+    SystemTarget.SystemTarget,
     | "macos-x64"
     | "macos-aarch64"
     | "linux-x64-gnu"
@@ -17,21 +17,22 @@ export type _Target = Assert<
   >
 >;
 
-export type _Info = Assert<
+export type _Descriptor = Assert<
   Same<
-    Target.Info,
+    SystemTarget.Descriptor,
     {
+      readonly target: SystemTarget.SystemTarget;
       readonly os: "macos" | "linux" | "windows";
       readonly architecture: "x64" | "aarch64";
-      readonly abi: "gnu" | "musl" | undefined;
+      readonly abi: "gnu" | "musl" | null;
       readonly executableSuffix: "" | ".exe";
       readonly nativeFormat: "elf" | "mach-o" | "pe";
     }
   >
 >;
 
-const information = Target.info("linux-x64-musl");
-export type _InfoResult = Assert<Same<typeof information, Target.Info>>;
+const descriptor = SystemTarget.describe("linux-x64-musl");
+export type _DescriptorResult = Assert<Same<typeof descriptor, SystemTarget.Descriptor>>;
 
-const host = Target.host();
-export type _Host = Assert<Same<typeof host, Target.Target | undefined>>;
+// Construction-host inference is intentionally not part of the target vocabulary.
+export type _NoHost = Assert<Same<"host" extends keyof typeof SystemTarget ? true : false, false>>;
