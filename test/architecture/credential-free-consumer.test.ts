@@ -149,4 +149,10 @@ describe("credential-free registry consumer", () => {
     expect(source).toContain('"--ignore-scripts"');
     expect(source).toContain("consumer configuration mutated during install");
   });
+
+  it("runs only the installed TypeScript CLI without npm exec resolution", () => {
+    const source = readFileSync(resolve(root, "scripts/test-built-consumer.mjs"), "utf8");
+    expect(source).not.toContain('["exec", "--no", "tsc"');
+    expect(source).toContain('[join(consumerRoot, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"]');
+  });
 });
