@@ -169,6 +169,123 @@ const appleOperationToolLineage = {
 };
 const npmOidcCertificationArtifactProtocol = "effect-build/npm-oidc-certification-artifact@1";
 const appleCertificationIndexProtocol = "effect-build/apple-certification-index@2";
+
+const appleHostedReceiptRunnerSelectors = [
+  ["N-native", "macos-aarch64"],
+  ["N-native", "macos-x64"],
+  ["P-signed-app", "macos-aarch64"],
+  ["P-signed-app", "macos-x64"],
+  ["P-notarized-product", "macos-aarch64"],
+  ["P-notarized-product", "macos-x64"],
+  ["G-clean-host", "macos-aarch64"],
+  ["G-clean-host", "macos-x64"],
+  ["A-verdict", null],
+].map(([category, coordinateArchitecture]) => ({
+  category,
+  coordinateArchitecture,
+  status: "unqualified",
+  runnerLabel: null,
+  platform: null,
+  architecture: null,
+  image: null,
+  runnerEnvironment: null,
+}));
+
+const appleHostedActivationInterfaces = {
+  protocol: "effect-build/apple-hosted-activation-interfaces@1",
+  status: "unconfigured",
+  producer: {
+    status: "unconfigured",
+    bundleProtocol: "effect-build/apple-producer-bundle@1",
+    sourceSha: null,
+    bundleDigest: null,
+  },
+  verifier: {
+    status: "unconfigured",
+    bundleProtocol: "effect-build/apple-clean-host-verifier-bundle@1",
+    sourceSha: null,
+    bundleDigest: null,
+  },
+  certificates: {
+    status: "unconfigured",
+    teamId: null,
+    applicationSha1: null,
+    installerSha1: null,
+  },
+  environment: {
+    status: "provisioned-policy-only",
+    authorityScope: "environment-policy-only-not-credential-or-runner-qualification",
+    repository: "mannyc2/effect-build",
+    repositoryId: "1331906770",
+    repositoryOwnerId: "126291407",
+    environmentId: "20977544910",
+    name: "apple-certification",
+    canAdminsBypass: true,
+    reviewer: {
+      id: 126291407,
+      login: "mannyc2",
+      type: "User",
+      preventSelfReview: false,
+    },
+    branchPolicy: {
+      name: "main",
+      type: "branch",
+      deploymentBranchPolicy: {
+        customBranchPolicies: true,
+        protectedBranches: false,
+      },
+      exactProtectionRuleTypes: ["branch_policy", "required_reviewers"],
+      branchPolicies: [{ name: "main", type: "branch" }],
+    },
+    secretNames: [],
+    variableNames: [],
+    oidcSubjectPolicy: {
+      use_default: true,
+      use_immutable_subject: false,
+      sub_claim_prefix: "repo:mannyc2@126291407/effect-build@1331906770",
+    },
+  },
+  credentialLayer: {
+    status: "unconfigured",
+    type: null,
+    environment: "apple-certification",
+    secretNames: [],
+  },
+  journal: {
+    status: "unconfigured",
+    packageName: "@mannyc1/ts-release",
+    packageVersion: null,
+    sourceSha: null,
+    reusableWorkflowRef: null,
+    reusableWorkflowSha: null,
+    codecId: null,
+  },
+  aws: {
+    status: "unconfigured",
+    accountId: null,
+    bucketArn: null,
+    region: null,
+    roleArn: null,
+    prefix: "operation-journal/v1",
+    retentionPolicyDigest: null,
+    iamPolicyDigest: null,
+    bucketPolicyDigest: null,
+    oidcTrustPolicyDigest: null,
+    oidcJobWorkflowRef: null,
+    oidcJobWorkflowSha: null,
+  },
+  runners: {
+    status: "unqualified",
+    receiptPins: appleHostedReceiptRunnerSelectors,
+  },
+  continuation: {
+    status: "unconfigured",
+    initialDelaySeconds: null,
+    pollIntervalSeconds: null,
+    maximumPolls: null,
+    maximumElapsedSeconds: null,
+  },
+};
 const fakeRegistryLocalQualificationProtocol = "effect-build/fake-registry-local-qualification@1";
 const fakeRegistryExactProtectedBodyProtocol =
   "effect-build/fake-registry-exact-protected-body-certification@1";
@@ -1630,6 +1747,7 @@ export const releaseCertificationPolicy = {
       ],
       artifactDisposition: "forbidden-while-blocked",
       protectedStageIds: ["sign-app", "submit-product", "continue-notary"],
+      activationInterfaces: appleHostedActivationInterfaces,
     },
     protocols: {
       request: "effect-build/apple-certification-request@3",
@@ -1731,7 +1849,7 @@ export const releaseCertificationPolicy = {
       byOperationId: appleOperationToolLineage,
     },
     receiptSchemas: {
-      runnerIdentity: ["platform", "architecture", "image", "imageVersion", "runnerEnvironment"],
+      runnerIdentity: ["runnerLabel", "platform", "architecture", "image", "imageVersion", "runnerEnvironment"],
       digestIdentity: ["bytes", "digest"],
       executableIdentity: ["provider", "version", "architecture", "target", "nativeFormat", "bytes", "digest"],
       toolObservation: ["name", "version", "executableDigest", "observationDigest"],

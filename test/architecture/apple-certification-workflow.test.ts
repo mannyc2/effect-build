@@ -121,6 +121,103 @@ describe("Apple certification workflow external-interface hard stop", () => {
     for (const blocker of plan.hostedExecution.blockerIds) expect(stopped.stderr).toContain(blocker);
   });
 
+  it("keeps every blocked activation interface explicit and unusable as production identity", () => {
+    const interfaces = plan.hostedExecution.activationInterfaces;
+    expect(interfaces.status).toBe("unconfigured");
+    expect(interfaces.producer).toMatchObject({ status: "unconfigured", sourceSha: null, bundleDigest: null });
+    expect(interfaces.verifier).toMatchObject({ status: "unconfigured", sourceSha: null, bundleDigest: null });
+    expect(interfaces.certificates).toEqual({
+      status: "unconfigured",
+      teamId: null,
+      applicationSha1: null,
+      installerSha1: null,
+    });
+    expect(interfaces.environment).toEqual({
+      status: "provisioned-policy-only",
+      authorityScope: "environment-policy-only-not-credential-or-runner-qualification",
+      repository: "mannyc2/effect-build",
+      repositoryId: "1331906770",
+      repositoryOwnerId: "126291407",
+      environmentId: "20977544910",
+      name: "apple-certification",
+      canAdminsBypass: true,
+      reviewer: {
+        id: 126291407,
+        login: "mannyc2",
+        type: "User",
+        preventSelfReview: false,
+      },
+      branchPolicy: {
+        name: "main",
+        type: "branch",
+        deploymentBranchPolicy: {
+          customBranchPolicies: true,
+          protectedBranches: false,
+        },
+        exactProtectionRuleTypes: ["branch_policy", "required_reviewers"],
+        branchPolicies: [{ name: "main", type: "branch" }],
+      },
+      secretNames: [],
+      variableNames: [],
+      oidcSubjectPolicy: {
+        use_default: true,
+        use_immutable_subject: false,
+        sub_claim_prefix: "repo:mannyc2@126291407/effect-build@1331906770",
+      },
+    });
+    expect(interfaces.credentialLayer).toMatchObject({ status: "unconfigured", type: null, secretNames: [] });
+    expect(interfaces.journal).toMatchObject({
+      status: "unconfigured",
+      packageVersion: null,
+      sourceSha: null,
+      reusableWorkflowRef: null,
+      reusableWorkflowSha: null,
+      codecId: null,
+    });
+    expect(interfaces.aws).toMatchObject({
+      status: "unconfigured",
+      accountId: null,
+      bucketArn: null,
+      region: null,
+      roleArn: null,
+      retentionPolicyDigest: null,
+      iamPolicyDigest: null,
+      bucketPolicyDigest: null,
+      oidcTrustPolicyDigest: null,
+      oidcJobWorkflowRef: null,
+      oidcJobWorkflowSha: null,
+    });
+    expect(interfaces.runners.status).toBe("unqualified");
+    expect(interfaces.runners.receiptPins).toHaveLength(9);
+    expect(
+      interfaces.runners.receiptPins.every((pin: any) =>
+        pin.status === "unqualified"
+        && pin.runnerLabel === null
+        && pin.platform === null
+        && pin.architecture === null
+        && pin.image === null
+        && pin.runnerEnvironment === null
+      ),
+    ).toBe(true);
+    expect(interfaces.continuation).toEqual({
+      status: "unconfigured",
+      initialDelaySeconds: null,
+      pollIntervalSeconds: null,
+      maximumPolls: null,
+      maximumElapsedSeconds: null,
+    });
+
+    const placeholderProducer = structuredClone(contract);
+    placeholderProducer.releaseCertification.apple.hostedExecution.activationInterfaces.producer.bundleDigest =
+      `sha256:${"0".repeat(64)}`;
+    expect(() => deriveAppleWorkflowPlan(placeholderProducer)).toThrow(/explicit null/u);
+
+    const inventedRunner = structuredClone(contract);
+    inventedRunner.releaseCertification.apple.hostedExecution.activationInterfaces.runners.receiptPins[0].image =
+      "macos-15";
+    expect(() => deriveAppleWorkflowPlan(inventedRunner)).toThrow(/explicit null/u);
+  });
+
   it("maps every A7 subordinate evidence ID to exact synthetic-only journal cases", () => {
     const subordinateEvidence =
       policy.coordinateRules.find(({ coordinate }: { readonly coordinate: string }) => coordinate === "A7").fieldValues
