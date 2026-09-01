@@ -450,7 +450,11 @@ console.log(JSON.stringify({
     if (installed.name !== name) throw new Error(`consumer resolved ${name} to ${installed.name}`);
   }
 
-  await execute(npm, ["exec", "--no", "tsc", "--", "-p", "tsconfig.json"], npmOptions);
+  await execute(
+    "node",
+    [join(consumerRoot, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
+    { cwd: consumerRoot, env: npmEnvironment },
+  );
 
   const { stdout } = await execute("node", [join(consumerRoot, "dist-consumer", "main.js")], { cwd: consumerRoot });
   const report = JSON.parse(stdout.trim());
