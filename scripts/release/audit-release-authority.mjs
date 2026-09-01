@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -12,8 +14,8 @@ import {
   validateContract,
 } from "../effect-build-contract/model.mjs";
 
-const inputSchema = "effect-build/release-authority-observation@2";
-const outputSchema = "effect-build/release-authority-audit@2";
+const inputSchema = "effect-build/release-authority-observation@4";
+const outputSchema = "effect-build/release-authority-audit@4";
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const contractPath = resolve(repositoryRoot, "tooling/effect-build-contract.json");
 // This is npm's authenticated settings/raw-response projection, not the
@@ -44,6 +46,7 @@ export const authenticateGeneratedContract = async (contract, root = repositoryR
   if (renderJson(contract) !== renderJson(generated)) {
     throw new Error("release authority contract is not the exact generated contract");
   }
+  assertPinnedNpmAuthorityObservationClient({ contract: generated, root });
   return generated;
 };
 
@@ -99,6 +102,7 @@ export const releaseAuthorityPolicyFromContract = (contract) => {
 
   const packageNames = Object.keys(projection.packages).sort();
   const admittedPackages = admission.packages;
+  const reservationPackages = registry.reservation?.packages;
   if (
     packageNames.length === 0
     || !exactStringArray(admittedPackages)
@@ -107,6 +111,8 @@ export const releaseAuthorityPolicyFromContract = (contract) => {
     || publicAdmission.packageCount !== packageNames.length
     || !exactStringArray(projection.privatePackages)
     || packageNames.some((name) => projection.privatePackages.includes(name))
+    || !exactStringArray(reservationPackages)
+    || !sameStrings(reservationPackages, projection.privatePackages)
   ) {
     throw new Error("release authority public projection drift");
   }
@@ -170,6 +176,9 @@ export const releaseAuthorityPolicyFromContract = (contract) => {
   const reviewer = githubAuthority.reviewer;
   const oidcSubjectPolicy = githubAuthority.oidcSubjectPolicy;
   const rawAllowedActionProjection = npmAuthorityObservation.rawAllowedActionProjection;
+  const authorityClient = npmAuthorityObservation.client;
+  const legacyTokenAuthority = npmAuthorityObservation.legacyTokenAuthority;
+  const publishingAccess = npmAuthorityObservation.publishingAccess;
   if (
     githubAuthority.identitySource !== "npmRegistryBoundary.trustedPublisher"
     || githubAuthority.repository !== trustedPublisher.repository
@@ -199,6 +208,91 @@ export const releaseAuthorityPolicyFromContract = (contract) => {
     || oidcSubjectPolicy.sub_claim_prefix.length === 0
     || !exactStringArray(rawAllowedActionProjection)
     || rawAllowedActionProjection.length === 0
+    || !isObject(authorityClient)
+    || authorityClient.node !== "24.14.1"
+    || authorityClient.npm !== "11.19.1"
+    || authorityClient.package !== "npm"
+    || authorityClient.installationPackage !== "npm-authority-client"
+    || !/^sha512-[A-Za-z0-9+/]+={0,2}$/u.test(authorityClient.integrity)
+    || !/^sha256:[0-9a-f]{64}$/u.test(authorityClient.manifestDigest)
+    || authorityClient.minimumSupportedTrustVersion !== "11.15.0"
+    || authorityClient.purpose !== "authenticated-authority-observation-only"
+    || authorityClient.publishCertificationClientSource !== "releaseCertification.npmOidcCertification.client"
+    || authorityClient.status !== "pinned-source-audited-observation-credential-unprovisioned"
+    || !hasExactKeys(authorityClient.sourceClosure, [
+      "algorithm",
+      "scope",
+      "entrySource",
+      "fileCount",
+      "directoryCount",
+      "bytes",
+      "digest",
+    ])
+    || authorityClient.sourceClosure.algorithm
+      !== "sha256-canonical-json-entry-type-path-bytes-file-sha256-v1"
+    || authorityClient.sourceClosure.scope
+      !== "entire-realpath-package-tree-no-links-or-nonregular-entries"
+    || authorityClient.sourceClosure.entrySource !== "bin/npm-cli.js"
+    || !Number.isSafeInteger(authorityClient.sourceClosure.fileCount)
+    || authorityClient.sourceClosure.fileCount <= 0
+    || !Number.isSafeInteger(authorityClient.sourceClosure.directoryCount)
+    || authorityClient.sourceClosure.directoryCount <= 0
+    || !Number.isSafeInteger(authorityClient.sourceClosure.bytes)
+    || authorityClient.sourceClosure.bytes <= 0
+    || !/^sha256:[0-9a-f]{64}$/u.test(authorityClient.sourceClosure.digest)
+    || !Array.isArray(authorityClient.auditedSources)
+    || authorityClient.auditedSources.length === 0
+    || authorityClient.auditedSources.some(({ path, digest }) =>
+      typeof path !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(digest)
+    )
+    || !isObject(legacyTokenAuthority)
+    || legacyTokenAuthority.checkId !== "npm.legacyTokenAuthority"
+    || !sameStrings(legacyTokenAuthority.command, ["token", "list", "--json"])
+    || legacyTokenAuthority.registrySource !== "npmRegistryBoundary.registry"
+    || legacyTokenAuthority.authenticatedAccount !== "mannyc1"
+    || legacyTokenAuthority.authorityPackageSource
+      !== "publicApiProjection.packages-plus-npmRegistryBoundary.reservation.packages"
+    || !sameStrings(legacyTokenAuthority.maintainerCommand, ["view", "<package>", "maintainers", "--json"])
+    || legacyTokenAuthority.maintainerTarget !== "exact-sole-maintainer-equals-authenticated-account"
+    || legacyTokenAuthority.target !== "zero-active-npm-access-tokens-after-legacy-token-remediation"
+    || legacyTokenAuthority.unknownTokenTypeOrScope !== "blocking"
+    || !sameStrings(legacyTokenAuthority.sanitizedProjectionFields, [
+      "activeTokenCount",
+      "activeLegacyWriteCapableTokenCount",
+      "unknownTokenCount",
+      "metadataDigest",
+    ])
+    || legacyTokenAuthority.retainedCredentialMetadata !== "none"
+    || !isObject(legacyTokenAuthority.observationCredential)
+    || legacyTokenAuthority.observationCredential.currentStatus !== "unprovisioned-stop"
+    || !hasExactKeys(legacyTokenAuthority.observationCredential.supportedProof, [
+      "authority",
+      "accountEntitlement",
+      "operations",
+      "persistence",
+      "destruction",
+    ])
+    || legacyTokenAuthority.observationCredential.supportedProof.authority
+      !== "ephemeral-non-token-session-for-mannyc1"
+    || legacyTokenAuthority.observationCredential.supportedProof.accountEntitlement
+      !== "write-permission-required-by-npm-trust-api"
+    || legacyTokenAuthority.observationCredential.supportedProof.operations
+      !== "read-only-observation-only"
+    || legacyTokenAuthority.observationCredential.supportedProof.persistence !== "none"
+    || legacyTokenAuthority.observationCredential.supportedProof.destruction
+      !== "completed-before-sigstore-oidc-signing"
+    || !isObject(publishingAccess)
+    || publishingAccess.checkIdPrefix !== "npm.publishingAccess."
+    || publishingAccess.packageSource
+      !== "publicApiProjection.packages-plus-npmRegistryBoundary.reservation.packages"
+    || publishingAccess.target !== "require-two-factor-authentication-and-disallow-tokens"
+    || !isObject(publishingAccess.observationMechanism)
+    || publishingAccess.observationMechanism.status !== "unprovisioned-stop"
+    || publishingAccess.observationMechanism.authority
+      !== "authenticated-npm-account-with-write-permission-and-two-factor-authentication"
+    || publishingAccess.observationMechanism.interface
+      !== "supported-authenticated-npm-web-or-registry-observation-required"
+    || publishingAccess.observationMechanism.endpoint !== "unqualified-and-forbidden-to-invent"
     || npmAuthorityObservation.semantics
       !== "authenticated-npm-settings-raw-projection-not-trustedPublisher.permission"
     || npmAuthorityReceipt.role !== "npm-authority"
@@ -228,10 +322,14 @@ export const releaseAuthorityPolicyFromContract = (contract) => {
     environment: trustedPublisher.environment,
     expectedEnvironmentSubject: githubAuthority.expectedEnvironmentSubject,
     forbiddenEnvironmentNames: Object.freeze([...forbiddenEnvironmentNames]),
-    npmClient: Object.freeze({ ...certificationClient }),
+    npmClient: Object.freeze({ node: authorityClient.node, npm: authorityClient.npm }),
+    npmAuthorityClient: Object.freeze(structuredClone(authorityClient)),
+    legacyTokenAuthority: Object.freeze(structuredClone(legacyTokenAuthority)),
     oidcSubjectPolicy: Object.freeze({ ...oidcSubjectPolicy }),
     packageNames: Object.freeze(packageNames),
+    authorityPackageNames: Object.freeze([...packageNames, ...reservationPackages].sort()),
     rawAllowedActionProjection: Object.freeze([...rawAllowedActionProjection]),
+    publishingAccess: Object.freeze(structuredClone(publishingAccess)),
     auditIdentity: npmAuthorityReceipt.identity,
     registry: registryUrl.href.replace(/\/$/u, ""),
     repository: trustedPublisher.repository,
@@ -241,6 +339,104 @@ export const releaseAuthorityPolicyFromContract = (contract) => {
     workflow: trustedPublisher.workflow,
   });
 };
+
+const projectNpmAuthoritySourceClosure = (packageRoot) => {
+  const entries = [];
+  let bytes = 0;
+  let directoryCount = 0;
+  let fileCount = 0;
+  const visit = (directory, prefix = "") => {
+    const children = readdirSync(directory, { withFileTypes: true })
+      .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+    for (const child of children) {
+      const path = prefix === "" ? child.name : `${prefix}/${child.name}`;
+      const absolute = resolve(directory, child.name);
+      const stat = lstatSync(absolute);
+      if (stat.isSymbolicLink()) throw new Error(`npm authority observation client source closure contains a link: ${path}`);
+      if (stat.isDirectory()) {
+        directoryCount += 1;
+        entries.push(["directory", path]);
+        visit(absolute, path);
+        continue;
+      }
+      if (!stat.isFile()) {
+        throw new Error(`npm authority observation client source closure contains a nonregular entry: ${path}`);
+      }
+      const source = readFileSync(absolute);
+      bytes += source.byteLength;
+      fileCount += 1;
+      entries.push(["file", path, source.byteLength, createHash("sha256").update(source).digest("hex")]);
+    }
+  };
+  visit(packageRoot);
+  return Object.freeze({
+    algorithm: "sha256-canonical-json-entry-type-path-bytes-file-sha256-v1",
+    scope: "entire-realpath-package-tree-no-links-or-nonregular-entries",
+    entrySource: "bin/npm-cli.js",
+    fileCount,
+    directoryCount,
+    bytes,
+    digest: `sha256:${createHash("sha256").update(`${JSON.stringify(entries)}\n`).digest("hex")}`,
+  });
+};
+
+const resolvePinnedNpmAuthorityObservationClient = ({ contract, root = repositoryRoot }) => {
+  const policy = releaseAuthorityPolicyFromContract(contract);
+  const client = policy.npmAuthorityClient;
+  const nodeModulesPath = resolve(root, "node_modules");
+  const packageAliasPath = resolve(nodeModulesPath, client.installationPackage);
+  const nodeModulesRoot = realpathSync(nodeModulesPath);
+  const packageRoot = realpathSync(packageAliasPath);
+  const packageRelative = relative(nodeModulesRoot, packageRoot);
+  if (packageRelative === "" || packageRelative.startsWith("..")) {
+    throw new Error("npm authority observation client package escapes node_modules");
+  }
+  const packageManifestPath = realpathSync(resolve(packageRoot, "package.json"));
+  const packageManifestStat = lstatSync(packageManifestPath);
+  const packageManifestBytes = readFileSync(packageManifestPath);
+  const packageManifest = JSON.parse(packageManifestBytes);
+  if (
+    !packageManifestStat.isFile()
+    || packageManifestStat.isSymbolicLink()
+    || dirname(packageManifestPath) !== packageRoot
+    || packageManifest.name !== client.package
+    || packageManifest.version !== client.npm
+    || `sha256:${createHash("sha256").update(packageManifestBytes).digest("hex")}` !== client.manifestDigest
+  ) throw new Error("npm authority observation client manifest changed");
+  if (JSON.stringify(projectNpmAuthoritySourceClosure(packageRoot)) !== JSON.stringify(client.sourceClosure)) {
+    throw new Error("npm authority observation client source closure changed");
+  }
+  for (const source of client.auditedSources) {
+    const sourcePath = realpathSync(resolve(packageRoot, source.path));
+    const sourceStat = lstatSync(sourcePath);
+    const sourceRelative = relative(packageRoot, sourcePath);
+    const sourceDigest = `sha256:${createHash("sha256").update(readFileSync(sourcePath)).digest("hex")}`;
+    if (
+      !sourceStat.isFile()
+      || sourceStat.isSymbolicLink()
+      || sourceRelative.startsWith("..")
+      || resolve(packageRoot, sourceRelative) !== sourcePath
+      || sourceDigest !== source.digest
+    ) throw new Error("npm authority observation client source changed");
+  }
+  const entryPath = realpathSync(resolve(packageRoot, client.sourceClosure.entrySource));
+  const entrySource = client.auditedSources.find(({ path }) => path === client.sourceClosure.entrySource);
+  if (entrySource === undefined || relative(packageRoot, entryPath).startsWith("..")) {
+    throw new Error("npm authority observation client entry source changed");
+  }
+  return Object.freeze({
+    client,
+    entryDigest: entrySource.digest,
+    entryPath,
+    nodeModulesPath,
+    nodeModulesRoot,
+    packageAliasPath,
+    packageRoot,
+  });
+};
+
+export const assertPinnedNpmAuthorityObservationClient = ({ contract, root = repositoryRoot }) =>
+  resolvePinnedNpmAuthorityObservationClient({ contract, root }).client;
 
 const canonicalize = (value) => {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -315,7 +511,7 @@ const commandEnvironment = (policy, authority) => {
   return environment;
 };
 
-const runReadOnly = (policy, authority, command, args) => spawnSync(command, args, {
+const runReadOnly = (policy, authority, command, args, spawn = spawnSync) => spawn(command, args, {
   cwd: repositoryRoot,
   encoding: "utf8",
   env: commandEnvironment(policy, authority),
@@ -325,6 +521,31 @@ const runReadOnly = (policy, authority, command, args) => spawnSync(command, arg
   timeout: 5_000,
   windowsHide: true,
 });
+
+const npmAuthorityInvocation = (runtime, args) => {
+  if (
+    realpathSync(runtime.nodeModulesPath) !== runtime.nodeModulesRoot
+    || realpathSync(runtime.packageAliasPath) !== runtime.packageRoot
+    || JSON.stringify(projectNpmAuthoritySourceClosure(runtime.packageRoot))
+      !== JSON.stringify(runtime.client.sourceClosure)
+  ) throw new Error("npm authority observation client source closure changed immediately before launch");
+  const entryPath = realpathSync(runtime.entryPath);
+  const entryStat = lstatSync(entryPath);
+  const entryDigest = `sha256:${createHash("sha256").update(readFileSync(entryPath)).digest("hex")}`;
+  if (
+    entryPath !== runtime.entryPath
+    || !entryStat.isFile()
+    || entryStat.isSymbolicLink()
+    || relative(runtime.packageRoot, entryPath).startsWith("..")
+    || entryDigest !== runtime.entryDigest
+  ) throw new Error("npm authority observation client entry changed immediately before launch");
+  return Object.freeze({ command: process.execPath, args: [entryPath, ...args] });
+};
+
+const runNpmAuthorityReadOnly = (policy, runtime, args, spawn = spawnSync) => {
+  const invocation = npmAuthorityInvocation(runtime, args);
+  return runReadOnly(policy, "npm", invocation.command, invocation.args, spawn);
+};
 
 const commandResponseStatus = (result) => {
   const diagnostics = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
@@ -341,16 +562,16 @@ const parseCommandJson = (result) => {
   }
 };
 
-const collectGithub = (policy, endpoint, projection) => {
+const collectGithub = (policy, endpoint, projection, spawn = spawnSync) => {
   const args = ["api", endpoint, "--hostname", "github.com"];
   args.push("--jq", projection);
-  const result = runReadOnly(policy, "github", "gh", args);
+  const result = runReadOnly(policy, "github", "gh", args, spawn);
   const status = commandResponseStatus(result);
   const body = parseCommandJson(result);
   return status === 200 && body !== undefined ? { body, status } : { status: status === 200 ? 598 : status };
 };
 
-const collectGithubInventory = (policy, endpoint, collection) => {
+const collectGithubInventory = (policy, endpoint, collection, spawn = spawnSync) => {
   const projection = `{total_count,${collection}:[.${collection}[]|{name}]}`;
   const result = runReadOnly(policy, "github", "gh", [
     "api",
@@ -360,7 +581,7 @@ const collectGithubInventory = (policy, endpoint, collection) => {
     "--paginate",
     "--jq",
     projection,
-  ]);
+  ], spawn);
   const status = commandResponseStatus(result);
   if (status !== 200 || typeof result.stdout !== "string" || result.stdout.trim() === "") return { status };
   try {
@@ -395,8 +616,8 @@ const projectTrustRecord = (record) => {
   };
 };
 
-const collectNpmAuthentication = (policy) => {
-  const result = runReadOnly(policy, "npm", "npm", ["whoami", "--json", "--registry", policy.registry]);
+const collectNpmAuthentication = (policy, runtime, spawn = spawnSync) => {
+  const result = runNpmAuthorityReadOnly(policy, runtime, ["whoami", "--json", "--registry", policy.registry], spawn);
   const status = commandResponseStatus(result);
   const body = parseCommandJson(result);
   const username = typeof body === "string" ? body : isObject(body) ? body.username : undefined;
@@ -405,8 +626,70 @@ const collectNpmAuthentication = (policy) => {
     : { status: status === 200 ? 598 : status };
 };
 
-const collectNpmClient = (policy) => {
-  const result = runReadOnly(policy, "npm", "npm", ["--version"]);
+const emptyTokenInventoryDigest = `sha256:${createHash("sha256").update("[]\n").digest("hex")}`;
+
+const collectNpmLegacyTokenAuthority = (policy, runtime, spawn = spawnSync) => {
+  const invocation = npmAuthorityInvocation(
+    runtime,
+    [...policy.legacyTokenAuthority.command, "--registry", policy.registry],
+  );
+  const result = spawn(invocation.command, invocation.args, {
+    cwd: repositoryRoot,
+    env: commandEnvironment(policy, "npm"),
+    input: Buffer.alloc(0),
+    maxBuffer: 1024 * 1024,
+    shell: false,
+    timeout: 5_000,
+    windowsHide: true,
+  });
+  const stdout = Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0);
+  const stderr = Buffer.isBuffer(result.stderr) ? result.stderr : Buffer.alloc(0);
+  try {
+    const diagnostics = stderr.toString("utf8");
+    if (/\bE401\b|\b401 Unauthorized\b/iu.test(diagnostics)) return { status: 401 };
+    if (result.status !== 0 || stdout.byteLength === 0) return { status: 599 };
+    const inventory = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(stdout));
+    if (!Array.isArray(inventory) || inventory.length !== 0) return { status: 598 };
+    return {
+      body: {
+        activeTokenCount: 0,
+        activeLegacyWriteCapableTokenCount: 0,
+        unknownTokenCount: 0,
+        metadataDigest: emptyTokenInventoryDigest,
+      },
+      status: 200,
+    };
+  } catch {
+    return { status: 598 };
+  } finally {
+    stdout.fill(0);
+    stderr.fill(0);
+    result.stdout = Buffer.alloc(0);
+    result.stderr = Buffer.alloc(0);
+  }
+};
+
+const collectNpmMaintainers = (policy, runtime, name, spawn = spawnSync) => {
+  const args = policy.legacyTokenAuthority.maintainerCommand.map((entry) =>
+    entry === "<package>" ? name : entry
+  );
+  const result = runNpmAuthorityReadOnly(policy, runtime, [...args, "--registry", policy.registry], spawn);
+  const status = commandResponseStatus(result);
+  const body = parseCommandJson(result);
+  const entries = Array.isArray(body) ? body : isObject(body) ? [body] : undefined;
+  if (
+    status !== 200
+    || !Array.isArray(entries)
+    || entries.length === 0
+    || entries.some((entry) => !isObject(entry) || typeof entry.name !== "string" || entry.name.length === 0)
+  ) return { status: status === 200 ? 598 : status };
+  const names = entries.map(({ name: maintainer }) => maintainer);
+  if (new Set(names).size !== names.length) return { status: 598 };
+  return { body: { names }, status };
+};
+
+const collectNpmClient = (policy, runtime, spawn = spawnSync) => {
+  const result = runNpmAuthorityReadOnly(policy, runtime, ["--version"], spawn);
   const status = commandResponseStatus(result);
   const version = typeof result.stdout === "string" ? result.stdout.trim() : "";
   return status === 200 && /^\d+\.\d+\.\d+$/u.test(version)
@@ -414,8 +697,13 @@ const collectNpmClient = (policy) => {
     : { status: status === 200 ? 598 : status };
 };
 
-const collectNpmTrust = (policy, name) => {
-  const result = runReadOnly(policy, "npm", "npm", ["trust", "list", name, "--json", "--registry", policy.registry]);
+const collectNpmTrust = (policy, runtime, name, spawn = spawnSync) => {
+  const result = runNpmAuthorityReadOnly(
+    policy,
+    runtime,
+    ["trust", "list", name, "--json", "--registry", policy.registry],
+    spawn,
+  );
   const status = commandResponseStatus(result);
   if (status !== 200) return { status };
   if (typeof result.stdout !== "string" || result.stdout.trim() === "") return { body: [], status };
@@ -437,27 +725,45 @@ export const assertCanonicalPackageRepositoryManifest = (manifest, policy, name)
   return manifest.repository;
 };
 
-const collectPackageRepositories = async (policy) => {
+const collectPackageRepositories = async (policy, root = repositoryRoot) => {
   const packages = {};
   for (const name of policy.packageNames) {
-    const manifest = JSON.parse(await readFile(resolve(repositoryRoot, "packages", name, "package.json"), "utf8"));
+    const manifest = JSON.parse(await readFile(resolve(root, "packages", name, "package.json"), "utf8"));
     packages[name] = { repository: assertCanonicalPackageRepositoryManifest(manifest, policy, name) };
   }
   return packages;
 };
 
-const collectObservation = async (policy, sourceSha) => {
-  const client = collectNpmClient(policy);
+const collectObservation = async (
+  policy,
+  sourceSha,
+  { npmRuntime, root = repositoryRoot, spawn = spawnSync, observedAt = new Date().toISOString() },
+) => {
+  const client = collectNpmClient(policy, npmRuntime, spawn);
   const observedClient = responseBody(client);
   const clientMatches = observedClient?.node === policy.npmClient.node
     && observedClient?.npm === policy.npmClient.npm;
   const authentication = clientMatches
-    ? collectNpmAuthentication(policy)
+    ? collectNpmAuthentication(policy, npmRuntime, spawn)
     : { status: 598 };
+  const legacyTokenAuthority = authentication.status === 200
+    ? collectNpmLegacyTokenAuthority(policy, npmRuntime, spawn)
+    : { status: authentication.status };
+  const maintainers = {};
+  for (const name of policy.authorityPackageNames) {
+    maintainers[name] = authentication.status === 200
+      ? collectNpmMaintainers(policy, npmRuntime, name, spawn)
+      : { status: authentication.status };
+  }
   const trust = {};
   for (const name of policy.packageNames) {
-    trust[name] = authentication.status === 200 ? collectNpmTrust(policy, name) : { status: authentication.status };
+    trust[name] = authentication.status === 200
+      ? collectNpmTrust(policy, npmRuntime, name, spawn)
+      : { status: authentication.status };
   }
+  const publishingAccess = Object.fromEntries(
+    policy.authorityPackageNames.map((name) => [name, { status: 598 }]),
+  );
   const repositoryEndpoint = `repos/${policy.repository}`;
   const environmentEndpoint = `${repositoryEndpoint}/environments/${policy.environment}`;
   return {
@@ -467,48 +773,76 @@ const collectObservation = async (policy, sourceSha) => {
           policy,
           `${environmentEndpoint}/deployment-branch-policies`,
           "{total_count,branch_policies:[.branch_policies[]|{name,type}]}",
+          spawn,
         ),
         details: collectGithub(
           policy,
           environmentEndpoint,
           "{name,deployment_branch_policy,protection_rules:[.protection_rules[]|if .type==\"required_reviewers\" then {type,prevent_self_review,reviewers:[.reviewers[]|{type,reviewer:{login:.reviewer.login,id:.reviewer.id}}]} else {type} end]}",
+          spawn,
         ),
         secrets: collectGithubInventory(
           policy,
           `${environmentEndpoint}/secrets?per_page=100`,
           "secrets",
+          spawn,
         ),
         variables: collectGithubInventory(
           policy,
           `${environmentEndpoint}/variables?per_page=100`,
           "variables",
+          spawn,
         ),
       },
       oidc: collectGithub(
         policy,
         `${repositoryEndpoint}/actions/oidc/customization/sub`,
         "{use_default,use_immutable_subject,sub_claim_prefix}",
+        spawn,
       ),
       repository: {
         secrets: collectGithubInventory(
           policy,
           `${repositoryEndpoint}/actions/secrets?per_page=100`,
           "secrets",
+          spawn,
         ),
         variables: collectGithubInventory(
           policy,
           `${repositoryEndpoint}/actions/variables?per_page=100`,
           "variables",
+          spawn,
         ),
       },
     },
-    npm: { authentication, client, trust },
+    npm: {
+      authentication,
+      client,
+      legacyTokenAuthority,
+      maintainers,
+      observationCredential: { status: 598 },
+      publishingAccess,
+      trust,
+    },
     identity: policy.auditIdentity,
-    observedAt: new Date().toISOString(),
-    packages: await collectPackageRepositories(policy),
+    observedAt,
+    packages: await collectPackageRepositories(policy, root),
     schema: inputSchema,
     sourceSha,
   };
+};
+
+export const collectReleaseAuthorityObservation = async ({
+  contract,
+  sourceSha,
+  root = repositoryRoot,
+  spawn = spawnSync,
+  observedAt = new Date().toISOString(),
+}) => {
+  const authenticated = await authenticateGeneratedContract(contract, root);
+  const policy = releaseAuthorityPolicyFromContract(authenticated);
+  const npmRuntime = resolvePinnedNpmAuthorityObservationClient({ contract: authenticated, root });
+  return collectObservation(policy, sourceSha, { npmRuntime, observedAt, root, spawn });
 };
 
 const exactReviewer = (reviewer, policy) => isObject(reviewer)
@@ -697,17 +1031,112 @@ export const auditReleaseAuthority = (observation, policy) => {
 
   const authenticationState = responseState(npm.authentication);
   const authenticationBody = responseBody(npm.authentication);
-  const authenticated = authenticationState === "observed"
+  const observedAuthentication = authenticationState === "observed"
     && isObject(authenticationBody)
     && typeof authenticationBody.username === "string"
     && authenticationBody.username.length > 0;
+  const authenticated = observedAuthentication
+    && authenticationBody.username === policy.legacyTokenAuthority.authenticatedAccount;
   if (authenticated) {
     addCheck("npm.authentication", "match");
+  } else if (observedAuthentication) {
+    addCheck("npm.authentication", "mismatch", "npm-authentication-mismatch");
   } else {
     addCheck(
       "npm.authentication",
       "unobserved",
       authenticationState === "e401" ? "npm-authentication-e401" : "npm-authentication-unobserved",
+    );
+  }
+
+  const legacyTokenState = responseState(npm.legacyTokenAuthority);
+  const legacyTokenBody = responseBody(npm.legacyTokenAuthority);
+  const credentialState = responseState(npm.observationCredential);
+  const credentialBody = responseBody(npm.observationCredential);
+  const maintainers = isObject(npm.maintainers) ? npm.maintainers : undefined;
+  const maintainerProjectionExact = isObject(maintainers)
+    && sameStrings(Object.keys(maintainers), policy.authorityPackageNames);
+  const maintainerResponsesObserved = maintainerProjectionExact
+    && policy.authorityPackageNames.every((name) => responseState(maintainers[name]) === "observed");
+  const maintainerShapesExact = maintainerResponsesObserved
+    && policy.authorityPackageNames.every((name) => {
+      const body = responseBody(maintainers[name]);
+      return hasExactKeys(body, ["names"])
+        && exactStringArray(body.names)
+        && body.names.length > 0;
+    });
+  const maintainersMatch = maintainerShapesExact
+    && policy.authorityPackageNames.every((name) =>
+      sameStrings(responseBody(maintainers[name]).names, [policy.legacyTokenAuthority.authenticatedAccount])
+    );
+  const legacyTokenShape = hasExactKeys(legacyTokenBody, policy.legacyTokenAuthority.sanitizedProjectionFields)
+    && Number.isSafeInteger(legacyTokenBody.activeTokenCount)
+    && legacyTokenBody.activeTokenCount >= 0
+    && Number.isSafeInteger(legacyTokenBody.activeLegacyWriteCapableTokenCount)
+    && legacyTokenBody.activeLegacyWriteCapableTokenCount >= 0
+    && Number.isSafeInteger(legacyTokenBody.unknownTokenCount)
+    && legacyTokenBody.unknownTokenCount >= 0
+    && /^sha256:[0-9a-f]{64}$/u.test(legacyTokenBody.metadataDigest);
+  const credentialProof = policy.legacyTokenAuthority.observationCredential.supportedProof;
+  if (
+    !authenticated
+    || legacyTokenState !== "observed"
+    || credentialState !== "observed"
+    || !maintainerProjectionExact
+    || !maintainerResponsesObserved
+  ) {
+    addCheck(
+      policy.legacyTokenAuthority.checkId,
+      "unobserved",
+      legacyTokenState === "e401" ? "npm-legacy-token-authority-e401" : "npm-legacy-token-authority-unobserved",
+    );
+  } else if (
+    !legacyTokenShape
+    || !hasExactKeys(credentialBody, Object.keys(credentialProof))
+    || !maintainerShapesExact
+  ) {
+    addCheck(
+      policy.legacyTokenAuthority.checkId,
+      "unobserved",
+      "npm-legacy-token-authority-unobserved",
+    );
+  } else {
+    const matches = legacyTokenBody.activeTokenCount === 0
+      && legacyTokenBody.activeLegacyWriteCapableTokenCount === 0
+      && legacyTokenBody.unknownTokenCount === 0
+      && legacyTokenBody.metadataDigest === emptyTokenInventoryDigest
+      && maintainersMatch
+      && JSON.stringify(canonicalize(credentialBody)) === JSON.stringify(canonicalize(credentialProof));
+    addCheck(
+      policy.legacyTokenAuthority.checkId,
+      matches ? "match" : "mismatch",
+      "npm-legacy-token-authority-mismatch",
+    );
+  }
+
+  const publishingAccessProjection = isObject(npm.publishingAccess) ? npm.publishingAccess : undefined;
+  const publishingAccessProjectionExact = isObject(publishingAccessProjection)
+    && sameStrings(Object.keys(publishingAccessProjection), policy.authorityPackageNames);
+  for (const name of policy.authorityPackageNames) {
+    const response = publishingAccessProjectionExact ? publishingAccessProjection[name] : undefined;
+    const state = responseState(response);
+    const body = responseBody(response);
+    if (!authenticated || !publishingAccessProjectionExact || state !== "observed") {
+      addCheck(
+        `${policy.publishingAccess.checkIdPrefix}${name}`,
+        "unobserved",
+        "npm-publishing-access-unobserved",
+        name,
+      );
+      continue;
+    }
+    const matches = hasExactKeys(body, ["policy"])
+      && body.policy === policy.publishingAccess.target;
+    addCheck(
+      `${policy.publishingAccess.checkIdPrefix}${name}`,
+      matches ? "match" : "mismatch",
+      "npm-publishing-access-mismatch",
+      name,
     );
   }
 
@@ -848,6 +1277,7 @@ const main = async () => {
   try {
     const contract = await loadAuthenticatedContract();
     const policy = releaseAuthorityPolicyFromContract(contract);
+    const npmRuntime = resolvePinnedNpmAuthorityObservationClient({ contract });
     let collectionSourceSha;
     if (collect) {
       const observed = spawnSync("git", ["rev-parse", "HEAD"], {
@@ -864,7 +1294,7 @@ const main = async () => {
       ) throw new Error("release authority collection source is not the exact checkout");
     }
     const observation = collect
-      ? await collectObservation(policy, collectionSourceSha)
+      ? await collectObservation(policy, collectionSourceSha, { npmRuntime })
       : JSON.parse(inputPath === "-" ? await new Response(process.stdin).text() : await readFile(inputPath, "utf8"));
     const output = auditReleaseAuthority(observation, policy);
     process.stdout.write(serialize(output));

@@ -244,9 +244,11 @@ Release completion is later than the release point. It requires:
   one reservation-only Rolldown package.
 - packages/effect-build-apple/README.md lines 59-80 define credential and
   journal ownership. Lines 82-91 define the external acceptance boundary.
-- The 2026-08-31 live repository has only the npm environment, no
-  apple-certification environment, no repository self-hosted runners, no main
-  protection or ruleset, and no required status checks.
+- The `apple-certification` environment now exists with the required reviewer
+  and main-only deployment policy, but its secret/variable inventories are
+  empty. This is inert policy scaffolding, not Apple credential or execution
+  feasibility. The repository still has no self-hosted runners, main
+  protection/ruleset, or required status checks.
 - The 2026-08-31 repository Actions secret-name inventory contains one secret,
   `NPM_TOKEN`, updated 2026-08-28. No value was accessed. Remote main's
   deleted historical bootstrap workflow referenced it as `NODE_AUTH_TOKEN`;
@@ -254,13 +256,25 @@ Release completion is later than the release point. It requires:
   persisted secret. Treat the secret as usable until separately authorized
   deletion and re-observed absence; never infer revocation or expiry from its
   name or age.
-- Repository release immutability is currently disabled (`enabled: false`, not
-  owner-enforced). It applies only to future Releases, so enabling it must be a
-  separate repository-settings act before v0.6.0 is created.
+- Repository release immutability is now enabled and not owner-enforced. The
+  ordinary workflow `GITHUB_TOKEN` returned HTTP 403 when reading
+  `repos/mannyc2/effect-build/immutable-releases`; the endpoint requires
+  repository Administration-read authority, which is not a workflow-token
+  permission. Therefore governance evidence remains stopped until an explicit
+  sealed, ephemeral Administration-read observation interface is qualified.
 - This session's authenticated npm feasibility check is unresolved:
   `npm trust list effect-build --json` returned E401. Treat every package's
   publisher setting as unobserved until an operator establishes a supported
   interactive npm/2FA session; never infer the other ten from one package.
+- Keep two npm clients distinct. Node 24.14.1/npm 11.11.0 remains the separately
+  audited publication/OIDC-certification client. Current npm trusted-publisher
+  documentation requires npm 11.15.0 or later, so authority observation is
+  pinned separately to npm 11.19.1, integrity
+  `sha512-ztsxKxt/kkIaAs+2i0GU6I+DRmUdrNasxTZKJe9TCdSjKxlhah/4r/hl5ygMD6XAg1qZ9c2TNomR4qgOydp10g==`.
+  Its manifest, exact `bin/npm-cli.js` entry, command sources, and canonical
+  1,943-file installed package-tree closure are contract-pinned. Every authority
+  call launches that authenticated realpath through the pinned Node runtime;
+  PATH `npm` is forbidden. This does not alter or requalify publication.
 - Anonymous registry re-observation on 2026-08-31 found no 0.6.0 on any of the
   twelve names. The five established packages retain `latest=0.3.0`; all seven
   handoff placeholders are singleton `0.0.0-reserved.0` packages with exact
@@ -321,10 +335,15 @@ feasibility question or earn release point R.
    exact repository URL. The npm environment remains reviewer-protected and
    main-only, and the repository OIDC policy remains default/non-immutable.
    However, `npm whoami` returned E401, so none of the eleven current trusted
-   publisher records is authenticatedly observed. The repository-level
-   `NPM_TOKEN` also remains present. Deleting that GitHub secret and identifying
-   and revoking the corresponding npm token require separate authorities and
-   independent evidence.
+   publisher records is authenticatedly observed. The supported authority
+   receipt must authenticate exact account `mannyc1`, prove its npm access-token
+   inventory is exactly empty at `https://registry.npmjs.org`, prove `mannyc1`
+   is the sole maintainer of all eleven public packages and reservation-only
+   Rolldown, and separately prove all twelve packages have publishing access
+   `Require two-factor authentication and disallow tokens`. Unknown/additional
+   maintainers, an unknown token shape, a peer account's empty inventory, or a
+   missing package policy is a STOP. Deleting the GitHub `NPM_TOKEN` secret is
+   not npm-side revocation evidence and cannot satisfy this receipt.
 2. **Apple execution backend**: the available keychain contains no Developer
    ID Application or Developer ID Installer identity; only an Apple Development
    identity of the wrong class is usable. The apple-certification environment,
@@ -361,9 +380,15 @@ feasibility question or earn release point R.
    worktree. The downstream ts-release journal backend, dedicated AWS
    authority, released owner version, and cross-process operational
    qualification do not exist yet.
-5. **GitHub Release governance**: immutability remains disabled and not
-   owner-enforced; main remains unprotected with no rulesets. Enabling
-   immutability, if selected, remains a separate exact-target settings action.
+   Any supported reusable journal identity must use an immutable
+   `operational-journal.yml@<40-hex-commit>` workflow ref, because AWS IAM can
+   condition on `job_workflow_ref` but not `job_workflow_sha`; keep the separate
+   exact source-SHA equality as well. The journal job's own runtime is exact
+   Node 22.22.2, not the effect-build npm-certification Node 24.14.1 pin.
+5. **GitHub Release governance**: immutability is enabled and not owner-enforced,
+   but its Administration-read observation interface remains unprovisioned and
+   the ordinary workflow token is insufficient. Main remains unprotected with
+   no rulesets. Any future settings change remains a separate exact-target act.
 
 The final exact local Bun 1.3.14 gate passed contract 13/13, 16/16 type-test
 files, 160/160 unit tests, 46/46 Apple package tests, the built consumer,
@@ -427,6 +452,28 @@ Apple distribution.
   `{ access: "public", provenance: true }`; reject every additional key,
   especially registry-scoped auth. Never add login, manual publication,
   dist-tag repair, repack, retry fallback, or automatic package installation.
+- The generated contract owns the complete external signer authority: exact
+  Node runtime; package/version/integrity and audited executed-source closure;
+  GitHub OIDC audience, host/path/query, request-token and request-URL bounds;
+  exact Fulcio/Rekor origins, paths, methods, success statuses (200/201), response bounds, JSON depth, TLS
+  roots/minimum, and zero redirects/retries. The signer imports only the pinned
+  `@sigstore/sign` internal DSSE primitive and uses repository-owned raw HTTPS
+  Fulcio/Rekor clients. It rejects duplicate response headers, partial or
+  length-ambiguous bodies, compression, redirects, duplicate JSON keys at every
+  nesting level, endpoint-origin escape, and ambient Node/Actions/proxy/CA
+  authority without retaining token-bearing errors.
+- Each same-repository external producer is an `observe` -> `sign` -> `upload`
+  hard cut. While external evidence is blocked, workflow-level and all three
+  job permissions are empty, `observe` and `sign` are one-step inline STOPs
+  with no third-party actions, and `upload` has no OIDC authority and can
+  transport only bounded canonical signed-byte outputs under a fixed
+  role/source-derived artifact name. A supported activation must first qualify
+  exact Node 24.14.1 plus audited repository source closures for both the
+  credentialed observer and isolated signer, with no third-party action in
+  either authority TCB; then grant only `contents: read` to `observe` and only
+  `id-token: write` to `sign`, atomically with all contract-pinned producer
+  identities. No test, dispatch input, runtime flag, permission-only edit, or
+  identity-only edit may activate an intermediate state.
 - Never store or print signing certificates, certificate passwords, Notary
   API-key material, keychain-profile coordinates, OIDC tokens, cookies, or npm
   credentials.
@@ -451,7 +498,7 @@ Apple distribution.
 | Repository secret names | gh api repos/mannyc2/effect-build/actions/secrets | names and timestamps only; never values |
 | Runners | gh api repos/mannyc2/effect-build/actions/runners | authenticated inventory |
 | npm state | npm view NAME versions dist-tags --json --registry https://registry.npmjs.org | parseable registry state |
-| npm trust | npm trust list NAME --json --registry https://registry.npmjs.org | one authenticated exact publisher record |
+| npm authority observation | node scripts/release/audit-release-authority.mjs --collect --source-sha R | repository collector immediately reauthenticates the entire pinned realpath npm 11.19.1 source closure before every authority call; no direct npm-cli invocation; local feasibility only until the isolated observer is qualified |
 
 Run the project-instruction `pnpm verify` handoff check once and record its
 expected package-manager rejection. This repository intentionally declares Bun
@@ -483,11 +530,14 @@ expected package-manager rejection. This repository intentionally declares Bun
 - .github/workflows/release.yml
 - .github/workflows/release-certification.yml
 - .github/workflows/release-evidence-ingress.yml
+- .github/workflows/npm-authority.yml
+- .github/workflows/github-release-governance.yml
 - .github/workflows/release-readiness.yml
 - .github/workflows/release-verification.yml
 - .github/workflows/apple-certification.yml
-- package.json and bun.lock, limited to the exact offline Sigstore verifier
-  dependencies and exact TUF acquisition-provenance replay clients
+- package.json and bun.lock, limited to the exact offline Sigstore verifier,
+  pinned internal-DSSE signer, npm 11.19.1 authority-observation client, and
+  exact TUF acquisition-provenance replay clients
 - scripts/release/
 - scripts/apple-certification/
 - scripts/test-built-consumer.mjs, limited to sealed credential-free npm and
@@ -512,6 +562,8 @@ expected package-manager rejection. This repository intentionally declares Bun
 - test/architecture/release-verification-workflow.test.ts
 - test/architecture/final-public-verification.test.ts
 - test/architecture/sigstore-dsse-verifier.test.ts
+- test/architecture/external-evidence-producer.test.ts
+- test/architecture/external-evidence-producer-workflows.test.ts
 - test/architecture/sigstore-tuf-provenance.test.ts
 - test/architecture/tar-protocol.test.ts
 - test/architecture/zip-protocol.test.ts
@@ -676,7 +728,8 @@ secret values.
 1. **npm trust inventory**: authenticatedly inspect the Trusted Publisher and
    Publishing access settings for each of the eleven admitted packages. Record
    package, repository, workflow filename, environment, permission, observation
-   time, and observer. Use `npm trust list --json` for the relationship fields;
+   time, and observer. Have the audited repository collector execute the pinned
+   npm 11.19.1 `trust list --json` authority operation for the relationship fields;
    if allowed action is not projected there, observe it through npm's
    authenticated package settings/raw trust response rather than inventing a
    field. Separately record the exact GitHub npm-environment reviewer and
@@ -1249,8 +1302,10 @@ Create a read-only workflow or script that:
 4. independently re-observes npm public versions, tags, placeholder bytes,
    npm environment metadata, deployment branch policy, remote main, workflow
    blob, repository OIDC subject policy, and package repository URLs; consumes
-   the private trusted-publisher/permission and no-legacy-auth inventory only
-   through freshness-limited external receipts whose Sigstore/DSSE envelope,
+   the private trusted-publisher/permission, exact empty `mannyc1` token
+   inventory, exact twelve-package sole-maintainer projection, and exact
+   twelve-package disallow-token publishing-access policy only through
+   freshness-limited external receipts whose Sigstore/DSSE envelope,
    exact producer workflow identity, source SHA, receipt digest, observation
    time, and expiration are verified against the contract;
 5. admits each of the three external roles only through a compact,
@@ -1366,6 +1421,12 @@ Exact-main success here proves only the inert implementation.
    model. It must pin the three role-specific Fulcio certificate identities,
    workflows, repositories, refs, and source bindings; change authentication
    to `supported` with artifact production required on terminal success;
+   preserve the exact three-job topology and current-main dispatch identity;
+   qualify the exact no-third-party observer and signer bootstraps; grant
+   `contents: read` only to each `observe` job and `id-token: write` only to each
+   dedicated `sign` job; keep every `upload` job OIDC-free; and make those
+   changes atomic with all identities. No blocked intermediate commit may carry
+   OIDC permission or claim a qualified bootstrap;
    change exact protected-body certification to its supported
    readiness-admissible state; change Apple hosted execution to its supported
    required-artifact state with the exact qualified journal, reusable-workflow,
@@ -1609,6 +1670,19 @@ worktree remain clean.
 - Test the Sigstore/DSSE verifier against canonical v0.3 bundles, exact payload
   and certificate/OID bindings, malformed and noncanonical encodings, trust
   thresholds, and the real two-argument Sigstore verification API boundary.
+- Test the generated signer independently: every repository Node launch is
+  `env -i`; blocked workflows have no OIDC permission; arbitrary dispatch SHAs
+  cannot execute repository code; request tokens/URLs and responses are bounded;
+  Fulcio/Rekor never redirect or retry; TLS uses bundled roots, exact SNI, and
+  no agent; duplicate/encoded/partial/truncated bodies and duplicate JSON keys
+  at every nesting level fail; and `//host` endpoint mutation sends zero bytes.
+- Test npm authority with the separately pinned npm 11.19.1 package integrity,
+  manifest, trust-list/token-list sources, and explicit npmjs registry argv.
+  Require exact `mannyc1`, exact empty token inventory, exact sole-maintainer and
+  disallow-token publishing-access projections for all twelve authority
+  packages, plus observation-credential destruction before signing. Peer users,
+  ambient registry config, additional maintainers, any token entry, missing
+  package policy, or deletion of a GitHub secret alone must remain blocked.
 - Test retained Sigstore TUF provenance against seed/root signature rotation,
   timestamp/snapshot/targets signatures and hash/length/version links, active
   rotated-root/timestamp/snapshot/targets acquisition-time expiry, exact target
@@ -1751,15 +1825,18 @@ No release-point or publication receipt exists yet.
   separate run. Local native Apple acceptance passed 4/4. This is local
   qualification of uncommitted bytes, not hosted certification, a release
   point, or publication evidence.
-- Current nonsecret authority audit: BLOCKED at
+- Historical pre-hard-cut nonsecret authority audit: BLOCKED at
   2026-09-01T00:40:01.724Z for source
-  dd39bd6104645d79fa52f40d0bbf291b5bf8f3dc. The exact 44 checks report 20
+  dd39bd6104645d79fa52f40d0bbf291b5bf8f3dc. Its former 44 checks reported 20
   match, one mismatch, and 23 unobserved: the repository `NPM_TOKEN` name is the
   mismatch; npm authentication returned E401; and all eleven trusted-publisher
   plus allowed-action records remain unobserved. GitHub environment, branch
   policy, OIDC policy, no environment secrets/variables, and all public package
   repository URLs matched. The token identity/revocation and authenticated npm
-  inventory remain unresolved.
+  inventory remain unresolved. This receipt shape is now superseded and cannot
+  satisfy the current 57-check protocol, which additionally requires exact
+  `mannyc1` empty-token/sole-maintainer evidence plus twelve disallow-token
+  publishing-access observations under the pinned authority-only client.
 - Apple execution backend: PARTIALLY-RESOLVED; Bun 1.3.14 is the canonical
   App/DMG/PKG lineage and Deno 2.9.5 remains signed-App-only; the exact ad-hoc
   rejection fixtures are frozen; and Plan 046 passes local fake 30/30 plus
@@ -1772,8 +1849,9 @@ No release-point or publication receipt exists yet.
   journal from exact ts-release main, but the downstream implementation,
   dedicated bucket/Object-Lock/IAM/OIDC authority, released owner version, and
   cross-process qualification do not exist
-- GitHub Release governance: OBSERVED-DISABLED; enablement or an explicit
-  non-immutable decision remains separately authorized
+- GitHub Release governance: OBSERVED-ENABLED / EXTERNAL READ BLOCKED;
+  immutability is enabled and not owner-enforced, but a supported ephemeral
+  Administration-read producer observation does not yet exist
 - Candidate run/attempt/artifact ID/digest: DECISION-PENDING
 - Fake-registry local qualification run: NOT-HOSTED; any future artifact uses
   effect-build/fake-registry-local-qualification@1 and is not readiness-admissible

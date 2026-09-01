@@ -33,19 +33,19 @@
       },
       {
         "path": "scripts/effect-build-contract/policy.mjs",
-        "sha256": "0f63dfb7798ecddd1d71540398f166b811326be30f7636e0ac009832f5f36370"
+        "sha256": "cdb9ed8f5026926ad17b70fc8c8d08681a0de45a749ceb18deba130e39076a71"
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "c26a039f9e17eb253738914fdedc1984f5580208c6e6106dbc17c935b5e82226"
+        "sha256": "72d6a92165edff496c8213afcd8a7e9f1f8569c6108d279482bcf06e76be4054"
       },
       {
         "path": "package.json",
-        "sha256": "820d47ab067d3753fe2c026e10739c2796985876604a40f03297eb7c4f2c67a4"
+        "sha256": "9d6794d7f5d476b36baf9ccf7b48fd3412c13ae37588d083653b95f4568fac68"
       },
       {
         "path": "bun.lock",
-        "sha256": "7eb02413dd8b8d61d638093fac7bf7e897cadbee34f0f17024cd860cc85ec20a"
+        "sha256": "c0a4eddcfd3d12408176a694cd66ef834f272ccb69da260252f13ed0f61455b5"
       },
       {
         "path": "scripts/release/zip-protocol.mjs",
@@ -4763,10 +4763,114 @@
       "evidence": "never-release-evidence"
     },
     "npmAuthorityObservation": {
+      "client": {
+        "node": "24.14.1",
+        "npm": "11.19.1",
+        "package": "npm",
+        "installationPackage": "npm-authority-client",
+        "integrity": "sha512-ztsxKxt/kkIaAs+2i0GU6I+DRmUdrNasxTZKJe9TCdSjKxlhah/4r/hl5ygMD6XAg1qZ9c2TNomR4qgOydp10g==",
+        "manifestDigest": "sha256:f6478d5600180a23f73e4217610c7709a71cedb4ae13f6c3e15ecb457f5d4fd6",
+        "minimumSupportedTrustVersion": "11.15.0",
+        "purpose": "authenticated-authority-observation-only",
+        "publishCertificationClientSource": "releaseCertification.npmOidcCertification.client",
+        "status": "pinned-source-audited-observation-credential-unprovisioned",
+        "sourceClosure": {
+          "algorithm": "sha256-canonical-json-entry-type-path-bytes-file-sha256-v1",
+          "scope": "entire-realpath-package-tree-no-links-or-nonregular-entries",
+          "entrySource": "bin/npm-cli.js",
+          "fileCount": 1943,
+          "directoryCount": 459,
+          "bytes": 12223891,
+          "digest": "sha256:e7510fbaa85940db552118f424a7792bc059877abcc6b4528bd9c0d7abc51444"
+        },
+        "auditedSources": [
+          {
+            "path": "bin/npm-cli.js",
+            "digest": "sha256:8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7"
+          },
+          {
+            "path": "lib/cli.js",
+            "digest": "sha256:67666f06479f9b0bbc01412c198caadd4287d34d5ed74a02871ea78f186451e7"
+          },
+          {
+            "path": "lib/cli/entry.js",
+            "digest": "sha256:667a44c1fa8795fdbba8ad843736ca7f8f24e64511985e9a7060b002123560c6"
+          },
+          {
+            "path": "lib/commands/whoami.js",
+            "digest": "sha256:d76223c1a10cbc0fae7092c77fc2e7fbde74b8f0ed258ffafbc53b4f807e4656"
+          },
+          {
+            "path": "lib/commands/view.js",
+            "digest": "sha256:59b26d2c2f06875e3df2aeb8f780fd62220c12618775ccaff8bdf88a390baf8c"
+          },
+          {
+            "path": "lib/commands/trust/list.js",
+            "digest": "sha256:1999714d799cc5b53198cb406a598dab8a67bbbea6f860f74ecf73a091434f76"
+          },
+          {
+            "path": "lib/commands/token.js",
+            "digest": "sha256:03363ca40e6b0ec7997686187f94b3b7260e0d00f205e3f7296b3974bc4cb643"
+          }
+        ]
+      },
       "rawAllowedActionProjection": [
         "createPackage"
       ],
-      "semantics": "authenticated-npm-settings-raw-projection-not-trustedPublisher.permission"
+      "semantics": "authenticated-npm-settings-raw-projection-not-trustedPublisher.permission",
+      "legacyTokenAuthority": {
+        "checkId": "npm.legacyTokenAuthority",
+        "command": [
+          "token",
+          "list",
+          "--json"
+        ],
+        "registrySource": "npmRegistryBoundary.registry",
+        "authenticatedAccount": "mannyc1",
+        "authorityPackageSource": "publicApiProjection.packages-plus-npmRegistryBoundary.reservation.packages",
+        "maintainerCommand": [
+          "view",
+          "<package>",
+          "maintainers",
+          "--json"
+        ],
+        "maintainerTarget": "exact-sole-maintainer-equals-authenticated-account",
+        "target": "zero-active-npm-access-tokens-after-legacy-token-remediation",
+        "unknownTokenTypeOrScope": "blocking",
+        "sanitizedProjectionFields": [
+          "activeTokenCount",
+          "activeLegacyWriteCapableTokenCount",
+          "unknownTokenCount",
+          "metadataDigest"
+        ],
+        "retainedCredentialMetadata": "none",
+        "observationCredential": {
+          "authority": "ephemeral-non-token-session-for-mannyc1",
+          "accountEntitlement": "write-permission-required-by-npm-trust-api",
+          "operations": "read-only-observation-only",
+          "persistence": "forbidden",
+          "destruction": "required-before-sigstore-oidc-signing",
+          "currentStatus": "unprovisioned-stop",
+          "supportedProof": {
+            "authority": "ephemeral-non-token-session-for-mannyc1",
+            "accountEntitlement": "write-permission-required-by-npm-trust-api",
+            "operations": "read-only-observation-only",
+            "persistence": "none",
+            "destruction": "completed-before-sigstore-oidc-signing"
+          }
+        }
+      },
+      "publishingAccess": {
+        "checkIdPrefix": "npm.publishingAccess.",
+        "packageSource": "publicApiProjection.packages-plus-npmRegistryBoundary.reservation.packages",
+        "target": "require-two-factor-authentication-and-disallow-tokens",
+        "observationMechanism": {
+          "status": "unprovisioned-stop",
+          "authority": "authenticated-npm-account-with-write-permission-and-two-factor-authentication",
+          "interface": "supported-authenticated-npm-web-or-registry-observation-required",
+          "endpoint": "unqualified-and-forbidden-to-invent"
+        }
+      }
     },
     "readiness": {
       "protocol": "effect-build/release-readiness@1",
@@ -4816,7 +4920,7 @@
       "externalEvidenceAuthentication": {
         "status": "blocked",
         "artifactDisposition": "forbidden-while-blocked",
-        "blocker": "contract-pinned-external-producer-identities-and-provisioned-signers-not-established",
+        "blocker": "contract-pinned-external-producer-identities-and-isolated-observer-signer-bootstraps-not-established",
         "requiredEnvelope": "sigstore-bundle-v0.3-dsse",
         "requiredBindings": [
           "producer-workflow-identity",
@@ -4827,6 +4931,157 @@
           "observed-at",
           "expiration"
         ],
+        "signer": {
+          "status": "implemented-inert-until-supported-activation",
+          "module": "scripts/release/sigstore-dsse-signer.mjs",
+          "runtime": {
+            "executable": "node",
+            "version": "24.14.1"
+          },
+          "dependency": {
+            "package": "@sigstore/sign",
+            "version": "4.1.0",
+            "integrity": "sha512-Vx1RmLxLGnSUqx/o5/VsCjkuN5L7y+vxEEwawvc7u+6WtX2W4GNa7b9HEjmcRWohw/d6BpATXmvOwc78m+Swdg==",
+            "manifestDigest": "sha256:7569ddc806232af82073f23aa9de2bd35c855ef53337216d0c3feea167ffce16",
+            "entrySource": "dist/bundler/dsse.js",
+            "executedSources": [
+              {
+                "path": "dist/bundler/dsse.js",
+                "digest": "sha256:4ffc3e40584b34893c1b96ec37270171edc38e492db15a25720749563c7ce500"
+              },
+              {
+                "path": "dist/bundler/base.js",
+                "digest": "sha256:c2d445b7dddebc3ff37be7cb297f872b437f878a764f4e15624275a555230e17"
+              },
+              {
+                "path": "dist/bundler/bundle.js",
+                "digest": "sha256:f28d4157ed51790e359b9d08ccbb6be6f50ba65cde3f3a58f588a3cd9c1fa4f3"
+              },
+              {
+                "path": "dist/util/index.js",
+                "digest": "sha256:f8a7b21c599d9d2c9655ea48d47ad692afe8913beb10761f62e301de7c1dfee7"
+              },
+              {
+                "path": "dist/util/oidc.js",
+                "digest": "sha256:b52ae97a8d080e4640c424bef506199a8cd883b2b6815af9ce47cd575d313569"
+              },
+              {
+                "path": "dist/util/ua.js",
+                "digest": "sha256:e4418fdf916be56ec105a8a90e13875e78cb4d23e8db38ec31b0e4b96e34c941"
+              }
+            ],
+            "executedDependencyClosure": [
+              {
+                "package": "@sigstore/sign",
+                "version": "4.1.0",
+                "integrity": "sha512-Vx1RmLxLGnSUqx/o5/VsCjkuN5L7y+vxEEwawvc7u+6WtX2W4GNa7b9HEjmcRWohw/d6BpATXmvOwc78m+Swdg=="
+              },
+              {
+                "package": "@sigstore/bundle",
+                "version": "4.0.0",
+                "integrity": "sha512-NwCl5Y0V6Di0NexvkTqdoVfmjTaQwoLM236r89KEojGmq/jMls8S+zb7yOwAPdXvbwfKDlP+lmXgAL4vKSQT+A=="
+              },
+              {
+                "package": "@sigstore/core",
+                "version": "3.2.1",
+                "integrity": "sha512-qRsxPnCrbC/puegGxKuynfnxgLiHqWStrSjxkoB4YKqq3Z3s4cyZyj42ZdWFAEblNP65C+rBH8EuREHIXoi83g=="
+              },
+              {
+                "package": "@sigstore/protobuf-specs",
+                "version": "0.5.2",
+                "integrity": "sha512-SQqvFMt4V78fdjcDdYX6HbiVSOR4QK3ZgwCa2KOsopAgPIHy1rU5UDUmzLl02r5oyyaYcYHR1hpwDRk/yUe+Mw=="
+              }
+            ]
+          },
+          "activation": {
+            "statusSource": "releaseCertification.readiness.externalEvidenceAuthentication.status",
+            "producerIdentitySource": "releaseCertification.readiness.externalEvidenceAuthentication.producerIdentities",
+            "topology": "observe-sign-upload-three-job-hard-cut",
+            "workflowPermissions": {},
+            "observerJob": "observe",
+            "signerJob": "sign",
+            "uploadJob": "upload",
+            "permissions": {
+              "observer": {},
+              "signer": {},
+              "upload": {}
+            },
+            "observerCredentialedThirdPartyActions": "forbidden",
+            "signerThirdPartyActions": "forbidden",
+            "handoff": {
+              "observerToSigner": [
+                "observed-at",
+                "receipt-base64"
+              ],
+              "signerToUpload": [
+                "bundle-base64",
+                "reference-base64"
+              ],
+              "transport": "canonical-bounded-nonsecret-job-outputs-only",
+              "artifactName": "fixed-role-and-validated-source-sha",
+              "maximumReferenceBytes": 4096,
+              "maximumBundleBytes": 32768
+            },
+            "hostedBootstrap": {
+              "status": "unqualified-stop",
+              "observer": "exact-node-24.14.1-and-audited-observer-source-closure-with-no-third-party-actions",
+              "signer": "exact-node-24.14.1-and-audited-signer-source-closure-with-no-third-party-actions"
+            },
+            "atomicity": "both-hosted-bootstraps-signer-job-permission-and-all-contract-pinned-producer-identities-activate-together"
+          },
+          "oidc": {
+            "audience": "sigstore",
+            "request": {
+              "method": "GET",
+              "hostPattern": "^pipelines[a-z0-9-]*\\.actions\\.githubusercontent\\.com$",
+              "pathPattern": "^/[A-Za-z0-9_-]{20,}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/_apis/distributedtask/hubs/[A-Za-z]+/plans/[A-Za-z0-9_-]{20,}/jobs/[A-Za-z0-9_-]{20,}/idtoken$",
+              "initialQuery": "api-version=2.0",
+              "audienceName": "audience",
+              "redirects": 0,
+              "retries": 0,
+              "successStatus": 200,
+              "responseContentType": "application/json",
+              "responseContentEncoding": "forbidden",
+              "maximumRequestTokenBytes": 16384,
+              "maximumRequestUrlBytes": 4096,
+              "maximumResponseBytes": 16384,
+              "requestInactivityTimeoutMilliseconds": 20000,
+              "sequenceTotalTimeoutMilliseconds": 20000
+            }
+          },
+          "transport": {
+            "tlsRootPolicy": "node-bundled-root-certificates-only",
+            "minimumTlsVersion": "TLSv1.2",
+            "agent": "disabled",
+            "redirects": 0,
+            "retries": 0,
+            "responseContentType": "application/json",
+            "responseContentEncoding": "forbidden",
+            "duplicateResponseHeaders": "forbidden",
+            "responseFraming": "exactly-one-content-length-or-chunked-transfer-encoding",
+            "partialResponses": "forbidden",
+            "maximumJsonDepth": 64,
+            "requestInactivityTimeoutMilliseconds": 20000,
+            "sequenceTotalTimeoutMilliseconds": 20000,
+            "fulcio": {
+              "origin": "https://fulcio.sigstore.dev",
+              "path": "/api/v2/signingCert",
+              "method": "POST",
+              "successStatus": 200,
+              "maximumRequestBytes": 32768,
+              "maximumResponseBytes": 32768
+            },
+            "rekor": {
+              "origin": "https://rekor.sigstore.dev",
+              "path": "/api/v2/log/entries",
+              "method": "POST",
+              "successStatus": 201,
+              "maximumRequestBytes": 65536,
+              "maximumResponseBytes": 65536,
+              "publicKeyDetails": "PKIX_ECDSA_P256_SHA_256"
+            }
+          }
+        },
         "verifier": {
           "status": "implemented",
           "module": "scripts/release/sigstore-dsse-verifier.mjs",
@@ -5243,6 +5498,19 @@
             "github.oidc",
             "npm.client",
             "npm.authentication",
+            "npm.legacyTokenAuthority",
+            "npm.publishingAccess.effect-build",
+            "npm.publishingAccess.effect-build-apple",
+            "npm.publishingAccess.effect-build-archives",
+            "npm.publishingAccess.effect-build-bun",
+            "npm.publishingAccess.effect-build-deno",
+            "npm.publishingAccess.effect-build-esbuild",
+            "npm.publishingAccess.effect-build-nfpm",
+            "npm.publishingAccess.effect-build-node-sea",
+            "npm.publishingAccess.effect-build-python",
+            "npm.publishingAccess.effect-build-rolldown",
+            "npm.publishingAccess.effect-build-sbom",
+            "npm.publishingAccess.effect-build-windows",
             "npm.trust.projection",
             "npm.trust.effect-build",
             "npm.trust.effect-build-apple",
@@ -5292,6 +5560,7 @@
             "ownerRepository",
             "ownerVersion",
             "ownerSourceSha",
+            "runtime",
             "candidateSourceSha",
             "appleCodecId",
             "awsAccountId",
@@ -5308,6 +5577,10 @@
             "backendAuthentication"
           ],
           "ownerRepository": "mannyc2/ts-release",
+          "runtime": {
+            "executable": "node",
+            "version": "22.22.2"
+          },
           "claims": [
             "one-s3-backend-no-fallback",
             "ten-year-compliance-object-lock",
@@ -5442,7 +5715,7 @@
         {
           "role": "npm-authority",
           "type": "externalObservation",
-          "protocol": "effect-build/release-authority-audit@2",
+          "protocol": "effect-build/release-authority-audit@4",
           "terminal": "supported",
           "maximumAgeSeconds": 3600,
           "maximumValiditySeconds": 14400
@@ -6412,7 +6685,7 @@
             },
             {
               "path": "test/fixtures/release/make-supported-contract.mjs",
-              "sha256": "f73e151939c486cfe70bd09cfa26ef054b18b52a0fc647f85cb19f69b43eab28"
+              "sha256": "cfbfb7db4624d20f0d5f31e6864d0fc846218f0cde06a4164833ee2c8df32bc9"
             },
             {
               "path": "test/fixtures/release/github-artifact-zip.mjs",

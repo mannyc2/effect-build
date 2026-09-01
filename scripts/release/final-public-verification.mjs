@@ -35,6 +35,38 @@ const exactKeys = (value, expected, label) => {
   return value;
 };
 
+const expectedExternalSignerActivation = (state) => ({
+  statusSource: "releaseCertification.readiness.externalEvidenceAuthentication.status",
+  producerIdentitySource: "releaseCertification.readiness.externalEvidenceAuthentication.producerIdentities",
+  topology: "observe-sign-upload-three-job-hard-cut",
+  workflowPermissions: {},
+  observerJob: "observe",
+  signerJob: "sign",
+  uploadJob: "upload",
+  permissions: {
+    observer: state === "supported" ? { contents: "read" } : {},
+    signer: state === "supported" ? { "id-token": "write" } : {},
+    upload: {},
+  },
+  observerCredentialedThirdPartyActions: "forbidden",
+  signerThirdPartyActions: "forbidden",
+  handoff: {
+    observerToSigner: ["observed-at", "receipt-base64"],
+    signerToUpload: ["bundle-base64", "reference-base64"],
+    transport: "canonical-bounded-nonsecret-job-outputs-only",
+    artifactName: "fixed-role-and-validated-source-sha",
+    maximumReferenceBytes: 4096,
+    maximumBundleBytes: 32768,
+  },
+  hostedBootstrap: {
+    status: state === "supported" ? "qualified" : "unqualified-stop",
+    observer: "exact-node-24.14.1-and-audited-observer-source-closure-with-no-third-party-actions",
+    signer: "exact-node-24.14.1-and-audited-signer-source-closure-with-no-third-party-actions",
+  },
+  atomicity:
+    "both-hosted-bootstraps-signer-job-permission-and-all-contract-pinned-producer-identities-activate-together",
+});
+
 const bytes = (value, label) => {
   if (!(value instanceof Uint8Array) || value.byteLength === 0) throw new Error(`${label} is empty`);
   return Buffer.from(value);
@@ -109,6 +141,7 @@ export const assertFinalPublicVerificationAllowed = (contract) => {
       "blocker",
       "requiredEnvelope",
       "requiredBindings",
+      "signer",
       "verifier",
       "producerIdentityFields",
       "sourceBinding",
@@ -123,6 +156,8 @@ export const assertFinalPublicVerificationAllowed = (contract) => {
     && authentication.status === "blocked"
     && authentication.artifactDisposition === "forbidden-while-blocked"
     && authentication.requiredEnvelope === "sigstore-bundle-v0.3-dsse"
+    && authentication.signer?.status === "implemented-inert-until-supported-activation"
+    && isDeepStrictEqual(authentication.signer?.activation, expectedExternalSignerActivation("blocked"))
     && authentication.verifier?.status === "implemented"
     && authentication.verifier?.module === "scripts/release/sigstore-dsse-verifier.mjs"
     && Array.isArray(authentication.producerIdentityFields)
@@ -137,6 +172,8 @@ export const assertFinalPublicVerificationAllowed = (contract) => {
     && policy.artifactDisposition === "allowed"
     && authentication.status === "supported"
     && authentication.artifactDisposition === "required-on-terminal-workflow-success"
+    && authentication.signer?.status === "implemented-inert-until-supported-activation"
+    && isDeepStrictEqual(authentication.signer?.activation, expectedExternalSignerActivation("supported"))
     && authentication.verifier?.status === "implemented"
     && authentication.producerIdentities.length === externalRoles.length
     && externalRoles.every((role) =>

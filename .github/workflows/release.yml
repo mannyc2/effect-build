@@ -1337,8 +1337,21 @@ jobs:
                 canonicalAuthentication?.status !== "blocked"
                 || canonicalAuthentication.artifactDisposition !== "forbidden-while-blocked"
                 || !isDeepStrictEqual(canonicalAuthentication.producerIdentities, [])
+                || !isDeepStrictEqual(canonicalAuthentication.signer?.activation?.permissions, {
+                  observer: {},
+                  signer: {},
+                  upload: {},
+                })
+                || canonicalAuthentication.signer?.activation?.hostedBootstrap?.status
+                  !== "unqualified-stop"
                 || projectedAuthentication.artifactDisposition
                   !== "required-on-terminal-workflow-success"
+                || !isDeepStrictEqual(projectedAuthentication.signer?.activation?.permissions, {
+                  observer: { contents: "read" },
+                  signer: { "id-token": "write" },
+                  upload: {},
+                })
+                || projectedAuthentication.signer?.activation?.hostedBootstrap?.status !== "qualified"
                 || !Array.isArray(externalRoles)
                 || !isDeepStrictEqual(externalRoles, [
                   "npm-authority",
@@ -1359,10 +1372,11 @@ jobs:
                 const workflowPath = external
                   ? ".github/workflows/operational-journal.yml"
                   : `.github/workflows/${role}.yml`;
-                const workflow = `${repository}/${workflowPath}@${branchRef}`;
                 const sourceBinding = external
                   ? identity.sourceBinding
                   : { kind: projectedAuthentication.sourceBinding.releaseSourceKind };
+                const workflowRef = external ? sourceBinding?.sourceSha : branchRef;
+                const workflow = `${repository}/${workflowPath}@${workflowRef}`;
                 if (
                   !isDeepStrictEqual(Object.keys(identity), identityFields)
                   || identity.certificateIssuer !== projectedAuthentication.verifier.certificateIssuer
@@ -1396,6 +1410,11 @@ jobs:
               projectedAuthentication.status = canonicalAuthentication.status;
               projectedAuthentication.artifactDisposition = canonicalAuthentication.artifactDisposition;
               projectedAuthentication.producerIdentities = structuredClone(canonicalAuthentication.producerIdentities);
+              projectedAuthentication.signer.activation.permissions = structuredClone(
+                canonicalAuthentication.signer.activation.permissions,
+              );
+              projectedAuthentication.signer.activation.hostedBootstrap.status =
+                canonicalAuthentication.signer.activation.hostedBootstrap.status;
               projectedExactCertification.status = canonicalExactCertification.status;
               projectedExactCertification.artifactDisposition = canonicalExactCertification.artifactDisposition;
               projectedFinalVerification.status = canonicalFinalVerification.status;
@@ -1582,7 +1601,7 @@ jobs:
                 && authentication?.status === "blocked"
                 && authentication?.artifactDisposition === "forbidden-while-blocked"
                 && authentication?.blocker
-                  === "contract-pinned-external-producer-identities-and-provisioned-signers-not-established"
+                  === "contract-pinned-external-producer-identities-and-isolated-observer-signer-bootstraps-not-established"
                 && authentication?.requiredEnvelope === "sigstore-bundle-v0.3-dsse"
                 && authentication?.verifier?.status === "implemented"
                 && authentication?.verifier?.module === "scripts/release/sigstore-dsse-verifier.mjs"

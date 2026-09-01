@@ -399,13 +399,18 @@ export const validateProducerIdentityPolicy = ({ authentication, identity, role,
     || value.certificateIdentityURI !== `https://github.com/${value.workflow}`
     || !value.workflow.startsWith(`${value.repository}/.github/workflows/`)
     || value.ref !== "refs/heads/main"
-    || !value.workflow.endsWith(`@${value.ref}`)
   ) throw new Error(`Sigstore ${role} producer identity is not exact`);
   if (value.sourceBinding?.kind === bindingPolicy.releaseSourceKind) {
     exactKeys(value.sourceBinding, bindingPolicy.releaseSourceFields, `Sigstore ${role} release source binding`);
+    if (!value.workflow.endsWith(`@${value.ref}`)) {
+      throw new Error(`Sigstore ${role} release-source workflow ref is not exact`);
+    }
   } else if (value.sourceBinding?.kind === bindingPolicy.exactSourceKind) {
     exactKeys(value.sourceBinding, bindingPolicy.exactSourceFields, `Sigstore ${role} exact source binding`);
     fullSha(value.sourceBinding.sourceSha, `Sigstore ${role} exact producer source SHA`);
+    if (!value.workflow.endsWith(`@${value.sourceBinding.sourceSha}`)) {
+      throw new Error(`Sigstore ${role} exact-source workflow ref is not immutable`);
+    }
   } else {
     throw new Error(`Sigstore ${role} has no contract-pinned producer source binding`);
   }

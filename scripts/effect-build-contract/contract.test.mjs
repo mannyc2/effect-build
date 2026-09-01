@@ -339,6 +339,10 @@ test("keeps npm namespace bootstrap separate from architectural release admissio
 test("freezes one exact release-certification policy without copying public package or module sets", () => {
   const release = contract.releaseCertification;
   const publicPackageNames = Object.keys(contract.publicApiProjection.packages).sort();
+  const authorityPackageNames = [
+    ...publicPackageNames,
+    ...contract.npmRegistryBoundary.reservation.packages,
+  ].sort();
   const expectedAuthorityCheckIds = [
     "github.repository.secrets",
     "github.repository.variables",
@@ -349,6 +353,8 @@ test("freezes one exact release-certification policy without copying public pack
     "github.oidc",
     "npm.client",
     "npm.authentication",
+    "npm.legacyTokenAuthority",
+    ...authorityPackageNames.map((name) => `npm.publishingAccess.${name}`),
     "npm.trust.projection",
     ...publicPackageNames.map((name) => `npm.trust.${name}`),
     ...publicPackageNames.map((name) => `npm.allowedAction.${name}`),
@@ -435,6 +441,33 @@ test("freezes one exact release-certification policy without copying public pack
     },
     workflow: "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main",
   });
+  assert.deepEqual(release.readiness.externalEvidenceAuthentication.signer.activation, {
+    statusSource: "releaseCertification.readiness.externalEvidenceAuthentication.status",
+    producerIdentitySource: "releaseCertification.readiness.externalEvidenceAuthentication.producerIdentities",
+    topology: "observe-sign-upload-three-job-hard-cut",
+    workflowPermissions: {},
+    observerJob: "observe",
+    signerJob: "sign",
+    uploadJob: "upload",
+    permissions: { observer: {}, signer: {}, upload: {} },
+    observerCredentialedThirdPartyActions: "forbidden",
+    signerThirdPartyActions: "forbidden",
+    handoff: {
+      observerToSigner: ["observed-at", "receipt-base64"],
+      signerToUpload: ["bundle-base64", "reference-base64"],
+      transport: "canonical-bounded-nonsecret-job-outputs-only",
+      artifactName: "fixed-role-and-validated-source-sha",
+      maximumReferenceBytes: 4096,
+      maximumBundleBytes: 32768,
+    },
+    hostedBootstrap: {
+      status: "unqualified-stop",
+      observer: "exact-node-24.14.1-and-audited-observer-source-closure-with-no-third-party-actions",
+      signer: "exact-node-24.14.1-and-audited-signer-source-closure-with-no-third-party-actions",
+    },
+    atomicity:
+      "both-hosted-bootstraps-signer-job-permission-and-all-contract-pinned-producer-identities-activate-together",
+  });
   assert.deepEqual(release.readiness, {
     protocol: "effect-build/release-readiness@1",
     bundleProtocol: "effect-build/release-readiness-evidence-bundle@1",
@@ -476,7 +509,8 @@ test("freezes one exact release-certification policy without copying public pack
     externalEvidenceAuthentication: {
       status: "blocked",
       artifactDisposition: "forbidden-while-blocked",
-      blocker: "contract-pinned-external-producer-identities-and-provisioned-signers-not-established",
+      blocker:
+        "contract-pinned-external-producer-identities-and-isolated-observer-signer-bootstraps-not-established",
       requiredEnvelope: "sigstore-bundle-v0.3-dsse",
       requiredBindings: [
         "producer-workflow-identity",
@@ -487,6 +521,7 @@ test("freezes one exact release-certification policy without copying public pack
         "observed-at",
         "expiration",
       ],
+      signer: release.readiness.externalEvidenceAuthentication.signer,
       verifier: {
         status: "implemented",
         module: "scripts/release/sigstore-dsse-verifier.mjs",
@@ -796,6 +831,7 @@ test("freezes one exact release-certification policy without copying public pack
           "ownerRepository",
           "ownerVersion",
           "ownerSourceSha",
+          "runtime",
           "candidateSourceSha",
           "appleCodecId",
           "awsAccountId",
@@ -812,6 +848,7 @@ test("freezes one exact release-certification policy without copying public pack
           "backendAuthentication",
         ],
         ownerRepository: "mannyc2/ts-release",
+        runtime: { executable: "node", version: "22.22.2" },
         claims: [
           "one-s3-backend-no-fallback",
           "ten-year-compliance-object-lock",
@@ -933,7 +970,7 @@ test("freezes one exact release-certification policy without copying public pack
       {
         role: "npm-authority",
         type: "externalObservation",
-        protocol: "effect-build/release-authority-audit@2",
+        protocol: "effect-build/release-authority-audit@4",
         terminal: "supported",
         maximumAgeSeconds: 3600,
         maximumValiditySeconds: 14400,
@@ -1302,8 +1339,105 @@ test("freezes one exact release-certification policy without copying public pack
     evidence: "never-release-evidence",
   });
   assert.deepEqual(release.npmAuthorityObservation, {
+    client: {
+      node: "24.14.1",
+      npm: "11.19.1",
+      package: "npm",
+      installationPackage: "npm-authority-client",
+      integrity:
+        "sha512-ztsxKxt/kkIaAs+2i0GU6I+DRmUdrNasxTZKJe9TCdSjKxlhah/4r/hl5ygMD6XAg1qZ9c2TNomR4qgOydp10g==",
+      manifestDigest: "sha256:f6478d5600180a23f73e4217610c7709a71cedb4ae13f6c3e15ecb457f5d4fd6",
+      minimumSupportedTrustVersion: "11.15.0",
+      purpose: "authenticated-authority-observation-only",
+      publishCertificationClientSource: "releaseCertification.npmOidcCertification.client",
+      status: "pinned-source-audited-observation-credential-unprovisioned",
+      sourceClosure: {
+        algorithm: "sha256-canonical-json-entry-type-path-bytes-file-sha256-v1",
+        scope: "entire-realpath-package-tree-no-links-or-nonregular-entries",
+        entrySource: "bin/npm-cli.js",
+        fileCount: 1943,
+        directoryCount: 459,
+        bytes: 12223891,
+        digest: "sha256:e7510fbaa85940db552118f424a7792bc059877abcc6b4528bd9c0d7abc51444",
+      },
+      auditedSources: [
+        {
+          path: "bin/npm-cli.js",
+          digest: "sha256:8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        },
+        {
+          path: "lib/cli.js",
+          digest: "sha256:67666f06479f9b0bbc01412c198caadd4287d34d5ed74a02871ea78f186451e7",
+        },
+        {
+          path: "lib/cli/entry.js",
+          digest: "sha256:667a44c1fa8795fdbba8ad843736ca7f8f24e64511985e9a7060b002123560c6",
+        },
+        {
+          path: "lib/commands/whoami.js",
+          digest: "sha256:d76223c1a10cbc0fae7092c77fc2e7fbde74b8f0ed258ffafbc53b4f807e4656",
+        },
+        {
+          path: "lib/commands/view.js",
+          digest: "sha256:59b26d2c2f06875e3df2aeb8f780fd62220c12618775ccaff8bdf88a390baf8c",
+        },
+        {
+          path: "lib/commands/trust/list.js",
+          digest: "sha256:1999714d799cc5b53198cb406a598dab8a67bbbea6f860f74ecf73a091434f76",
+        },
+        {
+          path: "lib/commands/token.js",
+          digest: "sha256:03363ca40e6b0ec7997686187f94b3b7260e0d00f205e3f7296b3974bc4cb643",
+        },
+      ],
+    },
     rawAllowedActionProjection: ["createPackage"],
     semantics: "authenticated-npm-settings-raw-projection-not-trustedPublisher.permission",
+    legacyTokenAuthority: {
+      checkId: "npm.legacyTokenAuthority",
+      command: ["token", "list", "--json"],
+      registrySource: "npmRegistryBoundary.registry",
+      authenticatedAccount: "mannyc1",
+      authorityPackageSource:
+        "publicApiProjection.packages-plus-npmRegistryBoundary.reservation.packages",
+      maintainerCommand: ["view", "<package>", "maintainers", "--json"],
+      maintainerTarget: "exact-sole-maintainer-equals-authenticated-account",
+      target: "zero-active-npm-access-tokens-after-legacy-token-remediation",
+      unknownTokenTypeOrScope: "blocking",
+      sanitizedProjectionFields: [
+        "activeTokenCount",
+        "activeLegacyWriteCapableTokenCount",
+        "unknownTokenCount",
+        "metadataDigest",
+      ],
+      retainedCredentialMetadata: "none",
+      observationCredential: {
+        authority: "ephemeral-non-token-session-for-mannyc1",
+        accountEntitlement: "write-permission-required-by-npm-trust-api",
+        operations: "read-only-observation-only",
+        persistence: "forbidden",
+        destruction: "required-before-sigstore-oidc-signing",
+        currentStatus: "unprovisioned-stop",
+        supportedProof: {
+          authority: "ephemeral-non-token-session-for-mannyc1",
+          accountEntitlement: "write-permission-required-by-npm-trust-api",
+          operations: "read-only-observation-only",
+          persistence: "none",
+          destruction: "completed-before-sigstore-oidc-signing",
+        },
+      },
+    },
+    publishingAccess: {
+      checkIdPrefix: "npm.publishingAccess.",
+      packageSource: "publicApiProjection.packages-plus-npmRegistryBoundary.reservation.packages",
+      target: "require-two-factor-authentication-and-disallow-tokens",
+      observationMechanism: {
+        status: "unprovisioned-stop",
+        authority: "authenticated-npm-account-with-write-permission-and-two-factor-authentication",
+        interface: "supported-authenticated-npm-web-or-registry-observation-required",
+        endpoint: "unqualified-and-forbidden-to-invent",
+      },
+    },
   });
 
   assert.deepEqual(release.npmOidcCertification, {
@@ -1786,15 +1920,22 @@ test("builds the supported release fixture only through one closed canonical act
     releaseSourceSha: "1".repeat(40),
     operationalJournal: {
       repository: "mannyc2/ts-release",
-      workflowPath: ".github/workflows/operational-journal.yml",
-      ref: "refs/heads/main",
+      reusableWorkflowRef:
+        `mannyc2/ts-release/.github/workflows/operational-journal.yml@${"4".repeat(40)}`,
       sourceSha: "4".repeat(40),
+      runtime: { executable: "node", version: "22.22.2" },
     },
   };
   const supported = buildSupportedReleaseFixtureContract(inputs, activation);
   const authentication = supported.releaseCertification.readiness.externalEvidenceAuthentication;
   assert.equal(authentication.status, "supported");
   assert.equal(authentication.artifactDisposition, "required-on-terminal-workflow-success");
+  assert.deepEqual(authentication.signer.activation.permissions, {
+    observer: { contents: "read" },
+    signer: { "id-token": "write" },
+    upload: {},
+  });
+  assert.equal(authentication.signer.activation.hostedBootstrap.status, "qualified");
   assert.deepEqual(authentication.producerIdentities.map(({ role, repository, sourceBinding }) => ({
     role,
     repository,
@@ -1831,9 +1972,10 @@ test("builds the supported release fixture only through one closed canonical act
   for (const mutate of [
     (value) => value.releaseSourceSha = "not-a-sha",
     (value) => value.operationalJournal.repository = "effect-ts/ts-release",
-    (value) => value.operationalJournal.workflowPath = ".github/workflows/peer.yml",
-    (value) => value.operationalJournal.ref = "refs/tags/unreviewed",
+    (value) => value.operationalJournal.reusableWorkflowRef =
+      `mannyc2/ts-release/.github/workflows/peer.yml@${"4".repeat(40)}`,
     (value) => value.operationalJournal.sourceSha = "5".repeat(39),
+    (value) => value.operationalJournal.runtime.version = "24.14.1",
     (value) => value.fallback = true,
   ]) {
     const changed = structuredClone(activation);
@@ -1847,6 +1989,20 @@ test("builds the supported release fixture only through one closed canonical act
     () => validateSupportedReleaseFixtureContract(peer, inputs, activation),
     /differs from the canonical activation model/u,
   );
+  for (const mutate of [
+    (value) => value.signer.activation.permissions.observer = {},
+    (value) => value.signer.activation.permissions.signer = {},
+    (value) => value.signer.activation.permissions.upload = { "id-token": "write" },
+    (value) => value.signer.activation.hostedBootstrap.status = "unqualified-stop",
+    (value) => value.signer.activation.signerThirdPartyActions = "allowed",
+  ]) {
+    const changed = structuredClone(supported);
+    mutate(changed.releaseCertification.readiness.externalEvidenceAuthentication);
+    assert.throws(
+      () => validateSupportedReleaseFixtureContract(changed, inputs, activation),
+      /differs from the canonical activation model/u,
+    );
+  }
   assert.throws(
     () => validateContract(supported, inputs),
     /release certification policy does not match the canonical generated policy/u,
@@ -2556,6 +2712,11 @@ test("rejects every release-certification policy mutation", () => {
   rejects((release) => release.dependencyBootstrap.environment.configurationFiles.projectNpmrc.digest = "sha256:" + "0".repeat(64));
   rejects((release) => release.dependencyBootstrap.environment.configurationFiles.bunfig.path = "bunfig.toml");
   rejects((release) => release.npmAuthorityObservation.rawAllowedActionProjection[0] = "publish");
+  rejects((release) => release.npmAuthorityObservation.client.integrity = "sha512-peer");
+  rejects((release) => release.npmAuthorityObservation.client.installationPackage = "npm");
+  rejects((release) => release.npmAuthorityObservation.client.sourceClosure.digest = "sha256:" + "0".repeat(64));
+  rejects((release) => release.npmAuthorityObservation.client.auditedSources.pop());
+  rejects((release) => release.npmAuthorityObservation.publishingAccess.target = "token-allowed");
   rejects((release) => release.readiness.coordinate = "optional");
   rejects((release) => release.readiness.bundleProtocol += "-fallback");
   rejects((release) => release.readiness.externalEvidencePolicy = "digest-bound-caller-assertion");
@@ -2587,6 +2748,33 @@ test("rejects every release-certification policy mutation", () => {
   rejects((release) => release.readiness.externalEvidenceManifest.authenticationRequiredRoles.pop());
   rejects((release) => release.readiness.externalEvidenceAuthentication.status = "verified");
   rejects((release) => release.readiness.externalEvidenceAuthentication.requiredBindings.pop());
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.runtime.version = "latest");
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.dependency.integrity =
+    "sha512-AAAA");
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.dependency.executedSources.pop());
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.activation.topology = "single-job");
+  rejects((release) =>
+    release.readiness.externalEvidenceAuthentication.signer.activation.permissions.signer["id-token"] = "write"
+  );
+  rejects((release) =>
+    release.readiness.externalEvidenceAuthentication.signer.activation.hostedBootstrap.status = "qualified"
+  );
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.oidc.audience = "peer");
+  rejects((release) =>
+    release.readiness.externalEvidenceAuthentication.signer.oidc.request.maximumRequestTokenBytes += 1);
+  rejects((release) =>
+    release.readiness.externalEvidenceAuthentication.signer.oidc.request.maximumRequestUrlBytes += 1);
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.fulcio.origin =
+    "https://example.invalid");
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.rekor.path =
+    "//example.invalid/log");
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.rekor.successStatus = 200);
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.responseFraming =
+    "connection-delimited");
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.redirects = 1);
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.maximumJsonDepth += 1);
+  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.fulcio.maximumResponseBytes +=
+    1);
   rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.client.version = "latest");
   rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.runtime.version = "latest");
   rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.maximumBundleBytes += 1);
@@ -2601,6 +2789,7 @@ test("rejects every release-certification policy mutation", () => {
   rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.signatureFields.push("keyid"));
   rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.payloadFields.pop());
   rejects((release) => release.readiness.externalReceipts.npmAuthority.expectedCheckIds.pop());
+  rejects((release) => release.npmAuthorityObservation.legacyTokenAuthority.registrySource = "ambient-config");
   rejects((release) => release.readiness.externalReceipts.operationalJournal.claims.pop());
   rejects((release) => release.readiness.externalReceipts.githubReleaseGovernance.decisions.pop());
   rejects((release) => release.readiness.candidate.referenceType = "evidence-role");

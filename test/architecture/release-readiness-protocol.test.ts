@@ -19,7 +19,7 @@ const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const contractBytes = await readFile(resolve(root, "tooling/effect-build-contract.json"));
 const contract = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(contractBytes));
 const policy = contract.releaseCertification.readiness;
-const blocker = "contract-pinned-external-producer-identities-and-provisioned-signers-not-established";
+const blocker = "contract-pinned-external-producer-identities-and-isolated-observer-signer-bootstraps-not-established";
 const sourceSha = "a".repeat(40);
 const coordinate = (workflow: string, seed: string) => ({
   workflow,
@@ -58,6 +58,7 @@ describe("release readiness protocol", () => {
         "observed-at",
         "expiration",
       ],
+      signer: policy.externalEvidenceAuthentication.signer,
       verifier: {
         status: "implemented",
         module: "scripts/release/sigstore-dsse-verifier.mjs",
@@ -250,12 +251,22 @@ describe("release readiness protocol", () => {
     const authentication = ready.releaseCertification.readiness.externalEvidenceAuthentication;
     authentication.status = "supported";
     authentication.artifactDisposition = "required-on-terminal-workflow-success";
+    authentication.signer.activation.permissions = {
+      observer: { contents: "read" },
+      signer: { "id-token": "write" },
+      upload: {},
+    };
+    authentication.signer.activation.hostedBootstrap.status = "qualified";
     authentication.producerIdentities = ready.releaseCertification.readiness.evidenceRoles
       .filter(({ type }: { type: string }) => type === "externalObservation")
       .map(({ role }: { role: string }, index: number) => {
         const repository = index === 1 ? "effect-ts/ts-release" : "mannyc2/effect-build";
         const ref = "refs/heads/main";
-        const workflow = `${repository}/.github/workflows/${role}.yml@${ref}`;
+        const sourceBinding = index === 1
+          ? { kind: "exact-source-sha", sourceSha: "b".repeat(40) }
+          : { kind: "release-source-sha" };
+        const workflowRef = sourceBinding.kind === "exact-source-sha" ? sourceBinding.sourceSha : ref;
+        const workflow = `${repository}/.github/workflows/${role}.yml@${workflowRef}`;
         return {
           role,
           certificateIssuer: authentication.verifier.certificateIssuer,
@@ -263,9 +274,7 @@ describe("release readiness protocol", () => {
           workflow,
           repository,
           ref,
-          sourceBinding: index === 1
-            ? { kind: "exact-source-sha", sourceSha: "b".repeat(40) }
-            : { kind: "release-source-sha" },
+          sourceBinding,
         };
       });
     expect(() => assertReadinessArtifactAllowed(ready)).not.toThrow();
