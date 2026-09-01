@@ -206,7 +206,7 @@ export const createReleaseState = ({
     run_id: "8001",
     runner_environment: "github-hosted",
     sha: sourceSha,
-    sub: "repo:mannyc2/effect-build:environment:npm",
+    sub: "repo:mannyc2@126291407/effect-build@1331906770:environment:npm",
     workflow_ref: workflowRef,
     workflow_sha: sourceSha,
   };
@@ -285,7 +285,7 @@ export const createReleaseState = ({
       oidc: {
         sub_claim_prefix: "repo:mannyc2@126291407/effect-build@1331906770",
         use_default: true,
-        use_immutable_subject: false,
+        use_immutable_subject: true,
       },
       oidcProvider: {
         discovery: {
@@ -341,7 +341,7 @@ export const createReleaseState = ({
 
 export const applyScenario = (state, scenario) => {
   if (oidcRejectionScenarioMatrix.some((entry) => entry.scenario === scenario)) {
-    if (scenario === "oidc-policy-drift") state.api.oidc.use_immutable_subject = true;
+    if (scenario === "oidc-policy-drift") state.api.oidc.use_immutable_subject = false;
     return;
   }
   switch (scenario) {

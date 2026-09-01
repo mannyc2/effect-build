@@ -280,14 +280,14 @@ Release completion is later than the release point. It requires:
   handoff placeholders are singleton `0.0.0-reserved.0` packages with exact
   contract bytes and `reserved` plus temporary `latest` tags; Rolldown remains
   reservation-only.
-- The repository OIDC subject endpoint returned `use_default: true`,
-  `use_immutable_subject: false`, and subject prefix
-  `repo:mannyc2@126291407/effect-build@1331906770`. Re-observe this policy at R
-  and validate the token's exact environment-qualified subject. Under the
-  observed opt-out, GitHub's documented token format remains the name-based
-  `repo:mannyc2/effect-build:environment:npm`; the returned immutable prefix is
-  not the active `sub`. A separately authorized opt-in would change the
-  expected subject and requires re-auditing npm trusted-publisher acceptance.
+- The repository OIDC subject endpoint now returns `use_default: true`,
+  `use_immutable_subject: true`, and subject prefix
+  `repo:mannyc2@126291407/effect-build@1331906770`. The active npm environment
+  subject is therefore
+  `repo:mannyc2@126291407/effect-build@1331906770:environment:npm`. Re-observe
+  this policy at R and validate the token's exact environment-qualified
+  subject. The generated contract and hostile fixtures must use this immutable
+  ID-qualified form; falling back to the prior name-based subject is forbidden.
 - Standard GitHub-hosted macOS labels provide arm64 macos-15 and Intel
   macos-15-intel runners. Use fresh hosted runners for clean-host evidence
   unless credential feasibility proves that a separately approved,
@@ -333,7 +333,7 @@ feasibility question or earn release point R.
    their versions/tags match the contract, and all seven placeholder tarballs
    match the frozen byte ledger. All eleven local package manifests have the
    exact repository URL. The npm environment remains reviewer-protected and
-   main-only, and the repository OIDC policy remains default/non-immutable.
+   main-only, and the repository OIDC policy is default/immutable-ID-qualified.
    However, `npm whoami` returned E401, so none of the eleven current trusted
    publisher records is authenticatedly observed. The supported authority
    receipt must authenticate exact account `mannyc1`, prove its npm access-token
