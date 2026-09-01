@@ -332,7 +332,7 @@ describe("Sigstore DSSE external-evidence verifier", () => {
       expect(executable).toBe("node");
       expect(argv).toEqual([
         "--permission",
-        `--allow-fs-read=${root}/`,
+        `--allow-fs-read=${fileURLToPath(new URL("../../", import.meta.url))}`,
         `--require=${resolve(root, "scripts/release/deny-network.cjs")}`,
         resolve(root, "scripts/release/sigstore-dsse-verifier.mjs"),
         "--verify-child",

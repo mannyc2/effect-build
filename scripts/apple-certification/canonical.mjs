@@ -9,6 +9,23 @@ export const isRecord = (value) =>
 
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
+export const appleEvidenceFileName = (id) => {
+  if (
+    typeof id !== "string"
+    || id.length === 0
+    || id.normalize("NFC") !== id
+    || !/^[\x21-\x7e]+$/u.test(id)
+    || id.includes("/")
+    || id.includes("\\")
+  ) throw new Error("generated Apple evidence descriptor is not portable canonical text");
+  const encoded = Buffer.from(id, "utf8").toString("hex");
+  const name = `eb-${encoded}.evidence`;
+  if (!/^eb-[a-f0-9]+\.evidence$/u.test(name) || name.length > 255) {
+    throw new Error("generated Apple evidence descriptor has no bounded portable filename");
+  }
+  return name;
+};
+
 export const exactKeys = (value, expected, label) => {
   if (!isRecord(value)) throw new Error(`${label} must be an object`);
   const actual = Object.keys(value).sort();
@@ -185,9 +202,18 @@ export const appleCertificationPolicy = (contract) => {
   const a7 = coordinateRules.find(({ coordinate }) => coordinate === "A7");
   const subordinateEvidence = a7?.fieldValues?.subordinateEvidence;
   const evidenceOrder = requireStringArray(policy.evidenceDescriptorOrder, "Apple evidence descriptor order");
+  const evidenceFileOrder = policy.evidenceFileOrder;
   if (
     !Array.isArray(subordinateEvidence)
     || !sameJson(evidenceOrder, [...coordinates, ...subordinateEvidence])
+    || !Array.isArray(evidenceFileOrder)
+    || evidenceFileOrder.length !== evidenceOrder.length
+    || !evidenceFileOrder.every((entry, index) => {
+      if (!isRecord(entry) || !sameJson(Object.keys(entry).sort(), ["file", "id"])) return false;
+      const id = evidenceOrder[index];
+      return entry.id === id && entry.file === appleEvidenceFileName(id);
+    })
+    || new Set(evidenceFileOrder.map(({ file }) => file.toLowerCase())).size !== evidenceFileOrder.length
   ) throw new Error("Apple evidence descriptor order is not the exact receipts plus A7 evidence");
 
   const appleCapabilities = contract.producerCapabilityRegister?.capabilities?.filter(

@@ -37,7 +37,7 @@
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "815a096a36a4ae6fef57594aca25f9a6d9d95281aa3c7ef926d1e0042f9d9ab7"
+        "sha256": "ab6ddd088eb1346f126b050fcf7912ecd9ad55697479258586046a062d1ab50a"
       },
       {
         "path": "package.json",
@@ -8474,6 +8474,152 @@
         "service-failure",
         "interruption",
         "pre-ack-unknown-outcome"
+      ],
+      "evidenceFileOrder": [
+        {
+          "id": "N-native-mechanics|macos-aarch64",
+          "file": "eb-4e2d6e61746976652d6d656368616e6963737c6d61636f732d61617263683634.evidence"
+        },
+        {
+          "id": "N-native-mechanics|macos-x64",
+          "file": "eb-4e2d6e61746976652d6d656368616e6963737c6d61636f732d783634.evidence"
+        },
+        {
+          "id": "P-signed-bun-app|macos-aarch64",
+          "file": "eb-502d7369676e65642d62756e2d6170707c6d61636f732d61617263683634.evidence"
+        },
+        {
+          "id": "P-signed-bun-app|macos-x64",
+          "file": "eb-502d7369676e65642d62756e2d6170707c6d61636f732d783634.evidence"
+        },
+        {
+          "id": "P-signed-deno-app|macos-aarch64",
+          "file": "eb-502d7369676e65642d64656e6f2d6170707c6d61636f732d61617263683634.evidence"
+        },
+        {
+          "id": "P-signed-deno-app|macos-x64",
+          "file": "eb-502d7369676e65642d64656e6f2d6170707c6d61636f732d783634.evidence"
+        },
+        {
+          "id": "P-notarized-stapled-app-private-zip|macos-aarch64",
+          "file": "eb-502d6e6f746172697a65642d737461706c65642d6170702d707269766174652d7a69707c6d61636f732d61617263683634.evidence"
+        },
+        {
+          "id": "P-notarized-stapled-app-private-zip|macos-x64",
+          "file": "eb-502d6e6f746172697a65642d737461706c65642d6170702d707269766174652d7a69707c6d61636f732d783634.evidence"
+        },
+        {
+          "id": "P-notarized-stapled-dmg|macos-aarch64",
+          "file": "eb-502d6e6f746172697a65642d737461706c65642d646d677c6d61636f732d61617263683634.evidence"
+        },
+        {
+          "id": "P-notarized-stapled-dmg|macos-x64",
+          "file": "eb-502d6e6f746172697a65642d737461706c65642d646d677c6d61636f732d783634.evidence"
+        },
+        {
+          "id": "P-notarized-stapled-pkg|macos-aarch64",
+          "file": "eb-502d6e6f746172697a65642d737461706c65642d706b677c6d61636f732d61617263683634.evidence"
+        },
+        {
+          "id": "P-notarized-stapled-pkg|macos-x64",
+          "file": "eb-502d6e6f746172697a65642d737461706c65642d706b677c6d61636f732d783634.evidence"
+        },
+        {
+          "id": "G-app|macos-aarch64",
+          "file": "eb-472d6170707c6d61636f732d61617263683634.evidence"
+        },
+        {
+          "id": "G-app|macos-x64",
+          "file": "eb-472d6170707c6d61636f732d783634.evidence"
+        },
+        {
+          "id": "G-dmg|macos-aarch64",
+          "file": "eb-472d646d677c6d61636f732d61617263683634.evidence"
+        },
+        {
+          "id": "G-dmg|macos-x64",
+          "file": "eb-472d646d677c6d61636f732d783634.evidence"
+        },
+        {
+          "id": "G-pkg|macos-aarch64",
+          "file": "eb-472d706b677c6d61636f732d61617263683634.evidence"
+        },
+        {
+          "id": "G-pkg|macos-x64",
+          "file": "eb-472d706b677c6d61636f732d783634.evidence"
+        },
+        {
+          "id": "A0",
+          "file": "eb-4130.evidence"
+        },
+        {
+          "id": "A1",
+          "file": "eb-4131.evidence"
+        },
+        {
+          "id": "A2",
+          "file": "eb-4132.evidence"
+        },
+        {
+          "id": "A3",
+          "file": "eb-4133.evidence"
+        },
+        {
+          "id": "A4",
+          "file": "eb-4134.evidence"
+        },
+        {
+          "id": "A5",
+          "file": "eb-4135.evidence"
+        },
+        {
+          "id": "A6",
+          "file": "eb-4136.evidence"
+        },
+        {
+          "id": "A7",
+          "file": "eb-4137.evidence"
+        },
+        {
+          "id": "A8",
+          "file": "eb-4138.evidence"
+        },
+        {
+          "id": "A9",
+          "file": "eb-4139.evidence"
+        },
+        {
+          "id": "accepted-both-architectures",
+          "file": "eb-61636365707465642d626f74682d61726368697465637475726573.evidence"
+        },
+        {
+          "id": "pending-both-architectures",
+          "file": "eb-70656e64696e672d626f74682d61726368697465637475726573.evidence"
+        },
+        {
+          "id": "rejected-both-architectures",
+          "file": "eb-72656a65637465642d626f74682d61726368697465637475726573.evidence"
+        },
+        {
+          "id": "info-and-log",
+          "file": "eb-696e666f2d616e642d6c6f67.evidence"
+        },
+        {
+          "id": "fresh-runner-resume",
+          "file": "eb-66726573682d72756e6e65722d726573756d65.evidence"
+        },
+        {
+          "id": "service-failure",
+          "file": "eb-736572766963652d6661696c757265.evidence"
+        },
+        {
+          "id": "interruption",
+          "file": "eb-696e74657272757074696f6e.evidence"
+        },
+        {
+          "id": "pre-ack-unknown-outcome",
+          "file": "eb-7072652d61636b2d756e6b6e6f776e2d6f7574636f6d65.evidence"
+        }
       ],
       "publicCapabilitySource": "producerCapabilityRegister.capabilities family=apple visibility=public",
       "publicCapabilityCount": 13

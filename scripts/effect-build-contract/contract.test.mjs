@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { appleEvidenceFileName } from "../apple-certification/canonical.mjs";
 import {
   buildContract,
   buildSupportedReleaseFixtureContract,
@@ -2396,6 +2397,10 @@ test("freezes the exact v0.6 Apple receipt schemas, coordinates, categories, and
     ...coordinates,
     ...apple.verdicts.find(({ coordinate }) => coordinate === "A7").subordinateEvidence,
   ]);
+  assert.deepEqual(
+    apple.evidenceFileOrder,
+    apple.evidenceDescriptorOrder.map((id) => ({ id, file: appleEvidenceFileName(id) })),
+  );
 });
 
 test("rejects every release-certification policy mutation", () => {

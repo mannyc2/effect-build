@@ -701,7 +701,7 @@ jobs:
               tlsRootPolicy: "node-bundled-root-certificates-only",
               ambientConfiguration: "forbidden-home-gh-config-proxy-and-extra-ca",
             })) throw new Error("authenticated GitHub transport policy changed");
-            NODE
+          NODE
           fi
           while IFS= read -r forbidden; do
             if [[ -n "${!forbidden+x}" ]]; then

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import { Metadata, MetadataKind } from "@tufjs/models";
 
+import { appleEvidenceFileName } from "../apple-certification/canonical.mjs";
 import { parseBunLockfilePackageRecords } from "../release/install-frozen-release-dependencies.mjs";
 
 import {
@@ -772,6 +773,10 @@ const buildReleaseCertification = (
     `npm-github-authority:${trustedPublisher.repository}:environment:${trustedPublisher.environment}`;
   readiness.externalReceipts.githubReleaseGovernance.identity =
     `github-release-governance:${trustedPublisher.repository}`;
+  const appleEvidenceDescriptorOrder = [
+    ...apple.coordinates,
+    ...apple.verdicts.find(({ coordinate }) => coordinate === "A7").subordinateEvidence,
+  ];
   return {
     ...structuredClone(releaseCertificationPolicy),
     candidate,
@@ -795,10 +800,8 @@ const buildReleaseCertification = (
       providerVersionSource: "exactToolEvidenceRegister.tools kind=provider name in bun,deno",
       providerVersions,
       coordinateRules: appleRules.coordinateRules,
-      evidenceDescriptorOrder: [
-        ...apple.coordinates,
-        ...apple.verdicts.find(({ coordinate }) => coordinate === "A7").subordinateEvidence,
-      ],
+      evidenceDescriptorOrder: appleEvidenceDescriptorOrder,
+      evidenceFileOrder: appleEvidenceDescriptorOrder.map((id) => ({ id, file: appleEvidenceFileName(id) })),
       publicCapabilitySource: "producerCapabilityRegister.capabilities family=apple visibility=public",
       publicCapabilityCount: producerCapabilities
         .filter((entry) => entry.family === "apple" && entry.visibility === "public")
@@ -2601,6 +2604,12 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     a7SubordinateEvidence === undefined
     || !sameJson(apple.evidenceDescriptorOrder, [...apple.coordinates, ...a7SubordinateEvidence])
     || new Set(apple.evidenceDescriptorOrder).size !== apple.evidenceDescriptorOrder.length
+    || !sameJson(
+      apple.evidenceFileOrder,
+      apple.evidenceDescriptorOrder.map((id) => ({ id, file: appleEvidenceFileName(id) })),
+    )
+    || new Set(apple.evidenceFileOrder.map(({ file }) => file.toLowerCase())).size
+      !== apple.evidenceFileOrder.length
   ) {
     throw new Error("Apple certification evidence descriptors must bind 28 primary receipts plus exact A7 evidence");
   }

@@ -35,6 +35,7 @@ if (nodeProbe.status !== 0 || nodeProbe.stdout.trim().length === 0) {
   throw new Error("state-machine fixture requires the contract-pinned Node executable");
 }
 const nodeExecutable = nodeProbe.stdout.trim();
+const bashExecutable = "/bin/bash";
 const reauthorizationName = "Re-observe protected authority after environment approval";
 const publisherName = "Adopt, compare, and publish only certified bytes";
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
@@ -305,7 +306,7 @@ const executeBody = (
     readonly stderr: string;
     readonly stdout: string;
   }>((resolveBody) => {
-    const child = spawn("/bin/bash", ["-c", body], {
+    const child = spawn(bashExecutable, ["-c", body], {
       cwd,
       detached: true,
       env: environment,
@@ -529,7 +530,15 @@ const mutateCandidateArtifact = async (
   await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
 };
 
-describe("release publisher boundary certification", () => {
+describe.skipIf(process.platform === "win32")("release publisher boundary certification", () => {
+  it("parses both exact protected bodies with the runner Bash", () => {
+    for (const body of [reauthorizations[0]?.step.run, publishers[0]?.step.run]) {
+      expect(typeof body).toBe("string");
+      const parsed = spawnSync(bashExecutable, ["-n"], { encoding: "utf8", input: body });
+      expect(parsed.status, parsed.stderr).toBe(0);
+    }
+  });
+
   it("terminates every timed-out protected-body descendant before cleanup", async () => {
     const directory = await mkdtemp(join(tmpdir(), "effect-build-release-timeout-process-group-"));
     const marker = join(directory, "leaked-descendant");
@@ -576,6 +585,24 @@ describe("release publisher boundary certification", () => {
       await withScenario(entry.scenario, async ({ directory, statePath }) => {
         const environment = entry.environment === undefined ? {} : { [entry.environment]: "fixture-canary" };
         const first = await runProtectedBodies(statePath, directory, environment);
+        if (entry.caseId === "forbidden-protected-environment") {
+          expect(first.reauthorization.status).not.toBe(0);
+          expect(first.reauthorization.stderr).toBe(
+            `forbidden protected authentication identity is present: ${entry.environment}\n`,
+          );
+          expect(first.publisher).toBeUndefined();
+        } else if (entry.caseId === "main-advances-before-first-mutation") {
+          expect(first.reauthorization.status).toBe(1);
+          expect(first.reauthorization.stderr).toBe(
+            "post-approval repository, environment, OIDC, or exact-main authority changed\n",
+          );
+          expect(first.publisher).toBeUndefined();
+        } else {
+          expect(first.reauthorization.status, first.reauthorization.stderr).toBe(0);
+          expect(first.reauthorization.stderr).toBe("");
+          expect(first.publisher, `${coordinate}: publisher did not run after successful reauthorization`)
+            .toBeDefined();
+        }
         const firstFailed = first.reauthorization.status !== 0 || first.publisher?.status !== 0;
         let state = await readState(statePath);
 
@@ -616,6 +643,8 @@ describe("release publisher boundary certification", () => {
             await clearPublishFault(statePath);
             const resumed = await runProtectedBodies(statePath, directory);
             expect(resumed.reauthorization.status, resumed.reauthorization.stderr).toBe(0);
+            expect(resumed.reauthorization.stderr).toBe("");
+            expect(resumed.publisher).toBeDefined();
             expect(resumed.publisher?.status, resumed.publisher?.stderr).toBe(0);
             state = await readState(statePath);
             expect(state.mutations.map(({ name }) => name)).toEqual(canonicalPackageOrder);
@@ -628,6 +657,9 @@ describe("release publisher boundary certification", () => {
             ]);
             await clearPublishFault(statePath);
             const resumed = await runProtectedBodies(statePath, directory);
+            expect(resumed.reauthorization.status, resumed.reauthorization.stderr).toBe(0);
+            expect(resumed.reauthorization.stderr).toBe("");
+            expect(resumed.publisher).toBeDefined();
             expect(resumed.publisher?.status).not.toBe(0);
             state = await readState(statePath);
             expect(mutationSummary(state)).toEqual([

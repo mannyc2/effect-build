@@ -255,9 +255,11 @@ describe("public surface", () => {
     expect(submissionSource).toContain("export interface PreparedAppSubmission");
     expect(codecSource).toContain("new Notary.SubmissionReference({");
     for (const entry of await readdir(resolve(root, "packages/effect-build-apple/src"), { recursive: true })) {
-      if (typeof entry !== "string" || !entry.endsWith(".ts") || entry === "internal/NotaryJournalCodec.ts") continue;
-      const source = await readFile(resolve(root, "packages/effect-build-apple/src", entry), "utf8");
-      expect(source, entry).not.toMatch(/new\s+(?:Notary\.)?SubmissionReference\s*\(/u);
+      if (typeof entry !== "string") continue;
+      const normalizedEntry = normalized(entry);
+      if (!normalizedEntry.endsWith(".ts") || normalizedEntry === "internal/NotaryJournalCodec.ts") continue;
+      const source = await readFile(resolve(root, "packages/effect-build-apple/src", normalizedEntry), "utf8");
+      expect(source, normalizedEntry).not.toMatch(/new\s+(?:Notary\.)?SubmissionReference\s*\(/u);
     }
   });
 

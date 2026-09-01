@@ -4,7 +4,7 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildAppleAggregate, validateAppleAggregate } from "./aggregate.mjs";
-import { appleCertificationPolicy, decodeCanonicalJson } from "./canonical.mjs";
+import { appleCertificationPolicy, appleEvidenceFileName, decodeCanonicalJson } from "./canonical.mjs";
 import {
   buildContract,
   contractPath as generatedContractPath,
@@ -78,32 +78,25 @@ const exactNames = (observed, expected, label) => {
   }
 };
 
-const evidenceFileName = (id) => {
-  if (
-    typeof id !== "string"
-    || id.length === 0
-    || id === "."
-    || id === ".."
-    || basename(id) !== id
-    || id.includes("/")
-    || id.includes("\\")
-  ) throw new Error("generated Apple evidence descriptor is not one safe filename");
-  return id;
-};
+export const evidenceFileName = appleEvidenceFileName;
 
 const loadEvidence = async (directory, policy) => {
   await exactDirectory(directory, "Apple evidence directory");
   const entries = await readdir(directory, { withFileTypes: true });
-  const expected = policy.evidenceDescriptorOrder.map(evidenceFileName);
+  const descriptors = policy.evidenceFileOrder.map(({ id, file }) => ({ id, name: file }));
+  const expected = descriptors.map(({ name }) => name);
+  if (new Set(expected.map((name) => name.toLowerCase())).size !== expected.length) {
+    throw new Error("generated Apple evidence descriptors collide after portable filename encoding");
+  }
   exactNames(entries.map(({ name }) => name), expected, "Apple evidence directory");
   const byName = new Map(entries.map((entry) => [entry.name, entry]));
   const evidence = new Map();
-  for (const id of expected) {
-    const entry = byName.get(id);
+  for (const { id, name } of descriptors) {
+    const entry = byName.get(name);
     if (entry?.isFile() !== true) {
       throw new Error(`Apple evidence ${id} must be one regular non-symlink file`);
     }
-    const value = await readRegularFile(join(directory, id), `Apple evidence ${id}`, { singleLink: true });
+    const value = await readRegularFile(join(directory, name), `Apple evidence ${id}`, { singleLink: true });
     if (value.byteLength === 0) throw new Error(`Apple evidence ${id} must be non-empty`);
     evidence.set(id, value);
   }

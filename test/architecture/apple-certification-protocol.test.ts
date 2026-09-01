@@ -17,7 +17,8 @@ import * as toolObservationProtocol from "../../scripts/apple-certification/tool
 const { buildAppleAggregate, validateAppleAggregate } = aggregateProtocol;
 const { artifactCoordinate: validateArtifactCoordinate, canonicalBytes, canonicalJson, sha256Digest } =
   canonicalProtocol;
-const { authenticateGeneratedAppleContract, parseAppleAggregateArguments, runAppleAggregateCli } = cliProtocol;
+const { authenticateGeneratedAppleContract, evidenceFileName, parseAppleAggregateArguments, runAppleAggregateCli } =
+  cliProtocol;
 const { compactToolObservation } = toolObservationProtocol;
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -747,7 +748,7 @@ describe("Apple v0.6 local protocol with synthetic-only vectors", () => {
       await mkdir(evidenceDirectory);
       await writeFile(receiptsPath, canonicalBytes(receipts));
       for (const id of policy.evidenceDescriptorOrder) {
-        await writeFile(join(evidenceDirectory, id), evidenceBytes.get(id)!);
+        await writeFile(join(evidenceDirectory, evidenceFileName(id)), evidenceBytes.get(id)!);
       }
       await runAppleAggregateCli([
         "--output-directory",
@@ -794,7 +795,7 @@ describe("Apple v0.6 local protocol with synthetic-only vectors", () => {
       const evidenceDirectory = join(directory, "evidence");
       await mkdir(evidenceDirectory);
       for (const id of policy.evidenceDescriptorOrder) {
-        await writeFile(join(evidenceDirectory, id), evidenceBytes.get(id)!);
+        await writeFile(join(evidenceDirectory, evidenceFileName(id)), evidenceBytes.get(id)!);
       }
       await writeFile(receiptsPath, JSON.stringify(receipts));
       await expect(runAppleAggregateCli([
@@ -819,10 +820,11 @@ describe("Apple v0.6 local protocol with synthetic-only vectors", () => {
       await unlink(join(evidenceDirectory, "additional-evidence"));
 
       const aliasedId = policy.evidenceDescriptorOrder[0];
+      const aliasedName = evidenceFileName(aliasedId);
       const aliasTarget = join(directory, "alias-target");
       await writeFile(aliasTarget, evidenceBytes.get(aliasedId)!);
-      await unlink(join(evidenceDirectory, aliasedId));
-      await symlink(aliasTarget, join(evidenceDirectory, aliasedId));
+      await unlink(join(evidenceDirectory, aliasedName));
+      await symlink(aliasTarget, join(evidenceDirectory, aliasedName));
       await expect(runAppleAggregateCli([
         "--receipts",
         receiptsPath,
@@ -835,9 +837,9 @@ describe("Apple v0.6 local protocol with synthetic-only vectors", () => {
       const hardlinkEvidence = join(directory, "hardlink-evidence");
       await mkdir(hardlinkEvidence);
       for (const id of policy.evidenceDescriptorOrder) {
-        await writeFile(join(hardlinkEvidence, id), evidenceBytes.get(id)!);
+        await writeFile(join(hardlinkEvidence, evidenceFileName(id)), evidenceBytes.get(id)!);
       }
-      await link(join(hardlinkEvidence, aliasedId), join(directory, "evidence-hardlink-alias"));
+      await link(join(hardlinkEvidence, aliasedName), join(directory, "evidence-hardlink-alias"));
       await expect(runAppleAggregateCli([
         "--receipts",
         receiptsPath,
@@ -851,7 +853,7 @@ describe("Apple v0.6 local protocol with synthetic-only vectors", () => {
       const nestedEvidence = join(realParent, "nested-evidence");
       await mkdir(nestedEvidence, { recursive: true });
       for (const id of policy.evidenceDescriptorOrder) {
-        await writeFile(join(nestedEvidence, id), evidenceBytes.get(id)!);
+        await writeFile(join(nestedEvidence, evidenceFileName(id)), evidenceBytes.get(id)!);
       }
       const parentAlias = join(directory, "parent-alias");
       await symlink(realParent, parentAlias);

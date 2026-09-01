@@ -273,10 +273,16 @@ export const verifySigstoreBundleIsolated = async (
       windowsHide: true,
     });
     if (result.error !== undefined || result.status !== 0 || typeof result.stdout !== "string") {
+      const failureStage = typeof result.stderr === "string"
+        ? /^effect-build-sigstore-child:(environment|input|contract|runtime|trusted-root|verification|projection)\s*$/u
+          .exec(result.stderr)?.[1]
+        : undefined;
       const reason = result.error?.code === "ENOENT"
         ? "runtime unavailable"
         : result.error?.code === "ETIMEDOUT"
         ? "whole-operation deadline exceeded"
+        : failureStage !== undefined
+        ? `child rejected verification at ${failureStage}`
         : "child rejected verification";
       throw new Error(`isolated Sigstore verifier failed: ${reason}`);
     }
@@ -528,29 +534,36 @@ export const verifyExternalEvidenceEnvelope = async ({
 };
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === modulePath && process.argv[2] === "--verify-child") {
-  const allowed = ["HOME", "LANG", "PATH", "TMPDIR", "__CF_USER_TEXT_ENCODING"];
-  if (Object.keys(process.env).some((name) => !allowed.includes(name))) {
-    throw new Error("isolated Sigstore child received a non-allowlisted environment name");
-  }
-  let input;
+  let failureStage = "environment";
   try {
-    input = JSON.parse(await new Promise((resolveInput, rejectInput) => {
+    const allowed = ["HOME", "LANG", "PATH", "TMPDIR", "__CF_USER_TEXT_ENCODING"];
+    if (Object.keys(process.env).some((name) => !allowed.includes(name))) {
+      throw new Error("isolated Sigstore child received a non-allowlisted environment name");
+    }
+    failureStage = "input";
+    const input = JSON.parse(await new Promise((resolveInput, rejectInput) => {
       const chunks = [];
       process.stdin.on("data", (chunk) => chunks.push(chunk));
       process.stdin.on("end", () => resolveInput(Buffer.concat(chunks).toString("utf8")));
       process.stdin.on("error", rejectInput);
     }));
+    exactKeys(input, ["bundle", "options", "trustedRootBase64"], "isolated Sigstore child input");
+    failureStage = "contract";
+    const contract = JSON.parse(readFileSync(contractPath, "utf8"));
+    const { verifier } = authenticationPolicy(contract);
+    failureStage = "runtime";
+    validateVerifierRuntime({ runtime: verifier.runtime });
+    failureStage = "trusted-root";
+    const trustedRoot = validateTrustedRootBytes({
+      trustedRootBytes: canonicalBase64(input.trustedRootBase64, "isolated Sigstore trusted-root bytes"),
+      verifier,
+    });
+    failureStage = "verification";
+    const signer = verifySigstoreBundleOffline({ bundle: input.bundle, options: input.options, trustedRoot });
+    failureStage = "projection";
+    process.stdout.write(canonicalJson(signerProjection(signer)));
   } catch {
-    throw new Error("isolated Sigstore child input is invalid");
+    process.stderr.write(`effect-build-sigstore-child:${failureStage}\n`);
+    process.exitCode = 1;
   }
-  exactKeys(input, ["bundle", "options", "trustedRootBase64"], "isolated Sigstore child input");
-  const contract = JSON.parse(readFileSync(contractPath, "utf8"));
-  const { verifier } = authenticationPolicy(contract);
-  validateVerifierRuntime({ runtime: verifier.runtime });
-  const trustedRoot = validateTrustedRootBytes({
-    trustedRootBytes: canonicalBase64(input.trustedRootBase64, "isolated Sigstore trusted-root bytes"),
-    verifier,
-  });
-  const signer = verifySigstoreBundleOffline({ bundle: input.bundle, options: input.options, trustedRoot });
-  process.stdout.write(canonicalJson(signerProjection(signer)));
 }

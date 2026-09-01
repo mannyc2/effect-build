@@ -5,6 +5,8 @@ import { delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+const itPosix = process.platform === "win32" ? it.skip : it;
+
 // @ts-expect-error The release auditor is an intentionally unprotected Node script module.
 import * as releaseAuthority from "../../scripts/release/audit-release-authority.mjs";
 
@@ -659,7 +661,7 @@ describe("release authority audit", () => {
     });
   });
 
-  it("collects through exact stateful read-only boundaries without retaining raw responses", async () => {
+  itPosix("collects through exact stateful read-only boundaries without retaining raw responses", async () => {
     const boundaryDirectory = await mkdtemp(join(tmpdir(), "effect-build-release-authority-"));
     const npmPath = join(boundaryDirectory, "npm");
     const githubPath = join(boundaryDirectory, "gh");
