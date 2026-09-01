@@ -1,8 +1,18 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import {
+  canonicalJson,
+  derivePublicModules,
+  derivePublicPackageNames,
+  extractEmbeddedPackageManifest,
+  sha256Digest,
+  validateEmbeddedPackageManifest,
+  validateReleaseCandidate,
+} from "./protocol.mjs";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const [candidateArgument, sourceSha] = process.argv.slice(2);
@@ -14,121 +24,120 @@ if (candidateArgument === undefined || !/^[0-9a-f]{40}$/u.test(sourceSha ?? ""))
 const candidateDirectory = resolve(candidateArgument);
 mkdirSync(candidateDirectory);
 
-const readJson = (path) => JSON.parse(readFileSync(resolve(repositoryRoot, path), "utf8"));
-const contract = readJson("tooling/effect-build-contract.json");
-const surface = readJson("tooling/public-api.json");
+const contractBytes = readFileSync(resolve(repositoryRoot, "tooling/effect-build-contract.json"));
+const contract = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(contractBytes));
+const policy = contract.releaseCertification;
 const registry = contract.npmRegistryBoundary;
-const names = [...registry.publicationAdmission.packages].sort();
+const names = derivePublicPackageNames(contract);
+const publicModules = derivePublicModules(contract);
 const reservedOnly = [...registry.reservation.packages].sort();
 const placeholders = [...registry.bootstrap.placeholderAtHandoffPackages].sort();
 const expectedLatest = [...registry.publicationAdmission.target.expectedLatestBeforePublication]
   .sort((left, right) => left.name.localeCompare(right.name));
-const projected = Object.keys(surface.packages).sort();
-const contractPublic = Object.keys(contract.publicApiProjection.packages).sort();
-const contractPrivate = [...contract.publicApiProjection.privatePackages].sort();
-const modules = (packages) => Object.entries(packages)
-  .sort(([left], [right]) => left.localeCompare(right))
-  .flatMap(([name, entry]) => [
-    name,
-    ...Object.keys(entry.subpaths).sort().map((subpath) => name + "/" + subpath.slice(2)),
-  ]);
-const expectedModules = modules(contract.publicApiProjection.packages);
-const projectedModules = modules(surface.packages);
 
 if (
-  contract.schema !== "effect-build/combined-contract@1"
-  || JSON.stringify(names) !== JSON.stringify(contractPublic)
-  || JSON.stringify(names) !== JSON.stringify(projected)
-  || JSON.stringify(reservedOnly) !== JSON.stringify(contractPrivate)
+  policy.candidate.protocol !== "effect-build/npm-release-candidate@2"
+  || policy.candidate.packageAdmission !== "releaseCertification.publicAdmission"
+  || policy.candidate.repositoryCodeInProtectedConsumer !== "forbidden"
+  || policy.publicAdmission.packageCount !== 11
+  || policy.publicAdmission.moduleCount !== 42
   || JSON.stringify(expectedLatest.map(({ name }) => name)) !== JSON.stringify(names)
-  || JSON.stringify(expectedModules) !== JSON.stringify(projectedModules)
-  || expectedModules.length !== 42
-  || registry.purpose !== "repository-package-distribution-only"
-  || registry.productReleaseOwnership !== "unchanged-ts-release-boundary"
-  || registry.candidateHandoff.producer !== "unprivileged-verified-pack-job"
-  || registry.candidateHandoff.consumer !== "protected-npm-distribution-job"
-  || JSON.stringify(registry.candidateHandoff.identity) !== JSON.stringify(["logicalName", "digest"])
-  || registry.candidateHandoff.content !== "immutable-package-tarball-bytes"
-  || registry.candidateHandoff.repositoryCodeInOidcJob !== "forbidden"
-  || registry.publicationAdmission.source !== "publicApiProjection.packages"
-  || registry.publicationAdmission.command !== "npm-publish"
-  || registry.publicationAdmission.tag !== "latest"
-  || registry.publicationAdmission.postPublishProof !== "downloaded-tarball-integrity"
-  || registry.publicationAdmission.existingVersionPolicy !== "exact-bytes-and-latest-or-stop"
-  || registry.publicationAdmission.priorLatestPolicy !== "exact-contract-ledger-or-target-on-resume"
-  || registry.publicationAdmission.registryObservation !== "isolated-cache-prefer-online"
-  || registry.publicationAdmission.lifecycleScripts !== "disabled"
-  || registry.publicationAdmission.target.presenceAtHandoff !== "absent-for-all-admitted-packages"
-  || registry.reservation.source !== "publicApiProjection.privatePackages"
-  || registry.reservation.policy !== "placeholder-version-and-tags-remain-unchanged"
-  || registry.bootstrap.architectureEvidence !== false
-  || registry.trustedPublisher.repository !== "mannyc2/effect-build"
-  || registry.trustedPublisher.workflow !== "release.yml"
-  || registry.trustedPublisher.environment !== "npm"
-  || registry.trustedPublisher.permission !== "publish"
-  || process.version !== "v" + registry.client.node
-) {
-  throw new Error("npm registry boundary does not match the combined contract");
-}
-if (
-  names.length !== 11
-  || names[0] !== "effect-build"
   || names.includes("effect-build-rolldown")
   || JSON.stringify(reservedOnly) !== JSON.stringify(["effect-build-rolldown"])
   || placeholders.length !== 7
+  || registry.candidateHandoff.repositoryCodeInOidcJob !== "forbidden"
 ) {
-  throw new Error("refusing non-canonical npm admission or reservation surface");
+  throw new Error("candidate preparation does not match the generated release-certification policy");
 }
 
+const observeVersion = (command, args) => {
+  const observed = spawnSync(command, args, { cwd: repositoryRoot, encoding: "utf8", shell: false });
+  return observed.status === 0 ? observed.stdout.trim() : "";
+};
+
 const bunEvidence = contract.exactToolEvidenceRegister.tools.find(({ name }) => name === "bun");
-const observedBun = spawnSync("bun", ["--version"], { cwd: repositoryRoot, encoding: "utf8" });
+const observedBun = spawnSync("bun", ["--version"], { cwd: repositoryRoot, encoding: "utf8", shell: false });
 if (observedBun.status !== 0 || observedBun.stdout.trim() !== bunEvidence?.version || bunEvidence.version !== "1.3.14") {
   throw new Error(`candidate packing requires contract Bun 1.3.14; observed ${observedBun.stdout.trim() || "missing"}`);
 }
+const observedNpm = observeVersion("npm", ["--version"]);
+if (
+  process.version !== `v${policy.npmOidcCertification.client.node}`
+  || observedNpm !== policy.npmOidcCertification.client.npm
+) {
+  throw new Error(
+    `candidate preparation requires Node ${policy.npmOidcCertification.client.node} and npm ${policy.npmOidcCertification.client.npm}`,
+  );
+}
 
-const version = readJson("packages/effect-build/package.json").version;
+const version = JSON.parse(readFileSync(resolve(repositoryRoot, "packages/effect-build/package.json"), "utf8")).version;
 if (version !== registry.publicationAdmission.target.version || version === registry.bootstrap.placeholderVersion) {
   throw new Error(`workspace version ${version} does not match contract release target`);
 }
 
+const packageBytes = new Map();
+const packageManifests = new Map();
 const packages = names.map((name) => {
   const packageDirectory = resolve(repositoryRoot, "packages", name);
-  const packageJson = readJson(`packages/${name}/package.json`);
-  if (packageJson.name !== name || packageJson.version !== version) {
-    throw new Error(`package directory identity or lockstep version mismatch for ${name}`);
-  }
+  const sourceManifest = JSON.parse(readFileSync(resolve(packageDirectory, "package.json"), "utf8"));
+  validateEmbeddedPackageManifest(sourceManifest, { contract, name, version });
   const packed = spawnSync(
     "bun",
     ["pm", "pack", "--destination", candidateDirectory, "--cwd", packageDirectory],
-    { cwd: repositoryRoot, encoding: "utf8" },
+    { cwd: repositoryRoot, encoding: "utf8", shell: false },
   );
-  if (packed.status !== 0) {
-    throw new Error(`packing ${name} failed:\n${packed.stderr || packed.stdout}`);
-  }
+  if (packed.status !== 0) throw new Error(`packing ${name} failed:\n${packed.stderr || packed.stdout}`);
   const file = packed.stdout.trimEnd().split("\n").findLast((line) => line.trim().endsWith(".tgz"))?.trim();
   if (file === undefined) throw new Error(`packing ${name} produced no tarball`);
   const filename = basename(file);
   if (filename !== `${name}-${version}.tgz`) {
     throw new Error(`packing ${name} produced unexpected filename ${filename}`);
   }
-  const bytes = readFileSync(resolve(candidateDirectory, filename));
+  const tarball = readFileSync(resolve(candidateDirectory, filename));
+  const embedded = extractEmbeddedPackageManifest(
+    resolve(candidateDirectory, filename),
+    contract.releaseCertification.candidate.tarballInspection,
+  );
+  validateEmbeddedPackageManifest(embedded.manifest, { contract, name, version });
+  packageBytes.set(name, tarball);
+  packageManifests.set(name, embedded);
   const entry = {
     name,
     file: filename,
-    integrity: "sha512-" + createHash("sha512").update(bytes).digest("base64"),
-    sha256: createHash("sha256").update(bytes).digest("hex"),
-    bytes: bytes.byteLength,
+    bytes: tarball.byteLength,
+    sha256: sha256Digest(tarball),
+    integrity: `sha512-${createHash("sha512").update(tarball).digest("base64")}`,
+    manifestDigest: sha256Digest(embedded.bytes),
   };
   process.stdout.write(`prepublish-sri ${name}@${version} ${entry.integrity}\n`);
   return entry;
 });
 
-writeFileSync(resolve(candidateDirectory, "release-candidate.json"), JSON.stringify({
-  schema: "effect-build/npm-release-candidate@1",
+const candidate = {
+  schema: policy.candidate.protocol,
   sourceSha,
   version,
-  publicModuleCount: 42,
-  packer: { name: "bun", version: bunEvidence.version },
-  registry,
+  contract: {
+    schema: contract.schema,
+    digest: sha256Digest(contractBytes),
+  },
+  toolchain: {
+    bun: { name: "bun", version: bunEvidence.version },
+    node: { name: "node", version: policy.npmOidcCertification.client.node },
+    npm: { name: "npm", version: policy.npmOidcCertification.client.npm },
+  },
+  publicModules,
   packages,
-}, null, 2) + "\n");
+};
+const manifestPath = resolve(candidateDirectory, policy.candidate.manifest);
+writeFileSync(manifestPath, canonicalJson(candidate));
+const persisted = JSON.parse(readFileSync(manifestPath, "utf8"));
+validateReleaseCandidate({
+  candidate: persisted,
+  contract,
+  contractBytes,
+  expectedSourceSha: sourceSha,
+  files: readdirSync(candidateDirectory),
+  packageBytes,
+  packageManifests,
+});

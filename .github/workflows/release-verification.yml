@@ -1,0 +1,222 @@
+name: Final public release verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact full lowercase release-point SHA R
+        required: true
+        type: string
+      candidate_reference_json:
+        description: Exact authenticated candidate artifact reference
+        required: true
+        type: string
+      readiness_reference_json:
+        description: Exact authenticated release-readiness artifact reference
+        required: true
+        type: string
+      tag_reference_json:
+        description: Exact lightweight-tag reference
+        required: true
+        type: string
+      release_reference_json:
+        description: Exact public GitHub Release reference
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: effect-build-final-public-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      artifact-digest: ${{ steps.final-coordinate.outputs.artifact-digest }}
+      artifact-id: ${{ steps.final-coordinate.outputs.artifact-id }}
+      run-attempt: ${{ steps.final-coordinate.outputs.run-attempt }}
+      run-id: ${{ steps.final-coordinate.outputs.run-id }}
+      source-sha: ${{ steps.final-coordinate.outputs.source-sha }}
+      workflow: ${{ steps.final-coordinate.outputs.workflow }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Admit the exact current-main source
+        shell: bash
+        env:
+          ACTIONS_READ_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]] || exit 1
+          env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" \
+            ACTIONS_READ_TOKEN="$ACTIONS_READ_TOKEN" REPOSITORY="$REPOSITORY" SOURCE_SHA="$SOURCE_SHA" \
+            node scripts/release/assert-current-main.mjs
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - name: Install the exact read-only verifier dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(node --version)" == "v24.14.1" ]] || exit 1
+          [[ "$(npm --version)" == "11.11.0" ]] || exit 1
+          [[ "$(bun --version)" == "1.3.14" ]] || exit 1
+          node scripts/release/install-frozen-release-dependencies.mjs
+      - name: Refuse or collect the exact final public receipt
+        id: collect
+        shell: bash
+        env:
+          CANDIDATE_REFERENCE_JSON: ${{ inputs.candidate_reference_json }}
+          GITHUB_TOKEN: ${{ github.token }}
+          READINESS_REFERENCE_JSON: ${{ inputs.readiness_reference_json }}
+          RELEASE_REFERENCE_JSON: ${{ inputs.release_reference_json }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          TAG_REFERENCE_JSON: ${{ inputs.tag_reference_json }}
+          OUTPUT_DIRECTORY: ${{ runner.temp }}/final-public-verification
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$OUTPUT_DIRECTORY"
+          node scripts/release/collect-final-public-verification.mjs --output "$OUTPUT_DIRECTORY"
+      - name: Upload the exact final public receipt
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.collect.outputs.artifact-name }}
+          path: ${{ runner.temp }}/final-public-verification
+          if-no-files-found: error
+          retention-days: ${{ steps.collect.outputs.retention-days }}
+          compression-level: 0
+      - name: Canonicalize and re-observe final public receipt bytes
+        id: final-coordinate
+        shell: bash
+        env:
+          ACTIONS_READ_TOKEN: ${{ github.token }}
+          API_ROOT: ${{ github.api_url }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          EXPECTED_ARTIFACT_NAME: ${{ steps.collect.outputs.artifact-name }}
+          EXPECTED_REPOSITORY_ID: ${{ steps.collect.outputs.repository-id }}
+          EXPECTED_WORKFLOW: ${{ steps.collect.outputs.workflow }}
+          EXPECTED_WORKFLOW_PATH: ${{ steps.collect.outputs.workflow-path }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          UPLOAD_ACTION_BARE_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ "$API_ROOT" != "https://api.github.com" \
+            || "$REPOSITORY" != "mannyc2/effect-build" \
+            || "$EXPECTED_REPOSITORY_ID" != "1331906770" \
+            || ! "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ \
+            || ! "$RUN_ID" =~ ^[1-9][0-9]*$ \
+            || ! "$RUN_ATTEMPT" =~ ^[1-9][0-9]*$ \
+            || ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ \
+            || ! "$UPLOAD_ACTION_BARE_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "final-public upload boundary is not canonical" >&2
+            exit 1
+          fi
+          canonical_digest="sha256:$UPLOAD_ACTION_BARE_DIGEST"
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          [[ "$ACTIONS_READ_TOKEN" =~ ^[A-Za-z0-9._-]+$ ]] || {
+            echo "GitHub authorization token is not safe for the private config boundary" >&2
+            exit 1
+          }
+          env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" \
+            ACTIONS_READ_TOKEN="$ACTIONS_READ_TOKEN" ARTIFACT_ID="$ARTIFACT_ID" \
+            EXPECTED_ARTIFACT_NAME="$EXPECTED_ARTIFACT_NAME" EXPECTED_REPOSITORY_ID="$EXPECTED_REPOSITORY_ID" \
+            EXPECTED_WORKFLOW="$EXPECTED_WORKFLOW" EXPECTED_WORKFLOW_PATH="$EXPECTED_WORKFLOW_PATH" \
+            REPOSITORY="$REPOSITORY" RUN_ATTEMPT="$RUN_ATTEMPT" RUN_ID="$RUN_ID" \
+            SOURCE_SHA="$SOURCE_SHA" UPLOAD_ACTION_BARE_DIGEST="$UPLOAD_ACTION_BARE_DIGEST" \
+            node scripts/release/post-upload-artifact-observation.mjs "$stage"
+          env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" node --input-type=module - \
+            "$stage/artifact.json" "$stage/artifact.zip" "$stage/run.json" "$stage/main.json" \
+            "$ARTIFACT_ID" "$canonical_digest" "$SOURCE_SHA" "$RUN_ID" "$RUN_ATTEMPT" \
+            "$EXPECTED_ARTIFACT_NAME" "$EXPECTED_WORKFLOW" "$EXPECTED_WORKFLOW_PATH" \
+            "$REPOSITORY" "$EXPECTED_REPOSITORY_ID" <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFileSync } from "node:fs";
+          import { extractStrictFlatZip } from "./scripts/release/zip-protocol.mjs";
+          const [
+            metadataPath, zipPath, runPath, mainPath, artifactId, digest, sourceSha, runId, runAttempt,
+            artifactName, expectedWorkflow, expectedWorkflowPath, repository, repositoryId,
+          ] = process.argv.slice(2);
+          const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+          const run = JSON.parse(readFileSync(runPath, "utf8"));
+          const main = JSON.parse(readFileSync(mainPath, "utf8"));
+          const expectedWorkflowIdentity = `${repository}/${expectedWorkflowPath}@refs/heads/main`;
+          const zip = readFileSync(zipPath);
+          const contract = JSON.parse(readFileSync("tooling/effect-build-contract.json", "utf8"));
+          const zipPolicy = contract.releaseCertification.readiness.zipExtraction;
+          const projection = zipPolicy.protectedProjection;
+          const zipProtocolBytes = readFileSync(projection.sourcePath);
+          if (
+            zipProtocolBytes.byteLength !== projection.sourceBytes
+            || `sha256:${createHash("sha256").update(zipProtocolBytes).digest("hex")}` !== projection.sourceDigest
+          ) throw new Error("final-public ZIP parser differs from the generated contract");
+          const files = extractStrictFlatZip({
+            zipBytes: zip,
+            expectedFiles: ["final-public-release.json"],
+            label: "final-public receipt artifact",
+            policy: zipPolicy,
+          });
+          const listing = [...files.keys()];
+          const receiptBytes = files.get("final-public-release.json");
+          const receipt = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(receiptBytes));
+          if (
+            expectedWorkflow !== expectedWorkflowIdentity
+            || metadata.id !== Number(artifactId)
+            || metadata.name !== artifactName
+            || metadata.digest !== digest
+            || metadata.expired !== false
+            || metadata.workflow_run?.id !== Number(runId)
+            || metadata.workflow_run?.head_branch !== "main"
+            || metadata.workflow_run?.head_sha !== sourceSha
+            || metadata.workflow_run?.repository_id !== Number(repositoryId)
+            || metadata.workflow_run?.head_repository_id !== Number(repositoryId)
+            || run.id !== Number(runId)
+            || run.run_attempt !== Number(runAttempt)
+            || run.path !== expectedWorkflowPath
+            || run.head_sha !== sourceSha
+            || run.head_branch !== "main"
+            || run.event !== "workflow_dispatch"
+            || run.status !== "in_progress"
+            || run.conclusion !== null
+            || run.repository?.id !== Number(repositoryId)
+            || run.head_repository?.id !== Number(repositoryId)
+            || main.ref !== "refs/heads/main"
+            || main.object?.type !== "commit"
+            || main.object?.sha !== sourceSha
+            || createHash("sha256").update(zip).digest("hex") !== digest.slice("sha256:".length)
+            || JSON.stringify(listing) !== JSON.stringify(["final-public-release.json"])
+            || receipt.schema !== "effect-build/final-public-release-receipt@1"
+            || receipt.sourceSha !== sourceSha
+            || receipt.verdict !== "success"
+          ) throw new Error("final-public receipt coordinate or downloaded bytes changed");
+          NODE
+          {
+            echo "workflow=$EXPECTED_WORKFLOW"
+            echo "source-sha=$SOURCE_SHA"
+            echo "run-id=$RUN_ID"
+            echo "run-attempt=$RUN_ATTEMPT"
+            echo "artifact-id=$ARTIFACT_ID"
+            echo "artifact-digest=$canonical_digest"
+          } >> "$GITHUB_OUTPUT"

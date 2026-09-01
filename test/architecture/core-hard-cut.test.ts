@@ -98,4 +98,42 @@ describe("hard-cut core architecture", () => {
       expect(source, entry).not.toMatch(/Effect\.run(?:Promise|Sync|Fork|Callback)/u);
     }
   });
+
+  it("keeps Apple probe argv and exact status admission under one package-private owner", async () => {
+    const appleSourceRoot = resolve(root, "packages/effect-build-apple/src");
+    const internal = await readFile(resolve(appleSourceRoot, "internal.ts"), "utf8");
+    const expected = [
+      ["plutil", ["-help"], 0],
+      ["codesign", ["--version"], 2],
+      ["productsign", ["--version"], 1],
+      ["hdiutil", ["help"], 0],
+      ["pkgbuild", ["--version"], 1],
+      ["productbuild", ["--version"], 1],
+      ["pkgutil", ["--help"], 0],
+      ["spctl", ["--version"], 2],
+      ["notarytool", ["--version"], 0],
+      ["ditto", ["--help"], 1],
+      ["stapler", ["-h"], 64],
+    ] as const;
+
+    expect(internal).toContain("const appleToolProbeSpecs = {");
+    expect(internal).not.toContain("probeArgs");
+    for (const [name, args, exitCode] of expected) {
+      expect(internal).toContain(
+        `${name}: { args: ${JSON.stringify(args)}, allowedExitCode: ${exitCode} }`,
+      );
+    }
+
+    let callCount = 0;
+    for (const entry of await readdir(appleSourceRoot, { recursive: true })) {
+      if (typeof entry !== "string" || !entry.endsWith(".ts") || entry === "internal.ts") continue;
+      const source = await readFile(resolve(appleSourceRoot, entry), "utf8");
+      expect(source, entry).not.toContain("appleToolProbeSpecs");
+      const occurrences = source.match(/selectAppleTool\(/gu) ?? [];
+      const exactCalls = source.match(/selectAppleTool\("[a-z]+", options\.[a-z]+, "[a-z-]+"\)/gu) ?? [];
+      expect(exactCalls, entry).toHaveLength(occurrences.length);
+      callCount += occurrences.length;
+    }
+    expect(callCount).toBe(23);
+  });
 });

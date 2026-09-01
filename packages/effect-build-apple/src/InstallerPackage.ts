@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, Exit, FileSystem, Layer, Path } from "effect";
+import { Context, Crypto, Effect, FileSystem, Layer, Path } from "effect";
 import * as File from "effect-build/Author/File";
 import * as Tree from "effect-build/Author/Tree";
 import { ChildProcessSpawner } from "effect/unstable/process";
@@ -8,10 +8,12 @@ import {
   AppleToolFailed,
   AppleToolUnavailable,
   capturePlatformServices,
+  claimApplePairMember,
   combineToolObservations,
   copyTreeSnapshot,
   ensureNewDestination,
   selectAppleTool,
+  withApplePairRollback,
 } from "./internal.js";
 import { hasDeveloperIdApplicationSignature, ProductStateInvalid } from "./Model.js";
 import type {
@@ -80,14 +82,15 @@ const makeService = (
 > =>
   Effect.gen(function*() {
     const { fileSystem, path, services } = yield* capturePlatformServices;
-    const pkgbuild = yield* selectAppleTool("pkgbuild", options.pkgbuild, ["--version"], "component-package");
-    const productbuild = yield* selectAppleTool("productbuild", options.productbuild, ["--version"], "flat-package");
-    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, ["--help"], "payload-verification");
-    const codesign = yield* selectAppleTool("codesign", options.codesign, ["--version"], "app-signature-verification");
+    const pkgbuild = yield* selectAppleTool("pkgbuild", options.pkgbuild, "component-package");
+    const productbuild = yield* selectAppleTool("productbuild", options.productbuild, "flat-package");
+    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, "payload-verification");
+    const codesign = yield* selectAppleTool("codesign", options.codesign, "app-signature-verification");
     const packageProvenance = combineToolObservations(
       productbuild.observation,
       pkgbuild.observation,
       pkgutil.observation,
+      codesign.observation,
     );
 
     const validate = (input: InstallerVariantInput, architecture: Architecture) => {
@@ -196,24 +199,29 @@ const makeService = (
         }
         let armCommitted = false;
         let x64Committed = false;
-        return yield* Effect.gen(function*() {
-          const arm64 = yield* buildOne(input.arm64);
-          armCommitted = true;
-          const x64 = yield* buildOne(input.x64);
-          x64Committed = true;
-          return {
-            arm64: Object.freeze({ ...arm64, architecture: "arm64" as const }),
-            x64: Object.freeze({ ...x64, architecture: "x64" as const }),
-          };
-        }).pipe(
-          Effect.onExit((exit) =>
-            Exit.isSuccess(exit)
-              ? Effect.void
-              : Effect.gen(function*() {
-                if (armCommitted) yield* fileSystem.remove(armDestination, { force: true }).pipe(Effect.ignore);
-                if (x64Committed) yield* fileSystem.remove(x64Destination, { force: true }).pipe(Effect.ignore);
-              })
-          ),
+        return yield* withApplePairRollback(
+          Effect.gen(function*() {
+            const arm64 = yield* claimApplePairMember(buildOne(input.arm64), () => {
+              armCommitted = true;
+            });
+            const x64 = yield* claimApplePairMember(buildOne(input.x64), () => {
+              x64Committed = true;
+            });
+            return {
+              arm64: Object.freeze({ ...arm64, architecture: "arm64" as const }),
+              x64: Object.freeze({ ...x64, architecture: "x64" as const }),
+            };
+          }),
+          fileSystem,
+          () => ({
+            operation: "build installer packages rollback",
+            arm64Path: armDestination,
+            x64Path: x64Destination,
+            arm64Committed: armCommitted,
+            x64Committed,
+            recursive: false,
+            failure: (reason) => new File.FileCommitFailed({ destination: armDestination, reason }),
+          }),
         );
       },
     );

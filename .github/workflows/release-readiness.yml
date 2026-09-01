@@ -1,0 +1,225 @@
+name: Release readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact full lowercase current-main SHA R
+        required: true
+        type: string
+      candidate_reference_json:
+        description: Reserved exact candidate reference; rejected while external authentication is blocked
+        required: true
+        type: string
+      exact_main_ci_reference_json:
+        description: Reserved exact-main CI reference; rejected while external authentication is blocked
+        required: true
+        type: string
+      fake_registry_reference_json:
+        description: Reserved fake-registry reference; rejected while external authentication is blocked
+        required: true
+        type: string
+      npm_authority_evidence_json:
+        description: Compact authenticated npm-authority ingress artifact reference
+        required: true
+        type: string
+      npm_oidc_certification_reference_json:
+        description: Reserved npm OIDC reference; rejected while external authentication is blocked
+        required: true
+        type: string
+      apple_certification_reference_json:
+        description: Reserved Apple reference; rejected while external authentication is blocked
+        required: true
+        type: string
+      operational_journal_evidence_json:
+        description: Compact authenticated operational-journal ingress artifact reference
+        required: true
+        type: string
+      github_release_governance_evidence_json:
+        description: Compact authenticated GitHub Release-governance ingress artifact reference
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  deployments: read
+
+concurrency:
+  group: effect-build-release-readiness
+  cancel-in-progress: false
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      artifact-id: ${{ steps.readiness-coordinate.outputs.artifact-id }}
+      artifact-digest: ${{ steps.readiness-coordinate.outputs.artifact-digest }}
+      run-attempt: ${{ steps.readiness-coordinate.outputs.run-attempt }}
+      run-id: ${{ steps.readiness-coordinate.outputs.run-id }}
+      source-sha: ${{ steps.readiness-coordinate.outputs.source-sha }}
+      workflow: ${{ steps.readiness-coordinate.outputs.workflow }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Admit the exact current-main source
+        shell: bash
+        env:
+          ACTIONS_READ_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]] || exit 1
+          env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" \
+            ACTIONS_READ_TOKEN="$ACTIONS_READ_TOKEN" REPOSITORY="$REPOSITORY" SOURCE_SHA="$SOURCE_SHA" \
+            node scripts/release/assert-current-main.mjs
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - name: Install the exact verifier dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(bun --version)" == "1.3.14" ]] || exit 1
+          node scripts/release/install-frozen-release-dependencies.mjs
+      - name: Refuse readiness while external producer authentication is not established
+        id: collect
+        shell: bash
+        env:
+          APPLE_CERTIFICATION_REFERENCE_JSON: ${{ inputs.apple_certification_reference_json }}
+          CANDIDATE_REFERENCE_JSON: ${{ inputs.candidate_reference_json }}
+          EXACT_MAIN_CI_REFERENCE_JSON: ${{ inputs.exact_main_ci_reference_json }}
+          FAKE_REGISTRY_REFERENCE_JSON: ${{ inputs.fake_registry_reference_json }}
+          GITHUB_RELEASE_GOVERNANCE_EVIDENCE_JSON: ${{ inputs.github_release_governance_evidence_json }}
+          GITHUB_TOKEN: ${{ github.token }}
+          NPM_AUTHORITY_EVIDENCE_JSON: ${{ inputs.npm_authority_evidence_json }}
+          NPM_OIDC_CERTIFICATION_REFERENCE_JSON: ${{ inputs.npm_oidc_certification_reference_json }}
+          OPERATIONAL_JOURNAL_EVIDENCE_JSON: ${{ inputs.operational_journal_evidence_json }}
+          OUTPUT_DIRECTORY: ${{ runner.temp }}/release-readiness
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$(node --version)" == "v24.14.1" ]] || exit 1
+          install -d -m 700 "$OUTPUT_DIRECTORY"
+          observed_at="$(node --input-type=module -e 'process.stdout.write(new Date().toISOString())')"
+          node scripts/release/collect-release-readiness.mjs \
+            --observed-at "$observed_at" \
+            --output "$OUTPUT_DIRECTORY"
+      - name: Upload the authenticated release-readiness aggregate
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.collect.outputs.artifact-name }}
+          path: ${{ runner.temp }}/release-readiness
+          if-no-files-found: error
+          retention-days: ${{ steps.collect.outputs.retention-days }}
+          compression-level: 0
+      - name: Canonicalize and re-observe release-readiness bytes
+        id: readiness-coordinate
+        shell: bash
+        env:
+          ACTIONS_READ_TOKEN: ${{ github.token }}
+          API_ROOT: ${{ github.api_url }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          EXPECTED_ARTIFACT_NAME: ${{ steps.collect.outputs.artifact-name }}
+          EXPECTED_REPOSITORY_ID: ${{ steps.collect.outputs.repository-id }}
+          EXPECTED_WORKFLOW: ${{ steps.collect.outputs.workflow }}
+          EXPECTED_WORKFLOW_PATH: ${{ steps.collect.outputs.workflow-path }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          UPLOAD_ACTION_BARE_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ "$API_ROOT" != "https://api.github.com" \
+            || "$REPOSITORY" != "mannyc2/effect-build" \
+            || "$EXPECTED_REPOSITORY_ID" != "1331906770" \
+            || ! "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ \
+            || ! "$RUN_ID" =~ ^[1-9][0-9]*$ \
+            || ! "$RUN_ATTEMPT" =~ ^[1-9][0-9]*$ \
+            || ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ \
+            || ! "$UPLOAD_ACTION_BARE_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "release-readiness upload boundary is not canonical" >&2
+            exit 1
+          fi
+          canonical_digest="sha256:$UPLOAD_ACTION_BARE_DIGEST"
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          [[ "$ACTIONS_READ_TOKEN" =~ ^[A-Za-z0-9._-]+$ ]] || {
+            echo "GitHub authorization token is not safe for the private config boundary" >&2
+            exit 1
+          }
+          env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" \
+            ACTIONS_READ_TOKEN="$ACTIONS_READ_TOKEN" ARTIFACT_ID="$ARTIFACT_ID" \
+            EXPECTED_ARTIFACT_NAME="$EXPECTED_ARTIFACT_NAME" EXPECTED_REPOSITORY_ID="$EXPECTED_REPOSITORY_ID" \
+            EXPECTED_WORKFLOW="$EXPECTED_WORKFLOW" EXPECTED_WORKFLOW_PATH="$EXPECTED_WORKFLOW_PATH" \
+            REPOSITORY="$REPOSITORY" RUN_ATTEMPT="$RUN_ATTEMPT" RUN_ID="$RUN_ID" \
+            SOURCE_SHA="$SOURCE_SHA" UPLOAD_ACTION_BARE_DIGEST="$UPLOAD_ACTION_BARE_DIGEST" \
+            node scripts/release/post-upload-artifact-observation.mjs "$stage"
+          env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" node --input-type=module - \
+            "$stage/artifact.json" "$stage/artifact.zip" "$stage/run.json" "$stage/main.json" \
+            "$ARTIFACT_ID" "$canonical_digest" "$SOURCE_SHA" "$RUN_ID" "$RUN_ATTEMPT" \
+            "$EXPECTED_ARTIFACT_NAME" "$EXPECTED_WORKFLOW" "$EXPECTED_WORKFLOW_PATH" \
+            "$REPOSITORY" "$EXPECTED_REPOSITORY_ID" <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFileSync } from "node:fs";
+          const [
+            metadataPath, zipPath, runPath, mainPath, artifactId, digest, sourceSha, runId, runAttempt,
+            artifactName, expectedWorkflow, expectedWorkflowPath, repository, repositoryId,
+          ] = process.argv.slice(2);
+          const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+          const run = JSON.parse(readFileSync(runPath, "utf8"));
+          const main = JSON.parse(readFileSync(mainPath, "utf8"));
+          const expectedWorkflowIdentity = `${repository}/${expectedWorkflowPath}@refs/heads/main`;
+          const zipDigest = createHash("sha256").update(readFileSync(zipPath)).digest("hex");
+          if (
+            expectedWorkflow !== expectedWorkflowIdentity
+            || metadata.id !== Number(artifactId)
+            || metadata.name !== artifactName
+            || metadata.digest !== digest
+            || metadata.expired !== false
+            || metadata.workflow_run?.id !== Number(runId)
+            || metadata.workflow_run?.head_branch !== "main"
+            || metadata.workflow_run?.head_sha !== sourceSha
+            || metadata.workflow_run?.repository_id !== Number(repositoryId)
+            || metadata.workflow_run?.head_repository_id !== Number(repositoryId)
+            || run.id !== Number(runId)
+            || run.run_attempt !== Number(runAttempt)
+            || run.path !== expectedWorkflowPath
+            || run.head_sha !== sourceSha
+            || run.head_branch !== "main"
+            || run.event !== "workflow_dispatch"
+            || run.status !== "in_progress"
+            || run.conclusion !== null
+            || run.repository?.full_name !== repository
+            || run.head_repository?.full_name !== repository
+            || run.repository?.id !== Number(repositoryId)
+            || run.head_repository?.id !== Number(repositoryId)
+            || main.ref !== "refs/heads/main"
+            || main.object?.type !== "commit"
+            || main.object?.sha !== sourceSha
+            || zipDigest !== digest.slice("sha256:".length)
+          ) throw new Error("release-readiness artifact coordinate or downloaded bytes changed");
+          NODE
+          {
+            echo "workflow=$EXPECTED_WORKFLOW"
+            echo "source-sha=$SOURCE_SHA"
+            echo "run-id=$RUN_ID"
+            echo "run-attempt=$RUN_ATTEMPT"
+            echo "artifact-id=$ARTIFACT_ID"
+            echo "artifact-digest=$canonical_digest"
+          } >> "$GITHUB_OUTPUT"

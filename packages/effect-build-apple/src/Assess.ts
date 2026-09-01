@@ -101,9 +101,9 @@ const makeService = (
 > =>
   Effect.gen(function*() {
     const { fileSystem, path, services } = yield* capturePlatformServices;
-    const spctl = yield* selectAppleTool("spctl", options.spctl, ["--version"], "gatekeeper-assessment");
-    const codesign = yield* selectAppleTool("codesign", options.codesign, ["--version"], "signature-verification");
-    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, ["--help"], "package-signature-verification");
+    const spctl = yield* selectAppleTool("spctl", options.spctl, "gatekeeper-assessment");
+    const codesign = yield* selectAppleTool("codesign", options.codesign, "signature-verification");
+    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, "package-signature-verification");
 
     const evaluate = (
       input: AssessInput,

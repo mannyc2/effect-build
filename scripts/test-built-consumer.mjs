@@ -9,6 +9,12 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 
+import {
+  assertCredentialFreeEffectiveNpmConfig,
+  buildCredentialFreeChildEnvironment,
+  credentialFreeConsumerPaths,
+} from "./release/credential-free-consumer.mjs";
+
 const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const combinedContract = JSON.parse(await readFile(join(root, "tooling/effect-build-contract.json"), "utf8"));
@@ -49,12 +55,240 @@ const publicModuleImports = publicModuleSpecifiers
   .map((specifier, index) => `import * as PublicModule${index} from ${JSON.stringify(specifier)};`)
   .join("\n");
 const publicModuleBindings = publicModuleSpecifiers.map((_, index) => `PublicModule${index}`).join(",\n  ");
-const bunExecutable = process.versions.bun === undefined ? "bun" : process.execPath;
 
 const workspaceManifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const effectVersion = workspaceManifest.devDependencies.effect;
 const platformNodeVersion = workspaceManifest.devDependencies["@effect/platform-node"];
 const typescriptVersion = workspaceManifest.devDependencies.typescript;
+
+const registryModeArguments = (args) => {
+  if (
+    args.length === 5
+    && args[0] === "--registry-version"
+    && args[2] === "--runtime"
+    && (args[3] === "node" || args[3] === "bun")
+    && args[4] === "--json"
+  ) return { runtime: args[3], version: args[1] };
+  if (
+    args.length === 0
+    || (args.length === 1 && (args[0] === "--fresh-install" || args[0] === "--built"))
+  ) return undefined;
+  throw new Error("consumer arguments are not one exact local or registry mode");
+};
+
+const runtimeConsumerSource = `import { NodeServices } from "@effect/platform-node";
+import { Cause, Effect, FileSystem } from "effect";
+import * as Artifact from "effect-build/Artifact";
+import * as FinalizedFile from "effect-build/Author/File";
+import * as EsbuildApi from "effect-build-esbuild/Api";
+${publicModuleImports}
+
+const publicModules = [
+  ${publicModuleBindings},
+];
+const bundle = await Effect.runPromise(
+  EsbuildApi.Build.build({
+    stdin: { contents: "export const consumer = 1;", loader: "ts", resolveDir: process.cwd() },
+    bundle: true,
+    write: false,
+    logLevel: "silent",
+  }),
+);
+const artifact = await Effect.runPromise(
+  FinalizedFile.publish(
+    {
+      destination: "dist/adopt-me.txt",
+      observation: "hashed",
+      provenance: Artifact.intrinsicProvenance("registry-consumer"),
+    },
+    (candidate) => FileSystem.FileSystem.use((fileSystem) =>
+      fileSystem.writeFileString(candidate, "immutable bytes\\n")
+    ),
+  ).pipe(Effect.provide(NodeServices.layer)),
+);
+const adoption = Artifact.adoptFile("consumer/adopt-me.txt", artifact);
+const verified = await Effect.runPromise(
+  FinalizedFile.withVerifiedBytes(artifact, (value) => Effect.succeed(new TextDecoder().decode(value)))
+    .pipe(Effect.provide(NodeServices.layer)),
+);
+const mutationExit = await Effect.runPromise(
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* fileSystem.writeFileString(artifact.path, "mutated\\n");
+    return yield* Effect.exit(FinalizedFile.withVerifiedBytes(artifact, () => Effect.void));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+const mutationError = mutationExit._tag === "Failure" ? Cause.findErrorOption(mutationExit.cause) : undefined;
+const mutationErrorTag = mutationError?._tag === "Some" ? mutationError.value._tag : null;
+process.stdout.write(JSON.stringify({
+  publicModules: publicModules.length,
+  outputs: bundle.outputFiles.length,
+  protocol: adoption.protocol,
+  logicalName: adoption.logicalName,
+  digestLength: adoption.digest.value.length,
+  bytes: adoption.bytes,
+  pathFree: !("path" in adoption),
+  adoptionMatchesArtifact:
+    adoption.bytes === artifact.bytes
+    && adoption.digest.value === artifact.digest.value
+    && adoption.digest !== artifact.digest
+    && Object.isFrozen(adoption)
+    && Object.isFrozen(adoption.digest),
+  verified,
+  mutationErrorTag,
+}));
+`;
+
+const runRegistryConsumer = async ({ runtime, version }) => {
+  const policy = combinedContract.releaseCertification.finalPublicVerification;
+  const smoke = policy.implementation.consumerSmoke;
+  if (version !== policy.version) throw new Error("consumer registry version is not the certified target");
+  const expected = smoke[runtime];
+  if (
+    (runtime === "node" && process.version !== `v${expected.version}`)
+    || (runtime === "bun" && process.versions.bun !== expected.version)
+  ) throw new Error(`${runtime} runtime does not match the certified toolchain`);
+  const consumerRoot = await mkdtemp(join(tmpdir(), `effect-build-${runtime}-registry-consumer-`));
+  try {
+    const consumerHome = join(consumerRoot, "home");
+    const cacheRoot = join(consumerRoot, "cache");
+    const paths = credentialFreeConsumerPaths({ consumerRoot, consumerHome, cacheRoot });
+    await mkdir(join(consumerHome, ".config"), { recursive: true, mode: 0o700 });
+    await mkdir(paths.cacheRoot, { recursive: true, mode: 0o700 });
+    await mkdir(paths.prefixRoot, { recursive: true, mode: 0o700 });
+    for (const file of [paths.projectConfig, paths.userConfig, paths.globalConfig, paths.bunConfig]) {
+      await writeFile(file, "", { mode: 0o600 });
+    }
+    await writeFile(
+      join(consumerRoot, "package.json"),
+      `${JSON.stringify({
+        name: `effect-build-final-${runtime}-consumer`,
+        private: true,
+        type: "module",
+        dependencies: {
+          "@effect/platform-node": platformNodeVersion,
+          effect: effectVersion,
+          ...Object.fromEntries(packageNames.map((name) => [name, version])),
+        },
+      }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    await writeFile(join(consumerRoot, "main.mjs"), runtimeConsumerSource, { mode: 0o600 });
+    const environment = buildCredentialFreeChildEnvironment({
+      sourceEnvironment: process.env,
+      forbiddenNames: combinedContract.releaseCertification.npmOidcCertification.forbiddenEnvironmentNames,
+      consumerHome,
+      paths,
+      registry: policy.registry,
+      runtime,
+    });
+    const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+    const auditNpmConfig = async () => {
+      const result = await execute(npm, ["config", "list", "--json"], {
+        cwd: consumerRoot,
+        env: environment,
+        shell: process.platform === "win32",
+      });
+      let effective;
+      try {
+        effective = JSON.parse(result.stdout);
+      } catch {
+        throw new Error("consumer effective npm config is not JSON");
+      }
+      assertCredentialFreeEffectiveNpmConfig(effective, {
+        registry: policy.registry,
+        userConfig: paths.userConfig,
+        globalConfig: paths.globalConfig,
+        cacheRoot: paths.cacheRoot,
+        prefixRoot: paths.prefixRoot,
+      });
+    };
+    const npmVersion = (await execute(npm, ["--version"], {
+      cwd: consumerRoot,
+      env: environment,
+      shell: process.platform === "win32",
+    })).stdout.trim();
+    if (npmVersion !== smoke.node.npm) throw new Error("npm client does not match the certified toolchain");
+    await auditNpmConfig();
+    if (runtime === "node") {
+      await execute(npm, [
+        "install",
+        "--no-audit",
+        "--no-fund",
+        "--ignore-scripts",
+        "--strict-ssl=true",
+        "--registry",
+        policy.registry,
+        "--userconfig",
+        paths.userConfig,
+        "--globalconfig",
+        paths.globalConfig,
+        "--cache",
+        paths.cacheRoot,
+      ], {
+        cwd: consumerRoot,
+        env: environment,
+        shell: process.platform === "win32",
+      });
+    } else {
+      await execute(process.execPath, [
+        "install",
+        "--config",
+        paths.bunConfig,
+        "--registry",
+        policy.registry,
+        "--cache-dir",
+        paths.cacheRoot,
+        "--ignore-scripts",
+        "--no-progress",
+        "--no-summary",
+      ], {
+        cwd: consumerRoot,
+        env: environment,
+      });
+    }
+    await auditNpmConfig();
+    for (const file of [paths.projectConfig, paths.userConfig, paths.globalConfig, paths.bunConfig]) {
+      if (await readFile(file, "utf8") !== "") throw new Error("consumer configuration mutated during install");
+    }
+    const result = await execute(process.execPath, [join(consumerRoot, "main.mjs")], {
+      cwd: consumerRoot,
+      env: environment,
+    });
+    const observed = JSON.parse(result.stdout.trim());
+    if (
+      observed.publicModules !== publicModuleSpecifiers.length
+      || observed.outputs !== 1
+      || observed.protocol !== "effect-build/artifact-adoption@1"
+      || observed.logicalName !== "consumer/adopt-me.txt"
+      || observed.digestLength !== 64
+      || observed.bytes !== "16"
+      || observed.pathFree !== true
+      || observed.adoptionMatchesArtifact !== true
+      || observed.verified !== "immutable bytes\n"
+      || observed.mutationErrorTag !== "FileVerificationFailed"
+    ) throw new Error(`${runtime} registry consumer did not prove all three pipelines`);
+    const values = {
+      executor: runtime,
+      version: expected.version,
+      npm: expected.npm,
+      cache: expected.cache,
+      publicModules: publicModuleSpecifiers,
+      pipelines: smoke.representativePipelines,
+      passed: true,
+    };
+    const report = Object.fromEntries(expected.reportFields.map((field) => [field, values[field]]));
+    process.stdout.write(`${JSON.stringify(report)}\n`);
+  } finally {
+    await rm(consumerRoot, { recursive: true, force: true });
+  }
+};
+
+const registryArguments = registryModeArguments(process.argv.slice(2));
+if (registryArguments !== undefined) {
+  await runRegistryConsumer(registryArguments);
+} else {
+const bunExecutable = process.versions.bun === undefined ? "bun" : process.execPath;
 
 const consumerRoot = await mkdtemp(join(tmpdir(), "effect-build-consumer-"));
 const cleanup = async () => rm(consumerRoot, { recursive: true, force: true });
@@ -65,7 +299,7 @@ const packedManifest = async (tarball) => {
   const archive = gunzipSync(await readFile(tarball));
   const record = 512;
   for (let offset = 0; offset < archive.byteLength; offset += record) {
-    const name = archive.subarray(offset, offset + 100).toString("utf8").replace(/\0.*$/, "");
+    const name = archive.subarray(offset, offset + 100).toString("utf8").split("\0", 1)[0];
     const size = Number.parseInt(archive.subarray(offset + 124, offset + 136).toString("utf8").trim() || "0", 8);
     if (name === "package/package.json") {
       return JSON.parse(archive.subarray(offset + record, offset + record + size).toString("utf8"));
@@ -238,4 +472,5 @@ console.log(JSON.stringify({
   console.log("consumer install, typecheck, and runtime checks passed");
 } finally {
   await cleanup();
+}
 }

@@ -194,6 +194,75 @@ describe("public surface", () => {
     }
   });
 
+  it("keeps the Apple Notary internals package-private without widening the 42-module surface", async () => {
+    const [surface, manifest, indexSource, notarySource, codecSource, rejectionSource, submissionSource] = await Promise
+      .all([
+        readSurface(),
+        readManifest("effect-build-apple"),
+        readFile(resolve(root, "packages/effect-build-apple/src/index.ts"), "utf8"),
+        readFile(resolve(root, "packages/effect-build-apple/src/Notary.ts"), "utf8"),
+        readFile(resolve(root, "packages/effect-build-apple/src/internal/NotaryJournalCodec.ts"), "utf8"),
+        readFile(resolve(root, "packages/effect-build-apple/src/internal/NotaryRejectionFixture.ts"), "utf8"),
+        readFile(resolve(root, "packages/effect-build-apple/src/internal/NotarySubmission.ts"), "utf8"),
+      ]);
+    expect(Object.keys(manifest.exports)).toEqual([
+      ".",
+      "./AppBundle",
+      "./Assess",
+      "./CodeSign",
+      "./DiskImage",
+      "./InstallerPackage",
+      "./Model",
+      "./Notary",
+      "./Staple",
+    ]);
+    expect(Object.keys(surface.packages)).toHaveLength(11);
+    expect(
+      Object.values(surface.packages).reduce((count, entry) => count + 1 + Object.keys(entry.subpaths).length, 0),
+    ).toBe(42);
+    for (
+      const name of [
+        "NotaryJournalCodecError",
+        "NotaryJournalValueTag",
+        "decodeNotaryJournalValue",
+        "encodeNotaryJournalValue",
+        "notaryJournalCodecId",
+        "submissionReferenceFromSubmission",
+      ]
+    ) {
+      expect(surface.packages["effect-build-apple"]?.subpaths["./Notary"]?.runtime).not.toContain(name);
+      expect(surface.packages["effect-build-apple"]?.subpaths["./Notary"]?.declarations).not.toContain(name);
+      expect(indexSource).not.toContain(name);
+      expect(notarySource).not.toContain(name);
+      expect(codecSource).toContain(`export ${name === "NotaryJournalCodecError" ? "class" : "const"} ${name}`);
+    }
+    for (
+      const name of [
+        "NotaryRejectionFixture",
+        "PreparedAppSubmission",
+        "Submitter",
+        "makeSubmissionEngine",
+        "submitOnce",
+      ]
+    ) {
+      expect(surface.packages["effect-build-apple"]?.subpaths["./Notary"]?.runtime).not.toContain(name);
+      expect(surface.packages["effect-build-apple"]?.subpaths["./Notary"]?.declarations).not.toContain(name);
+      expect(indexSource).not.toContain(name);
+    }
+    expect(rejectionSource).toContain("export class Submitter");
+    expect(rejectionSource).toContain("export const submitOnce");
+    expect(submissionSource).toContain("export const makeSubmissionEngine");
+    expect(submissionSource).toContain("export interface PreparedAppSubmission");
+    expect(codecSource).toContain("new Notary.SubmissionReference({");
+    for (const entry of await readdir(resolve(root, "packages/effect-build-apple/src"), { recursive: true })) {
+      if (typeof entry !== "string") continue;
+      const normalizedEntry = normalized(entry);
+      if (!normalizedEntry.endsWith(".ts") || normalizedEntry === "internal/NotaryJournalCodec.ts") continue;
+      const source = await readFile(resolve(root, "packages/effect-build-apple/src", normalizedEntry), "utf8");
+      expect(source, normalizedEntry).not.toMatch(/new\s+(?:Notary\.)?SubmissionReference\s*\(/u);
+    }
+  });
+
   it("ships only declared modules in every package dist", async () => {
     const [surface, contract] = await Promise.all([readSurface(), readContract()]);
     for (const name of Object.keys(surface.packages)) {

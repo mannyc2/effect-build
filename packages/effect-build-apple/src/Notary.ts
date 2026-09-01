@@ -1,6 +1,5 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import * as Artifact from "effect-build/Artifact";
-import * as BorrowedOutput from "effect-build/Author/BorrowedOutput";
 import * as File from "effect-build/Author/File";
 import type * as Tool from "effect-build/Author/Tool";
 import * as Tree from "effect-build/Author/Tree";
@@ -11,10 +10,19 @@ import {
   AppleToolFailed,
   AppleToolUnavailable,
   capturePlatformServices,
-  copyTreeSnapshot,
-  describe,
   selectAppleTool,
 } from "./internal.js";
+import {
+  type CredentialArguments,
+  type JsonObject,
+  makeSubmissionEngine,
+  nonEmpty,
+  normalizeStatus,
+  parseObject,
+  requireSubmissionId,
+  scrub,
+  type SubmissionModel,
+} from "./internal/NotarySubmission.js";
 import {
   Architecture,
   hasDeveloperIdApplicationSignature,
@@ -243,11 +251,6 @@ export class CorrelationFailed extends Schema.TaggedError<CorrelationFailed>()("
   observedSubmissionId: Schema.NonEmptyString,
 }) {}
 
-interface CredentialArguments {
-  readonly args: readonly string[];
-  readonly sensitiveValues: readonly string[];
-}
-
 interface CredentialService {
   readonly arguments: Effect.Effect<CredentialArguments>;
 }
@@ -314,63 +317,23 @@ interface Service {
 
 export class Client extends Context.Service<Client, Service>()("effect-build-apple/Notary/Client") {}
 
-type JsonObject = Record<string, unknown>;
-
-const scrub = (text: string, values: readonly string[]): string =>
-  values.reduce((redacted, value) => value.length === 0 ? redacted : redacted.split(value).join("<redacted>"), text);
-
-const parseObject = (operation: "submit" | "info" | "log", text: string): Effect.Effect<JsonObject, ResponseInvalid> =>
-  Effect.try({
-    try: () => {
-      const parsed: unknown = JSON.parse(text);
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        throw new Error("expected one JSON object");
-      }
-      return parsed as JsonObject;
-    },
-    catch: (error) => new ResponseInvalid({ operation, reason: describe(error) }),
-  });
-
-const nonEmpty = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length > 0 ? value : undefined;
-
-const requireText = (operation: "submit" | "info" | "log", object: JsonObject, key: string) => {
-  const value = nonEmpty(object[key]);
-  return value === undefined
-    ? Effect.fail(new ResponseInvalid({ operation, reason: `missing non-empty ${key}` }))
-    : Effect.succeed(value);
-};
-
-const requireSubmissionId = (
-  operation: "submit" | "info" | "log",
-  object: JsonObject,
-  key: string,
-  sensitiveValues: readonly string[],
-): Effect.Effect<SubmissionId, ResponseInvalid> =>
-  Effect.flatMap(requireText(operation, object, key), (value) => {
-    const canonical = value.toLowerCase();
-    if (sensitiveValues.some((sensitive) => sensitive.length > 0 && canonical.includes(sensitive.toLowerCase()))) {
-      return Effect.fail(new ResponseInvalid({ operation, reason: `${key} overlaps credential material` }));
-    }
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(canonical)
-      ? Effect.succeed(canonical as SubmissionId)
-      : Effect.fail(new ResponseInvalid({ operation, reason: `${key} is not a submission UUID` }));
-  });
-
-const normalizeStatus = (
-  operation: "submit" | "info" | "log",
-  providerStatus: string,
-  summary?: string,
-): Effect.Effect<Status, ResponseInvalid> => {
-  const normalized = providerStatus.trim().toLowerCase();
-  if (normalized === "accepted") return Effect.succeed(new Accepted({ providerStatus: "Accepted" }));
-  if (normalized === "in progress" || normalized === "in-progress" || normalized === "submitted") {
-    return Effect.succeed(new Pending({ providerStatus }));
-  }
-  if (normalized === "invalid" || normalized === "rejected") {
-    return Effect.succeed(new Rejected({ providerStatus, ...(summary === undefined ? {} : { summary }) }));
-  }
-  return Effect.fail(new ResponseInvalid({ operation, reason: `unknown status ${providerStatus}` }));
+const submissionModel: SubmissionModel<
+  Submission,
+  Status,
+  StapleTarget,
+  ResponseInvalid,
+  SubmissionPreparationFailed,
+  SubmissionOutcomeUnknown
+> = {
+  responseInvalid: (fields) => new ResponseInvalid(fields),
+  preparationFailed: (fields) => new SubmissionPreparationFailed(fields),
+  isPreparationFailed: (value): value is SubmissionPreparationFailed => value instanceof SubmissionPreparationFailed,
+  outcomeUnknown: (fields) => new SubmissionOutcomeUnknown(fields),
+  accepted: () => new Accepted({ providerStatus: "Accepted" }),
+  pending: (providerStatus) => new Pending({ providerStatus }),
+  rejected: (providerStatus, summary) =>
+    new Rejected({ providerStatus, ...(summary === undefined ? {} : { summary }) }),
+  submission: (fields) => new Submission(fields),
 };
 
 const issue = (value: unknown, sensitiveValues: readonly string[]): LogIssue | undefined => {
@@ -392,8 +355,6 @@ const issue = (value: unknown, sensitiveValues: readonly string[]): LogIssue | u
   });
 };
 
-const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-
 type LayerError = AppleToolUnavailable | AppleToolFailed;
 
 const makeService = (
@@ -404,101 +365,20 @@ const makeService = (
   Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Credential
 > =>
   Effect.gen(function*() {
-    const { fileSystem, path, services } = yield* capturePlatformServices;
-    const crypto = yield* Crypto.Crypto;
+    const { path, services } = yield* capturePlatformServices;
     const credentialService = yield* Credential;
-    const notarytool = yield* selectAppleTool("notarytool", options.notarytool, ["--version"], "notarization");
-    const ditto = yield* selectAppleTool("ditto", options.ditto, ["--help"], "archive-transport");
-    const codesign = yield* selectAppleTool("codesign", options.codesign, ["--version"], "signature-verification");
-    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, ["--help"], "package-signature-verification");
-
-    const run = (operation: "submit" | "info" | "log", args: readonly string[]) =>
-      Effect.gen(function*() {
-        const credential = yield* credentialService.arguments;
-        const completion = yield* notarytool.run(
-          [operation, ...args, "--output-format", "json", ...credential.args],
-          { redact: credential.sensitiveValues },
-        );
-        const text = yield* Effect.try({
-          try: () => new TextDecoder("utf-8", { fatal: true }).decode(completion.stdout),
-          catch: (error) =>
-            new ResponseInvalid({
-              operation,
-              reason: `stdout was not UTF-8: ${scrub(describe(error), credential.sensitiveValues)}`,
-            }),
-        });
-        return { text, sensitiveValues: credential.sensitiveValues } as const;
-      });
-
-    const submitBytes = (
-      kind: SubmissionKind,
-      architecture: typeof Architecture.Type,
-      name: string,
-      bytes: Uint8Array,
-      digest: Artifact.Digest,
-      stapleTarget?: StapleTarget,
-      transportTool?: Tool.Observation<"ditto">,
-    ): Effect.Effect<Submission, SubmitError> =>
-      Effect.scoped(
-        Effect.gen(function*() {
-          const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: ".effect-build-notary-" }).pipe(
-            Effect.mapError((error) => new SubmissionPreparationFailed({ path: name, reason: describe(error) })),
-          );
-          const staged = path.join(directory, name);
-          yield* fileSystem.writeFile(staged, bytes).pipe(
-            Effect.mapError((error) => new SubmissionPreparationFailed({ path: name, reason: describe(error) })),
-          );
-          if (kind === "dmg") yield* codesign.run(["--verify", "--strict", "--verbose=2", staged]);
-          if (kind === "pkg") yield* pkgutil.run(["--check-signature", staged]);
-          const response = yield* run("submit", [staged]).pipe(
-            Effect.mapError((failure) =>
-              failure instanceof AppleToolChanged
-                ? failure
-                : new SubmissionOutcomeUnknown({
-                  artifactDigest: digest.value,
-                  reason: failure.message,
-                })
-            ),
-          );
-          const parsed = yield* Effect.gen(function*() {
-            const object = yield* parseObject("submit", response.text);
-            const submissionId = yield* requireSubmissionId("submit", object, "id", response.sensitiveValues);
-            const safeText = (value: unknown) => {
-              const text = nonEmpty(value);
-              return text === undefined ? undefined : scrub(text, response.sensitiveValues);
-            };
-            const providerStatus = safeText(object.status) ?? "Submitted";
-            const message = safeText(object.message);
-            const status = yield* normalizeStatus("submit", providerStatus, message);
-            return new Submission({
-              submissionId,
-              kind,
-              architecture,
-              artifactBytes: Artifact.decimalBytes(`${bytes.byteLength}`),
-              artifactDigest: digest,
-              status,
-              ...(message === undefined ? {} : { message }),
-              submissionTool: notarytool.observation,
-              tool: notarytool.observation,
-              ...(stapleTarget === undefined ? {} : { stapleTarget }),
-              ...(transportTool === undefined ? {} : { transportTool }),
-            });
-          }).pipe(
-            Effect.mapError((failure) =>
-              new SubmissionOutcomeUnknown({
-                artifactDigest: digest.value,
-                reason: scrub(
-                  failure instanceof ResponseInvalid
-                    ? failure.reason
-                    : describe(failure) || "provider response could not be correlated",
-                  response.sensitiveValues,
-                ),
-              })
-            ),
-          );
-          return parsed;
-        }),
-      );
+    const notarytool = yield* selectAppleTool("notarytool", options.notarytool, "notarization");
+    const ditto = yield* selectAppleTool("ditto", options.ditto, "archive-transport");
+    const codesign = yield* selectAppleTool("codesign", options.codesign, "signature-verification");
+    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, "package-signature-verification");
+    const submissionEngine = yield* makeSubmissionEngine({
+      notarytool,
+      ditto,
+      codesign,
+      pkgutil,
+      credentialArguments: credentialService.arguments,
+      model: submissionModel,
+    });
 
     const submit = Effect.fn("effect-build-apple.notarySubmit")(function*(input: SubmitInput) {
       const expectedSuffix = input.kind === "dmg" ? ".dmg" : ".pkg";
@@ -521,7 +401,7 @@ const makeService = (
         });
       }
       return yield* File.withVerifiedBytes(input.artifact, (bytes) =>
-        submitBytes(
+        submissionEngine.submitBytes(
           input.kind,
           input.artifact.architecture,
           path.basename(input.artifact.path),
@@ -544,112 +424,40 @@ const makeService = (
           expected: "a native-verified Developer ID Application .app bundle",
         });
       }
-      return yield* Tree.withVerifiedSnapshot(input.bundle, (snapshot) =>
-        Effect.scoped(
-          Effect.gen(function*() {
-            const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: ".effect-build-notary-app-" }).pipe(
-              Effect.mapError((error) =>
-                new SubmissionPreparationFailed({ path: input.bundle.root, reason: describe(error) })
-              ),
-            );
-            const bundleName = path.basename(input.bundle.root);
-            const stagedApp = path.join(directory, bundleName);
-            yield* copyTreeSnapshot(snapshot, stagedApp).pipe(
-              Effect.mapError((error) =>
-                new SubmissionPreparationFailed({ path: input.bundle.root, reason: error.message })
-              ),
-            );
-            yield* codesign.run(["--verify", "--deep", "--strict", "--verbose=2", stagedApp]);
-            const zipName = `${bundleName.slice(0, -4)}.zip`;
-            const zipPath = path.join(directory, zipName);
-            yield* ditto.run(["-c", "-k", "--keepParent", stagedApp, zipPath]);
-            yield* BorrowedOutput.withTree(
-              {
-                prefix: "effect-build-notary-extracted-",
-                produce: (ownedRoot) =>
-                  Effect.gen(function*() {
-                    const extracted = path.join(ownedRoot, "payload");
-                    yield* fileSystem.makeDirectory(extracted);
-                    yield* ditto.run(["-x", "-k", zipPath, extracted]);
-                    const entries = (yield* fileSystem.readDirectory(extracted)).sort();
-                    if (entries.length !== 1 || entries[0] !== bundleName) {
-                      return yield* new SubmissionPreparationFailed({
-                        path: zipPath,
-                        reason: `ZIP extraction must contain exactly ${bundleName}`,
-                      });
-                    }
-                    return path.join(extracted, bundleName);
-                  }),
-              },
-              "hashed",
-              (tree) =>
-                Effect.gen(function*() {
-                  if (
-                    tree.initial.manifestDigest.value !== input.bundle.manifestDigest.value
-                    || tree.initial.totalBytes !== input.bundle.totalBytes
-                    || tree.initial.rootMode !== input.bundle.rootMode
-                  ) {
-                    const entryCount = Math.max(input.bundle.entries.length, tree.initial.entries.length);
-                    let firstEntryMismatch = "none";
-                    for (let index = 0; index < entryCount; index++) {
-                      const expected = JSON.stringify(input.bundle.entries[index]);
-                      const observed = JSON.stringify(tree.initial.entries[index]);
-                      if (expected !== observed) {
-                        firstEntryMismatch = `${index}: ${expected} -> ${observed}`.slice(0, 1024);
-                        break;
-                      }
-                    }
-                    return yield* new SubmissionPreparationFailed({
-                      path: zipPath,
-                      reason: [
-                        "ZIP projection changed bundle identity",
-                        `manifest ${input.bundle.manifestDigest.value} -> ${tree.initial.manifestDigest.value}`,
-                        `bytes ${input.bundle.totalBytes} -> ${tree.initial.totalBytes}`,
-                        `root mode ${input.bundle.rootMode} -> ${tree.initial.rootMode}`,
-                        `first entry mismatch ${firstEntryMismatch}`,
-                      ].join("; "),
-                    });
-                  }
-                  yield* codesign.run(["--verify", "--deep", "--strict", "--verbose=2", tree.root]);
-                  yield* tree.observe;
-                }),
-            ).pipe(
-              Effect.provide(BorrowedOutput.CleanupReporter.layer),
-              Effect.mapError((error) =>
-                error instanceof SubmissionPreparationFailed
-                  ? error
-                  : new SubmissionPreparationFailed({ path: zipPath, reason: describe(error) })
-              ),
-            );
-            const zipBytes = yield* fileSystem.readFile(zipPath).pipe(
-              Effect.mapError((error) => new SubmissionPreparationFailed({ path: zipPath, reason: describe(error) })),
-            );
-            const hashed = yield* crypto.digest("SHA-256", zipBytes).pipe(
-              Effect.mapError((error) => new SubmissionPreparationFailed({ path: zipPath, reason: describe(error) })),
-            );
-            return yield* submitBytes(
-              "zip",
-              input.bundle.architecture,
-              zipName,
-              zipBytes,
-              Artifact.sha256Digest(hex(new Uint8Array(hashed))),
-              new StapleTarget({
-                kind: "app",
-                identityKind: "tree-manifest",
-                artifactBytes: input.bundle.totalBytes,
-                artifactDigest: input.bundle.manifestDigest,
-                bundleName,
-              }),
-              ditto.observation,
-            );
+      return yield* Tree.withVerifiedSnapshot(input.bundle, (snapshot) => {
+        const bundleName = path.basename(input.bundle.root);
+        return submissionEngine.submitAppSnapshot({
+          sourcePath: input.bundle.root,
+          snapshotRoot: snapshot,
+          identity: {
+            architecture: input.bundle.architecture,
+            bundleName,
+            rootMode: input.bundle.rootMode,
+            entries: input.bundle.entries,
+            totalBytes: input.bundle.totalBytes,
+            manifestDigest: input.bundle.manifestDigest,
+          },
+          stapleTarget: new StapleTarget({
+            kind: "app",
+            identityKind: "tree-manifest",
+            artifactBytes: input.bundle.totalBytes,
+            artifactDigest: input.bundle.manifestDigest,
+            bundleName,
           }),
-        ));
+        });
+      });
     });
 
     const info = Effect.fn("effect-build-apple.notaryInfo")(function*(reference: SubmissionReference) {
-      const response = yield* run("info", [reference.submissionId]);
-      const object = yield* parseObject("info", response.text);
-      const submissionId = yield* requireSubmissionId("info", object, "id", response.sensitiveValues);
+      const response = yield* submissionEngine.run("info", [reference.submissionId]);
+      const object = yield* parseObject(submissionModel.responseInvalid, "info", response.text);
+      const submissionId = yield* requireSubmissionId(
+        submissionModel.responseInvalid,
+        "info",
+        object,
+        "id",
+        response.sensitiveValues,
+      );
       if (submissionId !== reference.submissionId) {
         return yield* new CorrelationFailed({
           operation: "info",
@@ -666,7 +474,7 @@ const makeService = (
         return yield* new ResponseInvalid({ operation: "info", reason: "missing status" });
       }
       const message = safeText(object.message);
-      const status = yield* normalizeStatus("info", providerStatus, message);
+      const status = yield* normalizeStatus(submissionModel, "info", providerStatus, message);
       const name = safeText(object.name);
       const createdDate = safeText(object.createdDate);
       return new Observation({
@@ -687,9 +495,15 @@ const makeService = (
     });
 
     const log = Effect.fn("effect-build-apple.notaryLog")(function*(reference: SubmissionReference) {
-      const response = yield* run("log", [reference.submissionId]);
-      const object = yield* parseObject("log", response.text);
-      const submissionId = yield* requireSubmissionId("log", object, "jobId", response.sensitiveValues);
+      const response = yield* submissionEngine.run("log", [reference.submissionId]);
+      const object = yield* parseObject(submissionModel.responseInvalid, "log", response.text);
+      const submissionId = yield* requireSubmissionId(
+        submissionModel.responseInvalid,
+        "log",
+        object,
+        "jobId",
+        response.sensitiveValues,
+      );
       if (submissionId !== reference.submissionId) {
         return yield* new CorrelationFailed({
           operation: "log",
@@ -706,7 +520,7 @@ const makeService = (
         return yield* new ResponseInvalid({ operation: "log", reason: "missing status" });
       }
       const statusSummary = safeText(object.statusSummary);
-      const status = yield* normalizeStatus("log", providerStatus, statusSummary);
+      const status = yield* normalizeStatus(submissionModel, "log", providerStatus, statusSummary);
       if (object.issues !== undefined && !Array.isArray(object.issues)) {
         return yield* new ResponseInvalid({ operation: "log", reason: "issues must be an array" });
       }
