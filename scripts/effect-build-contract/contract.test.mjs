@@ -1265,10 +1265,10 @@ test("freezes one exact release-certification policy without copying public pack
     reviewer: { id: 126291407, login: "mannyc2", type: "User", preventSelfReview: false },
     oidcSubjectPolicy: {
       use_default: true,
-      use_immutable_subject: false,
+      use_immutable_subject: true,
       sub_claim_prefix: "repo:mannyc2@126291407/effect-build@1331906770",
     },
-    expectedEnvironmentSubjectSource: "name-based-repository-and-environment",
+    expectedEnvironmentSubjectSource: "immutable-id-repository-and-environment",
     authorizationSplit: {
       protectedGithubTokenObservations: [
         "repository-metadata",
@@ -1293,7 +1293,8 @@ test("freezes one exact release-certification policy without copying public pack
     repositoryOwner: "mannyc2",
     workflow: contract.npmRegistryBoundary.trustedPublisher.workflow,
     environment: contract.npmRegistryBoundary.trustedPublisher.environment,
-    expectedEnvironmentSubject: "repo:mannyc2/effect-build:environment:npm",
+    expectedEnvironmentSubject:
+      "repo:mannyc2@126291407/effect-build@1331906770:environment:npm",
   });
   assert.deepEqual(release.dependencyBootstrap, {
     protocol: "effect-build/checkout-dependency-bootstrap@1",
@@ -2103,7 +2104,7 @@ test("freezes the exact v0.6 Apple receipt schemas, coordinates, categories, and
         variableNames: [],
         oidcSubjectPolicy: {
           use_default: true,
-          use_immutable_subject: false,
+          use_immutable_subject: true,
           sub_claim_prefix: "repo:mannyc2@126291407/effect-build@1331906770",
         },
       },

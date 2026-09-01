@@ -185,7 +185,7 @@ export const releaseAuthorityPolicyFromContract = (contract) => {
     || githubAuthority.workflow !== trustedPublisher.workflow
     || githubAuthority.environment !== trustedPublisher.environment
     || githubAuthority.expectedEnvironmentSubject
-      !== `repo:${trustedPublisher.repository}:environment:${trustedPublisher.environment}`
+      !== `${githubAuthority.oidcSubjectPolicy.sub_claim_prefix}:environment:${trustedPublisher.environment}`
     || !isObject(branchPolicy)
     || typeof branchPolicy.name !== "string"
     || branchPolicy.name.length === 0

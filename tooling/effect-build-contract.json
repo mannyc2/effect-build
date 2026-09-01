@@ -33,11 +33,11 @@
       },
       {
         "path": "scripts/effect-build-contract/policy.mjs",
-        "sha256": "cdb9ed8f5026926ad17b70fc8c8d08681a0de45a749ceb18deba130e39076a71"
+        "sha256": "947b9a02c18925b44bfc78fa7847ff02667b811d28ac0ae77ecaf7b9d3e51620"
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "72d6a92165edff496c8213afcd8a7e9f1f8569c6108d279482bcf06e76be4054"
+        "sha256": "2cf6973e7fb167dc8fd74507457876e3a8f842d8f8dd94128d53b2886aafc477"
       },
       {
         "path": "package.json",
@@ -4682,10 +4682,10 @@
       },
       "oidcSubjectPolicy": {
         "use_default": true,
-        "use_immutable_subject": false,
+        "use_immutable_subject": true,
         "sub_claim_prefix": "repo:mannyc2@126291407/effect-build@1331906770"
       },
-      "expectedEnvironmentSubjectSource": "name-based-repository-and-environment",
+      "expectedEnvironmentSubjectSource": "immutable-id-repository-and-environment",
       "authorizationSplit": {
         "protectedGithubTokenObservations": [
           "repository-metadata",
@@ -4713,7 +4713,7 @@
       "repositoryOwner": "mannyc2",
       "workflow": "release.yml",
       "environment": "npm",
-      "expectedEnvironmentSubject": "repo:mannyc2/effect-build:environment:npm"
+      "expectedEnvironmentSubject": "repo:mannyc2@126291407/effect-build@1331906770:environment:npm"
     },
     "dependencyBootstrap": {
       "protocol": "effect-build/checkout-dependency-bootstrap@1",
@@ -6673,7 +6673,7 @@
             },
             {
               "path": "test/fixtures/release/release-state.mjs",
-              "sha256": "fa476b71550d04c4468348d97d81aee14f608bbe73f517eb89a8ccfca1e5e824"
+              "sha256": "e58bc50e3647f26bc733cc5e7437082bd3795ae15e6a44050698b482d3c765c3"
             },
             {
               "path": "test/fixtures/release/exact-fake-fetch.mjs",
@@ -6944,7 +6944,7 @@
             "variableNames": [],
             "oidcSubjectPolicy": {
               "use_default": true,
-              "use_immutable_subject": false,
+              "use_immutable_subject": true,
               "sub_claim_prefix": "repo:mannyc2@126291407/effect-build@1331906770"
             }
           },

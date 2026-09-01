@@ -666,7 +666,8 @@ const buildReleaseCertification = (
     repositoryOwner,
     workflow: trustedPublisher.workflow,
     environment: trustedPublisher.environment,
-    expectedEnvironmentSubject: `repo:${trustedPublisher.repository}:environment:${trustedPublisher.environment}`,
+    expectedEnvironmentSubject:
+      `${releaseCertificationPolicy.githubAuthority.oidcSubjectPolicy.sub_claim_prefix}:environment:${trustedPublisher.environment}`,
   };
   const workflowIdentity = (path) =>
     `${trustedPublisher.repository}/${path}@refs/heads/${githubAuthority.branchPolicy.name}`;
@@ -1293,8 +1294,8 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || githubAuthority.workflow !== npm.trustedPublisher.workflow
     || githubAuthority.environment !== npm.trustedPublisher.environment
     || githubAuthority.expectedEnvironmentSubject
-      !== `repo:${npm.trustedPublisher.repository}:environment:${npm.trustedPublisher.environment}`
-    || githubAuthority.expectedEnvironmentSubjectSource !== "name-based-repository-and-environment"
+      !== `${githubAuthority.oidcSubjectPolicy.sub_claim_prefix}:environment:${npm.trustedPublisher.environment}`
+    || githubAuthority.expectedEnvironmentSubjectSource !== "immutable-id-repository-and-environment"
     || !/^[1-9][0-9]*$/u.test(githubAuthority.repositoryId)
     || !/^[1-9][0-9]*$/u.test(githubAuthority.repositoryOwnerId)
     || githubAuthority.repositoryVisibility !== "public"
@@ -1337,7 +1338,7 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || githubAuthority.reviewer.login.length === 0
     || githubAuthority.reviewer.type !== "User"
     || githubAuthority.oidcSubjectPolicy.use_default !== true
-    || githubAuthority.oidcSubjectPolicy.use_immutable_subject !== false
+    || githubAuthority.oidcSubjectPolicy.use_immutable_subject !== true
     || typeof githubAuthority.oidcSubjectPolicy.sub_claim_prefix !== "string"
     || githubAuthority.oidcSubjectPolicy.sub_claim_prefix.length === 0
   ) {

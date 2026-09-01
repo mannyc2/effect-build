@@ -241,7 +241,7 @@ const appleHostedActivationInterfaces = {
     variableNames: [],
     oidcSubjectPolicy: {
       use_default: true,
-      use_immutable_subject: false,
+      use_immutable_subject: true,
       sub_claim_prefix: "repo:mannyc2@126291407/effect-build@1331906770",
     },
   },
@@ -471,10 +471,10 @@ export const releaseCertificationPolicy = {
     },
     oidcSubjectPolicy: {
       use_default: true,
-      use_immutable_subject: false,
+      use_immutable_subject: true,
       sub_claim_prefix: "repo:mannyc2@126291407/effect-build@1331906770",
     },
-    expectedEnvironmentSubjectSource: "name-based-repository-and-environment",
+    expectedEnvironmentSubjectSource: "immutable-id-repository-and-environment",
     authorizationSplit: {
       protectedGithubTokenObservations: [
         "repository-metadata",
@@ -1864,7 +1864,7 @@ export const releaseCertificationPolicy = {
           },
           {
             path: "test/fixtures/release/release-state.mjs",
-            sha256: "fa476b71550d04c4468348d97d81aee14f608bbe73f517eb89a8ccfca1e5e824",
+            sha256: "e58bc50e3647f26bc733cc5e7437082bd3795ae15e6a44050698b482d3c765c3",
           },
           {
             path: "test/fixtures/release/exact-fake-fetch.mjs",

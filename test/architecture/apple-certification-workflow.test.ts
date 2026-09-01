@@ -432,7 +432,7 @@ describe("Apple certification workflow external-interface hard stop", () => {
       variableNames: [],
       oidcSubjectPolicy: {
         use_default: true,
-        use_immutable_subject: false,
+        use_immutable_subject: true,
         sub_claim_prefix: "repo:mannyc2@126291407/effect-build@1331906770",
       },
     });
