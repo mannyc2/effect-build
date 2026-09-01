@@ -1897,6 +1897,120 @@ test("freezes the exact v0.6 Apple receipt schemas, coordinates, categories, and
     ],
     artifactDisposition: "forbidden-while-blocked",
     protectedStageIds: ["sign-app", "submit-product", "continue-notary"],
+    activationInterfaces: {
+      protocol: "effect-build/apple-hosted-activation-interfaces@1",
+      status: "unconfigured",
+      producer: {
+        status: "unconfigured",
+        bundleProtocol: "effect-build/apple-producer-bundle@1",
+        sourceSha: null,
+        bundleDigest: null,
+      },
+      verifier: {
+        status: "unconfigured",
+        bundleProtocol: "effect-build/apple-clean-host-verifier-bundle@1",
+        sourceSha: null,
+        bundleDigest: null,
+      },
+      certificates: {
+        status: "unconfigured",
+        teamId: null,
+        applicationSha1: null,
+        installerSha1: null,
+      },
+      environment: {
+        status: "provisioned-policy-only",
+        authorityScope: "environment-policy-only-not-credential-or-runner-qualification",
+        repository: "mannyc2/effect-build",
+        repositoryId: "1331906770",
+        repositoryOwnerId: "126291407",
+        environmentId: "20977544910",
+        name: "apple-certification",
+        canAdminsBypass: true,
+        reviewer: {
+          id: 126291407,
+          login: "mannyc2",
+          type: "User",
+          preventSelfReview: false,
+        },
+        branchPolicy: {
+          name: "main",
+          type: "branch",
+          deploymentBranchPolicy: {
+            customBranchPolicies: true,
+            protectedBranches: false,
+          },
+          exactProtectionRuleTypes: ["branch_policy", "required_reviewers"],
+          branchPolicies: [{ name: "main", type: "branch" }],
+        },
+        secretNames: [],
+        variableNames: [],
+        oidcSubjectPolicy: {
+          use_default: true,
+          use_immutable_subject: false,
+          sub_claim_prefix: "repo:mannyc2@126291407/effect-build@1331906770",
+        },
+      },
+      credentialLayer: {
+        status: "unconfigured",
+        type: null,
+        environment: "apple-certification",
+        secretNames: [],
+      },
+      journal: {
+        status: "unconfigured",
+        packageName: "@mannyc1/ts-release",
+        packageVersion: null,
+        sourceSha: null,
+        reusableWorkflowRef: null,
+        reusableWorkflowSha: null,
+        codecId: null,
+      },
+      aws: {
+        status: "unconfigured",
+        accountId: null,
+        bucketArn: null,
+        region: null,
+        roleArn: null,
+        prefix: "operation-journal/v1",
+        retentionPolicyDigest: null,
+        iamPolicyDigest: null,
+        bucketPolicyDigest: null,
+        oidcTrustPolicyDigest: null,
+        oidcJobWorkflowRef: null,
+        oidcJobWorkflowSha: null,
+      },
+      runners: {
+        status: "unqualified",
+        receiptPins: [
+          ["N-native", "macos-aarch64"],
+          ["N-native", "macos-x64"],
+          ["P-signed-app", "macos-aarch64"],
+          ["P-signed-app", "macos-x64"],
+          ["P-notarized-product", "macos-aarch64"],
+          ["P-notarized-product", "macos-x64"],
+          ["G-clean-host", "macos-aarch64"],
+          ["G-clean-host", "macos-x64"],
+          ["A-verdict", null],
+        ].map(([category, coordinateArchitecture]) => ({
+          category,
+          coordinateArchitecture,
+          status: "unqualified",
+          runnerLabel: null,
+          platform: null,
+          architecture: null,
+          image: null,
+          runnerEnvironment: null,
+        })),
+      },
+      continuation: {
+        status: "unconfigured",
+        initialDelaySeconds: null,
+        pollIntervalSeconds: null,
+        maximumPolls: null,
+        maximumElapsedSeconds: null,
+      },
+    },
   });
   assert.deepEqual(apple.protocols, {
     request: "effect-build/apple-certification-request@3",
@@ -2076,7 +2190,7 @@ test("freezes the exact v0.6 Apple receipt schemas, coordinates, categories, and
     },
   });
   assert.deepEqual(apple.receiptSchemas, {
-    runnerIdentity: ["platform", "architecture", "image", "imageVersion", "runnerEnvironment"],
+    runnerIdentity: ["runnerLabel", "platform", "architecture", "image", "imageVersion", "runnerEnvironment"],
     digestIdentity: ["bytes", "digest"],
     executableIdentity: ["provider", "version", "architecture", "target", "nativeFormat", "bytes", "digest"],
     toolObservation: ["name", "version", "executableDigest", "observationDigest"],
@@ -2541,9 +2655,18 @@ test("rejects every release-certification policy mutation", () => {
   rejects((release) => release.fakeRegistry.hypotheticalStateMachine.cases.pop());
   rejects((release) => release.fakeRegistry.hypotheticalStateMachine.cases[0].expected = "best-effort");
   rejects((release) => release.apple.protocols.receipt = "effect-build/apple-certification-receipt@2");
-  rejects((release) => release.apple.hostedExecution.status = "ready");
+  rejects((release) => release.apple.hostedExecution.status = "supported");
   rejects((release) => release.apple.hostedExecution.blockerIds.pop());
   rejects((release) => release.apple.hostedExecution.protectedStageIds.push("peer-stage"));
+  rejects((release) => release.apple.hostedExecution.activationInterfaces.status = "configured");
+  rejects((release) => release.apple.hostedExecution.activationInterfaces.producer.bundleDigest = `sha256:${"0".repeat(64)}`);
+  rejects((release) => release.apple.hostedExecution.activationInterfaces.certificates.teamId = "ABCDE12345");
+  rejects((release) => release.apple.hostedExecution.activationInterfaces.environment.canAdminsBypass = false);
+  rejects((release) => release.apple.hostedExecution.activationInterfaces.credentialLayer.secretNames.push("PEER_SECRET"));
+  rejects((release) => release.apple.hostedExecution.activationInterfaces.journal.packageVersion = "0.0.0-peer");
+  rejects((release) => release.apple.hostedExecution.activationInterfaces.aws.accountId = "123456789012");
+  rejects((release) => release.apple.hostedExecution.activationInterfaces.runners.receiptPins[0].image = "peer-image");
+  rejects((release) => release.apple.hostedExecution.activationInterfaces.continuation.maximumPolls = 1);
   rejects((release) => release.apple.productLineage.denoCoverage = "distribution-fallback");
   rejects((release) => release.apple.publicCapabilityCount -= 1);
   rejects((release) => release.apple.coordinates.reverse());

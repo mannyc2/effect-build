@@ -2444,6 +2444,12 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   requireUnique(Object.values(apple.protocols), "Apple certification protocol ids");
   requireUnique(apple.hostedExecution.blockerIds, "Apple hosted-execution blocker ids");
   requireUnique(apple.hostedExecution.protectedStageIds, "Apple hosted protected-stage ids");
+  requireUnique(
+    apple.hostedExecution.activationInterfaces.runners.receiptPins.map(
+      ({ category, coordinateArchitecture }) => `${category}|${coordinateArchitecture ?? "none"}`,
+    ),
+    "Apple hosted runner receipt selectors",
+  );
   requireUnique(apple.coordinates, "Apple certification coordinates");
   requireUnique(apple.commonReceiptFields, "Apple certification common receipt fields");
   requireUnique(apple.coordinateRuleFields, "Apple certification coordinate rule fields");
@@ -2500,6 +2506,10 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     ])
     || apple.hostedExecution.artifactDisposition !== "forbidden-while-blocked"
     || !sameJson(apple.hostedExecution.protectedStageIds, ["sign-app", "submit-product", "continue-notary"])
+    || !sameJson(
+      apple.hostedExecution.activationInterfaces,
+      releaseCertificationPolicy.apple.hostedExecution.activationInterfaces,
+    )
     || apple.coordinates.length !== 28
     || apple.counts.total !== 28
     || apple.counts.N !== 2

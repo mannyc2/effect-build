@@ -33,11 +33,11 @@
       },
       {
         "path": "scripts/effect-build-contract/policy.mjs",
-        "sha256": "dc95f489930665599e96a2233d761b347004bb7ec7fff4176e8390218ac747d4"
+        "sha256": "0f63dfb7798ecddd1d71540398f166b811326be30f7636e0ac009832f5f36370"
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "ab6ddd088eb1346f126b050fcf7912ecd9ad55697479258586046a062d1ab50a"
+        "sha256": "c26a039f9e17eb253738914fdedc1984f5580208c6e6106dbc17c935b5e82226"
       },
       {
         "path": "package.json",
@@ -6612,7 +6612,201 @@
           "sign-app",
           "submit-product",
           "continue-notary"
-        ]
+        ],
+        "activationInterfaces": {
+          "protocol": "effect-build/apple-hosted-activation-interfaces@1",
+          "status": "unconfigured",
+          "producer": {
+            "status": "unconfigured",
+            "bundleProtocol": "effect-build/apple-producer-bundle@1",
+            "sourceSha": null,
+            "bundleDigest": null
+          },
+          "verifier": {
+            "status": "unconfigured",
+            "bundleProtocol": "effect-build/apple-clean-host-verifier-bundle@1",
+            "sourceSha": null,
+            "bundleDigest": null
+          },
+          "certificates": {
+            "status": "unconfigured",
+            "teamId": null,
+            "applicationSha1": null,
+            "installerSha1": null
+          },
+          "environment": {
+            "status": "provisioned-policy-only",
+            "authorityScope": "environment-policy-only-not-credential-or-runner-qualification",
+            "repository": "mannyc2/effect-build",
+            "repositoryId": "1331906770",
+            "repositoryOwnerId": "126291407",
+            "environmentId": "20977544910",
+            "name": "apple-certification",
+            "canAdminsBypass": true,
+            "reviewer": {
+              "id": 126291407,
+              "login": "mannyc2",
+              "type": "User",
+              "preventSelfReview": false
+            },
+            "branchPolicy": {
+              "name": "main",
+              "type": "branch",
+              "deploymentBranchPolicy": {
+                "customBranchPolicies": true,
+                "protectedBranches": false
+              },
+              "exactProtectionRuleTypes": [
+                "branch_policy",
+                "required_reviewers"
+              ],
+              "branchPolicies": [
+                {
+                  "name": "main",
+                  "type": "branch"
+                }
+              ]
+            },
+            "secretNames": [],
+            "variableNames": [],
+            "oidcSubjectPolicy": {
+              "use_default": true,
+              "use_immutable_subject": false,
+              "sub_claim_prefix": "repo:mannyc2@126291407/effect-build@1331906770"
+            }
+          },
+          "credentialLayer": {
+            "status": "unconfigured",
+            "type": null,
+            "environment": "apple-certification",
+            "secretNames": []
+          },
+          "journal": {
+            "status": "unconfigured",
+            "packageName": "@mannyc1/ts-release",
+            "packageVersion": null,
+            "sourceSha": null,
+            "reusableWorkflowRef": null,
+            "reusableWorkflowSha": null,
+            "codecId": null
+          },
+          "aws": {
+            "status": "unconfigured",
+            "accountId": null,
+            "bucketArn": null,
+            "region": null,
+            "roleArn": null,
+            "prefix": "operation-journal/v1",
+            "retentionPolicyDigest": null,
+            "iamPolicyDigest": null,
+            "bucketPolicyDigest": null,
+            "oidcTrustPolicyDigest": null,
+            "oidcJobWorkflowRef": null,
+            "oidcJobWorkflowSha": null
+          },
+          "runners": {
+            "status": "unqualified",
+            "receiptPins": [
+              {
+                "category": "N-native",
+                "coordinateArchitecture": "macos-aarch64",
+                "status": "unqualified",
+                "runnerLabel": null,
+                "platform": null,
+                "architecture": null,
+                "image": null,
+                "runnerEnvironment": null
+              },
+              {
+                "category": "N-native",
+                "coordinateArchitecture": "macos-x64",
+                "status": "unqualified",
+                "runnerLabel": null,
+                "platform": null,
+                "architecture": null,
+                "image": null,
+                "runnerEnvironment": null
+              },
+              {
+                "category": "P-signed-app",
+                "coordinateArchitecture": "macos-aarch64",
+                "status": "unqualified",
+                "runnerLabel": null,
+                "platform": null,
+                "architecture": null,
+                "image": null,
+                "runnerEnvironment": null
+              },
+              {
+                "category": "P-signed-app",
+                "coordinateArchitecture": "macos-x64",
+                "status": "unqualified",
+                "runnerLabel": null,
+                "platform": null,
+                "architecture": null,
+                "image": null,
+                "runnerEnvironment": null
+              },
+              {
+                "category": "P-notarized-product",
+                "coordinateArchitecture": "macos-aarch64",
+                "status": "unqualified",
+                "runnerLabel": null,
+                "platform": null,
+                "architecture": null,
+                "image": null,
+                "runnerEnvironment": null
+              },
+              {
+                "category": "P-notarized-product",
+                "coordinateArchitecture": "macos-x64",
+                "status": "unqualified",
+                "runnerLabel": null,
+                "platform": null,
+                "architecture": null,
+                "image": null,
+                "runnerEnvironment": null
+              },
+              {
+                "category": "G-clean-host",
+                "coordinateArchitecture": "macos-aarch64",
+                "status": "unqualified",
+                "runnerLabel": null,
+                "platform": null,
+                "architecture": null,
+                "image": null,
+                "runnerEnvironment": null
+              },
+              {
+                "category": "G-clean-host",
+                "coordinateArchitecture": "macos-x64",
+                "status": "unqualified",
+                "runnerLabel": null,
+                "platform": null,
+                "architecture": null,
+                "image": null,
+                "runnerEnvironment": null
+              },
+              {
+                "category": "A-verdict",
+                "coordinateArchitecture": null,
+                "status": "unqualified",
+                "runnerLabel": null,
+                "platform": null,
+                "architecture": null,
+                "image": null,
+                "runnerEnvironment": null
+              }
+            ]
+          },
+          "continuation": {
+            "status": "unconfigured",
+            "initialDelaySeconds": null,
+            "pollIntervalSeconds": null,
+            "maximumPolls": null,
+            "maximumElapsedSeconds": null
+          }
+        }
       },
       "protocols": {
         "request": "effect-build/apple-certification-request@3",
@@ -6949,6 +7143,7 @@
       },
       "receiptSchemas": {
         "runnerIdentity": [
+          "runnerLabel",
           "platform",
           "architecture",
           "image",

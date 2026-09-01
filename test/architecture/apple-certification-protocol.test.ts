@@ -195,6 +195,11 @@ const common = (rule: any) => ({
   verifierDigest: digest("one synthetic verifier"),
   observedAt,
   runnerIdentity: {
+    runnerLabel: rule.architecture === "macos-x64"
+      ? "synthetic-macos-15-intel"
+      : rule.architecture === "macos-aarch64"
+      ? "synthetic-macos-15"
+      : "synthetic-ubuntu-24.04",
     platform: rule.architecture === null ? "linux" : "macos",
     architecture: rule.architecture ?? "linux-x64",
     image: rule.architecture === null ? "synthetic-ubuntu" : "synthetic-macos",
@@ -299,7 +304,9 @@ const notarizedReceipt = (rule: any, receiptsByCoordinate: Map<string, any>) => 
   const assessmentDigest = digest(`${rule.coordinate} assessment`);
   const journalReference = {
     protocol: policy.notaryJournal.protocol,
-    journalId: `synthetic-${rule.coordinate}`,
+    journalId: `${policy.hostedExecution.activationInterfaces.aws.prefix}/${sourceSha}/${
+      digest(`${rule.coordinate} operation key`).slice("sha256:".length)
+    }`,
     submissionId: id,
     intentRecordDigest: digest(`${rule.coordinate} intent record`),
     intentSequence: "1",
@@ -473,6 +480,102 @@ const makeSyntheticReceipts = () => {
 };
 
 const receipts = makeSyntheticReceipts();
+const configuredHostedFixture = () => {
+  const configuredContract = structuredClone(contract);
+  const hosted = configuredContract.releaseCertification.apple.hostedExecution;
+  const interfaces = hosted.activationInterfaces;
+  hosted.status = "supported";
+  hosted.blockerIds = [];
+  hosted.artifactDisposition = "required-on-terminal-success";
+  interfaces.status = "configured";
+  interfaces.producer = {
+    ...interfaces.producer,
+    status: "configured",
+    sourceSha,
+    bundleDigest: digest("one synthetic producer"),
+  };
+  interfaces.verifier = {
+    ...interfaces.verifier,
+    status: "configured",
+    sourceSha,
+    bundleDigest: digest("one synthetic verifier"),
+  };
+  interfaces.certificates = {
+    status: "configured",
+    teamId: "ABCDE12345",
+    applicationSha1: "a".repeat(40),
+    installerSha1: "b".repeat(40),
+  };
+  interfaces.credentialLayer = {
+    ...interfaces.credentialLayer,
+    status: "configured",
+    type: "keychain-profile-app-store-connect-api-key",
+    secretNames: [
+      "APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64",
+      "APPLE_DEVELOPER_ID_APPLICATION_P12_PASSWORD",
+      "APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64",
+      "APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD",
+      "APPLE_NOTARY_API_PRIVATE_KEY_BASE64",
+      "APPLE_NOTARY_API_KEY_ID",
+      "APPLE_NOTARY_API_ISSUER_ID",
+    ],
+  };
+  interfaces.environment = {
+    ...interfaces.environment,
+    status: "configured",
+    authorityScope: "environment-and-credential-name-policy-not-runner-qualification",
+    secretNames: [...interfaces.credentialLayer.secretNames],
+  };
+  const journalSourceSha = "c".repeat(40);
+  const reusableWorkflowRef = "mannyc2/ts-release/.github/workflows/operational-journal.yml@refs/heads/main";
+  interfaces.journal = {
+    ...interfaces.journal,
+    status: "configured",
+    packageVersion: "0.0.0-synthetic",
+    sourceSha: journalSourceSha,
+    reusableWorkflowRef,
+    reusableWorkflowSha: journalSourceSha,
+    codecId: configuredContract.releaseCertification.apple.notaryJournal.submissionCodec,
+  };
+  interfaces.aws = {
+    ...interfaces.aws,
+    status: "configured",
+    accountId: "123456789012",
+    bucketArn: "arn:aws:s3:::synthetic-effect-build-journal",
+    region: "us-east-1",
+    roleArn: "arn:aws:iam::123456789012:role/synthetic-effect-build-journal",
+    retentionPolicyDigest: digest("synthetic retention policy"),
+    iamPolicyDigest: digest("synthetic IAM policy"),
+    bucketPolicyDigest: digest("synthetic bucket policy"),
+    oidcTrustPolicyDigest: digest("synthetic OIDC trust policy"),
+    oidcJobWorkflowRef: reusableWorkflowRef,
+    oidcJobWorkflowSha: journalSourceSha,
+  };
+  interfaces.runners.status = "qualified";
+  interfaces.runners.receiptPins = interfaces.runners.receiptPins.map((pin: any) => ({
+    ...pin,
+    status: "qualified",
+    runnerLabel: pin.coordinateArchitecture === "macos-x64"
+      ? "synthetic-macos-15-intel"
+      : pin.coordinateArchitecture === "macos-aarch64"
+      ? "synthetic-macos-15"
+      : "synthetic-ubuntu-24.04",
+    platform: pin.category === "A-verdict" ? "linux" : "macos",
+    architecture: pin.coordinateArchitecture ?? "linux-x64",
+    image: pin.category === "A-verdict" ? "synthetic-ubuntu" : "synthetic-macos",
+    runnerEnvironment: "github-hosted",
+  }));
+  interfaces.continuation = {
+    status: "configured",
+    initialDelaySeconds: 10,
+    pollIntervalSeconds: 30,
+    maximumPolls: 20,
+    maximumElapsedSeconds: 600,
+  };
+  const configuredReceipts = structuredClone(receipts);
+  for (const receipt of configuredReceipts) receipt.runnerIdentity.runnerEnvironment = "github-hosted";
+  return { configuredContract, configuredReceipts };
+};
 const build = (overrides: Record<string, unknown> = {}) =>
   buildAppleAggregate({
     contract,
@@ -520,6 +623,77 @@ describe("Apple v0.6 local protocol with synthetic-only vectors", () => {
         ({ category, product }: any) => category === "P-signed-app" && product === "app",
       ),
     ).toBe(true);
+  });
+
+  it("fails closed against configured hosted producer, verifier, certificate, journal, and runner pins", () => {
+    const { configuredContract, configuredReceipts } = configuredHostedFixture();
+    const buildConfigured = (activeContract: any, activeReceipts: any[]) =>
+      buildAppleAggregate({
+        contract: activeContract,
+        sourceSha,
+        candidateCoordinate,
+        workflowCoordinate,
+        receipts: activeReceipts,
+        evidenceBytes: new Map(evidenceBytes),
+      });
+    expect(() => buildConfigured(configuredContract, configuredReceipts)).not.toThrow();
+
+    const coherentForeignProducer = structuredClone(configuredReceipts);
+    for (const receipt of coherentForeignProducer) receipt.producerDigest = digest("coherent foreign producer");
+    expect(() => buildConfigured(configuredContract, coherentForeignProducer)).toThrow(/configured producer/u);
+
+    const coherentForeignCertificates = structuredClone(configuredReceipts);
+    for (const receipt of coherentForeignCertificates.filter(({ coordinate }: any) => coordinate.startsWith("P-"))) {
+      receipt.certificateFacts.teamId = "FGHIJ67890";
+    }
+    expect(() => buildConfigured(configuredContract, coherentForeignCertificates)).toThrow(
+      /configured Apple certificate/u,
+    );
+
+    const coherentForeignJournal = structuredClone(configuredReceipts);
+    for (
+      const receipt of coherentForeignJournal.filter(({ coordinate }: any) => coordinate.startsWith("P-notarized-"))
+    ) {
+      const operationKey = receipt.journalReference.journalId.split("/").at(-1);
+      receipt.journalReference.journalId = `${policy.hostedExecution.activationInterfaces.aws.prefix}/${
+        "d".repeat(40)
+      }/${operationKey}`;
+    }
+    expect(() => buildConfigured(configuredContract, coherentForeignJournal)).toThrow(
+      /configured journal namespace/u,
+    );
+
+    const coherentForeignRunners = structuredClone(configuredReceipts);
+    for (const receipt of coherentForeignRunners) receipt.runnerIdentity.runnerLabel = "synthetic-foreign-runner";
+    expect(() => buildConfigured(configuredContract, coherentForeignRunners)).toThrow(/configured hosted runner/u);
+
+    const wrongVerdictArchitecture = structuredClone(configuredReceipts);
+    for (const receipt of wrongVerdictArchitecture.filter(({ coordinate }: any) => coordinate.startsWith("A"))) {
+      receipt.runnerIdentity.architecture = "linux-arm64";
+    }
+    expect(() => buildConfigured(configuredContract, wrongVerdictArchitecture)).toThrow(/configured hosted runner/u);
+
+    const invalidCredentialInventory = structuredClone(configuredContract);
+    invalidCredentialInventory.releaseCertification.apple.hostedExecution.activationInterfaces.credentialLayer
+      .secretNames.reverse();
+    expect(() => buildConfigured(invalidCredentialInventory, configuredReceipts)).toThrow(/credential layer/u);
+
+    const conflatedWorkflowRef = structuredClone(configuredContract);
+    const conflatedInterfaces = conflatedWorkflowRef.releaseCertification.apple.hostedExecution.activationInterfaces;
+    conflatedInterfaces.journal.reusableWorkflowRef =
+      `mannyc2/ts-release/.github/workflows/operational-journal.yml@${conflatedInterfaces.journal.reusableWorkflowSha}`;
+    conflatedInterfaces.aws.oidcJobWorkflowRef = conflatedInterfaces.journal.reusableWorkflowRef;
+    expect(() => buildConfigured(conflatedWorkflowRef, configuredReceipts)).toThrow(/workflow ref/u);
+
+    const conflatedAwsEvidence = structuredClone(configuredContract);
+    const aws = conflatedAwsEvidence.releaseCertification.apple.hostedExecution.activationInterfaces.aws;
+    aws.iamPolicyDigest = aws.bucketPolicyDigest;
+    expect(() => buildConfigured(conflatedAwsEvidence, configuredReceipts)).toThrow(/must be distinct/u);
+
+    const invalidContinuation = structuredClone(configuredContract);
+    invalidContinuation.releaseCertification.apple.hostedExecution.activationInterfaces.continuation
+      .maximumElapsedSeconds = 1;
+    expect(() => buildConfigured(invalidContinuation, configuredReceipts)).toThrow(/polling schedule/u);
   });
 
   it("builds and revalidates one deterministic two-file byte lineage", () => {

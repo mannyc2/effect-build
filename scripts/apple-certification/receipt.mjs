@@ -221,6 +221,15 @@ const validateCertificateFacts = (input, context, rule, observedAt, label) => {
   if (notBefore > observedAt || notAfter < observedAt || notAfter <= notBefore) {
     throw new Error(`${label} validity does not cover the receipt observation`);
   }
+  const configured = policy.hostedExecution.activationInterfaces;
+  if (configured.status === "configured") {
+    const expectedSha1 = rule.product === "pkg"
+      ? configured.certificates.installerSha1
+      : configured.certificates.applicationSha1;
+    if (value.teamId !== configured.certificates.teamId || value.sha1 !== expectedSha1) {
+      throw new Error(`${label} does not match the configured Apple certificate identity`);
+    }
+  }
   return value;
 };
 
@@ -232,6 +241,20 @@ const validateRunnerIdentity = (input, context, rule, label) => {
     if (value.platform !== "macos" || value.architecture !== rule.architecture) {
       throw new Error(`${label} is not the receipt coordinate's macOS architecture`);
     }
+  }
+  const configured = policy.hostedExecution.activationInterfaces;
+  if (configured.status === "configured") {
+    const pin = configured.runners.receiptPins.find(({ category, coordinateArchitecture }) =>
+      category === rule.category && coordinateArchitecture === rule.architecture
+    );
+    if (
+      pin === undefined
+      || value.runnerLabel !== pin.runnerLabel
+      || value.platform !== pin.platform
+      || value.architecture !== pin.architecture
+      || value.image !== pin.image
+      || value.runnerEnvironment !== pin.runnerEnvironment
+    ) throw new Error(`${label} does not match the configured hosted runner identity`);
   }
   return value;
 };
@@ -390,6 +413,14 @@ const validateJournalReference = (input, context, label) => {
   ) throw new Error(`${label} does not bind exact acknowledged journal re-reads`);
   if (BigInt(value.submissionSequence) <= BigInt(value.intentSequence)) {
     throw new Error(`${label} submission sequence does not follow the intent sequence`);
+  }
+  const configured = policy.hostedExecution.activationInterfaces;
+  if (configured.status === "configured") {
+    const expectedPrefix = `${configured.aws.prefix}/${context.expectedSourceSha}/`;
+    const operationKey = value.journalId.slice(expectedPrefix.length);
+    if (!value.journalId.startsWith(expectedPrefix) || !/^[0-9a-f]{64}$/u.test(operationKey)) {
+      throw new Error(`${label}.journalId does not bind the configured journal namespace and release point`);
+    }
   }
   return value;
 };
@@ -711,12 +742,22 @@ export const validateAppleReceipt = ({
   if (value.producerDigest === value.verifierDigest) {
     throw new Error(`${rule.coordinate} producer and verifier digests must be distinct`);
   }
+  const configured = policy.hostedExecution.activationInterfaces;
+  if (
+    configured.status === "configured"
+    && (
+      value.producerDigest !== configured.producer.bundleDigest
+      || value.verifierDigest !== configured.verifier.bundleDigest
+      || configured.producer.sourceSha !== value.sourceSha
+      || configured.verifier.sourceSha !== value.sourceSha
+    )
+  ) throw new Error(`${rule.coordinate} does not bind the configured producer and verifier byte identities`);
   const observedAt = canonicalTimestamp(value.observedAt, `${rule.coordinate}.observedAt`);
   validateRunnerIdentity(value.runnerIdentity, { contract, policy }, rule, `${rule.coordinate}.runnerIdentity`);
   scalarArray(value.dependencies, `${rule.coordinate}.dependencies`, { allowEmpty: true });
   if (!sameArray(value.dependencies, rule.dependencies)) throw new Error(`${rule.coordinate} dependencies changed`);
 
-  const context = { contract, policy };
+  const context = { contract, policy, expectedSourceSha };
   if (rule.category === "N-native") validateNReceipt(value, context, rule);
   else if (rule.category === "P-signed-app") validateSignedAppReceipt(value, context, rule, observedAt);
   else if (rule.category === "P-notarized-product") validateNotarizedReceipt(value, context, rule, observedAt);
