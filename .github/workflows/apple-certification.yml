@@ -80,13 +80,14 @@ jobs:
         run: |
           set -euo pipefail
           bun run check:contract
+          bun run build
           bun run --cwd packages/effect-build-apple test
           bunx vitest run \
             test/architecture/apple-certification-protocol.test.ts \
             test/architecture/apple-certification-workflow.test.ts
 
-  external-interface-stop:
-    name: Stop before every protected or certifying action
+  admission:
+    name: Stop hosted admission before every protected or certifying action
     needs: local-protocol-qualification
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -103,3 +104,218 @@ jobs:
           package-manager-cache: false
       - name: Enforce the external journal, Apple, executor, and runner STOP
         run: node scripts/apple-certification/workflow.mjs --assert-hosted-ready
+
+  native:
+    name: "Inert native topology: ${{ matrix.coordinate }}"
+    needs: admission
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        coordinate:
+          - N-native-mechanics|macos-aarch64
+          - N-native-mechanics|macos-x64
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
+
+  paired-app:
+    name: "Inert paired-app topology: ${{ matrix.coordinate }}"
+    needs: native
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        coordinate:
+          - paired-app:bun
+          - paired-app:deno
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
+
+  sign-app:
+    name: "Inert sign-app topology: ${{ matrix.coordinate }}"
+    needs: paired-app
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        coordinate:
+          - P-signed-bun-app|macos-aarch64
+          - P-signed-bun-app|macos-x64
+          - P-signed-deno-app|macos-aarch64
+          - P-signed-deno-app|macos-x64
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
+
+  distribution-pairs:
+    name: "Inert distribution-pairs topology: ${{ matrix.coordinate }}"
+    needs: sign-app
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        coordinate:
+          - paired-product:dmg
+          - paired-product:pkg
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
+
+  submit-product:
+    name: "Inert submit-product topology: ${{ matrix.coordinate }}"
+    needs:
+      - sign-app
+      - distribution-pairs
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        coordinate:
+          - P-notarized-stapled-app-private-zip|macos-aarch64
+          - P-notarized-stapled-app-private-zip|macos-x64
+          - P-notarized-stapled-dmg|macos-aarch64
+          - P-notarized-stapled-dmg|macos-x64
+          - P-notarized-stapled-pkg|macos-aarch64
+          - P-notarized-stapled-pkg|macos-x64
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
+
+  continue-notary:
+    name: "Inert continue-notary topology: ${{ matrix.coordinate }}"
+    needs: submit-product
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        coordinate:
+          - P-notarized-stapled-app-private-zip|macos-aarch64
+          - P-notarized-stapled-app-private-zip|macos-x64
+          - P-notarized-stapled-dmg|macos-aarch64
+          - P-notarized-stapled-dmg|macos-x64
+          - P-notarized-stapled-pkg|macos-aarch64
+          - P-notarized-stapled-pkg|macos-x64
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
+
+  clean-host:
+    name: "Inert clean-host topology: ${{ matrix.coordinate }}"
+    needs: continue-notary
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        coordinate:
+          - G-app|macos-aarch64
+          - G-app|macos-x64
+          - G-dmg|macos-aarch64
+          - G-dmg|macos-x64
+          - G-pkg|macos-aarch64
+          - G-pkg|macos-x64
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
+
+  verdict:
+    name: "Inert verdict topology: ${{ matrix.coordinate }}"
+    needs:
+      - native
+      - sign-app
+      - continue-notary
+      - clean-host
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        coordinate:
+          - A0
+          - A1
+          - A2
+          - A3
+          - A4
+          - A5
+          - A6
+          - A7
+          - A8
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
+
+  final-verdict:
+    name: "Inert final-verdict topology: ${{ matrix.coordinate }}"
+    needs:
+      - native
+      - sign-app
+      - continue-notary
+      - clean-host
+      - verdict
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        coordinate:
+          - A9
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
+
+  aggregate:
+    name: Inert aggregate topology
+    needs: final-verdict
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Unreachable while Apple hosted execution is blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 78
