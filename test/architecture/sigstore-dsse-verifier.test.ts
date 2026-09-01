@@ -14,6 +14,7 @@ import * as sigstoreVerifier from "../../scripts/release/sigstore-dsse-verifier.
 
 const { canonicalJson, sha256Digest } = releaseProtocol;
 const {
+  validateIsolatedChildEnvironment,
   verifyExternalEvidenceEnvelope,
   verifySigstoreBundleIsolated,
   validateVerifierRuntime,
@@ -365,6 +366,33 @@ describe("Sigstore DSSE external-evidence verifier", () => {
     });
     expect(result).toEqual(signer);
     expect(spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("admits only the exact libuv-required Windows environment additions", () => {
+    const environment = Object.fromEntries([
+      "HOME",
+      "HOMEDRIVE",
+      "HOMEPATH",
+      "LANG",
+      "LOGONSERVER",
+      "PATH",
+      "SYSTEMDRIVE",
+      "SYSTEMROOT",
+      "TEMP",
+      "TMPDIR",
+      "USERDOMAIN",
+      "USERNAME",
+      "USERPROFILE",
+      "WINDIR",
+      "__CF_USER_TEXT_ENCODING",
+    ].map((name) => [name, "fixture-value"]));
+    expect(validateIsolatedChildEnvironment(environment, "win32")).toBe(environment);
+    expect(() => validateIsolatedChildEnvironment({ ...environment, NPM_TOKEN: "canary" }, "win32"))
+      .toThrow(/non-allowlisted environment/u);
+    expect(() => validateIsolatedChildEnvironment({ ...environment, Path: "duplicate" }, "win32"))
+      .toThrow(/non-allowlisted environment/u);
+    expect(() => validateIsolatedChildEnvironment(environment, "linux"))
+      .toThrow(/non-allowlisted environment/u);
   });
 
   it("rejects a wrong Node version and an unavailable contract-pinned node command", async () => {

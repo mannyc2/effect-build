@@ -103,6 +103,38 @@ const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const contractPath = resolve(repositoryRoot, "tooling/effect-build-contract.json");
 const vendoredTrustedRootPath = resolve(repositoryRoot, "tooling/sigstore/trusted_root.json");
 const networkGuardPath = resolve(repositoryRoot, "scripts/release/deny-network.cjs");
+const isolatedChildEnvironmentNames = ["HOME", "LANG", "PATH", "TMPDIR", "__CF_USER_TEXT_ENCODING"];
+// Node 24.14.1's bundled libuv 1.51.0 copies these required Windows variables
+// from the parent when they are absent from an explicit child environment. They
+// are OS identity/runtime metadata, not npm, GitHub, proxy, or signing authority.
+// https://github.com/nodejs/node/blob/v24.14.1/deps/uv/src/win/process.c#L50-L62
+const libuvWindowsRequiredEnvironmentNames = [
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "LOGONSERVER",
+  "SYSTEMDRIVE",
+  "SYSTEMROOT",
+  "TEMP",
+  "USERDOMAIN",
+  "USERNAME",
+  "USERPROFILE",
+  "WINDIR",
+];
+
+export const validateIsolatedChildEnvironment = (environment, platform = process.platform) => {
+  const windows = platform === "win32";
+  const allowed = new Set([
+    ...isolatedChildEnvironmentNames,
+    ...(windows ? libuvWindowsRequiredEnvironmentNames : []),
+  ].map((name) => windows ? name.toUpperCase() : name));
+  const observed = Object.keys(environment).map((name) => windows ? name.toUpperCase() : name);
+  if (
+    new Set(observed).size !== observed.length
+    || isolatedChildEnvironmentNames.some((name) => !observed.includes(windows ? name.toUpperCase() : name))
+    || observed.some((name) => !allowed.has(name))
+  ) throw new Error("isolated Sigstore child received a non-allowlisted environment name");
+  return environment;
+};
 
 const signerProjection = (signer) => ({
   identity: {
@@ -536,10 +568,7 @@ export const verifyExternalEvidenceEnvelope = async ({
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === modulePath && process.argv[2] === "--verify-child") {
   let failureStage = "environment";
   try {
-    const allowed = ["HOME", "LANG", "PATH", "TMPDIR", "__CF_USER_TEXT_ENCODING"];
-    if (Object.keys(process.env).some((name) => !allowed.includes(name))) {
-      throw new Error("isolated Sigstore child received a non-allowlisted environment name");
-    }
+    validateIsolatedChildEnvironment(process.env);
     failureStage = "input";
     const input = JSON.parse(await new Promise((resolveInput, rejectInput) => {
       const chunks = [];

@@ -761,7 +761,9 @@ describe("Apple v0.6 local protocol with synthetic-only vectors", () => {
       expect((await readdir(outputDirectory)).sort()).toEqual([...policy.artifact.orderedFiles].sort());
       expect(await readFile(join(outputDirectory, policy.artifact.orderedFiles[0]))).toEqual(aggregate.indexBytes);
       expect(await readFile(join(outputDirectory, policy.artifact.orderedFiles[1]))).toEqual(aggregate.bundleBytes);
-      expect((await stat(join(outputDirectory, policy.artifact.orderedFiles[0]))).mode & 0o777).toBe(0o600);
+      if (process.platform !== "win32") {
+        expect((await stat(join(outputDirectory, policy.artifact.orderedFiles[0]))).mode & 0o777).toBe(0o600);
+      }
       await expect(runAppleAggregateCli([
         "--receipts",
         receiptsPath,
