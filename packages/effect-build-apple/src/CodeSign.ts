@@ -148,7 +148,7 @@ const makeAppService = (
   Effect.gen(function*() {
     const { fileSystem, path, services } = yield* capturePlatformServices;
     const identityService = yield* DeveloperIdApplicationIdentity;
-    const codesign = yield* selectAppleTool("codesign", options.codesign, ["--version"], "developer-id-signing");
+    const codesign = yield* selectAppleTool("codesign", options.codesign, "developer-id-signing");
 
     const signApp = Effect.fn("effect-build-apple.signApp")(function*(input: SignAppInput) {
       const destination = path.resolve(input.outdir);
@@ -285,8 +285,8 @@ const makeInstallerService = (
   Effect.gen(function*() {
     const { fileSystem, path, services } = yield* capturePlatformServices;
     const identityService = yield* DeveloperIdInstallerIdentity;
-    const productsign = yield* selectAppleTool("productsign", options.productsign, ["--version"], "installer-signing");
-    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, ["--help"], "package-signature-verification");
+    const productsign = yield* selectAppleTool("productsign", options.productsign, "installer-signing");
+    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, "package-signature-verification");
     const installerSigningProvenance = combineToolObservations(productsign.observation, pkgutil.observation);
 
     const signInstallerPackage = Effect.fn("effect-build-apple.signInstallerPackage")(

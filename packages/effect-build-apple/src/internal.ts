@@ -1,4 +1,4 @@
-import { Cause, Context, Crypto, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Cause, Context, Crypto, Effect, Exit, FileSystem, Option, Path, Schema, Stream } from "effect";
 import type * as Artifact from "effect-build/Artifact";
 import * as File from "effect-build/Author/File";
 import type * as Tool from "effect-build/Author/Tool";
@@ -52,6 +52,113 @@ export class AppleOperationInvalid extends Schema.TaggedError<AppleOperationInva
     return `${this.operation} rejected ${this.path}: ${this.reason}`;
   }
 }
+
+export interface ApplePairRollbackInput<E> {
+  readonly operation: string;
+  readonly arm64Path: string;
+  readonly x64Path: string;
+  readonly arm64Committed: boolean;
+  readonly x64Committed: boolean;
+  readonly recursive: boolean;
+  readonly failure: (reason: string) => E;
+}
+
+/**
+ * Keeps the publication itself interruptible, but makes successful publication
+ * and transfer of destination ownership to the pair rollback protocol atomic.
+ * The optional hook is package-private boundary instrumentation for tests and
+ * runs inside the same uninterruptible region.
+ */
+export const claimApplePairMember = <A, E, R, HookR = never>(
+  publish: Effect.Effect<A, E, R>,
+  claim: () => void,
+  publishedHook?: Effect.Effect<void, never, HookR>,
+): Effect.Effect<A, E, R | HookR> =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function*() {
+      const value = yield* restore(publish);
+      if (publishedHook !== undefined) yield* publishedHook;
+      yield* Effect.sync(claim);
+      return value;
+    })
+  );
+
+/**
+ * Rolls back every committed member, then independently proves that neither
+ * public destination remains. A failed remove is reconciled only when the
+ * subsequent observation proves absence; residue or an unobservable path is a
+ * typed terminal failure that is combined with the original exit cause.
+ */
+export const rollbackApplePair = <E>(
+  fileSystem: FileSystem.FileSystem,
+  input: ApplePairRollbackInput<E>,
+): Effect.Effect<void, E> =>
+  Effect.gen(function*() {
+    const removals: string[] = [];
+    for (
+      const member of [
+        { architecture: "arm64", path: input.arm64Path, committed: input.arm64Committed },
+        { architecture: "x64", path: input.x64Path, committed: input.x64Committed },
+      ] as const
+    ) {
+      if (!member.committed) continue;
+      const removal = yield* Effect.exit(
+        fileSystem.remove(member.path, { recursive: input.recursive, force: true }),
+      );
+      if (Exit.isFailure(removal)) {
+        removals.push(`${member.architecture} removal failed: ${Cause.pretty(removal.cause)}`);
+      }
+    }
+
+    const observations: string[] = [];
+    for (
+      const member of [
+        { architecture: "arm64", path: input.arm64Path },
+        { architecture: "x64", path: input.x64Path },
+      ] as const
+    ) {
+      const link = yield* Effect.exit(fileSystem.readLink(member.path));
+      if (Exit.isSuccess(link)) {
+        observations.push(`${member.architecture} destination remains as a symbolic link`);
+        continue;
+      }
+      const exists = yield* Effect.exit(fileSystem.exists(member.path));
+      if (Exit.isFailure(exists)) {
+        observations.push(`${member.architecture} absence observation failed: ${Cause.pretty(exists.cause)}`);
+      } else if (exists.value) {
+        observations.push(`${member.architecture} destination remains`);
+      }
+    }
+
+    if (observations.length > 0) {
+      return yield* Effect.fail(input.failure(
+        `${input.operation} could not prove both destinations absent (${input.arm64Path}, ${input.x64Path}): ${
+          [...removals, ...observations].join("; ")
+        }`,
+      ));
+    }
+  });
+
+/** Runs a pair operation interruptibly while keeping rollback and cause
+ * reconciliation uninterruptible. This preserves the original typed failure
+ * or interruption even on Effect runtimes where a failing `onExit` finalizer
+ * would replace it. */
+export const withApplePairRollback = <A, E, R, RollbackError>(
+  source: Effect.Effect<A, E, R>,
+  fileSystem: FileSystem.FileSystem,
+  input: () => ApplePairRollbackInput<RollbackError>,
+): Effect.Effect<A, E | RollbackError, R> =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function*() {
+      const sourceExit = yield* Effect.exit(restore(source));
+      if (Exit.isSuccess(sourceExit)) return sourceExit.value;
+      const rollbackExit = yield* Effect.exit(rollbackApplePair(fileSystem, input()));
+      if (Exit.isFailure(rollbackExit)) {
+        return yield* Effect.failCause(Cause.combine(sourceExit.cause, rollbackExit.cause));
+      }
+      return yield* Effect.failCause(sourceExit.cause);
+    })
+  );
 
 export interface AppleCompletion<Name extends string> {
   readonly tool: Tool.Observation<Name>;
@@ -176,16 +283,37 @@ const scrubFailure = (failure: AppleToolFailed, values: readonly string[]): Appl
 const selectionFailure = (tool: string, error: unknown): AppleToolUnavailable | AppleToolFailed =>
   error instanceof AppleToolFailed ? error : new AppleToolUnavailable({ tool, reason: describe(error) });
 
-export const selectAppleTool = <const Name extends string>(
+interface AppleToolProbeSpec {
+  readonly args: readonly string[];
+  readonly allowedExitCode: number;
+}
+
+const appleToolProbeSpecs = {
+  plutil: { args: ["-help"], allowedExitCode: 0 },
+  codesign: { args: ["--version"], allowedExitCode: 2 },
+  productsign: { args: ["--version"], allowedExitCode: 1 },
+  hdiutil: { args: ["help"], allowedExitCode: 0 },
+  pkgbuild: { args: ["--version"], allowedExitCode: 1 },
+  productbuild: { args: ["--version"], allowedExitCode: 1 },
+  pkgutil: { args: ["--help"], allowedExitCode: 0 },
+  spctl: { args: ["--version"], allowedExitCode: 2 },
+  notarytool: { args: ["--version"], allowedExitCode: 0 },
+  ditto: { args: ["--help"], allowedExitCode: 1 },
+  stapler: { args: ["-h"], allowedExitCode: 64 },
+} as const satisfies Record<string, AppleToolProbeSpec>;
+
+type AppleToolProbeName = keyof typeof appleToolProbeSpecs;
+
+export const selectAppleTool = <const Name extends AppleToolProbeName>(
   name: Name,
   options: AppleToolOptions,
-  probeArgs: readonly string[],
   capability = `${name}-command`,
 ): Effect.Effect<SelectedAppleTool<Name>, AppleToolUnavailable | AppleToolFailed, PlatformServices> =>
   Effect.gen(function*() {
     if (options.version.length === 0 || options.version.includes("\0")) {
       return yield* new AppleToolUnavailable({ tool: name, reason: "version fact must be non-empty" });
     }
+    const probe = appleToolProbeSpecs[name];
     const crypto = yield* Crypto.Crypto;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -209,16 +337,19 @@ export const selectAppleTool = <const Name extends string>(
             channel: "system",
             content: candidate.content,
           })]) as readonly [Tool.ParticipantIdentity],
-          capabilities: Object.freeze([{
-            _tag: "Present" as const,
-            id: capability,
-            evidence: "native probe completed",
-          }]),
+          capabilities: Object.freeze([]),
         });
-        return runCommand(candidate.command(probeArgs), provisional).pipe(
+        return runCommand(candidate.command(probe.args), provisional).pipe(
           Effect.flatMap((completion) =>
-            completion.exitCode === 0
-              ? Effect.succeed(provisional)
+            probe.allowedExitCode === completion.exitCode
+              ? Effect.succeed(Object.freeze({
+                ...provisional,
+                capabilities: Object.freeze([{
+                  _tag: "Present" as const,
+                  id: capability,
+                  evidence: `native probe ${JSON.stringify(probe.args)} admitted exit code ${completion.exitCode}`,
+                }]),
+              }))
               : Effect.fail(
                 new AppleToolFailed({
                   tool: name,

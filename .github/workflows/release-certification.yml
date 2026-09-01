@@ -1,0 +1,477 @@
+name: Release certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full lowercase current-main commit SHA to certify
+        required: true
+        type: string
+      candidate_reference_json:
+        description: Exact candidate@2 retained-artifact reference JSON for this source SHA
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: effect-build-release-certification
+  cancel-in-progress: false
+
+jobs:
+  fake-registry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      workflow: ${{ steps.fake-registry-coordinate.outputs.workflow }}
+      source-sha: ${{ steps.fake-registry-coordinate.outputs.source-sha }}
+      run-id: ${{ steps.fake-registry-coordinate.outputs.run-id }}
+      run-attempt: ${{ steps.fake-registry-coordinate.outputs.run-attempt }}
+      artifact-id: ${{ steps.fake-registry-coordinate.outputs.artifact-id }}
+      artifact-digest: ${{ steps.fake-registry-coordinate.outputs.artifact-digest }}
+      evidence-observed-at: ${{ steps.exact-evidence.outputs.evidence-observed-at }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - name: Admit the exact current-main source
+        shell: bash
+        env:
+          ACTIONS_READ_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]] || exit 1
+          env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" \
+            ACTIONS_READ_TOKEN="$ACTIONS_READ_TOKEN" REPOSITORY="$REPOSITORY" SOURCE_SHA="$SOURCE_SHA" \
+            node scripts/release/assert-current-main.mjs
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: node scripts/release/install-frozen-release-dependencies.mjs
+      - name: Authenticate and prepare exact candidate and reservation bytes
+        id: exact-inputs
+        env:
+          CANDIDATE_REFERENCE_JSON: ${{ inputs.candidate_reference_json }}
+          GITHUB_TOKEN: ${{ github.token }}
+          OUTPUT_DIRECTORY: ${{ runner.temp }}/fake-registry-exact-inputs
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: node scripts/release/prepare-fake-certification-inputs.mjs
+      - name: Execute the exact protected body, reference oracle, and certification variants
+        shell: bash
+        env:
+          EFFECT_BUILD_CERTIFICATION_CANDIDATE_DIRECTORY: ${{ steps.exact-inputs.outputs.candidate-directory }}
+          EFFECT_BUILD_CERTIFICATION_CANDIDATE_REFERENCE_JSON: ${{ steps.exact-inputs.outputs.candidate-reference }}
+          EFFECT_BUILD_CERTIFICATION_CANDIDATE_ZIP: ${{ steps.exact-inputs.outputs.candidate-zip }}
+          EFFECT_BUILD_CERTIFICATION_PLACEHOLDER_DIRECTORY: ${{ steps.exact-inputs.outputs.placeholder-directory }}
+          EFFECT_BUILD_EXACT_CASE_EVIDENCE_PATH: ${{ runner.temp }}/fake-registry-exact-cases.jsonl
+          EFFECT_BUILD_FIXTURE_SOURCE_SHA: ${{ inputs.source_sha }}
+          REPORT_PATH: ${{ runner.temp }}/fake-registry-vitest.json
+        run: |
+          set -euo pipefail
+          rm -f "$EFFECT_BUILD_EXACT_CASE_EVIDENCE_PATH"
+          bunx vitest run test/architecture/release-publisher-state-machine.test.ts \
+            --reporter=json \
+            --outputFile="$REPORT_PATH" \
+            --testTimeout=240000
+      - name: Build one canonical secret-free local qualification receipt
+        id: evidence
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          RECEIPT_DIR: ${{ runner.temp }}/fake-registry-local-qualification
+          REPORT_PATH: ${{ runner.temp }}/fake-registry-vitest.json
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir "$RECEIPT_DIR"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          import { resolve } from "node:path";
+          import { canonicalJson, sha256Digest } from "./scripts/release/protocol.mjs";
+          import { hypotheticalFakeRegistryEvidenceLedger } from "./test/fixtures/release/release-state.mjs";
+
+          const contractBytes = readFileSync("tooling/effect-build-contract.json");
+          const contract = JSON.parse(contractBytes);
+          const reportBytes = readFileSync(process.env.REPORT_PATH);
+          const report = JSON.parse(reportBytes);
+          const release = contract.releaseCertification;
+          const qualification = release.fakeRegistry.localQualification;
+          const futureCertification = release.fakeRegistry.exactProtectedBodyCertification;
+          const externalAuthenticationStatus = release.readiness.externalEvidenceAuthentication.status;
+          const externalAuthenticationOutcomes = Object.freeze({
+            blocked: Object.freeze({
+              status: "blocked",
+              artifactDisposition: "forbidden-while-external-authentication-blocked",
+              exactArtifactAllowed: false,
+            }),
+            supported: Object.freeze({
+              status: "supported",
+              artifactDisposition: "required-on-supported-terminal-workflow-success",
+              exactArtifactAllowed: true,
+            }),
+          });
+          const externalAuthenticationOutcome = externalAuthenticationOutcomes[externalAuthenticationStatus];
+          const exactPolicy = release.fakeRegistry.exactProtectedBody;
+          const hypotheticalPolicy = release.fakeRegistry.hypotheticalStateMachine;
+          const coordinates = hypotheticalPolicy.cases.flatMap(({ id, variants }) =>
+            (variants ?? [null]).map((variant) => variant === null ? id : `${id}/${variant}`)
+          );
+          const assertions = report.testResults.flatMap(({ assertionResults }) => assertionResults ?? []);
+          const coordinateResults = assertions.flatMap(({ fullName, status }) => {
+            const match = /executes exact protected fake-registry state-machine case (.+)$/u.exec(fullName);
+            return match === null ? [] : [{ coordinate: match[1], status }];
+          }).sort((left, right) => left.coordinate.localeCompare(right.coordinate));
+          const exactProtectedChecks = assertions
+            .filter(({ fullName }) => /stops the exact protected publish body before readiness adoption/u.test(fullName))
+            .map(({ fullName, status }) => ({ name: fullName, status }));
+          const expectedCoordinates = [...coordinates].sort();
+          const expectedLedgerCoordinates = hypotheticalFakeRegistryEvidenceLedger.map(({ coordinate }) => coordinate).sort();
+          const certificationChecks = assertions
+            .filter(({ fullName }) =>
+              /certifies eleven package-specific npm OIDC exchanges|fails closed on dry-run-marker-(?:missing|duplicate)/u
+                .test(fullName)
+            )
+            .map(({ fullName, status }) => ({ name: fullName, status }))
+            .sort((left, right) => left.name.localeCompare(right.name));
+          if (
+            contract.schema !== "effect-build/combined-contract@1"
+            || qualification?.workflowPath !== ".github/workflows/release-certification.yml"
+            || qualification?.workflow !== "mannyc2/effect-build/.github/workflows/release-certification.yml@refs/heads/main"
+            || qualification?.artifactName !== "effect-build-v0.6.0-fake-registry-local-qualification"
+            || qualification?.protocol !== "effect-build/fake-registry-local-qualification@1"
+            || qualification?.terminal !== "local-qualification"
+            || qualification?.readinessAdmissible !== false
+            || futureCertification?.implementationStatus !== "implemented"
+            || externalAuthenticationOutcome === undefined
+            || futureCertification?.status !== externalAuthenticationOutcome.status
+            || futureCertification?.artifactDisposition !== externalAuthenticationOutcome.artifactDisposition
+            || exactPolicy?.status !== "two-purpose-hard-cut"
+            || exactPolicy?.realExpected !== "stop-zero-mutations-while-readiness-authentication-is-blocked"
+            || exactPolicy?.realBlockedMutationCount !== 0
+            || hypotheticalPolicy?.status !== "reference-oracle-only-not-certification"
+            || hypotheticalPolicy?.testSubject !== "independent-oracle-compared-with-exact-protected-body"
+            || hypotheticalPolicy?.coordinateCount !== coordinates.length
+            || report.numFailedTestSuites !== 0
+            || report.numFailedTests !== 0
+            || report.numPendingTests !== 0
+            || report.success !== true
+            || coordinates.length === 0
+            || new Set(coordinates).size !== coordinates.length
+            || JSON.stringify(expectedCoordinates) !== JSON.stringify(expectedLedgerCoordinates)
+            || JSON.stringify(coordinateResults.map(({ coordinate }) => coordinate)) !== JSON.stringify(expectedCoordinates)
+            || coordinateResults.some(({ status }) => status !== "passed")
+            || exactProtectedChecks.length !== 1
+            || exactProtectedChecks.some(({ status }) => status !== "passed")
+            || certificationChecks.length !== 3
+            || certificationChecks.some(({ status }) => status !== "passed")
+          ) throw new Error("fake-registry local qualification report or generated policy is incomplete");
+          const results = {
+            schema: "effect-build/fake-registry-local-qualification-results@1",
+            sourceSha: process.env.EXPECTED_SHA,
+            exactProtectedBody: {
+              bodies: exactPolicy.bodies,
+              status: exactPolicy.status,
+              realExpected: exactPolicy.realExpected,
+              observedRealMutationCount: exactPolicy.realBlockedMutationCount,
+              checks: exactProtectedChecks,
+              proves: exactPolicy.proves,
+              doesNotProve: exactPolicy.doesNotProve,
+            },
+            hypotheticalStateMachine: {
+              status: hypotheticalPolicy.status,
+              testSubject: hypotheticalPolicy.testSubject,
+              coordinates: hypotheticalFakeRegistryEvidenceLedger.map((entry) => ({ ...entry, status: "passed" })),
+              proves: hypotheticalPolicy.proves,
+              doesNotProve: hypotheticalPolicy.doesNotProve,
+            },
+            npmOidcDryRunBodyChecks: certificationChecks,
+            testSummary: {
+              passed: report.numPassedTests,
+              total: report.numTotalTests,
+            },
+          };
+          const resultsBytes = Buffer.from(canonicalJson(results));
+          const receipt = {
+            schema: qualification.protocol,
+            sourceSha: process.env.EXPECTED_SHA,
+            workflow: qualification.workflow,
+            artifactName: qualification.artifactName,
+            readinessAdmissible: qualification.readinessAdmissible,
+            proves: qualification.proves,
+            doesNotProve: qualification.doesNotProve,
+            exactProtectedBody: {
+              status: exactPolicy.status,
+              realBlockedMutationCount: exactPolicy.realBlockedMutationCount,
+              proves: exactPolicy.proves,
+              doesNotProve: exactPolicy.doesNotProve,
+            },
+            hypotheticalStateMachine: {
+              status: hypotheticalPolicy.status,
+              testSubject: hypotheticalPolicy.testSubject,
+              coordinateCount: hypotheticalPolicy.coordinateCount,
+              proves: hypotheticalPolicy.proves,
+              doesNotProve: hypotheticalPolicy.doesNotProve,
+            },
+            results: {
+              file: "fake-registry-results.json",
+              bytes: String(resultsBytes.byteLength),
+              digest: sha256Digest(resultsBytes),
+            },
+            contractDigest: sha256Digest(contractBytes),
+            realRegistryMutation: false,
+            realNpmOrRegistryCredentialsUsed: false,
+            terminal: qualification.terminal,
+          };
+          const receiptBytes = Buffer.from(canonicalJson(receipt));
+          const retained = [resultsBytes, receiptBytes];
+          if (retained.some((bytes) =>
+            /FAKE-(?:GITHUB|ACTIONS)-|Successfully retrieved and set token|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/u
+              .test(bytes.toString("utf8"))
+          )) throw new Error("secret-like private boundary evidence reached the retained artifact");
+          writeFileSync(resolve(process.env.RECEIPT_DIR, "fake-registry-results.json"), resultsBytes, { mode: 0o600 });
+          writeFileSync(resolve(process.env.RECEIPT_DIR, "fake-registry-local-qualification.json"), receiptBytes, {
+            mode: 0o600,
+          });
+          writeFileSync(process.env.GITHUB_OUTPUT, [
+            `exact-artifact-allowed=${externalAuthenticationOutcome.exactArtifactAllowed}`,
+            "",
+          ].join("\n"), { flag: "a" });
+          NODE
+      - name: Build the candidate-bound exact protected-body certification receipt
+        id: exact-evidence
+        if: steps.evidence.outputs.exact-artifact-allowed == 'true'
+        shell: bash
+        env:
+          CANDIDATE_REFERENCE_JSON: ${{ steps.exact-inputs.outputs.candidate-reference }}
+          CASE_EVIDENCE_PATH: ${{ runner.temp }}/fake-registry-exact-cases.jsonl
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          RECEIPT_DIR: ${{ runner.temp }}/fake-registry-exact-protected-body-certification
+          REPORT_PATH: ${{ runner.temp }}/fake-registry-vitest.json
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir "$RECEIPT_DIR"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          import { resolve } from "node:path";
+          import { canonicalJson, sha256Digest } from "./scripts/release/protocol.mjs";
+
+          const contractBytes = readFileSync("tooling/effect-build-contract.json");
+          const contract = JSON.parse(contractBytes);
+          const report = JSON.parse(readFileSync(process.env.REPORT_PATH, "utf8"));
+          const reference = JSON.parse(process.env.CANDIDATE_REFERENCE_JSON);
+          const policy = contract.releaseCertification.fakeRegistry.exactProtectedBodyCertification;
+          const authority = contract.releaseCertification.githubAuthority;
+          const caseEvidence = new Map(readFileSync(process.env.CASE_EVIDENCE_PATH, "utf8")
+            .trim().split("\n").map((line) => {
+              const value = JSON.parse(line);
+              return [value.coordinate, value];
+            }));
+          const assertions = report.testResults.flatMap(({ assertionResults }) => assertionResults ?? []);
+          const results = new Map(assertions.flatMap(({ fullName, status }) => {
+            const match = /executes exact protected fake-registry state-machine case (.+)$/u.exec(fullName);
+            return match === null ? [] : [[match[1], status]];
+          }));
+          const coordinates = policy.exactMutationLedger.map((entry) => {
+            const identity = caseEvidence.get(entry.coordinate);
+            return {
+              coordinate: entry.coordinate,
+              status: results.get(entry.coordinate),
+              attemptedFakeMutations: entry.attemptedFakeMutations,
+              committedFakeMutations: entry.committedFakeMutations,
+              candidateBinding: entry.candidateBinding,
+              candidateArtifactDigest: identity?.candidateArtifactDigest,
+              candidateManifestDigest: identity?.candidateManifestDigest,
+            };
+          });
+          const observedAt = new Date().toISOString();
+          const receipt = {
+            schema: policy.protocol,
+            sourceSha: process.env.EXPECTED_SHA,
+            observedAt,
+            workflow: policy.workflow,
+            contractDigest: sha256Digest(contractBytes),
+            externalAuthenticationStatus: contract.releaseCertification.readiness.externalEvidenceAuthentication.status,
+            candidate: reference.coordinate,
+            candidateManifestDigest: reference.manifestDigest,
+            coordinates,
+            coordinateCount: coordinates.length,
+            claims: policy.requiredClaims,
+            doesNotProve: policy.doesNotProve,
+            realRegistryMutation: false,
+            realNpmOrRegistryCredentialsUsed: false,
+            terminal: policy.terminal,
+          };
+          if (
+            report.numFailedTestSuites !== 0
+            || report.numFailedTests !== 0
+            || report.numPendingTests !== 0
+            || report.success !== true
+            || policy.implementationStatus !== "implemented"
+            || policy.status !== "supported"
+            || policy.status !== contract.releaseCertification.readiness.externalEvidenceAuthentication.status
+            || policy.artifactDisposition !== "required-on-supported-terminal-workflow-success"
+            || coordinates.length !== policy.exactMutationLedger.length
+            || new Set(coordinates.map(({ coordinate }) => coordinate)).size !== coordinates.length
+            || results.size !== coordinates.length
+            || caseEvidence.size !== coordinates.length
+            || coordinates.some(({ status }) => status !== "passed")
+            || coordinates.some((entry) => entry.candidateBinding === "exact-release-candidate"
+              ? entry.candidateArtifactDigest !== reference.coordinate.artifactDigest
+                || entry.candidateManifestDigest !== reference.manifestDigest
+              : entry.candidateArtifactDigest === reference.coordinate.artifactDigest
+                && entry.candidateManifestDigest === reference.manifestDigest)
+            || JSON.stringify(Object.keys(receipt)) !== JSON.stringify(policy.receiptFields)
+            || reference.coordinate?.sourceSha !== process.env.EXPECTED_SHA
+          ) throw new Error("exact protected-body certification report or candidate binding is incomplete");
+          const bytes = Buffer.from(canonicalJson(receipt));
+          if (
+            /FAKE-(?:GITHUB|ACTIONS)-|Successfully retrieved and set token|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/u
+              .test(bytes.toString("utf8"))
+          ) throw new Error("private fake-boundary evidence reached the exact retained artifact");
+          writeFileSync(resolve(process.env.RECEIPT_DIR, policy.orderedFiles[0]), bytes, { mode: 0o600 });
+          writeFileSync(process.env.GITHUB_OUTPUT, [
+            `artifact-name=${policy.artifactName}`,
+            `retention-days=${policy.retentionDays}`,
+            `workflow=${policy.workflow}`,
+            `workflow-path=${policy.workflowPath}`,
+            `repository-id=${authority.repositoryId}`,
+            `evidence-observed-at=${observedAt}`,
+            "",
+          ].join("\n"), { flag: "a" });
+          NODE
+      - name: Upload the exact protected-body certification artifact
+        id: exact-upload
+        if: steps.evidence.outputs.exact-artifact-allowed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.exact-evidence.outputs.artifact-name }}
+          path: ${{ runner.temp }}/fake-registry-exact-protected-body-certification
+          if-no-files-found: error
+          retention-days: ${{ steps.exact-evidence.outputs.retention-days }}
+          compression-level: 0
+      - name: Canonicalize and re-observe fake-registry exact protected-body bytes
+        id: fake-registry-coordinate
+        if: steps.evidence.outputs.exact-artifact-allowed == 'true'
+        shell: bash
+        env:
+          ACTIONS_READ_TOKEN: ${{ github.token }}
+          API_ROOT: ${{ github.api_url }}
+          ARTIFACT_ID: ${{ steps.exact-upload.outputs.artifact-id }}
+          EXPECTED_ARTIFACT_NAME: ${{ steps.exact-evidence.outputs.artifact-name }}
+          EXPECTED_REPOSITORY_ID: ${{ steps.exact-evidence.outputs.repository-id }}
+          EXPECTED_WORKFLOW: ${{ steps.exact-evidence.outputs.workflow }}
+          EXPECTED_WORKFLOW_PATH: ${{ steps.exact-evidence.outputs.workflow-path }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          UPLOAD_ACTION_BARE_DIGEST: ${{ steps.exact-upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ "$API_ROOT" != "https://api.github.com" \
+            || ! "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ \
+            || ! "$RUN_ID" =~ ^[1-9][0-9]*$ \
+            || ! "$RUN_ATTEMPT" =~ ^[1-9][0-9]*$ \
+            || ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ \
+            || ! "$UPLOAD_ACTION_BARE_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "fake-registry upload boundary is not canonical" >&2
+            exit 1
+          fi
+          canonical_digest="sha256:$UPLOAD_ACTION_BARE_DIGEST"
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          [[ "$ACTIONS_READ_TOKEN" =~ ^[A-Za-z0-9._-]+$ ]] || {
+            echo "GitHub authorization token is not safe for the private config boundary" >&2
+            exit 1
+          }
+          env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" \
+            ACTIONS_READ_TOKEN="$ACTIONS_READ_TOKEN" ARTIFACT_ID="$ARTIFACT_ID" \
+            EXPECTED_ARTIFACT_NAME="$EXPECTED_ARTIFACT_NAME" EXPECTED_REPOSITORY_ID="$EXPECTED_REPOSITORY_ID" \
+            EXPECTED_WORKFLOW="$EXPECTED_WORKFLOW" EXPECTED_WORKFLOW_PATH="$EXPECTED_WORKFLOW_PATH" \
+            REPOSITORY="$REPOSITORY" RUN_ATTEMPT="$RUN_ATTEMPT" RUN_ID="$RUN_ID" \
+            SOURCE_SHA="$SOURCE_SHA" UPLOAD_ACTION_BARE_DIGEST="$UPLOAD_ACTION_BARE_DIGEST" \
+            node scripts/release/post-upload-artifact-observation.mjs "$stage"
+          env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" node --input-type=module - \
+            "$stage/artifact.json" "$stage/artifact.zip" "$stage/run.json" \
+            "$ARTIFACT_ID" "$canonical_digest" "$SOURCE_SHA" "$RUN_ID" "$RUN_ATTEMPT" \
+            "$EXPECTED_ARTIFACT_NAME" "$EXPECTED_WORKFLOW" "$EXPECTED_WORKFLOW_PATH" "$REPOSITORY" <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFileSync } from "node:fs";
+          const [
+            metadataPath,
+            zipPath,
+            runPath,
+            artifactId,
+            digest,
+            sourceSha,
+            runId,
+            runAttempt,
+            artifactName,
+            expectedWorkflow,
+            expectedWorkflowPath,
+            repository,
+          ] = process.argv.slice(2);
+          const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+          const run = JSON.parse(readFileSync(runPath, "utf8"));
+          const workflowPrefix = `${repository}/${expectedWorkflowPath}@refs/heads/`;
+          if (!expectedWorkflow.startsWith(workflowPrefix)) {
+            throw new Error("generated fake-registry workflow identity is inconsistent");
+          }
+          const expectedBranch = expectedWorkflow.slice(workflowPrefix.length);
+          const zipDigest = createHash("sha256").update(readFileSync(zipPath)).digest("hex");
+          if (
+            expectedBranch.length === 0
+            || metadata.id !== Number(artifactId)
+            || metadata.name !== artifactName
+            || metadata.digest !== digest
+            || metadata.expired !== false
+            || metadata.workflow_run?.id !== Number(runId)
+            || metadata.workflow_run?.head_branch !== expectedBranch
+            || metadata.workflow_run?.head_sha !== sourceSha
+            || metadata.workflow_run?.repository_id !== run.repository?.id
+            || metadata.workflow_run?.head_repository_id !== run.head_repository?.id
+            || run.id !== Number(runId)
+            || run.run_attempt !== Number(runAttempt)
+            || run.path !== expectedWorkflowPath
+            || run.head_sha !== sourceSha
+            || run.head_branch !== expectedBranch
+            || run.event !== "workflow_dispatch"
+            || run.status !== "in_progress"
+            || run.conclusion !== null
+            || run.repository?.full_name !== repository
+            || run.head_repository?.full_name !== repository
+            || zipDigest !== digest.slice("sha256:".length)
+          ) throw new Error("fake-registry exact protected-body artifact coordinate or bytes changed");
+          NODE
+          {
+            echo "workflow=$EXPECTED_WORKFLOW"
+            echo "source-sha=$SOURCE_SHA"
+            echo "run-id=$RUN_ID"
+            echo "run-attempt=$RUN_ATTEMPT"
+            echo "artifact-id=$ARTIFACT_ID"
+            echo "artifact-digest=$canonical_digest"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo '### Fake-registry exact protected-body certification coordinate'
+            echo
+            echo "- workflow: \`$EXPECTED_WORKFLOW\`"
+            echo "- sourceSha: \`$SOURCE_SHA\`"
+            echo "- runId: \`$RUN_ID\`"
+            echo "- runAttempt: \`$RUN_ATTEMPT\`"
+            echo "- artifactId: \`$ARTIFACT_ID\`"
+            echo "- artifactDigest: \`$canonical_digest\`"
+          } >> "$GITHUB_STEP_SUMMARY"

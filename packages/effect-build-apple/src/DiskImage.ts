@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, Exit, FileSystem, Layer, Path } from "effect";
+import { Context, Crypto, Effect, FileSystem, Layer, Path } from "effect";
 import type * as Artifact from "effect-build/Artifact";
 import * as File from "effect-build/Author/File";
 import * as Tree from "effect-build/Author/Tree";
@@ -9,10 +9,13 @@ import {
   AppleToolFailed,
   AppleToolUnavailable,
   capturePlatformServices,
+  claimApplePairMember,
+  combineToolObservations,
   copyTreeSnapshot,
   ensureNewDestination,
   isSafeRelative,
   selectAppleTool,
+  withApplePairRollback,
 } from "./internal.js";
 import { hasDeveloperIdApplicationSignature, ProductStateInvalid } from "./Model.js";
 import type { AppleToolOptions, Architecture, DeveloperIdApplicationBundle, UdzoDiskImage } from "./Model.js";
@@ -76,8 +79,9 @@ const makeService = (
 > =>
   Effect.gen(function*() {
     const { fileSystem, path, services } = yield* capturePlatformServices;
-    const hdiutil = yield* selectAppleTool("hdiutil", options.hdiutil, ["help"], "udzo-image");
-    const codesign = yield* selectAppleTool("codesign", options.codesign, ["--version"], "app-signature-verification");
+    const hdiutil = yield* selectAppleTool("hdiutil", options.hdiutil, "udzo-image");
+    const codesign = yield* selectAppleTool("codesign", options.codesign, "app-signature-verification");
+    const diskImageProvenance = combineToolObservations(hdiutil.observation, codesign.observation);
 
     const validate = (input: DiskImageVariantInput, architecture: Architecture) => {
       const destination = path.resolve(input.outfile);
@@ -135,7 +139,7 @@ const makeService = (
     const createOne = (input: DiskImageVariantInput) =>
       Tree.withVerifiedSnapshot(input.sourceApp, (snapshot) =>
         File.publish(
-          { destination: input.outfile, observation: "hashed", provenance: hdiutil.observation },
+          { destination: input.outfile, observation: "hashed", provenance: diskImageProvenance },
           (stagedPath) =>
             Effect.scoped(
               Effect.gen(function*() {
@@ -269,24 +273,29 @@ const makeService = (
       }
       let armCommitted = false;
       let x64Committed = false;
-      return yield* Effect.gen(function*() {
-        const arm64 = yield* createOne(input.arm64);
-        armCommitted = true;
-        const x64 = yield* createOne(input.x64);
-        x64Committed = true;
-        return {
-          arm64: Object.freeze({ ...arm64, architecture: "arm64" as const }),
-          x64: Object.freeze({ ...x64, architecture: "x64" as const }),
-        };
-      }).pipe(
-        Effect.onExit((exit) =>
-          Exit.isSuccess(exit)
-            ? Effect.void
-            : Effect.gen(function*() {
-              if (armCommitted) yield* fileSystem.remove(armDestination, { force: true }).pipe(Effect.ignore);
-              if (x64Committed) yield* fileSystem.remove(x64Destination, { force: true }).pipe(Effect.ignore);
-            })
-        ),
+      return yield* withApplePairRollback(
+        Effect.gen(function*() {
+          const arm64 = yield* claimApplePairMember(createOne(input.arm64), () => {
+            armCommitted = true;
+          });
+          const x64 = yield* claimApplePairMember(createOne(input.x64), () => {
+            x64Committed = true;
+          });
+          return {
+            arm64: Object.freeze({ ...arm64, architecture: "arm64" as const }),
+            x64: Object.freeze({ ...x64, architecture: "x64" as const }),
+          };
+        }),
+        fileSystem,
+        () => ({
+          operation: "create disk images rollback",
+          arm64Path: armDestination,
+          x64Path: x64Destination,
+          arm64Committed: armCommitted,
+          x64Committed,
+          recursive: false,
+          failure: (reason) => new File.FileCommitFailed({ destination: armDestination, reason }),
+        }),
       );
     });
 

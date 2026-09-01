@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -9,6 +9,12 @@ import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as AppBundle from "../../packages/effect-build-apple/src/AppBundle.js";
+import * as Assess from "../../packages/effect-build-apple/src/Assess.js";
+import * as CodeSign from "../../packages/effect-build-apple/src/CodeSign.js";
+import * as DiskImage from "../../packages/effect-build-apple/src/DiskImage.js";
+import * as InstallerPackage from "../../packages/effect-build-apple/src/InstallerPackage.js";
+import * as Notary from "../../packages/effect-build-apple/src/Notary.js";
+import * as Staple from "../../packages/effect-build-apple/src/Staple.js";
 import { finalizedFile } from "../fixtures/finalized-artifacts.js";
 import { requiredEnvironment, requiredExecutable } from "./acceptance-support.js";
 
@@ -40,6 +46,12 @@ afterAll(async () => {
 });
 
 const appleTool = (executable: string) => ({ executable, version: toolVersion });
+
+const xcrunTool = async (name: string): Promise<string> => {
+  const selected = (await execute("/usr/bin/xcrun", ["--find", name])).stdout.trim();
+  if (selected.length === 0) throw new Error(`xcrun did not resolve ${name}`);
+  return realpath(selected);
+};
 
 const sha256 = async (path: string): Promise<string> => createHash("sha256").update(await readFile(path)).digest("hex");
 
@@ -102,6 +114,86 @@ const assertUnsignedPackage = async (installer: string): Promise<void> => {
 };
 
 describe.sequential("real Apple-native artifact mechanics", () => {
+  it("constructs every Apple release layer against exact real-native probe statuses", async () => {
+    const [productsign, notarytool, ditto, stapler, spctl] = await Promise.all(
+      [
+        xcrunTool("productsign"),
+        xcrunTool("notarytool"),
+        xcrunTool("ditto"),
+        xcrunTool("stapler"),
+        xcrunTool("spctl"),
+      ] as const,
+    );
+    const applicationIdentity = "a".repeat(40) as CodeSign.CertificateSha1;
+    const installerIdentity = "b".repeat(40) as CodeSign.CertificateSha1;
+    const program = Effect.gen(function*() {
+      yield* Layer.build(
+        AppBundle.layer({ plutil: appleTool(plutil) }).pipe(
+          Layer.provide(NodeServices.layer),
+        ),
+      );
+      yield* Layer.build(
+        CodeSign.appLayer({ codesign: appleTool(codesign) }).pipe(
+          Layer.provide(Layer.merge(
+            NodeServices.layer,
+            CodeSign.developerIdApplicationIdentityLayer(applicationIdentity),
+          )),
+        ),
+      );
+      yield* Layer.build(
+        CodeSign.installerLayer({
+          productsign: appleTool(productsign),
+          pkgutil: appleTool(pkgutil),
+        }).pipe(
+          Layer.provide(Layer.merge(
+            NodeServices.layer,
+            CodeSign.developerIdInstallerIdentityLayer(installerIdentity),
+          )),
+        ),
+      );
+      yield* Layer.build(
+        DiskImage.layer({
+          hdiutil: appleTool(hdiutil),
+          codesign: appleTool(codesign),
+        }).pipe(Layer.provide(NodeServices.layer)),
+      );
+      yield* Layer.build(
+        InstallerPackage.layer({
+          pkgbuild: appleTool(pkgbuild),
+          productbuild: appleTool(productbuild),
+          pkgutil: appleTool(pkgutil),
+          codesign: appleTool(codesign),
+        }).pipe(Layer.provide(NodeServices.layer)),
+      );
+      yield* Layer.build(
+        Notary.layer({
+          notarytool: appleTool(notarytool),
+          ditto: appleTool(ditto),
+          codesign: appleTool(codesign),
+          pkgutil: appleTool(pkgutil),
+        }).pipe(Layer.provide(Layer.merge(
+          NodeServices.layer,
+          Notary.keychainProfileCredentialLayer({ profile: "probe-only" }),
+        ))),
+      );
+      yield* Layer.build(
+        Staple.layer({
+          stapler: appleTool(stapler),
+          codesign: appleTool(codesign),
+          pkgutil: appleTool(pkgutil),
+        }).pipe(Layer.provide(NodeServices.layer)),
+      );
+      yield* Layer.build(
+        Assess.layer({
+          spctl: appleTool(spctl),
+          codesign: appleTool(codesign),
+          pkgutil: appleTool(pkgutil),
+        }).pipe(Layer.provide(NodeServices.layer)),
+      );
+    });
+    await Effect.runPromise(Effect.scoped(program));
+  }, 120_000);
+
   it("builds exactly arm64 and x64 unsigned app bundles and launches the matching-host variant", async () => {
     expect(process.arch).toBe(hostArchitecture);
     expect((await execute(xcodebuild, ["-version"])).stdout).toContain(`Xcode ${xcodeVersion}\n`);

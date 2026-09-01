@@ -8,6 +8,7 @@ import {
   AppleToolFailed,
   AppleToolUnavailable,
   capturePlatformServices,
+  combineToolObservations,
   copyTreeSnapshot,
   selectAppleTool,
 } from "./internal.js";
@@ -107,9 +108,9 @@ const makeService = (
 > =>
   Effect.gen(function*() {
     const { fileSystem, path, services } = yield* capturePlatformServices;
-    const stapler = yield* selectAppleTool("stapler", options.stapler, ["-h"], "ticket-stapling");
-    const codesign = yield* selectAppleTool("codesign", options.codesign, ["--version"], "signature-verification");
-    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, ["--help"], "package-signature-verification");
+    const stapler = yield* selectAppleTool("stapler", options.stapler, "ticket-stapling");
+    const codesign = yield* selectAppleTool("codesign", options.codesign, "signature-verification");
+    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, "package-signature-verification");
 
     const mismatch = (
       acceptance: AcceptedReference,
@@ -172,7 +173,11 @@ const makeService = (
       }
       const stapled = yield* Tree.withVerifiedSnapshot(input.source, (snapshot) =>
         Tree.publish(
-          { outdir: input.outdir, observation: "hashed", provenance: stapler.observation },
+          {
+            outdir: input.outdir,
+            observation: "hashed",
+            provenance: combineToolObservations(stapler.observation, codesign.observation),
+          },
           (staging) =>
             Effect.gen(function*() {
               yield* copyTreeSnapshot(snapshot, staging);
@@ -223,15 +228,19 @@ const makeService = (
       ) {
         return yield* mismatch(input.acceptance, input.kind, input.source.bytes, input.source.digest.value);
       }
+      const verifier = input.kind === "pkg" ? pkgutil : codesign;
       const stapled = yield* File.withVerifiedBytes(input.source, (contents) =>
         File.publish(
-          { destination: input.outfile, observation: "hashed", provenance: stapler.observation },
+          {
+            destination: input.outfile,
+            observation: "hashed",
+            provenance: combineToolObservations(stapler.observation, verifier.observation),
+          },
           (stagedPath) =>
             Effect.gen(function*() {
               yield* fileSystem.writeFile(stagedPath, contents).pipe(
                 Effect.mapError((error) => invalid(`stage ${input.kind} for stapling`, stagedPath, String(error))),
               );
-              const verifier = input.kind === "pkg" ? pkgutil : codesign;
               yield* verifier.run(
                 input.kind === "pkg"
                   ? ["--check-signature", stagedPath]

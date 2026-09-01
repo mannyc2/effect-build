@@ -1,6 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit, Fiber, Layer, PlatformError, Sink, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, FileSystem, Layer, PlatformError, Sink, Stream } from "effect";
 import * as Artifact from "effect-build/Artifact";
+import * as File from "effect-build/Author/File";
 import type * as Tool from "effect-build/Author/Tool";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { createHash } from "node:crypto";
@@ -28,9 +29,16 @@ import * as Assess from "../src/Assess.js";
 import * as CodeSign from "../src/CodeSign.js";
 import * as DiskImage from "../src/DiskImage.js";
 import * as InstallerPackage from "../src/InstallerPackage.js";
+import { claimApplePairMember, selectAppleTool, withApplePairRollback } from "../src/internal.js";
+import * as NotaryRejectionFixture from "../src/internal/NotaryRejectionFixture.js";
 import * as Model from "../src/Model.js";
 import * as Notary from "../src/Notary.js";
 import * as Staple from "../src/Staple.js";
+
+// @ts-expect-error Apple certification helpers are intentionally private Node script modules.
+const { extractAppleOperationToolObservations } = await import(
+  "../../../scripts/apple-certification/tool-observation.mjs"
+);
 
 interface Invocation {
   readonly command: string;
@@ -46,6 +54,22 @@ interface Completion {
 }
 
 type Handler = (invocation: Invocation) => Completion;
+
+const nativeProbeCases = [
+  ["plutil", ["-help"], 0],
+  ["codesign", ["--version"], 2],
+  ["productsign", ["--version"], 1],
+  ["hdiutil", ["help"], 0],
+  ["pkgbuild", ["--version"], 1],
+  ["productbuild", ["--version"], 1],
+  ["pkgutil", ["--help"], 0],
+  ["spctl", ["--version"], 2],
+  ["notarytool", ["--version"], 0],
+  ["ditto", ["--help"], 1],
+  ["stapler", ["-h"], 64],
+] as const;
+
+const nonzeroNativeProbeCases = nativeProbeCases.filter(([, , exitCode]) => exitCode !== 0);
 
 const roots: string[] = [];
 
@@ -77,6 +101,35 @@ const thinMachO = (file: string, architecture: "arm64" | "x64"): void => {
 
 const sha256 = (file: string): string => createHash("sha256").update(readFileSync(file)).digest("hex");
 const digest = "a".repeat(64);
+
+interface ExpectedAppleTool {
+  readonly name: string;
+  readonly capabilityId: string;
+}
+
+const appleToolLineage = (JSON.parse(
+  readFileSync(new URL("../../../tooling/effect-build-contract.json", import.meta.url), "utf8"),
+) as {
+  readonly releaseCertification: {
+    readonly apple: {
+      readonly operationToolLineage: {
+        readonly byOperationId: Readonly<Record<string, Readonly<Record<string, readonly ExpectedAppleTool[]>>>>;
+      };
+    };
+  };
+}).releaseCertification.apple.operationToolLineage.byOperationId;
+
+const extractedToolNames = (
+  operationId: string,
+  product: string,
+  carriers: readonly unknown[],
+): readonly string[] =>
+  extractAppleOperationToolObservations({
+    operationId,
+    product,
+    carriers,
+    expectedComponents: appleToolLineage[operationId]![product]!,
+  }).map((observation: { readonly name: string }) => observation.name);
 
 const toolObservation = <const Name extends string>(name: Name, version = "18.0"): Tool.Observation<Name> => ({
   name,
@@ -268,7 +321,12 @@ const makeSpawner = (handler: Handler): readonly [
       const completion = handler(invocation);
       const stdout = completion.stdout ?? "";
       const stderr = completion.stderr ?? "";
-      const exitCode = completion.exitCode ?? 0;
+      const nativeProbeExitCode = nativeProbeCases.find(([name, args]) =>
+        basename(command.command) === name
+        && args.length === command.args.length
+        && args.every((value, index) => value === command.args[index])
+      )?.[2];
+      const exitCode = completion.exitCode ?? nativeProbeExitCode ?? 0;
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(41001),
         stdin: Sink.drain,
@@ -297,7 +355,110 @@ const errorOf = <A, E>(exit: Exit.Exit<A, E>): E => {
   return error.value;
 };
 
+const errorTagsOf = <A, E>(exit: Exit.Exit<A, E>): readonly string[] => {
+  if (!Exit.isFailure(exit)) throw new Error("expected a failure cause");
+  return exit.cause.reasons.flatMap((reason) => {
+    if (reason._tag !== "Fail") return [];
+    const tag = (reason.error as { readonly _tag?: unknown })._tag;
+    return typeof tag === "string" ? [tag] : [];
+  });
+};
+
+const fileSystemWithPairRemovalFailure = async (
+  destination: string,
+  armed: () => boolean,
+  recursive: boolean,
+): Promise<{ readonly fileSystem: FileSystem.FileSystem; readonly attempts: () => number }> => {
+  const baseFileSystem = await Effect.runPromise(
+    FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)),
+  );
+  let attempts = 0;
+  const fileSystem: FileSystem.FileSystem = {
+    ...baseFileSystem,
+    remove: (target, options) => {
+      if (
+        armed()
+        && target === destination
+        && options?.force === true
+        && (options?.recursive ?? false) === recursive
+      ) {
+        attempts += 1;
+        return Effect.fail(PlatformError.systemError({
+          _tag: "InvalidData",
+          module: "test",
+          method: "remove",
+          description: "deliberate exact-pair rollback failure",
+        }));
+      }
+      return baseFileSystem.remove(target, options);
+    },
+  };
+  return { fileSystem, attempts: () => attempts };
+};
+
 describe("effect-build-apple hard cut", () => {
+  it.each(nativeProbeCases)(
+    "admits only the exact native %s probe status",
+    async (name, args, exitCode) => {
+      const root = makeRoot();
+      const tool = executable(root, name);
+      const probeStdout = `${name}-probe-stdout`;
+      const probeStderr = `${name}-probe-stderr`;
+      const [spawner, invocations] = makeSpawner(() => ({ exitCode, stdout: probeStdout, stderr: probeStderr }));
+      const selected = await Effect.runPromise(
+        selectAppleTool(name, { executable: tool, version: "18.0" }).pipe(
+          Effect.provide(platform(spawner)),
+        ),
+      );
+      expect(selected.observation.name).toBe(name);
+      expect(selected.observation.capabilities).toContainEqual({
+        _tag: "Present",
+        id: `${name}-command`,
+        evidence: `native probe ${JSON.stringify(args)} admitted exit code ${exitCode}`,
+      });
+      expect(JSON.stringify(selected.observation)).not.toContain(probeStdout);
+      expect(JSON.stringify(selected.observation)).not.toContain(probeStderr);
+      expect(invocations).toEqual([{ command: realpathSync(tool), args, cwd: undefined }]);
+    },
+  );
+
+  it("rejects a non-allowed native probe status even when it is nonzero", async () => {
+    const root = makeRoot();
+    const codesign = executable(root, "codesign");
+    const [spawner] = makeSpawner(() => ({ exitCode: 1, stderr: "unexpected usage status" }));
+    const exit = await Effect.runPromiseExit(
+      selectAppleTool("codesign", { executable: codesign, version: "18.0" }).pipe(
+        Effect.provide(platform(spawner)),
+      ),
+    );
+    expect(errorOf(exit)).toMatchObject({
+      _tag: "AppleToolFailed",
+      tool: "codesign",
+      exitCode: 1,
+      stderr: "unexpected usage status",
+    });
+  });
+
+  it.each(nonzeroNativeProbeCases)(
+    "rejects exit zero for native %s instead of widening its exact status",
+    async (name) => {
+      const root = makeRoot();
+      const tool = executable(root, name);
+      const [spawner] = makeSpawner(() => ({ exitCode: 0, stderr: "unexpected zero status" }));
+      const exit = await Effect.runPromiseExit(
+        selectAppleTool(name, { executable: tool, version: "18.0" }).pipe(
+          Effect.provide(platform(spawner)),
+        ),
+      );
+      expect(errorOf(exit)).toMatchObject({
+        _tag: "AppleToolFailed",
+        tool: name,
+        exitCode: 0,
+        stderr: "unexpected zero status",
+      });
+    },
+  );
+
   it("constructs exactly arm64 and x64 app bundles and validates each plist", async () => {
     const root = makeRoot();
     const plutil = executable(root, "plutil");
@@ -499,6 +660,49 @@ describe("effect-build-apple hard cut", () => {
     expect(existsSync(x64Out)).toBe(false);
   });
 
+  it("surfaces app-pair rollback residue when destination removal fails", async () => {
+    const root = makeRoot();
+    const plutil = executable(root, "plutil");
+    const armExecutable = join(root, "arm64-bin");
+    const x64Executable = join(root, "x64-bin");
+    thinMachO(armExecutable, "arm64");
+    thinMachO(x64Executable, "x64");
+    const armOut = join(root, "Rollback-failure-arm64.app");
+    const x64Out = join(root, "Rollback-failure-x64.app");
+    let secondRejected = false;
+    let lintCount = 0;
+    const [spawner] = makeSpawner(({ args }) => {
+      if (args[0] === "-lint" && ++lintCount === 2) {
+        secondRejected = true;
+        return { exitCode: 65, stderr: "second architecture rejected" };
+      }
+      return {};
+    });
+    const injected = await fileSystemWithPairRemovalFailure(armOut, () => secondRejected, true);
+    const provider = AppBundle.layer({ plutil: { executable: plutil, version: "18.0" } }).pipe(
+      Layer.provide(Layer.merge(
+        platform(spawner),
+        Layer.succeed(FileSystem.FileSystem, injected.fileSystem),
+      )),
+    );
+    const exit = await Effect.runPromiseExit(
+      AppBundle.buildAppBundles({
+        bundleIdentifier: "dev.effect.build.rollback-failure",
+        bundleName: "Rollback Failure",
+        displayName: "Rollback Failure",
+        executableName: "rollback-failure",
+        version: "1",
+        shortVersion: "1.0.0",
+        arm64: { executable: executableArtifact(armExecutable, "macos-aarch64"), outdir: armOut },
+        x64: { executable: executableArtifact(x64Executable, "macos-x64"), outdir: x64Out },
+      }).pipe(Effect.provide(provider)),
+    );
+    expect(errorTagsOf(exit)).toEqual(expect.arrayContaining(["AppleToolFailed", "TreeCommitFailed"]));
+    expect(injected.attempts()).toBe(1);
+    expect(existsSync(armOut)).toBe(true);
+    expect(existsSync(x64Out)).toBe(false);
+  });
+
   it("rolls back an exact pair when interrupted after the first commit", async () => {
     const root = makeRoot();
     const plutil = executable(root, "plutil");
@@ -536,9 +740,71 @@ describe("effect-build-apple hard cut", () => {
     const fiber = Effect.runFork(program);
     await secondLint;
     await Effect.runPromise(Fiber.interrupt(fiber));
+    const interrupted = await Effect.runPromise(Fiber.await(fiber));
+    expect(Exit.isFailure(interrupted) && Cause.hasInterrupts(interrupted.cause)).toBe(true);
+    expect(Exit.isFailure(interrupted) && interrupted.cause.reasons.some(({ _tag }) => _tag === "Fail")).toBe(false);
     expect(existsSync(armOut)).toBe(false);
     expect(existsSync(x64Out)).toBe(false);
   });
+
+  it.each(["arm64", "x64"] as const)(
+    "atomically claims the %s publication boundary before observing interruption",
+    async (boundary) => {
+      const root = makeRoot();
+      const armOut = join(root, "boundary-arm64");
+      const x64Out = join(root, "boundary-x64-link");
+      const missingTarget = join(root, "missing-target");
+      const fileSystem = await Effect.runPromise(
+        FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)),
+      );
+      let armCommitted = false;
+      let x64Committed = false;
+      let releaseBoundary!: () => void;
+      let resolveBoundary!: () => void;
+      const boundaryReached = new Promise<void>((resolve) => {
+        resolveBoundary = resolve;
+      });
+      const publishedHook = Effect.callback<void>((resume) => {
+        releaseBoundary = () => resume(Effect.void);
+        resolveBoundary();
+      });
+      const source = Effect.gen(function*() {
+        yield* claimApplePairMember(
+          fileSystem.writeFileString(armOut, "owned arm64 publication"),
+          () => {
+            armCommitted = true;
+          },
+          boundary === "arm64" ? publishedHook : undefined,
+        );
+        yield* claimApplePairMember(
+          fileSystem.symlink(missingTarget, x64Out),
+          () => {
+            x64Committed = true;
+          },
+          boundary === "x64" ? publishedHook : undefined,
+        );
+      });
+      const program = withApplePairRollback(source, fileSystem, () => ({
+        operation: "test exact pair ownership transfer",
+        arm64Path: armOut,
+        x64Path: x64Out,
+        arm64Committed: armCommitted,
+        x64Committed,
+        recursive: false,
+        failure: (reason) => new File.FileCommitFailed({ destination: armOut, reason }),
+      }));
+      const fiber = Effect.runFork(program);
+      await boundaryReached;
+      fiber.interruptUnsafe(999);
+      releaseBoundary();
+      const interrupted = await Effect.runPromise(Fiber.await(fiber));
+      expect(Exit.isFailure(interrupted) && Cause.hasInterruptsOnly(interrupted.cause)).toBe(true);
+      expect(armCommitted).toBe(true);
+      expect(x64Committed).toBe(boundary === "x64");
+      expect(() => lstatSync(armOut)).toThrow();
+      expect(() => lstatSync(x64Out)).toThrow();
+    },
+  );
 
   it("fails layer construction when a native tool probe exits nonzero", async () => {
     const root = makeRoot();
@@ -621,7 +887,19 @@ describe("effect-build-apple hard cut", () => {
         },
       ).pipe(Effect.provide(dmgProvider)),
     );
-    expect(dmgs.arm64.provenance).toMatchObject({ name: "hdiutil", participants: [{ version: "18.0" }] });
+    expect(dmgs.arm64.provenance).toMatchObject({
+      name: "hdiutil",
+      participants: [
+        { name: "hdiutil", version: "18.0" },
+        { name: "codesign", version: "18.0" },
+      ],
+    });
+    expect(dmgs.x64.provenance).toEqual(dmgs.arm64.provenance);
+    expect(extractedToolNames("PROD-APPLE-005", "dmg", [dmgs.arm64.provenance])).toEqual([
+      "codesign",
+      "hdiutil",
+    ]);
+    expect(dmgs).not.toHaveProperty("operationTools");
     expect(dmgs.arm64.architecture).toBe("arm64");
     expect(dmgs.x64.architecture).toBe("x64");
     expect(readFileSync(dmgs.x64.path, "utf8")).toContain("UDZO");
@@ -852,7 +1130,18 @@ describe("effect-build-apple hard cut", () => {
         "productbuild",
         "pkgbuild",
         "pkgutil",
+        "codesign",
       ]);
+    expect((packages.arm64.provenance as Tool.Observation<"productbuild">).participants.map(({ version }) => version))
+      .toEqual(["18.0", "18.0", "15.0", "18.0"]);
+    expect(packages.x64.provenance).toEqual(packages.arm64.provenance);
+    expect(extractedToolNames("PROD-APPLE-006", "pkg", [packages.arm64.provenance])).toEqual([
+      "codesign",
+      "pkgbuild",
+      "productbuild",
+      "pkgutil",
+    ]);
+    expect(packages).not.toHaveProperty("operationTools");
     expect(packages.arm64.architecture).toBe("arm64");
     expect(packages.x64.architecture).toBe("x64");
     const build = pkgInvocations.find(({ command, args }) =>
@@ -881,6 +1170,127 @@ describe("effect-build-apple hard cut", () => {
       pkgInvocations.filter(({ command, args }) => basename(command) === "pkgutil" && args[0] === "--payload-files"),
     )
       .toHaveLength(2);
+  });
+
+  it("surfaces disk-image-pair rollback residue when destination removal fails", async () => {
+    const root = makeRoot();
+    const hdiutil = executable(root, "hdiutil");
+    const codesign = executable(root, "codesign");
+    const armApp = join(root, "Rollback-arm64.app");
+    const x64App = join(root, "Rollback-x64.app");
+    mkdirSync(join(armApp, "Contents"), { recursive: true });
+    mkdirSync(join(x64App, "Contents"), { recursive: true });
+    writeFileSync(join(armApp, "Contents/Info.plist"), "arm");
+    writeFileSync(join(x64App, "Contents/Info.plist"), "x64");
+    const armOut = join(root, "rollback-failure-arm64.dmg");
+    const x64Out = join(root, "rollback-failure-x64.dmg");
+    let secondRejected = false;
+    let createCount = 0;
+    let layout = "";
+    const mounted = join(root, "rollback-mounted");
+    const device = "/dev/disk91";
+    const [spawner] = makeSpawner(({ command, args }) => {
+      if (basename(command) !== "hdiutil") return {};
+      if (args[0] === "create") {
+        createCount += 1;
+        if (createCount === 2) {
+          secondRejected = true;
+          return { exitCode: 65, stderr: "second disk image rejected" };
+        }
+        layout = args[args.indexOf("-srcfolder") + 1]!;
+        writeFileSync(args.at(-1)!, "UDZO");
+      }
+      if (args[0] === "attach") {
+        cpSync(layout, mounted, { recursive: true, verbatimSymlinks: true });
+        return { stdout: `${device}\tApple_HFS\t${mounted}\n` };
+      }
+      if (args[0] === "info") return { stdout: `dev-entry: ${device}\n` };
+      if (args[0] === "detach") rmSync(mounted, { recursive: true, force: true });
+      return {};
+    });
+    const injected = await fileSystemWithPairRemovalFailure(armOut, () => secondRejected, false);
+    const provider = DiskImage.layer({
+      hdiutil: { executable: hdiutil, version: "18.0" },
+      codesign: { executable: codesign, version: "18.0" },
+    }).pipe(Layer.provide(Layer.merge(
+      platform(spawner),
+      Layer.succeed(FileSystem.FileSystem, injected.fileSystem),
+    )));
+    const exit = await Effect.runPromiseExit(
+      DiskImage.createDiskImages({
+        arm64: { sourceApp: developerIdBundle(armApp, "arm64"), outfile: armOut, volumeName: "Rollback arm64" },
+        x64: { sourceApp: developerIdBundle(x64App, "x64"), outfile: x64Out, volumeName: "Rollback x64" },
+      }).pipe(Effect.provide(provider)),
+    );
+    expect(errorTagsOf(exit)).toEqual(expect.arrayContaining(["AppleToolFailed", "FileCommitFailed"]));
+    expect(injected.attempts()).toBe(1);
+    expect(existsSync(armOut)).toBe(true);
+    expect(existsSync(x64Out)).toBe(false);
+  });
+
+  it("surfaces installer-pair rollback residue when destination removal fails", async () => {
+    const root = makeRoot();
+    const pkgbuild = executable(root, "pkgbuild");
+    const productbuild = executable(root, "productbuild");
+    const pkgutil = executable(root, "pkgutil");
+    const codesign = executable(root, "codesign");
+    const armApp = join(root, "Rollback-arm64.app");
+    const x64App = join(root, "Rollback-x64.app");
+    mkdirSync(join(armApp, "Contents"), { recursive: true });
+    mkdirSync(join(x64App, "Contents"), { recursive: true });
+    writeFileSync(join(armApp, "Contents/Info.plist"), "arm");
+    writeFileSync(join(x64App, "Contents/Info.plist"), "x64");
+    const armOut = join(root, "rollback-failure-arm64.pkg");
+    const x64Out = join(root, "rollback-failure-x64.pkg");
+    let secondRejected = false;
+    let productbuildCount = 0;
+    const [spawner] = makeSpawner(({ command, args }) => {
+      if (basename(command) === "pkgbuild" && args[0] !== "--version") {
+        writeFileSync(args.at(-1)!, "component");
+      }
+      if (basename(command) === "productbuild" && args[0] !== "--version") {
+        productbuildCount += 1;
+        if (productbuildCount === 2) {
+          secondRejected = true;
+          return { exitCode: 65, stderr: "second installer rejected" };
+        }
+        writeFileSync(args.at(-1)!, "installer");
+      }
+      if (basename(command) === "pkgutil" && args[0] === "--payload-files") {
+        return { stdout: `./${basename(armApp)}/Contents/Info.plist\n` };
+      }
+      return {};
+    });
+    const injected = await fileSystemWithPairRemovalFailure(armOut, () => secondRejected, false);
+    const provider = InstallerPackage.layer({
+      pkgbuild: { executable: pkgbuild, version: "18.0" },
+      productbuild: { executable: productbuild, version: "18.0" },
+      pkgutil: { executable: pkgutil, version: "15.0" },
+      codesign: { executable: codesign, version: "18.0" },
+    }).pipe(Layer.provide(Layer.merge(
+      platform(spawner),
+      Layer.succeed(FileSystem.FileSystem, injected.fileSystem),
+    )));
+    const exit = await Effect.runPromiseExit(
+      InstallerPackage.buildInstallerPackages({
+        arm64: {
+          sourceApp: developerIdBundle(armApp, "arm64"),
+          outfile: armOut,
+          identifier: "dev.effect.build.rollback.arm64",
+          version: "1.0.0",
+        },
+        x64: {
+          sourceApp: developerIdBundle(x64App, "x64"),
+          outfile: x64Out,
+          identifier: "dev.effect.build.rollback.x64",
+          version: "1.0.0",
+        },
+      }).pipe(Effect.provide(provider)),
+    );
+    expect(errorTagsOf(exit)).toEqual(expect.arrayContaining(["AppleToolFailed", "FileCommitFailed"]));
+    expect(injected.attempts()).toBe(1);
+    expect(existsSync(armOut)).toBe(true);
+    expect(existsSync(x64Out)).toBe(false);
   });
 
   it("Developer ID-signs app and pkg copies with exact identities and redacted typed failures", async () => {
@@ -1123,8 +1533,19 @@ describe("effect-build-apple hard cut", () => {
     );
     expect(submitted.submissionId).toBe(submissionId);
     expect(submitted.status._tag).toBe("Pending");
-    expect(submitted.submissionTool).toMatchObject({ name: "notarytool", participants: [{ version: "18.0" }] });
+    expect(submitted.submissionTool).toMatchObject({
+      name: "notarytool",
+      participants: [
+        { name: "notarytool", version: "18.0" },
+        { name: "pkgutil", version: "15.0" },
+      ],
+    });
     expect(submitted.tool).toMatchObject({ name: "notarytool", participants: [{ version: "18.0" }] });
+    expect(extractedToolNames("PROD-APPLE-007", "pkg", [submitted.submissionTool])).toEqual([
+      "pkgutil",
+      "notarytool",
+    ]);
+    expect(submitted).not.toHaveProperty("structuralVerifier");
     expect(JSON.stringify(submitted)).not.toContain(profile);
     const stagedSubmission = runnerOneInvocations[5]!.args[1]!;
     expect(stagedSubmission).not.toBe(artifact);
@@ -1138,6 +1559,25 @@ describe("effect-build-apple hard cut", () => {
       "json",
       "--keychain-profile",
       profile,
+    ]);
+
+    const diskImagePath = join(root, "signed.dmg");
+    writeFileSync(diskImagePath, "signed-dmg");
+    const diskImageSubmission = await Effect.runPromise(
+      Notary.submit({ kind: "dmg", artifact: developerIdDiskImage(diskImagePath) }).pipe(
+        Effect.provide(runnerOneProvider),
+      ),
+    );
+    expect(diskImageSubmission.submissionTool).toMatchObject({
+      name: "notarytool",
+      participants: [
+        { name: "notarytool", version: "18.0" },
+        { name: "codesign", version: "18.0" },
+      ],
+    });
+    expect(extractedToolNames("PROD-APPLE-007", "dmg", [diskImageSubmission.submissionTool])).toEqual([
+      "codesign",
+      "notarytool",
     ]);
 
     const reference = new Notary.SubmissionReference({
@@ -1204,13 +1644,22 @@ describe("effect-build-apple hard cut", () => {
         identityKind: "file-bytes",
         artifactDigest: { value: artifactDigest },
       },
-      submissionTool: { name: "notarytool", participants: [{ version: "18.0" }] },
+      submissionTool: {
+        name: "notarytool",
+        participants: [
+          { name: "notarytool", version: "18.0" },
+          { name: "pkgutil", version: "15.0" },
+        ],
+      },
       tool: { name: "notarytool", participants: [{ version: "18.1" }] },
     });
     const pendingReference = await Effect.runPromiseExit(Notary.acceptedReference(submitted));
     expect(errorOf(pendingReference)).toMatchObject({ _tag: "NotaryResultNotAccepted" });
     expect(log.submissionId).toBe(reference.submissionId);
     expect(log.artifactDigest.value).toBe(artifactDigest);
+    expect(log.submissionTool).toBe(reference.submissionTool);
+    expect(extractedToolNames("PROD-APPLE-009", "pkg", [observed.tool])).toEqual(["notarytool"]);
+    expect(extractedToolNames("PROD-APPLE-010", "pkg", [log.tool])).toEqual(["notarytool"]);
     expect(log.issues[0]?.message).toHaveLength(1_100_000);
     expect(JSON.stringify({ observed, log })).not.toContain(profile);
     expect(runnerTwoInvocations[4]!.args).toEqual([
@@ -1401,6 +1850,70 @@ describe("effect-build-apple hard cut", () => {
     expect(changedToolSubmits).toBe(0);
   });
 
+  it("preserves a known native submission when staging cleanup fails after the provider response", async () => {
+    const root = makeRoot();
+    const notarytool = executable(root, "notarytool");
+    const ditto = executable(root, "ditto");
+    const codesign = executable(root, "codesign");
+    const pkgutil = executable(root, "pkgutil");
+    const artifact = join(root, "signed.pkg");
+    writeFileSync(artifact, "signed");
+    const submissionId = "e455e2bf-2207-47a7-a1a5-3aab2cd87f6e";
+    let stagedDirectory = "";
+    let providerResponses = 0;
+    let cleanupFailures = 0;
+    const [spawner] = makeSpawner(({ command, args }) => {
+      if (basename(command) === "notarytool" && args[0] === "submit") {
+        providerResponses++;
+        stagedDirectory = dirname(args[1]!);
+        return { stdout: JSON.stringify({ id: submissionId, status: "Accepted" }) };
+      }
+      return { stdout: "tool version 1\n" };
+    });
+    const baseFileSystem = await Effect.runPromise(
+      FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)),
+    );
+    const cleanupFailingFileSystem: FileSystem.FileSystem = {
+      ...baseFileSystem,
+      remove: (target, options) => {
+        if (providerResponses > 0 && target === stagedDirectory && options?.recursive === true) {
+          cleanupFailures++;
+          return Effect.fail(PlatformError.systemError({
+            _tag: "InvalidData",
+            module: "test",
+            method: "remove",
+            description: "deliberate post-response staging cleanup failure",
+          }));
+        }
+        return baseFileSystem.remove(target, options);
+      },
+    };
+    const injectedPlatform = Layer.merge(
+      platform(spawner),
+      Layer.succeed(FileSystem.FileSystem, cleanupFailingFileSystem),
+    );
+    const provider = Notary.layer({
+      notarytool: { executable: notarytool, version: "18.0" },
+      ditto: { executable: ditto, version: "18.0" },
+      codesign: { executable: codesign, version: "18.0" },
+      pkgutil: { executable: pkgutil, version: "15.0" },
+    }).pipe(Layer.provide(Layer.merge(
+      injectedPlatform,
+      Notary.keychainProfileCredentialLayer({ profile: "fixture-profile" }),
+    )));
+    const submission = await Effect.runPromise(
+      Notary.submit({ kind: "pkg", artifact: developerIdInstallerPackage(artifact) }).pipe(
+        Effect.provide(provider),
+      ),
+    );
+    expect(submission).toBeInstanceOf(Notary.Submission);
+    expect(submission).toMatchObject({ submissionId, status: { _tag: "Accepted" } });
+    expect(providerResponses).toBe(1);
+    expect(cleanupFailures).toBe(1);
+    expect(existsSync(stagedDirectory)).toBe(true);
+    rmSync(stagedDirectory, { recursive: true, force: true });
+  });
+
   it("binds an app ZIP transport to an exact symlink-aware bundle before stapling", async () => {
     const root = makeRoot();
     const notarytool = executable(root, "notarytool");
@@ -1462,8 +1975,18 @@ describe("effect-build-apple hard cut", () => {
       kind: "zip",
       status: { _tag: "Accepted" },
       stapleTarget: { kind: "app", identityKind: "tree-manifest", bundleName: "Signed.app" },
+      submissionTool: {
+        name: "notarytool",
+        participants: [
+          { name: "notarytool", version: "18.0" },
+          { name: "codesign", version: "18.0" },
+        ],
+      },
       transportTool: { name: "ditto", participants: [{ version: "18.0" }] },
     });
+    expect(
+      extractedToolNames("PROD-APPLE-008", "app", [submission.submissionTool, submission.transportTool]),
+    ).toEqual(["codesign", "ditto", "notarytool"]);
     expect(submission.artifactDigest.value).toHaveLength(64);
     expect(acceptance.stapleTarget.artifactDigest.value).not.toBe(submission.artifactDigest.value);
     expect(notaryInvocations.map(({ args }) => args[0])).toEqual([
@@ -1510,6 +2033,17 @@ describe("effect-build-apple hard cut", () => {
       join("Versions", "Current", "Resources"),
     );
     expect(readFileSync(join(root, "Stapled.app/Contents/_CodeSignature/NotaryTicket"), "utf8")).toBe("ticket");
+    expect(stapled.provenance).toMatchObject({
+      name: "stapler",
+      participants: [
+        { name: "stapler", version: "18.0" },
+        { name: "codesign", version: "18.0" },
+      ],
+    });
+    expect(extractedToolNames("PROD-APPLE-011", "app", [stapled.provenance])).toEqual([
+      "codesign",
+      "stapler",
+    ]);
 
     const changedApp = join(root, "Changed.app");
     cpSync(sourceApp, changedApp, { recursive: true, verbatimSymlinks: true });
@@ -1553,6 +2087,179 @@ describe("effect-build-apple hard cut", () => {
     );
     expect(errorOf(badTransport)).toMatchObject({ _tag: "SubmissionPreparationFailed" });
     expect(badTransportSubmitted).toBe(false);
+  });
+
+  it("keeps the ad-hoc rejection app private and submits its exact ZIP once", async () => {
+    const root = makeRoot();
+    const notarytool = executable(root, "notarytool");
+    const ditto = executable(root, "ditto");
+    const codesign = executable(root, "codesign");
+    const pkgutil = executable(root, "pkgutil");
+    const sourceApp = join(root, "Unsigned-arm64.app");
+    mkdirSync(join(sourceApp, "Contents/MacOS"), { recursive: true });
+    writeFileSync(join(sourceApp, "Contents/MacOS/effect-build"), "unsigned-arm64");
+    chmodSync(join(sourceApp, "Contents/MacOS/effect-build"), 0o755);
+    const bundle: Model.ApplicationBundle = {
+      ...bundleArtifact(sourceApp, "plutil"),
+      architecture: "arm64",
+    };
+    const submissionId = "b7888dce-7b63-4c30-ac8f-361e6a4e748b";
+    let transportSource = "";
+    const [spawner, invocations] = makeSpawner(({ command, args }) => {
+      if (basename(command) === "codesign" && args[0] === "--force") {
+        mkdirSync(join(args.at(-1)!, "Contents/_CodeSignature"), { recursive: true });
+        writeFileSync(join(args.at(-1)!, "Contents/_CodeSignature/CodeResources"), "ad-hoc-no-timestamp");
+      }
+      if (basename(command) === "ditto" && args[0] === "-c") {
+        transportSource = args.at(-2)!;
+        writeFileSync(args.at(-1)!, `zip:${basename(transportSource)}`);
+      }
+      if (basename(command) === "ditto" && args[0] === "-x") {
+        const extractedApp = join(args.at(-1)!, basename(transportSource));
+        cpSync(transportSource, extractedApp, { recursive: true, verbatimSymlinks: true });
+      }
+      if (basename(command) === "notarytool" && args[0] === "submit") {
+        return {
+          stdout: JSON.stringify({
+            id: submissionId,
+            status: "Invalid",
+            message: "bundle lacks a secure Developer ID timestamp",
+          }),
+        };
+      }
+      return { stdout: "tool version 1\n" };
+    });
+    const dependencies = Layer.merge(
+      platform(spawner),
+      Notary.keychainProfileCredentialLayer({ profile: "fixture-profile" }),
+    );
+
+    const publicProvider = Notary.layer({
+      notarytool: { executable: notarytool, version: "18.0" },
+      ditto: { executable: ditto, version: "18.0" },
+      codesign: { executable: codesign, version: "18.0" },
+      pkgutil: { executable: pkgutil, version: "15.0" },
+    }).pipe(Layer.provide(dependencies));
+    const publicCandidate = {
+      ...bundle,
+      signature: {
+        _tag: "AdHocRejectionSignature",
+        architecture: "arm64",
+        identity: "-",
+        tool: toolObservation("codesign"),
+        hardenedRuntime: true,
+        secureTimestamp: false,
+      },
+    } as unknown as Model.DeveloperIdApplicationBundle;
+    const publicExit = await Effect.runPromiseExit(
+      Notary.submitApp({ bundle: publicCandidate }).pipe(Effect.provide(publicProvider)),
+    );
+    expect(errorOf(publicExit)).toMatchObject({ _tag: "AppleProductStateInvalid" });
+    expect(invocations.filter(({ args }) => args[0] === "submit")).toHaveLength(0);
+
+    const fixtureStart = invocations.length;
+    const fixtureProvider = NotaryRejectionFixture.layer({
+      notarytool: { executable: notarytool, version: "18.0" },
+      ditto: { executable: ditto, version: "18.0" },
+      codesign: { executable: codesign, version: "18.0" },
+    }).pipe(Layer.provide(dependencies));
+    const submission = await Effect.runPromise(
+      NotaryRejectionFixture.submitOnce({ bundle }).pipe(Effect.provide(fixtureProvider)),
+    );
+    const fixtureInvocations = invocations.slice(fixtureStart);
+    expect(fixtureInvocations.map(({ args }) => args[0])).toEqual([
+      "--version",
+      "--help",
+      "--version",
+      "--force",
+      "--verify",
+      "--verify",
+      "--verify",
+      "-c",
+      "-x",
+      "--verify",
+      "submit",
+    ]);
+    const sign = fixtureInvocations.find(({ args }) => args[0] === "--force")!;
+    expect(sign.args).toEqual([
+      "--force",
+      "--deep",
+      "--sign",
+      "-",
+      "--options",
+      "runtime",
+      "--timestamp=none",
+      sign.args.at(-1),
+    ]);
+    expect(fixtureInvocations.filter(({ args }) => args[0] === "submit")).toHaveLength(1);
+    expect(submission).toBeInstanceOf(Notary.Submission);
+    expect(submission).toMatchObject({
+      kind: "zip",
+      architecture: "arm64",
+      status: { _tag: "Rejected", providerStatus: "Invalid" },
+      stapleTarget: { kind: "app", identityKind: "tree-manifest", bundleName: "Unsigned-arm64.app" },
+      submissionTool: { name: "notarytool", participants: [{ name: "notarytool" }, { name: "codesign" }] },
+      transportTool: { name: "ditto" },
+    });
+    expect(submission.stapleTarget?.artifactDigest.value).not.toBe(bundle.manifestDigest.value);
+    expect("root" in submission).toBe(false);
+    expect("path" in submission).toBe(false);
+    expect("signature" in submission).toBe(false);
+    expect(JSON.stringify(submission)).not.toContain("AdHocRejectionSignature");
+  });
+
+  it("maps rejection-fixture response loss to one unknown outcome without retry", async () => {
+    const root = makeRoot();
+    const notarytool = executable(root, "notarytool");
+    const ditto = executable(root, "ditto");
+    const codesign = executable(root, "codesign");
+    const sourceApp = join(root, "Unsigned-x64.app");
+    mkdirSync(join(sourceApp, "Contents/MacOS"), { recursive: true });
+    writeFileSync(join(sourceApp, "Contents/MacOS/effect-build"), "unsigned-x64");
+    chmodSync(join(sourceApp, "Contents/MacOS/effect-build"), 0o755);
+    const bundle: Model.ApplicationBundle = {
+      ...bundleArtifact(sourceApp, "plutil"),
+      architecture: "x64",
+    };
+    let transportSource = "";
+    let submissions = 0;
+    const [spawner] = makeSpawner(({ command, args }) => {
+      if (basename(command) === "codesign" && args[0] === "--force") {
+        mkdirSync(join(args.at(-1)!, "Contents/_CodeSignature"), { recursive: true });
+        writeFileSync(join(args.at(-1)!, "Contents/_CodeSignature/CodeResources"), "ad-hoc-no-timestamp");
+      }
+      if (basename(command) === "ditto" && args[0] === "-c") {
+        transportSource = args.at(-2)!;
+        writeFileSync(args.at(-1)!, `zip:${basename(transportSource)}`);
+      }
+      if (basename(command) === "ditto" && args[0] === "-x") {
+        cpSync(transportSource, join(args.at(-1)!, basename(transportSource)), {
+          recursive: true,
+          verbatimSymlinks: true,
+        });
+      }
+      if (basename(command) === "notarytool" && args[0] === "submit") {
+        submissions++;
+        return { exitCode: 75, stderr: "provider response lost after upload" };
+      }
+      return { stdout: "tool version 1\n" };
+    });
+    const provider = NotaryRejectionFixture.layer({
+      notarytool: { executable: notarytool, version: "18.0" },
+      ditto: { executable: ditto, version: "18.0" },
+      codesign: { executable: codesign, version: "18.0" },
+    }).pipe(Layer.provide(Layer.merge(
+      platform(spawner),
+      Notary.keychainProfileCredentialLayer({ profile: "fixture-profile" }),
+    )));
+    const exit = await Effect.runPromiseExit(
+      NotaryRejectionFixture.submitOnce({ bundle }).pipe(Effect.provide(provider)),
+    );
+    expect(errorOf(exit)).toMatchObject({
+      _tag: "SubmissionOutcomeUnknown",
+      reason: expect.stringContaining("provider response lost after upload"),
+    });
+    expect(submissions).toBe(1);
   });
 
   it("staples new bytes and performs product-specific Gatekeeper verification", async () => {
@@ -1602,11 +2309,23 @@ describe("effect-build-apple hard cut", () => {
       ).pipe(Effect.provide(stapleProvider)),
     );
     expect(stapled._tag).toBe("HashedFile");
-    expect(stapled.provenance).toMatchObject({ name: "stapler", participants: [{ version: "18.0" }] });
+    expect(stapled.provenance).toMatchObject({
+      name: "stapler",
+      participants: [
+        { name: "stapler", version: "18.0" },
+        { name: "codesign", version: "18.0" },
+      ],
+    });
+    expect(extractedToolNames("PROD-APPLE-012", "dmg", [stapled.provenance])).toEqual([
+      "codesign",
+      "stapler",
+    ]);
     expect(stapled.notarizationTicket).toMatchObject({
       submissionTool: { name: "notarytool", participants: [{ version: "17.4" }] },
       acceptanceTool: { name: "notarytool", participants: [{ version: "18.0" }] },
     });
+    expect(stapled.notarizationTicket).not.toHaveProperty("structuralVerifier");
+    expect(stapled.notarizationTicket).not.toHaveProperty("staplingTool");
     expect(readFileSync(stapled.path, "utf8")).toBe("accepted:stapled");
     expect(
       stapleInvocations.filter(({ command }) => basename(command) === "stapler").map(({ args }) => args.slice(0, 1)),
@@ -1614,6 +2333,45 @@ describe("effect-build-apple hard cut", () => {
       ["-h"],
       ["staple"],
       ["validate"],
+    ]);
+
+    const sourcePkg = join(root, "accepted.pkg");
+    writeFileSync(sourcePkg, "accepted-pkg");
+    const sourcePkgArtifact = developerIdInstallerPackage(sourcePkg);
+    const packageAcceptance = new Notary.AcceptedReference({
+      submissionId: "f17717f8-c582-4ef7-8a18-e8872eec79e0",
+      kind: "pkg",
+      architecture: "arm64",
+      artifactBytes: sourcePkgArtifact.bytes,
+      artifactDigest: sourcePkgArtifact.digest,
+      providerStatus: "Accepted",
+      submissionTool: toolObservation("notarytool", "17.4"),
+      tool: toolObservation("notarytool", "18.0"),
+      stapleTarget: new Notary.StapleTarget({
+        kind: "pkg",
+        identityKind: "file-bytes",
+        artifactBytes: sourcePkgArtifact.bytes,
+        artifactDigest: sourcePkgArtifact.digest,
+      }),
+    });
+    const stapledPackage = await Effect.runPromise(
+      Staple.stapleFile({
+        kind: "pkg",
+        source: sourcePkgArtifact,
+        acceptance: packageAcceptance,
+        outfile: join(root, "final.pkg"),
+      }).pipe(Effect.provide(stapleProvider)),
+    );
+    expect(stapledPackage.provenance).toMatchObject({
+      name: "stapler",
+      participants: [
+        { name: "stapler", version: "18.0" },
+        { name: "pkgutil", version: "15.0" },
+      ],
+    });
+    expect(extractedToolNames("PROD-APPLE-012", "pkg", [stapledPackage.provenance])).toEqual([
+      "pkgutil",
+      "stapler",
     ]);
 
     const mismatchedAcceptance = new Notary.AcceptedReference({
@@ -1637,7 +2395,9 @@ describe("effect-build-apple hard cut", () => {
     expect(existsSync(join(root, "must-not-staple.dmg"))).toBe(false);
 
     const finalApp = join(root, "Final.app");
-    const finalPkg = join(root, "Final.pkg");
+    // Keep this path distinct from the earlier `final.pkg`: the default macOS
+    // filesystem is case-insensitive, so those names can resolve to one file.
+    const finalPkg = join(root, "Assessed.pkg");
     mkdirSync(join(finalApp, "Contents/MacOS"), { recursive: true });
     writeFileSync(join(finalApp, "Contents/MacOS/app"), "signed-app");
     writeFileSync(finalPkg, "signed-pkg");
@@ -1712,13 +2472,25 @@ describe("effect-build-apple hard cut", () => {
     expect(dmg.identityKind).toBe("file-bytes");
     expect(dmg.artifactDigest.value).toBe(sha256(stapled.path));
     expect(pkg.structuralVerifier.name).toBe("pkgutil");
+    expect(extractedToolNames("PROD-APPLE-013", "app", [app.gatekeeper, app.structuralVerifier])).toEqual([
+      "spctl",
+      "codesign",
+    ]);
+    expect(extractedToolNames("PROD-APPLE-013", "dmg", [dmg.gatekeeper, dmg.structuralVerifier])).toEqual([
+      "spctl",
+      "codesign",
+    ]);
+    expect(extractedToolNames("PROD-APPLE-013", "pkg", [pkg.gatekeeper, pkg.structuralVerifier])).toEqual([
+      "spctl",
+      "pkgutil",
+    ]);
     const commands = assessInvocations.slice(3).map(({ command, args }) => [basename(command), ...args]);
     const assessedApp = commands[0]!.at(-1)!;
     const assessedDmg = commands[2]!.at(-1)!;
     const assessedPkg = commands[4]!.at(-1)!;
     expect(basename(assessedApp)).toBe("Final.app");
     expect(basename(assessedDmg)).toBe("final.dmg");
-    expect(basename(assessedPkg)).toBe("Final.pkg");
+    expect(basename(assessedPkg)).toBe("Assessed.pkg");
     for (const assessed of [assessedApp, assessedDmg, assessedPkg]) {
       expect(basename(dirname(assessed))).toMatch(/^effect-build-assess-(?:app|file)-/);
     }

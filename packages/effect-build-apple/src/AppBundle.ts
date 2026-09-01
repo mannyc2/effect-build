@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, Exit, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import type * as Artifact from "effect-build/Artifact";
 import * as File from "effect-build/Author/File";
 import * as Tree from "effect-build/Author/Tree";
@@ -9,9 +9,11 @@ import {
   AppleToolFailed,
   AppleToolUnavailable,
   capturePlatformServices,
+  claimApplePairMember,
   ensureNewDestination,
   isSafeRelative,
   selectAppleTool,
+  withApplePairRollback,
   xmlEscape,
 } from "./internal.js";
 import type { AppleToolOptions, ApplicationBundle } from "./Model.js";
@@ -149,7 +151,7 @@ const makeService = (
 > =>
   Effect.gen(function*() {
     const { fileSystem, path, services } = yield* capturePlatformServices;
-    const plutil = yield* selectAppleTool("plutil", options.plutil, ["-help"], "plist-lint");
+    const plutil = yield* selectAppleTool("plutil", options.plutil, "plist-lint");
 
     const validateExecutable = (executable: Artifact.HashedExecutable, expected: "arm64" | "x64") => {
       const expectedTarget = expected === "arm64" ? "macos-aarch64" : "macos-x64";
@@ -261,28 +263,35 @@ const makeService = (
       );
       let armCommitted = false;
       let x64Committed = false;
-      return yield* Effect.gen(function*() {
-        const arm64 = yield* buildOne(input, input.arm64, armExecutable, resources);
-        armCommitted = true;
-        const x64 = yield* buildOne(input, input.x64, x64Executable, resources);
-        x64Committed = true;
-        return {
-          arm64: Object.freeze({ ...arm64, architecture: "arm64" as const }),
-          x64: Object.freeze({ ...x64, architecture: "x64" as const }),
-        };
-      }).pipe(
-        Effect.onExit((exit) =>
-          Exit.isSuccess(exit)
-            ? Effect.void
-            : Effect.gen(function*() {
-              if (armCommitted) {
-                yield* fileSystem.remove(armDestination, { recursive: true, force: true }).pipe(Effect.ignore);
-              }
-              if (x64Committed) {
-                yield* fileSystem.remove(x64Destination, { recursive: true, force: true }).pipe(Effect.ignore);
-              }
-            })
-        ),
+      return yield* withApplePairRollback(
+        Effect.gen(function*() {
+          const arm64 = yield* claimApplePairMember(
+            buildOne(input, input.arm64, armExecutable, resources),
+            () => {
+              armCommitted = true;
+            },
+          );
+          const x64 = yield* claimApplePairMember(
+            buildOne(input, input.x64, x64Executable, resources),
+            () => {
+              x64Committed = true;
+            },
+          );
+          return {
+            arm64: Object.freeze({ ...arm64, architecture: "arm64" as const }),
+            x64: Object.freeze({ ...x64, architecture: "x64" as const }),
+          };
+        }),
+        fileSystem,
+        () => ({
+          operation: "build app bundles rollback",
+          arm64Path: armDestination,
+          x64Path: x64Destination,
+          arm64Committed: armCommitted,
+          x64Committed,
+          recursive: true,
+          failure: (reason) => new Tree.TreeCommitFailed({ destination: armDestination, reason }),
+        }),
       );
     });
 
