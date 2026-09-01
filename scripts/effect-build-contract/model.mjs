@@ -123,6 +123,9 @@ const supportedReleaseFixtureChangedPaths = [
   "/releaseCertification/finalPublicVerification/status",
   "/releaseCertification/readiness/externalEvidenceAuthentication/artifactDisposition",
   "/releaseCertification/readiness/externalEvidenceAuthentication/producerIdentities",
+  "/releaseCertification/readiness/externalEvidenceAuthentication/signer/activation/hostedBootstrap/status",
+  "/releaseCertification/readiness/externalEvidenceAuthentication/signer/activation/permissions/observer/contents",
+  "/releaseCertification/readiness/externalEvidenceAuthentication/signer/activation/permissions/signer/id-token",
   "/releaseCertification/readiness/externalEvidenceAuthentication/status",
 ];
 
@@ -753,6 +756,10 @@ const buildReleaseCertification = (
     },
   };
   const publicPackageNames = Object.keys(publicApiProjection.packages).sort();
+  const authorityPackageNames = [
+    ...publicPackageNames,
+    ...npmRegistryBoundary.reservation.packages,
+  ].sort();
   readiness.externalReceipts.npmAuthority.expectedCheckIds = [
     "github.repository.secrets",
     "github.repository.variables",
@@ -763,6 +770,8 @@ const buildReleaseCertification = (
     "github.oidc",
     "npm.client",
     "npm.authentication",
+    "npm.legacyTokenAuthority",
+    ...authorityPackageNames.map((name) => `npm.publishingAccess.${name}`),
     "npm.trust.projection",
     ...publicPackageNames.map((name) => `npm.trust.${name}`),
     ...publicPackageNames.map((name) => `npm.allowedAction.${name}`),
@@ -826,14 +835,15 @@ const applySupportedReleaseFixtureActivation = (contract, activationInputs) => {
   const branchRef = `refs/heads/${release.githubAuthority.branchPolicy.name}`;
   const operationalJournal = requireExactObjectKeys(
     activationInputs.operationalJournal,
-    ["repository", "workflowPath", "ref", "sourceSha"],
+    ["repository", "reusableWorkflowRef", "sourceSha", "runtime"],
     "supported release fixture operational journal",
   );
   const expectedOperationalJournal = {
     repository: release.readiness.externalReceipts.operationalJournal.ownerRepository,
-    workflowPath: ".github/workflows/operational-journal.yml",
-    ref: branchRef,
+    reusableWorkflowRef:
+      `${release.readiness.externalReceipts.operationalJournal.ownerRepository}/.github/workflows/operational-journal.yml@${operationalJournal.sourceSha}`,
     sourceSha: operationalJournal.sourceSha,
+    runtime: release.readiness.externalReceipts.operationalJournal.runtime,
   };
   if (
     !/^[0-9a-f]{40}$/u.test(operationalJournal.sourceSha)
@@ -849,8 +859,8 @@ const applySupportedReleaseFixtureActivation = (contract, activationInputs) => {
     },
     "operational-journal": {
       repository: operationalJournal.repository,
-      workflowPath: operationalJournal.workflowPath,
-      ref: operationalJournal.ref,
+      workflow: operationalJournal.reusableWorkflowRef,
+      ref: branchRef,
       sourceBinding: {
         kind: authentication.sourceBinding.exactSourceKind,
         sourceSha: operationalJournal.sourceSha,
@@ -871,7 +881,7 @@ const applySupportedReleaseFixtureActivation = (contract, activationInputs) => {
   }
   authentication.producerIdentities = externalRoles.map((role) => {
     const identity = identitiesByRole[role];
-    const workflow = `${identity.repository}/${identity.workflowPath}@${identity.ref}`;
+    const workflow = identity.workflow ?? `${identity.repository}/${identity.workflowPath}@${identity.ref}`;
     return {
       role,
       certificateIssuer: authentication.verifier.certificateIssuer,
@@ -884,6 +894,9 @@ const applySupportedReleaseFixtureActivation = (contract, activationInputs) => {
   });
   authentication.status = "supported";
   authentication.artifactDisposition = "required-on-terminal-workflow-success";
+  authentication.signer.activation.permissions.observer = { contents: "read" };
+  authentication.signer.activation.permissions.signer = { "id-token": "write" };
+  authentication.signer.activation.hostedBootstrap.status = "qualified";
   release.fakeRegistry.exactProtectedBodyCertification.status = "supported";
   release.fakeRegistry.exactProtectedBodyCertification.artifactDisposition =
     "required-on-supported-terminal-workflow-success";
@@ -1417,10 +1430,39 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     releaseCertification.npmAuthorityObservation.rawAllowedActionProjection,
     "release certification raw npm allowed-action projection",
   );
+  const legacyTokenAuthority = releaseCertification.npmAuthorityObservation.legacyTokenAuthority;
+  const npmAuthorityClient = releaseCertification.npmAuthorityObservation.client;
+  const npmAuthorityPublishingAccess = releaseCertification.npmAuthorityObservation.publishingAccess;
+  const npmAuthorityClientLocks = parseBunLockfilePackageRecords(inputs.lockfileSource)
+    .filter(([name]) => name === npmAuthorityClient.installationPackage);
+  requireUnique(
+    npmAuthorityClient.auditedSources.map(({ path }) => path),
+    "release certification npm authority client audited sources",
+  );
+  requireUnique(
+    legacyTokenAuthority.sanitizedProjectionFields,
+    "release certification sanitized legacy-token projection fields",
+  );
   if (
     releaseCertification.npmAuthorityObservation.semantics
       !== "authenticated-npm-settings-raw-projection-not-trustedPublisher.permission"
     || releaseCertification.npmAuthorityObservation.rawAllowedActionProjection.length !== 1
+    || !sameJson(npmAuthorityClient, releaseCertificationPolicy.npmAuthorityObservation.client)
+    || inputs.packageManifest.devDependencies?.[npmAuthorityClient.installationPackage]
+      !== `npm:${npmAuthorityClient.package}@${npmAuthorityClient.npm}`
+    || npmAuthorityClientLocks.length !== 1
+    || npmAuthorityClientLocks[0][1]?.[0] !== `${npmAuthorityClient.package}@${npmAuthorityClient.npm}`
+    || npmAuthorityClientLocks[0][1]?.at(-1) !== npmAuthorityClient.integrity
+    || npmAuthorityClient.sourceClosure.entrySource !== "bin/npm-cli.js"
+    || npmAuthorityClient.sourceClosure.scope
+      !== "entire-realpath-package-tree-no-links-or-nonregular-entries"
+    || !sameJson(legacyTokenAuthority, releaseCertificationPolicy.npmAuthorityObservation.legacyTokenAuthority)
+    || !sameJson(
+      npmAuthorityPublishingAccess,
+      releaseCertificationPolicy.npmAuthorityObservation.publishingAccess,
+    )
+    || legacyTokenAuthority.registrySource !== "npmRegistryBoundary.registry"
+    || !sameJson(legacyTokenAuthority.command, ["token", "list", "--json"])
   ) {
     throw new Error("raw npm allowed-action observation must remain distinct from semantic publish permission");
   }
@@ -1687,6 +1729,7 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     readiness.externalEvidenceAuthentication.sourceBinding.exactSourceFields,
     "release readiness exact-source binding fields",
   );
+  const externalSigner = readiness.externalEvidenceAuthentication.signer;
   const externalVerifier = readiness.externalEvidenceAuthentication.verifier;
   const expectedAuthentication = expectedReleaseCertification.readiness.externalEvidenceAuthentication;
   const trustedRoot = externalVerifier.trustedRoot;
@@ -1778,6 +1821,14 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
       && matches[0][1]?.[0] === `${entry.package}@${entry.version}`
       && matches[0][1]?.at(-1) === entry.integrity;
   };
+  requireUnique(
+    externalSigner.dependency.executedSources.map(({ path }) => path),
+    "release readiness Sigstore signer executed sources",
+  );
+  requireUnique(
+    externalSigner.dependency.executedDependencyClosure.map(({ package: name }) => name),
+    "release readiness Sigstore signer dependency closure",
+  );
   requireUnique(externalVerifier.bundleFields, "release readiness Sigstore bundle fields");
   requireUnique(
     externalVerifier.verificationMaterialFields,
@@ -1799,8 +1850,40 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || readiness.externalEvidenceAuthentication.status !== expectedAuthentication.status
     || readiness.externalEvidenceAuthentication.artifactDisposition !== expectedAuthentication.artifactDisposition
     || readiness.externalEvidenceAuthentication.blocker
-      !== "contract-pinned-external-producer-identities-and-provisioned-signers-not-established"
+      !== "contract-pinned-external-producer-identities-and-isolated-observer-signer-bootstraps-not-established"
     || readiness.externalEvidenceAuthentication.requiredEnvelope !== "sigstore-bundle-v0.3-dsse"
+    || !sameJson(externalSigner, expectedAuthentication.signer)
+    || externalSigner.status !== "implemented-inert-until-supported-activation"
+    || externalSigner.module !== "scripts/release/sigstore-dsse-signer.mjs"
+    || !sameJson(externalSigner.runtime, { executable: "node", version: "24.14.1" })
+    || inputs.packageManifest.devDependencies?.[externalSigner.dependency.package]
+      !== externalSigner.dependency.version
+    || externalSigner.dependency.executedDependencyClosure.some((entry) => !lockContainsClient(entry))
+    || externalSigner.activation.topology !== "observe-sign-upload-three-job-hard-cut"
+    || !sameJson(externalSigner.activation.workflowPermissions, {})
+    || !(
+      expectedAuthentication.status === "blocked"
+      && sameJson(externalSigner.activation.permissions, {
+        observer: {},
+        signer: {},
+        upload: {},
+      })
+      && externalSigner.activation.hostedBootstrap.status === "unqualified-stop"
+      || expectedAuthentication.status === "supported"
+      && sameJson(externalSigner.activation.permissions, {
+        observer: { contents: "read" },
+        signer: { "id-token": "write" },
+        upload: {},
+      })
+      && externalSigner.activation.hostedBootstrap.status === "qualified"
+    )
+    || externalSigner.oidc.audience !== "sigstore"
+    || externalSigner.oidc.request.redirects !== 0
+    || externalSigner.oidc.request.retries !== 0
+    || externalSigner.transport.redirects !== 0
+    || externalSigner.transport.retries !== 0
+    || externalSigner.transport.fulcio.successStatus !== 200
+    || externalSigner.transport.rekor.successStatus !== 201
     || externalVerifier.status !== "implemented"
     || externalVerifier.module !== "scripts/release/sigstore-dsse-verifier.mjs"
     || !sameJson(externalVerifier.client, { package: "@sigstore/verify", version: "3.1.1" })
@@ -1935,9 +2018,12 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
       !== "releaseCertification.githubAuthority-repository-and-environment"
     || externalReceipts.npmAuthority.identity
       !== `npm-github-authority:${githubAuthority.repository}:environment:${githubAuthority.environment}`
-    || externalReceipts.npmAuthority.expectedCheckIds.length !== 11 + publicAdmission.packageCount * 3
+    || externalReceipts.npmAuthority.expectedCheckIds.length
+      !== 12 + publicAdmission.packageCount * 3 + publicAdmission.packageCount
+        + npm.reservation.packages.length
     || externalReceipts.operationalJournal.role !== "operational-journal"
     || externalReceipts.operationalJournal.ownerRepository !== "mannyc2/ts-release"
+    || !sameJson(externalReceipts.operationalJournal.runtime, { executable: "node", version: "22.22.2" })
     || externalReceipts.operationalJournal.backendAuthentication
       !== "qualified-external-producer-not-reperformed-by-release-readiness"
     || externalReceipts.githubReleaseGovernance.role !== "github-release-governance"
@@ -2444,6 +2530,12 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   requireUnique(Object.values(apple.protocols), "Apple certification protocol ids");
   requireUnique(apple.hostedExecution.blockerIds, "Apple hosted-execution blocker ids");
   requireUnique(apple.hostedExecution.protectedStageIds, "Apple hosted protected-stage ids");
+  requireUnique(
+    apple.hostedExecution.activationInterfaces.runners.receiptPins.map(
+      ({ category, coordinateArchitecture }) => `${category}|${coordinateArchitecture ?? "none"}`,
+    ),
+    "Apple hosted runner receipt selectors",
+  );
   requireUnique(apple.coordinates, "Apple certification coordinates");
   requireUnique(apple.commonReceiptFields, "Apple certification common receipt fields");
   requireUnique(apple.coordinateRuleFields, "Apple certification coordinate rule fields");
@@ -2500,6 +2592,10 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     ])
     || apple.hostedExecution.artifactDisposition !== "forbidden-while-blocked"
     || !sameJson(apple.hostedExecution.protectedStageIds, ["sign-app", "submit-product", "continue-notary"])
+    || !sameJson(
+      apple.hostedExecution.activationInterfaces,
+      releaseCertificationPolicy.apple.hostedExecution.activationInterfaces,
+    )
     || apple.coordinates.length !== 28
     || apple.counts.total !== 28
     || apple.counts.N !== 2

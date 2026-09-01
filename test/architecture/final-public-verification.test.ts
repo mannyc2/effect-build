@@ -37,6 +37,12 @@ const fixture = () => {
   const authentication = release.readiness.externalEvidenceAuthentication;
   authentication.status = "supported";
   authentication.artifactDisposition = "required-on-terminal-workflow-success";
+  authentication.signer.activation.permissions = {
+    observer: { contents: "read" },
+    signer: { "id-token": "write" },
+    upload: {},
+  };
+  authentication.signer.activation.hostedBootstrap.status = "qualified";
   authentication.producerIdentities = release.readiness.evidenceRoles
     .filter(({ type }: { type: string }) => type === "externalObservation")
     .map(({ role }: { role: string }) => {

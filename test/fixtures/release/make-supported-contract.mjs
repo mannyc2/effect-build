@@ -17,9 +17,10 @@ const contract = buildSupportedReleaseFixtureContract(await readInputs(repositor
   releaseSourceSha,
   operationalJournal: {
     repository: "mannyc2/ts-release",
-    workflowPath: ".github/workflows/operational-journal.yml",
-    ref: "refs/heads/main",
+    reusableWorkflowRef:
+      `mannyc2/ts-release/.github/workflows/operational-journal.yml@${"4".repeat(40)}`,
     sourceSha: "4".repeat(40),
+    runtime: { executable: "node", version: "22.22.2" },
   },
 });
 process.stdout.write(renderJson(contract));

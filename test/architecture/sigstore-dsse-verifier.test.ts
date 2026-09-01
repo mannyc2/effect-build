@@ -28,11 +28,11 @@ const definition = contract.releaseCertification.readiness.evidenceRoles.find(
 );
 const verifierPolicy = contract.releaseCertification.readiness.externalEvidenceAuthentication.verifier;
 const trustedRootBytes = Buffer.from(await readFile(resolve(root, verifierPolicy.trustedRoot.path)));
-const certificateIdentityURI =
-  "https://github.com/mannyc2/effect-build-authority/.github/workflows/npm-authority.yml@refs/heads/main";
-const producerWorkflow = certificateIdentityURI.slice("https://github.com/".length);
 const sourceSha = "a".repeat(40);
 const producerSourceSha = "b".repeat(40);
+const certificateIdentityURI =
+  `https://github.com/mannyc2/effect-build-authority/.github/workflows/npm-authority.yml@${producerSourceSha}`;
+const producerWorkflow = certificateIdentityURI.slice("https://github.com/".length);
 const producerIdentity = {
   role,
   certificateIssuer: verifierPolicy.certificateIssuer,

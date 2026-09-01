@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { appendFileSync } from "node:fs";
+import { chmod, cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +14,9 @@ import * as releaseAuthority from "../../scripts/release/audit-release-authority
 
 const {
   assertCanonicalPackageRepositoryManifest,
+  assertPinnedNpmAuthorityObservationClient,
   authenticateGeneratedContract,
+  collectReleaseAuthorityObservation,
   releaseAuthorityPolicyFromContract,
 } = releaseAuthority;
 
@@ -22,9 +26,13 @@ const contract = JSON.parse(await readFile(resolve(root, "tooling/effect-build-c
 const policy = releaseAuthorityPolicyFromContract(contract);
 const sourceSha = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
 const packageNames = policy.packageNames as ReadonlyArray<string>;
+const authorityPackageNames = policy.authorityPackageNames as ReadonlyArray<string>;
+const firstAuthorityPackage = authorityPackageNames[0]!;
+const lastAuthorityPackage = authorityPackageNames.at(-1)!;
 const firstPackage = packageNames[0]!;
 const lastPackage = packageNames.at(-1)!;
 const privatePackage = contract.publicApiProjection.privatePackages[0] as string;
+const emptyTokenInventoryDigest = `sha256:${createHash("sha256").update("[]\n").digest("hex")}`;
 
 interface AuditCheck {
   readonly id: string;
@@ -69,15 +77,43 @@ const packages = Object.fromEntries(packageNames.map((name) => [
   },
 ]));
 
+const maintainers = Object.fromEntries(authorityPackageNames.map((name) => [
+  name,
+  { status: 200, body: { names: [policy.legacyTokenAuthority.authenticatedAccount] } },
+]));
+
+const publishingAccess = Object.fromEntries(authorityPackageNames.map((name) => [
+  name,
+  { status: 200, body: { policy: policy.publishingAccess.target } },
+]));
+
 const supportedObservation = () => ({
-  schema: "effect-build/release-authority-observation@2",
+  schema: "effect-build/release-authority-observation@4",
   sourceSha,
   identity: policy.auditIdentity,
   observedAt: "2026-08-30T12:00:00.000Z",
   ignoredCredential: "ROOT-CANARY-CREDENTIAL",
   npm: {
     client: { status: 200, body: { node: policy.npmClient.node, npm: policy.npmClient.npm } },
-    authentication: { status: 200, body: { username: "npm-observer", token: "AUTH-CANARY" } },
+    authentication: {
+      status: 200,
+      body: { username: policy.legacyTokenAuthority.authenticatedAccount, token: "AUTH-CANARY" },
+    },
+    legacyTokenAuthority: {
+      status: 200,
+      body: {
+        activeTokenCount: 0,
+        activeLegacyWriteCapableTokenCount: 0,
+        unknownTokenCount: 0,
+        metadataDigest: emptyTokenInventoryDigest,
+      },
+    },
+    observationCredential: {
+      status: 200,
+      body: structuredClone(policy.legacyTokenAuthority.observationCredential.supportedProof),
+    },
+    maintainers: structuredClone(maintainers),
+    publishingAccess: structuredClone(publishingAccess),
     trust: structuredClone(trust),
   },
   github: {
@@ -179,6 +215,7 @@ const scenario = statePath === undefined ? undefined : path.basename(statePath, 
 const registry = ${JSON.stringify(policy.registry)};
 const npmVersion = ${JSON.stringify(policy.npmClient.npm)};
 const packageNames = ${JSON.stringify(packageNames)};
+const authorityPackageNames = ${JSON.stringify(authorityPackageNames)};
 const forbiddenEnvironmentNames = ${JSON.stringify(policy.forbiddenEnvironmentNames)};
 const repository = ${JSON.stringify(policy.repository)};
 const workflow = ${JSON.stringify(policy.workflow)};
@@ -208,7 +245,7 @@ const output = (value) => process.stdout.write(JSON.stringify(value) + "\n");
 
 if (
   !statePath
-  || !["supported", "e401", "multipage"].includes(scenario)
+  || !["supported", "e401", "multipage", "active-token"].includes(scenario)
   || forbiddenEnvironmentNames.some((name) => process.env[name] !== undefined)
   || process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN !== undefined
   || process.env.ACTIONS_ID_TOKEN_REQUEST_URL !== undefined
@@ -222,6 +259,8 @@ if (tool === "npm") {
     || process.env.GH_HOST !== undefined
     || process.env.GH_CONFIG_DIR !== undefined
     || process.env.NPM_CONFIG_USERCONFIG !== statePath + ".npmrc"
+    || process.env.NPM_CONFIG_REGISTRY !== undefined
+    || process.env.npm_config_registry !== undefined
   ) fail();
 } else if (tool === "gh") {
   if (
@@ -248,6 +287,27 @@ if (tool === "npm") {
       process.exit(1);
     }
     output({ username: "mannyc1", token: "NPM-AUTH-CREDENTIAL-CANARY" });
+    process.exit(0);
+  }
+  if (JSON.stringify(args) === JSON.stringify(["token", "list", "--json", "--registry", registry])) {
+    if (scenario === "active-token") {
+      output([{ key: "TOKEN-KEY-CANARY", token: "NPM-TOKEN-PREFIX-CANARY", readonly: false }]);
+    } else {
+      output([]);
+    }
+    process.exit(0);
+  }
+  if (
+    args.length === 6
+    && args[0] === "view"
+    && authorityPackageNames.includes(args[1])
+    && args[2] === "maintainers"
+    && args[3] === "--json"
+    && args[4] === "--registry"
+    && args[5] === registry
+    && scenario !== "e401"
+  ) {
+    output([{ name: "mannyc1", email: "MAINTAINER-EMAIL-CANARY" }]);
     process.exit(0);
   }
   if (
@@ -412,7 +472,18 @@ describe("release authority audit", () => {
     expect(policy.workflow).toBe(contract.npmRegistryBoundary.trustedPublisher.workflow);
     expect(policy.environment).toBe(contract.npmRegistryBoundary.trustedPublisher.environment);
     expect(policy.registry).toBe(contract.npmRegistryBoundary.registry);
-    expect(policy.npmClient).toEqual(contract.releaseCertification.npmOidcCertification.client);
+    expect(policy.npmClient).toEqual({
+      node: contract.releaseCertification.npmAuthorityObservation.client.node,
+      npm: contract.releaseCertification.npmAuthorityObservation.client.npm,
+    });
+    expect(policy.npmClient).toEqual({ node: "24.14.1", npm: "11.19.1" });
+    expect(contract.releaseCertification.npmOidcCertification.client).toEqual({
+      node: "24.14.1",
+      npm: "11.11.0",
+    });
+    expect(assertPinnedNpmAuthorityObservationClient({ contract, root })).toEqual(
+      contract.releaseCertification.npmAuthorityObservation.client,
+    );
     expect(policy.forbiddenEnvironmentNames).toEqual(
       contract.releaseCertification.npmOidcCertification.forbiddenEnvironmentNames,
     );
@@ -425,16 +496,67 @@ describe("release authority audit", () => {
     expect(policy.rawAllowedActionProjection).toEqual(
       contract.releaseCertification.npmAuthorityObservation.rawAllowedActionProjection,
     );
+    expect(policy.legacyTokenAuthority).toEqual(
+      contract.releaseCertification.npmAuthorityObservation.legacyTokenAuthority,
+    );
     expect(policy.semanticPermission).toBe("publish");
     expect(policy.auditIdentity).toBe(
       contract.releaseCertification.readiness.externalReceipts.npmAuthority.identity,
     );
   });
 
+  itPosix("reauthenticates the entire npm authority source closure before every spawn", async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "effect-build-npm-authority-closure-"));
+    const temporaryNodeModules = join(temporaryRoot, "node_modules");
+    const temporaryPackageRoot = join(temporaryNodeModules, "npm-authority-client");
+    let spawnCount = 0;
+
+    try {
+      for (const entry of await readdir(root, { withFileTypes: true })) {
+        if (entry.name === ".git" || entry.name === "node_modules") continue;
+        await symlink(
+          join(root, entry.name),
+          join(temporaryRoot, entry.name),
+          entry.isDirectory() ? "dir" : "file",
+        );
+      }
+      await mkdir(temporaryNodeModules);
+      await cp(
+        await realpath(resolve(root, "node_modules/npm-authority-client")),
+        temporaryPackageRoot,
+        { recursive: true },
+      );
+      const temporaryCliPath = await realpath(join(temporaryPackageRoot, "bin/npm-cli.js"));
+      const mutatedLoadedSource = join(temporaryPackageRoot, "lib/cli.js");
+      const spawnBoundary = (commandName: string, args: ReadonlyArray<string>, _options: unknown) => {
+        spawnCount += 1;
+        if (commandName !== process.execPath || args[0] !== temporaryCliPath || spawnCount !== 1) {
+          throw new Error("unexpected npm authority spawn");
+        }
+        appendFileSync(mutatedLoadedSource, "\nSOURCE-CLOSURE-MUTATION\n", "utf8");
+        return { status: 0, stderr: "", stdout: `${policy.npmClient.npm}\n` };
+      };
+
+      await expect(collectReleaseAuthorityObservation({
+        contract,
+        observedAt: "2026-08-30T12:00:00.000Z",
+        root: temporaryRoot,
+        sourceSha,
+        spawn: spawnBoundary,
+      })).rejects.toThrow(/source closure changed immediately before launch/u);
+      expect(spawnCount).toBe(1);
+    } finally {
+      await rm(temporaryRoot, { force: true, recursive: true });
+    }
+  }, 30_000);
+
   it("fails closed on public projection, forbidden-name, npm-client, and semantic-permission contract drift", () => {
     const mutations: ReadonlyArray<(value: typeof contract) => void> = [
       (value) => value.publicApiProjection.packages[privatePackage] = {},
       (value) => value.releaseCertification.npmOidcCertification.forbiddenEnvironmentNames.pop(),
+      (value) => value.releaseCertification.npmAuthorityObservation.client.npm = "11.19.0",
+      (value) => value.releaseCertification.npmAuthorityObservation.client.installationPackage = "npm",
+      (value) => value.releaseCertification.npmAuthorityObservation.publishingAccess.target = "token-allowed",
       (value) => value.npmRegistryBoundary.client.npm = "11.99.0",
       (value) => Reflect.deleteProperty(value.npmRegistryBoundary.trustedPublisher, "permission"),
     ];
@@ -505,11 +627,11 @@ describe("release authority audit", () => {
       identity: policy.auditIdentity,
       issues: [],
       observedAt: "2026-08-30T12:00:00.000Z",
-      schema: "effect-build/release-authority-audit@2",
+      schema: "effect-build/release-authority-audit@4",
       sourceSha,
-      summary: { match: 44, mismatch: 0, unobserved: 0 },
+      summary: { match: 57, mismatch: 0, unobserved: 0 },
     });
-    expect(result.output.checks).toHaveLength(44);
+    expect(result.output.checks).toHaveLength(57);
     expect(
       result.output.checks.filter(({ id }) => packageNames.some((name) => id === `npm.trust.${name}`)),
     ).toHaveLength(11);
@@ -527,14 +649,100 @@ describe("release authority audit", () => {
 
     expect(result.status).toBe(2);
     expect(result.output.decision).toBe("blocked");
-    expect(result.output.summary).toEqual({ match: 21, mismatch: 0, unobserved: 23 });
+    expect(result.output.summary).toEqual({ match: 21, mismatch: 0, unobserved: 36 });
     expect(result.output.issues).toContainEqual({
       category: "unobserved",
       code: "npm-authentication-e401",
       subject: "npm.authentication",
     });
-    expect(result.output.checks.filter(({ status }) => status === "unobserved")).toHaveLength(23);
+    expect(result.output.checks.filter(({ status }) => status === "unobserved")).toHaveLength(36);
     expect(result.stdout).not.toContain("E401-CANARY");
+  });
+
+  it("requires an empty authenticated token inventory and a destroyed non-token observation credential", () => {
+    const before = supportedObservation();
+    before.npm.legacyTokenAuthority.body.activeTokenCount = 1;
+    before.npm.legacyTokenAuthority.body.activeLegacyWriteCapableTokenCount = 1;
+    const beforeResult = runAudit(before);
+    expect(beforeResult.status).toBe(2);
+    expect(beforeResult.output.checks).toContainEqual({
+      id: "npm.legacyTokenAuthority",
+      status: "mismatch",
+    });
+
+    const missingInventory = supportedObservation();
+    missingInventory.github.repository.secrets.body.secrets = [];
+    missingInventory.github.repository.secrets.body.total_count = 0;
+    missingInventory.npm.legacyTokenAuthority = { status: 598 } as never;
+    const missingResult = runAudit(missingInventory);
+    expect(missingResult.status).toBe(2);
+    expect(missingResult.output.checks).toContainEqual({
+      id: "npm.legacyTokenAuthority",
+      status: "unobserved",
+    });
+
+    const retainedCredential = supportedObservation();
+    retainedCredential.npm.observationCredential.body.destruction = "not-destroyed";
+    const retainedResult = runAudit(retainedCredential);
+    expect(retainedResult.status).toBe(2);
+    expect(retainedResult.output.checks).toContainEqual({
+      id: "npm.legacyTokenAuthority",
+      status: "mismatch",
+    });
+    for (const result of [beforeResult, missingResult, retainedResult]) {
+      expect(result.stdout).not.toMatch(/(?:npm_[A-Za-z0-9]+|AUTH-CANARY)/u);
+    }
+  });
+
+  it("requires the exact authenticated token owner and sole-maintainer projection", () => {
+    const peerAccount = supportedObservation();
+    peerAccount.npm.authentication.body.username = "peer-maintainer";
+    const peerResult = runAudit(peerAccount);
+    expect(peerResult.status).toBe(2);
+    expect(peerResult.output.checks).toContainEqual({ id: "npm.authentication", status: "mismatch" });
+    expect(peerResult.output.checks).toContainEqual({ id: "npm.legacyTokenAuthority", status: "unobserved" });
+
+    const additionalMaintainer = supportedObservation();
+    additionalMaintainer.npm.maintainers[firstAuthorityPackage]!.body.names.push("peer-maintainer");
+    const additionalResult = runAudit(additionalMaintainer);
+    expect(additionalResult.status).toBe(2);
+    expect(additionalResult.output.checks).toContainEqual({
+      id: "npm.legacyTokenAuthority",
+      status: "mismatch",
+    });
+
+    const missingReservationMaintainer = supportedObservation();
+    delete missingReservationMaintainer.npm.maintainers[lastAuthorityPackage];
+    const missingResult = runAudit(missingReservationMaintainer);
+    expect(missingResult.status).toBe(2);
+    expect(missingResult.output.checks).toContainEqual({
+      id: "npm.legacyTokenAuthority",
+      status: "unobserved",
+    });
+    for (const result of [peerResult, additionalResult, missingResult]) {
+      expect(result.stdout).not.toContain("peer-maintainer");
+    }
+  });
+
+  it("requires disallow-token publishing access for every public and reservation package", () => {
+    const permissive = supportedObservation();
+    permissive.npm.publishingAccess[firstAuthorityPackage]!.body.policy = "two-factor-authentication-or-token";
+    const permissiveResult = runAudit(permissive);
+    expect(permissiveResult.status).toBe(2);
+    expect(permissiveResult.output.checks).toContainEqual({
+      id: `npm.publishingAccess.${firstAuthorityPackage}`,
+      status: "mismatch",
+    });
+
+    const missing = supportedObservation();
+    delete missing.npm.publishingAccess[lastAuthorityPackage];
+    const missingResult = runAudit(missing);
+    expect(missingResult.status).toBe(2);
+    expect(missingResult.output.checks).toContainEqual({
+      id: `npm.publishingAccess.${lastAuthorityPackage}`,
+      status: "unobserved",
+    });
+    expect(permissiveResult.stdout).not.toContain("two-factor-authentication-or-token");
   });
 
   it("rejects collection by any npm client other than the exact contract client", () => {
@@ -665,38 +873,93 @@ describe("release authority audit", () => {
     const boundaryDirectory = await mkdtemp(join(tmpdir(), "effect-build-release-authority-"));
     const npmPath = join(boundaryDirectory, "npm");
     const githubPath = join(boundaryDirectory, "gh");
+    const npmAuthorityCliPath = await realpath(
+      resolve(root, "node_modules/npm-authority-client/bin/npm-cli.js"),
+    );
     const supportedState = join(boundaryDirectory, "supported.jsonl");
     const e401State = join(boundaryDirectory, "e401.jsonl");
     const multipageState = join(boundaryDirectory, "multipage.jsonl");
-    const execute = (statePath: string) =>
-      spawnSync(
-        process.execPath,
-        [command, "--collect", "--source-sha", sourceSha],
-        {
-          cwd: root,
-          encoding: "utf8",
-          env: {
-            ...process.env,
-            ...Object.fromEntries(policy.forbiddenEnvironmentNames.map((name: string) => [name, `${name}-CANARY`])),
-            ACTIONS_ID_TOKEN_REQUEST_TOKEN: "ACTIONS-TOKEN-CANARY",
-            ACTIONS_ID_TOKEN_REQUEST_URL: "ACTIONS-URL-CANARY",
-            GH_CONFIG_DIR: `${statePath}.gh`,
-            GH_HOST: "github.example.invalid",
-            GH_TOKEN: "GH-TOKEN-CANARY",
-            GITHUB_TOKEN: "GITHUB-TOKEN-CANARY",
-            NPM_CONFIG_GLOBALCONFIG: "NPM-GLOBALCONFIG-CANARY",
-            NPM_CONFIG_USERCONFIG: `${statePath}.npmrc`,
-            PATH: [boundaryDirectory, process.env.PATH ?? ""].join(delimiter),
-            UNRELATED_RELEASE_SECRET: "UNRELATED-CANARY",
-            npm_config_globalconfig: "npm-globalconfig-canary",
-          },
-        },
+    const activeTokenState = join(boundaryDirectory, "active-token.jsonl");
+    const execute = async (statePath: string) => {
+      const environment = {
+        ...Object.fromEntries(policy.forbiddenEnvironmentNames.map((name: string) => [name, `${name}-CANARY`])),
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: "ACTIONS-TOKEN-CANARY",
+        ACTIONS_ID_TOKEN_REQUEST_URL: "ACTIONS-URL-CANARY",
+        GH_CONFIG_DIR: `${statePath}.gh`,
+        GH_HOST: "github.example.invalid",
+        GH_TOKEN: "GH-TOKEN-CANARY",
+        GITHUB_TOKEN: "GITHUB-TOKEN-CANARY",
+        NPM_CONFIG_GLOBALCONFIG: "NPM-GLOBALCONFIG-CANARY",
+        NPM_CONFIG_REGISTRY: "https://registry.example.invalid",
+        NPM_CONFIG_USERCONFIG: `${statePath}.npmrc`,
+        PATH: [boundaryDirectory, process.env.PATH ?? ""].join(delimiter),
+        UNRELATED_RELEASE_SECRET: "UNRELATED-CANARY",
+        npm_config_globalconfig: "npm-globalconfig-canary",
+      };
+      const savedEnvironment = new Map(
+        Object.keys(environment).map((name) => [name, process.env[name]]),
       );
+      const launches: Array<{ readonly args: ReadonlyArray<string>; readonly command: string }> = [];
+      const spawnBoundary = (
+        commandName: string,
+        args: ReadonlyArray<string>,
+        options: Parameters<typeof spawnSync>[2],
+      ) => {
+        launches.push({ args: [...args], command: commandName });
+        if (commandName === "npm") throw new Error("PATH npm was invoked");
+        if (commandName === process.execPath) {
+          if (args[0] !== npmAuthorityCliPath) {
+            throw new Error("unexpected Node authority entry source");
+          }
+          return spawnSync(npmPath, args.slice(1), options);
+        }
+        return spawnSync(commandName, args, options);
+      };
+
+      Object.assign(process.env, environment);
+      try {
+        const observation = await collectReleaseAuthorityObservation({
+          contract,
+          observedAt: "2026-08-30T12:00:00.000Z",
+          root,
+          sourceSha,
+          spawn: spawnBoundary,
+        });
+        const output = releaseAuthority.auditReleaseAuthority(observation, policy) as AuditOutput;
+        return {
+          launches,
+          status: output.decision === "supported" ? 0 : 2,
+          stderr: "",
+          stdout: JSON.stringify(output),
+        };
+      } finally {
+        for (const [name, value] of savedEnvironment) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+      }
+    };
+    const expectPinnedNpmLaunches = (
+      result: Awaited<ReturnType<typeof execute>>,
+    ) => {
+      expect(result.launches.some(({ command: launched }) => launched === "npm")).toBe(false);
+      const npmLaunches = result.launches.filter(({ command: launched }) => launched === process.execPath);
+      expect(npmLaunches.length).toBeGreaterThan(0);
+      for (const launch of npmLaunches) expect(launch.args[0]).toBe(npmAuthorityCliPath);
+    };
     const whoami = ["whoami", "--json", "--registry", policy.registry];
+    const tokenInventory = ["token", "list", "--json", "--registry", policy.registry];
     const npmVersion = ["--version"];
+    const maintainerCalls = authorityPackageNames.map((name) => ({
+      args: ["view", name, "maintainers", "--json", "--registry", policy.registry],
+      tool: "npm",
+    }));
     const expectedGithub = githubCalls.map((args) => ({ args, tool: "gh" }));
     const canaries = [
       "NPM-AUTH-CREDENTIAL-CANARY",
+      "NPM-TOKEN-PREFIX-CANARY",
+      "TOKEN-KEY-CANARY",
+      "MAINTAINER-EMAIL-CANARY",
       "NPM-TRUST-RAW-RESPONSE-CANARY",
       "TRUST-ID-CANARY",
       "GH-RAW-RESPONSE-CANARY",
@@ -721,12 +984,12 @@ describe("release authority audit", () => {
       ]);
       await Promise.all([chmod(npmPath, 0o755), chmod(githubPath, 0o755)]);
 
-      const supported = execute(supportedState);
+      const supported = await execute(supportedState);
       const supportedOutput = JSON.parse(supported.stdout) as AuditOutput;
       expect(supported.status).toBe(2);
       expect(supported.stderr).toBe("");
       expect(supportedOutput.decision).toBe("blocked");
-      expect(supportedOutput.summary).toEqual({ match: 33, mismatch: 0, unobserved: 11 });
+      expect(supportedOutput.summary).toEqual({ match: 33, mismatch: 0, unobserved: 24 });
       expect(supportedOutput.issues).toContainEqual({
         category: "unobserved",
         code: "npm-allowed-action-unobserved",
@@ -735,19 +998,22 @@ describe("release authority audit", () => {
       expect(await readInvocations(supportedState)).toEqual([
         { args: npmVersion, tool: "npm" },
         { args: whoami, tool: "npm" },
+        { args: tokenInventory, tool: "npm" },
+        ...maintainerCalls,
         ...packageNames.map((name) => ({
           args: ["trust", "list", name, "--json", "--registry", policy.registry],
           tool: "npm",
         })),
         ...expectedGithub,
       ]);
+      expectPinnedNpmLaunches(supported);
 
-      const e401 = execute(e401State);
+      const e401 = await execute(e401State);
       const e401Output = JSON.parse(e401.stdout) as AuditOutput;
       expect(e401.status).toBe(2);
       expect(e401.stderr).toBe("");
       expect(e401Output.decision).toBe("blocked");
-      expect(e401Output.summary).toEqual({ match: 20, mismatch: 1, unobserved: 23 });
+      expect(e401Output.summary).toEqual({ match: 20, mismatch: 1, unobserved: 36 });
       expect(e401Output.issues).toContainEqual({
         category: "mismatch",
         code: "forbidden-name-present",
@@ -763,13 +1029,14 @@ describe("release authority audit", () => {
         { args: whoami, tool: "npm" },
         ...expectedGithub,
       ]);
+      expectPinnedNpmLaunches(e401);
 
-      const multipage = execute(multipageState);
+      const multipage = await execute(multipageState);
       const multipageOutput = JSON.parse(multipage.stdout) as AuditOutput;
       expect(multipage.status).toBe(2);
       expect(multipage.stderr).toBe("");
       expect(multipageOutput.decision).toBe("blocked");
-      expect(multipageOutput.summary).toEqual({ match: 32, mismatch: 1, unobserved: 11 });
+      expect(multipageOutput.summary).toEqual({ match: 32, mismatch: 1, unobserved: 24 });
       expect(multipageOutput.issues).toContainEqual({
         category: "mismatch",
         code: "forbidden-name-present",
@@ -778,32 +1045,63 @@ describe("release authority audit", () => {
       expect(await readInvocations(multipageState)).toEqual([
         { args: npmVersion, tool: "npm" },
         { args: whoami, tool: "npm" },
+        { args: tokenInventory, tool: "npm" },
+        ...maintainerCalls,
         ...packageNames.map((name) => ({
           args: ["trust", "list", name, "--json", "--registry", policy.registry],
           tool: "npm",
         })),
         ...expectedGithub,
       ]);
+      expectPinnedNpmLaunches(multipage);
+
+      const activeToken = await execute(activeTokenState);
+      const activeTokenOutput = JSON.parse(activeToken.stdout) as AuditOutput;
+      expect(activeToken.status).toBe(2);
+      expect(activeToken.stderr).toBe("");
+      expect(activeTokenOutput.decision).toBe("blocked");
+      expect(activeTokenOutput.checks).toContainEqual({
+        id: "npm.legacyTokenAuthority",
+        status: "unobserved",
+      });
+      expect(await readInvocations(activeTokenState)).toEqual([
+        { args: npmVersion, tool: "npm" },
+        { args: whoami, tool: "npm" },
+        { args: tokenInventory, tool: "npm" },
+        ...maintainerCalls,
+        ...packageNames.map((name) => ({
+          args: ["trust", "list", name, "--json", "--registry", policy.registry],
+          tool: "npm",
+        })),
+        ...expectedGithub,
+      ]);
+      expectPinnedNpmLaunches(activeToken);
 
       for (const canary of canaries) {
         expect(supported.stdout).not.toContain(canary);
         expect(e401.stdout).not.toContain(canary);
         expect(multipage.stdout).not.toContain(canary);
+        expect(activeToken.stdout).not.toContain(canary);
       }
     } finally {
       await rm(boundaryDirectory, { force: true, recursive: true });
     }
-  }, 30_000);
+  }, 120_000);
 
   it("limits collection to projected read-only commands and performs no writes", async () => {
     const source = await readFile(command, "utf8");
 
-    expect(source).toContain("spawnSync(command, args, {");
+    expect(source).toContain("spawn(command, args, {");
+    expect(source).toContain("command: process.execPath");
+    expect(source).toContain("args: [entryPath, ...args]");
+    expect(source).not.toMatch(/runReadOnly\(policy, "npm", "npm"/u);
     expect(source).toContain("shell: false");
     expect(source).toContain('npm_config_logs_max: "0"');
     expect(source).toContain('resolve(repositoryRoot, "tooling/effect-build-contract.json")');
     expect(source).toContain("releaseAuthorityPolicyFromContract(contract)");
     expect(source).toContain('["trust", "list", name, "--json"');
+    expect(source).toContain('[...policy.legacyTokenAuthority.command, "--registry", policy.registry]');
+    expect(source).toContain('[...args, "--registry", policy.registry]');
     expect(source).toContain('["api", endpoint, "--hostname", "github.com"]');
     expect(source).toContain('"--paginate",\n    "--jq"');
     expect(source).toContain("body.total_count !== names.length");
@@ -814,7 +1112,8 @@ describe("release authority audit", () => {
       const mutation of [
         '["publish"',
         '["login"',
-        '["token"',
+        '["token", "revoke"',
+        '["token", "delete"',
         '["trust", "revoke"',
         '["trust", "github"',
         '["trust", "gitlab"',
