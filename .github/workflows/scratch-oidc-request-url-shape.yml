@@ -28,6 +28,8 @@ jobs:
             }).join("/");
             console.log("host=" + url.hostname);
             console.log("path=" + skeleton);
+            console.log("raw=" + url.pathname.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gu, "<uuid>"));
+            console.log("segments=" + JSON.stringify(url.pathname.split("/").map((s) => s.length)));
             console.log("query=" + url.search);
             console.log("tokenLength=" + (process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN ?? "").length);
           '
