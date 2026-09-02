@@ -9,7 +9,6 @@ import {
   packageNames,
   readState,
   registryUrl,
-  sourceSha,
   targetVersion,
   workflowRef,
   writeState,
@@ -97,6 +96,7 @@ const npmView = () => {
     ["--json", "boolean"],
     ["--cache", "value"],
     ["--fetch-retries", "value"],
+    ["--fetch-retry-mintimeout", "value"],
     ["--fetch-retry-maxtimeout", "value"],
     ["--fetch-timeout", "value"],
     ["--globalconfig", "value"],
@@ -158,6 +158,7 @@ const npmPack = () => {
   const options = parseOptions(args.slice(2), new Map([
     ["--cache", "value"],
     ["--fetch-retries", "value"],
+    ["--fetch-retry-mintimeout", "value"],
     ["--fetch-retry-maxtimeout", "value"],
     ["--fetch-timeout", "value"],
     ["--globalconfig", "value"],
@@ -200,6 +201,7 @@ const npmPublish = () => {
     ["--cache", "value"],
     ["--dry-run", "boolean"],
     ["--fetch-retries", "value"],
+    ["--fetch-retry-mintimeout", "value"],
     ["--fetch-retry-maxtimeout", "value"],
     ["--fetch-timeout", "value"],
     ["--globalconfig", "value"],
@@ -255,7 +257,7 @@ const npmPublish = () => {
     process.stderr.write("simulated response loss after bytes and tag but before provenance\n");
     process.exit(1);
   }
-  commitTarget(state, name, exactProvenance());
+  commitTarget(state, name, exactProvenance(state.sourceSha));
   mutation.committed = true;
   mutation.provenance = true;
   writeState(statePath, state);
@@ -384,14 +386,14 @@ const artifactMetadata = (artifact) => ({
   id: artifact.artifactId,
   name: artifact.name,
   size_in_bytes: artifact.size,
-  workflow_run: { head_sha: artifact.headSha ?? sourceSha, id: artifact.runId },
+  workflow_run: { head_sha: artifact.headSha ?? state.sourceSha, id: artifact.runId },
 });
 
 const runMetadata = (artifact) => ({
   conclusion: "success",
   event: "workflow_dispatch",
   head_branch: "main",
-  head_sha: artifact.headSha ?? sourceSha,
+  head_sha: artifact.headSha ?? state.sourceSha,
   id: artifact.runId,
   path: artifact.workflowPath,
   run_attempt: artifact.runAttempt,
@@ -475,10 +477,10 @@ const handleCurl = () => {
   if (url === "https://token.actions.githubusercontent.com/.well-known/jwks") {
     return writeCurlBody(state.api.oidcProvider.jwks, output);
   }
-  if (url === `${prefix}contents/tooling/effect-build-contract.json?ref=${sourceSha}`) {
+  if (url === `${prefix}contents/tooling/effect-build-contract.json?ref=${state.sourceSha}`) {
     return writeCurlBody(readFileSync(state.candidate.contractPath), output);
   }
-  if (url === `${prefix}contents/tooling/sigstore/trusted_root.json?ref=${sourceSha}`) {
+  if (url === `${prefix}contents/tooling/sigstore/trusted_root.json?ref=${state.sourceSha}`) {
     return writeCurlBody(
       readFileSync(new URL("../../../tooling/sigstore/trusted_root.json", import.meta.url)),
       output,
