@@ -41,7 +41,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "734117e99d168a93e6cd1312c83596a28dee8cf3d903201a98e580e083f8ce23"
+        "sha256": "8d71bc1a4ec6286ea058e6a4a59d39b854d6e04e6d0f507e68363de4e678edab"
       },
       {
         "path": "bun.lock",

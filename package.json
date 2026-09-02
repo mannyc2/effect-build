@@ -20,7 +20,7 @@
     "check:contract": "node scripts/effect-build-contract/generate.mjs --check && node --test scripts/effect-build-contract/contract.test.mjs && node scripts/effect-build-contract/validate.mjs",
     "test:types": "tstyche",
     "test:unit": "vitest run test/unit && bun run --cwd packages/effect-build-apple test",
-    "test:architecture": "vitest run test/architecture",
+    "test:architecture": "vitest run test/architecture --exclude test/architecture/release-publisher-state-machine.test.ts && vitest run test/architecture/release-publisher-state-machine.test.ts",
     "test:consumer": "bun scripts/test-built-consumer.mjs",
     "test:consumer:fresh": "bun scripts/test-built-consumer.mjs --fresh-install",
     "test:integration:bun": "bun scripts/run-real-bun-integration.mjs",
