@@ -2226,6 +2226,7 @@ jobs:
             "--globalconfig", globalConfig,
             "--cache", environment.NPM_CACHE,
             "--fetch-retries", "0",
+            "--fetch-retry-mintimeout", "0",
             "--fetch-retry-maxtimeout", "0",
             "--fetch-timeout", "120000",
             "--prefer-online",

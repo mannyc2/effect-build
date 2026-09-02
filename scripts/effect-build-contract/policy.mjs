@@ -1483,11 +1483,11 @@ export const releaseCertificationPolicy = {
           },
           {
             path: "test/fixtures/release/fake-boundary.mjs",
-            sha256: "cdbf2eadc6cb4a2a68dcb45b6e3b089fca80ef3ecb9f5e7059ca1e772b3e8174",
+            sha256: "0b24b3163e7e1bb5282088ea35819f67dfd82db954ecc3a74d86af14969b61f9",
           },
           {
             path: "test/fixtures/release/release-state.mjs",
-            sha256: "44c2296008bc588e720eaea685b5dbdaaa281b35dd93dfa229fa1b154e11a3a6",
+            sha256: "d858fb22cd987c185055a395c58cf0fd7ae646072d389d683c40bb5f18403bee",
           },
           {
             path: "test/fixtures/release/exact-fake-fetch.mjs",

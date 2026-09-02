@@ -170,14 +170,14 @@ const initialTags = (name) => structuredClone(
   expectedPublicDistTags.get(name) ?? { latest: placeholderVersion, reserved: placeholderVersion },
 );
 
-export const exactProvenance = () => ({
+export const exactProvenance = (sha = sourceSha) => ({
   predicateType: "https://slsa.dev/provenance/v1",
-  sourceSha,
+  sourceSha: sha,
   verified: true,
   workflowRef,
 });
 
-export const commitTarget = (state, name, provenance = exactProvenance()) => {
+export const commitTarget = (state, name, provenance = exactProvenance(state.sourceSha)) => {
   const candidate = state.candidate.packages[name];
   if (candidate === undefined) throw new Error(`missing candidate fixture for ${name}`);
   state.registry.packages[name].versions[targetVersion] = {

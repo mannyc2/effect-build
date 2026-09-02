@@ -125,6 +125,7 @@ const combinedContract = JSON.parse(
   };
 };
 const stateModule = await import(stateModuleUrl) as {
+  readonly sourceSha: string;
   readonly clearPublishFault: (path: string) => void;
   readonly hypotheticalFakeRegistryEvidenceLedger: ReadonlyArray<{
     readonly attemptedFakeMutations: number;
@@ -142,6 +143,7 @@ const stateModule = await import(stateModuleUrl) as {
     readonly scenario: string;
   }>;
 };
+const fixtureSourceSha = stateModule.sourceSha;
 const fakeRegistryScenarioMatrix = stateModule.fakeRegistryScenarioMatrix;
 const hypotheticalFakeRegistryEvidenceLedger = stateModule.hypotheticalFakeRegistryEvidenceLedger;
 const oidcRejectionScenarioMatrix = stateModule.oidcRejectionScenarioMatrix;
@@ -246,7 +248,7 @@ const installPinnedNpmSources = async (rootDirectory: string) => {
       "  const oids = [",
       "    ['1.3.6.1.4.1.57264.1.9', identity],",
       "    ['1.3.6.1.4.1.57264.1.12', 'https://github.com/mannyc2/effect-build'],",
-      "    ['1.3.6.1.4.1.57264.1.13', '1111111111111111111111111111111111111111'],",
+      `    ['1.3.6.1.4.1.57264.1.13', '${fixtureSourceSha}'],`,
       "  ].map(([oid, value]) => ({ oid: { id: oid.split('.').map(Number) }, value: der(value) }));",
       "  if (bundle.fakeSignerOid === 'wrong') oids[2].value = der('2222222222222222222222222222222222222222');",
       "  if (bundle.fakeSignerOid === 'duplicate') oids.push(structuredClone(oids[2]));",
@@ -417,7 +419,7 @@ const runProtectedBodies = async (
     CI: "true",
     EXPECTED_ARTIFACT_DIGEST: state.dispatch.candidateDigest,
     EXPECTED_REPOSITORY: "mannyc2/effect-build",
-    EXPECTED_SHA: "1111111111111111111111111111111111111111",
+    EXPECTED_SHA: fixtureSourceSha,
     EXPECTED_WORKFLOW_REF: "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main",
     GH_TOKEN: "FAKE-GITHUB-TOKEN",
     GITHUB_ACTIONS: "true",
@@ -430,7 +432,7 @@ const runProtectedBodies = async (
     GITHUB_RUN_ATTEMPT: "1",
     GITHUB_RUN_ID: "8001",
     GITHUB_SERVER_URL: "https://github.com",
-    GITHUB_SHA: "1111111111111111111111111111111111111111",
+    GITHUB_SHA: fixtureSourceSha,
     GITHUB_WORKFLOW_REF: "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main",
     MODE: "publish-certified-bytes",
     NODE_OPTIONS: `--import=${fakeFetch}`,
@@ -453,7 +455,7 @@ const runProtectedBodies = async (
     RUN_REF: "refs/heads/main",
     RUNNER_ENVIRONMENT: "github-hosted",
     RUNNER_TEMP: runnerTemp,
-    SOURCE_SHA: "1111111111111111111111111111111111111111",
+    SOURCE_SHA: fixtureSourceSha,
     WORKFLOW_REF: "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main",
     ...extraEnvironment,
   };
