@@ -1,0 +1,33 @@
+name: Scratch OIDC request URL shape
+
+on:
+  push:
+    branches:
+      - codex/scratch-oidc-request-url-shape
+
+permissions: {}
+
+jobs:
+  observe:
+    if: github.repository == 'mannyc2/effect-build'
+    permissions:
+      id-token: write
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Print the token request URL host and redacted path skeleton
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+            const skeleton = url.pathname.split("/").map((segment) => {
+              if (segment === "") return "";
+              if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(segment)) return "<uuid>";
+              if (/^[A-Za-z0-9_-]{20,}$/u.test(segment)) return `<opaque:${segment.length}:${/^[0-9a-f]+$/u.test(segment) ? "hex" : "base64url-ish"}>`;
+              return segment;
+            }).join("/");
+            console.log("host=" + url.hostname);
+            console.log("path=" + skeleton);
+            console.log("query=" + url.search);
+            console.log("tokenLength=" + (process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN ?? "").length);
+          '
