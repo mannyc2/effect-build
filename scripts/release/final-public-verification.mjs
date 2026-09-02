@@ -19,7 +19,7 @@ import {
 } from "./protocol.mjs";
 import { validateReadinessAggregateWithEvidence } from "./readiness-protocol.mjs";
 import {
-  validateProducerIdentityPolicy,
+  validateTrustedRootBytes,
   validateVerifiedSignerIdentity,
   verifySigstoreBundleIsolated,
 } from "./sigstore-dsse-verifier.mjs";
@@ -34,38 +34,6 @@ const exactKeys = (value, expected, label) => {
   }
   return value;
 };
-
-const expectedExternalSignerActivation = (state) => ({
-  statusSource: "releaseCertification.readiness.externalEvidenceAuthentication.status",
-  producerIdentitySource: "releaseCertification.readiness.externalEvidenceAuthentication.producerIdentities",
-  topology: "observe-sign-upload-three-job-hard-cut",
-  workflowPermissions: {},
-  observerJob: "observe",
-  signerJob: "sign",
-  uploadJob: "upload",
-  permissions: {
-    observer: state === "supported" ? { contents: "read" } : {},
-    signer: state === "supported" ? { "id-token": "write" } : {},
-    upload: {},
-  },
-  observerCredentialedThirdPartyActions: "forbidden",
-  signerThirdPartyActions: "forbidden",
-  handoff: {
-    observerToSigner: ["observed-at", "receipt-base64"],
-    signerToUpload: ["bundle-base64", "reference-base64"],
-    transport: "canonical-bounded-nonsecret-job-outputs-only",
-    artifactName: "fixed-role-and-validated-source-sha",
-    maximumReferenceBytes: 4096,
-    maximumBundleBytes: 32768,
-  },
-  hostedBootstrap: {
-    status: state === "supported" ? "qualified" : "unqualified-stop",
-    observer: "exact-node-24.14.1-and-audited-observer-source-closure-with-no-third-party-actions",
-    signer: "exact-node-24.14.1-and-audited-signer-source-closure-with-no-third-party-actions",
-  },
-  atomicity:
-    "both-hosted-bootstraps-signer-job-permission-and-all-contract-pinned-producer-identities-activate-together",
-});
 
 const bytes = (value, label) => {
   if (!(value instanceof Uint8Array) || value.byteLength === 0) throw new Error(`${label} is empty`);
@@ -118,13 +86,15 @@ const finalPublicPolicy = (contract) => {
     || !isRecord(release)
     || !isRecord(policy)
     || !isRecord(implementation)
-    || policy.protocol !== "effect-build/final-public-verification@1"
-    || policy.upstreamGateSource !== "releaseCertification.readiness.externalEvidenceAuthentication"
+    || policy.protocol !== "effect-build/final-public-verification@2"
+    || policy.status !== "ready"
+    || policy.upstreamGateSource !== "releaseCertification.readiness"
+    || policy.artifactDisposition !== "allowed-on-terminal-readiness-success"
     || policy.workflow !== `${policy.repository}/${policy.workflowPath}@refs/heads/main`
     || policy.packageCount !== release.publicAdmission?.packageCount
     || policy.moduleCount !== release.publicAdmission?.moduleCount
     || policy.releaseAssetCount !== policy.packageCount + 1
-    || implementation.status !== "implemented-inert-behind-upstream-gate"
+    || implementation.status !== "implemented"
     || implementation.module !== "scripts/release/final-public-verification.mjs"
     || implementation.contractAuthentication !== "exact-generated-bytes"
   ) throw new Error("combined contract has no exact final-public verification implementation");
@@ -132,64 +102,7 @@ const finalPublicPolicy = (contract) => {
 };
 
 export const assertFinalPublicVerificationAllowed = (contract) => {
-  const { policy, release } = finalPublicPolicy(contract);
-  const authentication = exactKeys(
-    release.readiness?.externalEvidenceAuthentication,
-    [
-      "status",
-      "artifactDisposition",
-      "blocker",
-      "requiredEnvelope",
-      "requiredBindings",
-      "signer",
-      "verifier",
-      "producerIdentityFields",
-      "sourceBinding",
-      "producerIdentities",
-    ],
-    "release readiness external evidence authentication",
-  );
-  if (
-    policy.status === "blocked"
-    && policy.blocker === "authenticated-release-readiness-aggregate-cannot-yet-exist"
-    && policy.artifactDisposition === "forbidden-while-upstream-blocked"
-    && authentication.status === "blocked"
-    && authentication.artifactDisposition === "forbidden-while-blocked"
-    && authentication.requiredEnvelope === "sigstore-bundle-v0.3-dsse"
-    && authentication.signer?.status === "implemented-inert-until-supported-activation"
-    && isDeepStrictEqual(authentication.signer?.activation, expectedExternalSignerActivation("blocked"))
-    && authentication.verifier?.status === "implemented"
-    && authentication.verifier?.module === "scripts/release/sigstore-dsse-verifier.mjs"
-    && Array.isArray(authentication.producerIdentityFields)
-    && Array.isArray(authentication.producerIdentities)
-    && authentication.producerIdentities.length === 0
-  ) throw new Error(`final public verification artifact forbidden: ${policy.blocker}`);
-  const externalRoles = release.readiness.evidenceRoles
-    .filter(({ type }) => type === "externalObservation")
-    .map(({ role }) => role);
-  if (
-    policy.status === "ready"
-    && policy.artifactDisposition === "allowed"
-    && authentication.status === "supported"
-    && authentication.artifactDisposition === "required-on-terminal-workflow-success"
-    && authentication.signer?.status === "implemented-inert-until-supported-activation"
-    && isDeepStrictEqual(authentication.signer?.activation, expectedExternalSignerActivation("supported"))
-    && authentication.verifier?.status === "implemented"
-    && authentication.producerIdentities.length === externalRoles.length
-    && externalRoles.every((role) =>
-      authentication.producerIdentities.filter((identity) => identity?.role === role).length === 1)
-  ) {
-    for (const role of externalRoles) {
-      validateProducerIdentityPolicy({
-        authentication,
-        identity: authentication.producerIdentities.find((entry) => entry.role === role),
-        role,
-        verifier: authentication.verifier,
-      });
-    }
-    return;
-  }
-  throw new Error("final public verification artifact forbidden: authenticated policy is not exact");
+  finalPublicPolicy(contract);
 };
 
 export const parseFinalPublicDispatch = (contract, environment) => {
@@ -215,15 +128,27 @@ export const parseFinalPublicDispatch = (contract, environment) => {
   };
 };
 
-const temporalReference = (value, observedAt, validationAt, policy, label) => {
+const temporalReference = (value, observedAt, validationAt, freshness, label) => {
   const observed = canonicalTimestamp(value.observedAt, `${label}.observedAt`);
   const expires = canonicalTimestamp(value.expiresAt, `${label}.expiresAt`);
   if (
-    observed > observedAt + policy.freshness.clockSkewSeconds * 1_000
-    || observedAt - observed > policy.freshness.maximumObservationAgeSeconds * 1_000
+    !Number.isSafeInteger(freshness.clockSkewSeconds)
+    || freshness.clockSkewSeconds < 0
+    || !Number.isSafeInteger(freshness.maximumAgeSeconds)
+    || freshness.maximumAgeSeconds <= 0
+    || (freshness.maximumValiditySeconds !== undefined && (
+      !Number.isSafeInteger(freshness.maximumValiditySeconds)
+      || freshness.maximumValiditySeconds < freshness.maximumAgeSeconds
+    ))
+  ) throw new Error(`${label} has no exact freshness policy`);
+  if (
+    observed > observedAt + freshness.clockSkewSeconds * 1_000
+    || observedAt - observed > freshness.maximumAgeSeconds * 1_000
     || expires <= validationAt
     || expires <= observed
-  ) throw new Error(`${label} is future, stale, or expired`);
+    || (freshness.maximumValiditySeconds !== undefined
+      && expires - observed > freshness.maximumValiditySeconds * 1_000)
+  ) throw new Error(`${label} is future, stale, expired, or has an excessive validity window`);
 };
 
 const validateCandidate = ({ contract, contractBytes, sourceSha, observedAt, validationAt, input }) => {
@@ -238,7 +163,11 @@ const validateCandidate = ({ contract, contractBytes, sourceSha, observedAt, val
     || positiveDecimal(reference.bytes, "final candidate bytes") !== `${manifestBytes.byteLength}`
     || reference.manifestDigest !== sha256Digest(manifestBytes)
   ) throw new Error("final candidate coordinate or manifest identity changed");
-  temporalReference(reference, observedAt, validationAt, policy, "final candidate");
+  temporalReference(reference, observedAt, validationAt, {
+    clockSkewSeconds: policy.freshness.clockSkewSeconds,
+    maximumAgeSeconds: release.readiness.candidate.maximumAgeSeconds,
+    maximumValiditySeconds: release.readiness.candidate.maximumValiditySeconds,
+  }, "final candidate");
   const manifest = decodeCanonicalJson(manifestBytes, "final candidate manifest");
   validateReleaseCandidate({
     candidate: manifest,
@@ -274,7 +203,10 @@ const validateReadiness = async ({
     || positiveDecimal(reference.bytes, "final readiness bytes") !== `${manifestBytes.byteLength}`
     || reference.manifestDigest !== sha256Digest(manifestBytes)
   ) throw new Error("final readiness coordinate or manifest identity changed");
-  temporalReference(reference, observedAt, validationAt, policy, "final readiness");
+  temporalReference(reference, observedAt, validationAt, {
+    clockSkewSeconds: policy.freshness.clockSkewSeconds,
+    maximumAgeSeconds: policy.freshness.maximumObservationAgeSeconds,
+  }, "final readiness");
   const result = await readinessVerify({
     contract,
     contractBytes,
@@ -283,7 +215,6 @@ const validateReadiness = async ({
     files: input.files,
     manifestBytes,
     bundleBytes: input.bundleBytes,
-    trustedRootBytes: input.trustedRootBytes,
     artifactExtractor: readinessArtifactExtractor,
   });
   return { ...result, coordinate, reference };
@@ -306,7 +237,7 @@ const validateTagAndRelease = ({ contract, sourceSha, observedAt, validationAt, 
     || releaseValue.targetSha !== sourceSha
     || releaseValue.draft !== policy.releasePolicy.draft
     || releaseValue.prerelease !== policy.releasePolicy.prerelease
-    || typeof releaseValue.immutable !== "boolean"
+    || releaseValue.immutable !== true
     || releaseObservedAt > observedAt + policy.freshness.clockSkewSeconds * 1_000
     || observedAt - releaseObservedAt > policy.freshness.maximumObservationAgeSeconds * 1_000
     || releaseObservedAt > validationAt + policy.freshness.clockSkewSeconds * 1_000
@@ -402,7 +333,8 @@ const validateProvenance = async ({
     || provenanceBundles.size !== names.length
   ) throw new Error("final provenance projection changed");
   const provenancePolicy = implementation.provenance;
-  const verifier = release.readiness.externalEvidenceAuthentication.verifier;
+  const verifier = release.provenanceVerification;
+  validateTrustedRootBytes({ trustedRootBytes, verifier });
   const identity = `https://github.com/${provenancePolicy.workflow}`;
   const identityPattern = `^${identity.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`;
   const normalized = [];
@@ -542,6 +474,7 @@ const validateAllowedFinalPublicState = async ({
   releaseAssetBytes,
   provenance,
   provenanceBundles,
+  provenanceTrustedRootBytes,
   consumerSmoke,
   reservation,
   reservationBytes,
@@ -591,10 +524,6 @@ const validateAllowedFinalPublicState = async ({
     tag,
     release,
   });
-  const governance = readinessResult.authenticatedExternalReceipts.get("github-release-governance");
-  if (!isRecord(governance) || publicIdentity.release.immutable !== governance.enabled) {
-    throw new Error("public Release immutability differs from the authenticated governance decision");
-  }
   const publicBytes = validatePublicBytes({
     contract,
     candidate: candidateResult,
@@ -609,7 +538,7 @@ const validateAllowedFinalPublicState = async ({
     candidate: candidateResult,
     provenance,
     provenanceBundles,
-    trustedRootBytes: readiness.trustedRootBytes,
+    trustedRootBytes: provenanceTrustedRootBytes,
     sigstoreVerify,
   });
   const consumer = validateConsumerAndReservation({ contract, consumerSmoke, reservation, reservationBytes });

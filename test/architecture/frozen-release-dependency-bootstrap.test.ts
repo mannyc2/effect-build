@@ -183,7 +183,6 @@ describe("frozen release dependency bootstrap", () => {
     const workflows = [
       "apple-certification.yml",
       "release-certification.yml",
-      "release-evidence-ingress.yml",
       "release-readiness.yml",
       "release-verification.yml",
       "release.yml",

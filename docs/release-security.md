@@ -29,13 +29,16 @@ packages and the 42-module public projection. Rolldown remains private and
 2. `certify-exact-sha` is a protected, no-checkout consumer of exact candidate
    bytes. It reauthenticates GitHub state immediately before use and is designed
    to prove GitHub claims plus one npm OIDC exchange and dry run per package
-   without uploading a tarball. It remains fail-closed while the contract's
-   external-evidence identities and signers are blocked.
+   without uploading a tarball. A separate protected certification workflow
+   executes the exact publisher body against sealed fake GitHub/npm boundaries.
 3. `publish-certified-bytes` is a separately authorized protected consumer of
    the exact candidate and readiness aggregate. It never repacks. Before each
    possible npm mutation it re-observes package bytes, provenance, and `latest`,
    and its state machine stops on conflict, unknown outcome, or incomplete
-   prior publication.
+   prior publication. An exact published prefix may resume only while the same
+   readiness packet remains valid. Once it expires, the release stops and
+   requires a new-version decision; no manual tag repair, repack, or bypass is
+   admitted.
 
 Protected consumers execute no checked-out repository code. They obtain the
 contract from the authenticated exact source SHA, compare artifact REST
@@ -47,115 +50,101 @@ archive topology.
 
 ## Certification and retained evidence
 
-The non-publishing path is split across dedicated workflows:
+Readiness authenticates the candidate separately plus exactly three ordered
+hosted proofs:
 
-- release certification executes the exact generated protocol and distinguishes
-  local fake-boundary qualification from readiness-admissible protected-body
-  certification;
-- evidence ingress is transport-only and grants caller bytes no authority;
-- release readiness re-downloads and authenticates exact run, attempt,
-  artifact, workflow, source, and external DSSE/Sigstore identities before
-  producing one aggregate;
-- final-public verification is read-only and re-downloads npm and GitHub
-  Release bytes before issuing its receipt.
+1. exact-main CI at the exact source SHA;
+2. exact protected-body execution against the stateful fake registry; and
+3. eleven-package npm OIDC dry-run certification.
+
+Every readiness input is an authenticated GitHub run or artifact coordinate.
+There is no caller-authored receipt, external-evidence ingress, generated
+activation fixture, or secret-backed observer. Direct observation of current
+main, repository policy, and anonymous npm state happens inside the readiness
+job and is never promoted from caller bytes. Final-public verification is
+read-only and re-downloads npm and GitHub Release bytes before issuing its
+receipt.
+
+`scripts/release/build-terminal-reference.mjs` is the sole constructor for the
+five terminal GitHub references used by this release: candidate, readiness,
+exact-main CI, fake-registry, and npm OIDC certification. Run it only after the
+named attempt has completed successfully. It authenticates the exact workflow,
+event, source SHA, branch, run attempt, repository IDs, artifact metadata and
+canonical REST digest; downloads the raw ZIP; accepts only the contract's exact
+files; derives manifest or retained-receipt identity; and re-reads current main
+before emitting canonical JSON. Artifact-reference expiry is the earlier of
+the contract validity window and GitHub retention expiry. The read token is
+consumed only by the sealed GitHub boundary and the CLI never prints it or a
+raw OIDC/npm credential.
+
+The post-merge command form is:
+
+```sh
+ACTIONS_READ_TOKEN="$(gh auth token)" \
+  node scripts/release/build-terminal-reference.mjs \
+    --kind <candidate|readiness|fake-registry|npm-oidc-certification> \
+    --source-sha "$R" \
+    --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT" \
+    --artifact-id "$ARTIFACT_ID" \
+    --artifact-digest "sha256:$ARTIFACT_DIGEST_HEX" \
+    > terminal-reference.json
+
+ACTIONS_READ_TOKEN="$(gh auth token)" \
+  node scripts/release/build-terminal-reference.mjs \
+    --kind exact-main-ci --source-sha "$R" \
+    --run-id "$CI_RUN_ID" --run-attempt "$CI_RUN_ATTEMPT" \
+    > exact-main-ci-reference.json
+```
+
+`$ARTIFACT_DIGEST_HEX` above is the 64-lowercase-hex suffix from an
+independently read REST artifact `digest`; the CLI argument is always the full
+canonical `sha256:` form. Reference JSON contains no authority and must be
+regenerated, never edited, if it expires.
 
 Checkout-capable release jobs use one frozen Bun 1.3.14 bootstrap. Sigstore
 verification is offline against an exact trusted-root target whose retained
 TUF seed/root/timestamp/snapshot/targets chain is independently replayed during
-contract generation. Runtime evidence verification has a fail-closed network
+contract generation. Runtime provenance verification has a fail-closed network
 guard and retains no OIDC token.
 
-The same-repository external-evidence producers are deliberately inert until a
-generated activation pins all three producer identities. The future identities
-for npm authority and GitHub Release governance are the exact
-`npm-authority.yml@refs/heads/main` and
-`github-release-governance.yml@refs/heads/main` workflow URIs. Each workflow is
-an `observe` -> `sign` -> `upload` hard cut. While blocked, workflow-level and
-all three job permissions are empty; `observe` and `sign` are single inline
-STOPs with no third-party actions; and every job repeats the main/source-SHA
-dispatch guard. `upload` has no OIDC authority, consumes only bounded canonical
-base64 signed-byte outputs, derives its artifact name from the fixed role and
-validated source SHA, and alone may run the pinned upload action. Signed-byte
-substitution there can only make the independent verifier reject the artifact.
+The npm OIDC certification is intentionally narrow. Under pinned Node
+24.14.1/npm 11.11.0 it rejects ambient npm/Sigstore tokens and registry auth,
+validates GitHub OIDC claims without retaining the token, requires exactly one
+private package-specific token-retrieval marker for each of the eleven dry
+runs, and proves anonymous registry state is unchanged. It proves that the
+exact protected workflow obtained package-specific authority at that instant.
+It does not prove tarball upload, provenance generation, publication,
+exclusive trusted-publisher administration, absence of legacy npm tokens, the
+package publishing-access toggle, or account 2FA state.
 
-Supported activation cannot be obtained by adding identities and OIDC
-permission alone. It must first qualify an exact Node 24.14.1 plus audited
-repository observer closure with no third-party action in the credentialed
-observation TCB, and a separate exact Node 24.14.1 plus audited signer/dependency
-closure with no third-party `uses:`. The closed activation then grants only
-`contents: read` to `observe`, only `id-token: write` to `sign`, and no GitHub
-token permission to `upload`, atomically with every generated identity. Until
-both hosted bootstraps are qualified, both STOPs remain and no evidence can be
-created.
+Those npm administrative inventories are excluded from the v0.6.0 release
+gate because npm exposes no supported read interface for all of them. A local
+web login is neither required nor retained as release evidence. Real
+publication remains the proof of registry mutation and provenance, with exact
+byte/latest/provenance re-observation before every next mutation.
 
-Their shared signer uses only GitHub's per-job OIDC request capability, Fulcio,
-and Rekor v2. The generated contract pins Node, the `@sigstore/sign` 4.1.0
-package/integrity and exact internal DSSE source closure, OIDC audience and
-request authority/bounds, and exact Fulcio/Rekor origins, paths, methods, TLS,
-timeouts, response bounds, and zero redirects/retries. Repository-owned raw
-HTTPS clients use bundled roots, exact SNI, no agent, identity encoding, strict
-headers and lengths, and a strict UTF-8 JSON decoder that rejects duplicate keys
-at every nesting level. They never follow a redirect carrying an OIDC token or
-Fulcio body. Ambient Actions/runtime variables, `NODE_OPTIONS`, TLS bypass,
-proxy/extra-CA authority, pre-supplied credentials, endpoint escape, partial or
-encoded bodies, and token-bearing errors all fail closed. The signed payload
-and logical reference are derived from the generated contract's closed fields,
-receipt protocol, source binding, freshness window, and byte digests. A
-short-lived producer artifact is only a handoff to the separately validated
-transport-only ingress workflow.
+Repository Release immutability is an operator-admin preflight, not a hosted
+readiness role: the workflow token intentionally lacks Administration-read
+authority. The operator must observe `enabled: true` immediately before draft
+creation and again immediately before publication. The draft is created only
+after a guarded lightweight tag, with `--verify-tag`; all twelve assets are
+uploaded, downloaded, and byte-verified before publication. Final-public
+verification requires the actual published Release to report
+`immutable: true` and fails closed otherwise.
 
-GitHub Release governance has an additional mandatory STOP. Reading
-`repos/mannyc2/effect-build/immutable-releases` requires repository
-Administration permission (read), but GitHub Actions exposes no `administration`
-permission for the workflow `GITHUB_TOKEN`. No supported ephemeral
-Administration-read observation mechanism is provisioned. A future sealed
-boundary must obtain only that read authority without using the workflow token,
-a GitHub secret, variable, workflow input, artifact, or caller-authored receipt;
-it must never log, hash, sign, or upload credential material and must destroy
-the authority before Sigstore OIDC signing. The pure collector and receipt
-builder already constrain the exact endpoint response, commit `enabled` and
-`enforced_by_owner` into `decisionReceiptDigest`, and select one of the
-contract's two decisions. Until the credential boundary is implemented and
-reviewed, `produce-github-release-governance.mjs` exits nonzero without reading
-the endpoint or creating evidence.
-
-The npm-authority producer has an additional mandatory STOP. Publication/OIDC
-certification remains pinned to Node 24.14.1/npm 11.11.0. Authority observation
-is separately pinned to npm 11.19.1 because current trusted-publisher tooling
-requires npm 11.15.0 or later; its registry integrity, manifest, exact CLI
-entry, command sources, and canonical entire installed package-tree closure are
-contract-authenticated. Every authority call executes that authenticated
-realpath through the pinned Node runtime, never PATH `npm`. A supported receipt must use an
-ephemeral non-token `mannyc1` session, an exact npmjs registry argv, an exactly
-empty account token inventory, exact sole-maintainer `mannyc1` projection for
-all eleven public packages plus reservation-only Rolldown, and exact publishing
-access `Require two-factor authentication and disallow tokens` for all twelve.
-Trusted-publisher records remain exactly the eleven public packages; Rolldown
-must have none. The npm API requires account 2FA and package write entitlement
-even though the admitted observation operations are read-only. There is no
-qualified publishing-access endpoint, so one must not be invented.
-
-No supported ephemeral npm plus GitHub-administration observation mechanism is
-provisioned. A future implementation must provide both authorities without a
-GitHub secret, variable, workflow input, artifact, npm token environment
-variable, or caller-authored receipt; it must never log, hash, sign, or upload
-credential material and must destroy the observation authority before Sigstore
-OIDC signing. Deleting a GitHub `NPM_TOKEN` secret does not prove npm-side token
-revocation. Until the exact interface is implemented and reviewed,
-`produce-npm-authority.mjs` exits nonzero and creates no evidence.
-
-Apple certification is an exact 28-coordinate protocol: 2 native, 10 protected
-product, 6 clean-host, and 10 aggregate-verdict receipts. The repository-owned
-workflow is deliberately STOP-only until exact producer, runner, credential,
-and external Notary-journal interfaces are qualified and a separately reviewed
-generated activation is merged. Local codecs, fake boundaries, or ordinary CI
-do not prove Developer ID signing, notarization, stapling, Gatekeeper behavior,
-clean-host use, or durable continuation.
+Apple certification is an exact 28-coordinate deferred protocol: 2 native, 10
+protected product, 6 clean-host, and 10 aggregate-verdict receipts. v0.6.0
+ships the `effect-build-apple` API/library package but no signed or notarized
+App, DMG, or PKG. Credential-backed Apple certification and its operational
+journal were not run, have not passed, and are excluded from readiness. Local
+codecs, fake boundaries, or ordinary CI do not prove Developer ID signing,
+notarization, stapling, Gatekeeper behavior, clean-host use, or durable
+continuation. Those products require a later, separately qualified release.
 
 The local `verify` gate builds all workspace packages, validates the generated
 contract and archive/trust projections, runs type, lifecycle, consumer, and
 architecture tests, and proves the public surface stays exactly bounded. It is
 implementation evidence only. Credentialed certification, release-point R,
 npm publication, tag creation, GitHub Release creation/publication, repository
-settings, and external infrastructure each require their own exact authority
-and terminal receipt.
+settings, and future external infrastructure each require their own exact
+authority and terminal evidence.

@@ -11,86 +11,62 @@
 
 ## Current v0.6.0 release-readiness program
 
-[Plan 045](./045-establish-v060-release-point.md) defines how to discover and
-close the remaining gap between an ordinary-CI-green source candidate and an
-honest release point. Its guarded PR 24 merge and exact-main verification are
-complete; it next requires a dedicated
-release-readiness change, a local-only fake-registry qualification that cannot
-satisfy readiness, later stateful execution of the exact protected publisher
-body after external evidence authentication is qualified, GitHub claims plus
-all eleven package-specific npm OIDC
-exchanges, authenticated observation of all trusted-publisher records,
-retirement of the observed repository-level `NPM_TOKEN` under separate
-authority, exact two-key embedded `publishConfig` admission, rejection of both
-pre-supplied npm and Sigstore identity tokens,
-credential-backed Apple and clean-host evidence on both architectures,
-downstream Notary-journal qualification, and one downloaded readiness
-aggregate. Only that aggregate may open a separate npm-publication decision;
-tag and GitHub Release remain a later decision and GitHub is last.
+[Plan 045](./045-establish-v060-release-point.md) defines the bounded path from
+an ordinary-CI-green source candidate to an honest release point and public
+release. PR 24 and the inert release infrastructure are already merged. The
+2026-09-01 scope hard cut releases exactly eleven npm packages, including the
+`effect-build-apple` API/library package. It does not release signed or
+notarized App, DMG, or PKG products.
 
-The first release-readiness infrastructure merge is intentionally inert and is
-not R. After external interfaces are qualified, a separately reviewed inert
-Apple hosted-integration merge must land; then one closed generated activation
-merge becomes candidate SHA R. That SHA earns release-point status only after
-exact-main CI, all non-publishing certifications, the downloaded readiness
-aggregate, and fresh terminal main/npm observations succeed.
+Credential-backed Apple artifact certification was not run and has not passed.
+Apple credentials, native signing/notarization, clean-host evidence, and the
+operational journal are excluded from v0.6.0 readiness and outputs. They belong
+to a later, separately qualified Apple-artifact release. Plan 047 records that
+future journal design only; AWS must not be provisioned for v0.6.0.
 
-External and protected execution is currently blocked at Plan 045 Step 2. The
-repository-owned contract, credential-free workflows, exact-shell fake
-boundaries, Apple codecs/receipts/submission boundary, and aggregate validators
-are implemented and locally verified as uncommitted working-tree changes,
-without treating that work as feasibility evidence. The current fake
-qualification protocol/path is specifically
-`effect-build/fake-registry-local-qualification@1`, covers 40 hypothetical
-oracle coordinates by executing the extracted protected bodies against sealed
-credential-free fake boundaries, plus proves that the real protected purpose
-finishes exact read-only GitHub reauthorization and then stops before candidate
-adoption or npm/registry work with zero mutation, and has
-`readinessAdmissible: false`; no hosted artifact exists. The future
-`effect-build/fake-registry-exact-protected-body-certification@1` path remains
-blocked and forbidden until the contract-pinned external producer identities
-and signers are qualified. The new nonsecret release-authority auditor confirms
-that npm authentication is
-E401 and the legacy repository `NPM_TOKEN` remains. The required Developer ID
-identity pair, Apple environment, credential-backed rejection outcomes, and
-clean-host proof are absent. Bun 1.3.14 is now the canonical App/DMG/PKG
-lineage while Deno 2.9.5 remains signed-App-only. [Plan
-046](./046-repair-apple-native-probe-admission.md) contains the locally verified
-native-probe repair. [Plan
-047](./047-establish-canonical-operation-journal.md) freezes a one-backend,
-provider-neutral S3 Object-Lock journal with GitHub OIDC and prefix-scoped IAM.
-It preserves effect-build-apple as the sole Notary schema owner and gives the
-journal job no GitHub contents authority, but its separate ts-release
-implementation, dedicated AWS authority, and live qualification remain
-unauthorized and unexecuted. No credentialed Apple run, protected npm exchange,
-or hosted readiness aggregate exists; local implementation cannot substitute
-for any of them.
+The v0.6.0 release point uses one candidate plus exactly three ordered hosted
+proofs:
 
-The final pinned Bun 1.3.14 local gate passes contract 13/13, 16/16 type-test
-files, 160/160 unit tests, 46/46 Apple package tests, the built consumer,
-254/254 architecture tests, lint, and formatting. The architecture total
-includes all 40 exact protected-body state-machine coordinates and a regression
-that kills an entire timed-out process group before fixture cleanup. This is
-local qualification of uncommitted bytes, not hosted certification or release
-point R.
+1. exact-main CI at the candidate SHA;
+2. exact protected publisher-body execution against sealed stateful fake
+   GitHub/npm boundaries; and
+3. protected npm OIDC certification for all eleven package-specific dry runs.
 
-Remote main now contains the historical eleven-package publish-only Release
-workflow and the temporary token bootstrap workflow is deleted. That current
-remote workflow is not a certification path and remains DO-NOT-DISPATCH. The
-local release-readiness change replaces it with the three hard-cut modes:
-prepare and certify are non-publishing Step 9 acts used to earn the release
-point, while publish remains unreachable until the later exact publication
-authorization and npm-environment approval.
+There are no external-observation roles, caller-authored receipts, ingress
+workflow, secret-backed observer, or generated activation fixture. Readiness
+collects current-main, repository-policy, and anonymous npm observations
+directly. The npm dry-run proves exact OIDC exchange acceptance and unchanged
+registry state; it does not claim upload, provenance, publication, exclusive
+publisher inventory, token absence, package publishing-access policy, or
+account 2FA state. Unsupported npm administrative inventories are explicitly
+unobserved and excluded from the v0.6.0 gate.
 
-Saved npm publisher configuration is not treated as proof. The plan pins npm
-11.11.0, audits its exchange-before-dry-run ordering, requires all eleven
-package-specific OIDC exchanges to succeed privately under
-`npm publish --dry-run`, and then proves registry state is unchanged. This
-certifies the
-exchange at that instant, not tarball upload, provenance, or publication; those
-remain at the separately authorized publish boundary.
+Publication remains separately protected and resumable. It adopts the semantic
+three-proof readiness packet before the first npm command, never repacks, and
+re-verifies exact bytes, `latest`, and provenance before each next mutation.
+`effect-build-rolldown` remains reservation-only and is never included in the
+eleven-package publication ledger.
 
-## Historical 0.4 program
+GitHub Release immutability is not a hosted readiness role because the workflow
+token lacks Administration-read authority. An operator-admin preflight must
+observe immutability enabled immediately before draft creation and again before
+public publication. The guarded lightweight tag targets the exact release
+point; the draft uses `--verify-tag`; all twelve candidate-derived assets are
+downloaded and byte-verified before publication; and final-public verification
+requires the actual published Release to report `immutable: true`.
+
+Local verification is implementation evidence only. The release point still
+requires exact-main hosted CI, a retained candidate, the three authenticated
+proofs, fresh current-main/npm observations, and a downloaded readiness
+aggregate at one SHA. Real publication, tag creation, draft creation, public
+Release publication, and final-public verification remain distinct terminal
+acts even when one operator has authorized the full sequence.
+
+The exact Apple coordinate inventory remains mechanically frozen at 28 unique
+entries: 2 native, 10 protected product, 6 clean-host, and 10 aggregate
+verdicts. It is retained for the later Apple-artifact release and cannot enter
+the v0.6.0 candidate, readiness aggregate, or GitHub Release assets.
+
 
 The post-0.3 research-to-freeze program completed on 2026-08-21. Its exact
 machine-readable authority is
@@ -429,9 +405,9 @@ direction. Plans 016-020 remain factual implementation history.
 | 042 | Implement the frozen Deno executable lane | P1 | L | 039 | DONE |
 | 043 | Implement direct Node SEA assembly | P1 | L | 039 | DONE |
 | 044 | Hard-cut and certify the frozen 0.4 candidate | P0 | XL | 039-043 | CANDIDATE |
-| 045 | Establish the v0.6.0 release point and bounded publication handoff | P0 | XL | Step 2 npm, Apple, journal, and product decisions | LOCAL IMPLEMENTATION VERIFIED; BLOCKED: EXTERNAL FEASIBILITY |
+| 045 | Establish the v0.6.0 release point and bounded publication handoff | P0 | XL | npm-only three-proof cut review, merge, and hosted certification | IN PROGRESS: LOCAL GATE VERIFIED; HOSTED CERTIFICATION PENDING |
 | 046 | Repair Apple native probe admission | P0 | S | 045 | COMPLETE LOCALLY; UNCOMMITTED |
-| 047 | Establish the canonical operation journal | P0 | XL | 045, external approval | DESIGN COMPLETE; IMPLEMENTATION BLOCKED |
+| 047 | Establish the canonical operation journal for a later Apple-artifact release | P0 | XL | future Apple release, external approval | DEFERRED OUTSIDE v0.6.0 |
 
 Status values: `READY`, `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
 `REJECTED: <reason>`. A historical `DONE` says

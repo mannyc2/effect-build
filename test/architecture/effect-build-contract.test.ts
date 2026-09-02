@@ -67,6 +67,10 @@ interface CombinedContract {
       readonly target: {
         readonly version: string;
         readonly expectedLatestBeforePublication: ReadonlyArray<{ readonly name: string; readonly version: string }>;
+        readonly expectedDistTagsBeforePublication: ReadonlyArray<{
+          readonly name: string;
+          readonly tags: Readonly<Record<string, string>>;
+        }>;
       };
     };
     readonly reservation: {
@@ -157,6 +161,15 @@ describe("authoritative combined contract", () => {
     expect(sorted(
       contract.npmRegistryBoundary.publicationAdmission.target.expectedLatestBeforePublication.map(({ name }) => name),
     )).toEqual(admitted);
+    expect(sorted(
+      contract.npmRegistryBoundary.publicationAdmission.target.expectedDistTagsBeforePublication.map(({ name }) =>
+        name
+      ),
+    )).toEqual(admitted);
+    expect(
+      contract.npmRegistryBoundary.publicationAdmission.target.expectedDistTagsBeforePublication
+        .find(({ name }) => name === "effect-build-bun")?.tags,
+    ).toEqual({ latest: "0.3.0", reserved: "0.0.0-reserved.0" });
     expect(sorted(contract.npmRegistryBoundary.reservation.packages)).toEqual(reservedOnly);
     expect(contract.npmRegistryBoundary.publicationAdmission.packages).not.toContain("effect-build-rolldown");
   });

@@ -28,7 +28,6 @@ import {
 import { createGitHubReadOnlyBoundary } from "./github-read-only-boundary.mjs";
 import { createAnonymousNpmBoundary } from "./npm-read-only-boundary.mjs";
 import { assertReadinessArtifactAllowed, buildReadinessAggregate } from "./readiness-protocol.mjs";
-import { validateTrustedRootBytes } from "./sigstore-dsse-verifier.mjs";
 import { finalizeAfterTerminalObservation } from "./terminal-observation.mjs";
 import { extractStrictFlatZip } from "./zip-protocol.mjs";
 
@@ -84,27 +83,14 @@ export const parseDispatchEnvironment = (contract, environment) => {
     policy.dispatch.candidateInput,
   );
   const evidence = [];
-  const ingressReferences = new Map();
   for (let index = 0; index < policy.evidenceRoles.length; index += 1) {
     const definition = policy.evidenceRoles[index];
     const dispatch = policy.dispatch.evidenceInputs[index];
     if (dispatch?.role !== definition.role) throw new Error("readiness dispatch role order changed");
     const input = environment[dispatch.input.toUpperCase()];
-    if (definition.type === "externalObservation") {
-      if (typeof input !== "string" || input.length > policy.externalEvidenceIngress.dispatch.maximumReferenceCharacters) {
-        throw new Error(`readiness ${definition.role} ingress reference exceeds its character bound`);
-      }
-      ingressReferences.set(definition.role, exactKeys(
-        parseJson(input, dispatch.input),
-        policy.dispatch.externalIngressReferenceFields,
-        `readiness ${definition.role} ingress reference`,
-      ));
-      evidence.push(undefined);
-    } else {
-      evidence.push(parseJson(input, dispatch.input));
-    }
+    evidence.push(parseJson(input, dispatch.input));
   }
-  return { candidate, evidence, ingressReferences, sourceSha };
+  return { candidate, evidence, sourceSha };
 };
 
 export const createCollectorGitHubBoundary = (contract, token = process.env.GITHUB_TOKEN) =>
@@ -238,90 +224,6 @@ const artifactBytes = async ({ github, contract, definition, reference, sourceSh
   return bytes;
 };
 
-const canonicalJsonBytes = (bytes, label) => {
-  if (!(bytes instanceof Buffer) || bytes.byteLength === 0) throw new Error(`${label} is empty`);
-  let source;
-  let value;
-  try {
-    source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    value = JSON.parse(source);
-  } catch {
-    throw new Error(`${label} is not UTF-8 JSON`);
-  }
-  if (canonicalJson(value) !== source) throw new Error(`${label} is not canonical JSON`);
-  return value;
-};
-
-export const collectExternalIngressEvidence = async ({
-  github,
-  contract,
-  definition,
-  ingressReference,
-  sourceSha,
-  observedAt,
-}) => {
-  const release = contract.releaseCertification;
-  const policy = release.readiness;
-  const ingress = policy.externalEvidenceIngress;
-  const reference = exactKeys(
-    ingressReference,
-    ingress.referenceFields,
-    `readiness ${definition.role} ingress reference`,
-  );
-  const expectedArtifactName = ingress.artifact.nameTemplate
-    .replace("<role>", definition.role)
-    .replace("<sourceSha>", sourceSha);
-  const outerObservedAt = canonicalTimestamp(reference.observedAt, `${definition.role} ingress observedAt`);
-  const outerExpiresAt = canonicalTimestamp(reference.expiresAt, `${definition.role} ingress expiresAt`);
-  const aggregateObservedAt = canonicalTimestamp(observedAt, "readiness observedAt");
-  if (
-    reference.schema !== ingress.protocol
-    || reference.role !== definition.role
-    || reference.artifactName !== expectedArtifactName
-    || typeof reference.bytes !== "string"
-    || !/^[1-9][0-9]*$/u.test(reference.bytes)
-    || Number(reference.bytes) > ingress.dispatch.maximumBundleBytes
-    || outerObservedAt > aggregateObservedAt + policy.clockSkewSeconds * 1_000
-    || aggregateObservedAt - outerObservedAt > definition.maximumAgeSeconds * 1_000
-    || outerExpiresAt <= aggregateObservedAt
-    || outerExpiresAt - outerObservedAt > definition.maximumValiditySeconds * 1_000
-  ) throw new Error(`readiness ${definition.role} ingress reference is not fresh and exact`);
-  const zipBytes = await artifactBytes({
-    github,
-    contract,
-    definition: {
-      ...definition,
-      event: ingress.event,
-      role: `${definition.role} ingress`,
-      workflow: ingress.workflow,
-      workflowPath: ingress.workflowPath,
-    },
-    reference,
-    sourceSha,
-    observedAt,
-  });
-  const files = extractFlatZip({
-    zipBytes,
-    expectedFiles: ingress.artifact.orderedFiles,
-    label: `readiness ${definition.role} ingress`,
-    policy: policy.zipExtraction,
-  });
-  const logicalReferenceBytes = files.get(ingress.artifact.orderedFiles[0]);
-  const bundleBytes = files.get(ingress.artifact.orderedFiles[1]);
-  if (
-    !(logicalReferenceBytes instanceof Buffer)
-    || !(bundleBytes instanceof Buffer)
-    || `${bundleBytes.byteLength}` !== reference.bytes
-    || bundleBytes.byteLength > ingress.dispatch.maximumBundleBytes
-  ) throw new Error(`readiness ${definition.role} ingress bytes changed`);
-  const logicalReference = canonicalJsonBytes(
-    logicalReferenceBytes,
-    `readiness ${definition.role} external evidence reference`,
-  );
-  canonicalJsonBytes(bundleBytes, `readiness ${definition.role} Sigstore bundle`);
-  return { bundleBytes, logicalReference };
-};
-
 const runObservationBytes = ({ contract, definition, reference, run }) => {
   const values = {
     schema: definition.protocol,
@@ -423,8 +325,8 @@ export const collectDirectObservation = async ({
     ...derivePublicPackageNames(contract),
     ...[...registry.reservation.packages].sort(),
   ];
-  const expectedLatest = new Map(
-    registry.publicationAdmission.target.expectedLatestBeforePublication.map((entry) => [entry.name, entry.version]),
+  const expectedDistTags = new Map(
+    registry.publicationAdmission.target.expectedDistTagsBeforePublication.map((entry) => [entry.name, entry.tags]),
   );
   const placeholderLedger = new Map(registry.bootstrap.placeholderLedger.map((entry) => [entry.name, entry]));
   const packages = [];
@@ -435,7 +337,7 @@ export const collectDirectObservation = async ({
     const distTags = Object.fromEntries(Object.entries(packument?.["dist-tags"] ?? {}).sort(([left], [right]) =>
       left.localeCompare(right)
     ));
-    const latest = expectedLatest.get(name) ?? placeholderLedger.get(name)?.bootstrapTags.latest;
+    const latest = expectedDistTags.get(name)?.latest ?? placeholderLedger.get(name)?.bootstrapTags.latest;
     const versionManifest = packument?.versions?.[latest];
     const entry = {
       name,
@@ -509,8 +411,6 @@ const collectAllowedReadinessAggregate = async ({
   observedAt,
   candidate,
   evidence,
-  ingressReferences,
-  trustedRootBytes,
   github,
   npm,
 }) => {
@@ -554,32 +454,11 @@ const collectAllowedReadinessAggregate = async ({
   const resolvedEvidence = [];
   for (let index = 0; index < policy.evidenceRoles.length; index += 1) {
     const definition = policy.evidenceRoles[index];
-    let reference;
-    if (definition.type === "externalObservation") {
-      if (!(ingressReferences instanceof Map) || !ingressReferences.has(definition.role)) {
-        throw new Error(`readiness ${definition.role} ingress reference is absent`);
-      }
-      const external = await collectExternalIngressEvidence({
-        github,
-        contract,
-        definition,
-        ingressReference: ingressReferences.get(definition.role),
-        sourceSha,
-        observedAt,
-      });
-      reference = exactKeys(
-        external.logicalReference,
-        policy.referenceShapes.externalObservation,
-        `readiness ${definition.role} reference`,
-      );
-      evidenceBytes.set(definition.role, external.bundleBytes);
-    } else {
-      reference = exactKeys(
-        evidence[index],
-        policy.referenceShapes[definition.type],
-        `readiness ${definition.role} reference`,
-      );
-    }
+    const reference = exactKeys(
+      evidence[index],
+      policy.referenceShapes[definition.type],
+      `readiness ${definition.role} reference`,
+    );
     resolvedEvidence.push(reference);
     if (
       reference.role !== definition.role
@@ -601,8 +480,6 @@ const collectAllowedReadinessAggregate = async ({
         ? release.fakeRegistry.exactProtectedBodyCertification.orderedFiles
         : definition.role === "npm-oidc-certification"
         ? release.npmOidcCertification.evidence.orderedFiles
-        : definition.role === "apple-certification"
-        ? release.apple.artifact.orderedFiles
         : undefined;
       artifactFiles.set(definition.role, extractFlatZip({
         zipBytes,
@@ -626,7 +503,7 @@ const collectAllowedReadinessAggregate = async ({
         observedAt,
       });
       evidenceBytes.set(definition.role, runObservationBytes({ contract, definition, reference, run }));
-    } else if (definition.type !== "externalObservation") {
+    } else {
       throw new Error(`unsupported readiness evidence role: ${definition.role}`);
     }
   }
@@ -642,7 +519,6 @@ const collectAllowedReadinessAggregate = async ({
       candidateBytes,
       evidence: resolvedEvidence,
       evidenceBytes,
-      trustedRootBytes,
       artifactFiles,
     }),
     observe: async () => await currentMain({ github, contract, sourceSha }),
@@ -678,9 +554,6 @@ const main = async () => {
   delete process.env.GITHUB_TOKEN;
   if (readdirSync(output).length !== 0) throw new Error("readiness output directory must be empty");
   const policy = contract.releaseCertification.readiness;
-  const verifier = policy.externalEvidenceAuthentication.verifier;
-  const trustedRootBytes = readFileSync(resolve(repositoryRoot, verifier.trustedRoot.path));
-  validateTrustedRootBytes({ trustedRootBytes, verifier });
   const aggregate = await collectReadinessAggregate({
     contract,
     contractBytes,
@@ -688,14 +561,11 @@ const main = async () => {
     observedAt,
     candidate: input.candidate,
     evidence: input.evidence,
-    ingressReferences: input.ingressReferences,
-    trustedRootBytes,
     github,
     npm: anonymousNpmBoundary,
   });
   writeFileSync(resolve(output, policy.manifest), aggregate.manifestBytes, { mode: 0o600 });
   writeFileSync(resolve(output, policy.evidenceBundle), aggregate.bundleBytes, { mode: 0o600 });
-  writeFileSync(resolve(output, verifier.trustedRoot.artifactFile), trustedRootBytes, { mode: 0o600 });
   if (typeof process.env.GITHUB_OUTPUT === "string") {
     writeFileSync(process.env.GITHUB_OUTPUT, [
       `artifact-name=${policy.artifactName}`,

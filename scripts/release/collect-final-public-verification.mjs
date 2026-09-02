@@ -120,8 +120,8 @@ const publicIdentity = async ({ contract, github, sourceSha, tagReference, relea
     || releaseResponse?.target_commitish !== authority.branchPolicy.name
     || releaseResponse?.draft !== false
     || releaseResponse?.prerelease !== false
-    || typeof releaseResponse?.immutable !== "boolean"
-    || releaseResponse.immutable !== releaseInput.immutable
+    || releaseResponse?.immutable !== true
+    || releaseInput.immutable !== true
   ) throw new Error("authenticated lightweight tag or public Release changed");
   const observedTag = {
     repository: authority.repository,
@@ -334,8 +334,6 @@ const artifactFilesForReadiness = ({ contract, definition, payload }) => {
     ? release.fakeRegistry.exactProtectedBodyCertification.orderedFiles
     : definition.role === "npm-oidc-certification"
     ? release.npmOidcCertification.evidence.orderedFiles
-    : definition.role === "apple-certification"
-    ? release.apple.artifact.orderedFiles
     : undefined;
   return extractFlatZip({
     zipBytes: payload,
@@ -360,6 +358,10 @@ const collectAllowedFinalPublicVerification = async ({
   assertFinalPublicVerificationAllowed(contract);
   const release = contract.releaseCertification;
   const policy = release.finalPublicVerification;
+  const provenanceTrustedRootBytes = readFileSync(resolve(
+    repositoryRoot,
+    release.provenanceVerification.trustedRoot.path,
+  ));
   await currentMain({ contract, github, sourceSha });
   const candidateZip = await coordinateArtifact({
     contract,
@@ -474,9 +476,6 @@ const collectAllowedFinalPublicVerification = async ({
         reference: readinessReference,
         manifestBytes: readinessFiles.get(release.readiness.manifest),
         bundleBytes: readinessFiles.get(release.readiness.evidenceBundle),
-        trustedRootBytes: readinessFiles.get(
-          release.readiness.externalEvidenceAuthentication.verifier.trustedRoot.artifactFile,
-        ),
         files: release.readiness.orderedFiles,
       },
       readinessArtifactExtractor: (arguments_) => artifactFilesForReadiness(arguments_),
@@ -488,6 +487,7 @@ const collectAllowedFinalPublicVerification = async ({
       releaseAssetBytes: secondAssets.bytes,
       provenance: secondNpmState.provenance,
       provenanceBundles: secondNpmState.provenanceBundles,
+      provenanceTrustedRootBytes,
       consumerSmoke,
       reservation: secondNpmState.reservation,
       reservationBytes: secondNpmState.reservationBytes,

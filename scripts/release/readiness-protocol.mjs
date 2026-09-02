@@ -8,16 +8,6 @@ import {
   derivePublicPackageNames,
   sha256Digest,
 } from "./protocol.mjs";
-import {
-  validateProducerIdentityPolicy,
-  validateTrustedRootBytes,
-  verifyExternalEvidenceEnvelope,
-} from "./sigstore-dsse-verifier.mjs";
-import { validateAppleAggregate } from "../apple-certification/aggregate.mjs";
-
-// The closed receipt and framing code below is intentionally inert while the
-// generated contract has no authenticated external producer identities. No
-// readiness artifact may be built or admitted from caller-asserted bytes.
 
 const isRecord = (value) =>
   value !== null
@@ -32,38 +22,6 @@ const exactKeys = (value, expected, label) => {
   }
   return value;
 };
-
-const expectedExternalSignerActivation = (state) => ({
-  statusSource: "releaseCertification.readiness.externalEvidenceAuthentication.status",
-  producerIdentitySource: "releaseCertification.readiness.externalEvidenceAuthentication.producerIdentities",
-  topology: "observe-sign-upload-three-job-hard-cut",
-  workflowPermissions: {},
-  observerJob: "observe",
-  signerJob: "sign",
-  uploadJob: "upload",
-  permissions: {
-    observer: state === "supported" ? { contents: "read" } : {},
-    signer: state === "supported" ? { "id-token": "write" } : {},
-    upload: {},
-  },
-  observerCredentialedThirdPartyActions: "forbidden",
-  signerThirdPartyActions: "forbidden",
-  handoff: {
-    observerToSigner: ["observed-at", "receipt-base64"],
-    signerToUpload: ["bundle-base64", "reference-base64"],
-    transport: "canonical-bounded-nonsecret-job-outputs-only",
-    artifactName: "fixed-role-and-validated-source-sha",
-    maximumReferenceBytes: 4096,
-    maximumBundleBytes: 32768,
-  },
-  hostedBootstrap: {
-    status: state === "supported" ? "qualified" : "unqualified-stop",
-    observer: "exact-node-24.14.1-and-audited-observer-source-closure-with-no-third-party-actions",
-    signer: "exact-node-24.14.1-and-audited-signer-source-closure-with-no-third-party-actions",
-  },
-  atomicity:
-    "both-hosted-bootstraps-signer-job-permission-and-all-contract-pinned-producer-identities-activate-together",
-});
 
 const payloadBytes = (value, label) => {
   if (!(value instanceof Uint8Array) || value.byteLength === 0) {
@@ -106,13 +64,6 @@ const canonicalTimestamp = (value, label) => {
   return milliseconds;
 };
 
-const canonicalIdentity = (value, label) => {
-  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/u.test(value)) {
-    throw new Error(`${label} must be one non-secret canonical identity`);
-  }
-  return value;
-};
-
 const decodeCanonicalJson = (value, label) => {
   const input = payloadBytes(value, label);
   let text;
@@ -133,11 +84,18 @@ const readinessPolicy = (contract) => {
   }
   const release = contract.releaseCertification;
   const policy = release?.readiness;
+  const expectedRoles = [
+    ["exact-main-ci", "githubRun"],
+    ["fake-registry", "githubArtifact"],
+    ["npm-oidc-certification", "githubArtifact"],
+  ];
   if (
     !isRecord(release)
     || !isRecord(policy)
-    || policy.externalEvidencePolicy !== "closed-receipts-require-contract-pinned-sigstore-dsse-authentication"
+    || policy.protocol !== "effect-build/release-readiness@3"
+    || policy.bundleProtocol !== "effect-build/release-readiness-evidence-bundle@3"
     || policy.bundleFraming !== "protocol-line-u32be-canonical-header-u64be-opaque-payload"
+    || policy.event !== "workflow_dispatch"
     || !Array.isArray(policy.orderedFiles)
     || !Array.isArray(policy.evidenceRoles)
     || !isRecord(policy.referenceShapes)
@@ -147,7 +105,6 @@ const readinessPolicy = (contract) => {
     JSON.stringify(policy.orderedFiles) !== JSON.stringify([
       policy.manifest,
       policy.evidenceBundle,
-      policy.externalEvidenceAuthentication?.verifier?.trustedRoot?.artifactFile,
     ])
     || policy.candidate.protocolSource !== "releaseCertification.candidate.protocol"
     || policy.candidate.referenceType !== "candidate"
@@ -155,72 +112,18 @@ const readinessPolicy = (contract) => {
     || policy.candidate.workflowSource !== "releaseCertification.candidate.workflow"
     || policy.candidate.artifactNameSource !== "releaseCertification.candidate.artifactName"
     || typeof policy.workflow !== "string"
-    || policy.evidenceRoles.length !== 7
+    || policy.evidenceRoles.length !== expectedRoles.length
+    || !isDeepStrictEqual(
+      policy.evidenceRoles.map(({ role, type }) => [role, type]),
+      expectedRoles,
+    )
     || new Set(policy.evidenceRoles.map(({ role }) => role)).size !== policy.evidenceRoles.length
   ) throw new Error("release-readiness policy has ambiguous files, candidate, or evidence roles");
   return { policy, release };
 };
 
 export const assertReadinessArtifactAllowed = (contract) => {
-  const { policy } = readinessPolicy(contract);
-  const authentication = exactKeys(
-    policy.externalEvidenceAuthentication,
-    [
-      "status",
-      "artifactDisposition",
-      "blocker",
-      "requiredEnvelope",
-      "requiredBindings",
-      "signer",
-      "verifier",
-      "producerIdentityFields",
-      "sourceBinding",
-      "producerIdentities",
-    ],
-    "release readiness external evidence authentication",
-  );
-  if (
-    authentication.status === "blocked"
-    && authentication.artifactDisposition === "forbidden-while-blocked"
-    && authentication.blocker
-      === "contract-pinned-external-producer-identities-and-isolated-observer-signer-bootstraps-not-established"
-    && authentication.requiredEnvelope === "sigstore-bundle-v0.3-dsse"
-    && authentication.signer?.status === "implemented-inert-until-supported-activation"
-    && isDeepStrictEqual(authentication.signer?.activation, expectedExternalSignerActivation("blocked"))
-    && authentication.verifier?.status === "implemented"
-    && authentication.verifier?.module === "scripts/release/sigstore-dsse-verifier.mjs"
-    && Array.isArray(authentication.producerIdentityFields)
-    && Array.isArray(authentication.producerIdentities)
-    && authentication.producerIdentities.length === 0
-  ) {
-    throw new Error(`release readiness artifact forbidden: ${authentication.blocker}`);
-  }
-  const externalRoles = policy.evidenceRoles
-    .filter(({ type }) => type === "externalObservation")
-    .map(({ role }) => role);
-  if (
-    authentication.status === "supported"
-    && authentication.artifactDisposition === "required-on-terminal-workflow-success"
-    && authentication.requiredEnvelope === "sigstore-bundle-v0.3-dsse"
-    && authentication.signer?.status === "implemented-inert-until-supported-activation"
-    && isDeepStrictEqual(authentication.signer?.activation, expectedExternalSignerActivation("supported"))
-    && authentication.verifier?.status === "implemented"
-    && Array.isArray(authentication.producerIdentities)
-    && authentication.producerIdentities.length === externalRoles.length
-    && externalRoles.every((role) =>
-      authentication.producerIdentities.filter((identity) => identity?.role === role).length === 1)
-  ) {
-    for (const role of externalRoles) {
-      validateProducerIdentityPolicy({
-        authentication,
-        identity: authentication.producerIdentities.find((entry) => entry.role === role),
-        role,
-        verifier: authentication.verifier,
-      });
-    }
-    return;
-  }
-  throw new Error("release readiness artifact forbidden: external producer authentication policy is not exact");
+  readinessPolicy(contract);
 };
 
 const semanticContractIdentity = (contract, contractBytes) => {
@@ -287,120 +190,6 @@ const validateOpaquePayload = (reference, payload, contract, label) => {
   const expectedDigest = canonicalDigest(evidencePayloadDigest(reference), contract, `${label}.digest`);
   if (sha256Digest(input) !== expectedDigest) throw new Error(`${label} opaque bytes changed`);
   return input;
-};
-
-const sameJson = (left, right) => canonicalJson(left) === canonicalJson(right);
-
-const validateExternalReceipt = ({ definition, reference, payload, contract, producerSourceSha }) => {
-  const policy = contract.releaseCertification.readiness;
-  const receiptPolicy = Object.values(policy.externalReceipts).find(({ role }) => role === definition.role);
-  if (!isRecord(receiptPolicy)) throw new Error(`readiness ${definition.role} has no external receipt policy`);
-  const receipt = exactKeys(
-    decodeCanonicalJson(payload, `readiness ${definition.role} receipt`),
-    receiptPolicy.fields,
-    `readiness ${definition.role} receipt`,
-  );
-
-  if (definition.role === "npm-authority") {
-    const summary = exactKeys(receipt.summary, receiptPolicy.summaryFields, "npm authority summary");
-    if (
-      receipt.schema !== definition.protocol
-      || receipt.sourceSha !== reference.sourceSha
-      || receipt.identity !== reference.identity
-      || receipt.identity !== receiptPolicy.identity
-      || receipt.observedAt !== reference.observedAt
-      || receipt.decision !== reference.terminal
-      || !Array.isArray(receipt.issues)
-      || receipt.issues.length !== 0
-      || !Array.isArray(receipt.checks)
-      || receipt.checks.length !== receiptPolicy.expectedCheckIds.length
-      || !Number.isSafeInteger(summary.match)
-      || summary.match !== receipt.checks.length
-      || summary.mismatch !== 0
-      || summary.unobserved !== 0
-      || receipt.checks.some((check, index) => {
-        const value = exactKeys(check, receiptPolicy.checkFields, `npm authority check ${index}`);
-        return value.id !== receiptPolicy.expectedCheckIds[index] || value.status !== "match";
-      })
-    ) throw new Error("npm authority receipt is not one exact supported audit");
-    return receipt;
-  }
-
-  if (
-    receipt.schema !== definition.protocol
-    || receipt.sourceSha !== reference.sourceSha
-    || receipt.identity !== reference.identity
-    || receipt.observedAt !== reference.observedAt
-    || receipt.terminal !== reference.terminal
-  ) throw new Error(`readiness ${definition.role} receipt does not correlate to its reference`);
-
-  const digestFields = Object.keys(receipt).filter((name) => name.endsWith("Digest"));
-  if (digestFields.some((name) => !/^sha256:[0-9a-f]{64}$/u.test(receipt[name]))) {
-    throw new Error(`readiness ${definition.role} receipt contains a noncanonical digest`);
-  }
-  if (definition.role === "operational-journal") {
-    if (
-      receipt.ownerRepository !== receiptPolicy.ownerRepository
-      || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(receipt.ownerVersion)
-      || receipt.ownerSourceSha !== producerSourceSha
-      || !sameJson(receipt.runtime, receiptPolicy.runtime)
-      || receipt.candidateSourceSha !== reference.sourceSha
-      || receipt.appleCodecId !== contract.releaseCertification.apple.notaryJournal.submissionCodec
-      || !/^\d{12}$/u.test(receipt.awsAccountId)
-      || !/^arn:aws:s3:::[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(receipt.bucketArn)
-      || !/^[a-z]{2}-[a-z]+-\d$/u.test(receipt.region)
-      || !new RegExp(`^arn:aws:iam::${receipt.awsAccountId}:role/[A-Za-z0-9+=,.@_/-]+$`, "u").test(receipt.roleArn)
-      || !/^operation-journal\/v1\/[A-Za-z0-9._/-]+\/$/u.test(receipt.prefix)
-      || !sameJson(receipt.claims, receiptPolicy.claims)
-      || receipt.backendAuthentication !== receiptPolicy.backendAuthentication
-    ) throw new Error("operational journal receipt is not the exact qualified one-backend claim");
-    return receipt;
-  }
-  if (definition.role === "github-release-governance") {
-    const decision = receiptPolicy.decisions.find((entry) => entry.decision === receipt.decision);
-    if (
-      receipt.identity !== receiptPolicy.identity
-      || receipt.repository !== contract.releaseCertification.githubAuthority.repository
-      || receipt.endpoint !== `repos/${receipt.repository}/immutable-releases`
-      || !isRecord(decision)
-      || receipt.enabled !== decision.enabled
-      || !sameJson(receipt.claims, decision.claims)
-      || receipt.backendAuthentication !== receiptPolicy.backendAuthentication
-    ) throw new Error("GitHub Release governance receipt is not one exact resolved decision");
-    return receipt;
-  }
-  throw new Error(`unsupported external readiness receipt: ${definition.role}`);
-};
-
-export const validateExternalReceiptForProducer = ({
-  contract,
-  role,
-  sourceSha,
-  producerSourceSha,
-  observedAt,
-  receiptBytes,
-}) => {
-  const { policy } = readinessPolicy(contract);
-  const definition = policy.evidenceRoles.find((entry) => entry.role === role);
-  if (!isRecord(definition) || definition.type !== "externalObservation") {
-    throw new Error(`release evidence producer role is not canonical: ${role}`);
-  }
-  fullSha(sourceSha, "release evidence producer source SHA");
-  fullSha(producerSourceSha, "release evidence producer workflow source SHA");
-  canonicalTimestamp(observedAt, "release evidence producer observedAt");
-  const receipt = decodeCanonicalJson(receiptBytes, `readiness ${role} receipt`);
-  return validateExternalReceipt({
-    contract,
-    definition,
-    payload: receiptBytes,
-    producerSourceSha,
-    reference: {
-      identity: receipt.identity,
-      observedAt,
-      sourceSha,
-      terminal: definition.terminal,
-    },
-  });
 };
 
 const validateCandidateManifest = ({ bytes, contract, contractIdentity, sourceSha }) => {
@@ -549,14 +338,18 @@ export const validateReadinessDirectObservation = ({ contract, sourceSha, observ
     || !Array.isArray(npm.packages)
     || npm.packages.length !== names.length
   ) throw new Error("readiness direct npm registry or package projection changed");
-  const expectedLatest = new Map(
-    registry.publicationAdmission.target.expectedLatestBeforePublication.map((entry) => [entry.name, entry.version]),
+  const expectedDistTags = new Map(
+    registry.publicationAdmission.target.expectedDistTagsBeforePublication.map((entry) => [entry.name, entry.tags]),
   );
   const placeholderLedger = new Map(registry.bootstrap.placeholderLedger.map((entry) => [entry.name, entry]));
+  const reservedOnly = new Set(registry.reservation.packages);
   for (let index = 0; index < names.length; index += 1) {
     const name = names[index];
     const entry = exactKeys(npm.packages[index], policy.npmPackageFields, `readiness npm ${name}`);
     const repository = exactKeys(entry.repository, policy.repositoryFields, `readiness npm ${name} repository`);
+    const ledger = placeholderLedger.get(name);
+    const expectedTags = expectedDistTags.get(name)
+      ?? (reservedOnly.has(name) ? ledger?.bootstrapTags : undefined);
     if (
       entry.name !== name
       || !Array.isArray(entry.versions)
@@ -570,15 +363,14 @@ export const validateReadinessDirectObservation = ({ contract, sourceSha, observ
       )
       || entry.versions.includes(npm.targetVersion)
       || !isRecord(entry.distTags)
-      || entry.distTags.latest !== (expectedLatest.get(name) ?? placeholderLedger.get(name)?.bootstrapTags.latest)
+      || expectedTags === undefined
+      || canonicalJson(entry.distTags) !== canonicalJson(expectedTags)
+      || Object.values(entry.distTags).some((version) => !entry.versions.includes(version))
       || canonicalJson(repository) !== canonicalJson(expectedPackageRepository(contract))
     ) throw new Error(`readiness direct npm public state changed for ${name}`);
-    const ledger = placeholderLedger.get(name);
     if (ledger === undefined) {
       if (
         entry.placeholder !== null
-        || JSON.stringify(Object.keys(entry.distTags)) !== JSON.stringify(["latest"])
-        || entry.distTags.latest !== expectedLatest.get(name)
       ) {
         throw new Error(`readiness direct npm non-placeholder state changed for ${name}`);
       }
@@ -587,9 +379,6 @@ export const validateReadinessDirectObservation = ({ contract, sourceSha, observ
       const expectedUrl = `${registry.registry}/${name}/-/${name}-${ledger.version}.tgz`;
       if (
         JSON.stringify(entry.versions) !== JSON.stringify([ledger.version])
-        || JSON.stringify(Object.keys(entry.distTags).sort()) !== JSON.stringify(["latest", "reserved"])
-        || entry.distTags.latest !== ledger.bootstrapTags.latest
-        || entry.distTags.reserved !== ledger.bootstrapTags.reserved
         || placeholder.version !== ledger.version
         || placeholder.bytes !== ledger.bytes
         || placeholder.sha256 !== `sha256:${ledger.sha256}`
@@ -723,11 +512,9 @@ const validateNpmOidcArtifact = ({
   const evidenceTime = canonicalTimestamp(evidenceObservedAt, "npm OIDC evidenceObservedAt");
   const artifactTime = canonicalTimestamp(artifactObservedAt, "npm OIDC artifact observedAt");
   if (
-    claims.observedAt !== new Date(jwt.iat * 1_000).toISOString()
-    || claimsObservedAt < jwt.nbf * 1_000
+    claimsObservedAt < jwt.nbf * 1_000
     || claimsObservedAt > jwt.exp * 1_000
     || npmObservedAt < claimsObservedAt
-    || npmObservedAt > jwt.exp * 1_000
     || npmObservedAt !== evidenceTime
     || evidenceTime > artifactTime
     || evidenceTime > aggregateObservedAt
@@ -768,11 +555,10 @@ const validateFakeRegistryArtifact = ({
     || receipt.observedAt !== observedAt
     || receipt.workflow !== policy.workflow
     || receipt.contractDigest !== contractDigest
-    || receipt.externalAuthenticationStatus !== "supported"
+    || receipt.readinessProtocol !== release.readiness.protocol
     || policy.implementationStatus !== "implemented"
     || policy.status !== "supported"
-    || release.readiness.externalEvidenceAuthentication.status !== "supported"
-    || policy.status !== release.readiness.externalEvidenceAuthentication.status
+    || policy.artifactDisposition !== "required-on-terminal-workflow-success"
     || canonicalJson(exactCoordinate(contract, receipt.candidate, candidateCoordinate, "fake-registry candidate"))
       !== canonicalJson(candidateCoordinate)
     || receipt.candidateManifestDigest !== candidateManifestDigest
@@ -852,22 +638,6 @@ export const validateGithubArtifactEvidence = ({
       files,
     });
   }
-  if (definition.role === "apple-certification") {
-    const policy = contract.releaseCertification.apple;
-    const result = validateAppleAggregate({
-      contract,
-      expectedSourceSha: sourceSha,
-      expectedCandidateCoordinate: candidateCoordinate,
-      expectedWorkflowCoordinate: workflowCoordinate,
-      files: [...files.keys()],
-      indexBytes: files.get(policy.artifact.orderedFiles[0]),
-      bundleBytes: files.get(policy.artifact.orderedFiles[1]),
-    });
-    if (result.verdict !== policy.encoding.terminalVerdict) {
-      throw new Error("Apple certification artifact has no exact terminal verdict");
-    }
-    return result;
-  }
   throw new Error(`unsupported GitHub artifact evidence role: ${definition.role}`);
 };
 
@@ -897,7 +667,6 @@ const validateEvidenceReference = async ({
   validateTemporalReference(value, aggregateObservedAt, validationTime, definition, `readiness ${definition.role}`);
   const input = validateOpaquePayload(value, payload, contract, `readiness ${definition.role}`);
   let authenticatedReceipt;
-  let producerAuthentication;
   if (definition.type === "githubArtifact") {
     const evidenceObservedAt = canonicalTimestamp(
       value.evidenceObservedAt,
@@ -928,34 +697,10 @@ const validateEvidenceReference = async ({
   } else if (definition.type === "githubRun") {
     validateRunIdentity(value, sourceSha, definition.workflow, `readiness ${definition.role}`);
     canonicalDigest(value.digest, contract, `readiness ${definition.role}.digest`);
-  } else if (definition.type === "externalObservation") {
-    fullSha(value.sourceSha, `readiness ${definition.role}.sourceSha`);
-    if (value.sourceSha !== sourceSha) throw new Error(`readiness ${definition.role} source SHA changed`);
-    canonicalIdentity(value.identity, `readiness ${definition.role}.identity`);
-    canonicalDigest(value.digest, contract, `readiness ${definition.role}.digest`);
-    const authenticated = await verifyExternalEvidenceEnvelope({
-      contract,
-      definition,
-      reference: value,
-      bundleBytes: input,
-      validationTime: new Date(validationTime).toISOString(),
-    });
-    authenticatedReceipt = validateExternalReceipt({
-      definition,
-      reference: value,
-      payload: authenticated.receiptBytes,
-      contract,
-      producerSourceSha: authenticated.payload.producerSourceSha,
-    });
-    producerAuthentication = {
-      identity: authenticated.identity,
-      producerSourceSha: authenticated.payload.producerSourceSha,
-      producerWorkflow: authenticated.payload.producerWorkflow,
-    };
   } else {
     throw new Error(`unsupported readiness reference type: ${definition.type}`);
   }
-  return { authenticatedReceipt, payload: input, producerAuthentication, reference: value };
+  return { authenticatedReceipt, payload: input, reference: value };
 };
 
 const candidateDescriptor = (candidate) => ({
@@ -1047,8 +792,6 @@ const validateRootManifest = ({ manifest, contract, contractIdentity, expectedSo
       "schema",
       "sourceSha",
       "observedAt",
-      "externalEvidencePolicy",
-      "externalEvidence",
       "contract",
       "toolchain",
       "directObservation",
@@ -1061,12 +804,6 @@ const validateRootManifest = ({ manifest, contract, contractIdentity, expectedSo
   if (
     value.schema !== policy.protocol
     || fullSha(value.sourceSha, "readiness sourceSha") !== expectedSourceSha
-    || value.externalEvidencePolicy !== policy.externalEvidencePolicy
-    || canonicalJson(exactKeys(
-      value.externalEvidence,
-      ["validation", "producerAuthentication", "authenticationRequiredRoles"],
-      "readiness external evidence manifest",
-    )) !== canonicalJson(policy.externalEvidenceManifest)
     || canonicalJson(exactKeys(value.contract, ["schema", "digest"], "readiness contract"))
       !== canonicalJson(contractIdentity)
     || canonicalJson(exactKeys(value.toolchain, ["bun", "node", "npm"], "readiness toolchain"))
@@ -1108,19 +845,14 @@ const validateAllowedReadinessAggregate = async ({
   files,
   manifestBytes,
   bundleBytes,
-  trustedRootBytes,
   artifactFiles,
   artifactExtractor,
 }) => {
   const { policy } = readinessPolicy(contract);
   fullSha(expectedSourceSha, "expected readiness source SHA");
   if (JSON.stringify(files) !== JSON.stringify(policy.orderedFiles)) {
-    throw new Error("readiness aggregate must contain exactly its three ordered files");
+    throw new Error("readiness aggregate must contain exactly its two ordered files");
   }
-  validateTrustedRootBytes({
-    trustedRootBytes,
-    verifier: policy.externalEvidenceAuthentication.verifier,
-  });
   const contractIdentity = semanticContractIdentity(contract, contractBytes);
   const manifest = decodeCanonicalJson(manifestBytes, "release-readiness manifest bytes");
   const root = validateRootManifest({
@@ -1151,8 +883,7 @@ const validateAllowedReadinessAggregate = async ({
   if (canonicalJson(root.value.toolchain) !== canonicalJson(candidate.candidate.toolchain)) {
     throw new Error("readiness and candidate toolchain bindings differ");
   }
-  const authenticatedExternalReceipts = new Map();
-  const authenticatedExternalProducers = new Map();
+  const authenticatedEvidence = new Map();
   for (let index = 0; index < policy.evidenceRoles.length; index += 1) {
     const definition = policy.evidenceRoles[index];
     const payload = payloads.get(definition.role);
@@ -1174,13 +905,10 @@ const validateAllowedReadinessAggregate = async ({
       artifactFiles: filesForRole,
     });
     if (result.authenticatedReceipt !== undefined) {
-      authenticatedExternalReceipts.set(definition.role, result.authenticatedReceipt);
-    }
-    if (result.producerAuthentication !== undefined) {
-      authenticatedExternalProducers.set(definition.role, result.producerAuthentication);
+      authenticatedEvidence.set(definition.role, result.authenticatedReceipt);
     }
   }
-  return { authenticatedExternalProducers, authenticatedExternalReceipts, manifest };
+  return { authenticatedEvidence, manifest };
 };
 
 export const validateReadinessAggregate = (arguments_) => {
@@ -1203,7 +931,6 @@ const buildAllowedReadinessAggregate = async ({
   candidateBytes,
   evidence,
   evidenceBytes,
-  trustedRootBytes,
   artifactFiles,
 }) => {
   const { policy } = readinessPolicy(contract);
@@ -1211,7 +938,7 @@ const buildAllowedReadinessAggregate = async ({
   const aggregateObservedAt = canonicalTimestamp(observedAt, "readiness observedAt");
   if (!(evidenceBytes instanceof Map)) throw new Error("readiness evidence bytes must be a role-keyed Map");
   if (!Array.isArray(evidence) || evidence.length !== policy.evidenceRoles.length) {
-    throw new Error("readiness requires exactly seven ordered evidence references");
+    throw new Error("readiness requires exactly three ordered evidence references");
   }
   const contractIdentity = semanticContractIdentity(contract, contractBytes);
   const candidateResult = validateCandidateReference({
@@ -1259,8 +986,6 @@ const buildAllowedReadinessAggregate = async ({
     schema: policy.protocol,
     sourceSha,
     observedAt,
-    externalEvidencePolicy: policy.externalEvidencePolicy,
-    externalEvidence: policy.externalEvidenceManifest,
     contract: contractIdentity,
     toolchain: candidateResult.candidate.toolchain,
     directObservation: validateReadinessDirectObservation({
@@ -1287,7 +1012,6 @@ const buildAllowedReadinessAggregate = async ({
     files: policy.orderedFiles,
     manifestBytes,
     bundleBytes,
-    trustedRootBytes,
     artifactFiles,
   });
   return { bundleBytes, manifest, manifestBytes };

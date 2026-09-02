@@ -20,10 +20,9 @@ const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const contractBytes = await readFile(resolve(root, "tooling/effect-build-contract.json"));
 const contract = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(contractBytes));
 const policy = contract.releaseCertification.readiness;
-const blocker = policy.externalEvidenceAuthentication.blocker;
 
 describe("release readiness workflow", () => {
-  it("keeps the current STOP before an activation-complete read-only aggregate finalizer", async () => {
+  it("runs one directly active read-only three-proof aggregate finalizer", async () => {
     const source = await readFile(resolve(root, ".github/workflows/release-readiness.yml"), "utf8");
     const collectorSource = await readFile(resolve(root, "scripts/release/collect-release-readiness.mjs"), "utf8");
     const workflow = parse(source) as any;
@@ -34,17 +33,10 @@ describe("release readiness workflow", () => {
     ];
     expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
     expect(Object.keys(workflow.on.workflow_dispatch.inputs)).toEqual(expectedInputs);
-    for (
-      const { input } of policy.dispatch.evidenceInputs.filter(
-        ({ role }: { readonly role: string }) => policy.externalEvidenceIngress.roles.includes(role),
-      )
-    ) {
-      expect(workflow.on.workflow_dispatch.inputs[input].description).toContain("ingress artifact reference");
-    }
     expect(workflow.permissions).toEqual({ actions: "read", contents: "read", deployments: "read" });
     expect(Object.keys(workflow.jobs)).toEqual(["aggregate"]);
     expect(workflow.jobs.aggregate.environment).toBeUndefined();
-    expect(source).toContain("Refuse readiness while external producer authentication is not established");
+    expect(source).toContain("Collect the exact three-proof readiness aggregate");
     expect(source).toContain("scripts/release/collect-release-readiness.mjs");
     const steps = workflow.jobs.aggregate.steps;
     const collect = steps.find(({ id }: { readonly id?: string }) => id === "collect");
@@ -54,25 +46,18 @@ describe("release readiness workflow", () => {
     expect(source).toContain("bun-version: 1.3.14");
     expect(source).toContain("node scripts/release/install-frozen-release-dependencies.mjs");
     expect(Object.keys(collect.env).sort()).toEqual([
-      "APPLE_CERTIFICATION_REFERENCE_JSON",
       "CANDIDATE_REFERENCE_JSON",
       "EXACT_MAIN_CI_REFERENCE_JSON",
       "FAKE_REGISTRY_REFERENCE_JSON",
-      "GITHUB_RELEASE_GOVERNANCE_EVIDENCE_JSON",
       "GITHUB_TOKEN",
-      "NPM_AUTHORITY_EVIDENCE_JSON",
       "NPM_OIDC_CERTIFICATION_REFERENCE_JSON",
-      "OPERATIONAL_JOURNAL_EVIDENCE_JSON",
       "OUTPUT_DIRECTORY",
       "SOURCE_SHA",
     ]);
-    expect(collect.env.NPM_AUTHORITY_EVIDENCE_JSON).toBe("${{ inputs.npm_authority_evidence_json }}");
-    expect(collect.env.OPERATIONAL_JOURNAL_EVIDENCE_JSON).toBe(
-      "${{ inputs.operational_journal_evidence_json }}",
-    );
-    expect(collect.env.GITHUB_RELEASE_GOVERNANCE_EVIDENCE_JSON).toBe(
-      "${{ inputs.github_release_governance_evidence_json }}",
-    );
+    expect(source).not.toContain("npm_authority_evidence_json");
+    expect(source).not.toContain("github_release_governance_evidence_json");
+    expect(source).not.toContain("apple_certification_reference_json");
+    expect(source).not.toContain("operational_journal_evidence_json");
     expect(upload.uses).toBe("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02");
     expect(upload.with).toEqual({
       name: "${{ steps.collect.outputs.artifact-name }}",
@@ -105,7 +90,7 @@ describe("release readiness workflow", () => {
     expect(collectorSource).toContain("return await finalizeAfterTerminalObservation");
   });
 
-  it("rejects dispatch parsing and collection before any untrusted reference or GitHub endpoint is used", () => {
+  it("rejects incomplete dispatch and collection before any GitHub endpoint is used", async () => {
     let reads = 0;
     const github = {
       readJson: () => {
@@ -117,8 +102,8 @@ describe("release readiness workflow", () => {
         throw new Error("must not be called");
       },
     };
-    expect(() => parseDispatchEnvironment(contract, {})).toThrow(blocker);
-    expect(() => collectReadinessAggregate({ contract, github })).toThrow(blocker);
+    expect(() => parseDispatchEnvironment(contract, {})).toThrow(/source SHA is not exact/u);
+    await expect(collectReadinessAggregate({ contract, github })).rejects.toThrow();
     expect(reads).toBe(0);
   });
 
@@ -163,10 +148,10 @@ describe("release readiness workflow", () => {
       ledger.integrity = sha512Integrity(bytes);
       placeholderBytes.set(ledger.name, bytes);
     }
-    const expectedLatest = new Map(
-      registry.publicationAdmission.target.expectedLatestBeforePublication.map((
-        { name, version }: any,
-      ) => [name, version]),
+    const expectedDistTags = new Map(
+      registry.publicationAdmission.target.expectedDistTagsBeforePublication.map((
+        { name, tags }: any,
+      ) => [name, tags]),
     );
     const ledgers = new Map(registry.bootstrap.placeholderLedger.map((entry: any) => [entry.name, entry]));
     const names = [
@@ -179,23 +164,20 @@ describe("release readiness workflow", () => {
     };
     const packuments = new Map(names.map((name) => {
       const ledger: any = ledgers.get(name);
-      const version = expectedLatest.get(name) ?? ledger.version;
+      const distTags: any = structuredClone(expectedDistTags.get(name) ?? ledger.bootstrapTags);
+      const versions = [...new Set(Object.values(distTags) as Array<string>)].sort();
       return [`https://registry.npmjs.org/${name}`, {
         repository,
-        versions: {
-          [version]: {
-            repository,
-            ...(ledger === undefined ? {} : {
-              dist: {
-                integrity: ledger.integrity,
-                tarball: `https://registry.npmjs.org/${name}/-/${name}-${version}.tgz`,
-              },
-            }),
-          },
-        },
-        "dist-tags": ledger === undefined
-          ? { latest: version }
-          : { latest: version, reserved: version },
+        versions: Object.fromEntries(versions.map((version) => [version, {
+          repository,
+          ...(ledger?.version !== version ? {} : {
+            dist: {
+              integrity: ledger.integrity,
+              tarball: `https://registry.npmjs.org/${name}/-/${name}-${version}.tgz`,
+            },
+          }),
+        }])),
+        "dist-tags": distTags,
       }];
     }));
     let extraProtectionRule = false;
@@ -257,6 +239,10 @@ describe("release readiness workflow", () => {
     expect(observation.npm.packages.at(-1).name).toBe("effect-build-rolldown");
     expect(observation.npm.packages[1].repository).toEqual(repository);
     expect(observation.npm.packages[1].repository).not.toHaveProperty("directory");
+    expect(observation.npm.packages.find(({ name }: any) => name === "effect-build-bun")?.distTags).toEqual({
+      latest: "0.3.0",
+      reserved: "0.0.0-reserved.0",
+    });
     expect(validateReadinessDirectObservation({
       contract: changed,
       sourceSha: "a".repeat(40),
@@ -273,6 +259,25 @@ describe("release readiness workflow", () => {
         observation: hostile,
       })
     ).toThrow(/public state/u);
+    for (
+      const mutate of [
+        (tags: Record<string, string>) => delete tags.reserved,
+        (tags: Record<string, string>) => tags.next = "0.3.0",
+        (tags: Record<string, string>) => tags.reserved = "0.0.0-reserved.1",
+      ]
+    ) {
+      const changedTags = structuredClone(observation);
+      const tags = changedTags.npm.packages.find(({ name }: any) => name === "effect-build-bun").distTags;
+      mutate(tags);
+      expect(() =>
+        validateReadinessDirectObservation({
+          contract: changed,
+          sourceSha: "a".repeat(40),
+          observedAt,
+          observation: changedTags,
+        })
+      ).toThrow(/public state/u);
+    }
     extraProtectionRule = true;
     await expect(collectDirectObservation({
       contract: changed,

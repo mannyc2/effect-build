@@ -12,7 +12,7 @@ import * as finalCollector from "../../scripts/release/collect-final-public-veri
 import * as verifier from "../../scripts/release/final-public-verification.mjs";
 
 const { assertFinalPublicVerificationAllowed, parseFinalPublicDispatch } = verifier;
-const { collectFinalNpmState, collectFinalPublicVerification } = finalCollector;
+const { collectFinalNpmState } = finalCollector;
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const contractBytes = await readFile(resolve(root, "tooling/effect-build-contract.json"));
 const contract = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(contractBytes));
@@ -20,8 +20,15 @@ const policy = contract.releaseCertification.finalPublicVerification;
 
 describe("final public release verification", () => {
   it("derives exact public counts and the twelve-asset boundary without copying package or module sets", () => {
-    expect(policy.status).toBe("blocked");
-    expect(policy.upstreamGateSource).toBe("releaseCertification.readiness.externalEvidenceAuthentication");
+    expect(policy.protocol).toBe("effect-build/final-public-verification@2");
+    expect(policy.receipt.protocol).toBe("effect-build/final-public-release-receipt@2");
+    expect(policy.implementation.consumerSmoke.protocol).toBe("effect-build/final-public-consumer-smoke@1");
+    expect(policy.status).toBe("ready");
+    expect(policy.upstreamGateSource).toBe("releaseCertification.readiness");
+    expect(policy.artifactDisposition).toBe("allowed-on-terminal-readiness-success");
+    expect(policy.releasePolicy.immutabilityDecisionSource).toBe(
+      "live-operator-admin-preflight-before-draft-and-public-release",
+    );
     expect(policy.packageCount).toBe(11);
     expect(policy.moduleCount).toBe(42);
     expect(policy.releaseAssetCount).toBe(12);
@@ -45,7 +52,7 @@ describe("final public release verification", () => {
     ]);
   });
 
-  it("keeps the activation-complete hosted path read-only and unreachable before authentication", async () => {
+  it("keeps the directly active hosted path read-only", async () => {
     const source = await readFile(resolve(root, ".github/workflows/release-verification.yml"), "utf8");
     const collectorSource = await readFile(
       resolve(root, "scripts/release/collect-final-public-verification.mjs"),
@@ -114,13 +121,13 @@ describe("final public release verification", () => {
     expect(collectorSource).toContain("return await finalizeAfterTerminalObservation");
   });
 
-  it("rejects caller references before parsing and the checked-in CLI fails closed", () => {
-    expect(() => assertFinalPublicVerificationAllowed(contract)).toThrow(policy.blocker);
+  it("admits only the canonical policy and rejects malformed dispatch before network access", () => {
+    expect(() => assertFinalPublicVerificationAllowed(contract)).not.toThrow();
     expect(() =>
       parseFinalPublicDispatch(contract, {
         READINESS_REFERENCE_JSON: JSON.stringify({ terminal: "success" }),
       })
-    ).toThrow(policy.blocker);
+    ).toThrow(/source SHA/u);
     const result = spawnSync(process.execPath, ["scripts/release/final-public-verification.mjs"], {
       cwd: root,
       encoding: "utf8",
@@ -130,13 +137,6 @@ describe("final public release verification", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("final public verification failed closed\n");
-    const boundary = new Proxy({}, {
-      get: () => () => {
-        throw new Error("boundary was reached");
-      },
-    });
-    expect(() => collectFinalPublicVerification({ contract, github: boundary, npm: boundary, consumer: boundary }))
-      .toThrow(policy.blocker);
   });
 
   it("passes the exact candidate byte ledger through both anonymous npm observations", async () => {
@@ -229,14 +229,9 @@ describe("final public release verification", () => {
     expect(collectorSource).not.toContain("collectFinalNpmState({ contract, npm })");
   });
 
-  it("cannot be enabled by a self-consistent caller mutation without an authenticated implementation", () => {
+  it("rejects caller mutations of the directly active policy", () => {
     const changed = structuredClone(contract);
-    changed.releaseCertification.finalPublicVerification.status = "ready";
     changed.releaseCertification.finalPublicVerification.artifactDisposition = "allowed";
-    changed.releaseCertification.readiness.externalEvidenceAuthentication.status = "supported";
-    changed.releaseCertification.readiness.externalEvidenceAuthentication.artifactDisposition =
-      "required-on-terminal-workflow-success";
-    changed.releaseCertification.readiness.externalEvidenceAuthentication.producerIdentities = ["peer"];
-    expect(() => assertFinalPublicVerificationAllowed(changed)).toThrow(/authenticated policy is not exact/u);
+    expect(() => assertFinalPublicVerificationAllowed(changed)).toThrow(/no exact final-public/u);
   });
 });

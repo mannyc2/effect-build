@@ -6,12 +6,10 @@ import { fileURLToPath } from "node:url";
 import { appleEvidenceFileName } from "../apple-certification/canonical.mjs";
 import {
   buildContract,
-  buildSupportedReleaseFixtureContract,
   readInputs,
   validateContract,
   validateImplementationCoordinates,
   validatePublicApiProjection,
-  validateSupportedReleaseFixtureContract,
 } from "./model.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -214,7 +212,8 @@ test("keeps npm namespace bootstrap separate from architectural release admissio
     repository: "mannyc2/effect-build",
     workflow: "release.yml",
     environment: "npm",
-    permission: "publish",
+    expectedPermissions: ["createPackage"],
+    semantics: "expected-npm-11.19.1-trust-record-identity-for-publication-not-live-observation",
   });
   assert.equal(npm.purpose, "repository-package-distribution-only");
   assert.equal(npm.productReleaseOwnership, "unchanged-ts-release-boundary");
@@ -259,6 +258,37 @@ test("keeps npm namespace bootstrap separate from architectural release admissio
   assert.deepEqual(npm.publicationAdmission.target, {
     version: "0.6.0",
     presenceAtHandoff: "absent-for-all-admitted-packages",
+    expectedDistTagsBeforePublication: [
+      { name: "effect-build", tags: { latest: "0.3.0" } },
+      {
+        name: "effect-build-apple",
+        tags: { latest: "0.0.0-reserved.0", reserved: "0.0.0-reserved.0" },
+      },
+      {
+        name: "effect-build-archives",
+        tags: { latest: "0.0.0-reserved.0", reserved: "0.0.0-reserved.0" },
+      },
+      { name: "effect-build-bun", tags: { latest: "0.3.0", reserved: "0.0.0-reserved.0" } },
+      { name: "effect-build-deno", tags: { latest: "0.3.0", reserved: "0.0.0-reserved.0" } },
+      { name: "effect-build-esbuild", tags: { latest: "0.3.0", reserved: "0.0.0-reserved.0" } },
+      {
+        name: "effect-build-nfpm",
+        tags: { latest: "0.0.0-reserved.0", reserved: "0.0.0-reserved.0" },
+      },
+      { name: "effect-build-node-sea", tags: { latest: "0.3.0", reserved: "0.0.0-reserved.0" } },
+      {
+        name: "effect-build-python",
+        tags: { latest: "0.0.0-reserved.0", reserved: "0.0.0-reserved.0" },
+      },
+      {
+        name: "effect-build-sbom",
+        tags: { latest: "0.0.0-reserved.0", reserved: "0.0.0-reserved.0" },
+      },
+      {
+        name: "effect-build-windows",
+        tags: { latest: "0.0.0-reserved.0", reserved: "0.0.0-reserved.0" },
+      },
+    ],
     expectedLatestBeforePublication: [
       { name: "effect-build", version: "0.3.0" },
       { name: "effect-build-apple", version: "0.0.0-reserved.0" },
@@ -334,38 +364,44 @@ test("keeps npm namespace bootstrap separate from architectural release admissio
     () => validateContract(changedPriorLatest, inputs),
     /npm release target or prior-latest ledger changed/u,
   );
+
+  const changedPrepublicationTags = structuredClone(contract);
+  changedPrepublicationTags.npmRegistryBoundary.publicationAdmission.target
+    .expectedDistTagsBeforePublication[3].tags.reserved = "0.0.0-reserved.1";
+  assert.throws(
+    () => validateContract(changedPrepublicationTags, inputs),
+    /npm release target or prior-latest ledger changed/u,
+  );
 });
 
 test("freezes one exact release-certification policy without copying public package or module sets", () => {
   const release = contract.releaseCertification;
-  const publicPackageNames = Object.keys(contract.publicApiProjection.packages).sort();
-  const authorityPackageNames = [
-    ...publicPackageNames,
-    ...contract.npmRegistryBoundary.reservation.packages,
-  ].sort();
-  const expectedAuthorityCheckIds = [
-    "github.repository.secrets",
-    "github.repository.variables",
-    "github.environment.secrets",
-    "github.environment.variables",
-    "github.environment.policy",
-    "github.environment.branchPolicies",
-    "github.oidc",
-    "npm.client",
-    "npm.authentication",
-    "npm.legacyTokenAuthority",
-    ...authorityPackageNames.map((name) => `npm.publishingAccess.${name}`),
-    "npm.trust.projection",
-    ...publicPackageNames.map((name) => `npm.trust.${name}`),
-    ...publicPackageNames.map((name) => `npm.allowedAction.${name}`),
-    "packages.projection",
-    ...publicPackageNames.map((name) => `packages.${name}.repository`),
-  ];
   assert.deepEqual(release.modes, [
     "prepare-exact-sha",
     "certify-exact-sha",
     "publish-certified-bytes",
   ]);
+  assert.deepEqual(release.scope, {
+    target: "v0.6.0",
+    npmPackages: {
+      status: "included",
+      packageSource: "publicApiProjection.packages",
+      appleApiLibrary: "included-as-effect-build-apple",
+      packageCountSource: "releaseCertification.publicAdmission.packageCount",
+    },
+    credentialBackedAppleArtifacts: {
+      status: "deferred",
+      certification: "not-run-not-passed",
+      releaseGate: "excluded-from-v0.6.0",
+      products: ["signed-app", "dmg", "pkg"],
+      target: "later-separately-qualified-release",
+    },
+    awsNotaryJournalEvidence: {
+      status: "deferred",
+      releaseGate: "excluded-from-v0.6.0",
+      applicability: "future-credential-backed-apple-artifact-certification-only",
+    },
+  });
   assert.deepEqual(release.publicAdmission, {
     packageSource: "publicApiProjection.packages",
     packageCount: 11,
@@ -441,592 +477,117 @@ test("freezes one exact release-certification policy without copying public pack
     },
     workflow: "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main",
   });
-  assert.deepEqual(release.readiness.externalEvidenceAuthentication.signer.activation, {
-    statusSource: "releaseCertification.readiness.externalEvidenceAuthentication.status",
-    producerIdentitySource: "releaseCertification.readiness.externalEvidenceAuthentication.producerIdentities",
-    topology: "observe-sign-upload-three-job-hard-cut",
-    workflowPermissions: {},
-    observerJob: "observe",
-    signerJob: "sign",
-    uploadJob: "upload",
-    permissions: { observer: {}, signer: {}, upload: {} },
-    observerCredentialedThirdPartyActions: "forbidden",
-    signerThirdPartyActions: "forbidden",
-    handoff: {
-      observerToSigner: ["observed-at", "receipt-base64"],
-      signerToUpload: ["bundle-base64", "reference-base64"],
-      transport: "canonical-bounded-nonsecret-job-outputs-only",
-      artifactName: "fixed-role-and-validated-source-sha",
-      maximumReferenceBytes: 4096,
-      maximumBundleBytes: 32768,
-    },
-    hostedBootstrap: {
-      status: "unqualified-stop",
-      observer: "exact-node-24.14.1-and-audited-observer-source-closure-with-no-third-party-actions",
-      signer: "exact-node-24.14.1-and-audited-signer-source-closure-with-no-third-party-actions",
-    },
-    atomicity:
-      "both-hosted-bootstraps-signer-job-permission-and-all-contract-pinned-producer-identities-activate-together",
-  });
-  assert.deepEqual(release.readiness, {
-    protocol: "effect-build/release-readiness@1",
-    bundleProtocol: "effect-build/release-readiness-evidence-bundle@1",
-    bundleFraming: "protocol-line-u32be-canonical-header-u64be-opaque-payload",
-    zipExtraction: {
-      protocol: "effect-build/strict-flat-zip@1",
-      allowedCompressionMethods: [0, 8],
-      allowedGeneralPurposeBitMask: 2056,
-      allowedExtraFieldIds: [],
-      creatorVersionMadeBy: 813,
-      requiredVersionNeeded: 20,
-      protectedProjection: {
-        sourcePath: "scripts/release/zip-protocol.mjs",
-        sourceBytes: 15670,
-        sourceDigest: "sha256:5a1428e693256fa78abf7358bbf5477b682e4205489cae2c78ef61fd1c2b48a1",
-        compressedBytes: 3810,
-        encoding: "deflate-raw-base64-data-url-exact-source",
-      },
-      maximumArchiveBytes: 67108864,
-      maximumEntries: 64,
-      maximumNameBytes: 255,
-      maximumExtraBytes: 4096,
-      maximumMemberCompressedBytes: 16777216,
-      maximumMemberUncompressedBytes: 16777216,
-      maximumTotalUncompressedBytes: 67108864,
-      maximumCompressionRatio: 200,
-      dataDescriptor: "required-signed-16-byte-exact-central-correlation-when-bit-3-set",
-      topology: "single-disk-zero-comment-no-zip64-no-prefix-trailer-or-record-gaps",
-      members: "unique-flat-utf8-regular-files-only",
-      encryption: "forbidden",
-      crc32: "required-before-admission",
-    },
-    externalEvidencePolicy: "closed-receipts-require-contract-pinned-sigstore-dsse-authentication",
-    externalEvidenceManifest: {
-      validation: "closed-shape-source-time-terminal-identity-digest-and-byte-correlation",
-      producerAuthentication: "required-before-readiness-artifact-production",
-      authenticationRequiredRoles: ["npm-authority", "operational-journal", "github-release-governance"],
-    },
-    externalEvidenceAuthentication: {
-      status: "blocked",
-      artifactDisposition: "forbidden-while-blocked",
-      blocker:
-        "contract-pinned-external-producer-identities-and-isolated-observer-signer-bootstraps-not-established",
-      requiredEnvelope: "sigstore-bundle-v0.3-dsse",
-      requiredBindings: [
-        "producer-workflow-identity",
-        "producer-source-sha",
-        "release-source-sha",
-        "receipt-protocol",
-        "receipt-digest",
-        "observed-at",
-        "expiration",
-      ],
-      signer: release.readiness.externalEvidenceAuthentication.signer,
-      verifier: {
-        status: "implemented",
-        module: "scripts/release/sigstore-dsse-verifier.mjs",
-        client: { package: "@sigstore/verify", version: "3.1.1" },
-        bundleClient: { package: "@sigstore/bundle", version: "4.0.0" },
-        protobufClient: { package: "@sigstore/protobuf-specs", version: "0.5.2" },
-        runtime: { executable: "node", version: "24.14.1" },
-        networkGuard: {
-          path: "scripts/release/deny-network.cjs",
-          bytes: 4379,
-          digest: "sha256:acb4f347c8abb4dbc98d138b487b7cf316a3ccbbbf3a2da2108e68e9b343de77",
-          strategy: "preload-standard-node-network-api-denial-plus-audited-direct-verifier-closure",
-        },
-        trustedRoot: {
-          path: "tooling/sigstore/trusted_root.json",
-          artifactFile: "sigstore-trusted-root.json",
-          mediaType: "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
-          bytes: 6787,
-          digest: "sha256:6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66",
-          tuf: {
-            mirror: "https://tuf-repo-cdn.sigstore.dev",
-            target: "trusted_root.json",
-            targetsMetadataVersion: 14,
-            targetLength: 6787,
-            targetSha256: "sha256:6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66",
-            acquisition: {
-              retrievedAt: "2026-08-30T15:07:03.000Z",
-              cache: "fresh-empty-temporary-directory",
-              home: "isolated-empty-directory",
-              network: "exact-official-mirror-only",
-              evidenceEncoding: "base64-of-exact-retrieved-bytes",
-              verificationModule: "scripts/release/verify-sigstore-tuf-provenance.mjs",
-              clients: [
-                {
-                  package: "@sigstore/tuf",
-                  version: "4.0.2",
-                  integrity: "sha512-TCAzTy0xzdP79EnxSjq9KQ3eaR7+FmudLC6eRKknVKZbV7ZNlGLClAAQb/HMNJ5n2OBNk2GT1tEmU0xuPr+SLQ==",
-                },
-                {
-                  package: "tuf-js",
-                  version: "4.1.0",
-                  integrity: "sha512-50QV99kCKH5P/Vs4E2Gzp7BopNV+KzTXqWeaxrfu5IQJBOULRsTIS9seSsOVT8ZnGXzCyx55nYWAi4qJzpZKEQ==",
-                },
-                {
-                  package: "@tufjs/models",
-                  version: "4.1.0",
-                  integrity: "sha512-Y8cK9aggNRsqJVaKUlEYs4s7CvQ1b1ta2DVPyAimb0I2qhzjNk+A+mxvll/klL0RlfuIUei8BF7YWiua4kQqww==",
-                },
-              ],
-              seedRoot: {
-                path: "tooling/sigstore/tuf/seed-root-v14.json.base64",
-                version: 14,
-                expiresAt: "2026-06-22T13:27:01.000Z",
-                bytes: 5490,
-                digest: "sha256:c8c41ec13f06ccabf5b48541ee2550098b4c7b5349e1d180390c29a7d5c2642c",
-                clientSeedsBytes: 19326,
-                clientSeedsDigest: "sha256:1300a33af16967e998983b364ab9988cd5c20e94c44e75d642dbeda1dbc255d9",
-              },
-              metadata: {
-                root: {
-                  path: "tooling/sigstore/tuf/root-v15.json.base64",
-                  version: 15,
-                  expiresAt: "2026-11-20T13:58:18.000Z",
-                  bytes: 5630,
-                  digest: "sha256:73747011d0857ada15479a16c4cae0f3ed03aac698b523b97e1de314ac9d9ca8",
-                },
-                timestamp: {
-                  path: "tooling/sigstore/tuf/timestamp-v769.json.base64",
-                  version: 769,
-                  expiresAt: "2026-09-05T19:19:49.000Z",
-                  bytes: 449,
-                  digest: "sha256:fa85cf89eeeec634759809a793a6056940f57c47b9fa1da4d095b0f9852e18c4",
-                },
-                snapshot: {
-                  path: "tooling/sigstore/tuf/snapshot-v165.json.base64",
-                  version: 165,
-                  expiresAt: "2036-05-15T08:09:16.000Z",
-                  bytes: 1760,
-                  digest: "sha256:8f784ab614ec62bfdd5f568eb2a2e3011668449ba235ed4eb7befa99f8469933",
-                },
-                targets: {
-                  path: "tooling/sigstore/tuf/targets-v14.json.base64",
-                  version: 14,
-                  expiresAt: "2036-05-09T09:00:52.000Z",
-                  bytes: 4942,
-                  digest: "sha256:6a697f7f8908c8ab26c11786ecb490b54acec97fa8c802e399f065f8a0cc1acd",
-                },
-              },
-              verification: "retained-seed-root-rotation-signatures-expiry-versions-descriptors-and-target-bytes-replay",
-            }
-          },
-          verification: "offline-direct-verifier-no-tuf-network-or-cache-fallback",
-        },
-        bundleMediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
-        bundleFields: ["mediaType", "verificationMaterial", "dsseEnvelope"],
-        verificationMaterialFields: [
-          "certificate",
-          "tlogEntries",
-          "timestampVerificationData",
-        ],
-        timestampVerificationDataFields: [],
-        envelopeFields: ["payload", "payloadType", "signatures"],
-        signatureFields: ["sig"],
-        payloadType: "application/vnd.effect-build.release-evidence+json;version=1",
-        payloadProtocol: "effect-build/authenticated-external-evidence@1",
-        payloadFields: [
-          "schema",
-          "role",
-          "producerWorkflow",
-          "producerSourceSha",
-          "releaseSourceSha",
-          "receiptProtocol",
-          "receiptBytes",
-          "receiptDigest",
-          "observedAt",
-          "expiresAt",
-          "receiptBase64",
-        ],
-        certificateIssuer: "https://token.actions.githubusercontent.com",
-        certificateIdentityMatch: "exact-anchored-uri-from-contract-role-identity",
-        certificateOids: {
-          buildSignerUri: "1.3.6.1.4.1.57264.1.9",
-          sourceRepositoryUri: "1.3.6.1.4.1.57264.1.12",
-          sourceRepositoryDigest: "1.3.6.1.4.1.57264.1.13",
-        },
-        ctLogThreshold: 1,
-        tlogThreshold: 1,
-        minimumTlogEntries: 1,
-        envelopeSignatureCount: 1,
-        maximumBundleBytes: 32768,
-        maximumReceiptBytes: 16384,
-        forbiddenEnvironmentSource:
-          "releaseCertification.npmOidcCertification.forbiddenEnvironmentNames",
-        network: "forbidden-by-preload-guard-and-audited-direct-verifier-closure",
-      },
-      producerIdentityFields: [
-        "role",
-        "certificateIssuer",
-        "certificateIdentityURI",
-        "workflow",
-        "repository",
-        "ref",
-        "sourceBinding",
-      ],
-      sourceBinding: {
-        releaseSourceFields: ["kind"],
-        releaseSourceKind: "release-source-sha",
-        exactSourceFields: ["kind", "sourceSha"],
-        exactSourceKind: "exact-source-sha",
-      },
-      producerIdentities: [],
-    },
-    externalEvidenceIngress: {
-      protocol: "effect-build/external-evidence-ingress@1",
-      workflowPath: ".github/workflows/release-evidence-ingress.yml",
-      event: "workflow_dispatch",
-      roles: ["npm-authority", "operational-journal", "github-release-governance"],
-      dispatch: {
-        sourceInput: "source_sha",
-        roleInput: "role",
-        referenceInput: "evidence_reference_json",
-        bundleInput: "sigstore_bundle_base64",
-        maximumReferenceCharacters: 4096,
-        maximumBundleBytes: 32768,
-        maximumEncodedBundleCharacters: 43692,
-        maximumTotalPayloadCharacters: 65535,
-      },
-      referenceFields: [
-        "schema",
-        "role",
-        "coordinate",
-        "artifactName",
-        "observedAt",
-        "expiresAt",
-        "bytes",
-      ],
-      artifact: {
-        nameTemplate: "effect-build-v0.6.0-external-evidence-<role>-<sourceSha>",
-        orderedFiles: ["external-evidence-reference.json", "sigstore-bundle.json"],
-        retentionDays: 30,
-        coordinate: "releaseCertification.githubArtifactCoordinate",
-      },
-      authority: "transport-only-sigstore-producer-identity-remains-the-sole-evidence-authority",
-      readinessInput: "exact-authenticated-ingress-artifact-reference-downloaded-and-byte-validated",
-      workflow: "mannyc2/effect-build/.github/workflows/release-evidence-ingress.yml@refs/heads/main",
-    },
-    manifest: "release-readiness.json",
-    evidenceBundle: "release-readiness.bin",
-    orderedFiles: ["release-readiness.json", "release-readiness.bin", "sigstore-trusted-root.json"],
-    artifactName: "effect-build-v0.6.0-release-readiness",
-    workflowPath: ".github/workflows/release-readiness.yml",
-    coordinate: "releaseCertification.githubArtifactCoordinate",
-    retentionDays: 30,
-    clockSkewSeconds: 60,
-    aggregateMaximumAgeSeconds: 14400,
-    dispatch: {
-      sourceInput: "source_sha",
-      candidateInput: "candidate_reference_json",
-      evidenceInputs: [
-        { role: "exact-main-ci", input: "exact_main_ci_reference_json" },
-        { role: "fake-registry", input: "fake_registry_reference_json" },
-        { role: "npm-authority", input: "npm_authority_evidence_json" },
-        { role: "npm-oidc-certification", input: "npm_oidc_certification_reference_json" },
-        { role: "apple-certification", input: "apple_certification_reference_json" },
-        { role: "operational-journal", input: "operational_journal_evidence_json" },
-        { role: "github-release-governance", input: "github_release_governance_evidence_json" },
-      ],
-      externalIngressReferenceFields: [
-        "schema",
-        "role",
-        "coordinate",
-        "artifactName",
-        "observedAt",
-        "expiresAt",
-        "bytes",
-      ],
-      githubInputs: "closed-full-reference-json-downloaded-by-workflow",
-      externalInputs: "three-compact-authenticated-ingress-artifact-references-only",
-    },
-    githubAuthentication: {
-      currentMain: "git-ref-heads-main-exact-sourceSha",
-      runStatus: "completed",
-      runConclusion: "success",
-      artifactExpired: false,
-      artifactDigest: "rest-metadata-and-downloaded-zip-sha256-exact",
-    },
-    githubRunObservation: {
-      fields: [
-        "schema",
-        "workflow",
-        "sourceSha",
-        "runId",
-        "runAttempt",
-        "event",
-        "headBranch",
-        "status",
-        "conclusion",
-        "createdAt",
-        "updatedAt",
-      ],
-    },
-    directObservation: {
-      protocol: "effect-build/release-readiness-direct-observation@1",
-      fields: ["schema", "sourceSha", "observedAt", "github", "npm"],
-      githubFields: [
-        "repository",
-        "repositoryId",
-        "repositoryOwnerId",
-        "visibility",
-        "environment",
-        "deploymentBranchPolicy",
-        "deploymentBranchPolicies",
-        "oidcSubjectPolicy",
-        "workflowPath",
-        "workflowDigest",
-        "currentMain",
-      ],
-      environmentFields: ["name", "protectionRuleTypes", "reviewer", "preventSelfReview"],
-      reviewerFields: ["id", "login", "type"],
-      branchPolicyFields: ["name", "type"],
-      npmFields: ["registry", "targetVersion", "packages"],
-      npmPackageFields: ["name", "versions", "distTags", "repository", "placeholder"],
-      repositoryFields: ["type", "url"],
-      placeholderFields: ["version", "bytes", "sha256", "integrity", "tarballUrl"],
-      packageSource: "publicApiProjection.packages plus npmRegistryBoundary.reservation.packages",
-      placeholderSource: "npmRegistryBoundary.bootstrap.placeholderLedger",
-      targetState: "absent-from-all-public-packages",
-      authentication: {
-        github: "GITHUB_TOKEN-actions-contents-deployments-read",
-        npm: "anonymous-no-auth",
-      },
-      githubEndpoints: [
-        "repository-metadata",
-        "environment-metadata-and-protection-rules",
-        "environment-deployment-branch-policy",
-        "environment-custom-deployment-branch-policies",
-        "repository-oidc-subject-policy",
-        "workflow-blob-at-source-sha",
-        "current-main-immediately-before-and-after-collection",
-      ],
-      npmChecks: [
-        "target-version-absent",
-        "expected-latest-exact",
-        "repository-identity-exact",
-        "placeholder-versions-tags-and-downloaded-bytes-exact",
-      ],
-    },
-    externalReceipts: {
-      npmAuthority: {
-        role: "npm-authority",
-        fields: ["checks", "decision", "identity", "issues", "observedAt", "schema", "sourceSha", "summary"],
-        checkFields: ["id", "status"],
-        summaryFields: ["match", "mismatch", "unobserved"],
-        expectedCheckIdSource: "release-authority-auditor-derived-from-generated-contract",
-        identitySource: "releaseCertification.githubAuthority-repository-and-environment",
-        expectedCheckIds: expectedAuthorityCheckIds,
-        identity: "npm-github-authority:mannyc2/effect-build:environment:npm",
-      },
-      operationalJournal: {
-        role: "operational-journal",
-        fields: [
-          "schema",
-          "sourceSha",
-          "observedAt",
-          "terminal",
-          "identity",
-          "ownerRepository",
-          "ownerVersion",
-          "ownerSourceSha",
-          "runtime",
-          "candidateSourceSha",
-          "appleCodecId",
-          "awsAccountId",
-          "bucketArn",
-          "region",
-          "roleArn",
-          "prefix",
-          "retentionPolicyDigest",
-          "iamPolicyDigest",
-          "bucketPolicyDigest",
-          "oidcTrustPolicyDigest",
-          "qualificationEvidenceDigest",
-          "claims",
-          "backendAuthentication",
-        ],
-        ownerRepository: "mannyc2/ts-release",
-        runtime: { executable: "node", version: "22.22.2" },
-        claims: [
-          "one-s3-backend-no-fallback",
-          "ten-year-compliance-object-lock",
-          "conditional-intent-before-provider-call",
-          "acknowledgement-and-immediate-exact-reread",
-          "cas-response-loss-and-fresh-process-replay-qualified",
-          "opaque-consumer-codec-bound",
-          "unknown-outcome-no-resubmit",
-        ],
-        backendAuthentication: "qualified-external-producer-not-reperformed-by-release-readiness",
-      },
-      githubReleaseGovernance: {
-        role: "github-release-governance",
-        fields: [
-          "schema",
-          "sourceSha",
-          "observedAt",
-          "terminal",
-          "identity",
-          "repository",
-          "endpoint",
-          "enabled",
-          "decision",
-          "decisionReceiptDigest",
-          "claims",
-          "backendAuthentication",
-        ],
-        identitySource: "releaseCertification.githubAuthority.repository",
-        decisions: [
-          {
-            enabled: true,
-            decision: "enabled-before-release",
-            claims: ["future-release-assets-governed-by-github-release-immutability"],
-          },
-          {
-            enabled: false,
-            decision: "accepted-disabled-release-assets-not-claimed-immutable",
-            claims: ["github-release-assets-not-claimed-immutable", "candidate-and-npm-byte-identity-still-required"],
-          },
-        ],
-        backendAuthentication: "qualified-external-producer-not-reperformed-by-release-readiness",
-        identity: "github-release-governance:mannyc2/effect-build",
-      },
-    },
-    candidate: {
-      protocolSource: "releaseCertification.candidate.protocol",
-      referenceType: "candidate",
-      coordinate: "required-exact",
-      workflowSource: "releaseCertification.candidate.workflow",
-      artifactNameSource: "releaseCertification.candidate.artifactName",
-      maximumAgeSeconds: 604800,
-      maximumValiditySeconds: 604800,
-    },
-    referenceShapes: {
-      candidate: ["protocol", "coordinate", "artifactName", "manifestDigest", "observedAt", "expiresAt", "bytes"],
-      githubRun: [
-        "role",
-        "type",
-        "protocol",
-        "workflow",
-        "sourceSha",
-        "runId",
-        "runAttempt",
-        "terminal",
-        "observedAt",
-        "expiresAt",
-        "bytes",
-        "digest",
-      ],
-      githubArtifact: [
-        "role",
-        "type",
-        "protocol",
-        "coordinate",
-        "artifactName",
-        "terminal",
-        "evidenceObservedAt",
-        "observedAt",
-        "expiresAt",
-        "bytes",
-      ],
-      externalObservation: [
-        "role",
-        "type",
-        "protocol",
-        "identity",
-        "sourceSha",
-        "terminal",
-        "observedAt",
-        "expiresAt",
-        "bytes",
-        "digest",
-      ],
-    },
-    evidenceRoles: [
-      {
-        role: "exact-main-ci",
-        type: "githubRun",
-        protocol: "effect-build/exact-main-ci-observation@1",
-        terminal: "success",
-        workflowPath: ".github/workflows/ci.yml",
-        event: "push",
-        maximumAgeSeconds: 86400,
-        maximumValiditySeconds: 172800,
-        workflow: "mannyc2/effect-build/.github/workflows/ci.yml@refs/heads/main",
-      },
-      {
-        role: "fake-registry",
-        type: "githubArtifact",
-        protocol: "effect-build/fake-registry-exact-protected-body-certification@1",
-        terminal: "success",
-        workflowPath: ".github/workflows/release-certification.yml",
-        artifactName: "effect-build-v0.6.0-fake-registry-exact-protected-body-certification",
-        event: "workflow_dispatch",
-        maximumAgeSeconds: 86400,
-        maximumValiditySeconds: 172800,
-        workflow: "mannyc2/effect-build/.github/workflows/release-certification.yml@refs/heads/main",
-      },
-      {
-        role: "npm-authority",
-        type: "externalObservation",
-        protocol: "effect-build/release-authority-audit@4",
-        terminal: "supported",
-        maximumAgeSeconds: 3600,
-        maximumValiditySeconds: 14400,
-      },
-      {
-        role: "npm-oidc-certification",
-        type: "githubArtifact",
-        protocol: "effect-build/npm-oidc-certification-artifact@1",
-        terminal: "success",
-        workflowPath: ".github/workflows/release.yml",
-        artifactName: "effect-build-v0.6.0-npm-oidc-certification",
-        event: "workflow_dispatch",
-        maximumAgeSeconds: 3600,
-        maximumValiditySeconds: 14400,
-        workflow: "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main",
-      },
-      {
-        role: "apple-certification",
-        type: "githubArtifact",
-        protocol: "effect-build/apple-certification-index@2",
-        terminal: "success",
-        workflowPath: ".github/workflows/apple-certification.yml",
-        artifactName: "effect-build-v0.6.0-apple-certification",
-        event: "workflow_dispatch",
-        maximumAgeSeconds: 86400,
-        maximumValiditySeconds: 172800,
-        workflow: "mannyc2/effect-build/.github/workflows/apple-certification.yml@refs/heads/main",
-      },
-      {
-        role: "operational-journal",
-        type: "externalObservation",
-        protocol: "effect-build/notary-journal-qualification@1",
-        terminal: "qualified",
-        maximumAgeSeconds: 86400,
-        maximumValiditySeconds: 172800,
-      },
-      {
-        role: "github-release-governance",
-        type: "externalObservation",
-        protocol: "effect-build/github-release-governance-observation@1",
-        terminal: "resolved",
-        maximumAgeSeconds: 3600,
-        maximumValiditySeconds: 14400,
-      },
+  assert.deepEqual(release.npmAdministrativeInventory, {
+    status: "not-observed",
+    releaseGate: "excluded-from-v0.6.0",
+    doesNotProve: [
+      "trusted-publisher-admin-inventory",
+      "publishing-access-two-factor-and-token-policy",
     ],
-    workflow: "mannyc2/effect-build/.github/workflows/release-readiness.yml@refs/heads/main",
   });
+  assert.equal(release.provenanceVerification.purpose, "npm-publication-provenance-verification-only");
+  assert.equal(release.provenanceVerification.status, "implemented");
+  assert.equal(release.provenanceVerification.module, "scripts/release/sigstore-dsse-verifier.mjs");
+  assert.deepEqual(release.provenanceVerification.client, {
+    package: "@sigstore/verify",
+    version: "3.1.1",
+  });
+  assert.deepEqual(release.provenanceVerification.bundleClient, {
+    package: "@sigstore/bundle",
+    version: "4.0.0",
+  });
+  assert.deepEqual(release.provenanceVerification.protobufClient, {
+    package: "@sigstore/protobuf-specs",
+    version: "0.5.2",
+  });
+  assert.equal(
+    release.provenanceVerification.trustedRoot.digest,
+    "sha256:6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66",
+  );
+  assert.equal(
+    release.provenanceVerification.certificateIdentityMatch,
+    "exact-anchored-uri-from-contract-release-workflow-identity",
+  );
+
+  assert.equal(release.readiness.protocol, "effect-build/release-readiness@3");
+  assert.equal(release.readiness.bundleProtocol, "effect-build/release-readiness-evidence-bundle@3");
+  assert.equal(
+    release.readiness.bundleFraming,
+    "protocol-line-u32be-canonical-header-u64be-opaque-payload",
+  );
+  assert.deepEqual(release.readiness.orderedFiles, [
+    "release-readiness.json",
+    "release-readiness.bin",
+  ]);
+  assert.equal(release.readiness.event, "workflow_dispatch");
+  assert.deepEqual(release.readiness.dispatch, {
+    sourceInput: "source_sha",
+    candidateInput: "candidate_reference_json",
+    evidenceInputs: [
+      { role: "exact-main-ci", input: "exact_main_ci_reference_json" },
+      { role: "fake-registry", input: "fake_registry_reference_json" },
+      { role: "npm-oidc-certification", input: "npm_oidc_certification_reference_json" },
+    ],
+    githubInputs: "closed-full-reference-json-downloaded-by-workflow",
+  });
+  assert.deepEqual(Object.keys(release.readiness.referenceShapes), [
+    "candidate",
+    "githubRun",
+    "githubArtifact",
+  ]);
+  assert.deepEqual(release.readiness.evidenceRoles, [
+    {
+      role: "exact-main-ci",
+      type: "githubRun",
+      protocol: "effect-build/exact-main-ci-observation@1",
+      terminal: "success",
+      workflowPath: ".github/workflows/ci.yml",
+      event: "push",
+      maximumAgeSeconds: 86400,
+      maximumValiditySeconds: 172800,
+      workflow: "mannyc2/effect-build/.github/workflows/ci.yml@refs/heads/main",
+    },
+    {
+      role: "fake-registry",
+      type: "githubArtifact",
+      protocol: "effect-build/fake-registry-exact-protected-body-certification@2",
+      terminal: "success",
+      workflowPath: ".github/workflows/release-certification.yml",
+      artifactName: "effect-build-v0.6.0-fake-registry-exact-protected-body-certification",
+      event: "workflow_dispatch",
+      maximumAgeSeconds: 86400,
+      maximumValiditySeconds: 172800,
+      workflow: "mannyc2/effect-build/.github/workflows/release-certification.yml@refs/heads/main",
+    },
+    {
+      role: "npm-oidc-certification",
+      type: "githubArtifact",
+      protocol: "effect-build/npm-oidc-certification-artifact@1",
+      terminal: "success",
+      workflowPath: ".github/workflows/release.yml",
+      artifactName: "effect-build-v0.6.0-npm-oidc-certification",
+      event: "workflow_dispatch",
+      maximumAgeSeconds: 3600,
+      maximumValiditySeconds: 14400,
+      workflow: "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main",
+    },
+  ]);
+  for (const removed of [
+    "externalEvidencePolicy",
+    "externalEvidenceManifest",
+    "externalEvidenceAuthentication",
+    "externalEvidenceIngress",
+    "externalReceipts",
+  ]) assert.equal(removed in release.readiness, false);
+
 
   assert.deepEqual(release.finalPublicVerification, {
-    protocol: "effect-build/final-public-verification@1",
+    protocol: "effect-build/final-public-verification@2",
     workflowPath: ".github/workflows/release-verification.yml",
     event: "workflow_dispatch",
-    status: "blocked",
-    upstreamGateSource: "releaseCertification.readiness.externalEvidenceAuthentication",
-    blocker: "authenticated-release-readiness-aggregate-cannot-yet-exist",
-    artifactDisposition: "forbidden-while-upstream-blocked",
+    status: "ready",
+    upstreamGateSource: "releaseCertification.readiness",
+    artifactDisposition: "allowed-on-terminal-readiness-success",
     permissions: {
       actions: "read",
       contents: "read",
@@ -1070,7 +631,7 @@ test("freezes one exact release-certification policy without copying public pack
       workflowSource: "releaseCertification.readiness.workflow",
       artifactNameSource: "releaseCertification.readiness.artifactName",
       coordinate: "releaseCertification.githubArtifactCoordinate",
-      protocol: "effect-build/release-readiness@1",
+      protocol: "effect-build/release-readiness@3",
       workflow: "mannyc2/effect-build/.github/workflows/release-readiness.yml@refs/heads/main",
       artifactName: "effect-build-v0.6.0-release-readiness",
     },
@@ -1089,7 +650,7 @@ test("freezes one exact release-certification policy without copying public pack
       targetShaSource: "authenticated-lightweight-tag-ref-only",
       targetCommitishSource: "releaseCertification.githubAuthority.branchPolicy.name-presentation-only",
       assetSource: "candidate ordered package ledger plus candidate manifest",
-      immutabilityDecisionSource: "releaseCertification.readiness.externalReceipts.githubReleaseGovernance.decisions",
+      immutabilityDecisionSource: "live-operator-admin-preflight-before-draft-and-public-release",
       mutation: "forbidden",
     },
     publicState: {
@@ -1114,7 +675,7 @@ test("freezes one exact release-certification policy without copying public pack
     },
     freshness: { clockSkewSeconds: 60, maximumObservationAgeSeconds: 3600 },
     implementation: {
-      status: "implemented-inert-behind-upstream-gate",
+      status: "implemented",
       module: "scripts/release/final-public-verification.mjs",
       contractAuthentication: "exact-generated-bytes",
       githubBoundary: "github-token-read-only-api-no-cross-origin-authorization",
@@ -1135,8 +696,8 @@ test("freezes one exact release-certification policy without copying public pack
         builderId: "https://github.com/actions/runner/github-hosted",
         subjectDigest: "sha512:<128-lowercase-hex>",
         certificateIdentitySource: "releaseCertification.githubAuthority expected release workflow identity",
-        certificateIssuerSource: "releaseCertification.readiness.externalEvidenceAuthentication.verifier",
-        certificateOidSource: "releaseCertification.readiness.externalEvidenceAuthentication.verifier",
+        certificateIssuerSource: "releaseCertification.provenanceVerification",
+        certificateOidSource: "releaseCertification.provenanceVerification",
         workflow: "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main",
         workflowPath: ".github/workflows/release.yml",
         branchRef: "refs/heads/main",
@@ -1193,7 +754,7 @@ test("freezes one exact release-certification policy without copying public pack
       },
     },
     receipt: {
-      protocol: "effect-build/final-public-release-receipt@1",
+      protocol: "effect-build/final-public-release-receipt@2",
       artifactName: "effect-build-v0.6.0-final-public-release",
       retentionDays: 90,
       orderedFiles: ["final-public-release.json"],
@@ -1286,7 +847,7 @@ test("freezes one exact release-certification policy without copying public pack
       ],
       runtimeForbiddenEnvironmentSource:
         "releaseCertification.npmOidcCertification.forbiddenEnvironmentNames",
-      publishGate: "releaseCertification.readiness npm-authority closed supported receipt",
+      publishGate: "releaseCertification.readiness exact-three-github-evidence aggregate",
       forbiddenCredentialEscalation: ["personal-access-token", "github-app-token", "administrative-token"],
     },
     repository: contract.npmRegistryBoundary.trustedPublisher.repository,
@@ -1339,108 +900,6 @@ test("freezes one exact release-certification policy without copying public pack
     network: "lockfile-resolved-dependency-bootstrap-only",
     evidence: "never-release-evidence",
   });
-  assert.deepEqual(release.npmAuthorityObservation, {
-    client: {
-      node: "24.14.1",
-      npm: "11.19.1",
-      package: "npm",
-      installationPackage: "npm-authority-client",
-      integrity:
-        "sha512-ztsxKxt/kkIaAs+2i0GU6I+DRmUdrNasxTZKJe9TCdSjKxlhah/4r/hl5ygMD6XAg1qZ9c2TNomR4qgOydp10g==",
-      manifestDigest: "sha256:f6478d5600180a23f73e4217610c7709a71cedb4ae13f6c3e15ecb457f5d4fd6",
-      minimumSupportedTrustVersion: "11.15.0",
-      purpose: "authenticated-authority-observation-only",
-      publishCertificationClientSource: "releaseCertification.npmOidcCertification.client",
-      status: "pinned-source-audited-observation-credential-unprovisioned",
-      sourceClosure: {
-        algorithm: "sha256-canonical-json-entry-type-path-bytes-file-sha256-v1",
-        scope: "entire-realpath-package-tree-no-links-or-nonregular-entries",
-        entrySource: "bin/npm-cli.js",
-        fileCount: 1943,
-        directoryCount: 459,
-        bytes: 12223891,
-        digest: "sha256:e7510fbaa85940db552118f424a7792bc059877abcc6b4528bd9c0d7abc51444",
-      },
-      auditedSources: [
-        {
-          path: "bin/npm-cli.js",
-          digest: "sha256:8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
-        },
-        {
-          path: "lib/cli.js",
-          digest: "sha256:67666f06479f9b0bbc01412c198caadd4287d34d5ed74a02871ea78f186451e7",
-        },
-        {
-          path: "lib/cli/entry.js",
-          digest: "sha256:667a44c1fa8795fdbba8ad843736ca7f8f24e64511985e9a7060b002123560c6",
-        },
-        {
-          path: "lib/commands/whoami.js",
-          digest: "sha256:d76223c1a10cbc0fae7092c77fc2e7fbde74b8f0ed258ffafbc53b4f807e4656",
-        },
-        {
-          path: "lib/commands/view.js",
-          digest: "sha256:59b26d2c2f06875e3df2aeb8f780fd62220c12618775ccaff8bdf88a390baf8c",
-        },
-        {
-          path: "lib/commands/trust/list.js",
-          digest: "sha256:1999714d799cc5b53198cb406a598dab8a67bbbea6f860f74ecf73a091434f76",
-        },
-        {
-          path: "lib/commands/token.js",
-          digest: "sha256:03363ca40e6b0ec7997686187f94b3b7260e0d00f205e3f7296b3974bc4cb643",
-        },
-      ],
-    },
-    rawAllowedActionProjection: ["createPackage"],
-    semantics: "authenticated-npm-settings-raw-projection-not-trustedPublisher.permission",
-    legacyTokenAuthority: {
-      checkId: "npm.legacyTokenAuthority",
-      command: ["token", "list", "--json"],
-      registrySource: "npmRegistryBoundary.registry",
-      authenticatedAccount: "mannyc1",
-      authorityPackageSource:
-        "publicApiProjection.packages-plus-npmRegistryBoundary.reservation.packages",
-      maintainerCommand: ["view", "<package>", "maintainers", "--json"],
-      maintainerTarget: "exact-sole-maintainer-equals-authenticated-account",
-      target: "zero-active-npm-access-tokens-after-legacy-token-remediation",
-      unknownTokenTypeOrScope: "blocking",
-      sanitizedProjectionFields: [
-        "activeTokenCount",
-        "activeLegacyWriteCapableTokenCount",
-        "unknownTokenCount",
-        "metadataDigest",
-      ],
-      retainedCredentialMetadata: "none",
-      observationCredential: {
-        authority: "ephemeral-non-token-session-for-mannyc1",
-        accountEntitlement: "write-permission-required-by-npm-trust-api",
-        operations: "read-only-observation-only",
-        persistence: "forbidden",
-        destruction: "required-before-sigstore-oidc-signing",
-        currentStatus: "unprovisioned-stop",
-        supportedProof: {
-          authority: "ephemeral-non-token-session-for-mannyc1",
-          accountEntitlement: "write-permission-required-by-npm-trust-api",
-          operations: "read-only-observation-only",
-          persistence: "none",
-          destruction: "completed-before-sigstore-oidc-signing",
-        },
-      },
-    },
-    publishingAccess: {
-      checkIdPrefix: "npm.publishingAccess.",
-      packageSource: "publicApiProjection.packages-plus-npmRegistryBoundary.reservation.packages",
-      target: "require-two-factor-authentication-and-disallow-tokens",
-      observationMechanism: {
-        status: "unprovisioned-stop",
-        authority: "authenticated-npm-account-with-write-permission-and-two-factor-authentication",
-        interface: "supported-authenticated-npm-web-or-registry-observation-required",
-        endpoint: "unqualified-and-forbidden-to-invent",
-      },
-    },
-  });
-
   assert.deepEqual(release.npmOidcCertification, {
     client: { node: "24.14.1", npm: "11.11.0" },
     protectedReadOnlyTransport: {
@@ -1656,7 +1115,10 @@ test("freezes one exact release-certification policy without copying public pack
     })),
     [
       { id: "all-absent-full-convergence", expected: "publish-all-eleven" },
-      { id: "partial-exact-publication", expected: "resume-only-missing" },
+      {
+        id: "partial-exact-publication",
+        expected: "resume-only-missing-within-current-readiness-validity",
+      },
       { id: "exact-bytes-latest-wrong", expected: "stop" },
       { id: "target-version-conflicting-bytes", expected: "stop" },
       {
@@ -1677,7 +1139,8 @@ test("freezes one exact release-certification policy without copying public pack
       { id: "failure-before-registry-commitment", expected: "stop-zero-mutations" },
       {
         id: "response-loss-after-registry-commitment",
-        expected: "stop-then-observation-driven-exact-byte-resume",
+        expected:
+          "stop-then-observation-driven-exact-byte-resume-within-current-readiness-validity",
       },
       {
         id: "response-loss-after-bytes-and-tag-before-valid-provenance",
@@ -1716,22 +1179,22 @@ test("freezes one exact release-certification policy without copying public pack
     ],
   );
   assert.deepEqual(release.fakeRegistry.localQualification, {
-    protocol: "effect-build/fake-registry-local-qualification@1",
+    protocol: "effect-build/fake-registry-local-qualification@2",
     workflowPath: ".github/workflows/release-certification.yml",
     artifactName: "effect-build-v0.6.0-fake-registry-local-qualification",
     terminal: "local-qualification",
     retentionDays: 30,
     readinessAdmissible: false,
     proves: [
-      "blocked-real-purpose-stops-before-first-mutation",
+      "real-purpose-without-readiness-stops-before-first-mutation",
       "sealed-credential-free-exact-purpose-covers-40-state-machine-coordinates",
       "independent-reference-oracle-agrees-with-exact-purpose",
       "npm-oidc-dry-run-body-local-boundaries",
     ],
     doesNotProve: [
       "readiness-admissible-exact-protected-body-certification",
-      "authenticated-external-evidence",
       "readiness-admission",
+      "same-candidate-resume-after-readiness-expiry",
       "npm-upload",
       "provenance",
       "publication",
@@ -1739,16 +1202,15 @@ test("freezes one exact release-certification policy without copying public pack
     workflow: "mannyc2/effect-build/.github/workflows/release-certification.yml@refs/heads/main",
   });
   assert.deepEqual(release.fakeRegistry.exactProtectedBodyCertification, {
-    protocol: "effect-build/fake-registry-exact-protected-body-certification@1",
+    protocol: "effect-build/fake-registry-exact-protected-body-certification@2",
     workflowPath: ".github/workflows/release-certification.yml",
     artifactName: "effect-build-v0.6.0-fake-registry-exact-protected-body-certification",
     terminal: "success",
     implementationStatus: "implemented",
-    status: "blocked",
-    gateSource: "releaseCertification.readiness.externalEvidenceAuthentication",
-    artifactDisposition: "forbidden-while-external-authentication-blocked",
-    readinessAdmission:
-      "requires-same-source-supported-external-authentication-and-terminal-success-exact-body-artifact",
+    status: "supported",
+    gateSource: "releaseCertification.readiness.githubAuthentication",
+    artifactDisposition: "required-on-terminal-workflow-success",
+    readinessAdmission: "requires-same-source-terminal-success-exact-body-artifact",
     retentionDays: 30,
     orderedFiles: ["fake-registry-exact-protected-body.json"],
     receiptFields: [
@@ -1757,7 +1219,7 @@ test("freezes one exact release-certification policy without copying public pack
       "observedAt",
       "workflow",
       "contractDigest",
-      "externalAuthenticationStatus",
+      "readinessProtocol",
       "candidate",
       "candidateManifestDigest",
       "coordinates",
@@ -1784,12 +1246,17 @@ test("freezes one exact release-certification policy without copying public pack
       "all-40-exact-body-case-coordinates-terminal",
       "zero-real-registry-mutation",
     ],
-    doesNotProve: ["npm-upload", "provenance", "publication"],
+    doesNotProve: [
+      "same-candidate-resume-after-readiness-expiry",
+      "npm-upload",
+      "provenance",
+      "publication",
+    ],
     certificationPurpose: release.fakeRegistry.exactProtectedBodyCertification.certificationPurpose,
     workflow: "mannyc2/effect-build/.github/workflows/release-certification.yml@refs/heads/main",
   });
   assert.deepEqual(release.fakeRegistry.exactProtectedBodyCertification.certificationPurpose, {
-    protocol: "effect-build/fake-registry-exact-protected-body-purpose@1",
+    protocol: "effect-build/fake-registry-exact-protected-body-purpose@2",
     selector: {
       environment: "EFFECT_BUILD_PUBLISH_PURPOSE",
       value: "fake-registry-exact-protected-body-certification",
@@ -1823,7 +1290,7 @@ test("freezes one exact release-certification policy without copying public pack
     executableNames: ["curl", "npm"],
     statePolicy: "one-regular-single-link-json-file-under-exact-execution-root",
     fixtureContractProjection:
-      "exact-generated-contract-with-only-closed-supported-activation-and-placeholder-byte-ledger-derived-from-fixture-archives",
+      "exact-canonical-generated-contract-with-placeholder-byte-ledger-derived-from-fixture-archives",
     authorityPolicy: "credential-free-fake-boundaries-only-real-authentication-forbidden",
     networkPolicy: "no-real-github-npm-or-oidc-network",
     realPurposeReadinessPolicy: "semantic-final-readiness-required-unconditionally",
@@ -1869,18 +1336,17 @@ test("freezes one exact release-certification policy without copying public pack
   );
   assert.deepEqual(release.fakeRegistry.exactProtectedBody, {
     bodies: ["protected-reauthorization", "publisher"],
-    realGateSource: "releaseCertification.readiness.externalEvidenceAuthentication",
+    realGateSource: "releaseCertification.readiness",
     fakeGateSource: "releaseCertification.fakeRegistry.exactProtectedBodyCertification.certificationPurpose",
     status: "two-purpose-hard-cut",
-    realExpected: "stop-zero-mutations-while-readiness-authentication-is-blocked",
+    realExpected: "require-exact-three-role-readiness-before-first-registry-mutation",
     fakeExpected: "execute-exact-40-coordinate-state-machine-with-no-real-boundary",
     realBlockedMutationCount: 0,
     proves: [
-      "real-purpose-blocked-readiness-gate-precedes-first-registry-mutation",
+      "real-purpose-readiness-gate-precedes-first-registry-mutation",
       "exact-fake-purpose-executes-shared-protected-bodies-and-state-machine",
     ],
     doesNotProve: [
-      "authenticated-external-evidence",
       "npm-upload",
       "provenance",
       "publication",
@@ -1908,104 +1374,33 @@ test("freezes one exact release-certification policy without copying public pack
   ]);
   assert.deepEqual(release.fakeRegistry.hypotheticalStateMachine.doesNotProve, [
     "exact-protected-body-execution",
-    "authenticated-external-evidence",
     "npm-upload",
     "provenance",
     "publication",
   ]);
 });
 
-test("builds the supported release fixture only through one closed canonical activation", () => {
-  const activation = {
-    protocol: "effect-build/supported-release-fixture-activation@1",
-    releaseSourceSha: "1".repeat(40),
-    operationalJournal: {
-      repository: "mannyc2/ts-release",
-      reusableWorkflowRef:
-        `mannyc2/ts-release/.github/workflows/operational-journal.yml@${"4".repeat(40)}`,
-      sourceSha: "4".repeat(40),
-      runtime: { executable: "node", version: "22.22.2" },
-    },
-  };
-  const supported = buildSupportedReleaseFixtureContract(inputs, activation);
-  const authentication = supported.releaseCertification.readiness.externalEvidenceAuthentication;
-  assert.equal(authentication.status, "supported");
-  assert.equal(authentication.artifactDisposition, "required-on-terminal-workflow-success");
-  assert.deepEqual(authentication.signer.activation.permissions, {
-    observer: { contents: "read" },
-    signer: { "id-token": "write" },
-    upload: {},
-  });
-  assert.equal(authentication.signer.activation.hostedBootstrap.status, "qualified");
-  assert.deepEqual(authentication.producerIdentities.map(({ role, repository, sourceBinding }) => ({
-    role,
-    repository,
-    sourceBinding,
-  })), [
-    {
-      role: "npm-authority",
-      repository: "mannyc2/effect-build",
-      sourceBinding: { kind: "release-source-sha" },
-    },
-    {
-      role: "operational-journal",
-      repository: "mannyc2/ts-release",
-      sourceBinding: { kind: "exact-source-sha", sourceSha: "4".repeat(40) },
-    },
-    {
-      role: "github-release-governance",
-      repository: "mannyc2/effect-build",
-      sourceBinding: { kind: "release-source-sha" },
-    },
-  ]);
+test("uses the canonical generated contract directly for fake release fixtures", () => {
+  const canonical = buildContract(inputs);
   assert.equal(
-    supported.releaseCertification.fakeRegistry.exactProtectedBodyCertification.status,
+    canonical.releaseCertification.fakeRegistry.exactProtectedBodyCertification.status,
     "supported",
   );
   assert.equal(
-    supported.releaseCertification.fakeRegistry.exactProtectedBodyCertification.artifactDisposition,
-    "required-on-supported-terminal-workflow-success",
+    canonical.releaseCertification.fakeRegistry.exactProtectedBodyCertification.artifactDisposition,
+    "required-on-terminal-workflow-success",
   );
-  assert.equal(supported.releaseCertification.finalPublicVerification.status, "ready");
-  assert.equal(supported.releaseCertification.finalPublicVerification.artifactDisposition, "allowed");
-  assert.strictEqual(validateSupportedReleaseFixtureContract(supported, inputs, activation), supported);
+  assert.equal(canonical.releaseCertification.finalPublicVerification.status, "ready");
+  assert.equal(
+    canonical.releaseCertification.finalPublicVerification.artifactDisposition,
+    "allowed-on-terminal-readiness-success",
+  );
+  assert.strictEqual(validateContract(canonical, inputs), canonical);
 
-  for (const mutate of [
-    (value) => value.releaseSourceSha = "not-a-sha",
-    (value) => value.operationalJournal.repository = "effect-ts/ts-release",
-    (value) => value.operationalJournal.reusableWorkflowRef =
-      `mannyc2/ts-release/.github/workflows/peer.yml@${"4".repeat(40)}`,
-    (value) => value.operationalJournal.sourceSha = "5".repeat(39),
-    (value) => value.operationalJournal.runtime.version = "24.14.1",
-    (value) => value.fallback = true,
-  ]) {
-    const changed = structuredClone(activation);
-    mutate(changed);
-    assert.throws(() => buildSupportedReleaseFixtureContract(inputs, changed));
-  }
-  const peer = structuredClone(supported);
-  peer.releaseCertification.readiness.externalEvidenceAuthentication.producerIdentities[0].workflow +=
-    "-peer";
+  const blockedPeer = structuredClone(canonical);
+  blockedPeer.releaseCertification.fakeRegistry.exactProtectedBodyCertification.status = "blocked";
   assert.throws(
-    () => validateSupportedReleaseFixtureContract(peer, inputs, activation),
-    /differs from the canonical activation model/u,
-  );
-  for (const mutate of [
-    (value) => value.signer.activation.permissions.observer = {},
-    (value) => value.signer.activation.permissions.signer = {},
-    (value) => value.signer.activation.permissions.upload = { "id-token": "write" },
-    (value) => value.signer.activation.hostedBootstrap.status = "unqualified-stop",
-    (value) => value.signer.activation.signerThirdPartyActions = "allowed",
-  ]) {
-    const changed = structuredClone(supported);
-    mutate(changed.releaseCertification.readiness.externalEvidenceAuthentication);
-    assert.throws(
-      () => validateSupportedReleaseFixtureContract(changed, inputs, activation),
-      /differs from the canonical activation model/u,
-    );
-  }
-  assert.throws(
-    () => validateContract(supported, inputs),
+    () => validateContract(blockedPeer, inputs),
     /release certification policy does not match the canonical generated policy/u,
   );
 });
@@ -2706,21 +2101,20 @@ test("rejects every release-certification policy mutation", () => {
   ));
   rejects((release) => release.githubAuthority.authorizationSplit.administrativeExternalOnly.pop());
   rejects((release) => release.githubAuthority.authorizationSplit.forbiddenCredentialEscalation.pop());
+  rejects((release) => release.scope.npmPackages.appleApiLibrary = "excluded");
+  rejects((release) => release.scope.credentialBackedAppleArtifacts.status = "passed");
+  rejects((release) => release.scope.credentialBackedAppleArtifacts.releaseGate = "required");
+  rejects((release) => release.scope.awsNotaryJournalEvidence.releaseGate = "required");
+  rejects((release) => release.npmAdministrativeInventory.status = "observed");
+  rejects((release) => release.npmAdministrativeInventory.doesNotProve.pop());
   rejects((release) => release.dependencyBootstrap.client.version = "latest");
   rejects((release) => release.dependencyBootstrap.command.arguments.pop());
   rejects((release) => release.dependencyBootstrap.lockfile.nonWorkspaceIntegrityPattern = ".*");
   rejects((release) => release.dependencyBootstrap.registries.scopes["@jsr"] = "https://registry.npmjs.org");
   rejects((release) => release.dependencyBootstrap.environment.configurationFiles.projectNpmrc.digest = "sha256:" + "0".repeat(64));
   rejects((release) => release.dependencyBootstrap.environment.configurationFiles.bunfig.path = "bunfig.toml");
-  rejects((release) => release.npmAuthorityObservation.rawAllowedActionProjection[0] = "publish");
-  rejects((release) => release.npmAuthorityObservation.client.integrity = "sha512-peer");
-  rejects((release) => release.npmAuthorityObservation.client.installationPackage = "npm");
-  rejects((release) => release.npmAuthorityObservation.client.sourceClosure.digest = "sha256:" + "0".repeat(64));
-  rejects((release) => release.npmAuthorityObservation.client.auditedSources.pop());
-  rejects((release) => release.npmAuthorityObservation.publishingAccess.target = "token-allowed");
   rejects((release) => release.readiness.coordinate = "optional");
   rejects((release) => release.readiness.bundleProtocol += "-fallback");
-  rejects((release) => release.readiness.externalEvidencePolicy = "digest-bound-caller-assertion");
   rejects((release) => release.readiness.orderedFiles.reverse());
   rejects((release) => release.readiness.aggregateMaximumAgeSeconds = 31536000);
   rejects((release) => release.readiness.zipExtraction.creatorVersionMadeBy = 20);
@@ -2738,61 +2132,20 @@ test("rejects every release-certification policy mutation", () => {
   rejects((release) => release.candidate.tarballInspection.protectedProjection.sourceDigest = "sha256:" + "0".repeat(64));
   rejects((release) => release.readiness.candidate.maximumValiditySeconds = 31536000);
   rejects((release) => release.readiness.dispatch.evidenceInputs.reverse());
-  rejects((release) => release.readiness.dispatch.externalIngressReferenceFields.pop());
-  rejects((release) => release.readiness.externalEvidenceIngress.roles.reverse());
-  rejects((release) => release.readiness.externalEvidenceIngress.dispatch.maximumBundleBytes += 1);
-  rejects((release) => release.readiness.externalEvidenceIngress.artifact.orderedFiles.pop());
-  rejects((release) => release.readiness.githubAuthentication.runConclusion = "neutral");
-  rejects((release) => release.readiness.githubRunObservation.fields.pop());
-  rejects((release) => release.readiness.directObservation.githubEndpoints.pop());
-  rejects((release) => release.readiness.directObservation.npmChecks.pop());
-  rejects((release) => release.readiness.externalEvidenceManifest.authenticationRequiredRoles.pop());
-  rejects((release) => release.readiness.externalEvidenceAuthentication.status = "verified");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.requiredBindings.pop());
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.runtime.version = "latest");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.dependency.integrity =
-    "sha512-AAAA");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.dependency.executedSources.pop());
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.activation.topology = "single-job");
+  rejects((release) => release.provenanceVerification.purpose = "external-receipts");
+  rejects((release) => release.provenanceVerification.client.version = "latest");
+  rejects((release) => release.provenanceVerification.runtime.version = "latest");
+  rejects((release) => release.provenanceVerification.maximumBundleBytes += 1);
+  rejects((release) => release.provenanceVerification.bundleClient.version = "latest");
   rejects((release) =>
-    release.readiness.externalEvidenceAuthentication.signer.activation.permissions.signer["id-token"] = "write"
+    release.provenanceVerification.networkGuard.digest = "sha256:" + "0".repeat(64));
+  rejects((release) =>
+    release.provenanceVerification.trustedRoot.digest = "sha256:" + "0".repeat(64));
+  rejects((release) =>
+    release.provenanceVerification.trustedRoot.tuf.acquisition.clients[0].integrity = "sha512-peer"
   );
-  rejects((release) =>
-    release.readiness.externalEvidenceAuthentication.signer.activation.hostedBootstrap.status = "qualified"
-  );
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.oidc.audience = "peer");
-  rejects((release) =>
-    release.readiness.externalEvidenceAuthentication.signer.oidc.request.maximumRequestTokenBytes += 1);
-  rejects((release) =>
-    release.readiness.externalEvidenceAuthentication.signer.oidc.request.maximumRequestUrlBytes += 1);
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.fulcio.origin =
-    "https://example.invalid");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.rekor.path =
-    "//example.invalid/log");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.rekor.successStatus = 200);
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.responseFraming =
-    "connection-delimited");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.redirects = 1);
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.maximumJsonDepth += 1);
-  rejects((release) => release.readiness.externalEvidenceAuthentication.signer.transport.fulcio.maximumResponseBytes +=
-    1);
-  rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.client.version = "latest");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.runtime.version = "latest");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.maximumBundleBytes += 1);
-  rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.bundleClient.version = "latest");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.networkGuard.digest = "sha256:" + "0".repeat(64));
-  rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.trustedRoot.digest = "sha256:" + "0".repeat(64));
-  rejects((release) =>
-    release.readiness.externalEvidenceAuthentication.verifier.trustedRoot.tuf.acquisition.clients[0].integrity =
-      "sha512-peer"
-  );
-  rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.bundleMediaType += ";legacy=1");
-  rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.signatureFields.push("keyid"));
-  rejects((release) => release.readiness.externalEvidenceAuthentication.verifier.payloadFields.pop());
-  rejects((release) => release.readiness.externalReceipts.npmAuthority.expectedCheckIds.pop());
-  rejects((release) => release.npmAuthorityObservation.legacyTokenAuthority.registrySource = "ambient-config");
-  rejects((release) => release.readiness.externalReceipts.operationalJournal.claims.pop());
-  rejects((release) => release.readiness.externalReceipts.githubReleaseGovernance.decisions.pop());
+  rejects((release) => release.provenanceVerification.bundleMediaType += ";legacy=1");
+  rejects((release) => release.provenanceVerification.certificateIssuer = "https://example.invalid");
   rejects((release) => release.readiness.candidate.referenceType = "evidence-role");
   rejects((release) => release.readiness.referenceShapes.githubArtifact.pop());
   rejects((release) => release.readiness.evidenceRoles.pop());
@@ -2803,7 +2156,7 @@ test("rejects every release-certification policy mutation", () => {
   rejects((release) => release.readiness.evidenceRoles[0].event = "workflow_dispatch");
   rejects((release) => release.readiness.evidenceRoles[0].maximumAgeSeconds = 31536000);
   rejects((release) => release.readiness.evidenceRoles[1].artifactName += "-peer");
-  rejects((release) => release.finalPublicVerification.status = "ready");
+  rejects((release) => release.finalPublicVerification.status = "blocked");
   rejects((release) => release.finalPublicVerification.publicState.requiredChecks.pop());
   rejects((release) => release.finalPublicVerification.releasePolicy.targetShaSource = "release-target-commitish");
   rejects((release) => release.finalPublicVerification.releasePolicy.targetCommitishSource = "dispatch.source_sha");
@@ -2835,7 +2188,7 @@ test("rejects every release-certification policy mutation", () => {
   rejects((release) => release.npmOidcCertification.forbiddenEnvironmentNames.pop());
   rejects((release) => release.fakeRegistry.exactProtectedBody.realBlockedMutationCount = 1);
   rejects((release) => release.fakeRegistry.localQualification.readinessAdmissible = true);
-  rejects((release) => release.fakeRegistry.exactProtectedBodyCertification.status = "supported");
+  rejects((release) => release.fakeRegistry.exactProtectedBodyCertification.status = "blocked");
   rejects((release) => release.fakeRegistry.exactProtectedBodyCertification.certificationPurpose.transportOnlySelectorValue = "generic-test");
   rejects((release) => release.fakeRegistry.exactProtectedBodyCertification.certificationPurpose.sourceFiles[0].sha256 = "0".repeat(64));
   rejects((release) => release.fakeRegistry.exactProtectedBodyCertification.exactMutationLedger[0].candidateBinding = "peer-fixture");
@@ -2889,13 +2242,13 @@ test("rejects Sigstore trust-material, retained-chain, and same-record lock-inte
   });
 
   const evidence = new Map(inputs.sigstoreTufEvidenceSources);
-  const targetsPath = contract.releaseCertification.readiness.externalEvidenceAuthentication.verifier.trustedRoot.tuf
+  const targetsPath = contract.releaseCertification.provenanceVerification.trustedRoot.tuf
     .acquisition.metadata.targets.path;
   const targets = evidence.get(targetsPath);
   evidence.set(targetsPath, `${targets.slice(0, -2)}A\n`);
   rejectsInputs({ ...inputs, sigstoreTufEvidenceSources: evidence });
 
-  const [left, right] = contract.releaseCertification.readiness.externalEvidenceAuthentication.verifier.trustedRoot
+  const [left, right] = contract.releaseCertification.provenanceVerification.trustedRoot
     .tuf.acquisition.clients;
   const relocatedLockIntegrity = inputs.lockfileSource
     .replace(left.integrity, "sha512-integrity-swap-sentinel")

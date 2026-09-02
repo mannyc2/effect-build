@@ -207,8 +207,9 @@ jobs:
             || main.object?.sha !== sourceSha
             || createHash("sha256").update(zip).digest("hex") !== digest.slice("sha256:".length)
             || JSON.stringify(listing) !== JSON.stringify(["final-public-release.json"])
-            || receipt.schema !== "effect-build/final-public-release-receipt@1"
+            || receipt.schema !== "effect-build/final-public-release-receipt@2"
             || receipt.sourceSha !== sourceSha
+            || receipt.release?.immutable !== true
             || receipt.verdict !== "success"
           ) throw new Error("final-public receipt coordinate or downloaded bytes changed");
           NODE

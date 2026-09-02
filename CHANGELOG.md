@@ -2,9 +2,28 @@
 
 ## 0.6.0
 
-Research-scope-complete implementation hard cut. All twelve packages move in
-lockstep; this is breaking throughout. Formal cross-repository launch evidence
-is tracked separately and is not implied by this implementation changelog.
+Research-scope-complete implementation hard cut. All eleven public packages
+move in lockstep; this is breaking throughout. `effect-build-rolldown` remains
+private and reservation-only. Formal cross-repository launch evidence is
+tracked separately and is not implied by this implementation changelog.
+
+The v0.6.0 release publishes npm API/library bytes only, including the
+`effect-build-apple` API/library package. It does not publish signed or
+notarized App, DMG, or PKG products. Credential-backed Apple artifact
+certification was not run and has not passed; it and the AWS Notary journal are
+excluded from the v0.6.0 readiness gate. Signed/notarized macOS distribution is
+deferred to a later, separately qualified release.
+
+Release readiness authenticates the exact candidate plus exactly three hosted
+proofs: exact-main CI, exact protected-body fake-registry certification, and
+eleven-package npm OIDC dry-run certification. Unsupported npm administrative
+inventories and GitHub Administration-only observation are not modeled as
+external receipts. The dry-run proves package-specific exchange acceptance and
+unchanged registry state, not upload, provenance, publication, exclusive
+publisher inventory, token absence, package policy, or account 2FA state.
+GitHub Release immutability is re-observed by an operator immediately before
+draft creation and publication, and final verification requires the published
+Release to report immutable.
 
 - One generated `effect-build/combined-contract@1` accounts for 67 provider
   operations, 46 non-operation findings, and 19 capabilities across archives,

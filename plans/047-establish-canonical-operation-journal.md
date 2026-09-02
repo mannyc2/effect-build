@@ -7,9 +7,26 @@
   `origin/main@1e9efd717ff9d5dc2dbe5e079894cd8e92eb7ed3`
 - **Consumer repository**: `mannyc2/effect-build`, repository ID
   `1331906770`
+- **v0.6.0 scope**: DEFERRED; this journal is not a v0.6.0 release gate or
+  output
 - **Authority**: this file freezes a design only. It grants no ts-release
   clone/edit/commit/push/PR authority, AWS account/bucket/IAM mutation,
   workflow dispatch, credential use, Apple submission, or release authority.
+
+## Scope after the v0.6.0 npm-only hard cut
+
+The v0.6.0 release includes the `effect-build-apple` npm API/library package,
+but it does not produce or certify credential-backed signed/notarized macOS
+artifacts. No Apple account was available, Apple artifact certification was not
+run and has not passed, and no AWS journal evidence is required by or admitted
+to the v0.6.0 readiness aggregate. Do not provision or qualify AWS for v0.6.0.
+
+The design below is retained for a later, separately qualified release of
+signed/notarized App, DMG, and PKG products. Before that future use it must be
+re-reviewed against the then-current effect-build and ts-release versions,
+Apple credentials and hosts, AWS account/policies, and release contract. None
+of the historical design facts below imply current infrastructure, Apple
+acceptance, or release evidence.
 
 ## Decision
 
@@ -51,9 +68,9 @@ The boundary is exact:
    sequence/transaction identities, the minimal tag-level state machine, S3
    conditional writes, acknowledgment, re-read, and chain validation. It never
    branches on an Apple payload field.
-3. The effect-build release integration composes the released ts-release store
-   with the exact candidate's Apple codecs. The public effect-build-apple
-   package does not depend on ts-release.
+3. A future effect-build Apple-artifact release integration composes the
+   released ts-release store with that exact candidate's Apple codecs. The
+   public effect-build-apple package does not depend on ts-release.
 4. Qualification binds `{released ts-release version and source SHA, exact
    effect-build candidate SHA and Apple codec ID, AWS account ID, bucket ARN,
    region, role ARN, retention policy digest, and IAM/bucket-policy digest}`.
@@ -263,11 +280,11 @@ shape is:
 - two real child-process crash/resume tests;
 - packed Node and Bun consumer smoke tests.
 
-In the separate effect-build release-readiness candidate, add the Apple-owned
+In a separate future Apple-artifact release candidate, add the Apple-owned
 strict codecs/derivations and a fake-Apple two-process integration proving that
 process A preserves every required and optional `Submission` field and process
 B reconstructs and correlates the exact reference without ts-release
-interpreting those bytes.
+interpreting those bytes. This work is not part of the v0.6.0 readiness gate.
 
 Before Apple use, separately qualify a non-production scratch operation in the
 exact provisioned bucket from two fresh GitHub-hosted runners, including one
@@ -275,7 +292,7 @@ deliberately lost response and one CAS race. Download and externally retain the
 ACK, then prove a third credential-free reader validates the exact retained
 versions and governance.
 
-## Remaining authorities
+## Remaining authorities for the later Apple-artifact release
 
 1. Explicit local-write authority naming `mannyc2/ts-release`, exact base
    `1e9efd717ff9d5dc2dbe5e079894cd8e92eb7ed3`, and branch

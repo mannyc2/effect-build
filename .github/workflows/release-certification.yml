@@ -109,20 +109,6 @@ jobs:
           const release = contract.releaseCertification;
           const qualification = release.fakeRegistry.localQualification;
           const futureCertification = release.fakeRegistry.exactProtectedBodyCertification;
-          const externalAuthenticationStatus = release.readiness.externalEvidenceAuthentication.status;
-          const externalAuthenticationOutcomes = Object.freeze({
-            blocked: Object.freeze({
-              status: "blocked",
-              artifactDisposition: "forbidden-while-external-authentication-blocked",
-              exactArtifactAllowed: false,
-            }),
-            supported: Object.freeze({
-              status: "supported",
-              artifactDisposition: "required-on-supported-terminal-workflow-success",
-              exactArtifactAllowed: true,
-            }),
-          });
-          const externalAuthenticationOutcome = externalAuthenticationOutcomes[externalAuthenticationStatus];
           const exactPolicy = release.fakeRegistry.exactProtectedBody;
           const hypotheticalPolicy = release.fakeRegistry.hypotheticalStateMachine;
           const coordinates = hypotheticalPolicy.cases.flatMap(({ id, variants }) =>
@@ -134,7 +120,7 @@ jobs:
             return match === null ? [] : [{ coordinate: match[1], status }];
           }).sort((left, right) => left.coordinate.localeCompare(right.coordinate));
           const exactProtectedChecks = assertions
-            .filter(({ fullName }) => /stops the exact protected publish body before readiness adoption/u.test(fullName))
+            .filter(({ fullName }) => /requires exact three-role readiness before any npm command/u.test(fullName))
             .map(({ fullName, status }) => ({ name: fullName, status }));
           const expectedCoordinates = [...coordinates].sort();
           const expectedLedgerCoordinates = hypotheticalFakeRegistryEvidenceLedger.map(({ coordinate }) => coordinate).sort();
@@ -150,15 +136,14 @@ jobs:
             || qualification?.workflowPath !== ".github/workflows/release-certification.yml"
             || qualification?.workflow !== "mannyc2/effect-build/.github/workflows/release-certification.yml@refs/heads/main"
             || qualification?.artifactName !== "effect-build-v0.6.0-fake-registry-local-qualification"
-            || qualification?.protocol !== "effect-build/fake-registry-local-qualification@1"
+            || qualification?.protocol !== "effect-build/fake-registry-local-qualification@2"
             || qualification?.terminal !== "local-qualification"
             || qualification?.readinessAdmissible !== false
             || futureCertification?.implementationStatus !== "implemented"
-            || externalAuthenticationOutcome === undefined
-            || futureCertification?.status !== externalAuthenticationOutcome.status
-            || futureCertification?.artifactDisposition !== externalAuthenticationOutcome.artifactDisposition
+            || futureCertification?.status !== "supported"
+            || futureCertification?.artifactDisposition !== "required-on-terminal-workflow-success"
             || exactPolicy?.status !== "two-purpose-hard-cut"
-            || exactPolicy?.realExpected !== "stop-zero-mutations-while-readiness-authentication-is-blocked"
+            || exactPolicy?.realExpected !== "require-exact-three-role-readiness-before-first-registry-mutation"
             || exactPolicy?.realBlockedMutationCount !== 0
             || hypotheticalPolicy?.status !== "reference-oracle-only-not-certification"
             || hypotheticalPolicy?.testSubject !== "independent-oracle-compared-with-exact-protected-body"
@@ -178,7 +163,7 @@ jobs:
             || certificationChecks.some(({ status }) => status !== "passed")
           ) throw new Error("fake-registry local qualification report or generated policy is incomplete");
           const results = {
-            schema: "effect-build/fake-registry-local-qualification-results@1",
+            schema: "effect-build/fake-registry-local-qualification-results@2",
             sourceSha: process.env.EXPECTED_SHA,
             exactProtectedBody: {
               bodies: exactPolicy.bodies,
@@ -244,14 +229,9 @@ jobs:
           writeFileSync(resolve(process.env.RECEIPT_DIR, "fake-registry-local-qualification.json"), receiptBytes, {
             mode: 0o600,
           });
-          writeFileSync(process.env.GITHUB_OUTPUT, [
-            `exact-artifact-allowed=${externalAuthenticationOutcome.exactArtifactAllowed}`,
-            "",
-          ].join("\n"), { flag: "a" });
           NODE
       - name: Build the candidate-bound exact protected-body certification receipt
         id: exact-evidence
-        if: steps.evidence.outputs.exact-artifact-allowed == 'true'
         shell: bash
         env:
           CANDIDATE_REFERENCE_JSON: ${{ steps.exact-inputs.outputs.candidate-reference }}
@@ -303,7 +283,7 @@ jobs:
             observedAt,
             workflow: policy.workflow,
             contractDigest: sha256Digest(contractBytes),
-            externalAuthenticationStatus: contract.releaseCertification.readiness.externalEvidenceAuthentication.status,
+            readinessProtocol: contract.releaseCertification.readiness.protocol,
             candidate: reference.coordinate,
             candidateManifestDigest: reference.manifestDigest,
             coordinates,
@@ -321,8 +301,7 @@ jobs:
             || report.success !== true
             || policy.implementationStatus !== "implemented"
             || policy.status !== "supported"
-            || policy.status !== contract.releaseCertification.readiness.externalEvidenceAuthentication.status
-            || policy.artifactDisposition !== "required-on-supported-terminal-workflow-success"
+            || policy.artifactDisposition !== "required-on-terminal-workflow-success"
             || coordinates.length !== policy.exactMutationLedger.length
             || new Set(coordinates.map(({ coordinate }) => coordinate)).size !== coordinates.length
             || results.size !== coordinates.length
@@ -354,7 +333,6 @@ jobs:
           NODE
       - name: Upload the exact protected-body certification artifact
         id: exact-upload
-        if: steps.evidence.outputs.exact-artifact-allowed == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ steps.exact-evidence.outputs.artifact-name }}
@@ -364,7 +342,6 @@ jobs:
           compression-level: 0
       - name: Canonicalize and re-observe fake-registry exact protected-body bytes
         id: fake-registry-coordinate
-        if: steps.evidence.outputs.exact-artifact-allowed == 'true'
         shell: bash
         env:
           ACTIONS_READ_TOKEN: ${{ github.token }}

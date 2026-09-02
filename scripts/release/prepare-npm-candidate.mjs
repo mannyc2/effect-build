@@ -32,7 +32,7 @@ const names = derivePublicPackageNames(contract);
 const publicModules = derivePublicModules(contract);
 const reservedOnly = [...registry.reservation.packages].sort();
 const placeholders = [...registry.bootstrap.placeholderAtHandoffPackages].sort();
-const expectedLatest = [...registry.publicationAdmission.target.expectedLatestBeforePublication]
+const expectedDistTags = [...registry.publicationAdmission.target.expectedDistTagsBeforePublication]
   .sort((left, right) => left.name.localeCompare(right.name));
 
 if (
@@ -41,7 +41,7 @@ if (
   || policy.candidate.repositoryCodeInProtectedConsumer !== "forbidden"
   || policy.publicAdmission.packageCount !== 11
   || policy.publicAdmission.moduleCount !== 42
-  || JSON.stringify(expectedLatest.map(({ name }) => name)) !== JSON.stringify(names)
+  || JSON.stringify(expectedDistTags.map(({ name }) => name)) !== JSON.stringify(names)
   || names.includes("effect-build-rolldown")
   || JSON.stringify(reservedOnly) !== JSON.stringify(["effect-build-rolldown"])
   || placeholders.length !== 7

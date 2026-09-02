@@ -20,5 +20,6 @@ export default defineConfig({
   test: {
     passWithNoTests: false,
     include: ["test/**/*.test.ts"],
+    maxConcurrency: 8,
   },
 });

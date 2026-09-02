@@ -478,6 +478,12 @@ const handleCurl = () => {
   if (url === `${prefix}contents/tooling/effect-build-contract.json?ref=${sourceSha}`) {
     return writeCurlBody(readFileSync(state.candidate.contractPath), output);
   }
+  if (url === `${prefix}contents/tooling/sigstore/trusted_root.json?ref=${sourceSha}`) {
+    return writeCurlBody(
+      readFileSync(new URL("../../../tooling/sigstore/trusted_root.json", import.meta.url)),
+      output,
+    );
+  }
   for (const artifact of Object.values(state.artifacts)) {
     if (url === `${prefix}actions/artifacts/${artifact.artifactId}`) {
       return writeCurlBody(artifactMetadata(artifact), output);
