@@ -316,6 +316,54 @@ const makePublisherReadinessFixture = ({
   return { bundleBytes, manifestBytes: Buffer.from(canonicalJson(manifest)) };
 };
 
+const writeReadinessArtifact = ({ candidate, candidateManifestBytes, contract, contractPath, registry, root, scenario }) => {
+  const readinessDirectory = resolve(root, "readiness");
+  mkdirSync(readinessDirectory, { recursive: true });
+  const aggregateTime = Date.now();
+  const observedAt = new Date(aggregateTime).toISOString();
+  const aggregate = makePublisherReadinessFixture({
+    candidate,
+    candidateManifestBytes,
+    contract,
+    contractPath,
+    observedAt,
+    registry,
+  });
+  writeFileSync(resolve(readinessDirectory, "release-readiness.json"), aggregate.manifestBytes);
+  writeFileSync(resolve(readinessDirectory, "release-readiness.bin"), aggregate.bundleBytes);
+  if (["readiness-stale", "readiness-future", "readiness-excess-validity"].includes(scenario)) {
+    const hostile = JSON.parse(aggregate.manifestBytes);
+    if (scenario === "readiness-stale") {
+      hostile.observedAt = new Date(aggregateTime - 5 * 60 * 60 * 1000).toISOString();
+    } else if (scenario === "readiness-future") {
+      hostile.observedAt = new Date(aggregateTime + 2 * 60 * 1000).toISOString();
+    } else {
+      hostile.candidate.expiresAt = new Date(
+        aggregateTime - 60_000
+          + (contract.releaseCertification.readiness.candidate.maximumValiditySeconds + 1) * 1000,
+      ).toISOString();
+    }
+    writeFileSync(resolve(readinessDirectory, "release-readiness.json"), canonicalJson(hostile));
+  }
+  const readinessZip = resolve(root, "readiness.zip");
+  writeGithubArtifactZip({
+    directory: readinessDirectory,
+    filenames: contract.releaseCertification.readiness.orderedFiles,
+    outputPath: readinessZip,
+  });
+  const readinessBytes = readFileSync(readinessZip);
+  return {
+    artifactId: 9002,
+    digest: canonicalDigest(readinessBytes),
+    name: contract.releaseCertification.readiness.artifactName,
+    path: readinessZip,
+    runAttempt: 1,
+    runId: 7002,
+    size: readinessBytes.byteLength,
+    workflowPath: contract.releaseCertification.readiness.workflowPath,
+  };
+};
+
 const makeExactCandidateFixture = ({ root, scenario }) => {
   const candidateDirectory = process.env.EFFECT_BUILD_CERTIFICATION_CANDIDATE_DIRECTORY;
   const candidateZip = process.env.EFFECT_BUILD_CERTIFICATION_CANDIDATE_ZIP;
@@ -377,30 +425,30 @@ const makeExactCandidateFixture = ({ root, scenario }) => {
   );
   const contractPath = resolve(root, "effect-build-contract.json");
   copyFileSync(contractSource, contractPath);
+  const tamperedScenarios = ["private-manifest", "duplicate-nonmanifest", "symlink-leaf"];
   const derivedCandidate = scenario.startsWith("publish-config-")
+    || tamperedScenarios.includes(scenario)
     || scenario === "candidate-manifest-mismatch"
     || scenario === "candidate-tarball-mismatch";
-  if (scenario.startsWith("publish-config-")) {
+  const tamperFirstPackage = (mutate) => {
     const entry = manifest.packages[0];
-    const packageRoot = resolve(workRoot, entry.name);
-    mkdirSync(packageRoot);
-    run("tar", ["-xzf", resolve(fixtureCandidateDirectory, entry.file), "-C", packageRoot]);
-    const embeddedPath = resolve(packageRoot, "package", "package.json");
-    const embedded = JSON.parse(readFileSync(embeddedPath, "utf8"));
-    const publishConfig = candidatePublishConfig(scenario, entry.name);
-    if (publishConfig === undefined) delete embedded.publishConfig;
-    else embedded.publishConfig = publishConfig;
-    writeFileSync(embeddedPath, `${JSON.stringify(embedded, null, 2)}\n`);
+    const extractRoot = resolve(workRoot, entry.name);
+    mkdirSync(extractRoot);
+    run("tar", ["-xzf", resolve(fixtureCandidateDirectory, entry.file), "-C", extractRoot]);
+    const packageRoot = resolve(extractRoot, "package");
+    const embeddedPath = resolve(packageRoot, "package.json");
+    const extraMembers = mutate({ embeddedPath, packageRoot }) ?? [];
     utimesSync(embeddedPath, fixedTime, fixedTime);
-    utimesSync(resolve(packageRoot, "package"), fixedTime, fixedTime);
+    utimesSync(packageRoot, fixedTime, fixedTime);
     run("tar", [
       "--format",
       "ustar",
       "-czf",
       resolve(fixtureCandidateDirectory, entry.file),
       "-C",
-      packageRoot,
+      extractRoot,
       "package",
+      ...extraMembers,
     ], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
     const observed = metadata(resolve(fixtureCandidateDirectory, entry.file));
     Object.assign(entry, {
@@ -410,7 +458,34 @@ const makeExactCandidateFixture = ({ root, scenario }) => {
       sha256: `sha256:${observed.sha256}`,
     });
     writeFileSync(resolve(fixtureCandidateDirectory, manifestName), canonicalJson(manifest));
+  };
+  if (scenario.startsWith("publish-config-")) {
+    tamperFirstPackage(({ embeddedPath }) => {
+      const embedded = JSON.parse(readFileSync(embeddedPath, "utf8"));
+      const publishConfig = candidatePublishConfig(scenario, manifest.packages[0].name);
+      if (publishConfig === undefined) delete embedded.publishConfig;
+      else embedded.publishConfig = publishConfig;
+      writeFileSync(embeddedPath, `${JSON.stringify(embedded, null, 2)}\n`);
+    });
   }
+  if (scenario === "private-manifest") {
+    tamperFirstPackage(({ embeddedPath }) => {
+      const embedded = JSON.parse(readFileSync(embeddedPath, "utf8"));
+      writeFileSync(embeddedPath, `${JSON.stringify({ name: embedded.name, private: true, ...embedded }, null, 2)}\n`);
+    });
+  }
+  if (scenario === "symlink-leaf") {
+    tamperFirstPackage(({ packageRoot }) => {
+      symlinkSync("package.json", resolve(packageRoot, "manifest-link"));
+    });
+  }
+  if (scenario === "duplicate-nonmanifest") {
+    tamperFirstPackage(({ packageRoot }) => {
+      writeFileSync(resolve(packageRoot, "duplicate.txt"), "duplicate archive member\n");
+      return ["package/duplicate.txt"];
+    });
+  }
+  const readinessCandidateManifestBytes = readFileSync(resolve(fixtureCandidateDirectory, manifestName));
   if (scenario === "candidate-manifest-mismatch") {
     writeFileSync(
       resolve(fixtureCandidateDirectory, manifestName),
@@ -450,16 +525,15 @@ const makeExactCandidateFixture = ({ root, scenario }) => {
     size: candidateBytes.byteLength,
     workflowPath: contract.releaseCertification.candidate.workflowPath,
   };
-  const readiness = {
-    artifactId: 9002,
-    digest: `sha256:${"0".repeat(64)}`,
-    name: contract.releaseCertification.readiness.artifactName,
-    path: null,
-    runAttempt: 1,
-    runId: 7002,
-    size: 0,
-    workflowPath: contract.releaseCertification.readiness.workflowPath,
-  };
+  const readiness = writeReadinessArtifact({
+    candidate,
+    candidateManifestBytes: readinessCandidateManifestBytes,
+    contract,
+    contractPath,
+    registry: contract.npmRegistryBoundary,
+    root,
+    scenario,
+  });
   const statePath = resolve(root, "state.json");
   createReleaseState({ candidate, contractPath, placeholderPackages, readiness, scenario, statePath });
   rmSync(workRoot, { force: true, recursive: true });
@@ -471,11 +545,9 @@ export const makeReleaseFixture = async ({ root, scenario }) => {
   if (exact !== undefined) return exact;
   const candidateDirectory = resolve(root, "candidate");
   const placeholderDirectory = resolve(root, "placeholders");
-  const readinessDirectory = resolve(root, "readiness");
   const workRoot = resolve(root, "package-roots");
   mkdirSync(candidateDirectory);
   mkdirSync(placeholderDirectory);
-  mkdirSync(readinessDirectory);
   mkdirSync(workRoot);
 
   const contract = JSON.parse(readFileSync(resolve(repositoryRoot, "tooling/effect-build-contract.json"), "utf8"));
@@ -581,49 +653,15 @@ export const makeReleaseFixture = async ({ root, scenario }) => {
     workflowPath: ".github/workflows/release.yml",
   };
 
-  const aggregateTime = Date.now();
-  const observedAt = new Date(aggregateTime).toISOString();
-  const aggregate = makePublisherReadinessFixture({
+  const readiness = writeReadinessArtifact({
     candidate,
     candidateManifestBytes: readinessCandidateManifestBytes,
     contract,
     contractPath,
-    observedAt,
     registry,
+    root,
+    scenario,
   });
-  writeFileSync(resolve(readinessDirectory, "release-readiness.json"), aggregate.manifestBytes);
-  writeFileSync(resolve(readinessDirectory, "release-readiness.bin"), aggregate.bundleBytes);
-  if (["readiness-stale", "readiness-future", "readiness-excess-validity"].includes(scenario)) {
-    const hostile = JSON.parse(aggregate.manifestBytes);
-    if (scenario === "readiness-stale") {
-      hostile.observedAt = new Date(aggregateTime - 5 * 60 * 60 * 1000).toISOString();
-    } else if (scenario === "readiness-future") {
-      hostile.observedAt = new Date(aggregateTime + 2 * 60 * 1000).toISOString();
-    } else {
-      hostile.candidate.expiresAt = new Date(
-        aggregateTime - 60_000
-          + (contract.releaseCertification.readiness.candidate.maximumValiditySeconds + 1) * 1000,
-      ).toISOString();
-    }
-    writeFileSync(resolve(readinessDirectory, "release-readiness.json"), canonicalJson(hostile));
-  }
-  const readinessZip = resolve(root, "readiness.zip");
-  writeGithubArtifactZip({
-    directory: readinessDirectory,
-    filenames: contract.releaseCertification.readiness.orderedFiles,
-    outputPath: readinessZip,
-  });
-  const readinessBytes = readFileSync(readinessZip);
-  const readiness = {
-    artifactId: 9002,
-    digest: canonicalDigest(readinessBytes),
-    name: contract.releaseCertification.readiness.artifactName,
-    path: readinessZip,
-    runAttempt: 1,
-    runId: 7002,
-    size: readinessBytes.byteLength,
-    workflowPath: contract.releaseCertification.readiness.workflowPath,
-  };
 
   const statePath = resolve(root, "state.json");
   createReleaseState({

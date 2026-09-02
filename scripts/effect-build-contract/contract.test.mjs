@@ -907,9 +907,9 @@ test("freezes one exact release-certification policy without copying public pack
       githubPolicySource: "releaseCertification.githubAuthority.readOnlyTransport",
       npmRegistryOriginSource: "npmRegistryBoundary.registry",
       oidcRequest: {
-        hostPattern: "^pipelines[a-z0-9-]*\\.actions\\.githubusercontent\\.com$",
+        hostPattern: "^(?:pipelines[a-z0-9-]*|run-actions-[0-9]+-[a-z0-9-]+)\\.actions\\.githubusercontent\\.com$",
         pathPattern:
-          "^/[A-Za-z0-9_-]{20,}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/_apis/distributedtask/hubs/[A-Za-z]+/plans/[A-Za-z0-9_-]{20,}/jobs/[A-Za-z0-9_-]{20,}/idtoken$",
+          "^(?:/[A-Za-z0-9_-]{20,}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/_apis/distributedtask/hubs/[A-Za-z]+/plans/[A-Za-z0-9_-]{20,}/jobs/[A-Za-z0-9_-]{20,}/idtoken|/[0-9]+//idtoken/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
         initialQuery: "api-version=2.0",
         audienceName: "audience",
         audienceValue: "npm:registry.npmjs.org",

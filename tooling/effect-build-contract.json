@@ -33,11 +33,11 @@
       },
       {
         "path": "scripts/effect-build-contract/policy.mjs",
-        "sha256": "3665034233295e1e7460bcec7d174e4b81587a59d45003b8f86f3b438ed205a4"
+        "sha256": "404beb1c621ebc999c72a2bacc42f4b579840643c3d3aa16b6fc982bd29ff983"
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "c6437b0af46a1f7fb392e7e456911878e06fc18abcc5dafc12bf5a143ad68ee2"
+        "sha256": "feef0c67de5e828a3de4f5986f77d9ca02cce077695fac546f84647a3b881e06"
       },
       {
         "path": "package.json",
@@ -5616,8 +5616,8 @@
         "githubPolicySource": "releaseCertification.githubAuthority.readOnlyTransport",
         "npmRegistryOriginSource": "npmRegistryBoundary.registry",
         "oidcRequest": {
-          "hostPattern": "^pipelines[a-z0-9-]*\\.actions\\.githubusercontent\\.com$",
-          "pathPattern": "^/[A-Za-z0-9_-]{20,}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/_apis/distributedtask/hubs/[A-Za-z]+/plans/[A-Za-z0-9_-]{20,}/jobs/[A-Za-z0-9_-]{20,}/idtoken$",
+          "hostPattern": "^(?:pipelines[a-z0-9-]*|run-actions-[0-9]+-[a-z0-9-]+)\\.actions\\.githubusercontent\\.com$",
+          "pathPattern": "^(?:/[A-Za-z0-9_-]{20,}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/_apis/distributedtask/hubs/[A-Za-z]+/plans/[A-Za-z0-9_-]{20,}/jobs/[A-Za-z0-9_-]{20,}/idtoken|/[0-9]+//idtoken/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
           "initialQuery": "api-version=2.0",
           "audienceName": "audience",
           "audienceValue": "npm:registry.npmjs.org",
@@ -6230,7 +6230,7 @@
             },
             {
               "path": "test/fixtures/release/make-candidate.mjs",
-              "sha256": "7f0f0a48adc0cfc195f446f54943a52529f5fe85d4a3b0e1212d4cf02742a1c0"
+              "sha256": "63b8f8e5c23197ac061c58e4248faa8076368820529b8a48e4a2e04ca406c3df"
             },
             {
               "path": "test/fixtures/release/make-fixture-contract.mjs",
