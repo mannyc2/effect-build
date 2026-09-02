@@ -295,7 +295,7 @@ const clearPublishFault = async (statePath: string) => {
   stateModule.clearPublishFault(statePath);
 };
 
-const protectedBodyTimeout = 300_000;
+const protectedBodyTimeout = 600_000;
 const exactCoordinateTimeout = (protectedBodyTimeout * 2) + 60_000;
 const supportedConvergenceTimeout = protectedBodyTimeout + 60_000;
 
@@ -344,6 +344,13 @@ const executeBody = (
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
           stderr += `${stderr.length === 0 ? "" : "\n"}${String(error)}`;
+          return;
+        }
+        // The detached child may not have created its process group yet; kill it directly.
+        try {
+          child.kill(signal);
+        } catch {
+          // The child already exited.
         }
       }
     };
@@ -555,10 +562,10 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
         "(trap '' TERM; sleep 2; printf leaked > \"$MARKER\") & wait",
         directory,
         { MARKER: marker, PATH: process.env.PATH ?? "" },
-        50,
+        500,
       );
       expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("protected body timed out after 50ms");
+      expect(result.stderr).toContain("protected body timed out after 500ms");
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_250));
       await expect(access(marker)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {

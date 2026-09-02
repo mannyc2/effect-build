@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
@@ -20,6 +21,7 @@ export default defineConfig({
   test: {
     passWithNoTests: false,
     include: ["test/**/*.test.ts"],
-    maxConcurrency: 8,
+    // Concurrent suites spawn one protected body per case; never oversubscribe the host.
+    maxConcurrency: Math.min(8, Math.max(2, availableParallelism())),
   },
 });
