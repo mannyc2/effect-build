@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { bundleFromJSON, bundleToJSON } from "@sigstore/bundle";
+import { bundleFromJSON } from "@sigstore/bundle";
 import { TrustedRoot } from "@sigstore/protobuf-specs";
 import { toSignedEntity, toTrustMaterial, Verifier } from "@sigstore/verify";
 
@@ -36,52 +36,6 @@ const canonicalBase64 = (value, label) => {
   if (decoded.toString("base64") !== value) throw new Error(`${label} is not canonical base64`);
   return decoded;
 };
-
-const canonicalTimestamp = (value, label) => {
-  if (typeof value !== "string") throw new Error(`${label} is not a timestamp`);
-  const milliseconds = Date.parse(value);
-  if (!Number.isFinite(milliseconds) || new Date(milliseconds).toISOString() !== value) {
-    throw new Error(`${label} is not one canonical UTC timestamp`);
-  }
-  return milliseconds;
-};
-
-const positiveDecimal = (value, label) => {
-  if (typeof value !== "string" || !/^[1-9][0-9]*$/u.test(value)) {
-    throw new Error(`${label} is not a canonical positive decimal string`);
-  }
-  return value;
-};
-
-const fullSha = (value, label) => {
-  if (typeof value !== "string" || !/^[0-9a-f]{40}$/u.test(value)) {
-    throw new Error(`${label} is not one full lowercase source SHA`);
-  }
-  return value;
-};
-
-const canonicalDigest = (value, contract, label) => {
-  const pattern = contract.releaseCertification?.githubArtifactDigest?.canonicalPattern;
-  if (typeof value !== "string" || typeof pattern !== "string" || !new RegExp(pattern, "u").test(value)) {
-    throw new Error(`${label} is not a canonical SHA-256 digest`);
-  }
-  return value;
-};
-
-const decodeCanonicalJson = (bytes, label) => {
-  let text;
-  let value;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    value = JSON.parse(text);
-  } catch {
-    throw new Error(`${label} is not UTF-8 JSON`);
-  }
-  if (text !== canonicalJson(value)) throw new Error(`${label} is not canonical JSON`);
-  return value;
-};
-
-const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 const derLength = (length) => {
   if (!Number.isSafeInteger(length) || length < 0) throw new Error("Sigstore OID value length is invalid");
@@ -165,7 +119,7 @@ const signerFromProjection = (value) => ({
 const trustedRootPolicy = (verifier) => {
   const value = exactKeys(
     verifier?.trustedRoot,
-    ["path", "artifactFile", "mediaType", "bytes", "digest", "tuf", "verification"],
+    ["path", "mediaType", "bytes", "digest", "tuf", "verification"],
     "Sigstore trusted-root policy",
   );
   const tuf = exactKeys(
@@ -175,7 +129,6 @@ const trustedRootPolicy = (verifier) => {
   );
   if (
     value.path !== "tooling/sigstore/trusted_root.json"
-    || value.artifactFile !== "sigstore-trusted-root.json"
     || value.mediaType !== "application/vnd.dev.sigstore.trustedroot+json;version=0.1"
     || value.bytes !== 6787
     || value.digest !== "sha256:6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66"
@@ -264,7 +217,7 @@ export const verifySigstoreBundleIsolated = async (
   options,
   { contract, environment = process.env, spawn = spawnSync, trustedRootBytes } = {},
 ) => {
-  const { verifier } = authenticationPolicy(contract);
+  const { verifier } = provenancePolicy(contract);
   const exactTrustedRootBytes = trustedRootBytes ?? readFileSync(vendoredTrustedRootPath);
   validateTrustedRootBytes({
     trustedRootBytes: exactTrustedRootBytes,
@@ -353,15 +306,14 @@ export const validateVerifiedSignerIdentity = ({ signer, verifier, identity, pro
   return signer;
 };
 
-const authenticationPolicy = (contract) => {
+const provenancePolicy = (contract) => {
   const release = contract?.releaseCertification;
-  const authentication = release?.readiness?.externalEvidenceAuthentication;
-  const verifier = authentication?.verifier;
+  const verifier = release?.provenanceVerification;
   if (
     contract?.schema !== "effect-build/combined-contract@1"
     || !isRecord(release)
-    || !isRecord(authentication)
     || !isRecord(verifier)
+    || verifier.purpose !== "npm-publication-provenance-verification-only"
     || verifier.status !== "implemented"
     || verifier.module !== "scripts/release/sigstore-dsse-verifier.mjs"
     || verifier.client?.package !== "@sigstore/verify"
@@ -378,196 +330,8 @@ const authenticationPolicy = (contract) => {
     || verifier.networkGuard?.strategy
       !== "preload-standard-node-network-api-denial-plus-audited-direct-verifier-closure"
     || verifier.network !== "forbidden-by-preload-guard-and-audited-direct-verifier-closure"
-    || authentication.requiredEnvelope !== "sigstore-bundle-v0.3-dsse"
-    || !Array.isArray(authentication.producerIdentities)
-    || !Array.isArray(authentication.producerIdentityFields)
-    || !isRecord(authentication.sourceBinding)
-  ) throw new Error("combined contract has no implemented Sigstore DSSE verifier policy");
-  return { authentication, release, verifier };
-};
-
-export const validateProducerIdentityPolicy = ({ authentication, identity, role, verifier }) => {
-  const value = exactKeys(
-    identity,
-    authentication.producerIdentityFields,
-    `Sigstore ${role} producer identity`,
-  );
-  const bindingPolicy = authentication.sourceBinding;
-  if (
-    value.role !== role
-    || value.certificateIssuer !== verifier.certificateIssuer
-    || value.certificateIdentityURI !== `https://github.com/${value.workflow}`
-    || !value.workflow.startsWith(`${value.repository}/.github/workflows/`)
-    || value.ref !== "refs/heads/main"
-  ) throw new Error(`Sigstore ${role} producer identity is not exact`);
-  if (value.sourceBinding?.kind === bindingPolicy.releaseSourceKind) {
-    exactKeys(value.sourceBinding, bindingPolicy.releaseSourceFields, `Sigstore ${role} release source binding`);
-    if (!value.workflow.endsWith(`@${value.ref}`)) {
-      throw new Error(`Sigstore ${role} release-source workflow ref is not exact`);
-    }
-  } else if (value.sourceBinding?.kind === bindingPolicy.exactSourceKind) {
-    exactKeys(value.sourceBinding, bindingPolicy.exactSourceFields, `Sigstore ${role} exact source binding`);
-    fullSha(value.sourceBinding.sourceSha, `Sigstore ${role} exact producer source SHA`);
-    if (!value.workflow.endsWith(`@${value.sourceBinding.sourceSha}`)) {
-      throw new Error(`Sigstore ${role} exact-source workflow ref is not immutable`);
-    }
-  } else {
-    throw new Error(`Sigstore ${role} has no contract-pinned producer source binding`);
-  }
-  return value;
-};
-
-export const validateSigstoreBundleTransport = ({ contract, bundleBytes }) => {
-  const { verifier } = authenticationPolicy(contract);
-  if (!(bundleBytes instanceof Uint8Array) || bundleBytes.byteLength === 0) {
-    throw new Error("Sigstore DSSE bundle is empty");
-  }
-  if (bundleBytes.byteLength > verifier.maximumBundleBytes) throw new Error("Sigstore DSSE bundle is too large");
-  const bundle = exactKeys(
-    decodeCanonicalJson(bundleBytes, "Sigstore DSSE bundle"),
-    verifier.bundleFields,
-    "Sigstore DSSE bundle",
-  );
-  const envelope = exactKeys(bundle.dsseEnvelope, verifier.envelopeFields, "Sigstore DSSE envelope");
-  if (
-    bundle.mediaType !== verifier.bundleMediaType
-    || envelope.payloadType !== verifier.payloadType
-    || !Array.isArray(envelope.signatures)
-    || envelope.signatures.length !== verifier.envelopeSignatureCount
-  ) throw new Error("Sigstore DSSE media type, payload type, or signature cardinality changed");
-  exactKeys(envelope.signatures[0], verifier.signatureFields, "Sigstore DSSE signature");
-  canonicalBase64(envelope.signatures[0].sig, "Sigstore DSSE signature bytes");
-  exactKeys(bundle.verificationMaterial, verifier.verificationMaterialFields, "Sigstore verification material");
-  exactKeys(
-    bundle.verificationMaterial.timestampVerificationData,
-    verifier.timestampVerificationDataFields,
-    "Sigstore timestamp verification material",
-  );
-  if (
-    !Array.isArray(bundle.verificationMaterial.tlogEntries)
-    || bundle.verificationMaterial.tlogEntries.length < verifier.minimumTlogEntries
-  ) throw new Error("Sigstore DSSE bundle has no transparency-log entry");
-  try {
-    const normalizedBundle = bundleToJSON(bundleFromJSON(bundle));
-    if (canonicalJson(normalizedBundle) !== canonicalJson(bundle)) {
-      throw new Error("noncanonical Sigstore bundle shape");
-    }
-  } catch {
-    throw new Error("Sigstore DSSE bundle is not one canonical v0.3 bundle");
-  }
-  return bundle;
-};
-
-export const verifyExternalEvidenceEnvelope = async ({
-  contract,
-  definition,
-  reference,
-  bundleBytes,
-  validationTime,
-  environment = process.env,
-  verifyBundle,
-}) => {
-  const { authentication, release, verifier } = authenticationPolicy(contract);
-  const canonicalDefinition = release.readiness?.evidenceRoles?.find(({ role }) => role === reference?.role);
-  if (
-    !isRecord(canonicalDefinition)
-    || canonicalDefinition.type !== "externalObservation"
-    || canonicalJson(canonicalDefinition) !== canonicalJson(definition)
-  ) throw new Error("Sigstore DSSE evidence role definition is not canonical");
-  const referenceValue = exactKeys(
-    reference,
-    release.readiness.referenceShapes?.externalObservation,
-    `Sigstore ${definition.role} reference`,
-  );
-  if (
-    referenceValue.role !== definition.role
-    || referenceValue.type !== definition.type
-    || referenceValue.protocol !== definition.protocol
-    || referenceValue.terminal !== definition.terminal
-  ) throw new Error("Sigstore DSSE evidence reference identity changed");
-  const forbiddenNames = release.npmOidcCertification?.forbiddenEnvironmentNames;
-  if (
-    !Array.isArray(forbiddenNames)
-    || forbiddenNames.some((name) => typeof environment[name] === "string")
-  ) throw new Error("Sigstore DSSE verification environment contains forbidden signing or registry authority");
-  const bundle = validateSigstoreBundleTransport({ contract, bundleBytes });
-  const envelope = bundle.dsseEnvelope;
-
-  const payload = exactKeys(
-    decodeCanonicalJson(canonicalBase64(envelope.payload, "Sigstore DSSE payload"), "Sigstore DSSE payload"),
-    verifier.payloadFields,
-    "Sigstore DSSE payload",
-  );
-  const identityMatches = authentication.producerIdentities.filter((identity) => identity?.role === definition?.role);
-  if (identityMatches.length !== 1) throw new Error(`no unique contract-pinned producer identity for ${definition?.role}`);
-  const identity = validateProducerIdentityPolicy({
-    authentication,
-    identity: identityMatches[0],
-    role: definition.role,
-    verifier,
-  });
-  const bindingPolicy = authentication.sourceBinding;
-  const binding = identity.sourceBinding;
-  let expectedProducerSourceSha;
-  if (binding?.kind === bindingPolicy.releaseSourceKind) {
-    exactKeys(binding, bindingPolicy.releaseSourceFields, `Sigstore ${definition.role} release source binding`);
-    expectedProducerSourceSha = reference.sourceSha;
-  } else if (binding?.kind === bindingPolicy.exactSourceKind) {
-    exactKeys(binding, bindingPolicy.exactSourceFields, `Sigstore ${definition.role} exact source binding`);
-    expectedProducerSourceSha = fullSha(binding.sourceSha, `Sigstore ${definition.role} exact producer source SHA`);
-  } else {
-    throw new Error(`Sigstore ${definition.role} has no contract-pinned producer source binding`);
-  }
-  if (
-    expectedProducerSourceSha !== payload.producerSourceSha
-    || payload.schema !== verifier.payloadProtocol
-    || payload.role !== definition.role
-    || payload.producerWorkflow !== identity.workflow
-    || payload.releaseSourceSha !== reference.sourceSha
-    || payload.receiptProtocol !== definition.protocol
-    || payload.observedAt !== reference.observedAt
-    || payload.expiresAt !== reference.expiresAt
-  ) throw new Error("Sigstore DSSE producer, role, source, receipt, or time binding changed");
-  fullSha(payload.producerSourceSha, "Sigstore DSSE producer source SHA");
-  fullSha(payload.releaseSourceSha, "Sigstore DSSE release source SHA");
-  const receiptBytes = canonicalBase64(payload.receiptBase64, "Sigstore DSSE receipt bytes");
-  if (
-    receiptBytes.byteLength > verifier.maximumReceiptBytes
-    || positiveDecimal(payload.receiptBytes, "Sigstore DSSE receipt byte count") !== `${receiptBytes.byteLength}`
-    || canonicalDigest(payload.receiptDigest, contract, "Sigstore DSSE receipt digest") !== sha256Digest(receiptBytes)
-    || decodeCanonicalJson(receiptBytes, "Sigstore DSSE receipt") === undefined
-  ) throw new Error("Sigstore DSSE receipt byte identity changed");
-  if (
-    positiveDecimal(reference.bytes, `${definition.role} bundle byte count`) !== `${bundleBytes.byteLength}`
-    || canonicalDigest(reference.digest, contract, `${definition.role} bundle digest`) !== sha256Digest(bundleBytes)
-  ) throw new Error("Sigstore DSSE bundle byte identity changed");
-  const observedAt = canonicalTimestamp(payload.observedAt, "Sigstore DSSE observedAt");
-  const expiresAt = canonicalTimestamp(payload.expiresAt, "Sigstore DSSE expiresAt");
-  const validationAt = canonicalTimestamp(validationTime, "Sigstore DSSE validation time");
-  if (
-    !Number.isSafeInteger(definition.maximumAgeSeconds)
-    || !Number.isSafeInteger(definition.maximumValiditySeconds)
-    || observedAt > validationAt + release.readiness.clockSkewSeconds * 1_000
-    || validationAt - observedAt > definition.maximumAgeSeconds * 1_000
-    || expiresAt <= validationAt
-    || expiresAt <= observedAt
-    || expiresAt - observedAt > definition.maximumValiditySeconds * 1_000
-  ) throw new Error("Sigstore DSSE evidence is future, stale, expired, or overlong");
-
-  // sigstore's embedded-DSSE overload is verify(bundle, options). Passing an
-  // undefined data argument would select the options overload and discard a
-  // third argument, silently removing every identity and log constraint.
-  const verifierOptions = {
-    certificateIssuer: identity.certificateIssuer,
-    certificateIdentityURI: `^${escapeRegExp(identity.certificateIdentityURI)}$`,
-    ctLogThreshold: verifier.ctLogThreshold,
-    tlogThreshold: verifier.tlogThreshold,
-  };
-  const signer = verifyBundle === undefined
-    ? await verifySigstoreBundleIsolated(bundle, verifierOptions, { contract, environment })
-    : await verifyBundle(bundle, verifierOptions);
-  validateVerifiedSignerIdentity({ signer, verifier, identity, producerSourceSha: payload.producerSourceSha });
-  return { bundle, identity, payload, receiptBytes, signer };
+  ) throw new Error("combined contract has no implemented npm provenance verifier policy");
+  return { release, verifier };
 };
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === modulePath && process.argv[2] === "--verify-child") {
@@ -584,7 +348,7 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]) === modulePath && 
     exactKeys(input, ["bundle", "options", "trustedRootBase64"], "isolated Sigstore child input");
     failureStage = "contract";
     const contract = JSON.parse(readFileSync(contractPath, "utf8"));
-    const { verifier } = authenticationPolicy(contract);
+    const { verifier } = provenancePolicy(contract);
     failureStage = "runtime";
     validateVerifierRuntime({ runtime: verifier.runtime });
     failureStage = "trusted-root";

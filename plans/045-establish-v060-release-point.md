@@ -21,11 +21,13 @@
 > If any listed path changed before Step 1, re-run the read-only current-state
 > audit. A changed public package, existing contract authority, release
 > boundary, or Apple operation inventory is a STOP until this plan is
-> reconciled. After Step 8, the exact reviewed contract delta is expected:
-> `releaseCertification` is added; the private implementation register adds
-> only the Notary submission, journal-codec, and rejection-fixture rows; and
-> provenance changes only for the regenerated model/policy source digests. Any
-> public/provider/capability/admission/reservation change or other drift stops.
+> reconciled. After Step 8, the reviewed contract includes
+> `releaseCertification`, the private Apple implementation rows, and the
+> 2026-09-01 npm-only scope hard cut. That hard cut retains eleven public npm
+> packages including `effect-build-apple`, removes Apple certification and the
+> operational journal from v0.6.0 readiness, and admits exactly three hosted
+> evidence roles with no external ingress. Any public/provider/capability/npm
+> admission/reservation change or other drift stops.
 
 ## Status
 
@@ -43,35 +45,46 @@
 - **Cold-reviewed at**: 2026-08-31 against the exact PR-head and remote-main
   workflow blobs, npm 11.11.0 source, Apple contract/API, and live GitHub/npm
   read-only state
-- **Status**: LOCAL EFFECT-BUILD IMPLEMENTATION VERIFIED; external execution
-  remains blocked at Step 2 feasibility. Guarded merge, exact-main ordinary CI,
-  isolated worktree creation, the Apple probe-admission repair, the read-only
-  authority auditor, contract, credential-free workflows, exact-shell fake
-  boundaries, Apple-owned codec/receipt/submission boundary, aggregate
-  validators, and local verification are complete as uncommitted working-tree
-  changes. The exact 40-coordinate protected-body matrix passed, and the final
-  pinned Bun 1.3.14 full gate passed. No npm identity, Apple credential,
-  operational journal backend, external producer identity, hosted receipt, or
-  repository setting was inferred or supplied. Protected dispatch, Apple
-  submission, journal use, credentialed certification, and every remote
-  mutation remain stopped until their recorded blockers and separate
-  authorities are resolved
-- **Publication authority**: NONE
+- **Status**: npm-only hosted-proof hard cut in implementation and verification.
+  Guarded merge, exact-main ordinary CI, the Apple probe-admission repair,
+  credential-free protocol work, and the exact-shell fake boundaries are
+  complete history. The current cut removes unsupported external-observer
+  roles and makes the canonical three-proof path directly executable. It must
+  pass a fresh pinned Bun 1.3.14 full gate and hosted review before R can be
+  selected.
+  Credential-backed Apple certification was not run and has not passed; it and
+  the AWS Notary journal are deliberately excluded from v0.6.0 readiness and
+  outputs. No hosted readiness or publication receipt is implied by local work
+- **Publication authority**: separately supplied by the operator; execution
+  still stops on any failed protocol or external-service result
+
+## v0.6.0 scope decision (2026-09-01)
+
+Release exactly the eleven contract-admitted npm packages, including the
+`effect-build-apple` API/library package. The release contains npm package
+bytes, the candidate manifest, and the later GitHub Release assets copied from
+that candidate. It contains no signed or notarized App, DMG, or PKG product.
+
+Credential-backed Apple artifact certification is **deferred, not passed**.
+Apple credentials, Developer ID signing, Notary submission, stapling,
+Gatekeeper, quarantine/clean-host distribution, and AWS journal evidence are
+not v0.6.0 readiness inputs or outputs. Do not provision AWS or dispatch Apple
+certification for this release. Those products require a later, separately
+qualified release with a newly reviewed contract, credentials, hosts, journal,
+evidence, and publication decision. Existing Apple library code and
+credential-free tests remain valid source qualification; they are not
+credential-backed distribution evidence.
 
 ## Why this matters
 
-The v0.6.0 source hard cut is merged and exact-main ordinary CI is green, but
-the repository cannot yet produce the pre-publication evidence packet described
-by PR 24. Main now has the replacement eleven-package release workflow and no
-temporary token bootstrap workflow. The replacement remains main-only and
-publish-only: do-not-publish skips every job, while the only OIDC-enabled job
-can execute npm publish. It is not a certification path and remains an explicit
-DO-NOT-DISPATCH path until this plan earns a release point and a separate npm
-publication decision. The local fake-registry qualification path has not been
-hosted; it is not readiness-admissible. The distinct exact protected-body
-certification path remains blocked and forbidden until external evidence
-authentication is qualified. Current Apple CI explicitly excludes Developer ID
-signing, notarization, stapling, Gatekeeper, and clean-host distribution.
+The v0.6.0 source hard cut and inert release infrastructure are merged and
+exact-main ordinary CI is green. The remaining release work must produce a
+truthful pre-publication packet without depending on observer APIs that GitHub
+or npm do not expose to the hosted workflow. The hard cut therefore admits only
+three real hosted proofs: exact-main CI, exact protected-body fake-registry
+execution, and eleven-package npm OIDC dry-run certification. Unsupported
+administrative inventories and Apple/AWS evidence are explicitly excluded,
+not modeled as permanently blocked evidence roles.
 
 This plan defines how to resolve those unknowns without pretending they are
 already certified. It separates:
@@ -87,93 +100,52 @@ already certified. It separates:
 Let R be one full Git commit SHA. The v0.6.0 **release point** is earned only
 when all of the following are true at the same R:
 
-1. R is the current remote main SHA and its tree is the reviewed inert
-   release-readiness implementation, the separately reviewed Apple hosted
-   producer/clean-host integration landed inert after its external interfaces
-   are frozen, and one separately reviewed generated activation change. That
-   activation must replace external-evidence authentication and exact-body
-   certification from `blocked` to their closed supported states, replace
-   Apple hosted execution from STOP-only to the supported required-artifact
-   state, pin every exact producer/journal/runner/credential identity and source
-   binding, and make final-public verification reachable under the same
-   contract. There is no runtime flag, dispatch input, test override, or
-   caller-authored fallback that can activate these paths.
+1. R is the current remote main SHA and its tree is the reviewed npm-only
+   release implementation. The canonical contract is directly executable;
+   there is no generated activation fixture, caller override, or external
+   observer that can promote a blocked peer policy.
 2. Exact-main ordinary CI is terminal and successful for every applicable job.
    PR-head runs remain historical evidence and do not substitute for R.
 3. One retained, downloaded candidate artifact contains exactly the eleven
    contract-admitted v0.6.0 tarballs plus one manifest. The manifest binds R,
    Bun 1.3.14, every name, byte size, SHA-256, SHA-512 integrity, and the exact
    42-module public projection. Each embedded package manifest has exactly
-   `publishConfig: { access: "public", provenance: true }`, with no other
-   publish configuration or registry-scoped authentication. It contains no
+   `publishConfig: { access: "public", provenance: true }`. It contains no
    Rolldown tarball.
-4. After the contract-pinned external-evidence authentication policy is
-   qualified with exact producer identities and provisioned signers and the
-   generated supported activation is merged at R, but before the readiness
-   aggregate is built, a test executes the exact protected
-   publisher shell against a stateful fake registry and passes every success,
-   conflict, partial, unknown-outcome, tag, reservation, and post-download case
-   listed in Step 4. The resulting exact protected-body certification is one
-   input to readiness; it never consumes the final aggregate that it helps
-   establish. While external authentication is blocked, the real protected
-   purpose proves only that its gate stops after exact read-only GitHub
-   reauthorization but before candidate adoption, npm/registry work, or the
-   first mutation. The sealed local qualification harness does
-   execute the extracted protected bodies for all forty coordinates against
-   credential-free fake GitHub/npm boundaries and cross-checks an independent
-   state-machine oracle, but its protocol is non-admissible, has no hosted
-   artifact, and is not exact protected-body certification. It cannot satisfy
-   this item until the supported contract reruns the same forty coordinates in
-   the exact certification workflow and emits the authenticated terminal
-   artifact.
-5. A protected non-publishing GitHub job obtains an OIDC token for the npm
-   audience, validates its signature and exact claims without logging or
-   retaining the token, rejects `NPM_ID_TOKEN`, `NPM_TOKEN`,
-   `NODE_AUTH_TOKEN`, and `SIGSTORE_ID_TOKEN`, validates its subject against the
-   re-observed repository OIDC subject policy, and emits only a redacted claims
-   receipt.
-   Pinned npm 11.11.0 then performs its package-specific OIDC exchange under
-   `npm publish --dry-run` for each of the eleven exact tarballs. Private logs
-   contain exactly one audited success marker per invocation, and immediate
-   registry re-observation proves zero version, tag, or byte mutation. This is
-   npm exchange acceptance at that instant, not tarball upload, provenance, or
-   publication certification.
-6. The npm environment and each of the eleven package settings are
-   authenticated and observed with repository mannyc2/effect-build, workflow
-   release.yml, environment npm, and publish permission. Every admitted
-   package manifest has the exact repository URL. Authenticated repository and
-   npm-environment secret-name inventories contain no `NPM_ID_TOKEN`,
-   `NPM_TOKEN`, `NODE_AUTH_TOKEN`, or `SIGSTORE_ID_TOKEN`; the observed legacy
-   repository `NPM_TOKEN` has been deleted under separate secret-mutation
-   authority rather than assumed unusable. The receipt explicitly says saving
-   the publisher setting was not validation and links each observation to its
-   successful non-publishing package exchange from item 5.
-7. Credential-backed Apple evidence covers both arm64 and x64, every one of
-   the thirteen public Apple capabilities, accepted and rejected notarization,
-   fresh-runner continuation from an externally persisted submission
-   reference, stapling, Gatekeeper, quarantine, and clean-host use of App, DMG,
-   and PKG products. ZIP remains private Notary transport for an App and is
-   never claimed as a public product. Secrets and private key coordinates are
-   absent from receipts.
-8. The downstream release owner has been qualified to persist and resume the
-   exact Notary submission fields required by
-   packages/effect-build-apple/README.md. A public npm version, an unreleased
-   checkout, or a package name alone is not qualification.
-9. One downloaded release-readiness aggregate authenticates the candidate
-   separately and exactly seven ordered evidence roles: exact-main CI,
-   exact protected-body fake-registry certification, npm authority,
-   npm OIDC certification, Apple certification, operational journal, and
-   GitHub Release governance. The npm OIDC artifact contains its two retained
-   receipt files; Apple certification contains its clean-host evidence.
-10. Anonymous npm observation still matches the contract's prior-latest and
-    placeholder ledgers, all twelve names still lack 0.6.0, Rolldown remains
-    reservation-only, and main has not advanced.
+4. One protected hosted certification executes the exact publisher
+   reauthorization and state-machine bodies against sealed fake GitHub/npm
+   boundaries for every contract coordinate. The authenticated artifact binds
+   R and the candidate and proves conflicts, partial publication, unknown
+   outcomes, reservations, provenance, and exact-byte resume behavior within
+   the same unexpired readiness packet.
+5. A protected non-publishing GitHub job obtains an npm-audience OIDC token,
+   validates its signature and exact claims without logging or retaining it,
+   rejects ambient npm/Sigstore credentials, and runs pinned npm 11.11.0
+   `npm publish --dry-run` for each exact tarball. Exactly one private
+   package-specific token-retrieval marker per invocation and unchanged
+   registry state prove exchange acceptance only—not upload, provenance, or
+   publication.
+6. One downloaded release-readiness aggregate authenticates the candidate
+   separately and exactly three ordered evidence roles: `exact-main-ci`,
+   `fake-registry`, and `npm-oidc-certification`. Direct current-main, GitHub
+   policy, package-repository, and anonymous npm observations are collected
+   inside readiness rather than accepted from caller-authored receipts.
+7. npm administrative inventory is explicitly `not-observed` and
+   `excluded-from-v0.6.0`: the gate does not claim exclusive trusted-publisher
+   administration, absence of legacy tokens, package publishing-access policy,
+   or account 2FA state. The hosted OIDC proof and later real publication are
+   the admitted authority and mutation evidence.
+8. Credential-backed Apple signed/notarized artifacts are deferred, not
+   passed. No Apple certification, App, DMG, PKG, operational-journal, or AWS
+   evidence appears in the candidate or readiness aggregate.
+9. Anonymous npm state still matches the contract's prior-latest and
+   placeholder ledgers, all twelve names still lack 0.6.0, Rolldown remains
+   reservation-only, and main has not advanced.
 
 At this point nothing has been published to npm, tagged, or released on GitHub.
-Apple notarization submissions do exist because they were separately
-authorized certification mutations. The executor must present the
-release-point packet and the exact proposed npm mutation command for a separate
-publication decision.
+Release immutability is an operator-admin preflight immediately before draft
+creation and again before public publication; it is not a readiness role.
+No Apple notarization submission or AWS journal mutation is part of earning R.
 
 ## Definition of release completion
 
@@ -203,36 +175,25 @@ Release completion is later than the release point. It requires:
   plans/045-establish-v060-release-point.md; no source or workflow path is
   locally dirty. Preserve both planning files and the unrelated dirty original
   checkout.
-- The isolated release-readiness worktree is
-  /Users/cjpher/.codex/worktrees/v060-release-readiness/does-effect on branch
-  codex/v060-release-readiness at the merge SHA. It now contains an uncommitted
-  local release-certification contract hard cut; the three-mode Release
-  workflow; separate fake-boundary, external-evidence ingress, Apple,
-  readiness, and final-public workflows; the Apple probe/journal codec and
-  exact 28-coordinate protocol;
-  the read-only release-authority auditor; a contract-pinned Sigstore/DSSE
-  verifier; and credential-free protocol, hostile-boundary, and workflow
-  tests. The exact 40-coordinate matrix and final pinned Bun 1.3.14 local gate
-  pass, including 254/254 architecture tests. None of this work is committed,
-  pushed, opened as a PR, hosted-CI observed, protected-job executed,
-  credential-certified, or release-point evidence. The generated external
-  producer identity list remains empty, the
-  current fake qualification protocol/path is explicitly
-  local-qualification-only (no hosted artifact exists), and the
-  exact fake-registry, readiness, Apple hosted, publication, and final-public
-  artifact paths remain mechanically stopped.
-- On current main, .github/workflows/release.yml blob
-  4666c3b121c0477a6fcaac8223aa795fb21a033a gates every job on
-  publish-exact-sha at lines 27, 90, and 146. Lines 99-121 require source_sha to
-  equal current main. Lines 146-155 make publish the only npm-environment and
-  id-token job. Lines 679-703 contain the one real publish loop and
-  post-download proof.
-- The exact current-main workflow tree contains only ci.yml and the
-  eleven-package replacement release.yml; the temporary npm-bootstrap and
-  research-export files are deleted at that SHA. GitHub's workflow inventory
-  still returns two historical research-export records whose files are absent
-  from current main. The current Release workflow remains a DO-NOT-DISPATCH
-  path until a release point and separate publication decision exist.
+- PRs 25-30 merged the inert release-readiness infrastructure and
+  immutable-subject binding. At the 2026-09-01
+  re-observation, `origin/main` is
+  8a6022095807bf19a2953025e94e48fd0072f31e and exact-main run 33546598147
+  passed all 33 jobs. The three-mode Release workflow; separate
+  certification, readiness, and final-public workflows, contract-pinned
+  Sigstore provenance verifier, and hostile-boundary tests are merged. The
+  unsupported external-observer and ingress design is historical and is
+  removed by the npm-only hosted-proof hard cut; it is not a release gate.
+- The isolated npm-only scope worktree is
+  /Users/cjpher/.codex/worktrees/v060-npm-only-release/does-effect on branch
+  codex/v060-npm-only-release at that exact main SHA. Its reviewed local hard
+  cut removes Apple/AWS evidence from the v0.6.0 gate while retaining the
+  `effect-build-apple` npm API/library package. Until committed, pushed,
+  reviewed, merged, and exact-main CI passes, those scope bytes are not remote
+  implementation or release-point evidence.
+- Current main contains the eleven-package Release workflow. It remains a
+  DO-NOT-DISPATCH path until the npm-only three-proof cut is merged and exact
+  release point R is established.
 - test/architecture/release-workflow.test.ts lines 52-230 parses YAML and
   asserts strings and topology. It does not execute the publisher against a
   registry model.
@@ -247,34 +208,32 @@ Release completion is later than the release point. It requires:
 - The `apple-certification` environment now exists with the required reviewer
   and main-only deployment policy, but its secret/variable inventories are
   empty. This is inert policy scaffolding, not Apple credential or execution
-  feasibility. The repository still has no self-hosted runners, main
-  protection/ruleset, or required status checks.
-- The 2026-08-31 repository Actions secret-name inventory contains one secret,
-  `NPM_TOKEN`, updated 2026-08-28. No value was accessed. Remote main's
-  deleted historical bootstrap workflow referenced it as `NODE_AUTH_TOKEN`;
-  no file at current main references it, but PR 24 could not delete the
-  persisted secret. Treat the secret as usable until separately authorized
-  deletion and re-observed absence; never infer revocation or expiry from its
-  name or age.
+  feasibility. It is not used by or required for the npm-only v0.6.0 release.
+  The repository has no self-hosted runners. Main is now protected strictly,
+  including administrators, by the three platform Verify checks; force pushes
+  and deletion are disabled. Active tag ruleset 22007841 protects
+  `refs/tags/v0.6.0` without bypass, update, or deletion.
+- The 2026-08-31 repository Actions secret-name inventory historically
+  contained `NPM_TOKEN`. A fresh authenticated administrative re-observation
+  on 2026-09-01 reports zero repository Actions secrets and zero variables;
+  no value was accessed. Treat GitHub-side absence only as proof of current
+  GitHub state. It does not prove that any corresponding npm token was revoked;
+  no npm token-absence claim is admitted by the v0.6.0 gate.
 - Repository release immutability is now enabled and not owner-enforced. The
   ordinary workflow `GITHUB_TOKEN` returned HTTP 403 when reading
   `repos/mannyc2/effect-build/immutable-releases`; the endpoint requires
   repository Administration-read authority, which is not a workflow-token
-  permission. Therefore governance evidence remains stopped until an explicit
-  sealed, ephemeral Administration-read observation interface is qualified.
-- This session's authenticated npm feasibility check is unresolved:
-  `npm trust list effect-build --json` returned E401. Treat every package's
-  publisher setting as unobserved until an operator establishes a supported
-  interactive npm/2FA session; never infer the other ten from one package.
-- Keep two npm clients distinct. Node 24.14.1/npm 11.11.0 remains the separately
-  audited publication/OIDC-certification client. Current npm trusted-publisher
-  documentation requires npm 11.15.0 or later, so authority observation is
-  pinned separately to npm 11.19.1, integrity
-  `sha512-ztsxKxt/kkIaAs+2i0GU6I+DRmUdrNasxTZKJe9TCdSjKxlhah/4r/hl5ygMD6XAg1qZ9c2TNomR4qgOydp10g==`.
-  Its manifest, exact `bin/npm-cli.js` entry, command sources, and canonical
-  1,943-file installed package-tree closure are contract-pinned. Every authority
-  call launches that authenticated realpath through the pinned Node runtime;
-  PATH `npm` is forbidden. This does not alter or requalify publication.
+  permission. Immutability is therefore re-observed by an operator-admin
+  immediately before draft creation and again before public publication; it is
+  not a hosted readiness role.
+- A fresh interactive npm web login authenticated as `mannyc1` and was revoked
+  after the feasibility check. npm 11.19.1 source confirms `trust list` is a
+  supported authenticated read, but no supported read interface exists for the
+  package publishing-access toggle, and web login itself creates a token.
+  Consequently the contract records npm administrative inventory as
+  unobserved/excluded rather than requiring an impossible empty-token or 2FA
+  policy receipt. Node 24.14.1/npm 11.11.0 remains the audited hosted
+  publication/OIDC-certification client.
 - Anonymous registry re-observation on 2026-08-31 found no 0.6.0 on any of the
   twelve names. The five established packages retain `latest=0.3.0`; all seven
   handoff placeholders are singleton `0.0.0-reserved.0` packages with exact
@@ -288,13 +247,15 @@ Release completion is later than the release point. It requires:
   this policy at R and validate the token's exact environment-qualified
   subject. The generated contract and hostile fixtures must use this immutable
   ID-qualified form; falling back to the prior name-based subject is forbidden.
-- Standard GitHub-hosted macOS labels provide arm64 macos-15 and Intel
-  macos-15-intel runners. Use fresh hosted runners for clean-host evidence
-  unless credential feasibility proves that a separately approved,
-  pre-provisioned runner is required.
+- For the later Apple-artifact release, standard GitHub-hosted macOS labels
+  provide arm64 macos-15 and Intel macos-15-intel runners. Use fresh hosted
+  runners for that future clean-host evidence unless credential feasibility
+  proves that a separately approved, pre-provisioned runner is required.
 - The published downstream package re-observed on 2026-08-31 is
   @mannyc1/ts-release 0.2.2. Do not infer that it supports the v0.6 Apple
-  journal. Qualify an exact released version or exact reviewed source commit.
+  journal. Qualify an exact released version or exact reviewed source commit
+  only before the later signed/notarized Apple-artifact release; this is not a
+  v0.6.0 npm readiness prerequisite.
 - npm documentation states that saved trusted-publisher configuration is not
   validated when saved. Pinned npm 11.11.0 currently performs the OIDC exchange
   before its dry-run mutation guard, then skips `libpub`; exchange failures are
@@ -315,96 +276,45 @@ Release completion is later than the release point. It requires:
   PUT. A pre-supplied Sigstore token is therefore a pre-mutation STOP, not an
   input to verify after publication.
 
-## Step 2 feasibility audit result: EXTERNAL-EXECUTION STOP
+## Step 2 feasibility audit result: RESOLVED BY HOSTED-ONLY HARD CUT
 
-The initial 2026-08-30 and current 2026-08-31 read-only observations produced
-supported public baselines but did not resolve the four feasibility questions.
-Protected or credentialed execution remains stopped here. Under the separately
-granted local effect-build implementation authority, Steps 3-7 built and
-fake-tested the repository-owned contract, workflows, exact shell bodies,
-Apple codecs/receipts/submission boundary, and aggregate validators while
-modeling each external dependency as unavailable. They did not add an
-operational journal backend, credential fallback, placeholder success, or a
-dispatch path that bypasses this STOP. Local success does not resolve a
-feasibility question or earn release point R.
+The original five-role design was self-blocked by two observer interfaces that
+the target platforms do not support. GitHub's workflow token cannot read the
+repository Administration immutability endpoint. npm can authenticate trusted
+publisher records, but npm 11.19.1 exposes no supported read for the package
+publishing-access toggle; moreover, an interactive web login creates a token,
+so a receipt requiring an ephemeral non-token session and an empty token
+inventory was contradictory.
 
-1. **npm trust and legacy identity**: all eleven public names plus the
-   reservation-only Rolldown name still lack 0.6.0,
-   their versions/tags match the contract, and all seven placeholder tarballs
-   match the frozen byte ledger. All eleven local package manifests have the
-   exact repository URL. The npm environment remains reviewer-protected and
-   main-only, and the repository OIDC policy is default/immutable-ID-qualified.
-   However, `npm whoami` returned E401, so none of the eleven current trusted
-   publisher records is authenticatedly observed. The supported authority
-   receipt must authenticate exact account `mannyc1`, prove its npm access-token
-   inventory is exactly empty at `https://registry.npmjs.org`, prove `mannyc1`
-   is the sole maintainer of all eleven public packages and reservation-only
-   Rolldown, and separately prove all twelve packages have publishing access
-   `Require two-factor authentication and disallow tokens`. Unknown/additional
-   maintainers, an unknown token shape, a peer account's empty inventory, or a
-   missing package policy is a STOP. Deleting the GitHub `NPM_TOKEN` secret is
-   not npm-side revocation evidence and cannot satisfy this receipt.
-2. **Apple execution backend**: the available keychain contains no Developer
-   ID Application or Developer ID Installer identity; only an Apple Development
-   identity of the wrong class is usable. The apple-certification environment,
-   its credentials, rejection fixtures, and clean-host execution evidence do
-   not exist. Bun 1.3.14 is now the canonical App/DMG/PKG lineage and Deno
-   2.9.5 remains signed-App-only; this resolves the product choice but supplies
-   no credential or host evidence. A keychain-profile Notary layer with one
-   isolated ephemeral keychain is design-feasible but not
-   credential-qualified.
-3. **Apple tool execution defect**: Plan 046 now contains the local repair.
-   One closed table owns canonical argv and exact admitted status for all
-   eleven tools; callers cannot pass a second probe policy; unexpected statuses
-   remain typed failures; and nonsecret observation evidence binds argv and
-   status without output text. Local fake tests passed 30/30 and the complete
-   real-native lane passed 4/4, including construction of every release layer.
-   Exact hosted arm64/x64 CI for the uncommitted repair remains unexecuted, so
-   this is a locally verified fix rather than release or Apple certification.
-4. **Operational journal**: released
-   `@mannyc1/ts-release@0.2.2` at provenance commit
-   528bdf9969985e2cb8238192d30c4a2f680ce8c3 and current public ts-release main
-   1e9efd717ff9d5dc2dbe5e079894cd8e92eb7ed3 contain no Notary journal.
-   Current effect-build PR 22 is open, non-draft, conflicting at
-   bda39cfd84bd15c0ab64be46b74381fc02dcf5a8; provisional commit
-   c2ac4ee4e7f02d74a7a1ff435bdfeaca6890b720 in its broad history adds only a
-   local SQLite journal. Plan 047 now selects a provider-neutral canonical-byte
-   S3 journal to be implemented from exact ts-release main, with one dedicated
-   Object-Lock/versioned namespace, GitHub OIDC plus prefix-scoped IAM,
-   acknowledged pre-dispatch intent, conditional event/head writes,
-   transaction/version/checksum ACK, bounded re-read, and fresh-process replay.
-   It deliberately gives the journal job no GitHub contents authority and
-   leaves every Apple field codec, correlation, and `SubmissionReference`
-   derivation in effect-build-apple to avoid a release cycle. The Apple-owned
-   codec and submission engine are implemented and locally verified in this
-   worktree. The downstream ts-release journal backend, dedicated AWS
-   authority, released owner version, and cross-process operational
-   qualification do not exist yet.
-   Any supported reusable journal identity must use an immutable
-   `operational-journal.yml@<40-hex-commit>` workflow ref, because AWS IAM can
-   condition on `job_workflow_ref` but not `job_workflow_sha`; keep the separate
-   exact source-SHA equality as well. The journal job's own runtime is exact
-   Node 22.22.2, not the effect-build npm-certification Node 24.14.1 pin.
-5. **GitHub Release governance**: immutability is enabled and not owner-enforced,
-   but its Administration-read observation interface remains unprovisioned and
-   the ordinary workflow token is insufficient. Main remains unprotected with
-   no rulesets. Any future settings change remains a separate exact-target act.
+The v0.6.0 solution removes those unsupported claims rather than inventing an
+API, PAT, secret, caller-attested receipt, or self-hosted observer. Readiness
+has exactly three real hosted roles: exact-main CI, exact protected-body
+fake-registry certification, and eleven-package npm OIDC dry-run
+certification. The canonical contract is directly usable; no supported fixture
+or generated activation can make a peer policy pass.
 
-The final exact local Bun 1.3.14 gate passed contract 13/13, 16/16 type-test
-files, 160/160 unit tests, 46/46 Apple package tests, the built consumer,
-254/254 architecture tests, lint, and formatting. The exact protected-body
-subset separately passed all 40 contract coordinates, and the native Apple
-acceptance subset passed 4/4 on the local exact tools. That local evidence does
-not waive any feasibility STOP, authenticate an external producer, or certify
-Apple distribution.
+The npm administrative inventory is recorded as `not-observed` and
+`excluded-from-v0.6.0`. The dry-run proves package-specific OIDC exchange
+acceptance and unchanged registry state only. Real publication plus immediate
+byte, tag, and provenance verification proves each mutation. GitHub Release
+immutability is re-observed with operator Administration authority immediately
+before draft creation and again before publication; final-public verification
+requires the actual Release to report `immutable: true`.
+
+Credential-backed Apple execution and the operational journal remain deferred
+future-release work. No Developer ID identities, Notary outcomes, clean-host
+aggregate, or qualified journal exists. Plan 046's native probe work and Plan
+047's journal design are source/planning evidence only and do not enter the
+v0.6.0 candidate or readiness aggregate.
 
 ## Authoritative constraints
 
 - tooling/effect-build-contract.json remains the implementation, public
   projection, npm admission, reservation, and ownership authority.
-- effect-build owns Apple operations and immutable artifact production.
-  The downstream release owner owns the durable journal, continuation, and
-  product publication.
+- effect-build owns Apple operations and immutable artifact production. For a
+  later signed/notarized macOS release, the downstream release owner owns the
+  durable journal, continuation, and product publication. None of those future
+  responsibilities is a v0.6.0 readiness role.
 - The protected npm job executes no checkout, dependency install, or
   repository script. It consumes immutable artifacts and inline,
   workflow-reviewed validation only.
@@ -452,28 +362,16 @@ Apple distribution.
   `{ access: "public", provenance: true }`; reject every additional key,
   especially registry-scoped auth. Never add login, manual publication,
   dist-tag repair, repack, retry fallback, or automatic package installation.
-- The generated contract owns the complete external signer authority: exact
-  Node runtime; package/version/integrity and audited executed-source closure;
-  GitHub OIDC audience, host/path/query, request-token and request-URL bounds;
-  exact Fulcio/Rekor origins, paths, methods, success statuses (200/201), response bounds, JSON depth, TLS
-  roots/minimum, and zero redirects/retries. The signer imports only the pinned
-  `@sigstore/sign` internal DSSE primitive and uses repository-owned raw HTTPS
-  Fulcio/Rekor clients. It rejects duplicate response headers, partial or
-  length-ambiguous bodies, compression, redirects, duplicate JSON keys at every
-  nesting level, endpoint-origin escape, and ambient Node/Actions/proxy/CA
-  authority without retaining token-bearing errors.
-- Each same-repository external producer is an `observe` -> `sign` -> `upload`
-  hard cut. While external evidence is blocked, workflow-level and all three
-  job permissions are empty, `observe` and `sign` are one-step inline STOPs
-  with no third-party actions, and `upload` has no OIDC authority and can
-  transport only bounded canonical signed-byte outputs under a fixed
-  role/source-derived artifact name. A supported activation must first qualify
-  exact Node 24.14.1 plus audited repository source closures for both the
-  credentialed observer and isolated signer, with no third-party action in
-  either authority TCB; then grant only `contents: read` to `observe` and only
-  `id-token: write` to `sign`, atomically with all contract-pinned producer
-  identities. No test, dispatch input, runtime flag, permission-only edit, or
-  identity-only edit may activate an intermediate state.
+- The generated contract owns the complete shared provenance-verifier
+  authority: exact runtime/client versions and integrity, trusted-root/TUF
+  bytes, certificate bindings, network guard, and response bounds. Removing
+  obsolete external receipt signing must not remove or weaken verification of
+  real npm publication provenance.
+- Every readiness producer is repository-owned and GitHub-hosted. Candidate and
+  evidence authority comes only from authenticated run/artifact coordinates,
+  exact workflow/source binding, and downloaded byte validation. There is no
+  external ingress, secret-backed observer, caller-authored receipt, or test
+  activation override.
 - Never store or print signing certificates, certificate passwords, Notary
   API-key material, keychain-profile coordinates, OIDC tokens, cookies, or npm
   credentials.
@@ -498,7 +396,6 @@ Apple distribution.
 | Repository secret names | gh api repos/mannyc2/effect-build/actions/secrets | names and timestamps only; never values |
 | Runners | gh api repos/mannyc2/effect-build/actions/runners | authenticated inventory |
 | npm state | npm view NAME versions dist-tags --json --registry https://registry.npmjs.org | parseable registry state |
-| npm authority observation | node scripts/release/audit-release-authority.mjs --collect --source-sha R | repository collector immediately reauthenticates the entire pinned realpath npm 11.19.1 source closure before every authority call; no direct npm-cli invocation; local feasibility only until the isolated observer is qualified |
 
 Run the project-instruction `pnpm verify` handoff check once and record its
 expected package-manager rejection. This repository intentionally declares Bun
@@ -527,17 +424,19 @@ expected package-manager rejection. This repository intentionally declares Bun
 
 **In scope for the release-readiness implementation**:
 
+The current v0.6.0 gate covers the npm candidate/publisher, three-role hosted
+readiness, operator immutability preflights, and final public verification.
+Apple files listed below are retained only for
+API/library source qualification and the deferred design record; they must not
+produce or satisfy v0.6.0 readiness evidence.
+
 - .github/workflows/release.yml
 - .github/workflows/release-certification.yml
-- .github/workflows/release-evidence-ingress.yml
-- .github/workflows/npm-authority.yml
-- .github/workflows/github-release-governance.yml
 - .github/workflows/release-readiness.yml
 - .github/workflows/release-verification.yml
 - .github/workflows/apple-certification.yml
-- package.json and bun.lock, limited to the exact offline Sigstore verifier,
-  pinned internal-DSSE signer, npm 11.19.1 authority-observation client, and
-  exact TUF acquisition-provenance replay clients
+- package.json and bun.lock, limited to the exact offline Sigstore provenance
+  verifier and exact TUF acquisition-provenance replay clients
 - scripts/release/
 - scripts/apple-certification/
 - scripts/test-built-consumer.mjs, limited to sealed credential-free npm and
@@ -562,17 +461,12 @@ expected package-manager rejection. This repository intentionally declares Bun
 - test/architecture/release-verification-workflow.test.ts
 - test/architecture/final-public-verification.test.ts
 - test/architecture/sigstore-dsse-verifier.test.ts
-- test/architecture/external-evidence-producer.test.ts
-- test/architecture/external-evidence-producer-workflows.test.ts
 - test/architecture/sigstore-tuf-provenance.test.ts
 - test/architecture/tar-protocol.test.ts
 - test/architecture/zip-protocol.test.ts
 - test/architecture/ci-workflow.test.ts
 - test/architecture/apple-certification-protocol.test.ts
 - test/architecture/apple-certification-workflow.test.ts
-- test/architecture/release-authority-audit.test.ts
-- test/architecture/release-evidence-ingress.test.ts
-- test/architecture/release-evidence-ingress-collector.test.ts
 - test/architecture/github-read-only-boundary.test.ts
 - test/architecture/npm-read-only-boundary.test.ts
 - test/architecture/frozen-release-dependency-bootstrap.test.ts
@@ -580,6 +474,7 @@ expected package-manager rejection. This repository intentionally declares Bun
 - test/architecture/terminal-observation.test.ts
 - test/architecture/assert-current-main.test.ts
 - test/architecture/post-upload-artifact-observation.test.ts
+- test/architecture/terminal-reference-builder.test.ts
 - test/architecture/core-hard-cut.test.ts, limited to Apple private-operation
   provenance-carrier assertions
 - test/architecture/public-surface.test.ts, limited to proving the Apple
@@ -601,6 +496,7 @@ expected package-manager rejection. This repository intentionally declares Bun
   model/policy provenance digests
 - docs/release-security.md
 - one v0.6 release-readiness receipt document
+- CHANGELOG.md
 - plans/045-establish-v060-release-point.md
 - plans/README.md
 - plans/046-repair-apple-native-probe-admission.md
@@ -611,7 +507,6 @@ defect and a new plan is approved**:
 
 - tooling/public-api.json
 - packages/*/package.json
-- CHANGELOG.md
 
 **Out of scope**:
 
@@ -640,9 +535,8 @@ defect and a new plan is approved**:
 - Use conventional commits, matching recent repository history. Keep tests,
   implementation, workflow wiring, and final evidence docs in reviewable
   logical commits.
-- Land the inert implementation and the later generated supported activation
-  as separate reviewed changes. The inert merge is not R; the activation merge
-  is eligible to become R only after exact-main CI and every Definition gate.
+- Land the canonical three-proof hard cut as one reviewed change. Its merge is
+  eligible to become R only after exact-main CI and every Definition gate.
 - Treat commit, push, PR creation, and merge as four separate acts. Do not
   perform any one of them, change repository settings, dispatch a credentialed
   workflow, or publish unless the operator has authorized that exact act.
@@ -653,18 +547,12 @@ defect and a new plan is approved**:
               |
         exact-main CI/tree
               |
-       release-readiness PR
-                 |
-       inert exact-main CI
-        /        |         \
-    npm trust  producer IDs  Apple/journal
-        \        |         /
-        supported activation PR
+       npm-only hard-cut PR
                  |
          exact-main SHA R freeze
-        /        |         \
-    fake npm  OIDC/settings  Apple evidence
-        \        |         /
+          /              \
+      fake npm         npm OIDC
+          \              /
           readiness aggregate
                   |
         RELEASE POINT earned at R
@@ -718,128 +606,33 @@ defect and a new plan is approved**:
 Expected: empty tree diff and one exact-main push run with all applicable jobs
 successful. Any merge-tree difference stops the plan.
 
-### Step 2: Resolve the four feasibility questions before protected execution
+### Step 2: Freeze the truthful npm-only evidence boundary
 
-Repository-owned fail-closed implementation may proceed while these questions
-remain blocked, but no protected/credentialed dispatch, external-evidence
-activation, or readiness artifact may. Record answers with evidence and no
-secret values.
+1. Set readiness to exactly three authenticated GitHub-hosted roles:
+   `exact-main-ci`, `fake-registry`, and `npm-oidc-certification`.
+2. Delete external-observation roles, evidence ingress, external producer
+   identities/signers, and the supported-fixture activation path. A caller may
+   provide only exact run/artifact coordinates; readiness performs its own
+   direct current-main, policy, and anonymous registry observations.
+3. Preserve the pinned Sigstore verifier and trusted root under shared
+   publication/provenance policy. Removing obsolete evidence signing must not
+   weaken verification of real npm provenance.
+4. Record npm administrative inventory as unobserved and excluded. Do not
+   claim exclusive trusted-publisher administration, empty token inventory,
+   publishing-access policy, or account 2FA state from unsupported reads or
+   from the OIDC dry-run.
+5. Keep Apple/AWS evidence explicitly deferred. Do not provision AWS, Apple
+   credentials, runners, or journal infrastructure for v0.6.0.
+6. Treat GitHub Release immutability as an operator-admin preflight immediately
+   before draft creation and again before publication. Final-public
+   verification must reject `immutable: false`.
 
-1. **npm trust inventory**: authenticatedly inspect the Trusted Publisher and
-   Publishing access settings for each of the eleven admitted packages. Record
-   package, repository, workflow filename, environment, permission, observation
-   time, and observer. Have the audited repository collector execute the pinned
-   npm 11.19.1 `trust list --json` authority operation for the relationship fields;
-   if allowed action is not projected there, observe it through npm's
-   authenticated package settings/raw trust response rather than inventing a
-   field. Separately record the exact GitHub npm-environment reviewer and
-   main-only deployment policy. Confirm every package.json repository URL
-   matches mannyc2/effect-build. Do not claim that a saved setting proves npm
-   will accept the first publish. If any record is absent or differs, prepare
-   the exact per-package replacement table and obtain separate npm
-   package-settings authority before changing it; then re-observe all eleven.
-   Never pass login material through a workflow or receipt. In the same gate,
-   an authorized administrative observer must authenticate repository- and
-   npm-environment-level Actions secret and variable *name* inventories
-   without reading values. GitHub's workflow `GITHUB_TOKEN` exposes no
-   Secrets/Variables permission and cannot perform those inventory calls; the
-   protected workflow must not add a PAT, GitHub App token, or other hidden
-   credential to pretend otherwise. Bind the administrative observation to a
-   freshness-limited, contract-pinned authenticated external receipt before
-   readiness can consume it. The currently observed
-   repository `NPM_TOKEN` is a fail-closed legacy-auth blocker: prepare its
-   exact GitHub-secret deletion and npm-token revocation procedure, obtain
-   separate authority for each mutation that is actually required, then prove
-   the repository and npm environment contain none of `NPM_ID_TOKEN`,
-   `NPM_TOKEN`, `NODE_AUTH_TOKEN`, or `SIGSTORE_ID_TOKEN`. A deleted GitHub
-   secret is not proof that an npm token was revoked, and an npm revocation is
-   not proof that the GitHub secret was deleted.
-2. **Apple execution backend**: confirm Developer ID Application and Installer
-   identities are available and prove their exact public class, common Team ID,
-   SHA-1 fingerprint, validity interval at signing time, and private-key
-   availability. Select one Notary credential-layer type and specify an
-   ephemeral-keychain import/unlock/partition-list/cleanup lifecycle without
-   exposing secret bytes. Record Bun or Deno as the one canonical executable
-   whose paired Apps continue through DMG and PKG distribution; this is an
-   explicit product choice, not a harness default. Freeze isolated, locally
-   valid artifact defects for both architectures that Apple is expected to
-   reject, their expected terminal status/log shape, and submission cost;
-   inability to define safe rejection fixtures is a pre-submit STOP. Prefer
-   GitHub-hosted macos-15
-   arm64 and macos-15-intel x64 distribution jobs. Separately prove that fresh
-   credential-free hosts can execute the exact App/DMG/PKG acquisition,
-   quarantine, LaunchServices/mount/installer, sentinel, and removal flows. If
-   certificate export policy blocks hosted distribution, write a separate
-   runner-provisioning plan; this may not weaken clean-host isolation. If the
-   clean-host user flows are infeasible on hosted images, stop and plan a
-   distinct resettable clean-host backend. Because the apple-certification
-   environment does not yet exist, present its exact reviewer, main-only branch
-   policy, variable-name, and secret-name inventory for separate
-   repository-settings and secret-provisioning authority. Record names and
-   public facts, never values.
+**Verify**: contract mutation tests reject any extra, missing, or reordered
+readiness role; workflow tests find no external ingress or activation branch;
+the exact 28 Apple coordinates remain unique with N=2, P=10, G=6, A=10.
 
-   **Canonical product decision recorded 2026-08-30**: Bun 1.3.14 is the one
-   canonical executable lineage whose paired arm64/x64 Apps continue through
-   private-ZIP App notarization, DMG, and PKG. The release contract and
-   candidate preparation already make exact Bun 1.3.14 the pack/build
-   authority, and Bun owns both public API and Command lanes. Deno 2.9.5 keeps
-   its two signed-App coordinates so the independently selected Deno producer
-   and App-signing path remain covered, but Deno Apps do not enter the
-   rendezvous or become DMG/PKG products. This is a protocol decision only; it
-   does not supply identities, credentials, executed rejection fixtures, clean
-   hosts, or credential-backed Apple evidence.
-
-   **Rejection-fixture decision recorded 2026-08-30**: derive one isolated Bun
-   App for each architecture from the matching canonical unsigned App, then
-   ad-hoc sign it with hardened runtime and no timestamp. Require local
-   `codesign --verify --deep --strict` success before private ZIP transport.
-   The ad-hoc identity makes acceptance invalid by construction without using
-   or corrupting a Developer ID product. Under separate Apple-submission
-   authority, submit each fixture exactly once and require terminal `Rejected`
-   with provider status `Invalid`, a nonempty correlated Notary log issue set,
-   and at least one signing/timestamp defect bound to the submitted bundle or
-   executable. Messages are scrubbed evidence, not exact-match protocol text.
-   The budget is exactly two rejected submissions total, one per architecture;
-   they create no public product and may not share a journal operation with a
-   successful lineage. This freezes safe fixture construction but remains
-   unqualified until Apple actually returns the expected terminal evidence.
-3. **Journal owner**: inspect the exact released and current reviewed
-   mannyc2/ts-release source and identify the actual operational store, owner
-   version/commit, envelope schema, auth credential type, retention, and
-   concurrency policy. The store must conditionally create and acknowledge a
-   pre-dispatch intent before any provider call, then persist only opaque
-   consumer-encoded canonical bytes. Prove durable acknowledgments containing
-   record digest plus sequence/transaction identity, immediate bounded re-read,
-   CAS races, response loss, and fresh-process replay. Separately prove that the
-   exact effect-build candidate's Apple-owned strict codecs decode and
-   correlate every `Notary.Submission` field and alone derive
-   `SubmissionReference`; ts-release may not import or mirror that unreleased
-   schema. Qualify the exact released ts-release version/source and exact
-   effect-build candidate/codec as one pair. Fault-inject death before provider
-   dispatch, after provider response, and before/after journal acknowledgment.
-   The package's post-intent/pre-first-ID response-loss gap remains an explicit
-   `SubmissionOutcomeUnknown` STOP with no resubmit; neither this plan nor a
-   journal can erase it. Plan 047 freezes the selected one-backend design. Stop
-   Plan 045 before credentialed Apple certification until both halves and their
-   integration are operationally qualified.
-4. **GitHub Release governance**: re-observe
-   `repos/mannyc2/effect-build/immutable-releases`. The recommended path is to
-   enable release immutability under separate repository-settings authority
-   before creating v0.6.0, because GitHub applies it only to future Releases.
-   If that setting cannot be enabled, record the decision and remove every
-   claim that GitHub Release assets themselves are immutable; candidate and npm
-   byte identity remain mandatory either way.
-
-**Verify**: update this plan's receipt section with a non-secret evidence
-reference for all four decisions. The following returns no unresolved
-feasibility marker:
-
-    ! rg -n "(npm trust inventory|Apple execution backend|Journal owner feasibility|GitHub Release governance): FEASIBILITY-PENDING" \
-      plans/045-establish-v060-release-point.md
-
-Expected: four supported decisions or a documented STOP. Local unprivileged
-and fake-boundary implementation may proceed, but it must not assume a
-credential or journal backend and cannot authorize protected execution.
+Expected: the canonical policy is directly executable and makes only the
+claims supported by hosted evidence.
 
 ### Step 3: Specify the candidate and readiness artifact protocols with tests first
 
@@ -847,8 +640,11 @@ Add failing architecture tests before workflow changes.
 
 1. Add one canonical `releaseCertification` object to the contract model. It
    freezes release.yml modes, candidate/readiness schemas, Node/npm identities,
-   npm exchange evidence, fake-registry cases, and the Apple policy from Step
-   6. Add mutation tests before generating the JSON; do not hand-edit it.
+   npm exchange evidence, fake-registry cases, and the explicit v0.6.0 scope:
+   eleven npm packages including `effect-build-apple`, with credential-backed
+   Apple products and AWS journal evidence deferred and excluded. The Apple
+   protocol record in Step 6 remains future design only. Add mutation tests
+   before generating the JSON; do not hand-edit it.
 2. Define one candidate-only path, available only for a full current-main SHA,
    that performs frozen install, full verify, exact packing, and artifact
    upload without id-token permission or npm mutation.
@@ -869,8 +665,8 @@ Add failing architecture tests before workflow changes.
    as a CLI flag. npm 11.11.0 deliberately flattens arbitrary `publishConfig`
    after initial configuration capture, so pre-invocation config inspection is
    not a substitute for this embedded-manifest allowlist.
-4. Retain the candidate long enough for Apple and human review. Use thirty days
-   unless evidence supports a narrower bounded window.
+4. Retain the candidate long enough for human review and publication approval.
+   Use thirty days unless evidence supports a narrower bounded window.
 5. Define a release-readiness aggregate schema that contains evidence
    identities and digests, not credentials or Apple private response bodies.
 6. Canonicalize every GitHub artifact digest as `sha256:` plus 64 lowercase hex
@@ -905,21 +701,11 @@ no extra mutation command.
 
 ### Step 4: Execute the exact publisher against a stateful fake registry
 
-This step is gated by the contract-pinned authenticated external-evidence
-policy from Step 7: the verifier implementation, exact producer identities, and
-provisioned signers must all be qualified. It is not gated by the final
-readiness aggregate, because this certification is itself one readiness input.
-Before that authentication policy is qualified, the exact protected body must
-stop before candidate/network/npm work with zero npm mutations. The sealed
-local qualification harness may exercise the extracted protected bodies across
-all forty transitions below and cross-check a separate hypothetical oracle,
-but it uses a non-admissible local protocol, has no hosted artifact, and must
-not claim authenticated certification, upload, provenance, or publication. Do
-not add a test-only runtime contract override or fallback; the supported test
-contract must be generated through the same closed policy model.
-
-Once the verifier is qualified, the test must exercise the exact shell bodies
-extracted from the parsed workflow, not a friendly reimplementation.
+This certification is itself one readiness input, so it does not consume the
+final readiness aggregate. The canonical policy runs it directly on GitHub at
+R; there is no external authentication switch or test-only supported contract.
+The harness must exercise the exact shell bodies extracted from the parsed
+workflow, not a friendly reimplementation.
 
 1. Select the exact protected reauthorization step and the exact publisher
    step by their frozen YAML names. Fail unless each selector resolves exactly
@@ -939,7 +725,8 @@ extracted from the parsed workflow, not a friendly reimplementation.
    every attempted mutation.
 5. Execute and assert these cases:
    - all eleven targets absent with exact prior latest, then full convergence;
-   - a partial exact-byte publication resumes only missing names;
+   - a partial exact-byte publication resumes only missing names while the
+     original readiness packet remains valid;
    - exact target bytes exist but latest is wrong;
    - target version exists with conflicting bytes;
    - exact target bytes and latest exist but provenance is missing,
@@ -950,7 +737,7 @@ extracted from the parsed workflow, not a friendly reimplementation.
    - an inconclusive non-404 registry read;
    - failure before registry commitment;
    - response loss after registry commitment, followed by observation-driven
-     exact-byte resume;
+     exact-byte resume within the original readiness validity window;
    - response loss after bytes/tag commitment but before valid provenance,
      which must stop rather than publish a later package;
    - placeholder or reservation tag drift;
@@ -975,16 +762,11 @@ extracted from the parsed workflow, not a friendly reimplementation.
       test/architecture/release-certification-workflow.test.ts \
       test/architecture/release-workflow.test.ts
 
-Expected while external authentication is blocked: the real protected purpose
-finishes its exact authenticated read-only GitHub reauthorization and then
-stops before candidate adoption or any npm/registry work, with zero mutations,
-while the sealed local qualification executes the extracted bodies across all forty
-coordinates and cross-checks the independent oracle with explicit mutation
-counts and truthful non-certification claims. It emits no readiness-admissible
-exact-certification artifact. Expected after qualification: the supported
-exact certification workflow reruns all forty coordinates through those same
-bodies; each has an explicit mutation-count assertion. Coverage by string
-inspection alone is not completion.
+Expected: the canonical protected certification executes all forty coordinates
+through the same extracted reauthorization and publisher bodies, cross-checks
+the independent oracle, asserts explicit mutation counts, and emits the
+readiness-admissible authenticated artifact. Coverage by string inspection or a
+different helper implementation is not completion.
 
 ### Step 5: Certify GitHub claims and all eleven npm OIDC exchanges without publication
 
@@ -1052,14 +834,26 @@ files exist: one GitHub claims receipt and one npm exchange receipt containing
 eleven ordered package-specific entries. Registry state is byte-for-byte
 unchanged, and no tarball upload or provenance generation occurred.
 
-### Step 6: Build the v0.6 Apple certification protocol from the current contract
+### Step 6: Deferred Apple-artifact certification design record
+
+**SUPERSEDED FOR v0.6.0 ON 2026-09-01. Do not execute this step for v0.6.0.**
+Credential-backed Apple artifact certification was not run and has not passed.
+The v0.6.0 release publishes the `effect-build-apple` API/library package but
+no signed/notarized App, DMG, or PKG. Its readiness aggregate accepts no Apple
+or AWS journal evidence.
+
+The detailed design below is preserved as historical question coverage for a
+later, separately qualified Apple-artifact release. Its v0.6-specific protocol
+names, artifact names, coordinates, and commands are not current release
+instructions; that future release must re-review and re-version them against
+its exact source, credentials, hosts, journal, and product scope.
 
 Do not copy the v0.5 workflow's six-package candidate protocol, public-ZIP or
 macOS Node SEA coordinates, universal receipt schema, or hard-coded 32-receipt
 claim. Reuse only its unprivileged prepare -> protected native execution ->
 secret-free clean host -> unprivileged aggregate trust topology.
 
-#### 6.1 Freeze one canonical v0.6 protocol
+#### 6.1 Historical proposed v0.6 protocol (deferred)
 
 Add a narrowly scoped `releaseCertification` policy to the generated combined
 contract. It may derive from the existing operation register but may not change
@@ -1140,7 +934,7 @@ Define strict tagged variants with required-and-forbidden fields:
 - A requires an exact ordered dependency set plus named claims and forbids
   product output, credential, and submission-owner fields.
 
-#### 6.2 Freeze operation and verdict coverage
+#### 6.2 Historical operation and verdict coverage (deferred)
 
 Map the thirteen public operations without an “at least one” escape hatch:
 `buildAppBundles` feeds both Bun and Deno paired-App manifests; `signApp` feeds
@@ -1208,7 +1002,7 @@ Freeze the A-cell dependencies and claims:
 - A9: all 18 N/P/G receipts plus A0-A8; exact cross-links, immutable inputs,
   newly created outputs, no duplicates, and complete finalization.
 
-#### 6.3 Implement the one-byte-lineage job DAG
+#### 6.3 Historical one-byte-lineage job DAG (deferred)
 
 1. An unprivileged Ubuntu admission/prepare job authenticates exact R/current
    main, attempt 1, exact-main CI, candidate bytes, Bun 1.3.14, contract, and
@@ -1282,207 +1076,170 @@ Freeze the A-cell dependencies and claims:
       test/architecture/ci-workflow.test.ts
     bun run verify
 
-Expected: structural and local fake-runner tests pass before credentials are
-used. Hosted completion requires the downloaded Apple aggregate to validate
-against exact R and candidate bytes.
+Expected for v0.6.0: this step is not executed and produces no artifact.
+Structural and local fake-runner tests may continue to qualify API/library
+source, but they do not satisfy credential-backed Apple distribution. Any
+future hosted completion belongs to the separately qualified Apple-artifact
+release.
 
 ### Step 7: Build one fail-closed release-readiness aggregate
 
 Create a read-only workflow or script that:
 
-1. authenticates GitHub API metadata for every contributing run and artifact;
-2. requires exact R, current main, attempt, success, non-expired artifacts, and
-   expected workflow identities;
-3. downloads and byte-validates the candidate separately plus exactly seven
-   ordered evidence roles: exact-main CI, exact protected-body fake-registry
-   certification, npm authority, npm OIDC certification, Apple certification,
-   operational journal, and GitHub Release governance. The npm OIDC artifact
-   contains claims plus eleven exchange entries in two retained files; Apple
-   certification contains clean-host evidence;
-4. independently re-observes npm public versions, tags, placeholder bytes,
-   npm environment metadata, deployment branch policy, remote main, workflow
-   blob, repository OIDC subject policy, and package repository URLs; consumes
-   the private trusted-publisher/permission, exact empty `mannyc1` token
-   inventory, exact twelve-package sole-maintainer projection, and exact
-   twelve-package disallow-token publishing-access policy only through
-   freshness-limited external receipts whose Sigstore/DSSE envelope,
-   exact producer workflow identity, source SHA, receipt digest, observation
-   time, and expiration are verified against the contract;
-5. admits each of the three external roles only through a compact,
-   transport-only `release-evidence-ingress.yml` artifact named by exact
-   run/attempt/artifact/digest coordinates. The ingress workflow validates and
-   byte-bounds canonical reference and Sigstore bundle inputs, uploads exactly
-   two files, and grants them no authority; readiness re-downloads those exact
-   bytes and the contract-pinned producer certificate identity remains the sole
-   evidence authority;
-6. parses every downloaded GitHub artifact ZIP before extraction using one
-   repository-owned fail-closed reader: exact single-disk EOCD and central/local
-   header correlation; unique flat UTF-8 expected names; only store or raw
-   deflate; no encryption, Zip64, unsupported flags, prepended/trailing bytes,
-   links, or device entries; one smallest contract-wide 64 MiB archive/aggregate,
-   16 MiB compressed/uncompressed member, and compression-ratio cap plus each
-   role's exact expected member set; and exact CRC-32. GitHub's
-   observed data-descriptor form is admitted only when its descriptor, central
-   sizes, local header, streamed bounded output, and CRC all agree. Never invoke
-   an extractor against the destination tree before these checks;
-7. emits `release-readiness.json`, an opaque evidence bundle, and the exact
-   contract-pinned `sigstore-trusted-root.json` snapshot used for offline
-   verification. Contract generation must first replay the exact pinned
-   acquisition clients and same-lock-record integrities, embedded seed-root to
-   rotated-root signatures, signed timestamp/snapshot/targets chain, versions,
-   acquisition-time expiry of the active rotated root, timestamp, snapshot,
-   and targets metadata, target descriptor, and target bytes from the retained
-   evidence. The historical seed root is the retained rotation trust anchor and
-   need not remain unexpired at acquisition. That replay authenticates the
-   vendored root target; the root snapshot and retained TUF chain remain
-   verifier inputs, not independent release evidence or authority;
-8. states explicitly that the dry-run receipts prove package-specific npm OIDC
-   exchange acceptance at that instant, while tarball upload, provenance
-   generation, registry commitment, and publication completion remain proven
-   only by the separately authorized real publish;
-9. uploads one artifact with a retention window that covers approval; while
-   any exact external producer identity or verifier is absent, it must exit
-   nonzero and expose no upload path rather than accept caller-authored bytes;
-10. also lands, before R is selected, a read-only final-public verification path
-   that consumes exact R/candidate/tag/Release coordinates, fresh-downloads npm
-   and Release bytes, verifies provenance and consumers, and emits the final
-   receipt artifact. It has no credential, repository write, tag, Release, or
-   registry mutation permission.
+1. authenticates GitHub API metadata for the candidate and each contributing
+   run/artifact;
+2. requires exact R, current main, attempt, success, non-expired artifacts,
+   workflow identity, REST digest, and canonical `sha256:` byte identity;
+3. downloads the candidate separately plus exactly three ordered evidence
+   roles: exact-main CI, exact protected-body fake-registry certification, and
+   npm OIDC certification;
+4. independently re-observes anonymous npm versions/tags/placeholder bytes,
+   current main, workflow blob, repository OIDC subject policy, npm environment
+   metadata, deployment policy, and package repository URLs;
+5. parses every GitHub artifact ZIP with the contract-pinned bounded reader
+   before extraction and rejects unsupported topology, encoding, size, CRC,
+   compression, or path forms;
+6. emits exactly two files: `release-readiness.json` and the opaque evidence
+   bundle. The publisher and final verifier load the exact contract-pinned
+   Sigstore trusted root independently from authenticated source SHA R; it is
+   not a third readiness file;
+7. records npm administrative inventory as unobserved/excluded and states that
+   dry-run evidence proves exchange acceptance and no registry mutation—not
+   upload, provenance, or publication;
+8. rejects every external-observation, ingress, Apple certification,
+   operational-journal, App, DMG, PKG, or AWS reference; and
+9. uploads one retained aggregate artifact with no credential, mutation, or
+   caller-authored evidence path.
 
-**Verify**: download the artifact by ID, compare the REST artifact digest,
-extract it, validate the JSON schema, and independently recompute every
-referenced digest.
+**Verify**: download by artifact ID, compare the REST digest, validate the
+manifest and bundle schemas, and independently recompute every referenced
+digest.
 
-Expected: one terminal success bound to R. A running aggregate, green
-dependencies, or an artifact listing without downloaded byte validation is not
-a release point.
+Expected: one terminal success bound to R. A running aggregate or an artifact
+listing without downloaded byte validation is not a release point.
 
-### Step 8: Land release-readiness infrastructure through its own PR
+### Step 8: Land the npm-only hosted-proof cut through its own PR
 
-1. Run pinned Bun 1.3.14 full verification, focused workflow tests, contract
-   checks, shell syntax checks for every workflow run block, action pin checks,
-   secret scans, and git diff checks. Require every checkout-capable release
-   evidence or control-plane GitHub/npm read to import the sealed Node boundary.
-   The sole package-manager exception is the separately closed, integrity-bound
-   `dependencyBootstrap` above, which is never evidence. The no-checkout
-   protected body must use a generated inline Node-HTTPS projection whose source
-   digest and behavior are mechanically locked to that boundary; architecture
-   tests reject raw curl for any real release evidence/control-plane
-   GitHub/npm/OIDC read and allow it only as the exact credential-free fake
-   executable.
-2. Commit only the release-readiness scope from an isolated worktree, and only
-   under exact commit authority.
-3. Push that commit only under separate exact push authority.
-4. Open a dedicated PR only under separate PR-creation authority. Obtain
-   exact-head push and PR CI.
-5. Merge only under separate merge authority with an exact-head guard.
-6. Capture the inert infrastructure merge SHA and rerun exact-main CI. While
-   external-evidence authentication remains generated as `blocked` with an
-   empty producer-identity list, this SHA is not R and neither readiness nor
-   final-public receipt production is reachable. Do not add an environment,
-   dispatch, fixture, or shell override to promote it.
+1. Run pinned Bun 1.3.14 full verification, focused workflow/contract tests,
+   action-pin checks, secret scans, formatting, and `git diff --check`.
+2. Require the generated contract and workflows to agree on the exact
+   three-role order and directly active canonical policy.
+3. Require no external-observation/ingress/activation path, no Apple/AWS
+   readiness input, no public API or package-admission drift, and no Rolldown
+   publication admission.
+4. Preserve the shared pinned Sigstore trusted root and real-publication
+   provenance verification after deleting obsolete evidence signing.
+5. Commit, push, open, review, and merge only the isolated release-readiness
+   worktree. Capture the exact merge SHA and wait for exact-main CI.
 
 **Verify**:
 
     test "$(bun --version)" = "1.3.14"
-    node scripts/release/install-frozen-release-dependencies.mjs
     bun run verify
     bun run check:contract
     bun run format:check
     git diff --check
 
-Expected: clean worktree; exact-head hosted checks and exact-main hosted checks
-successful; no public package-source, provider-operation, public-projection,
-npm-admission, or reservation change. The generated combined-contract diff is
-limited to the exact generated allowlist above. Public/provider/capability,
-npm-admission, and reservation authority remain byte-for-byte unchanged.
-Exact-main success here proves only the inert implementation.
+Expected: clean reviewed branch, exact-head and exact-main hosted checks green,
+and no source/provider/public-projection/npm-admission/reservation drift. The
+merge SHA is a candidate for R but does not earn R until Step 9 succeeds.
 
 ### Step 9: Execute non-publishing certification and present the release point
 
-1. Apply only the exact Step 2 npm package-setting, legacy npm-token
-   revocation/secret deletion, Apple environment/policy,
-   credential-provisioning, and journal-store changes that received separate
-   authority. Re-observe public configuration and secret/variable names without
-   reading values; stop on any extra, missing, or different setting.
-2. After the exact journal/reusable-workflow, AWS, Apple credential, executor,
-   and runner interfaces are frozen, implement and land the full Apple hosted
-   producer, continuation, clean-host, verdict, and aggregate DAG in a separate
-   reviewed PR while `releaseCertification.apple.hostedExecution` remains
-   `blocked`. Its protected stage allowlist, no-checkout immutable inputs,
-   atomic journal acknowledgment/re-read, no-blind-resubmit behavior, 28
-   ordered receipts, full operation tool observations, and fresh-host flows
-   must pass structural, source-backed, and hostile tests. The merged inert
-   workflow must still stop before every protected or certifying action; this
-   merge is not R.
-3. After all three external receipt producers and signers and the inert Apple
-   hosted integration are operationally qualified, generate one closed
-   supported activation from the same contract
-   model. It must pin the three role-specific Fulcio certificate identities,
-   workflows, repositories, refs, and source bindings; change authentication
-   to `supported` with artifact production required on terminal success;
-   preserve the exact three-job topology and current-main dispatch identity;
-   qualify the exact no-third-party observer and signer bootstraps; grant
-   `contents: read` only to each `observe` job and `id-token: write` only to each
-   dedicated `sign` job; keep every `upload` job OIDC-free; and make those
-   changes atomic with all identities. No blocked intermediate commit may carry
-   OIDC permission or claim a qualified bootstrap;
-   change exact protected-body certification to its supported
-   readiness-admissible state; change Apple hosted execution to its supported
-   required-artifact state with the exact qualified journal, reusable-workflow,
-   AWS, credential, executor, and runner identities; and make final-public
-   verification `ready`/`allowed` while the shared authentication object stays
-   `supported`/required-on-terminal-success.
-   The supported fixture must rerun all forty stateful publisher cases and a
-   same-contract test spanning exact-body certification, readiness adoption,
-   real publication recovery, Apple admission, and final-public verification.
-   Review, commit,
-   push, open, and merge this activation only under separately granted exact
-   authorities. No change beyond this closed external-authentication,
-   exact-body, Apple-hosted, and final-public activation allowlist may ride
-   with it.
-4. Let candidate release SHA R be the supported activation merge SHA. Prove
-   its exact merge tree, wait for exact-main ordinary CI, and freeze main. It
-   has not yet earned release-point status. Any later source or workflow change
-   invalidates R and all candidate/certification work.
-5. Dispatch release.yml in prepare-exact-sha mode for R.
-6. Download and independently validate its artifact and manifest.
-7. Dispatch release.yml in certify-exact-sha mode against that exact candidate,
-   then approve and run its protected GitHub claims plus eleven npm-exchange
-   job. This approval does not authorize npm publication.
-8. Dispatch the
-   exact protected-body fake-registry certification against the exact candidate
-   and download and validate its readiness-admissible artifact. The current
-   local-qualification artifact cannot substitute for it.
-9. Resolve GitHub Release governance before readiness. Under separate settings
-   authority, either enable and re-observe immutability, or retain a signed,
-   authenticated accepted-disabled decision that makes no immutability claim.
-10. Under separate Apple-submission authority, approve and run Apple
-   certification only after credential and journal feasibility is recorded.
-11. Wait for terminal Apple and clean-host aggregates, download them, and
-   validate bytes.
-12. For each of `npm-authority`, `operational-journal`, and
-   `github-release-governance`, dispatch exactly one
-   `release-evidence-ingress.yml` run at R with the canonical signed logical
-   reference and Sigstore bundle. Download and independently validate each
-   exact two-file ingress artifact, then pass readiness only its compact
-   run/attempt/artifact/digest coordinates; never pass caller-authored receipt
-   bytes directly to readiness.
-13. Run the readiness aggregate with those three exact ingress references and
-   independently validate it.
-14. Re-observe remote main and npm immediately before presenting the packet.
-   Only when every Definition gate and the fresh terminal observations succeed
-   is candidate SHA R promoted to the earned release point R.
-15. Present R, all run IDs/attempts, artifact IDs/digests, eleven tarball
-   digests, Apple aggregate identity, journal owner identity, environment and
-   publisher observations, registry state, and the exact proposed publish
-   dispatch.
+1. Let candidate release SHA R be the exact npm-only hard-cut merge SHA. Prove
+   its merge tree, wait for exact-main ordinary CI, and freeze main. Any later
+   source or workflow change invalidates R and all candidate/certification work.
+2. Dispatch `release.yml` in `prepare-exact-sha` mode for R. Download and
+   independently validate the exact candidate artifact and manifest.
+3. Dispatch the exact protected-body fake-registry certification against that
+   candidate. Download and validate its authenticated artifact.
+4. Dispatch `release.yml` in `certify-exact-sha` mode against the same
+   candidate, approve the protected npm environment, and run GitHub claims plus
+   all eleven package-specific npm OIDC dry runs. This approval authorizes no
+   registry mutation.
+5. Dispatch readiness with the candidate and exactly the three authenticated
+   evidence coordinates. Download and independently validate the aggregate.
+   Construct every dispatch reference only after its named run attempt has
+   completed successfully. The repository-owned builder reads the exact run
+   and artifact through the sealed read-only GitHub boundary, downloads and
+   strictly parses the raw artifact ZIP, re-reads current main, and emits only
+   canonical reference JSON. Supply the canonical REST artifact digest,
+   including its `sha256:` prefix; never paste an upload-action bare digest.
 
-**Verify**: every item in the Definition of the release point is checked and
-the final main/npm observations are no older than the approval packet.
+       R=<40-lowercase-main-sha>
+       CI_RUN_ID=<push-run-id>
+       CI_RUN_ATTEMPT=<push-run-attempt>
+       CANDIDATE_RUN_ID=<prepare-run-id>
+       CANDIDATE_RUN_ATTEMPT=<prepare-run-attempt>
+       CANDIDATE_ARTIFACT_ID=<candidate-artifact-id>
+       CANDIDATE_ARTIFACT_DIGEST=sha256:<64-lowercase-hex>
+       FAKE_RUN_ID=<fake-registry-run-id>
+       FAKE_RUN_ATTEMPT=<fake-registry-run-attempt>
+       FAKE_ARTIFACT_ID=<fake-registry-artifact-id>
+       FAKE_ARTIFACT_DIGEST=sha256:<64-lowercase-hex>
+       NPM_OIDC_RUN_ID=<npm-oidc-run-id>
+       NPM_OIDC_RUN_ATTEMPT=<npm-oidc-run-attempt>
+       NPM_OIDC_ARTIFACT_ID=<npm-oidc-artifact-id>
+       NPM_OIDC_ARTIFACT_DIGEST=sha256:<64-lowercase-hex>
+       READINESS_RUN_ID=<readiness-run-id>
+       READINESS_RUN_ATTEMPT=<readiness-run-attempt>
+       READINESS_ARTIFACT_ID=<readiness-artifact-id>
+       READINESS_ARTIFACT_DIGEST=sha256:<64-lowercase-hex>
 
-Expected: Plan status may become READY FOR PUBLICATION AUTHORIZATION. It must
-not become RELEASED.
+       ACTIONS_READ_TOKEN="$(gh auth token)" \
+         node scripts/release/build-terminal-reference.mjs \
+           --kind candidate --source-sha "$R" \
+           --run-id "$CANDIDATE_RUN_ID" --run-attempt "$CANDIDATE_RUN_ATTEMPT" \
+           --artifact-id "$CANDIDATE_ARTIFACT_ID" \
+           --artifact-digest "$CANDIDATE_ARTIFACT_DIGEST" \
+           > candidate-reference.json
+
+       ACTIONS_READ_TOKEN="$(gh auth token)" \
+         node scripts/release/build-terminal-reference.mjs \
+           --kind exact-main-ci --source-sha "$R" \
+           --run-id "$CI_RUN_ID" --run-attempt "$CI_RUN_ATTEMPT" \
+           > exact-main-ci-reference.json
+
+       ACTIONS_READ_TOKEN="$(gh auth token)" \
+         node scripts/release/build-terminal-reference.mjs \
+           --kind fake-registry --source-sha "$R" \
+           --run-id "$FAKE_RUN_ID" --run-attempt "$FAKE_RUN_ATTEMPT" \
+           --artifact-id "$FAKE_ARTIFACT_ID" \
+           --artifact-digest "$FAKE_ARTIFACT_DIGEST" \
+           > fake-registry-reference.json
+
+       ACTIONS_READ_TOKEN="$(gh auth token)" \
+         node scripts/release/build-terminal-reference.mjs \
+           --kind npm-oidc-certification --source-sha "$R" \
+           --run-id "$NPM_OIDC_RUN_ID" --run-attempt "$NPM_OIDC_RUN_ATTEMPT" \
+           --artifact-id "$NPM_OIDC_ARTIFACT_ID" \
+           --artifact-digest "$NPM_OIDC_ARTIFACT_DIGEST" \
+           > npm-oidc-certification-reference.json
+
+       ACTIONS_READ_TOKEN="$(gh auth token)" \
+         node scripts/release/build-terminal-reference.mjs \
+           --kind readiness --source-sha "$R" \
+           --run-id "$READINESS_RUN_ID" --run-attempt "$READINESS_RUN_ATTEMPT" \
+           --artifact-id "$READINESS_ARTIFACT_ID" \
+           --artifact-digest "$READINESS_ARTIFACT_DIGEST" \
+           > readiness-reference.json
+
+   The candidate, exact-main, fake-registry, and npm OIDC files are the four
+   JSON inputs to the readiness dispatch. The candidate and readiness files
+   are the two retained artifact inputs to publication and final-public
+   verification. Re-run the builder rather than hand-editing a reference when
+   a validity window expires.
+6. Re-observe remote main and anonymous npm immediately before presenting the
+   packet. Confirm no 0.6.0 exists, prior-latest/placeholder ledgers are exact,
+   and Rolldown remains reservation-only.
+7. Present R, run/attempt/artifact IDs and digests, eleven tarball digests, the
+   explicit limits of the npm dry-run, and the explicit Apple/AWS deferred
+   statement. Only then is R an earned release point.
+
+**Verify**: every item in the release-point definition is checked and final
+main/npm observations are fresh.
+
+Expected: READY FOR PUBLICATION. Nothing is yet published, tagged, or released.
 
 ### Step 10: Publish only the certified bytes after explicit authorization
 
@@ -1518,21 +1275,21 @@ cache, and recheck all Rolldown reservation invariants.
 
 Expected: eleven converged npm coordinates or an explicitly partial state whose
 published prefix has exact bytes, tags, and provenance and is therefore
-eligible for same-candidate resume. Any other partial state is a STOP requiring
-a new recovery/version decision. Partial state is not release completion.
+eligible for same-candidate resume only while the original readiness packet is
+still valid. After that packet expires, or for any other partial state, stop
+and require a new-version decision. Never repack, manually repair tags, or
+bypass readiness. Partial state is not release completion.
 
 ### Step 11: Create the tag and GitHub Release last
 
 Require separate tag, draft-Release, and public-Release authorities after all
 npm coordinates converge.
 
-1. Re-observe and enforce the exact Step 9 governance decision already admitted
-   by readiness. Any drift is a STOP. If the decision was
-   `enabled-before-release`, immutability was already enabled and re-observed
-   under separate settings authority before readiness. If it was
-   `accepted-disabled-release-assets-not-claimed-immutable`, preserve that
-   limitation and do not claim immutable Release assets. Step 11 may not make
-   the first governance decision or mutate the setting after R is earned.
+1. With operator Administration-read authority, re-observe repository Release
+   immutability immediately before draft creation and require `enabled: true`.
+   This live preflight is deliberately outside hosted readiness because the
+   workflow token lacks that permission. Any false or inconclusive result is a
+   STOP; do not create the draft.
 2. Under tag authority, create the same lightweight-tag form used by v0.3.0.
    Re-observe exact main. An absent remote tag may be created; an existing
    lightweight tag is resumable only if it already resolves directly to R; any
@@ -1582,12 +1339,14 @@ npm coordinates converge.
    download every asset into a fresh directory for byte comparison. A mismatch
    is repaired only by deleting the draft under separate destructive authority
    and restarting; never patch an ambiguous draft in place.
-6. Under public-Release authority, publish only that exact verified draft:
+6. Repeat the operator-admin immutability preflight immediately before public
+   publication and again require `enabled: true`. Under public-Release
+   authority, publish only that exact verified draft:
 
        gh release edit v0.6.0 -R mannyc2/effect-build --draft=false
 
-   Re-download release metadata. If immutability was enabled, require
-   `immutable: true`; do not upload or edit any asset afterward.
+   Re-download release metadata and require `immutable: true`; do not upload or
+   edit any asset afterward.
 7. Run the pre-merged read-only final-smoke workflow against R. From fresh npm
    and Bun caches, cover every public package and representative composed
    pipelines, verify npm signatures/provenance, and compare registry downloads
@@ -1611,8 +1370,10 @@ worktree remain clean.
 2. Close superseded PR 22 with a factual link to merged PR 24 and v0.6.0 only
    under separate PR-mutation authority naming PR 22. Do not merge it or delete
    its branch.
-3. Retain candidate, readiness, Apple, and final receipts at their exact named
+3. Retain candidate, readiness, and final receipts at their exact named
    artifact/archive locations for the documented period and record expiry.
+   Preserve historical/local Apple evidence separately as source-qualification
+   history; it is not a v0.6.0 release receipt.
 4. Separately propose main protection against force-push/deletion and required
    PR/CI gates. Repository-settings changes require their own approval.
 5. Do not delete evidence branches, workflows, environments, runners, or
@@ -1647,18 +1408,18 @@ worktree remain clean.
   ambient auth/proxy/extra-CA/`NODE_OPTIONS`, wrong Bun, lifecycle scripts, and
   source-authority mutation. Require every checkout-capable release workflow to
   use that one helper and the protected publisher to use none.
-- Add test/architecture/apple-certification-workflow.test.ts. Generate its
-  expected coverage from the canonical releaseCertification policy; require
-  the exact ordered 28 coordinates, category field allowlists, A dependencies,
-  pair-rendezvous DAG, environment/credential job allowlist, two-file aggregate,
-  and rejection of public ZIP and macOS Node SEA cells.
+- Retain test/architecture/apple-certification-workflow.test.ts as
+  source/library and deferred-design qualification. Its historical 28-coordinate
+  coverage must not be consumed by v0.6.0 readiness. Add current-scope tests
+  proving Apple and operational-journal references are rejected and no App,
+  DMG, PKG, or Apple aggregate can enter v0.6.0 outputs.
 - Extend test/architecture/ci-workflow.test.ts so ordinary credential-free CI
   cannot be mislabeled as distribution certification.
-- Add local fake Apple tests for reference persistence, fresh-runner resume,
+- Retain local fake Apple tests for reference persistence, fresh-runner resume,
   redaction, architecture correlation, external journal ACK/re-read and crash
   points, locally-valid rejection, unknown outcome with no resubmit, clean-host
   pre/post state, and aggregate completeness. These do not substitute for
-  hosted Apple evidence.
+  hosted Apple evidence and are not a v0.6.0 gate.
 - Test the readiness aggregate with missing, duplicate, wrong-run, wrong-SHA,
   rerun, expired-artifact, changed-main, changed-registry, and changed-byte
   fixtures. Add hostile ZIP fixtures for duplicate/local-central name mismatch,
@@ -1667,22 +1428,13 @@ worktree remain clean.
   truncated descriptor, oversized members/aggregate, and high compression ratio;
   retain one real GitHub-style data-descriptor/store fixture as the positive
   boundary.
-- Test the Sigstore/DSSE verifier against canonical v0.3 bundles, exact payload
-  and certificate/OID bindings, malformed and noncanonical encodings, trust
-  thresholds, and the real two-argument Sigstore verification API boundary.
-- Test the generated signer independently: every repository Node launch is
-  `env -i`; blocked workflows have no OIDC permission; arbitrary dispatch SHAs
-  cannot execute repository code; request tokens/URLs and responses are bounded;
-  Fulcio/Rekor never redirect or retry; TLS uses bundled roots, exact SNI, and
-  no agent; duplicate/encoded/partial/truncated bodies and duplicate JSON keys
-  at every nesting level fail; and `//host` endpoint mutation sends zero bytes.
-- Test npm authority with the separately pinned npm 11.19.1 package integrity,
-  manifest, trust-list/token-list sources, and explicit npmjs registry argv.
-  Require exact `mannyc1`, exact empty token inventory, exact sole-maintainer and
-  disallow-token publishing-access projections for all twelve authority
-  packages, plus observation-credential destruction before signing. Peer users,
-  ambient registry config, additional maintainers, any token entry, missing
-  package policy, or deletion of a GitHub secret alone must remain blocked.
+- Test the retained Sigstore provenance verifier against exact npm payload and
+  certificate/OID bindings, malformed and noncanonical encodings, trust
+  thresholds, and the real verification API boundary. No external receipt
+  signer remains in the v0.6.0 gate.
+- Test that npm OIDC dry-run receipts cannot claim upload, provenance,
+  publication, exclusive publisher inventory, token absence, package policy,
+  or account 2FA state. The registry snapshot must remain unchanged.
 - Test retained Sigstore TUF provenance against seed/root signature rotation,
   timestamp/snapshot/targets signatures and hash/length/version links, active
   rotated-root/timestamp/snapshot/targets acquisition-time expiry, exact target
@@ -1691,8 +1443,7 @@ worktree remain clean.
   not invalidate an otherwise authenticated rotation.
 - Test final-public validation and its workflow for exact readiness, npm, tag,
   Release, asset, provenance, and clean-consumer byte bindings while retaining
-  read-only permissions and an unreachable upload while readiness authentication
-  is blocked.
+  read-only permissions and mandatory `immutable: true` final metadata.
 - Run full verify after focused tests. No test may require live credentials.
 
 ## Done criteria
@@ -1707,37 +1458,30 @@ All boxes are conjunctive:
   exact-main green at R.
 - [ ] Candidate artifact contains exactly eleven certified 0.6.0 tarballs plus
   manifest; no Rolldown tarball.
-- [ ] After authenticated external evidence is qualified, the exact publisher
-  shell passes every named stateful fake-registry case in the supported exact
-  certification workflow. Until then, the real purpose proves only a
-  post-reauthorization, pre-candidate, pre-npm zero-mutation STOP; the sealed local protocol executes those
-  extracted bodies for all forty coordinates and cross-checks the oracle, but
-  its non-admissible result is not a substitute.
+- [ ] The canonical exact publisher shell passes every named stateful
+  fake-registry case in the hosted certification workflow and emits the
+  authenticated artifact at R.
 - [ ] The one protected GitHub claims receipt and one npm OIDC exchange receipt
   containing eleven ordered entries are valid, contain no token, and bind an
   unchanged registry snapshot.
-- [ ] All eleven trusted-publisher records and repository URLs are observed;
-  setting-save insufficiency and the exact dry-run exchange evidence are both
-  preserved.
-- [ ] The legacy repository `NPM_TOKEN` is deleted under separate authority,
-  any corresponding npm token is authenticatedly revoked, forbidden
-  repository/environment secret names are absent, all tarballs have exact
-  two-key `publishConfig`, and npm/Sigstore sources match the audited digests.
-- [ ] Apple evidence covers both architectures, all thirteen capabilities,
-  acceptance/rejection, fresh-runner continuation, staple, Gatekeeper,
-  quarantine, private App ZIP transport, and six App/DMG/PKG clean-host
-  coordinates within the exact 28-receipt matrix.
-- [ ] The exact downstream journal owner is qualified.
-- [ ] Downloaded readiness aggregate authenticates all run/SHA/attempt and
-  artifact bytes at R.
+- [ ] All eleven package repository URLs and exact two-key `publishConfig`
+  values are validated; the npm dry-run's narrow exchange/no-mutation claim and
+  excluded administrative inventories are explicit.
+- [x] The v0.6.0 scope includes all eleven npm packages, including the
+  `effect-build-apple` API/library, and explicitly marks credential-backed
+  signed/notarized Apple artifacts and AWS journal evidence deferred, not
+  passed, excluded from readiness, and targeted to a later separately
+  qualified release.
+- [ ] Downloaded readiness aggregate authenticates the candidate plus exactly
+  three ordered hosted evidence roles at R; it rejects external ingress, Apple
+  certification, and operational-journal references.
 - [ ] Anonymous registry and current-main observations are fresh and exact.
 - [ ] Separate publication authorization is recorded before npm mutation.
 - [ ] All eleven npm coordinates converge to candidate-exact bytes.
 - [ ] Separate tag/GitHub Release authorization is recorded.
 - [ ] Separate draft-Release and public-Release authorizations are recorded.
-- [ ] GitHub Release immutability is enabled before v0.6.0 creation, or the
-  explicit non-immutable governance decision and compensating receipt policy
-  are recorded.
+- [ ] GitHub Release immutability is observed enabled immediately before draft
+  creation and public publication; final metadata reports `immutable: true`.
 - [ ] v0.6.0 tag, Release, assets, provenance, and fresh consumers are verified.
 - [ ] Rolldown reservation remains unchanged.
 - [ ] Final worktree is literally clean and all receipts are retained.
@@ -1754,24 +1498,21 @@ Stop and report; do not improvise if:
 - any source or workflow changes after R is selected and before the final
   public receipt is terminal;
 - ordinary CI or an applicable host/capability receipt is skipped or fails;
-- a package trusted-publisher record cannot be authenticated, differs, or is
-  only assumed from another package;
-- npm, GitHub, or Apple observation is inconclusive;
-- the journal owner cannot durably persist and resume the exact Notary fields;
-- an Actions artifact is used as the first durable journal acknowledgment or
-  the submit-response-to-upload crash gap remains open;
-- Apple credentials, runners, team identity, product architecture, submission,
-  stapling, Gatekeeper, quarantine, or clean-host evidence is unavailable;
+- an admitted hosted GitHub/npm observation is inconclusive;
+- any v0.6.0 candidate, readiness input, or GitHub Release asset claims or
+  contains a signed/notarized App, DMG, PKG, Apple certification receipt, or
+  AWS operational-journal evidence;
+- Apple credential or AWS journal setup is made a prerequisite for v0.6.0
+  instead of remaining deferred to a later separately qualified release;
 - any secret or OIDC token appears in logs, artifacts, commands, or committed
   files;
 - before protected certification or publication, a repository/environment
   `NPM_ID_TOKEN`, `NPM_TOKEN`, `NODE_AUTH_TOKEN`, or `SIGSTORE_ID_TOKEN` secret
   remains, a protected process receives one of those variables, or a tarball
   contains non-canonical `publishConfig`;
-- after external evidence authentication is qualified, fake-registry execution
-  does not run the exact protected reauthorization and publisher bodies; while
-  it remains blocked, the exact body reaches any registry mutation or helper
-  coverage is described as exact-body certification;
+- fake-registry certification does not run the exact protected
+  reauthorization and publisher bodies or does not emit the authenticated
+  candidate-bound artifact;
 - a conflict, newer npm version, prior-latest drift, wrong tag, wrong bytes,
   missing/foreign provenance, reservation drift, or unresolved unknown
   commitment exists;
@@ -1780,6 +1521,8 @@ Stop and report; do not improvise if:
   fallback token, login, stage, dist-tag repair, manual publish, repack, or
   unpublish;
 - GitHub tag/Release would be created before all npm subjects converge;
+- either pre-draft or pre-publication immutability preflight is not exactly
+  enabled, or final Release metadata is not `immutable: true`;
 - any requested action lacks exact same-session authority.
 
 ## Maintenance notes
@@ -1788,9 +1531,15 @@ Stop and report; do not improvise if:
   instant. It does not prove upload, provenance, or publication; keep those at
   the separately authorized real-publish boundary.
 - Re-run fake-registry cases whenever the inline publisher changes.
-- Re-generate Apple coverage whenever the producer capability register changes.
+- Same-candidate partial-prefix recovery is deliberately bounded by the
+  original readiness validity. Expiry is a STOP requiring a new-version
+  decision, not authority to mint post-publication readiness or repair state
+  manually.
+- Re-generate Apple coverage whenever the producer capability register changes,
+  but do not admit it to v0.6.0 readiness.
 - Requalify the journal owner whenever its released version or exact source
-  commit changes.
+  commit changes before a future signed/notarized Apple-artifact release; the
+  journal is outside v0.6.0.
 - A new target version, package, tag policy, staged-publishing policy, workflow
   filename, environment, npm/Node client, or candidate schema invalidates the
   readiness protocol and requires a reviewed contract change.
@@ -1799,71 +1548,25 @@ Stop and report; do not improvise if:
 
 ## Receipt
 
-No release-point or publication receipt exists yet.
+No v0.6.0 release-point or public-release receipt existed when this plan
+revision was written.
 
-- Merge receipt: PR 24 merged at 2026-08-30T11:40:40Z as
+- PR 24 merged at 2026-08-30T11:40:40Z as
   dd39bd6104645d79fa52f40d0bbf291b5bf8f3dc with parents
   4ad34423d84d17c959ace0d55af8623f336a68be and
-  e4511f12f2afdab0090de73fd6bf4d1f226b4d88; its tree
-  29cdac9bf9621aa3df12757e2720c093b17d742e equals the PR-head tree, and
-  exact-main push run 33309530017 passed 33/33 jobs with no retained artifact
-- Post-merge main SHA: dd39bd6104645d79fa52f40d0bbf291b5bf8f3dc;
-  this is not release point R
-- Final main SHA R: DECISION-PENDING
-- Release-readiness implementation PR/head: LOCAL-UNCOMMITTED on
-  codex/v060-release-readiness at
-  dd39bd6104645d79fa52f40d0bbf291b5bf8f3dc; the release contract, workflows,
-  Apple probe/journal boundary, Sigstore verifier, release-authority auditor,
-  readiness/final-public validators, fixtures, and tests exist only as
-  working-tree changes, and no implementation commit, push, or PR exists
-- Current local release-readiness verification: PASSED under pinned Bun 1.3.14;
-  contract 13/13, type-test files 16/16, unit 160/160, Apple package 46/46,
-  built consumer, architecture 254/254, lint, formatting, and git diff check
-  passed. The architecture total includes 78 publisher-boundary tests, a
-  deliberate process-group timeout regression, and all 40 exact protected-body
-  state-machine coordinates; the exact 40-coordinate subset also passed in a
-  separate run. Local native Apple acceptance passed 4/4. This is local
-  qualification of uncommitted bytes, not hosted certification, a release
-  point, or publication evidence.
-- Historical pre-hard-cut nonsecret authority audit: BLOCKED at
-  2026-09-01T00:40:01.724Z for source
-  dd39bd6104645d79fa52f40d0bbf291b5bf8f3dc. Its former 44 checks reported 20
-  match, one mismatch, and 23 unobserved: the repository `NPM_TOKEN` name is the
-  mismatch; npm authentication returned E401; and all eleven trusted-publisher
-  plus allowed-action records remain unobserved. GitHub environment, branch
-  policy, OIDC policy, no environment secrets/variables, and all public package
-  repository URLs matched. The token identity/revocation and authenticated npm
-  inventory remain unresolved. This receipt shape is now superseded and cannot
-  satisfy the current 57-check protocol, which additionally requires exact
-  `mannyc1` empty-token/sole-maintainer evidence plus twelve disallow-token
-  publishing-access observations under the pinned authority-only client.
-- Apple execution backend: PARTIALLY-RESOLVED; Bun 1.3.14 is the canonical
-  App/DMG/PKG lineage and Deno 2.9.5 remains signed-App-only; the exact ad-hoc
-  rejection fixtures are frozen; and Plan 046 passes local fake 30/30 plus
-  real-native 4/4 including every release layer. Developer ID Application and
-  Installer identities, environment/credentials, actual rejection outcomes,
-  both hosted architectures, and clean-host feasibility remain absent.
-- Journal owner feasibility: APPLE BOUNDARY IMPLEMENTED LOCALLY / EXTERNAL
-  OWNER BLOCKED; effect-build-apple now owns the locally verified codec and
-  submission engine. Plan 047 selects a provider-neutral canonical-byte S3
-  journal from exact ts-release main, but the downstream implementation,
-  dedicated bucket/Object-Lock/IAM/OIDC authority, released owner version, and
-  cross-process qualification do not exist
-- GitHub Release governance: OBSERVED-ENABLED / EXTERNAL READ BLOCKED;
-  immutability is enabled and not owner-enforced, but a supported ephemeral
-  Administration-read producer observation does not yet exist
-- Candidate run/attempt/artifact ID/digest: DECISION-PENDING
-- Fake-registry local qualification run: NOT-HOSTED; any future artifact uses
-  effect-build/fake-registry-local-qualification@1 and is not readiness-admissible
-- Exact protected-body fake-registry certification run: BLOCKED; protocol
-  effect-build/fake-registry-exact-protected-body-certification@1 is forbidden
-  until external producer identities and signers are qualified
-- GitHub claims/npm OIDC exchange run/artifact: DECISION-PENDING
-- npm publisher observation: DECISION-PENDING
-- Apple run/attempt/aggregate ID/digest: DECISION-PENDING
-- Journal owner exact identity: DECISION-PENDING
-- Readiness aggregate run/artifact: DECISION-PENDING
-- Publication authorization: NONE
-- npm convergence receipt: NONE
-- Tag/GitHub Release authorization: NONE
-- Final public-release receipt: NONE
+  e4511f12f2afdab0090de73fd6bf4d1f226b4d88; its tree matched the PR head and
+  exact-main push run 33309530017 passed 33/33 jobs.
+- PRs 25-30 merged release infrastructure through
+  8a6022095807bf19a2953025e94e48fd0072f31e; exact-main run 33546598147 passed
+  33/33. The npm-only three-proof cut requires its own review, merge, and
+  exact-main receipt before that merge SHA can become R.
+- Credential-backed Apple artifact certification: DEFERRED / NOT RUN / NOT
+  PASSED. No Apple or AWS evidence is admitted by v0.6.0 readiness.
+- npm administrative inventory: NOT OBSERVED / EXCLUDED FROM v0.6.0. A
+  temporary interactive `mannyc1` web login used for feasibility was revoked;
+  it is not release evidence.
+- GitHub Release immutability: last observed enabled and not owner-enforced;
+  mandatory operator-admin re-observations remain immediately before draft
+  creation and publication.
+- Candidate, three hosted evidence roles, readiness aggregate, npm convergence,
+  tag, GitHub Release, and final-public receipt: PENDING.

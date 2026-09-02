@@ -106,6 +106,10 @@ export const fakeRegistryScenarioMatrix = [
 const generatedContract = JSON.parse(readFileSync(new URL("../../../tooling/effect-build-contract.json", import.meta.url)));
 export const hypotheticalFakeRegistryEvidenceLedger =
   generatedContract.releaseCertification.fakeRegistry.exactProtectedBodyCertification.exactMutationLedger;
+const expectedPublicDistTags = new Map(
+  generatedContract.npmRegistryBoundary.publicationAdmission.target.expectedDistTagsBeforePublication
+    .map(({ name, tags }) => [name, tags]),
+);
 
 export const oidcRejectionScenarioMatrix = [
   { id: "wrong-alg", scenario: "oidc-wrong-alg" },
@@ -143,6 +147,15 @@ const initialVersion = (name, placeholderPackages) => {
     };
   }
   return {
+    ...(expectedPublicDistTags.get(name)?.reserved === placeholderVersion ? {
+      [placeholderVersion]: {
+        bytes: 1,
+        file: null,
+        integrity: `sha512-${Buffer.from(`reserved-${name}`).toString("base64")}`,
+        provenance: null,
+        sha256: sha256(Buffer.from(`reserved-${name}`)),
+      },
+    } : {}),
     "0.3.0": {
       bytes: 1,
       file: null,
@@ -153,9 +166,9 @@ const initialVersion = (name, placeholderPackages) => {
   };
 };
 
-const initialTags = (name) => placeholderNames.includes(name)
-  ? { latest: placeholderVersion, reserved: placeholderVersion }
-  : { latest: "0.3.0" };
+const initialTags = (name) => structuredClone(
+  expectedPublicDistTags.get(name) ?? { latest: placeholderVersion, reserved: placeholderVersion },
+);
 
 export const exactProvenance = () => ({
   predicateType: "https://slsa.dev/provenance/v1",

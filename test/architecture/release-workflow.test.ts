@@ -65,12 +65,6 @@ interface CombinedContract {
     };
     readonly readiness: {
       readonly bundleFraming: string;
-      readonly externalEvidenceAuthentication: {
-        readonly artifactDisposition: string;
-        readonly producerIdentities: ReadonlyArray<string>;
-        readonly requiredEnvelope: string;
-        readonly status: string;
-      };
     };
   };
 }
@@ -361,7 +355,7 @@ describe("release workflow hard cut", () => {
     }
   });
 
-  it("keeps certify dry-run-only and makes real publication activation-complete behind semantic readiness", () => {
+  it("keeps certify dry-run-only and requires three-proof semantic readiness for real publication", () => {
     const publisher = named(
       workflow.jobs["protected-npm"],
       "Adopt, compare, and publish only certified bytes",
@@ -378,24 +372,18 @@ describe("release workflow hard cut", () => {
     expect(publisher).toContain("release readiness is not bound to the dispatched candidate bytes");
     expect(publisher).toContain("release readiness evidence bundle has trailing or additional frames");
     expect(publisher).toContain("real publication has no authenticated readiness npm baseline");
-    expect(publisher).toContain("closed-receipts-require-contract-pinned-sigstore-dsse-authentication");
-    expect(publisher).toContain('authentication?.status === "blocked"');
-    expect(publisher).toContain('authentication?.status !== "supported"');
-    expect(publisher).toContain('authentication?.artifactDisposition !== "required-on-terminal-workflow-success"');
-    expect(publisher).toContain('mode === "certify-exact-sha" ? "candidate adoption" : "readiness adoption"');
-    expect(publisher).toContain("is blocked before ${stage}");
+    expect(publisher).toContain('readiness?.protocol !== "effect-build/release-readiness@3"');
+    expect(publisher).toContain('readiness?.bundleProtocol !== "effect-build/release-readiness-evidence-bundle@3"');
+    expect(publisher).toContain('readiness?.event !== "workflow_dispatch"');
+    expect(publisher).toContain("authenticated contract has an unknown three-proof readiness policy");
+    expect(publisher).toContain('fakePurpose.protocol !== "effect-build/fake-registry-exact-protected-body-purpose@2"');
+    expect(publisher).not.toContain("externalAuthentication");
     expect(publisher.indexOf('if (["certify-exact-sha", "publish-certified-bytes"].includes(mode))')).toBeLessThan(
       publisher.indexOf("const candidateCoordinate"),
     );
     expect(publisher.indexOf("const readinessCoordinate")).toBeLessThan(
       publisher.indexOf("const npmEnvironmentNames"),
     );
-    expect(contract.releaseCertification.readiness.externalEvidenceAuthentication).toMatchObject({
-      artifactDisposition: "forbidden-while-blocked",
-      producerIdentities: [],
-      requiredEnvelope: "sigstore-bundle-v0.3-dsse",
-      status: "blocked",
-    });
     expect(hypotheticalPublisherSource).toContain("runHypotheticalPublisher");
     expect(hypotheticalPublisherSource).not.toMatch(/\bnpm\s+(?:publish|dist-tag|unpublish)\b/u);
     expect(publisher).toContain("credentialFreeChildEnvironment");
@@ -406,10 +394,11 @@ describe("release workflow hard cut", () => {
     expect(publisher).toContain('version: "3.1.0"');
     expect(publisher).toContain("new verifyClient.Verifier(verifyClient.toTrustMaterial(trustedRoot)");
     expect(publisher).toContain("publicationTrustedRootPath");
-    expect(publisher).toContain('if (mode === "publish-certified-bytes" && fakePurposeSelected)');
+    expect(publisher).toContain("if (fakePurposeSelected)");
     expect(publisher).toContain("resolve(exactFakeRepositoryRoot, trustedRootPolicy.path)");
     expect(publisher).toContain('if (mode === "publish-certified-bytes" && !fakePurposeSelected)');
-    expect(publisher).toContain("resolve(environment.READINESS_DIR, trustedRootPolicy.artifactFile)");
+    expect(publisher).toContain("githubDocument(");
+    expect(publisher).toContain("`${api}/contents/${trustedRootPolicy.path}?ref=${sourceSha}`");
     expect(publisher).toContain("published provenance has no exact contract-bound trusted root");
     expect(publisher).toContain("network access is forbidden in provenance verifier");
     expect(publisher).toContain("Resolver?.prototype, resolverMethods");

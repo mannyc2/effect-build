@@ -85,7 +85,12 @@ The package-local fake-runner suite proves exact argv, held-byte boundaries,
 symlink-chain preservation, ZIP-to-app projection, collision rejection,
 rollback, typed failures, provider result facts, runner-two resumption,
 acceptance correlation, and secret non-persistence. It does not claim Apple
-acceptance. Release evidence still requires credential-backed macOS jobs
-covering both architectures, quarantined launch/install, notarization
-acceptance and rejection, ticket stapling, Gatekeeper assessment, and
-clean-host execution.
+acceptance.
+
+The v0.6.0 release includes this npm API/library package, but no
+credential-backed Apple artifact. Developer ID signing, notarization,
+stapling, Gatekeeper, quarantined clean-host execution, and the durable AWS
+Notary journal were not run and have not passed. They are explicitly excluded
+from v0.6.0 readiness and outputs. Producing signed/notarized App, DMG, or PKG
+artifacts requires a later, separately qualified release with its own
+credentials, journal, hosts, evidence, and publication decision.

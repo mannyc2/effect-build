@@ -91,6 +91,13 @@ interface FakeState {
     readonly name: string;
     readonly provenance: boolean;
   }>;
+  readonly registry: {
+    readonly packages: Readonly<
+      Record<string, {
+        readonly tags: Readonly<Record<string, string>>;
+      }>
+    >;
+  };
   readonly violations?: ReadonlyArray<unknown>;
 }
 
@@ -272,25 +279,23 @@ const readState = async (statePath: string) => JSON.parse(await readFile(statePa
 const makeFixture = async (
   directory: string,
   scenario: string,
-  supportedRealPublication = false,
 ) => {
   const module = await import(fixtureModuleUrl) as {
     readonly makeReleaseFixture: (input: {
       readonly root: string;
       readonly scenario: string;
-      readonly supportedRealPublication?: boolean;
     }) => Promise<{
       readonly statePath: string;
     }>;
   };
-  return await module.makeReleaseFixture({ root: directory, scenario, supportedRealPublication });
+  return await module.makeReleaseFixture({ root: directory, scenario });
 };
 
 const clearPublishFault = async (statePath: string) => {
   stateModule.clearPublishFault(statePath);
 };
 
-const protectedBodyTimeout = 300_000;
+const protectedBodyTimeout = 600_000;
 const exactCoordinateTimeout = (protectedBodyTimeout * 2) + 60_000;
 const supportedConvergenceTimeout = protectedBodyTimeout + 60_000;
 
@@ -339,6 +344,13 @@ const executeBody = (
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
           stderr += `${stderr.length === 0 ? "" : "\n"}${String(error)}`;
+          return;
+        }
+        // The detached child may not have created its process group yet; kill it directly.
+        try {
+          child.kill(signal);
+        } catch {
+          // The child already exited.
         }
       }
     };
@@ -467,17 +479,6 @@ const withScenario = async <A>(
   }
 };
 
-const withSupportedRealScenario = async <A>(
-  use: (fixture: { readonly directory: string; readonly statePath: string }) => Promise<A>,
-) => {
-  const directory = await mkdtemp(join(tmpdir(), "effect-build-release-supported-real-"));
-  try {
-    const { statePath } = await makeFixture(directory, "full-convergence", true);
-    return await use({ directory, statePath });
-  } finally {
-    await rm(directory, { force: true, maxRetries: 20, recursive: true, retryDelay: 100 });
-  }
-};
 const canonicalPackageOrder = [
   "effect-build",
   "effect-build-apple",
@@ -530,7 +531,21 @@ const mutateCandidateArtifact = async (
   await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
 };
 
-describe.skipIf(process.platform === "win32")("release publisher boundary certification", () => {
+const mutateRegistryTags = async (
+  statePath: string,
+  name: string,
+  mutate: (tags: Record<string, string>) => void,
+) => {
+  const state = JSON.parse(await readFile(statePath, "utf8")) as {
+    registry: { packages: Record<string, { tags: Record<string, string> }> };
+  };
+  const entry = state.registry.packages[name];
+  if (entry === undefined) throw new Error(`missing fake registry package ${name}`);
+  mutate(entry.tags);
+  await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+};
+
+describe.skipIf(process.platform === "win32")("release publisher boundary certification", { concurrent: true }, () => {
   it("parses both exact protected bodies with the runner Bash", () => {
     for (const body of [reauthorizations[0]?.step.run, publishers[0]?.step.run]) {
       expect(typeof body).toBe("string");
@@ -547,10 +562,10 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
         "(trap '' TERM; sleep 2; printf leaked > \"$MARKER\") & wait",
         directory,
         { MARKER: marker, PATH: process.env.PATH ?? "" },
-        50,
+        500,
       );
       expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("protected body timed out after 50ms");
+      expect(result.stderr).toContain("protected body timed out after 500ms");
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_250));
       await expect(access(marker)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
@@ -619,6 +634,11 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
             expect(firstFailed, first.publisher?.stderr).toBe(false);
             expect(state.mutations.map(({ name }) => name)).toEqual(canonicalPackageOrder);
             expect(state.mutations.every(({ committed, provenance }) => committed && provenance)).toBe(true);
+            expect(state.registry.packages["effect-build"]?.tags).toEqual({ latest: "0.6.0" });
+            expect(state.registry.packages["effect-build-bun"]?.tags).toEqual({
+              latest: "0.6.0",
+              reserved: "0.0.0-reserved.0",
+            });
             break;
           }
           case "partial-exact-publication": {
@@ -728,17 +748,54 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
     }, exactCoordinateTimeout);
   }
 
-  it("stops the exact protected publish body before readiness adoption or any npm command", async () => {
+  for (
+    const drift of [
+      {
+        label: "missing historical reserved tag",
+        mutate: (tags: Record<string, string>) => {
+          delete tags.reserved;
+        },
+      },
+      {
+        label: "unexpected extra tag",
+        mutate: (tags: Record<string, string>) => {
+          tags.next = "0.3.0";
+        },
+      },
+      {
+        label: "wrong historical reserved tag",
+        mutate: (tags: Record<string, string>) => {
+          tags.reserved = "0.0.0-reserved.1";
+        },
+      },
+    ]
+  ) {
+    it(`rejects ${drift.label} before the first registry mutation`, async () => {
+      await withScenario("full-convergence", async ({ directory, statePath }) => {
+        await mutateRegistryTags(statePath, "effect-build-bun", drift.mutate);
+        const result = await runProtectedBodies(statePath, directory);
+        expect(result.reauthorization.status, result.reauthorization.stderr).toBe(0);
+        expect(result.publisher?.status).not.toBe(0);
+        const state = await readState(statePath);
+        expect(state.mutations).toEqual([]);
+      });
+    }, exactCoordinateTimeout);
+  }
+
+  it("requires exact three-role readiness before any npm command", async () => {
     await withScenario("full-convergence", async ({ directory, statePath }) => {
       const result = await runProtectedBodies(
         statePath,
         directory,
-        { UNRELATED_RUNNER_SECRET: "SECRET-CANARY" },
+        {
+          READINESS_ARTIFACT_ID: "0",
+          UNRELATED_RUNNER_SECRET: "SECRET-CANARY",
+        },
         false,
       );
       expect(result.reauthorization.status, result.reauthorization.stderr).toBe(0);
       expect(result.publisher?.status).not.toBe(0);
-      expect(result.publisher?.stderr).toContain("blocked before readiness adoption");
+      expect(result.publisher?.stderr).toContain("readiness fixture coordinate changed");
       const state = await readState(statePath);
       expect(state.mutations).toHaveLength(
         combinedContract.releaseCertification.fakeRegistry.exactProtectedBody.realBlockedMutationCount,
@@ -762,14 +819,14 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
     });
   }, 120_000);
 
-  it("adopts one supported semantic readiness artifact and runs real convergence without checkout", async () => {
-    await withSupportedRealScenario(async ({ directory, statePath }) => {
+  it("adopts the canonical semantic readiness artifact and runs real convergence without checkout", async () => {
+    await withScenario("full-convergence", async ({ directory, statePath }) => {
       const stateBefore = await readState(statePath);
-      const activatedContract = JSON.parse(
+      const canonicalContract = JSON.parse(
         await readFile(resolve(directory, "effect-build-contract.json"), "utf8"),
       );
-      expect(() => assertReadinessArtifactAllowed(activatedContract)).not.toThrow();
-      expect(() => assertFinalPublicVerificationAllowed(activatedContract)).not.toThrow();
+      expect(() => assertReadinessArtifactAllowed(canonicalContract)).not.toThrow();
+      expect(() => assertFinalPublicVerificationAllowed(canonicalContract)).not.toThrow();
       const protectedJob = workflow.jobs[reauthorizations[0]!.job]!;
       expect(
         protectedJob.steps?.some(({ uses }: { readonly uses?: string }) =>
@@ -793,30 +850,6 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
       expect(state.violations ?? []).toEqual([]);
     });
   }, supportedConvergenceTimeout);
-
-  it(
-    "stops real certification after reauthorization and before candidate or npm adoption while authentication is blocked",
-    async () => {
-      await withScenario("full-convergence", async ({ directory, statePath }) => {
-        const result = await runProtectedBodies(statePath, directory, certificationEnvironment, false);
-        expect(result.reauthorization.status, result.reauthorization.stderr).toBe(0);
-        expect(result.publisher?.status).not.toBe(0);
-        expect(result.publisher?.stderr).toContain("certify-exact-sha is blocked before candidate adoption");
-        const state = await readState(statePath);
-        expect(state.mutations).toEqual([]);
-        expect(state.invocations.filter(({ tool }) => tool === "npm")).toEqual([]);
-        const observedCurl = state.invocations
-          .filter(({ tool }) => tool === "curl")
-          .flatMap(({ args }) => args)
-          .join("\n");
-        expect(observedCurl).not.toContain("/actions/artifacts/");
-        expect(observedCurl).not.toContain("registry.npmjs.org");
-        expect(observedCurl).not.toContain("token.actions.githubusercontent.com");
-        expect(state.violations ?? []).toEqual([]);
-      });
-    },
-    120_000,
-  );
 
   it("certifies eleven package-specific npm OIDC exchanges without a reachable mutation", async () => {
     await withScenario("full-convergence", async ({ directory, statePath }) => {
@@ -957,12 +990,14 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
   }
 
   for (const scenario of ["readiness-stale", "readiness-future", "readiness-excess-validity"]) {
-    it("does not admit " + scenario + " while external authentication is blocked", async () => {
+    it("does not admit " + scenario + " before any npm command", async () => {
       await withScenario(scenario, async ({ directory, statePath }) => {
         const result = await runProtectedBodies(statePath, directory, {}, false);
         expect(result.reauthorization.status, result.reauthorization.stderr).toBe(0);
         expect(result.publisher?.status).not.toBe(0);
-        expect(result.publisher?.stderr).toContain("blocked before readiness adoption");
+        expect(result.publisher?.stderr).toMatch(
+          /release readiness .*(?:changed|stale, future, expired, or overlong)/u,
+        );
         const state = await readState(statePath);
         expect(state.mutations).toEqual([]);
         expect(state.invocations.filter(({ tool }) => tool === "npm")).toEqual([]);

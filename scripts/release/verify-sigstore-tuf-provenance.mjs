@@ -182,7 +182,8 @@ export const verifyRetainedSigstoreTufProvenance = async ({
 
 export const loadRetainedSigstoreTufInputs = async () => {
   const contract = JSON.parse(await readFile(contractPath, "utf8"));
-  const tuf = contract.releaseCertification.readiness.externalEvidenceAuthentication.verifier.trustedRoot.tuf;
+  const provenance = contract.releaseCertification.provenanceVerification;
+  const tuf = provenance.trustedRoot.tuf;
   const evidence = new Map(await Promise.all([
     tuf.acquisition.seedRoot,
     ...Object.values(tuf.acquisition.metadata),
@@ -198,8 +199,7 @@ export const loadRetainedSigstoreTufInputs = async () => {
     lockfileText: await readFile(resolve(repositoryRoot, "bun.lock"), "utf8"),
     packageManifest: JSON.parse(await readFile(resolve(repositoryRoot, "package.json"), "utf8")),
     seedDocumentBytes: await readFile(require.resolve("@sigstore/tuf/seeds.json")),
-    trustedRootBytes: await readFile(resolve(repositoryRoot, contract.releaseCertification.readiness
-      .externalEvidenceAuthentication.verifier.trustedRoot.path)),
+    trustedRootBytes: await readFile(resolve(repositoryRoot, provenance.trustedRoot.path)),
   };
 };
 

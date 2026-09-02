@@ -18,6 +18,7 @@ const { canonicalJson, derivePublicModules, derivePublicPackageNames, sha256Dige
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const generated = JSON.parse(await readFile(resolve(root, "tooling/effect-build-contract.json"), "utf8"));
+const trustedRootFixtureBytes = await readFile(resolve(root, "tooling/sigstore/trusted_root.json"));
 const sourceSha = "a".repeat(40);
 const observedAt = "2026-08-30T16:00:00.000Z";
 const validationTime = "2026-08-30T16:05:00.000Z";
@@ -32,31 +33,6 @@ const derUtf8 = (value: string) => {
 const fixture = () => {
   const contract = structuredClone(generated);
   const release = contract.releaseCertification;
-  release.finalPublicVerification.status = "ready";
-  release.finalPublicVerification.artifactDisposition = "allowed";
-  const authentication = release.readiness.externalEvidenceAuthentication;
-  authentication.status = "supported";
-  authentication.artifactDisposition = "required-on-terminal-workflow-success";
-  authentication.signer.activation.permissions = {
-    observer: { contents: "read" },
-    signer: { "id-token": "write" },
-    upload: {},
-  };
-  authentication.signer.activation.hostedBootstrap.status = "qualified";
-  authentication.producerIdentities = release.readiness.evidenceRoles
-    .filter(({ type }: { type: string }) => type === "externalObservation")
-    .map(({ role }: { role: string }) => {
-      const workflow = `mannyc2/effect-build/.github/workflows/${role}.yml@refs/heads/main`;
-      return {
-        role,
-        certificateIssuer: authentication.verifier.certificateIssuer,
-        certificateIdentityURI: `https://github.com/${workflow}`,
-        workflow,
-        repository: "mannyc2/effect-build",
-        ref: "refs/heads/main",
-        sourceBinding: { kind: "release-source-sha" },
-      };
-    });
   const reservationBytes = Buffer.from("fixture reservation bytes\n");
   const reservationLedger = release.finalPublicVerification.implementation.reservation.ledger;
   reservationLedger.bytes = reservationBytes.byteLength;
@@ -278,11 +254,12 @@ const fixture = () => {
     releaseAssetBytes,
     provenance,
     provenanceBundles,
+    provenanceTrustedRootBytes: Buffer.from(trustedRootFixtureBytes),
     consumerSmoke,
     reservation,
     reservationBytes,
     sigstoreVerify: vi.fn(async () => {
-      const verifier = release.readiness.externalEvidenceAuthentication.verifier;
+      const verifier = release.provenanceVerification;
       const identity = `https://github.com/${release.candidate.workflow}`;
       return {
         identity: {
@@ -307,12 +284,12 @@ const fixture = () => {
     }),
     readinessVerify: vi.fn(async () => ({
       manifest: { schema: release.readiness.protocol, candidate: candidate.reference },
-      authenticatedExternalReceipts: new Map([["github-release-governance", { enabled: true }]]),
+      authenticatedEvidence: new Map(),
     })),
   };
 };
 
-describe("full inert final-public verifier", () => {
+describe("directly active final-public verifier", () => {
   it("produces one canonical receipt for exact npm, Release, provenance, smoke, and reservation state", async () => {
     const input = fixture();
     const result = await validateFinalPublicState(input);
@@ -340,15 +317,30 @@ describe("full inert final-public verifier", () => {
           },
         },
       },
-      authenticatedExternalReceipts: new Map([[
-        "github-release-governance",
-        { enabled: true },
-      ]]),
+      authenticatedEvidence: new Map(),
     }));
     await expect(validateFinalPublicState(input)).rejects.toThrow(/readiness-certified candidate/u);
   });
 
-  it("fails closed on bytes, provenance, smoke, reservation, or governance drift", async () => {
+  it("uses the readiness candidate's seven-day freshness and validity window", async () => {
+    const withinWindow = fixture();
+    withinWindow.candidate.reference.observedAt = "2026-08-28T16:00:00.000Z";
+    withinWindow.candidate.reference.expiresAt = "2026-09-04T16:00:00.000Z";
+    const accepted = await validateFinalPublicState(withinWindow);
+    expect(accepted.receipt.candidate).toEqual(withinWindow.candidate.reference);
+
+    const expired = fixture();
+    expired.candidate.reference.observedAt = "2026-08-28T16:00:00.000Z";
+    expired.candidate.reference.expiresAt = "2026-08-30T16:04:59.999Z";
+    await expect(validateFinalPublicState(expired)).rejects.toThrow(/expired/u);
+
+    const overlong = fixture();
+    overlong.candidate.reference.observedAt = "2026-08-28T16:00:00.000Z";
+    overlong.candidate.reference.expiresAt = "2026-09-04T16:00:00.001Z";
+    await expect(validateFinalPublicState(overlong)).rejects.toThrow(/excessive validity/u);
+  });
+
+  it("fails closed on bytes, provenance, smoke, reservation, or Release immutability drift", async () => {
     const cases = [
       (input: any) => input.npmPackageBytes.set(input.npmPackages[0].name, Buffer.from("changed")),
       (input: any) => input.releaseAssetBytes.set(input.releaseAssets[0].name, Buffer.from("changed")),

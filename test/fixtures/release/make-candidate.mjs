@@ -197,13 +197,7 @@ const makePublisherReadinessFixture = ({
         evidenceObservedAt,
       };
     }
-    const receipt = Object.values(policy.externalReceipts).find(({ role }) => role === definition.role);
-    return {
-      ...common,
-      identity: receipt.identity ?? `operational-journal:${receipt.ownerRepository}`,
-      sourceSha,
-      digest: canonicalDigest(payload),
-    };
+    throw new Error(`unsupported readiness evidence type: ${definition.type}`);
   });
   const referenceDigest = (value) => canonicalDigest(Buffer.from(canonicalJson(value)));
   const descriptors = [
@@ -229,8 +223,8 @@ const makePublisherReadinessFixture = ({
       readinessFrame(descriptors[index + 1], evidenceBytes.get(reference.role))
     ),
   ]);
-  const expectedLatest = new Map(
-    registry.publicationAdmission.target.expectedLatestBeforePublication.map(({ name, version }) => [name, version]),
+  const expectedDistTags = new Map(
+    registry.publicationAdmission.target.expectedDistTagsBeforePublication.map(({ name, tags }) => [name, tags]),
   );
   const namespaceNames = [...packageNames, ...registry.reservation.packages];
   const repository = {
@@ -240,11 +234,11 @@ const makePublisherReadinessFixture = ({
   const npmPackages = namespaceNames.map((name) => {
     const ledger = registry.bootstrap.placeholderLedger.find((entry) => entry.name === name);
     if (ledger === undefined) {
-      const latest = expectedLatest.get(name);
+      const distTags = structuredClone(expectedDistTags.get(name));
       return {
         name,
-        versions: [latest],
-        distTags: { latest },
+        versions: [...new Set(Object.values(distTags))].sort(),
+        distTags,
         repository,
         placeholder: null,
       };
@@ -252,7 +246,7 @@ const makePublisherReadinessFixture = ({
     return {
       name,
       versions: [ledger.version],
-      distTags: structuredClone(ledger.bootstrapTags),
+      distTags: structuredClone(expectedDistTags.get(name) ?? ledger.bootstrapTags),
       repository,
       placeholder: {
         version: ledger.version,
@@ -300,8 +294,6 @@ const makePublisherReadinessFixture = ({
     schema: policy.protocol,
     sourceSha,
     observedAt,
-    externalEvidencePolicy: policy.externalEvidencePolicy,
-    externalEvidence: policy.externalEvidenceManifest,
     contract: {
       schema: contract.schema,
       digest: canonicalDigest(readFileSync(contractPath)),
@@ -474,7 +466,7 @@ const makeExactCandidateFixture = ({ root, scenario }) => {
   return { statePath };
 };
 
-export const makeReleaseFixture = async ({ root, scenario, supportedRealPublication = false }) => {
+export const makeReleaseFixture = async ({ root, scenario }) => {
   const exact = makeExactCandidateFixture({ root, scenario });
   if (exact !== undefined) return exact;
   const candidateDirectory = resolve(root, "candidate");
@@ -486,12 +478,7 @@ export const makeReleaseFixture = async ({ root, scenario, supportedRealPublicat
   mkdirSync(readinessDirectory);
   mkdirSync(workRoot);
 
-  const contract = supportedRealPublication
-    ? JSON.parse(run("node", [
-      resolve(repositoryRoot, "test/fixtures/release/make-supported-contract.mjs"),
-      sourceSha,
-    ], { cwd: repositoryRoot }).stdout)
-    : JSON.parse(readFileSync(resolve(repositoryRoot, "tooling/effect-build-contract.json"), "utf8"));
+  const contract = JSON.parse(readFileSync(resolve(repositoryRoot, "tooling/effect-build-contract.json"), "utf8"));
   const registry = structuredClone(contract.npmRegistryBoundary);
   const placeholderPackages = {};
   for (const name of placeholderNames) {
@@ -594,25 +581,6 @@ export const makeReleaseFixture = async ({ root, scenario, supportedRealPublicat
     workflowPath: ".github/workflows/release.yml",
   };
 
-  const externalAuthentication = contract.releaseCertification.readiness.externalEvidenceAuthentication;
-  let readiness;
-  if (externalAuthentication.status === "blocked") {
-    if (
-      externalAuthentication.artifactDisposition !== "forbidden-while-blocked"
-      || externalAuthentication.requiredEnvelope !== "sigstore-bundle-v0.3-dsse"
-      || externalAuthentication.producerIdentities.length !== 0
-    ) throw new Error("blocked readiness authentication fixture policy is inconsistent");
-    readiness = {
-      artifactId: 9002,
-      digest: `sha256:${"0".repeat(64)}`,
-      name: contract.releaseCertification.readiness.artifactName,
-      path: null,
-      runAttempt: 1,
-      runId: 7002,
-      size: 0,
-      workflowPath: contract.releaseCertification.readiness.workflowPath,
-    };
-  } else {
   const aggregateTime = Date.now();
   const observedAt = new Date(aggregateTime).toISOString();
   const aggregate = makePublisherReadinessFixture({
@@ -625,11 +593,6 @@ export const makeReleaseFixture = async ({ root, scenario, supportedRealPublicat
   });
   writeFileSync(resolve(readinessDirectory, "release-readiness.json"), aggregate.manifestBytes);
   writeFileSync(resolve(readinessDirectory, "release-readiness.bin"), aggregate.bundleBytes);
-  const trustedRoot = contract.releaseCertification.readiness.externalEvidenceAuthentication.verifier.trustedRoot;
-  copyFileSync(
-    resolve(repositoryRoot, trustedRoot.path),
-    resolve(readinessDirectory, trustedRoot.artifactFile),
-  );
   if (["readiness-stale", "readiness-future", "readiness-excess-validity"].includes(scenario)) {
     const hostile = JSON.parse(aggregate.manifestBytes);
     if (scenario === "readiness-stale") {
@@ -651,7 +614,7 @@ export const makeReleaseFixture = async ({ root, scenario, supportedRealPublicat
     outputPath: readinessZip,
   });
   const readinessBytes = readFileSync(readinessZip);
-  readiness = {
+  const readiness = {
     artifactId: 9002,
     digest: canonicalDigest(readinessBytes),
     name: contract.releaseCertification.readiness.artifactName,
@@ -661,7 +624,6 @@ export const makeReleaseFixture = async ({ root, scenario, supportedRealPublicat
     size: readinessBytes.byteLength,
     workflowPath: contract.releaseCertification.readiness.workflowPath,
   };
-  }
 
   const statePath = resolve(root, "state.json");
   createReleaseState({

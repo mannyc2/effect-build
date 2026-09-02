@@ -8,35 +8,19 @@ on:
         required: true
         type: string
       candidate_reference_json:
-        description: Reserved exact candidate reference; rejected while external authentication is blocked
+        description: Exact authenticated candidate artifact reference
         required: true
         type: string
       exact_main_ci_reference_json:
-        description: Reserved exact-main CI reference; rejected while external authentication is blocked
+        description: Exact successful current-main CI run reference
         required: true
         type: string
       fake_registry_reference_json:
-        description: Reserved fake-registry reference; rejected while external authentication is blocked
-        required: true
-        type: string
-      npm_authority_evidence_json:
-        description: Compact authenticated npm-authority ingress artifact reference
+        description: Exact fake-registry protected-body artifact reference
         required: true
         type: string
       npm_oidc_certification_reference_json:
-        description: Reserved npm OIDC reference; rejected while external authentication is blocked
-        required: true
-        type: string
-      apple_certification_reference_json:
-        description: Reserved Apple reference; rejected while external authentication is blocked
-        required: true
-        type: string
-      operational_journal_evidence_json:
-        description: Compact authenticated operational-journal ingress artifact reference
-        required: true
-        type: string
-      github_release_governance_evidence_json:
-        description: Compact authenticated GitHub Release-governance ingress artifact reference
+        description: Exact protected npm OIDC dry-run certification artifact reference
         required: true
         type: string
 
@@ -93,19 +77,15 @@ jobs:
           set -euo pipefail
           [[ "$(bun --version)" == "1.3.14" ]] || exit 1
           node scripts/release/install-frozen-release-dependencies.mjs
-      - name: Refuse readiness while external producer authentication is not established
+      - name: Collect the exact three-proof readiness aggregate
         id: collect
         shell: bash
         env:
-          APPLE_CERTIFICATION_REFERENCE_JSON: ${{ inputs.apple_certification_reference_json }}
           CANDIDATE_REFERENCE_JSON: ${{ inputs.candidate_reference_json }}
           EXACT_MAIN_CI_REFERENCE_JSON: ${{ inputs.exact_main_ci_reference_json }}
           FAKE_REGISTRY_REFERENCE_JSON: ${{ inputs.fake_registry_reference_json }}
-          GITHUB_RELEASE_GOVERNANCE_EVIDENCE_JSON: ${{ inputs.github_release_governance_evidence_json }}
           GITHUB_TOKEN: ${{ github.token }}
-          NPM_AUTHORITY_EVIDENCE_JSON: ${{ inputs.npm_authority_evidence_json }}
           NPM_OIDC_CERTIFICATION_REFERENCE_JSON: ${{ inputs.npm_oidc_certification_reference_json }}
-          OPERATIONAL_JOURNAL_EVIDENCE_JSON: ${{ inputs.operational_journal_evidence_json }}
           OUTPUT_DIRECTORY: ${{ runner.temp }}/release-readiness
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
@@ -117,7 +97,7 @@ jobs:
           node scripts/release/collect-release-readiness.mjs \
             --observed-at "$observed_at" \
             --output "$OUTPUT_DIRECTORY"
-      - name: Upload the authenticated release-readiness aggregate
+      - name: Upload the exact release-readiness aggregate
         id: upload
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

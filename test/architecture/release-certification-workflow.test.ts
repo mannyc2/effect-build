@@ -71,13 +71,12 @@ describe("fake-registry exact protected-body certification workflow", () => {
     expect(body).toContain("hypotheticalFakeRegistryEvidenceLedger");
     expect(stateSource).toContain("exactProtectedBodyCertification.exactMutationLedger");
     expect(body).toContain("fake-registry-results.json");
+    expect(body).toContain('schema: "effect-build/fake-registry-local-qualification-results@2"');
     expect(body).toContain("digest: sha256Digest(resultsBytes)");
     expect(body).toContain("certificationChecks.length !== 3");
     expect(body).toContain("executes exact protected fake-registry state-machine case");
     expect(body).toContain("candidateManifestDigest: reference.manifestDigest");
-    expect(body).toContain(
-      "externalAuthenticationStatus: contract.releaseCertification.readiness.externalEvidenceAuthentication.status",
-    );
+    expect(body).toContain("readinessProtocol: contract.releaseCertification.readiness.protocol");
     expect(body).toContain("candidateBinding: entry.candidateBinding");
     expect(body).toContain("JSON.stringify(Object.keys(receipt)) !== JSON.stringify(policy.receiptFields)");
   });
@@ -87,16 +86,12 @@ describe("fake-registry exact protected-body certification workflow", () => {
     const uploads = job?.steps?.filter(({ uses }) => uses?.startsWith("actions/upload-artifact@")) ?? [];
     const qualification = contract.releaseCertification.fakeRegistry.localQualification;
     const futureCertification = contract.releaseCertification.fakeRegistry.exactProtectedBodyCertification;
-    const externalAuthenticationStatus = contract.releaseCertification.readiness.externalEvidenceAuthentication.status;
-    const expectedDisposition = externalAuthenticationStatus === "blocked"
-      ? "forbidden-while-external-authentication-blocked"
-      : "required-on-supported-terminal-workflow-success";
 
     expect(uploads).toHaveLength(1);
     expect(uploads[0]?.id).toBe("exact-upload");
     expect(uploads[0]?.with?.name).toBe("${{ steps.exact-evidence.outputs.artifact-name }}");
     expect(uploads[0]?.with?.path).toBe("${{ runner.temp }}/fake-registry-exact-protected-body-certification");
-    expect(uploads[0]?.if).toBe("steps.evidence.outputs.exact-artifact-allowed == 'true'");
+    expect(uploads[0]?.if).toBeUndefined();
     expect(uploads.some(({ with: options }) => options?.name === qualification.artifactName)).toBe(false);
     expect(
       uploads.some(({ with: options }) => options?.path === "${{ runner.temp }}/fake-registry-local-qualification"),
@@ -104,54 +99,35 @@ describe("fake-registry exact protected-body certification workflow", () => {
       .toBe(false);
     expect(qualification).toMatchObject({
       artifactName: "effect-build-v0.6.0-fake-registry-local-qualification",
-      protocol: "effect-build/fake-registry-local-qualification@1",
+      protocol: "effect-build/fake-registry-local-qualification@2",
       readinessAdmissible: false,
       terminal: "local-qualification",
       workflowPath: ".github/workflows/release-certification.yml",
     });
     expect(futureCertification).toMatchObject({
-      artifactDisposition: expectedDisposition,
+      artifactDisposition: "required-on-terminal-workflow-success",
       implementationStatus: "implemented",
-      protocol: "effect-build/fake-registry-exact-protected-body-certification@1",
-      status: externalAuthenticationStatus,
+      protocol: "effect-build/fake-registry-exact-protected-body-certification@2",
+      status: "supported",
     });
-    expect(["blocked", "supported"]).toContain(externalAuthenticationStatus);
     expect(source).toContain("${{ steps.exact-evidence.outputs.artifact-name }}");
     expect(source).toContain("${{ inputs.candidate_reference_json }}");
     expect(source).not.toContain("steps.evidence.outputs.artifact-name");
     expect(source).not.toContain("steps.evidence.outputs.retention-days");
   });
 
-  it("maps exactly blocked and supported external authentication to exact artifact admission", () => {
+  it("requires the directly active canonical certification policy", () => {
     const job = workflow.jobs["fake-registry"];
     const builder = job?.steps?.find(({ id }) => id === "evidence");
     const body = builder?.run ?? "";
 
     expect(builder?.name).toBe("Build one canonical secret-free local qualification receipt");
+    expect(body).toContain('futureCertification?.status !== "supported"');
     expect(body).toContain(
-      "const externalAuthenticationStatus = release.readiness.externalEvidenceAuthentication.status;",
+      'futureCertification?.artifactDisposition !== "required-on-terminal-workflow-success"',
     );
-    expect(body).toContain("const externalAuthenticationOutcomes = Object.freeze({");
-    expect(body).toMatch(
-      /blocked: Object\.freeze\(\{\s+status: "blocked",\s+artifactDisposition: "forbidden-while-external-authentication-blocked",\s+exactArtifactAllowed: false,\s+\}\)/u,
-    );
-    expect(body).toMatch(
-      /supported: Object\.freeze\(\{\s+status: "supported",\s+artifactDisposition: "required-on-supported-terminal-workflow-success",\s+exactArtifactAllowed: true,\s+\}\)/u,
-    );
-    expect(body).toContain(
-      "const externalAuthenticationOutcome = externalAuthenticationOutcomes[externalAuthenticationStatus];",
-    );
-    expect(body).toContain("externalAuthenticationOutcome === undefined");
-    expect(body).toContain("futureCertification?.status !== externalAuthenticationOutcome.status");
-    expect(body).toContain(
-      "futureCertification?.artifactDisposition !== externalAuthenticationOutcome.artifactDisposition",
-    );
-    expect(body).toContain("`exact-artifact-allowed=${externalAuthenticationOutcome.exactArtifactAllowed}`");
     expect(body).toContain("qualification?.readinessAdmissible !== false");
-    expect(body).not.toContain('futureCertification?.status !== "blocked"');
-    expect(body).not.toContain(
-      'futureCertification?.artifactDisposition !== "forbidden-while-external-authentication-blocked"',
-    );
+    expect(body).not.toContain("externalAuthentication");
   });
 
   it("normalizes the upload digest only once and exposes the fully re-observed six-field coordinate", () => {

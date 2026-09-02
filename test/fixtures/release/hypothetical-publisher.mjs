@@ -67,7 +67,12 @@ const validateCandidate = (state) => {
   return contract;
 };
 
-const exactTarget = (state, name) => {
+const publishedTags = (expectedDistTags, name) => ({
+  ...expectedDistTags.get(name),
+  latest: targetVersion,
+});
+
+const exactTarget = (state, name, expectedDistTags) => {
   const observed = state.registry.packages[name].versions[targetVersion];
   const candidate = state.candidate.packages[name];
   if (observed === undefined) stop(`${name}@${targetVersion} is absent`);
@@ -80,21 +85,22 @@ const exactTarget = (state, name) => {
     || observedIntegrity !== candidate.integrity
     || observedSha256 !== candidate.sha256
     || !isDeepStrictEqual(observed.provenance, exactProvenance())
-    || state.registry.packages[name].tags.latest !== targetVersion
+    || !isDeepStrictEqual(state.registry.packages[name].tags, publishedTags(expectedDistTags, name))
   ) stop(`${name}@${targetVersion} does not equal the certified candidate bytes, latest tag, and provenance`);
 };
 
-const assertReservations = (state) => {
+const assertReservations = (state, expectedDistTags) => {
   for (const name of placeholderNames) {
     const entry = state.registry.packages[name];
     const versions = Object.keys(entry.versions).sort();
     const publicTarget = packageNames.includes(name) && Object.hasOwn(entry.versions, targetVersion);
     const expectedVersions = publicTarget ? [placeholderVersion, targetVersion].sort() : [placeholderVersion];
-    const expectedLatest = publicTarget ? targetVersion : placeholderVersion;
+    const expectedTags = packageNames.includes(name)
+      ? (publicTarget ? publishedTags(expectedDistTags, name) : expectedDistTags.get(name))
+      : { latest: placeholderVersion, reserved: placeholderVersion };
     if (
       !isDeepStrictEqual(versions, expectedVersions)
-      || entry.tags.reserved !== placeholderVersion
-      || entry.tags.latest !== expectedLatest
+      || !isDeepStrictEqual(entry.tags, expectedTags)
     ) stop(`${name} placeholder or reservation state drifted`);
   }
   const reserved = state.registry.packages[reservedOnlyName];
@@ -116,9 +122,9 @@ export const runHypotheticalPublisher = (statePath, { forbiddenEnvironment } = {
   const contract = validateCandidate(state);
   if (state.api.mainSha !== sourceSha) stop("main advanced before the first hypothetical mutation");
   if (state.faults.view !== undefined) stop("hypothetical registry observation was inconclusive");
-  const expectedLatest = new Map(
-    contract.npmRegistryBoundary.publicationAdmission.target.expectedLatestBeforePublication
-      .map(({ name, version }) => [name, version]),
+  const expectedDistTags = new Map(
+    contract.npmRegistryBoundary.publicationAdmission.target.expectedDistTagsBeforePublication
+      .map(({ name, tags }) => [name, tags]),
   );
   let sawMissing = false;
   const missing = [];
@@ -127,19 +133,19 @@ export const runHypotheticalPublisher = (statePath, { forbiddenEnvironment } = {
     if (versions.some(newerThanTarget)) stop(`${name} has a version newer than ${targetVersion}`);
     if (versions.includes(targetVersion)) {
       if (sawMissing) stop("existing hypothetical publication is not one canonical prefix");
-      exactTarget(state, name);
+      exactTarget(state, name, expectedDistTags);
     } else {
       sawMissing = true;
-      if (state.registry.packages[name].tags.latest !== expectedLatest.get(name)) {
-        stop(`${name} prior latest drifted before the hypothetical mutation`);
+      if (!isDeepStrictEqual(state.registry.packages[name].tags, expectedDistTags.get(name))) {
+        stop(`${name} prior dist-tags drifted before the hypothetical mutation`);
       }
       missing.push(name);
     }
   }
-  assertReservations(state);
+  assertReservations(state, expectedDistTags);
   for (const name of missing) {
     if (state.api.mainSha !== sourceSha) stop("main advanced before the next hypothetical mutation");
-    assertReservations(state);
+    assertReservations(state, expectedDistTags);
     const fault = state.faults.publish?.name === name ? state.faults.publish.mode : undefined;
     if (fault === "before-commit") {
       state.mutations.push({ committed: false, name, provenance: false });
@@ -156,10 +162,10 @@ export const runHypotheticalPublisher = (statePath, { forbiddenEnvironment } = {
     state.mutations.push({ committed: true, name, provenance: true });
     writeState(statePath, state);
     if (fault === "after-commit") stop(`hypothetical publish outcome is unknown for ${name}`);
-    exactTarget(state, name);
+    exactTarget(state, name, expectedDistTags);
   }
-  for (const name of packageNames) exactTarget(state, name);
-  assertReservations(state);
+  for (const name of packageNames) exactTarget(state, name, expectedDistTags);
+  assertReservations(state, expectedDistTags);
   writeState(statePath, state);
   return { status: "converged" };
 };

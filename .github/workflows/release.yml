@@ -1322,104 +1322,6 @@ jobs:
               ) fail("exact fake purpose placeholder projection changed identity");
               projectedLedger[index] = structuredClone(canonicalLedger[index]);
             }
-            const projectedRelease = projected.releaseCertification;
-            const canonicalRelease = localContract.releaseCertification;
-            const projectedAuthentication = projectedRelease?.readiness?.externalEvidenceAuthentication;
-            const canonicalAuthentication = canonicalRelease?.readiness?.externalEvidenceAuthentication;
-            if (projectedAuthentication?.status === "supported") {
-              const externalRoles = projectedRelease.readiness.evidenceRoles
-                ?.filter(({ type }) => type === "externalObservation")
-                .map(({ role }) => role);
-              const identities = projectedAuthentication.producerIdentities;
-              const branchRef = `refs/heads/${projectedRelease.githubAuthority.branchPolicy.name}`;
-              const identityFields = projectedAuthentication.producerIdentityFields;
-              if (
-                canonicalAuthentication?.status !== "blocked"
-                || canonicalAuthentication.artifactDisposition !== "forbidden-while-blocked"
-                || !isDeepStrictEqual(canonicalAuthentication.producerIdentities, [])
-                || !isDeepStrictEqual(canonicalAuthentication.signer?.activation?.permissions, {
-                  observer: {},
-                  signer: {},
-                  upload: {},
-                })
-                || canonicalAuthentication.signer?.activation?.hostedBootstrap?.status
-                  !== "unqualified-stop"
-                || projectedAuthentication.artifactDisposition
-                  !== "required-on-terminal-workflow-success"
-                || !isDeepStrictEqual(projectedAuthentication.signer?.activation?.permissions, {
-                  observer: { contents: "read" },
-                  signer: { "id-token": "write" },
-                  upload: {},
-                })
-                || projectedAuthentication.signer?.activation?.hostedBootstrap?.status !== "qualified"
-                || !Array.isArray(externalRoles)
-                || !isDeepStrictEqual(externalRoles, [
-                  "npm-authority",
-                  "operational-journal",
-                  "github-release-governance",
-                ])
-                || !Array.isArray(identities)
-                || identities.length !== externalRoles.length
-              ) fail("supported fake transport contract activation state is not exact");
-              for (const role of externalRoles) {
-                const matches = identities.filter((identity) => identity?.role === role);
-                if (matches.length !== 1) fail("supported fake transport producer identity is not unique");
-                const identity = matches[0];
-                const external = role === "operational-journal";
-                const repository = external
-                  ? projectedRelease.readiness.externalReceipts.operationalJournal.ownerRepository
-                  : projectedRelease.githubAuthority.repository;
-                const workflowPath = external
-                  ? ".github/workflows/operational-journal.yml"
-                  : `.github/workflows/${role}.yml`;
-                const sourceBinding = external
-                  ? identity.sourceBinding
-                  : { kind: projectedAuthentication.sourceBinding.releaseSourceKind };
-                const workflowRef = external ? sourceBinding?.sourceSha : branchRef;
-                const workflow = `${repository}/${workflowPath}@${workflowRef}`;
-                if (
-                  !isDeepStrictEqual(Object.keys(identity), identityFields)
-                  || identity.certificateIssuer !== projectedAuthentication.verifier.certificateIssuer
-                  || identity.certificateIdentityURI !== `https://github.com/${workflow}`
-                  || identity.workflow !== workflow
-                  || identity.repository !== repository
-                  || identity.ref !== branchRef
-                  || (external
-                    ? !isDeepStrictEqual(Object.keys(sourceBinding), ["kind", "sourceSha"])
-                      || sourceBinding.kind !== projectedAuthentication.sourceBinding.exactSourceKind
-                      || !shaPattern.test(sourceBinding.sourceSha ?? "")
-                    : !isDeepStrictEqual(identity.sourceBinding, sourceBinding))
-                ) fail(`supported fake transport producer identity changed: ${role}`);
-              }
-              const projectedExactCertification = projectedRelease.fakeRegistry.exactProtectedBodyCertification;
-              const canonicalExactCertification = canonicalRelease.fakeRegistry.exactProtectedBodyCertification;
-              const projectedFinalVerification = projectedRelease.finalPublicVerification;
-              const canonicalFinalVerification = canonicalRelease.finalPublicVerification;
-              if (
-                projectedExactCertification.status !== "supported"
-                || projectedExactCertification.artifactDisposition
-                  !== "required-on-supported-terminal-workflow-success"
-                || canonicalExactCertification.status !== "blocked"
-                || canonicalExactCertification.artifactDisposition
-                  !== "forbidden-while-external-authentication-blocked"
-                || projectedFinalVerification.status !== "ready"
-                || projectedFinalVerification.artifactDisposition !== "allowed"
-                || canonicalFinalVerification.status !== "blocked"
-                || canonicalFinalVerification.artifactDisposition !== "forbidden-while-upstream-blocked"
-              ) fail("supported fake transport downstream activation state is not exact");
-              projectedAuthentication.status = canonicalAuthentication.status;
-              projectedAuthentication.artifactDisposition = canonicalAuthentication.artifactDisposition;
-              projectedAuthentication.producerIdentities = structuredClone(canonicalAuthentication.producerIdentities);
-              projectedAuthentication.signer.activation.permissions = structuredClone(
-                canonicalAuthentication.signer.activation.permissions,
-              );
-              projectedAuthentication.signer.activation.hostedBootstrap.status =
-                canonicalAuthentication.signer.activation.hostedBootstrap.status;
-              projectedExactCertification.status = canonicalExactCertification.status;
-              projectedExactCertification.artifactDisposition = canonicalExactCertification.artifactDisposition;
-              projectedFinalVerification.status = canonicalFinalVerification.status;
-              projectedFinalVerification.artifactDisposition = canonicalFinalVerification.artifactDisposition;
-            }
             if (!isDeepStrictEqual(projected, localContract)) {
               fail("exact fake purpose changed more than the closed fixture contract projection");
             }
@@ -1488,21 +1390,15 @@ jobs:
             const boundarySource = sourceByPath.get("test/fixtures/release/fake-boundary.mjs");
             const fetchSource = sourceByPath.get("test/fixtures/release/exact-fake-fetch.mjs");
             const candidateSource = sourceByPath.get("test/fixtures/release/make-candidate.mjs");
-            const supportedContractSource = sourceByPath.get("test/fixtures/release/make-supported-contract.mjs");
+            const fixtureContractSource = sourceByPath.get("test/fixtures/release/make-fixture-contract.mjs");
             const artifactZipSource = sourceByPath.get("test/fixtures/release/github-artifact-zip.mjs");
-            const authenticationStatus = policy.readiness?.externalEvidenceAuthentication?.status;
-            const expectedExactDisposition = authenticationStatus === "blocked"
-              ? "forbidden-while-external-authentication-blocked"
-              : authenticationStatus === "supported"
-              ? "required-on-supported-terminal-workflow-success"
-              : undefined;
             if (
               exactCertification.implementationStatus !== "implemented"
-              || exactCertification.status !== authenticationStatus
+              || exactCertification.status !== "supported"
               || exactCertification.gateSource
-                !== "releaseCertification.readiness.externalEvidenceAuthentication"
-              || exactCertification.artifactDisposition !== expectedExactDisposition
-              || fakePurpose.protocol !== "effect-build/fake-registry-exact-protected-body-purpose@1"
+                !== "releaseCertification.readiness.githubAuthentication"
+              || exactCertification.artifactDisposition !== "required-on-terminal-workflow-success"
+              || fakePurpose.protocol !== "effect-build/fake-registry-exact-protected-body-purpose@2"
               || fakePurpose.transportOnlySelectorValue
                 !== "fake-registry-exact-protected-body-real-gate-certification"
               || fakePurpose.transportOnlyPurpose
@@ -1514,7 +1410,7 @@ jobs:
               || !fakePurpose.instrumentedModes.includes(mode)
               || fakePurpose.skippedStage !== "final-readiness-adoption-only"
               || fakePurpose.fixtureContractProjection
-                !== "exact-generated-contract-with-only-closed-supported-activation-and-placeholder-byte-ledger-derived-from-fixture-archives"
+                !== "exact-canonical-generated-contract-with-placeholder-byte-ledger-derived-from-fixture-archives"
               || fakePurpose.realPurposeReadinessPolicy !== "semantic-final-readiness-required-unconditionally"
               || fakePurpose.networkPolicy !== "no-real-github-npm-or-oidc-network"
               || !isDeepStrictEqual(fakePurpose.executableNames, ["curl", "npm"])
@@ -1527,7 +1423,7 @@ jobs:
               || boundarySource === undefined
               || fetchSource === undefined
               || candidateSource === undefined
-              || supportedContractSource === undefined
+              || fixtureContractSource === undefined
               || artifactZipSource === undefined
             ) fail("generated exact fake-registry purpose is incomplete");
             for (const entry of sourceFiles) {
@@ -1591,51 +1487,26 @@ jobs:
               ) fail(`exact fake-registry ${tool} wrapper differs`);
             }
           }
-          if (["certify-exact-sha", "publish-certified-bytes"].includes(mode)) {
-            const readiness = policy.readiness;
-            const authentication = readiness?.externalEvidenceAuthentication;
-            if (!fakePurposeSelected) {
-              const blocked =
-                readiness?.externalEvidencePolicy
-                  === "closed-receipts-require-contract-pinned-sigstore-dsse-authentication"
-                && authentication?.status === "blocked"
-                && authentication?.artifactDisposition === "forbidden-while-blocked"
-                && authentication?.blocker
-                  === "contract-pinned-external-producer-identities-and-isolated-observer-signer-bootstraps-not-established"
-                && authentication?.requiredEnvelope === "sigstore-bundle-v0.3-dsse"
-                && authentication?.verifier?.status === "implemented"
-                && authentication?.verifier?.module === "scripts/release/sigstore-dsse-verifier.mjs"
-                && Array.isArray(authentication?.producerIdentities)
-                && authentication.producerIdentities.length === 0;
-              if (blocked) {
-                const stage = mode === "certify-exact-sha" ? "candidate adoption" : "readiness adoption";
-                fail(`${mode} is blocked before ${stage}: ${authentication.blocker}`);
-              }
-              const externalRoles = readiness.evidenceRoles
-                ?.filter(({ type }) => type === "externalObservation")
-                .map(({ role }) => role);
-              if (
-                readiness?.externalEvidencePolicy
-                  !== "closed-receipts-require-contract-pinned-sigstore-dsse-authentication"
-                || authentication?.status !== "supported"
-                || authentication?.artifactDisposition !== "required-on-terminal-workflow-success"
-                || authentication?.requiredEnvelope !== "sigstore-bundle-v0.3-dsse"
-                || authentication?.verifier?.status !== "implemented"
-                || authentication?.verifier?.module !== "scripts/release/sigstore-dsse-verifier.mjs"
-                || !Array.isArray(authentication?.producerIdentities)
-                || !Array.isArray(externalRoles)
-                || authentication.producerIdentities.length !== externalRoles.length
-                || externalRoles.some((role) =>
-                  authentication.producerIdentities.filter((identity) => identity?.role === role).length !== 1)
-                || !isDeepStrictEqual(
-                  readiness.dispatch?.externalIngressReferenceFields,
-                  readiness.externalEvidenceIngress?.referenceFields,
-                )
-                || readiness.dispatch?.externalInputs
-                  !== "three-compact-authenticated-ingress-artifact-references-only"
-              ) fail("authenticated contract has an unknown external readiness authentication state");
-            }
-          }
+          const readiness = policy.readiness;
+          if (
+            readiness?.protocol !== "effect-build/release-readiness@3"
+            || readiness?.bundleProtocol !== "effect-build/release-readiness-evidence-bundle@3"
+            || readiness?.event !== "workflow_dispatch"
+            || !isDeepStrictEqual(
+              readiness.evidenceRoles?.map(({ role, type }) => ({ role, type })),
+              [
+                { role: "exact-main-ci", type: "githubRun" },
+                { role: "fake-registry", type: "githubArtifact" },
+                { role: "npm-oidc-certification", type: "githubArtifact" },
+              ],
+            )
+            || !isDeepStrictEqual(Object.keys(readiness.referenceShapes ?? {}).sort(), [
+              "candidate",
+              "githubArtifact",
+              "githubRun",
+            ])
+            || !isDeepStrictEqual(readiness.orderedFiles, [readiness.manifest, readiness.evidenceBundle])
+          ) fail("authenticated contract has an unknown three-proof readiness policy");
 
           const candidateCoordinate = {
             workflow: policy.candidate.workflow,
@@ -1785,9 +1656,13 @@ jobs:
           const names = [...registry.publicationAdmission.packages];
           const placeholders = [...registry.bootstrap.placeholderAtHandoffPackages].sort();
           const reservedOnly = [...registry.reservation.packages].sort();
-          const expectedLatest = new Map(
-            registry.publicationAdmission.target.expectedLatestBeforePublication.map(({ name, version }) => [name, version]),
+          const expectedDistTags = new Map(
+            registry.publicationAdmission.target.expectedDistTagsBeforePublication.map(({ name, tags }) => [
+              name,
+              structuredClone(tags),
+            ]),
           );
+          const expectedLatest = new Map([...expectedDistTags].map(([name, tags]) => [name, tags.latest]));
           const version = registry.publicationAdmission.target.version;
           const candidateManifestBytes = readFileSync(resolve(environment.CANDIDATE_DIR, policy.candidate.manifest));
           let candidateText;
@@ -1949,19 +1824,29 @@ jobs:
             ) fail(`${label} differs from the contract pin`);
             return trustedRootPath;
           };
-          if (mode === "publish-certified-bytes" && fakePurposeSelected) {
-            const trustedRootPolicy = policy.readiness.externalEvidenceAuthentication.verifier.trustedRoot;
-            if (exactFakeRepositoryRoot === undefined) fail("exact fake checkout identity was not established");
-            const expectedFixtureRootPath = resolve(exactFakeRepositoryRoot, trustedRootPolicy.path);
-            const fixtureRootPath = realpathSync(expectedFixtureRootPath);
-            if (
-              fixtureRootPath !== expectedFixtureRootPath
-              || relative(exactFakeRepositoryRoot, fixtureRootPath).startsWith("..")
-            ) fail("exact fake trusted root escaped its authenticated checkout");
+          if (mode === "publish-certified-bytes") {
+            const trustedRootPolicy = policy.provenanceVerification.trustedRoot;
+            let exactRootPath;
+            if (fakePurposeSelected) {
+              if (exactFakeRepositoryRoot === undefined) fail("exact fake checkout identity was not established");
+              const expectedFixtureRootPath = resolve(exactFakeRepositoryRoot, trustedRootPolicy.path);
+              exactRootPath = realpathSync(expectedFixtureRootPath);
+              if (
+                exactRootPath !== expectedFixtureRootPath
+                || relative(exactFakeRepositoryRoot, exactRootPath).startsWith("..")
+              ) fail("exact fake trusted root escaped its authenticated checkout");
+            } else {
+              const trustedRootBytes = await githubDocument(
+                `${api}/contents/${trustedRootPolicy.path}?ref=${sourceSha}`,
+                "application/vnd.github.raw+json",
+              );
+              exactRootPath = resolve(environment.NPM_CACHE, "sigstore-trusted-root.json");
+              writeFileSync(exactRootPath, trustedRootBytes, { mode: 0o600 });
+            }
             publicationTrustedRootPath = validateExactTrustedRoot(
-              fixtureRootPath,
+              exactRootPath,
               trustedRootPolicy,
-              "exact fake-purpose Sigstore trusted root",
+              "exact-source npm provenance Sigstore trusted root",
             );
           }
           if (mode === "publish-certified-bytes" && !fakePurposeSelected) {
@@ -1986,12 +1871,6 @@ jobs:
             }
             const readinessManifestBytes = readFileSync(resolve(environment.READINESS_DIR, readinessPolicy.manifest));
             const readinessBundleBytes = readFileSync(resolve(environment.READINESS_DIR, readinessPolicy.evidenceBundle));
-            const trustedRootPolicy = readinessPolicy.externalEvidenceAuthentication.verifier.trustedRoot;
-            publicationTrustedRootPath = validateExactTrustedRoot(
-              resolve(environment.READINESS_DIR, trustedRootPolicy.artifactFile),
-              trustedRootPolicy,
-              "release readiness Sigstore trusted root",
-            );
             let readinessText;
             try {
               readinessText = new TextDecoder("utf-8", { fatal: true }).decode(readinessManifestBytes);
@@ -2009,8 +1888,6 @@ jobs:
               "schema",
               "sourceSha",
               "observedAt",
-              "externalEvidencePolicy",
-              "externalEvidence",
               "contract",
               "toolchain",
               "directObservation",
@@ -2023,8 +1900,6 @@ jobs:
             if (
               readinessManifest.schema !== readinessPolicy.protocol
               || readinessManifest.sourceSha !== sourceSha
-              || readinessManifest.externalEvidencePolicy !== readinessPolicy.externalEvidencePolicy
-              || !isDeepStrictEqual(readinessManifest.externalEvidence, readinessPolicy.externalEvidenceManifest)
               || !isDeepStrictEqual(readinessManifest.contract, {
                 schema: contract.schema,
                 digest: `sha256:${createHash("sha256").update(contractBytes).digest("hex")}`,
@@ -2103,13 +1978,6 @@ jobs:
                   || evidenceObservedAt > Date.parse(reference.observedAt)
                   || readinessObservedAt - evidenceObservedAt > definition.maximumAgeSeconds * 1_000
                 ) fail(`release readiness ${definition.role} artifact identity changed`);
-              } else if (definition.type === "externalObservation") {
-                if (
-                  reference.sourceSha !== sourceSha
-                  || typeof reference.identity !== "string"
-                  || reference.identity.length === 0
-                  || !canonicalDigestPattern.test(reference.digest)
-                ) fail(`release readiness ${definition.role} external identity changed`);
               } else fail(`release readiness ${definition.role} type changed`);
             }
 
@@ -2259,6 +2127,8 @@ jobs:
                 `release readiness direct npm ${name} repository`,
               );
               const ledger = registry.bootstrap.placeholderLedger.find((entry) => entry.name === name);
+              const expectedTags = expectedDistTags.get(name)
+                ?? (reservedOnly.includes(name) ? ledger?.bootstrapTags : undefined);
               if (
                 !Array.isArray(observed.versions)
                 || observed.versions.length === 0
@@ -2266,6 +2136,9 @@ jobs:
                 || !isDeepStrictEqual(observed.versions, [...observed.versions].sort())
                 || observed.versions.includes(version)
                 || observed.versions.some(readinessNewerThanTarget)
+                || expectedTags === undefined
+                || !isDeepStrictEqual(observed.distTags, expectedTags)
+                || Object.values(observed.distTags).some((tagVersion) => !observed.versions.includes(tagVersion))
                 || !isDeepStrictEqual(repositoryIdentity, {
                   type: "git",
                   url: `git+https://github.com/${expectedRepository}.git`,
@@ -2274,8 +2147,6 @@ jobs:
               if (ledger === undefined) {
                 if (
                   observed.placeholder !== null
-                  || !isDeepStrictEqual(Object.keys(observed.distTags), ["latest"])
-                  || observed.distTags.latest !== expectedLatest.get(name)
                 ) fail(`release readiness non-placeholder baseline changed for ${name}`);
               } else {
                 const placeholder = exactKeys(
@@ -2285,9 +2156,6 @@ jobs:
                 );
                 if (
                   !isDeepStrictEqual(observed.versions, [ledger.version])
-                  || !isDeepStrictEqual(Object.keys(observed.distTags).sort(), ["latest", "reserved"])
-                  || observed.distTags.latest !== ledger.bootstrapTags.latest
-                  || observed.distTags.reserved !== ledger.bootstrapTags.reserved
                   || !isDeepStrictEqual(placeholder, {
                     version: ledger.version,
                     bytes: ledger.bytes,
@@ -2491,11 +2359,13 @@ jobs:
               const tags = readTags(name);
               const versions = readVersions(name);
               const hasTarget = versions.includes(version);
-              const expectedVersions = hasTarget ? [ledger.version, version].sort() : [ledger.version];
-              const expectedLatestTag = hasTarget ? version : ledger.version;
+              const expectedVersions = hasTarget && !reservedOnly.includes(name)
+                ? [ledger.version, version].sort()
+                : [ledger.version];
+              const expectedTags = structuredClone(expectedDistTags.get(name) ?? ledger.bootstrapTags);
+              if (hasTarget && expectedDistTags.has(name)) expectedTags.latest = version;
               if (
-                tags.reserved !== ledger.version
-                || tags.latest !== expectedLatestTag
+                !isDeepStrictEqual(tags, expectedTags)
                 || !isDeepStrictEqual(versions, expectedVersions)
               ) {
                 fail(`placeholder or reservation state drifted for ${name}`);
@@ -2714,7 +2584,7 @@ jobs:
             if (publicationTrustedRootPath === undefined) {
               fail("published provenance has no exact contract-bound trusted root");
             }
-            const trustedRootPolicy = policy.readiness.externalEvidenceAuthentication.verifier.trustedRoot;
+            const trustedRootPolicy = policy.provenanceVerification.trustedRoot;
             command(process.execPath, [
               "--permission",
               `--allow-fs-read=${npmRoot}`,
@@ -2735,9 +2605,9 @@ jobs:
               expectedIssuer,
               expectedRepository,
               sourceSha,
-              policy.readiness.externalEvidenceAuthentication.verifier.certificateOids.buildSignerUri,
-              policy.readiness.externalEvidenceAuthentication.verifier.certificateOids.sourceRepositoryUri,
-              policy.readiness.externalEvidenceAuthentication.verifier.certificateOids.sourceRepositoryDigest,
+              policy.provenanceVerification.certificateOids.buildSignerUri,
+              policy.provenanceVerification.certificateOids.sourceRepositoryUri,
+              policy.provenanceVerification.certificateOids.sourceRepositoryDigest,
             ], { env: credentialFreeChildEnvironment });
             const envelope = attestations[0].bundle.dsseEnvelope;
             if (envelope?.payloadType !== "application/vnd.in-toto+json") {
@@ -2953,7 +2823,10 @@ jobs:
           if (mode === "certify-exact-sha") {
             const before = registrySnapshot();
             for (const name of names) {
-              if (before[name].versions.includes(version) || before[name].tags.latest !== expectedLatest.get(name)) {
+              if (
+                before[name].versions.includes(version)
+                || !isDeepStrictEqual(before[name].tags, expectedDistTags.get(name))
+              ) {
                 fail(`npm OIDC certification requires exact unpublished prior state for ${name}`);
               }
             }
@@ -3113,12 +2986,15 @@ jobs:
               if (versions.some(newerThanTarget)) fail(`${name} has a version newer than ${version}`);
               if (versions.includes(version)) {
                 if (sawMissing) fail("existing publication is not one canonical package prefix");
+                if (
+                  !isDeepStrictEqual(publicationBaseline[name].tags, { ...expectedDistTags.get(name), latest: version })
+                ) fail(`${name} published dist-tags drifted from the exact contract ledger`);
                 await verifyTarget(name);
                 verifiedPrefix.push(name);
               } else {
                 sawMissing = true;
-                if (publicationBaseline[name].tags.latest !== expectedLatest.get(name)) {
-                  fail(`${name} prior latest drifted before the exact publication mutation`);
+                if (!isDeepStrictEqual(publicationBaseline[name].tags, expectedDistTags.get(name))) {
+                  fail(`${name} prior dist-tags drifted before the exact publication mutation`);
                 }
                 missing.push(name);
               }
