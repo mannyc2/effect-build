@@ -1,6 +1,6 @@
 {
   "name": "effect-build-sbom",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Effect-native SPDX and CycloneDX SBOM generation with Syft.",
   "type": "module",
   "license": "MIT",

@@ -115,7 +115,7 @@ describe("pinned anonymous npm boundary", () => {
     }]);
     await expect(
       boundary(fake.request).readTarball(
-        "https://registry.npmjs.org/effect-build/-/effect-build-0.6.0.tgz",
+        "https://registry.npmjs.org/effect-build/-/effect-build-0.6.1.tgz",
         3,
       ),
     ).resolves.toEqual(Buffer.from("tgz"));
@@ -151,7 +151,7 @@ describe("pinned anonymous npm boundary", () => {
       const fake = fakeHttps(steps);
       await expect(
         boundary(fake.request).readTarball(
-          "https://registry.npmjs.org/effect-build/-/effect-build-0.6.0.tgz",
+          "https://registry.npmjs.org/effect-build/-/effect-build-0.6.1.tgz",
           64 * 1024 * 1024,
         ),
       ).rejects.toThrow();
@@ -165,7 +165,7 @@ describe("pinned anonymous npm boundary", () => {
     }]);
     await expect(
       boundary(declared.request).readTarball(
-        "https://registry.npmjs.org/effect-build/-/effect-build-0.6.0.tgz",
+        "https://registry.npmjs.org/effect-build/-/effect-build-0.6.1.tgz",
         3,
       ),
     ).rejects.toThrow("declared an invalid byte length");
@@ -173,7 +173,7 @@ describe("pinned anonymous npm boundary", () => {
     const chunked = fakeHttps([{ headers: {}, chunks: ["ab", "cd"] }]);
     await expect(
       boundary(chunked.request).readTarball(
-        "https://registry.npmjs.org/effect-build/-/effect-build-0.6.0.tgz",
+        "https://registry.npmjs.org/effect-build/-/effect-build-0.6.1.tgz",
         3,
       ),
     ).rejects.toThrow("exceeded its byte bound");
@@ -182,7 +182,7 @@ describe("pinned anonymous npm boundary", () => {
     for (const maximumBytes of [undefined, 0, 1.5, 1024 * 1024 * 1024 + 1]) {
       await expect(
         boundary(invalid.request).readTarball(
-          "https://registry.npmjs.org/effect-build/-/effect-build-0.6.0.tgz",
+          "https://registry.npmjs.org/effect-build/-/effect-build-0.6.1.tgz",
           maximumBytes as number,
         ),
       ).rejects.toThrow("artifact byte bound is not canonical");

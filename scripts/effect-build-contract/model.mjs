@@ -1176,20 +1176,20 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     credentialBackedAppleArtifacts: {
       status: "deferred",
       certification: "not-run-not-passed",
-      releaseGate: "excluded-from-v0.6.0",
+      releaseGate: "excluded-from-v0.6.1",
       products: ["signed-app", "dmg", "pkg"],
       target: "later-separately-qualified-release",
     },
     awsNotaryJournalEvidence: {
       status: "deferred",
-      releaseGate: "excluded-from-v0.6.0",
+      releaseGate: "excluded-from-v0.6.1",
       applicability: "future-credential-backed-apple-artifact-certification-only",
     },
   })) throw new Error("v0.6 release scope must include Apple APIs and defer credential-backed Apple products");
   requireUnique(npmAdministrativeInventory.doesNotProve, "npm administrative inventory exclusions");
   if (!sameJson(npmAdministrativeInventory, {
     status: "not-observed",
-    releaseGate: "excluded-from-v0.6.0",
+    releaseGate: "excluded-from-v0.6.1",
     doesNotProve: [
       "trusted-publisher-admin-inventory",
       "publishing-access-two-factor-and-token-policy",
@@ -1877,7 +1877,7 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
       ledger: reservationLedger,
     })
     || finalPublicVerification.receipt.protocol !== "effect-build/final-public-release-receipt@2"
-    || finalPublicVerification.receipt.artifactName !== "effect-build-v0.6.0-final-public-release"
+    || finalPublicVerification.receipt.artifactName !== "effect-build-v0.6.1-final-public-release"
     || finalPublicVerification.receipt.retentionDays !== 90
     || !sameJson(finalPublicVerification.receipt.orderedFiles, ["final-public-release.json"])
     || finalPublicVerification.receipt.terminalVerdict !== "success"
@@ -2029,7 +2029,7 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || localQualification.workflowPath !== ".github/workflows/release-certification.yml"
     || localQualification.workflow
       !== `${githubAuthority.repository}/${localQualification.workflowPath}@refs/heads/${githubAuthority.branchPolicy.name}`
-    || localQualification.artifactName !== "effect-build-v0.6.0-fake-registry-local-qualification"
+    || localQualification.artifactName !== "effect-build-v0.6.1-fake-registry-local-qualification"
     || localQualification.terminal !== "local-qualification"
     || localQualification.retentionDays !== 30
     || localQualification.readinessAdmissible !== false
@@ -2052,7 +2052,7 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || exactProtectedBodyCertification.protocol === localQualification.protocol
     || exactProtectedBodyCertification.workflow !== localQualification.workflow
     || exactProtectedBodyCertification.artifactName
-      !== "effect-build-v0.6.0-fake-registry-exact-protected-body-certification"
+      !== "effect-build-v0.6.1-fake-registry-exact-protected-body-certification"
     || exactProtectedBodyCertification.artifactName === localQualification.artifactName
     || exactProtectedBodyCertification.terminal !== "success"
     || exactProtectedBodyCertification.implementationStatus !== "implemented"

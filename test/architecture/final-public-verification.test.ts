@@ -60,7 +60,7 @@ const fixture = () => {
     packageManifests.set(name, { bytes: manifestBytes, manifest });
     return {
       name,
-      file: `${name}-0.6.0.tgz`,
+      file: `${name}-0.6.1.tgz`,
       bytes: tarball.byteLength,
       sha256: sha256Digest(tarball),
       integrity: sha512Integrity(tarball),
@@ -70,7 +70,7 @@ const fixture = () => {
   const candidateManifest = {
     schema: release.candidate.protocol,
     sourceSha,
-    version: "0.6.0",
+    version: "0.6.1",
     contract: { schema: contract.schema, digest: sha256Digest(contractBytes) },
     toolchain: {
       bun: { name: "bun", version: release.finalPublicVerification.implementation.consumerSmoke.bun.version },
@@ -122,8 +122,8 @@ const fixture = () => {
   const npmPackageBytes = new Map(packageBytes);
   const npmPackages = packages.map((entry: any) => ({
     name: entry.name,
-    version: "0.6.0",
-    latest: "0.6.0",
+    version: "0.6.1",
+    latest: "0.6.1",
     bytes: entry.bytes,
     sha256: entry.sha256,
     integrity: entry.integrity,
@@ -139,7 +139,7 @@ const fixture = () => {
     bytes: assetBytes.byteLength,
     digest: sha256Digest(assetBytes),
     apiUrl: `https://api.github.com/repos/mannyc2/effect-build/releases/assets/${index + 1}`,
-    browserDownloadUrl: `https://github.com/mannyc2/effect-build/releases/download/v0.6.0/${name}`,
+    browserDownloadUrl: `https://github.com/mannyc2/effect-build/releases/download/v0.6.1/${name}`,
   }));
   const provenanceBundles = new Map<string, object>();
   const provenance = names.map((name: string) => {
@@ -147,7 +147,7 @@ const fixture = () => {
     const statement = {
       _type: release.finalPublicVerification.implementation.provenance.statementType,
       predicateType: release.finalPublicVerification.implementation.provenance.predicateType,
-      subject: [{ digest: { sha512 }, name: `pkg:npm/${name}@0.6.0` }],
+      subject: [{ digest: { sha512 }, name: `pkg:npm/${name}@0.6.1` }],
       predicate: {
         buildDefinition: {
           buildType: release.finalPublicVerification.implementation.provenance.buildType,
@@ -182,7 +182,7 @@ const fixture = () => {
     provenanceBundles.set(name, bundle);
     return {
       name,
-      attestationUrl: `https://registry.npmjs.org/-/npm/v1/attestations/${encodeURIComponent(name)}@0.6.0`,
+      attestationUrl: `https://registry.npmjs.org/-/npm/v1/attestations/${encodeURIComponent(name)}@0.6.1`,
       bundleDigest: sha256Digest(canonicalJson(bundle)),
       subjectDigest: `sha512:${sha512}`,
       workflow: release.candidate.workflow,
@@ -191,7 +191,7 @@ const fixture = () => {
   });
   const consumerSmoke = {
     schema: release.finalPublicVerification.implementation.consumerSmoke.protocol,
-    version: "0.6.0",
+    version: "0.6.1",
     node: {
       executor: "node",
       version: release.finalPublicVerification.implementation.consumerSmoke.node.version,
@@ -233,7 +233,7 @@ const fixture = () => {
     readiness,
     tag: {
       repository: "mannyc2/effect-build",
-      name: "v0.6.0",
+      name: "v0.6.1",
       targetSha: sourceSha,
       objectType: "commit",
       form: "lightweight-direct-commit",
@@ -241,7 +241,7 @@ const fixture = () => {
     release: {
       repository: "mannyc2/effect-build",
       releaseId: "30",
-      tagName: "v0.6.0",
+      tagName: "v0.6.1",
       targetSha: sourceSha,
       draft: false,
       prerelease: false,
@@ -346,7 +346,7 @@ describe("directly active final-public verifier", () => {
       (input: any) => input.releaseAssetBytes.set(input.releaseAssets[0].name, Buffer.from("changed")),
       (input: any) => input.provenance[0].sourceSha = "b".repeat(40),
       (input: any) => input.consumerSmoke.publicModules.pop(),
-      (input: any) => input.reservation.versions.push("0.6.0"),
+      (input: any) => input.reservation.versions.push("0.6.1"),
       (input: any) => input.release.immutable = false,
     ];
     for (const mutate of cases) {

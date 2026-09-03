@@ -98,7 +98,7 @@ describe("fake-registry exact protected-body certification workflow", () => {
     )
       .toBe(false);
     expect(qualification).toMatchObject({
-      artifactName: "effect-build-v0.6.0-fake-registry-local-qualification",
+      artifactName: "effect-build-v0.6.1-fake-registry-local-qualification",
       protocol: "effect-build/fake-registry-local-qualification@2",
       readinessAdmissible: false,
       terminal: "local-qualification",
@@ -187,7 +187,7 @@ describe("fake-registry exact protected-body certification workflow", () => {
             digest,
             expired: false,
             id: 456,
-            name: "effect-build-v0.6.0-fake-registry-exact-protected-body-certification",
+            name: "effect-build-v0.6.1-fake-registry-exact-protected-body-certification",
             workflow_run: {
               head_branch: "main",
               head_repository_id: 789,
@@ -224,7 +224,7 @@ describe("fake-registry exact protected-body certification workflow", () => {
         sourceSha,
         "123",
         "1",
-        "effect-build-v0.6.0-fake-registry-exact-protected-body-certification",
+        "effect-build-v0.6.1-fake-registry-exact-protected-body-certification",
         workflowIdentity,
         workflowPath,
         repository,
@@ -247,7 +247,7 @@ describe("fake-registry exact protected-body certification workflow", () => {
         sourceSha,
         "123",
         "1",
-        "effect-build-v0.6.0-fake-registry-exact-protected-body-certification",
+        "effect-build-v0.6.1-fake-registry-exact-protected-body-certification",
         workflowIdentity,
         workflowPath,
         repository,

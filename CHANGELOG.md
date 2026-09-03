@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.1
+
+Identical library contents to 0.6.0. The 0.6.0 lockstep publication stopped
+after `effect-build@0.6.0` was published because the certified publisher had
+no settle window for npm read replication and, on resume, compared the
+readiness baseline instead of the live registry for already-published
+packages. Both defects are fixed; the fixed publisher changes the release
+point, and the plan forbids adopting a prefix whose provenance names a
+different source commit, so the remaining ten packages ship together with
+`effect-build` as 0.6.1. `effect-build@0.6.0` stays on npm as an orphan
+version and is not part of any lockstep release.
+
 ## 0.6.0
 
 Research-scope-complete implementation hard cut. All eleven public packages

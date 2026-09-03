@@ -157,7 +157,7 @@ describe("authoritative combined contract", () => {
       "effect-build-windows",
     ]);
     expect(sorted(contract.npmRegistryBoundary.publicationAdmission.packages)).toEqual(admitted);
-    expect(contract.npmRegistryBoundary.publicationAdmission.target.version).toBe("0.6.0");
+    expect(contract.npmRegistryBoundary.publicationAdmission.target.version).toBe("0.6.1");
     expect(sorted(
       contract.npmRegistryBoundary.publicationAdmission.target.expectedLatestBeforePublication.map(({ name }) => name),
     )).toEqual(admitted);

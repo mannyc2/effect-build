@@ -32,7 +32,7 @@ describe("final public release verification", () => {
     expect(policy.packageCount).toBe(11);
     expect(policy.moduleCount).toBe(42);
     expect(policy.releaseAssetCount).toBe(12);
-    expect(policy.tag).toBe("v0.6.0");
+    expect(policy.tag).toBe("v0.6.1");
     expect(policy.publicState.packageSource).toBe("publicApiProjection.packages");
     expect(policy.publicState.moduleSource).toBe("publicApiProjection.packages package roots and subpaths");
     expect(policy.publicState).not.toHaveProperty("packages");
@@ -149,12 +149,12 @@ describe("final public release verification", () => {
       createHash("sha512").update(reservationBytes).digest("base64")
     }`;
     const names = Object.keys(active.publicApiProjection.packages).sort();
-    const bytes = new Map(names.map((name) => [name, Buffer.from(`exact ${name} 0.6.0 bytes\n`)]));
+    const bytes = new Map(names.map((name) => [name, Buffer.from(`exact ${name} 0.6.1 bytes\n`)]));
     const packages = names.map((name) => {
       const value = bytes.get(name)!;
       return {
         name,
-        file: `${name}-0.6.0.tgz`,
+        file: `${name}-0.6.1.tgz`,
         bytes: value.byteLength,
         sha256: `sha256:${createHash("sha256").update(value).digest("hex")}`,
         integrity: `sha512-${createHash("sha512").update(value).digest("base64")}`,

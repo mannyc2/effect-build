@@ -561,14 +561,14 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
     const marker = join(directory, "leaked-descendant");
     try {
       const result = await executeBody(
-        "(trap '' TERM; sleep 2; printf leaked > \"$MARKER\") & wait",
+        "(trap '' TERM; sleep 3; printf leaked > \"$MARKER\") & wait",
         directory,
         { MARKER: marker, PATH: process.env.PATH ?? "" },
         500,
       );
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("protected body timed out after 500ms");
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_250));
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 4_000));
       await expect(access(marker)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await rm(directory, { force: true, maxRetries: 20, recursive: true, retryDelay: 100 });
@@ -636,9 +636,9 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
             expect(firstFailed, first.publisher?.stderr).toBe(false);
             expect(state.mutations.map(({ name }) => name)).toEqual(canonicalPackageOrder);
             expect(state.mutations.every(({ committed, provenance }) => committed && provenance)).toBe(true);
-            expect(state.registry.packages["effect-build"]?.tags).toEqual({ latest: "0.6.0" });
+            expect(state.registry.packages["effect-build"]?.tags).toEqual({ latest: "0.6.1" });
             expect(state.registry.packages["effect-build-bun"]?.tags).toEqual({
-              latest: "0.6.0",
+              latest: "0.6.1",
               reserved: "0.0.0-reserved.0",
             });
             break;

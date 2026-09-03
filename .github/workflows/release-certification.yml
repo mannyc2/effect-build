@@ -149,7 +149,7 @@ jobs:
             contract.schema !== "effect-build/combined-contract@1"
             || qualification?.workflowPath !== ".github/workflows/release-certification.yml"
             || qualification?.workflow !== "mannyc2/effect-build/.github/workflows/release-certification.yml@refs/heads/main"
-            || qualification?.artifactName !== "effect-build-v0.6.0-fake-registry-local-qualification"
+            || qualification?.artifactName !== "effect-build-v0.6.1-fake-registry-local-qualification"
             || qualification?.protocol !== "effect-build/fake-registry-local-qualification@2"
             || qualification?.terminal !== "local-qualification"
             || qualification?.readinessAdmissible !== false

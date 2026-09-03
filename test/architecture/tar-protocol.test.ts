@@ -55,7 +55,7 @@ const tarArchive = (
 
 const tarball = (entries: ReadonlyArray<TarEntry>, end?: Uint8Array) =>
   gzipSync(tarArchive(entries, end ?? Buffer.alloc(1024)));
-const manifest = Buffer.from('{"name":"effect-build","version":"0.6.0"}\n');
+const manifest = Buffer.from('{"name":"effect-build","version":"0.6.1"}\n');
 const validEntries = [
   { name: "package/", type: "5" },
   { body: manifest, name: "package/package.json" },

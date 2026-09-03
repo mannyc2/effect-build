@@ -28,7 +28,7 @@ export const placeholderNames = [
 ];
 export const establishedNames = packageNames.filter((name) => !placeholderNames.includes(name));
 export const reservedOnlyName = "effect-build-rolldown";
-export const targetVersion = "0.6.0";
+export const targetVersion = "0.6.1";
 export const placeholderVersion = "0.0.0-reserved.0";
 export const registryUrl = "https://registry.npmjs.org";
 
@@ -146,24 +146,21 @@ const initialVersion = (name, placeholderPackages) => {
       },
     };
   }
-  return {
-    ...(expectedPublicDistTags.get(name)?.reserved === placeholderVersion ? {
-      [placeholderVersion]: {
-        bytes: 1,
-        file: null,
-        integrity: `sha512-${Buffer.from(`reserved-${name}`).toString("base64")}`,
-        provenance: null,
-        sha256: sha256(Buffer.from(`reserved-${name}`)),
-      },
-    } : {}),
-    "0.3.0": {
+  const versions = [...new Set(Object.values(expectedPublicDistTags.get(name) ?? { latest: "0.3.0" }))].sort();
+  return Object.fromEntries(versions.map((version) => {
+    const seed = version === placeholderVersion
+      ? `reserved-${name}`
+      : version === "0.3.0"
+      ? `prior-${name}`
+      : `prior-${name}-${version}`;
+    return [version, {
       bytes: 1,
       file: null,
-      integrity: `sha512-${Buffer.from(`prior-${name}`).toString("base64")}`,
+      integrity: `sha512-${Buffer.from(seed).toString("base64")}`,
       provenance: null,
-      sha256: sha256(Buffer.from(`prior-${name}`)),
-    },
-  };
+      sha256: sha256(Buffer.from(seed)),
+    }];
+  }));
 };
 
 const initialTags = (name) => structuredClone(
