@@ -15,7 +15,7 @@
         "@tufjs/models": "4.1.0",
         "@types/node": "24.3.0",
         "dprint": "0.49.1",
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
         "effect-build": "workspace:*",
         "effect-build-apple": "workspace:*",
         "effect-build-archives": "workspace:*",
@@ -43,7 +43,7 @@
       "name": "@effect-build/example-bun",
       "dependencies": {
         "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
         "effect-build-bun": "workspace:^",
       },
     },
@@ -51,14 +51,14 @@
       "name": "@effect-build/example-deno",
       "dependencies": {
         "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
         "effect-build-deno": "workspace:^",
       },
     },
     "examples/esbuild": {
       "name": "effect-build-example-esbuild",
       "dependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
         "effect-build-esbuild": "workspace:^",
       },
     },
@@ -66,7 +66,7 @@
       "name": "effect-build-example-node-sea",
       "dependencies": {
         "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
         "effect-build-node-sea": "workspace:^",
       },
     },
@@ -74,7 +74,7 @@
       "name": "effect-build",
       "version": "0.6.1",
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -88,7 +88,7 @@
       },
       "devDependencies": {
         "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
         "vitest": "3.2.6",
       },
       "peerDependencies": {
@@ -102,7 +102,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -116,7 +116,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -129,7 +129,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -143,7 +143,7 @@
         "esbuild": "0.28.2",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -156,7 +156,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -169,7 +169,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -182,7 +182,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -196,7 +196,7 @@
         "rolldown": "1.2.5",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -209,7 +209,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -222,7 +222,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": "4.0.0-rc.112",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-beta.104 <4.1.0-0",
@@ -468,8 +468,6 @@
 
     "@sigstore/verify": ["@sigstore/verify@3.1.1", "", { "dependencies": { "@sigstore/bundle": "^4.0.0", "@sigstore/core": "^3.2.1", "@sigstore/protobuf-specs": "^0.5.0" } }, "sha512-qv7+G3J2cc6wwFj3yKvXOamzqhMwSk1ogPGmhpS8iXllcPrJaIIBA+4HbttlHVu1pqWTdmaCH/WE7UOC51kdoA=="],
 
-    "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
-
     "@std/fs": ["@jsr/std__fs@1.0.24", "https://npm.jsr.io/~/11/@jsr/std__fs/1.0.24.tgz", { "dependencies": { "@jsr/std__internal": "^1.0.14", "@jsr/std__path": "^1.1.5" } }, "sha512-UunW2Rg++9sA74NJnYMGTsMVQgoFRAwPP02wRRohL0PQBNorbyxHiyCMRaxYQCtLepTLkC4nUyMtcwrGKqTR6g=="],
 
     "@std/media-types": ["@jsr/std__media-types@1.1.0", "https://npm.jsr.io/~/11/@jsr/std__media-types/1.1.0.tgz", {}, "sha512-dHvaxHL7ENWnltgL653uo3KnKFse3ZbopZop2gqsT7yrscx7irZEClu5Cba7gMPPRk4Lg1FbriNcaBViM2RSBw=="],
@@ -538,7 +536,7 @@
 
     "dprint": ["dprint@0.49.1", "", { "optionalDependencies": { "@dprint/darwin-arm64": "0.49.1", "@dprint/darwin-x64": "0.49.1", "@dprint/linux-arm64-glibc": "0.49.1", "@dprint/linux-arm64-musl": "0.49.1", "@dprint/linux-riscv64-glibc": "0.49.1", "@dprint/linux-x64-glibc": "0.49.1", "@dprint/linux-x64-musl": "0.49.1", "@dprint/win32-arm64": "0.49.1", "@dprint/win32-x64": "0.49.1" }, "bin": { "dprint": "bin.js" } }, "sha512-pO9XH79SyXybj2Vhc9ITZMEI8cJkdlQQRoD8oEfPH6Jjpp/7WX5kIgECVd3DBOjjAdCSiW6R47v3gJBx/qZVkw=="],
 
-    "effect": ["effect@4.0.0-rc.108", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "fast-check": "^4.9.0", "kubernetes-types": "^1.30.0", "msgpackr": "^2.0.4", "uuid": "^14.0.1" } }, "sha512-KmI3DlKZWPvCL4QQ2FMaPOuxMt/7DrKMENCY/gQ+MkDR5QYw25wgU5Zmh/wVLboNjIci1gNOgNCFe4xqgxli3A=="],
+    "effect": ["effect@4.0.0-rc.112", "", { "dependencies": { "fast-check": "^4.9.0", "msgpackr": "^2.0.5" } }, "sha512-wXxwuh1Ywnv4cPRM3Wfa0vDwuOHnZ1TsTgHJkG9XgzND6inhBH9n1vBxhg3iIXOia/OrpmvVmd3lrD4vq6bF3A=="],
 
     "effect-build": ["effect-build@workspace:packages/effect-build"],
 
@@ -599,8 +597,6 @@
     "ip-address": ["ip-address@10.7.0", "", {}, "sha512-BGFsyJd5mpXp3rK6jIdADLNgpJUK1jnjzvYF8lK+VyDab9JAmqN0YOKDdP17HlgKb2+ehPgDc8EtnRLbGCAMhA=="],
 
     "js-tokens": ["js-tokens@9.0.1", "", {}, "sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ=="],
-
-    "kubernetes-types": ["kubernetes-types@1.30.0", "", {}, "sha512-Dew1okvhM/SQcIa2rcgujNndZwU8VnSapDgdxlYoB84ZlpAD43U6KLAFqYo17ykSFGHNPrg0qry0bP+GJd9v7Q=="],
 
     "loupe": ["loupe@3.2.1", "", {}, "sha512-CdzqowRJCeLU72bHvWqwRBBlLcMEtIvGrlvef74kMnV2AolS9Y8xUv1I0U/MNAWMhBlKIoyuEgoJ0t/bbwHbLQ=="],
 
@@ -717,8 +713,6 @@
     "undici": ["undici@8.10.0", "", {}, "sha512-HvltHd7avK13QIw/oLe4qoOLyoVSoafqJ2jYOrtMRBkbYT31eiBQ8O0ehRKZiEZCMEyLFQNIADpgCWC5fALvYQ=="],
 
     "undici-types": ["undici-types@7.10.0", "", {}, "sha512-t5Fy/nfn+14LuOc2KNYg75vZqClpAiqscVvMygNnlsHBFpSXdJaYtXMcdNLpl/Qvc3P2cB3s6lOV51nqsFq4ag=="],
-
-    "uuid": ["uuid@14.0.1", "", { "bin": { "uuid": "dist-node/bin/uuid" } }, "sha512-6ZxzVpzDXDa3bJWaHilVayA+BH/1zmxCJoVgvmqJnid/gPoKHxUrS/aC/T6LGQtNHT+XHG9fXPJB4d+IrU30Ew=="],
 
     "vite": ["vite@7.3.6", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-4XP60spRGjSZFf1qYH+dJIkK2znL3zQfl9KkOV9MkkRR/3Dls0dxaBsQPTloEc5BLXWPL9vsOxopxyKoMmDueg=="],
 

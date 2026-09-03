@@ -51,7 +51,7 @@
     "@tufjs/models": "4.1.0",
     "@types/node": "24.3.0",
     "dprint": "0.49.1",
-    "effect": "4.0.0-rc.108",
+    "effect": "4.0.0-rc.112",
     "effect-build": "workspace:*",
     "effect-build-apple": "workspace:*",
     "effect-build-archives": "workspace:*",
