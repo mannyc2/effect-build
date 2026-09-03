@@ -256,10 +256,10 @@ test("keeps npm namespace bootstrap separate from architectural release admissio
   assert.equal(npm.publicationAdmission.source, "publicApiProjection.packages");
   assert.deepEqual(npm.publicationAdmission.packages, admittedPackages);
   assert.deepEqual(npm.publicationAdmission.target, {
-    version: "0.6.0",
+    version: "0.6.1",
     presenceAtHandoff: "absent-for-all-admitted-packages",
     expectedDistTagsBeforePublication: [
-      { name: "effect-build", tags: { latest: "0.3.0" } },
+      { name: "effect-build", tags: { latest: "0.6.0" } },
       {
         name: "effect-build-apple",
         tags: { latest: "0.0.0-reserved.0", reserved: "0.0.0-reserved.0" },
@@ -290,7 +290,7 @@ test("keeps npm namespace bootstrap separate from architectural release admissio
       },
     ],
     expectedLatestBeforePublication: [
-      { name: "effect-build", version: "0.3.0" },
+      { name: "effect-build", version: "0.6.0" },
       { name: "effect-build-apple", version: "0.0.0-reserved.0" },
       { name: "effect-build-archives", version: "0.0.0-reserved.0" },
       { name: "effect-build-bun", version: "0.3.0" },
@@ -330,7 +330,7 @@ test("keeps npm namespace bootstrap separate from architectural release admissio
   );
 
   const changedTags = structuredClone(contract);
-  changedTags.npmRegistryBoundary.bootstrap.placeholderLedger[0].bootstrapTags.latest = "0.6.0";
+  changedTags.npmRegistryBoundary.bootstrap.placeholderLedger[0].bootstrapTags.latest = "0.6.1";
   assert.throws(
     () => validateContract(changedTags, inputs),
     /npm namespace placeholders must remain non-architectural bootstrap evidence/u,
@@ -382,7 +382,7 @@ test("freezes one exact release-certification policy without copying public pack
     "publish-certified-bytes",
   ]);
   assert.deepEqual(release.scope, {
-    target: "v0.6.0",
+    target: "v0.6.1",
     npmPackages: {
       status: "included",
       packageSource: "publicApiProjection.packages",
@@ -392,13 +392,13 @@ test("freezes one exact release-certification policy without copying public pack
     credentialBackedAppleArtifacts: {
       status: "deferred",
       certification: "not-run-not-passed",
-      releaseGate: "excluded-from-v0.6.0",
+      releaseGate: "excluded-from-v0.6.1",
       products: ["signed-app", "dmg", "pkg"],
       target: "later-separately-qualified-release",
     },
     awsNotaryJournalEvidence: {
       status: "deferred",
-      releaseGate: "excluded-from-v0.6.0",
+      releaseGate: "excluded-from-v0.6.1",
       applicability: "future-credential-backed-apple-artifact-certification-only",
     },
   });
@@ -479,7 +479,7 @@ test("freezes one exact release-certification policy without copying public pack
   });
   assert.deepEqual(release.npmAdministrativeInventory, {
     status: "not-observed",
-    releaseGate: "excluded-from-v0.6.0",
+    releaseGate: "excluded-from-v0.6.1",
     doesNotProve: [
       "trusted-publisher-admin-inventory",
       "publishing-access-two-factor-and-token-policy",
@@ -553,7 +553,7 @@ test("freezes one exact release-certification policy without copying public pack
       protocol: "effect-build/fake-registry-exact-protected-body-certification@2",
       terminal: "success",
       workflowPath: ".github/workflows/release-certification.yml",
-      artifactName: "effect-build-v0.6.0-fake-registry-exact-protected-body-certification",
+      artifactName: "effect-build-v0.6.1-fake-registry-exact-protected-body-certification",
       event: "workflow_dispatch",
       maximumAgeSeconds: 86400,
       maximumValiditySeconds: 172800,
@@ -565,7 +565,7 @@ test("freezes one exact release-certification policy without copying public pack
       protocol: "effect-build/npm-oidc-certification-artifact@1",
       terminal: "success",
       workflowPath: ".github/workflows/release.yml",
-      artifactName: "effect-build-v0.6.0-npm-oidc-certification",
+      artifactName: "effect-build-v0.6.1-npm-oidc-certification",
       event: "workflow_dispatch",
       maximumAgeSeconds: 3600,
       maximumValiditySeconds: 14400,
@@ -633,7 +633,7 @@ test("freezes one exact release-certification policy without copying public pack
       coordinate: "releaseCertification.githubArtifactCoordinate",
       protocol: "effect-build/release-readiness@3",
       workflow: "mannyc2/effect-build/.github/workflows/release-readiness.yml@refs/heads/main",
-      artifactName: "effect-build-v0.6.0-release-readiness",
+      artifactName: "effect-build-v0.6.1-release-readiness",
     },
     tagPolicy: {
       nameSource: "npmRegistryBoundary.publicationAdmission.target.version prefixed with v",
@@ -755,7 +755,7 @@ test("freezes one exact release-certification policy without copying public pack
     },
     receipt: {
       protocol: "effect-build/final-public-release-receipt@2",
-      artifactName: "effect-build-v0.6.0-final-public-release",
+      artifactName: "effect-build-v0.6.1-final-public-release",
       retentionDays: 90,
       orderedFiles: ["final-public-release.json"],
       fields: [
@@ -780,8 +780,8 @@ test("freezes one exact release-certification policy without copying public pack
     workflow: "mannyc2/effect-build/.github/workflows/release-verification.yml@refs/heads/main",
     repository: "mannyc2/effect-build",
     registry: "https://registry.npmjs.org",
-    version: "0.6.0",
-    tag: "v0.6.0",
+    version: "0.6.1",
+    tag: "v0.6.1",
     packageCount: 11,
     moduleCount: 42,
     releaseAssetCount: 12,
@@ -940,7 +940,7 @@ test("freezes one exact release-certification policy without copying public pack
         githubOidcClaims: "effect-build/github-oidc-claims@1",
         npmOidcExchangeAccepted: "effect-build/npm-oidc-exchange-accepted@1",
       },
-      artifactName: "effect-build-v0.6.0-npm-oidc-certification",
+      artifactName: "effect-build-v0.6.1-npm-oidc-certification",
       retentionDays: 30,
       orderedFiles: ["github-oidc-claims.json", "npm-oidc-exchange-accepted.json"],
       receiptFieldPolicy: "closed-objects-additional-fields-forbidden",
@@ -1181,7 +1181,7 @@ test("freezes one exact release-certification policy without copying public pack
   assert.deepEqual(release.fakeRegistry.localQualification, {
     protocol: "effect-build/fake-registry-local-qualification@2",
     workflowPath: ".github/workflows/release-certification.yml",
-    artifactName: "effect-build-v0.6.0-fake-registry-local-qualification",
+    artifactName: "effect-build-v0.6.1-fake-registry-local-qualification",
     terminal: "local-qualification",
     retentionDays: 30,
     readinessAdmissible: false,
@@ -1204,7 +1204,7 @@ test("freezes one exact release-certification policy without copying public pack
   assert.deepEqual(release.fakeRegistry.exactProtectedBodyCertification, {
     protocol: "effect-build/fake-registry-exact-protected-body-certification@2",
     workflowPath: ".github/workflows/release-certification.yml",
-    artifactName: "effect-build-v0.6.0-fake-registry-exact-protected-body-certification",
+    artifactName: "effect-build-v0.6.1-fake-registry-exact-protected-body-certification",
     terminal: "success",
     implementationStatus: "implemented",
     status: "supported",
@@ -1578,9 +1578,9 @@ test("freezes the exact v0.6 Apple receipt schemas, coordinates, categories, and
     "mannyc2/effect-build/.github/workflows/apple-certification.yml@refs/heads/main",
   );
   assert.deepEqual(apple.artifact, {
-    name: "effect-build-v0.6.0-apple-certification",
+    name: "effect-build-v0.6.1-apple-certification",
     retentionDays: 30,
-    orderedFiles: ["apple-certification-index.json", "effect-build-v0.6.0-apple-certification.bin"],
+    orderedFiles: ["apple-certification-index.json", "effect-build-v0.6.1-apple-certification.bin"],
     attempt: 1,
   });
   assert.deepEqual(apple.productLineage, {

@@ -213,7 +213,7 @@ describe("Apple certification workflow external-interface hard stop", () => {
     expect(Object.values(inputs).every(({ required, type }) => required && type === "string")).toBe(true);
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(workflow.concurrency).toEqual({
-      group: "effect-build-apple-certification-v0.6.0",
+      group: "effect-build-apple-certification-v0.6.1",
       "cancel-in-progress": false,
     });
     expect(Object.keys(workflow.jobs)).toEqual([

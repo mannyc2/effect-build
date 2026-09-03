@@ -1,6 +1,6 @@
 {
   "name": "effect-build-apple",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Effect-native direct Developer ID distribution operations for macOS.",
   "type": "module",
   "license": "MIT",

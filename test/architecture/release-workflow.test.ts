@@ -317,7 +317,7 @@ describe("release workflow hard cut", () => {
             sourceSha,
             runId,
             runAttempt,
-            "effect-build-v0.6.0-npm-oidc-certification",
+            "effect-build-v0.6.1-npm-oidc-certification",
             "workflow_dispatch",
             "main",
             "mannyc2/effect-build",
@@ -325,7 +325,7 @@ describe("release workflow hard cut", () => {
             "mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main",
             ".github/workflows/release.yml",
           ],
-          artifactName: "effect-build-v0.6.0-npm-oidc-certification",
+          artifactName: "effect-build-v0.6.1-npm-oidc-certification",
           name: "Canonicalize and re-observe certification evidence bytes",
         },
       ];
@@ -416,7 +416,7 @@ describe("release workflow hard cut", () => {
       if (name !== "release.yml") expect(workflowSource).not.toMatch(/\bnpm\s+publish\b/u);
     }
     expect(contract.npmRegistryBoundary.publicationAdmission.packages).toHaveLength(11);
-    expect(contract.npmRegistryBoundary.publicationAdmission.target.version).toBe("0.6.0");
+    expect(contract.npmRegistryBoundary.publicationAdmission.target.version).toBe("0.6.1");
   });
 
   it("parses every workflow with duplicate mapping keys forbidden", async () => {

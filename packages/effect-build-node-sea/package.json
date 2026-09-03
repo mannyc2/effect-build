@@ -1,6 +1,6 @@
 {
   "name": "effect-build-node-sea",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Effect-native provider command access for direct Node SEA assembly.",
   "type": "module",
   "license": "MIT",

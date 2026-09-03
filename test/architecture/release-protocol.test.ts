@@ -173,7 +173,7 @@ describe("unprotected release protocol", () => {
       { ...valid, artifactId: "-1" },
       { ...valid, artifactDigest: "c".repeat(64) },
       { ...valid, artifactDigest: `sha256:${"C".repeat(64)}` },
-      { ...valid, workflow: "mannyc2/effect-build/.github/workflows/release.yml@v0.6.0" },
+      { ...valid, workflow: "mannyc2/effect-build/.github/workflows/release.yml@v0.6.1" },
       { ...valid, extra: "peer-coordinate" },
     ];
     for (const value of hostile) {
@@ -354,7 +354,7 @@ describe("unprotected release protocol", () => {
       (value) => value.publicModules.pop(),
       (value) => value.packages.reverse(),
       (value) => value.packages[0]!.name = "effect-build-rolldown",
-      (value) => value.packages[0]!.file = "../effect-build-0.6.0.tgz",
+      (value) => value.packages[0]!.file = "../effect-build-0.6.1.tgz",
       (value) => value.packages[0]!.bytes += 1,
       (value) => value.packages[0]!.sha256 = `sha256:${"0".repeat(64)}`,
       (value) => value.packages[0]!.integrity = "sha512-invalid",

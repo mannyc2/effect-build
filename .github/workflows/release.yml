@@ -2988,13 +2988,13 @@ jobs:
               if (versions.includes(version)) {
                 if (sawMissing) fail("existing publication is not one canonical package prefix");
                 if (
-                  !isDeepStrictEqual(publicationBaseline[name].tags, { ...expectedDistTags.get(name), latest: version })
+                  !isDeepStrictEqual(initialPublicationState[name].tags, { ...expectedDistTags.get(name), latest: version })
                 ) fail(`${name} published dist-tags drifted from the exact contract ledger`);
                 await verifyTarget(name);
                 verifiedPrefix.push(name);
               } else {
                 sawMissing = true;
-                if (!isDeepStrictEqual(publicationBaseline[name].tags, expectedDistTags.get(name))) {
+                if (!isDeepStrictEqual(initialPublicationState[name].tags, expectedDistTags.get(name))) {
                   fail(`${name} prior dist-tags drifted before the exact publication mutation`);
                 }
                 missing.push(name);
@@ -3015,6 +3015,18 @@ jobs:
               ], { allowFailure: true, env: npmOidcEnvironment });
               if (result.status !== 0) {
                 fail(`npm publish outcome is unknown for ${name}; same-run retry is forbidden`);
+              }
+              const settleDeadline = performance.now()
+                + policy.npmOidcCertification.protectedReadOnlyTransport.request.metadataTotalTimeoutMilliseconds;
+              while (
+                targetIntegrity(name) === undefined
+                || readTags(name).latest !== version
+                || !readVersions(name).includes(version)
+              ) {
+                if (performance.now() >= settleDeadline) {
+                  fail(`${name}@${version} was accepted but is not yet observable; same-candidate resume required`);
+                }
+                await new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000));
               }
               await assertPublicationPrefix(verifiedPrefix.length + 1);
               verifiedPrefix.push(name);

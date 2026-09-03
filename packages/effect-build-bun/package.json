@@ -1,6 +1,6 @@
 {
   "name": "effect-build-bun",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Provider-native Bun API and selected-command operations for effect-build.",
   "type": "module",
   "license": "MIT",

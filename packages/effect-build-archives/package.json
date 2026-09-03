@@ -1,6 +1,6 @@
 {
   "name": "effect-build-archives",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Effect-native deterministic binary and exact Git-tree source archives.",
   "type": "module",
   "license": "MIT",
