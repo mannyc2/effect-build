@@ -41,7 +41,7 @@
     "verify:real": "bun run test:integration:bun && bun run test:integration:deno"
   },
   "devDependencies": {
-    "@effect/platform-bun": "4.0.0-rc.108",
+    "@effect/platform-bun": "4.0.0-rc.112",
     "@effect/platform-deno": "4.0.0-rc.108",
     "@effect/platform-node": "4.0.0-rc.108",
     "@sigstore/bundle": "4.0.0",

@@ -5,7 +5,7 @@
     "": {
       "name": "effect-build-workspace",
       "devDependencies": {
-        "@effect/platform-bun": "4.0.0-rc.108",
+        "@effect/platform-bun": "4.0.0-rc.112",
         "@effect/platform-deno": "4.0.0-rc.108",
         "@effect/platform-node": "4.0.0-rc.108",
         "@sigstore/bundle": "4.0.0",
@@ -254,13 +254,13 @@
 
     "@effect-build/example-deno": ["@effect-build/example-deno@workspace:examples/deno"],
 
-    "@effect/platform-bun": ["@effect/platform-bun@4.0.0-rc.108", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.108" }, "peerDependencies": { "effect": "^4.0.0-rc.108" } }, "sha512-27RoALzmzx6Qp4LrPIE8bYJfHe+8ZaAO3xLhJMEE6mVA8fxcPh4HAGwBv09Nk2qTFVh578SlSCY5ojUlqeSJ4A=="],
+    "@effect/platform-bun": ["@effect/platform-bun@4.0.0-rc.112", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.112" }, "peerDependencies": { "effect": "^4.0.0-rc.112" } }, "sha512-Y5n2HhV/vsbrJls9ukX42RL7zqXQxISHegWFsP9njsCyDmGTnq7QYSO82rglwrLPwtTrv5dkSRTuGw4+oXxgMg=="],
 
     "@effect/platform-deno": ["@effect/platform-deno@4.0.0-rc.108", "", { "dependencies": { "@db/redis": "npm:@jsr/db__redis@^0.41.2", "@effect/platform-node-shared": "^4.0.0-rc.108", "@std/fs": "npm:@jsr/std__fs@^1.0.24", "@std/media-types": "npm:@jsr/std__media-types@^1.1.0", "@std/path": "npm:@jsr/std__path@^1.1.6", "@std/streams": "npm:@jsr/std__streams@^1.1.1" }, "peerDependencies": { "effect": "^4.0.0-rc.108" } }, "sha512-iHpUfHd1cJANDs/vYsvxMG+RT2T+31sOhccC+aLDumJiTOi+TGHYHJFaInZi41vn7FaRfmvED2EJ1UviCm49Tg=="],
 
     "@effect/platform-node": ["@effect/platform-node@4.0.0-rc.108", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.108", "mime": "^4.1.0", "undici": "^8.7.0" }, "peerDependencies": { "effect": "^4.0.0-rc.108", "ioredis": ">=5.7.0 <6.0.0" } }, "sha512-Nof78154BaHGdSYr4TPQFZ5+Dg+HkpmbI3SQUdwsby5QNs6yahGJPu2AgdIVqdx7pKZ2w7j/bvdnqoMmkG0PbA=="],
 
-    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-rc.108", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.21.0" }, "peerDependencies": { "effect": "^4.0.0-rc.108" } }, "sha512-g5dSRR+tHzFcWav5A6zbug78oV8WPJL5BJqgKlKtow0cQ2IpULcLZaP2xCYR3RJDvz5SETREmPCJ+BNONIsalw=="],
+    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-rc.112", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.21.3" }, "peerDependencies": { "effect": "^4.0.0-rc.112" } }, "sha512-ttjz0xKamFN7vL8pNDYVwddJLjZvqKePc05djlz2VcdaKbLsnYbtMnL1rbOfHgEnIUSHGh7FkjaN4DM1Ov81sQ=="],
 
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.28.2", "", { "os": "aix", "cpu": "ppc64" }, "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ=="],
 
@@ -733,6 +733,10 @@
     "yallist": ["yallist@4.0.0", "", {}, "sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A=="],
 
     "yaml": ["yaml@2.9.0", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA=="],
+
+    "@effect/platform-deno/@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-rc.108", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.21.0" }, "peerDependencies": { "effect": "^4.0.0-rc.108" } }, "sha512-g5dSRR+tHzFcWav5A6zbug78oV8WPJL5BJqgKlKtow0cQ2IpULcLZaP2xCYR3RJDvz5SETREmPCJ+BNONIsalw=="],
+
+    "@effect/platform-node/@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-rc.108", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.21.0" }, "peerDependencies": { "effect": "^4.0.0-rc.108" } }, "sha512-g5dSRR+tHzFcWav5A6zbug78oV8WPJL5BJqgKlKtow0cQ2IpULcLZaP2xCYR3RJDvz5SETREmPCJ+BNONIsalw=="],
 
     "@vitest/snapshot/@vitest/pretty-format": ["@vitest/pretty-format@3.2.6", "", { "dependencies": { "tinyrainbow": "^2.0.0" } }, "sha512-lb7XXXzmm2h2ASzFnRvQpDo6onT1NmMJA3tkGTWiBFtRJ9lxGY3d3mm/Apt36gej2bkkOVLL/yTOtufDaFa/jA=="],
 
