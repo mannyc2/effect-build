@@ -28,7 +28,7 @@ export const placeholderNames = [
 ];
 export const establishedNames = packageNames.filter((name) => !placeholderNames.includes(name));
 export const reservedOnlyName = "effect-build-rolldown";
-export const targetVersion = "0.6.1";
+export const targetVersion = "0.6.2";
 export const placeholderVersion = "0.0.0-reserved.0";
 export const registryUrl = "https://registry.npmjs.org";
 

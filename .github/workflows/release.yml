@@ -2533,13 +2533,25 @@ jobs:
               ctlogThreshold: 1,
               tlogThreshold: 1,
             });
-            const signer = verifier.verify(
-              verifyClient.toSignedEntity(bundleClient.bundleFromJSON(JSON.parse(readFileSync(bundlePath, "utf8")))),
+            const entity = verifyClient.toSignedEntity(
+              bundleClient.bundleFromJSON(JSON.parse(readFileSync(bundlePath, "utf8"))),
+            );
+            verifier.verify(
+              entity,
               {
                 extensions: { issuer },
                 subjectAlternativeName: "^" + escapedIdentity + "$",
               },
             );
+            if (entity.key.$case !== "certificate") {
+              throw new Error("verified provenance has no signing certificate");
+            }
+            // npm's pinned verifier 3.1.0 omits OIDs from its signer projection.
+            // Read only the certificate object consumed by the successful verification.
+            const verifiedOids = entity.key.certificate.extensions.map((extension) => ({
+              oid: extension.subs[0].toOID(),
+              value: extension.subs[extension.subs.length - 1].value,
+            }));
             const derLength = (length) => {
               if (length < 0x80) return Buffer.from([length]);
               const octets = [];
@@ -2556,7 +2568,7 @@ jobs:
               [sourceDigestOid, sourceSha],
             ];
             for (const [oid, value] of expected) {
-              const matches = signer?.identity?.oids?.filter((entry) => entry?.oid?.id?.join(".") === oid) ?? [];
+              const matches = verifiedOids.filter((entry) => entry.oid === oid);
               if (
                 matches.length !== 1
                 || !(matches[0].value instanceof Uint8Array)
