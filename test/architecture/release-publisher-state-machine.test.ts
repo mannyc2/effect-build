@@ -235,7 +235,20 @@ const installPinnedNpmSources = async (rootDirectory: string) => {
     "3.1.0",
     [
       "exports.toTrustMaterial = (root) => root;",
-      "exports.toSignedEntity = (bundle) => bundle;",
+      "exports.toSignedEntity = (bundle) => {",
+      "  const identity = 'https://github.com/mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main';",
+      "  const der = (value) => { const bytes = Buffer.from(value); return Buffer.concat([Buffer.from([0x0c, bytes.length]), bytes]); };",
+      "  const oids = [",
+      "    ['1.3.6.1.4.1.57264.1.9', identity],",
+      "    ['1.3.6.1.4.1.57264.1.12', 'https://github.com/mannyc2/effect-build'],",
+      `    ['1.3.6.1.4.1.57264.1.13', '${fixtureSourceSha}'],`,
+      "  ].map(([oid, value]) => ({ oid, value: der(value) }));",
+      "  if (bundle.fakeSignerOid === 'wrong') oids[2].value = der('2222222222222222222222222222222222222222');",
+      "  if (bundle.fakeSignerOid === 'duplicate') oids.push(oids[2]);",
+      "  return { ...bundle, key: { $case: 'certificate', certificate: { extensions: oids.map(({ oid, value }) => ({",
+      "    subs: [{ toOID: () => oid }, { value }],",
+      "  })) } } };",
+      "};",
       "exports.Verifier = class {",
       "verify(bundle, options) {",
       "  for (const name of ['GH_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_URL', 'UNRELATED_RUNNER_SECRET']) {",
@@ -244,15 +257,7 @@ const installPinnedNpmSources = async (rootDirectory: string) => {
       "  if (bundle.fakeVerified === false) throw new Error('fixture provenance verification failed');",
       "  if (options.extensions?.issuer !== 'https://token.actions.githubusercontent.com') throw new Error('issuer');",
       "  const identity = 'https://github.com/mannyc2/effect-build/.github/workflows/release.yml@refs/heads/main';",
-      "  const der = (value) => { const bytes = Buffer.from(value); return Buffer.concat([Buffer.from([0x0c, bytes.length]), bytes]); };",
-      "  const oids = [",
-      "    ['1.3.6.1.4.1.57264.1.9', identity],",
-      "    ['1.3.6.1.4.1.57264.1.12', 'https://github.com/mannyc2/effect-build'],",
-      `    ['1.3.6.1.4.1.57264.1.13', '${fixtureSourceSha}'],`,
-      "  ].map(([oid, value]) => ({ oid: { id: oid.split('.').map(Number) }, value: der(value) }));",
-      "  if (bundle.fakeSignerOid === 'wrong') oids[2].value = der('2222222222222222222222222222222222222222');",
-      "  if (bundle.fakeSignerOid === 'duplicate') oids.push(structuredClone(oids[2]));",
-      "  return { identity: { subjectAlternativeName: identity, extensions: { issuer: options.extensions.issuer }, oids } };",
+      "  return { identity: { subjectAlternativeName: identity, extensions: { issuer: options.extensions.issuer } } };",
       "}",
       "};",
     ],
@@ -636,9 +641,9 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
             expect(firstFailed, first.publisher?.stderr).toBe(false);
             expect(state.mutations.map(({ name }) => name)).toEqual(canonicalPackageOrder);
             expect(state.mutations.every(({ committed, provenance }) => committed && provenance)).toBe(true);
-            expect(state.registry.packages["effect-build"]?.tags).toEqual({ latest: "0.6.1" });
+            expect(state.registry.packages["effect-build"]?.tags).toEqual({ latest: "0.6.2" });
             expect(state.registry.packages["effect-build-bun"]?.tags).toEqual({
-              latest: "0.6.1",
+              latest: "0.6.2",
               reserved: "0.0.0-reserved.0",
             });
             break;

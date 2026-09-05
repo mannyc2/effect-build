@@ -1,6 +1,22 @@
 # Changelog
 
+## 0.6.2
+
+The 0.6.1 publication stopped after `effect-build@0.6.1` because npm 11.11.0
+bundles Sigstore verifier 3.1.0, whose verified signer result does not expose
+certificate OIDs. The publisher now checks the required OIDs on the exact
+certificate consumed by successful verification, retaining the existing
+signature, trust, identity, and source checks. An offline regression test runs
+the actual extracted child with the real npm-bundled verifier.
+
+The library contents are unchanged. All eleven public packages target 0.6.2
+from a newly certified release commit; the existing core-only 0.6.0 and 0.6.1
+versions remain on npm and are not complete lockstep releases. Apple artifact
+certification remains deferred; this release contains npm API/library bytes.
+
 ## 0.6.1
+
+This attempt also stopped after publishing only `effect-build`; see 0.6.2.
 
 Identical library contents to 0.6.0. The 0.6.0 lockstep publication stopped
 after `effect-build@0.6.0` was published because the certified publisher had
