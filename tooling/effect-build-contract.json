@@ -33,11 +33,11 @@
       },
       {
         "path": "scripts/effect-build-contract/policy.mjs",
-        "sha256": "7487daf7d91ba6ab3fa75663ac3248a98bba11aaa1d7c38a636d14d4596c012d"
+        "sha256": "9481eceec3fce58afbdc23a06ca33d02cbfb2b057a2d28755e903e5784047457"
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "34ed01337400ce5ef346dba2a2b2d4a5cec596d72ebc2f464d39f12853051c10"
+        "sha256": "46d37a51158f021ccc52cfd9e2b9c03155d782105d8a0f1349ba75cfbbd0c46a"
       },
       {
         "path": "package.json",
@@ -45,7 +45,7 @@
       },
       {
         "path": "bun.lock",
-        "sha256": "ea9bc20ce6811e9dc690d359aa2776ee7e996a716f18afb6011ac06a6ecb32d7"
+        "sha256": "8f6b0cd99bed066932b4aac31eafc477277de67653e5da1a19636301529bfb7c"
       },
       {
         "path": "scripts/release/zip-protocol.mjs",
@@ -4484,82 +4484,82 @@
         "effect-build-windows"
       ],
       "target": {
-        "version": "0.6.2",
+        "version": "0.6.3",
         "presenceAtHandoff": "absent-for-all-admitted-packages",
         "expectedDistTagsBeforePublication": [
           {
             "name": "effect-build",
             "tags": {
-              "latest": "0.6.1"
+              "latest": "0.6.2"
             }
           },
           {
             "name": "effect-build-apple",
             "tags": {
-              "latest": "0.0.0-reserved.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           },
           {
             "name": "effect-build-archives",
             "tags": {
-              "latest": "0.0.0-reserved.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           },
           {
             "name": "effect-build-bun",
             "tags": {
-              "latest": "0.3.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           },
           {
             "name": "effect-build-deno",
             "tags": {
-              "latest": "0.3.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           },
           {
             "name": "effect-build-esbuild",
             "tags": {
-              "latest": "0.3.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           },
           {
             "name": "effect-build-nfpm",
             "tags": {
-              "latest": "0.0.0-reserved.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           },
           {
             "name": "effect-build-node-sea",
             "tags": {
-              "latest": "0.3.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           },
           {
             "name": "effect-build-python",
             "tags": {
-              "latest": "0.0.0-reserved.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           },
           {
             "name": "effect-build-sbom",
             "tags": {
-              "latest": "0.0.0-reserved.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           },
           {
             "name": "effect-build-windows",
             "tags": {
-              "latest": "0.0.0-reserved.0",
+              "latest": "0.6.2",
               "reserved": "0.0.0-reserved.0"
             }
           }
@@ -4567,47 +4567,47 @@
         "expectedLatestBeforePublication": [
           {
             "name": "effect-build",
-            "version": "0.6.1"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-apple",
-            "version": "0.0.0-reserved.0"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-archives",
-            "version": "0.0.0-reserved.0"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-bun",
-            "version": "0.3.0"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-deno",
-            "version": "0.3.0"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-esbuild",
-            "version": "0.3.0"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-nfpm",
-            "version": "0.0.0-reserved.0"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-node-sea",
-            "version": "0.3.0"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-python",
-            "version": "0.0.0-reserved.0"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-sbom",
-            "version": "0.0.0-reserved.0"
+            "version": "0.6.2"
           },
           {
             "name": "effect-build-windows",
-            "version": "0.0.0-reserved.0"
+            "version": "0.6.2"
           }
         ]
       },
@@ -4634,7 +4634,7 @@
       "publish-certified-bytes"
     ],
     "scope": {
-      "target": "v0.6.2",
+      "target": "v0.6.3",
       "npmPackages": {
         "status": "included",
         "packageSource": "publicApiProjection.packages",
@@ -4644,7 +4644,7 @@
       "credentialBackedAppleArtifacts": {
         "status": "deferred",
         "certification": "not-run-not-passed",
-        "releaseGate": "excluded-from-v0.6.2",
+        "releaseGate": "excluded-from-v0.6.3",
         "products": [
           "signed-app",
           "dmg",
@@ -4654,13 +4654,13 @@
       },
       "awsNotaryJournalEvidence": {
         "status": "deferred",
-        "releaseGate": "excluded-from-v0.6.2",
+        "releaseGate": "excluded-from-v0.6.3",
         "applicability": "future-credential-backed-apple-artifact-certification-only"
       }
     },
     "npmAdministrativeInventory": {
       "status": "not-observed",
-      "releaseGate": "excluded-from-v0.6.2",
+      "releaseGate": "excluded-from-v0.6.3",
       "doesNotProve": [
         "trusted-publisher-admin-inventory",
         "publishing-access-two-factor-and-token-policy"
@@ -5041,7 +5041,7 @@
         "release-readiness.json",
         "release-readiness.bin"
       ],
-      "artifactName": "effect-build-v0.6.2-release-readiness",
+      "artifactName": "effect-build-v0.6.3-release-readiness",
       "workflowPath": ".github/workflows/release-readiness.yml",
       "event": "workflow_dispatch",
       "coordinate": "releaseCertification.githubArtifactCoordinate",
@@ -5224,7 +5224,8 @@
           "target-version-absent",
           "expected-latest-exact",
           "repository-identity-exact",
-          "placeholder-versions-tags-and-downloaded-bytes-exact"
+          "historical-placeholder-version-and-downloaded-bytes-exact",
+          "reservation-only-placeholder-version-and-tags-exact"
         ]
       },
       "candidate": {
@@ -5291,7 +5292,7 @@
           "protocol": "effect-build/fake-registry-exact-protected-body-certification@2",
           "terminal": "success",
           "workflowPath": ".github/workflows/release-certification.yml",
-          "artifactName": "effect-build-v0.6.2-fake-registry-exact-protected-body-certification",
+          "artifactName": "effect-build-v0.6.3-fake-registry-exact-protected-body-certification",
           "event": "workflow_dispatch",
           "maximumAgeSeconds": 86400,
           "maximumValiditySeconds": 172800,
@@ -5303,7 +5304,7 @@
           "protocol": "effect-build/npm-oidc-certification-artifact@1",
           "terminal": "success",
           "workflowPath": ".github/workflows/release.yml",
-          "artifactName": "effect-build-v0.6.2-npm-oidc-certification",
+          "artifactName": "effect-build-v0.6.3-npm-oidc-certification",
           "event": "workflow_dispatch",
           "maximumAgeSeconds": 3600,
           "maximumValiditySeconds": 14400,
@@ -5386,7 +5387,7 @@
         "coordinate": "releaseCertification.githubArtifactCoordinate",
         "protocol": "effect-build/release-readiness@3",
         "workflow": "mannyc2/effect-build/.github/workflows/release-readiness.yml@refs/heads/main",
-        "artifactName": "effect-build-v0.6.2-release-readiness"
+        "artifactName": "effect-build-v0.6.3-release-readiness"
       },
       "tagPolicy": {
         "nameSource": "npmRegistryBoundary.publicationAdmission.target.version prefixed with v",
@@ -5573,7 +5574,7 @@
       },
       "receipt": {
         "protocol": "effect-build/final-public-release-receipt@2",
-        "artifactName": "effect-build-v0.6.2-final-public-release",
+        "artifactName": "effect-build-v0.6.3-final-public-release",
         "retentionDays": 90,
         "orderedFiles": [
           "final-public-release.json"
@@ -5600,8 +5601,8 @@
       "workflow": "mannyc2/effect-build/.github/workflows/release-verification.yml@refs/heads/main",
       "repository": "mannyc2/effect-build",
       "registry": "https://registry.npmjs.org",
-      "version": "0.6.2",
-      "tag": "v0.6.2",
+      "version": "0.6.3",
+      "tag": "v0.6.3",
       "packageCount": 11,
       "moduleCount": 42,
       "releaseAssetCount": 12
@@ -5648,7 +5649,7 @@
           "githubOidcClaims": "effect-build/github-oidc-claims@1",
           "npmOidcExchangeAccepted": "effect-build/npm-oidc-exchange-accepted@1"
         },
-        "artifactName": "effect-build-v0.6.2-npm-oidc-certification",
+        "artifactName": "effect-build-v0.6.3-npm-oidc-certification",
         "retentionDays": 30,
         "orderedFiles": [
           "github-oidc-claims.json",
@@ -5853,7 +5854,7 @@
       "localQualification": {
         "protocol": "effect-build/fake-registry-local-qualification@2",
         "workflowPath": ".github/workflows/release-certification.yml",
-        "artifactName": "effect-build-v0.6.2-fake-registry-local-qualification",
+        "artifactName": "effect-build-v0.6.3-fake-registry-local-qualification",
         "terminal": "local-qualification",
         "retentionDays": 30,
         "readinessAdmissible": false,
@@ -5876,7 +5877,7 @@
       "exactProtectedBodyCertification": {
         "protocol": "effect-build/fake-registry-exact-protected-body-certification@2",
         "workflowPath": ".github/workflows/release-certification.yml",
-        "artifactName": "effect-build-v0.6.2-fake-registry-exact-protected-body-certification",
+        "artifactName": "effect-build-v0.6.3-fake-registry-exact-protected-body-certification",
         "terminal": "success",
         "implementationStatus": "implemented",
         "status": "supported",
@@ -6222,7 +6223,7 @@
             },
             {
               "path": "test/fixtures/release/release-state.mjs",
-              "sha256": "04307f87b33ba64f3f891455ac9837dd2291c5d44b5a35b7d1910ebb5fa38de7"
+              "sha256": "8dc05ea37bc8847256f72f7d7d6411cc6ccaa0fefc2567c496f85c70a02fc49b"
             },
             {
               "path": "test/fixtures/release/exact-fake-fetch.mjs",
@@ -6230,7 +6231,7 @@
             },
             {
               "path": "test/fixtures/release/make-candidate.mjs",
-              "sha256": "63b8f8e5c23197ac061c58e4248faa8076368820529b8a48e4a2e04ca406c3df"
+              "sha256": "52721e48868e86bc316090d591d5922a67eff951282e3eaa1a9bc8394ad8fc68"
             },
             {
               "path": "test/fixtures/release/make-fixture-contract.mjs",
@@ -6641,11 +6642,11 @@
         "submissionCodec": "effect-build-apple/notary-journal@1"
       },
       "artifact": {
-        "name": "effect-build-v0.6.2-apple-certification",
+        "name": "effect-build-v0.6.3-apple-certification",
         "retentionDays": 30,
         "orderedFiles": [
           "apple-certification-index.json",
-          "effect-build-v0.6.2-apple-certification.bin"
+          "effect-build-v0.6.3-apple-certification.bin"
         ],
         "attempt": 1
       },

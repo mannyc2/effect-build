@@ -233,8 +233,7 @@ const runRegistryConsumer = async ({ runtime, version }) => {
     } else {
       await execute(process.execPath, [
         "install",
-        "--config",
-        paths.bunConfig,
+        `--config=${paths.bunConfig}`,
         "--registry",
         policy.registry,
         "--cache-dir",

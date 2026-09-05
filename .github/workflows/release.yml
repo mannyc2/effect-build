@@ -2155,7 +2155,8 @@ jobs:
                   `release readiness ${name} placeholder`,
                 );
                 if (
-                  !isDeepStrictEqual(observed.versions, [ledger.version])
+                  !observed.versions.includes(ledger.version)
+                  || (reservedOnly.includes(name) && !isDeepStrictEqual(observed.versions, [ledger.version]))
                   || !isDeepStrictEqual(placeholder, {
                     version: ledger.version,
                     bytes: ledger.bytes,
@@ -2360,14 +2361,14 @@ jobs:
               const tags = readTags(name);
               const versions = readVersions(name);
               const hasTarget = versions.includes(version);
-              const expectedVersions = hasTarget && !reservedOnly.includes(name)
-                ? [ledger.version, version].sort()
-                : [ledger.version];
               const expectedTags = structuredClone(expectedDistTags.get(name) ?? ledger.bootstrapTags);
               if (hasTarget && expectedDistTags.has(name)) expectedTags.latest = version;
               if (
                 !isDeepStrictEqual(tags, expectedTags)
-                || !isDeepStrictEqual(versions, expectedVersions)
+                || !versions.includes(ledger.version)
+                || Object.values(tags).some((tagVersion) => !versions.includes(tagVersion))
+                || versions.some(newerThanTarget)
+                || (reservedOnly.includes(name) && !isDeepStrictEqual(versions, [ledger.version]))
               ) {
                 fail(`placeholder or reservation state drifted for ${name}`);
               }

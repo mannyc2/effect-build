@@ -1,6 +1,6 @@
 {
   "name": "effect-build-esbuild",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Effect-native provider API and command access for esbuild.",
   "type": "module",
   "license": "MIT",

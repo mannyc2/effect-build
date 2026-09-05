@@ -157,7 +157,7 @@ describe("authoritative combined contract", () => {
       "effect-build-windows",
     ]);
     expect(sorted(contract.npmRegistryBoundary.publicationAdmission.packages)).toEqual(admitted);
-    expect(contract.npmRegistryBoundary.publicationAdmission.target.version).toBe("0.6.2");
+    expect(contract.npmRegistryBoundary.publicationAdmission.target.version).toBe("0.6.3");
     expect(sorted(
       contract.npmRegistryBoundary.publicationAdmission.target.expectedLatestBeforePublication.map(({ name }) => name),
     )).toEqual(admitted);
@@ -169,7 +169,7 @@ describe("authoritative combined contract", () => {
     expect(
       contract.npmRegistryBoundary.publicationAdmission.target.expectedDistTagsBeforePublication
         .find(({ name }) => name === "effect-build-bun")?.tags,
-    ).toEqual({ latest: "0.3.0", reserved: "0.0.0-reserved.0" });
+    ).toEqual({ latest: "0.6.2", reserved: "0.0.0-reserved.0" });
     expect(sorted(contract.npmRegistryBoundary.reservation.packages)).toEqual(reservedOnly);
     expect(contract.npmRegistryBoundary.publicationAdmission.packages).not.toContain("effect-build-rolldown");
   });

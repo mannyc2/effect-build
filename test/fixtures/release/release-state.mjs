@@ -28,7 +28,7 @@ export const placeholderNames = [
 ];
 export const establishedNames = packageNames.filter((name) => !placeholderNames.includes(name));
 export const reservedOnlyName = "effect-build-rolldown";
-export const targetVersion = "0.6.2";
+export const targetVersion = "0.6.3";
 export const placeholderVersion = "0.0.0-reserved.0";
 export const registryUrl = "https://registry.npmjs.org";
 
@@ -138,16 +138,15 @@ export const writeState = (path, state) => {
 };
 
 const initialVersion = (name, placeholderPackages) => {
-  if (placeholderNames.includes(name)) {
-    return {
-      [placeholderVersion]: {
-        ...placeholderPackages[name],
-        provenance: null,
-      },
-    };
-  }
-  const versions = [...new Set(Object.values(expectedPublicDistTags.get(name) ?? { latest: "0.3.0" }))].sort();
+  const hasHistoricalPlaceholder = placeholderNames.includes(name);
+  const versions = [...new Set([
+    ...Object.values(expectedPublicDistTags.get(name) ?? { latest: placeholderVersion }),
+    ...(hasHistoricalPlaceholder ? [placeholderVersion] : []),
+  ])].sort();
   return Object.fromEntries(versions.map((version) => {
+    if (hasHistoricalPlaceholder && version === placeholderVersion) {
+      return [version, { ...placeholderPackages[name], provenance: null }];
+    }
     const seed = version === placeholderVersion
       ? `reserved-${name}`
       : version === "0.3.0"
@@ -453,14 +452,8 @@ export const applyScenario = (state, scenario) => {
     case "placeholder-reserved-drift":
       state.registry.packages["effect-build-apple"].tags.reserved = targetVersion;
       return;
-    case "placeholder-extra-version":
-      state.registry.packages["effect-build-apple"].versions["0.0.1"] = {
-        bytes: 1,
-        file: null,
-        integrity: `sha512-${Buffer.from("rogue-placeholder-version").toString("base64")}`,
-        provenance: null,
-        sha256: sha256(Buffer.from("rogue-placeholder-version")),
-      };
+    case "historical-placeholder-missing":
+      delete state.registry.packages["effect-build-apple"].versions[placeholderVersion];
       return;
     case "reservation-latest-drift":
       state.registry.packages[reservedOnlyName].tags.latest = targetVersion;

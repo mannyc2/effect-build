@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.3
+
+Fix the final registry consumer to pass Bun 1.3.14 its config path as one
+`--config=<path>` argument. The split spelling was parsed as an install
+dependency, so final verification stopped after all eleven 0.6.2 packages and
+the immutable GitHub Release had been published. A regression now executes
+the actual consumer install arguments with the pinned Bun CLI. Corrected
+Node and Bun consumers and the full diagnostic collector passed against the
+existing 0.6.2 publications before preparing this new source-bound release.
+
+The readiness namespace audit and protected publisher now verify historical
+placeholder bytes after public `latest` advances. Public version history must
+match the authenticated readiness snapshot throughout publication; only the
+reserved Rolldown package requires a singleton history. The simulated registry
+and readiness evidence retain every version named by their expected tags.
+
+Library implementations and all 42 public modules are unchanged. The 0.6.2
+packages, tag, and assets remain intact; 0.6.3 receives fresh certification.
+Credential-backed Apple artifact certification remains deferred.
+
 ## 0.6.2
 
 The 0.6.1 publication stopped after `effect-build@0.6.1` because npm 11.11.0

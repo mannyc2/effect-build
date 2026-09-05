@@ -378,7 +378,8 @@ export const validateReadinessDirectObservation = ({ contract, sourceSha, observ
       const placeholder = exactKeys(entry.placeholder, policy.placeholderFields, `readiness npm ${name} placeholder`);
       const expectedUrl = `${registry.registry}/${name}/-/${name}-${ledger.version}.tgz`;
       if (
-        JSON.stringify(entry.versions) !== JSON.stringify([ledger.version])
+        !entry.versions.includes(ledger.version)
+        || (reservedOnly.has(name) && JSON.stringify(entry.versions) !== JSON.stringify([ledger.version]))
         || placeholder.version !== ledger.version
         || placeholder.bytes !== ledger.bytes
         || placeholder.sha256 !== `sha256:${ledger.sha256}`

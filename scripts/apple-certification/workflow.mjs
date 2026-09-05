@@ -543,7 +543,7 @@ export const validateBlockedAppleWorkflow = (workflow, contract) => {
   if (
     !sameJson(workflow.permissions, { contents: "read" })
     || !sameJson(workflow.concurrency, {
-      group: "effect-build-apple-certification-v0.6.2",
+      group: "effect-build-apple-certification-v0.6.3",
       "cancel-in-progress": false,
     })
   ) throw new Error("blocked Apple workflow top-level authority changed");

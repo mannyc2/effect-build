@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 import { describe, expect, it } from "vitest";
 
@@ -18,7 +19,7 @@ const {
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const registry = "https://registry.npmjs.org";
 
-const fixture = () => {
+const fixture = (runtime: "node" | "bun" = "node") => {
   const consumerRoot = mkdtempSync(join(tmpdir(), "effect-build-consumer-config-test-"));
   const consumerHome = join(consumerRoot, "home");
   const cacheRoot = join(consumerRoot, "cache");
@@ -41,7 +42,7 @@ const fixture = () => {
     consumerHome,
     paths,
     registry,
-    runtime: "node",
+    runtime,
   });
   return { consumerRoot, consumerHome, paths, environment };
 };
@@ -145,9 +146,44 @@ describe("credential-free registry consumer", () => {
     const source = readFileSync(resolve(root, "scripts/test-built-consumer.mjs"), "utf8");
     expect([...source.matchAll(/await auditNpmConfig\(\);/gu)]).toHaveLength(2);
     expect(source).toContain('"--globalconfig",\n        paths.globalConfig');
-    expect(source).toContain('"--config",\n        paths.bunConfig');
+    expect(source).toContain("`--config=${paths.bunConfig}`");
     expect(source).toContain('"--ignore-scripts"');
     expect(source).toContain("consumer configuration mutated during install");
+  });
+
+  it("passes the actual consumer install arguments to pinned Bun without installing its config file", () => {
+    const input = fixture("bun");
+    try {
+      writeFileSync(
+        join(input.consumerRoot, "package.json"),
+        JSON.stringify({ name: "effect-build-bun-config-consumer", private: true, dependencies: {} }),
+      );
+      const source = readFileSync(resolve(root, "scripts/test-built-consumer.mjs"), "utf8");
+      const invocation = source.match(/await execute\(process\.execPath, (\[\s*"install",[\s\S]*?\n      \]), \{/u);
+      expect(invocation).not.toBeNull();
+      const args: Array<string> = runInNewContext(invocation![1]!, { paths: input.paths, policy: { registry } });
+      const version = spawnSync("bun", ["--version"], {
+        cwd: input.consumerRoot,
+        encoding: "utf8",
+        env: input.environment,
+        timeout: 10_000,
+      });
+      expect(version.error).toBeUndefined();
+      expect(version.status).toBe(0);
+      expect(version.stdout.trim()).toBe("1.3.14");
+      const result = spawnSync("bun", args, {
+        cwd: input.consumerRoot,
+        encoding: "utf8",
+        env: input.environment,
+        timeout: 30_000,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(readFileSync(join(input.consumerRoot, "package.json"), "utf8")).dependencies).toEqual({});
+      expect(readFileSync(input.paths.bunConfig, "utf8")).toBe("");
+    } finally {
+      rmSync(input.consumerRoot, { recursive: true, force: true });
+    }
   });
 
   it("runs only the installed TypeScript CLI without npm exec resolution", () => {
