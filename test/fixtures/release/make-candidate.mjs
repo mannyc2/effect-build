@@ -243,10 +243,11 @@ const makePublisherReadinessFixture = ({
         placeholder: null,
       };
     }
+    const distTags = structuredClone(expectedDistTags.get(name) ?? ledger.bootstrapTags);
     return {
       name,
-      versions: [ledger.version],
-      distTags: structuredClone(expectedDistTags.get(name) ?? ledger.bootstrapTags),
+      versions: [...new Set([ledger.version, ...Object.values(distTags)])].sort(),
+      distTags,
       repository,
       placeholder: {
         version: ledger.version,

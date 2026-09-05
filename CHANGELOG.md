@@ -10,9 +10,11 @@ the actual consumer install arguments with the pinned Bun CLI. Corrected
 Node and Bun consumers and the full diagnostic collector passed against the
 existing 0.6.2 publications before preparing this new source-bound release.
 
-The readiness namespace audit now observes retained reservation bytes at their
-recorded version after public `latest` advances. The simulated registry also
-retains every version named by its expected tags; Rolldown remains reserved.
+The readiness namespace audit and protected publisher now verify historical
+placeholder bytes after public `latest` advances. Public version history must
+match the authenticated readiness snapshot throughout publication; only the
+reserved Rolldown package requires a singleton history. The simulated registry
+and readiness evidence retain every version named by their expected tags.
 
 Library implementations and all 42 public modules are unchanged. The 0.6.2
 packages, tag, and assets remain intact; 0.6.3 receives fresh certification.

@@ -452,14 +452,8 @@ export const applyScenario = (state, scenario) => {
     case "placeholder-reserved-drift":
       state.registry.packages["effect-build-apple"].tags.reserved = targetVersion;
       return;
-    case "placeholder-extra-version":
-      state.registry.packages["effect-build-apple"].versions["0.0.1"] = {
-        bytes: 1,
-        file: null,
-        integrity: `sha512-${Buffer.from("rogue-placeholder-version").toString("base64")}`,
-        provenance: null,
-        sha256: sha256(Buffer.from("rogue-placeholder-version")),
-      };
+    case "historical-placeholder-missing":
+      delete state.registry.packages["effect-build-apple"].versions[placeholderVersion];
       return;
     case "reservation-latest-drift":
       state.registry.packages[reservedOnlyName].tags.latest = targetVersion;

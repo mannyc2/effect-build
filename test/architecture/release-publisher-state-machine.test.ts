@@ -95,6 +95,7 @@ interface FakeState {
     readonly packages: Readonly<
       Record<string, {
         readonly tags: Readonly<Record<string, string>>;
+        readonly versions: Readonly<Record<string, unknown>>;
       }>
     >;
   };
@@ -834,6 +835,12 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
       );
       expect(() => assertReadinessArtifactAllowed(canonicalContract)).not.toThrow();
       expect(() => assertFinalPublicVerificationAllowed(canonicalContract)).not.toThrow();
+      const readiness = JSON.parse(await readFile(resolve(directory, "readiness/release-readiness.json"), "utf8"));
+      for (const observed of readiness.directObservation.npm.packages) {
+        const registryPackage = stateBefore.registry.packages[observed.name]!;
+        expect(observed.versions, observed.name).toEqual(Object.keys(registryPackage.versions).sort());
+        expect(observed.distTags, observed.name).toEqual(registryPackage.tags);
+      }
       const protectedJob = workflow.jobs[reauthorizations[0]!.job]!;
       expect(
         protectedJob.steps?.some(({ uses }: { readonly uses?: string }) =>
@@ -978,7 +985,7 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
   for (
     const scenario of [
       "preexisting-registry-auth",
-      "placeholder-extra-version",
+      "historical-placeholder-missing",
       "private-manifest",
       "duplicate-nonmanifest",
       "symlink-leaf",

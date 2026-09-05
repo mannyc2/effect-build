@@ -5,7 +5,10 @@
 > remain preserved. Version 0.6.2 published all eleven packages and its
 > immutable GitHub Release, but final verification exposed a Bun 1.3.14 config
 > argument error in the consumer harness. Correct that invocation and test
-> the actual pinned CLI. The corrected Node/Bun consumers and complete local
+> the actual pinned CLI. The readiness collector and protected publisher also
+> distinguish retained historical placeholders from the current public version
+> history; exact readiness-bound publication history and the singleton Rolldown
+> reservation remain enforced. The corrected Node/Bun consumers and complete local
 > diagnostic collector passed against 0.6.2; they do not replace hosted
 > certification. Certify and publish a new exact main commit at 0.6.3, keeping
 > the existing 0.6.2 packages, tag, assets, and failure evidence untouched.

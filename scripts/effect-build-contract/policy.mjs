@@ -1488,7 +1488,7 @@ export const releaseCertificationPolicy = {
           },
           {
             path: "test/fixtures/release/release-state.mjs",
-            sha256: "def7337bfeab8379796f2c8fd330979518fb59d932b8a7efa5fffea5c8e26a57",
+            sha256: "8dc05ea37bc8847256f72f7d7d6411cc6ccaa0fefc2567c496f85c70a02fc49b",
           },
           {
             path: "test/fixtures/release/exact-fake-fetch.mjs",
@@ -1496,7 +1496,7 @@ export const releaseCertificationPolicy = {
           },
           {
             path: "test/fixtures/release/make-candidate.mjs",
-            sha256: "63b8f8e5c23197ac061c58e4248faa8076368820529b8a48e4a2e04ca406c3df",
+            sha256: "52721e48868e86bc316090d591d5922a67eff951282e3eaa1a9bc8394ad8fc68",
           },
           {
             path: "test/fixtures/release/make-fixture-contract.mjs",
