@@ -1,16 +1,17 @@
 # Plan 045: Establish the v0.6.0 release point and bounded publication handoff
 
-> **2026-09-05 execution amendment:** The current release target is **0.6.2**,
-> as recorded in the combined contract. The older 0.6.0/0.6.1 candidates each
-> published only `effect-build` before stopping. Their existing registry bytes
-> are preserved; neither is a complete lockstep release. The 0.6.1 attempt
-> exposed a deterministic mismatch between npm 11.11.0's bundled Sigstore
-> verifier 3.1.0 result and the publisher's assumed certificate-OID projection.
-> Repair that check, test the actual bundled verifier, and certify a new exact
-> main commit before publication. Apply the operational steps below to the
-> contract's current version and artifact names; historical 0.6.0 coordinates
-> are provenance only. Apple/AWS remain deferred. No old readiness packet may
-> authorize the new release.
+> **2026-09-05 execution amendment:** The current release target is **0.6.3**,
+> as recorded in the combined contract. The core-only 0.6.0/0.6.1 publications
+> remain preserved. Version 0.6.2 published all eleven packages and its
+> immutable GitHub Release, but final verification exposed a Bun 1.3.14 config
+> argument error in the consumer harness. Correct that invocation and test
+> the actual pinned CLI. The corrected Node/Bun consumers and complete local
+> diagnostic collector passed against 0.6.2; they do not replace hosted
+> certification. Certify and publish a new exact main commit at 0.6.3, keeping
+> the existing 0.6.2 packages, tag, assets, and failure evidence untouched.
+> Apply the operational steps below to the contract's current version and
+> artifact names; historical coordinates are provenance only. Apple/AWS remain
+> deferred. No old readiness packet may authorize the new release.
 
 > **Executor instructions**: Read this plan completely before acting. Run each
 > verification gate and confirm its expected result before continuing. A green

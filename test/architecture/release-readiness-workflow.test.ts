@@ -135,7 +135,7 @@ describe("release readiness workflow", () => {
     }
   });
 
-  it("collects exact GitHub authority and all twelve anonymous npm namespace coordinates without inventing repository fields", async () => {
+  it("collects current repository identity and retained placeholders after public latest advances", async () => {
     const changed = structuredClone(contract);
     const release = changed.releaseCertification;
     const registry = changed.npmRegistryBoundary;
@@ -170,16 +170,23 @@ describe("release readiness workflow", () => {
         repository,
         versions: Object.fromEntries(versions.map((version) => [version, {
           repository,
-          ...(ledger?.version !== version ? {} : {
-            dist: {
-              integrity: ledger.integrity,
-              tarball: `https://registry.npmjs.org/${name}/-/${name}-${version}.tgz`,
-            },
-          }),
+          dist: {
+            integrity: ledger?.version === version
+              ? ledger.integrity
+              : sha512Integrity(Buffer.from(`release:${name}@${version}\n`)),
+            tarball: `https://registry.npmjs.org/${name}/-/${name}-${version}.tgz`,
+          },
         }])),
         "dist-tags": distTags,
       }];
     }));
+    const advancedName = "effect-build-archives";
+    const advancedLedger: any = ledgers.get(advancedName);
+    const advancedPackument: any = packuments.get(`${registry.registry}/${advancedName}`);
+    const retainedPlaceholder = advancedPackument.versions[advancedLedger.version];
+    retainedPlaceholder.repository = { type: "git", url: "git+https://github.com/example/historical-placeholder.git" };
+    expect(advancedPackument["dist-tags"].latest).toBe("0.6.2");
+    expect(advancedPackument.versions["0.6.2"].dist.integrity).not.toBe(advancedLedger.integrity);
     let extraProtectionRule = false;
     const github = {
       readJson: (endpoint: string) => {
@@ -239,8 +246,17 @@ describe("release readiness workflow", () => {
     expect(observation.npm.packages.at(-1).name).toBe("effect-build-rolldown");
     expect(observation.npm.packages[1].repository).toEqual(repository);
     expect(observation.npm.packages[1].repository).not.toHaveProperty("directory");
+    const advancedObservation = observation.npm.packages.find(({ name }: any) => name === advancedName);
+    expect(advancedObservation.repository).toEqual(repository);
+    expect(advancedObservation.placeholder).toEqual({
+      version: advancedLedger.version,
+      bytes: advancedLedger.bytes,
+      sha256: `sha256:${advancedLedger.sha256}`,
+      integrity: advancedLedger.integrity,
+      tarballUrl: `${registry.registry}/${advancedName}/-/${advancedName}-${advancedLedger.version}.tgz`,
+    });
     expect(observation.npm.packages.find(({ name }: any) => name === "effect-build-bun")?.distTags).toEqual({
-      latest: "0.3.0",
+      latest: "0.6.2",
       reserved: "0.0.0-reserved.0",
     });
     expect(validateReadinessDirectObservation({
@@ -249,6 +265,28 @@ describe("release readiness workflow", () => {
       observedAt,
       observation,
     })).toEqual(observation);
+    delete advancedPackument.versions[advancedLedger.version];
+    await expect(collectDirectObservation({
+      contract: changed,
+      sourceSha: "a".repeat(40),
+      observedAt,
+      github,
+      npm,
+      workflowBytes,
+    })).rejects.toThrow(`anonymous npm placeholder metadata changed for ${advancedName}`);
+    advancedPackument.versions[advancedLedger.version] = retainedPlaceholder;
+    const reservationDrift = structuredClone(observation);
+    const reservation = reservationDrift.npm.packages.find(({ name }: any) => name === "effect-build-rolldown");
+    reservation.versions.push("0.1.0");
+    reservation.versions.sort();
+    expect(() =>
+      validateReadinessDirectObservation({
+        contract: changed,
+        sourceSha: "a".repeat(40),
+        observedAt,
+        observation: reservationDrift,
+      })
+    ).toThrow(/placeholder state changed for effect-build-rolldown/u);
     const hostile = structuredClone(observation);
     hostile.npm.packages[0].versions.push("0.7.0");
     expect(() =>

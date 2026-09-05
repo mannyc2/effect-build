@@ -1,6 +1,6 @@
 {
   "name": "effect-build-nfpm",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Effect-native nFPM system and MSIX package production.",
   "type": "module",
   "license": "MIT",

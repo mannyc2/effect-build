@@ -348,8 +348,9 @@ export const collectDirectObservation = async ({
     };
     const ledger = placeholderLedger.get(name);
     if (ledger !== undefined) {
+      const placeholderManifest = packument?.versions?.[ledger.version];
       const tarballUrl = `${registry.registry}/${name}/-/${name}-${ledger.version}.tgz`;
-      if (versionManifest?.dist?.tarball !== tarballUrl || versionManifest?.dist?.integrity !== ledger.integrity) {
+      if (placeholderManifest?.dist?.tarball !== tarballUrl || placeholderManifest?.dist?.integrity !== ledger.integrity) {
         throw new Error(`anonymous npm placeholder metadata changed for ${name}`);
       }
       const downloaded = await npm.readTarball(tarballUrl, ledger.bytes);
@@ -357,7 +358,7 @@ export const collectDirectObservation = async ({
         version: ledger.version,
         bytes: downloaded.byteLength,
         sha256: sha256Digest(downloaded),
-        integrity: versionManifest.dist.integrity,
+        integrity: placeholderManifest.dist.integrity,
         tarballUrl,
       };
     }

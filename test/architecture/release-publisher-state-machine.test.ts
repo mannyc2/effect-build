@@ -641,9 +641,9 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
             expect(firstFailed, first.publisher?.stderr).toBe(false);
             expect(state.mutations.map(({ name }) => name)).toEqual(canonicalPackageOrder);
             expect(state.mutations.every(({ committed, provenance }) => committed && provenance)).toBe(true);
-            expect(state.registry.packages["effect-build"]?.tags).toEqual({ latest: "0.6.2" });
+            expect(state.registry.packages["effect-build"]?.tags).toEqual({ latest: "0.6.3" });
             expect(state.registry.packages["effect-build-bun"]?.tags).toEqual({
-              latest: "0.6.2",
+              latest: "0.6.3",
               reserved: "0.0.0-reserved.0",
             });
             break;

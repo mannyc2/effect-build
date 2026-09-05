@@ -28,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: effect-build-apple-certification-v0.6.2
+  group: effect-build-apple-certification-v0.6.3
   cancel-in-progress: false
 
 jobs:
