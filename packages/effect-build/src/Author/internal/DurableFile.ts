@@ -1,4 +1,4 @@
-import { Cause, Crypto, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import { Cause, Crypto, Effect, Exit, FileSystem, Option, Path, Schema, type Scope } from "effect";
 import type { AbsolutePath, File, HashedFileObservation, ObservationMode, Provenance } from "../../Artifact.js";
 import { decimalBytes, fileMode, sha256Digest } from "../../Artifact.js";
 import { claimDurableDestination, releaseDurableDestination } from "./Claims.js";
@@ -132,7 +132,11 @@ export const publish = <
 ): Effect.Effect<
   Result<Mode, Inspection>,
   Failure | ProduceFailure | InspectFailure,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ProduceRequirements | InspectRequirements
+  | Crypto.Crypto
+  | FileSystem.FileSystem
+  | Path.Path
+  | Exclude<ProduceRequirements, Scope.Scope>
+  | Exclude<InspectRequirements, Scope.Scope>
 > =>
   Effect.scoped(
     Effect.gen(function*() {

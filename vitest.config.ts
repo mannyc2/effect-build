@@ -11,6 +11,7 @@ export default defineConfig({
       "effect-build/Artifact": core("Artifact"),
       "effect-build/Author/BorrowedOutput": core("Author/BorrowedOutput"),
       "effect-build/Author/Executable": core("Author/Executable"),
+      "effect-build/Author/NativeExecutable": core("Author/NativeExecutable"),
       "effect-build/Author/File": core("Author/File"),
       "effect-build/Author/Tool": core("Author/Tool"),
       "effect-build/Author/Tree": core("Author/Tree"),

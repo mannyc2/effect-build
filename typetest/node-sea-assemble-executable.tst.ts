@@ -21,12 +21,43 @@ export type _Main = Assert<
   >
 >;
 
+export type _Asset = Assert<
+  Same<
+    AssembleExecutable.Asset,
+    | { readonly _tag: "File"; readonly key: string; readonly path: string; readonly contents?: never }
+    | { readonly _tag: "Bytes"; readonly key: string; readonly contents: Uint8Array; readonly path?: never }
+  >
+>;
+
 const assembled = AssembleExecutable.assembleDirect({
   main: { _tag: "File", path: "main.cjs", format: "commonjs" },
   outfile: "dist/app",
   observation: "hashed",
-  assets: [{ key: "message", path: "assets/message.txt" }],
+  assets: [
+    { _tag: "File", key: "message", path: "assets/message.txt" },
+    { _tag: "Bytes", key: "binary", contents: new Uint8Array([0, 128, 255]) },
+  ],
 });
+
+const untaggedAsset = { key: "legacy", path: "assets/message.txt" };
+// @ts-expect-error! asset acquisition must explicitly select File or Bytes.
+const rejectedUntagged: AssembleExecutable.Asset = untaggedAsset;
+void rejectedUntagged;
+
+const mixedAsset = { _tag: "File" as const, key: "mixed", path: "assets/message.txt", contents: new Uint8Array() };
+// @ts-expect-error! File assets cannot also supply byte contents, including through a variable.
+const rejectedMixed: AssembleExecutable.Asset = mixedAsset;
+void rejectedMixed;
+
+const mixedBytesAsset = {
+  _tag: "Bytes" as const,
+  key: "mixed",
+  path: "assets/message.txt",
+  contents: new Uint8Array(),
+};
+// @ts-expect-error! Bytes assets cannot also supply a source path.
+const rejectedMixedBytes: AssembleExecutable.Asset = mixedBytesAsset;
+void rejectedMixedBytes;
 
 export type _Assemble = Assert<
   Same<

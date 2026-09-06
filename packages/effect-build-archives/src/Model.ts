@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import * as Artifact from "effect-build/Artifact";
+import * as FileAuthor from "effect-build/Author/File";
 
 /** The two deterministic archive encodings selected by the release contract. */
 export const Format = Schema.Literals(["zip", "tar.gz"] as const);
@@ -9,7 +9,7 @@ export type Format = typeof Format.Type;
 export class ArchiveEntry extends Schema.Class<ArchiveEntry>(
   "effect-build-archives/ArchiveEntry",
 )({
-  artifact: Artifact.HashedFileSchema,
+  artifact: FileAuthor.VerifiedInputSchema,
   path: Schema.NonEmptyString,
   executable: Schema.optionalKey(Schema.Boolean),
 }) {}

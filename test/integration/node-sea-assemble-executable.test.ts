@@ -12,6 +12,8 @@ import * as AssembleExecutable from "../../packages/effect-build-node-sea/src/Co
 import * as Command from "../../packages/effect-build-node-sea/src/Command/index.js";
 import * as AssembleModes from "../../packages/effect-build-node-sea/src/internal/AssembleModes.js";
 import { Runtime } from "../../packages/effect-build-node-sea/src/internal/Runtime.js";
+import * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import * as File from "../../packages/effect-build/src/Author/File.js";
 import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
@@ -95,7 +97,7 @@ describe.sequential("real Node SEA Command.AssembleExecutable exact cell", () =>
       main: { _tag: "File", path: join(fixture, "main.mjs"), format: "module" },
       outfile: join(root, "esm-app"),
       observation: "hashed",
-      assets: [{ key: "message", path: join(fixture, "message.txt") }],
+      assets: [{ _tag: "File", key: "message", path: join(fixture, "message.txt") }],
       disableExperimentalSEAWarning: true,
     }));
     expect(artifact.digest.value).toHaveLength(64);
@@ -113,6 +115,39 @@ describe.sequential("real Node SEA Command.AssembleExecutable exact cell", () =>
     }))).rejects.toMatchObject({ _tag: "NodeSeaCommandFailed", operation: "check-main" });
   }, 300_000);
 
+  it("executes an embedded verified byte asset after its source file is removed", async () => {
+    const contents = new Uint8Array([0, 1, 127, 128, 254, 255]);
+    const artifact = await run(Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const source = yield* File.publish({
+        destination: join(root, "verified-asset.bin"),
+        observation: "hashed",
+        provenance: Artifact.intrinsicProvenance("node-sea-verified-asset-integration"),
+      }, (candidate) => fileSystem.writeFile(candidate, contents));
+      return yield* File.withVerifiedBytes(source, (verified) =>
+        Effect.gen(function*() {
+          yield* fileSystem.remove(source.path);
+          return yield* AssembleExecutable.assembleDirect({
+            main: {
+              _tag: "Bytes",
+              contents: new TextEncoder().encode(
+                'const { getAsset } = require("node:sea"); console.log(Buffer.from(getAsset("__proto__")).toString("hex"));',
+              ),
+              format: "commonjs",
+            },
+            outfile: join(root, "verified-byte-asset-app"),
+            observation: "hashed",
+            assets: [{ _tag: "Bytes", key: "__proto__", contents: verified }],
+            disableExperimentalSEAWarning: true,
+          });
+        }));
+    }));
+    expect((await execute(artifact.path, [])).stdout.trim()).toBe(Buffer.from(contents).toString("hex"));
+    expect(artifact.target).toBe("linux-x64-gnu");
+    const executableBytes = await readFile(artifact.path);
+    expect(artifact.digest.value).toBe(createHash("sha256").update(executableBytes).digest("hex"));
+  }, 300_000);
+
   it("executes the package-private CJS/ESM code-cache and CJS snapshot candidates", async () => {
     const cjsCache = await run(AssembleModes.assembleDirect({
       main: { _tag: "File", path: join(fixture, "main.cjs"), format: "commonjs" },
@@ -126,7 +161,7 @@ describe.sequential("real Node SEA Command.AssembleExecutable exact cell", () =>
       main: { _tag: "File", path: join(fixture, "main.mjs"), format: "module" },
       outfile: join(root, "esm-cache-app"),
       observation: "hashed",
-      assets: [{ key: "message", path: join(fixture, "message.txt") }],
+      assets: [{ _tag: "File", key: "message", path: join(fixture, "message.txt") }],
       useCodeCache: true,
     }));
     expect((await execute(esmCache.path, [])).stdout).toContain("node-sea-esm-ok");

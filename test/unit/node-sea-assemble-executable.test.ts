@@ -9,6 +9,8 @@ import * as Assemble from "../../packages/effect-build-node-sea/src/Command/Asse
 import * as Command from "../../packages/effect-build-node-sea/src/Command/index.js";
 import * as AssembleModes from "../../packages/effect-build-node-sea/src/internal/AssembleModes.js";
 import { Runtime } from "../../packages/effect-build-node-sea/src/internal/Runtime.js";
+import * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import * as File from "../../packages/effect-build/src/Author/File.js";
 
 const roots: string[] = [];
 
@@ -39,6 +41,7 @@ interface Invocation {
 interface Control {
   readonly invocations: readonly Invocation[];
   readonly configs: readonly Record<string, unknown>[];
+  readonly assets: readonly Readonly<Record<string, Uint8Array>>[];
   readonly builds: () => number;
   readonly interrupted: () => boolean;
   readonly started: () => Promise<void>;
@@ -55,6 +58,7 @@ interface FakeNodeOptions {
     | "delay";
   readonly version?: string;
   readonly baseVersion?: string;
+  readonly onCheck?: () => void;
 }
 
 const makeSpawner = (
@@ -62,6 +66,7 @@ const makeSpawner = (
 ): readonly [ChildProcessSpawner.ChildProcessSpawner["Service"], Control] => {
   const invocations: Invocation[] = [];
   const configs: Record<string, unknown>[] = [];
+  const assets: Readonly<Record<string, Uint8Array>>[] = [];
   let buildCount = 0;
   let wasInterrupted = false;
   let signalStarted: () => void = () => {};
@@ -111,6 +116,7 @@ const makeSpawner = (
       if (first === "--help") return handle("Usage: node --build-sea CONFIG\n", "", 0);
       if (first === "-p") return handle('{"platform":"linux","arch":"x64","glibc":true}\n', "", 0);
       if (first === "--check") {
+        options.onCheck?.();
         return options.mode === "syntax-failure" ? handle("syntax-out", "syntax-error", 7) : handle("", "", 0);
       }
       if (first !== "--build-sea") throw new Error(`unexpected argv ${command.args.join(" ")}`);
@@ -122,6 +128,12 @@ const makeSpawner = (
       }
       const config = JSON.parse(readFileSync(command.args[1]!, "utf8")) as Record<string, unknown>;
       configs.push(config);
+      assets.push(Object.fromEntries(
+        Object.entries((config.assets ?? {}) as Record<string, string>).map(([key, path]) => [
+          key,
+          new Uint8Array(readFileSync(path)),
+        ]),
+      ));
       if (options.mode === "build-failure") return handle("build-out", "build-error", 19);
       if (options.mode !== "missing-output") {
         writeFileSync(String(config.output), options.mode === "invalid-output" ? "bad" : elfX64());
@@ -138,6 +150,7 @@ const makeSpawner = (
   return [service, {
     invocations,
     configs,
+    assets,
     builds: () => buildCount,
     interrupted: () => wasInterrupted,
     started: () => started,
@@ -197,7 +210,7 @@ describe("Node SEA Command.AssembleExecutable", () => {
       main: { _tag: "File", path: main, format: "module" },
       outfile: join(harness.root, "app"),
       observation: "hashed",
-      assets: [{ key: "message", path: asset }],
+      assets: [{ _tag: "File", key: "message", path: asset }],
       disableExperimentalSEAWarning: true,
     }));
     expect(Exit.isSuccess(first)).toBe(true);
@@ -247,6 +260,114 @@ describe("Node SEA Command.AssembleExecutable", () => {
     expect(failure(await mismatch.run(Assemble.assembleDirect(input(mismatch.root, "app")))))
       .toMatchObject({ _tag: "NodeSeaRelationRejected", relation: "node-builder-base" });
     expect(mismatch.control.builds()).toBe(0);
+  });
+
+  it("snapshots byte and relative file assets before checking the main", async () => {
+    const contents = new Uint8Array([0, 127, 255]);
+    let sourcePath = "";
+    const harness = makeHarness({
+      onCheck: () => {
+        contents.fill(42);
+        writeFileSync(sourcePath, "changed after preparation");
+      },
+    });
+    sourcePath = join(harness.root, "asset.bin");
+    writeFileSync(sourcePath, new Uint8Array([1, 2, 3]));
+    const exit = await harness.run(Assemble.assembleDirect({
+      ...input(harness.root, "byte-assets"),
+      cwd: harness.root,
+      assets: [
+        { _tag: "Bytes", key: "binary", contents },
+        { _tag: "Bytes", key: "empty", contents: new Uint8Array() },
+        { _tag: "Bytes", key: "__proto__", contents: new Uint8Array([4, 5, 6]) },
+        { _tag: "File", key: "relative", path: "asset.bin" },
+      ],
+    }));
+    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(contents).toEqual(new Uint8Array([42, 42, 42]));
+    expect(readFileSync(sourcePath, "utf8")).toBe("changed after preparation");
+    expect(harness.control.assets[0]).toEqual({
+      binary: new Uint8Array([0, 127, 255]),
+      empty: new Uint8Array(),
+      ["__proto__"]: new Uint8Array([4, 5, 6]),
+      relative: new Uint8Array([1, 2, 3]),
+    });
+    expect(readdirSync(harness.root).some((entry) => entry.startsWith(".effect-build-file-"))).toBe(false);
+  });
+
+  it("embeds verified bytes without reopening the finalized asset path", async () => {
+    const harness = makeHarness();
+    const contents = new Uint8Array([0, 128, 255]);
+    const exit = await harness.run(Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const artifact = yield* File.publish({
+        destination: join(harness.root, "verified.bin"),
+        observation: "hashed",
+        provenance: Artifact.intrinsicProvenance("node-sea-asset-test"),
+      }, (candidate) => fileSystem.writeFile(candidate, contents));
+      return yield* File.withVerifiedBytes(artifact, (verified) =>
+        Effect.gen(function*() {
+          yield* fileSystem.remove(artifact.path);
+          return yield* Assemble.assembleDirect({
+            ...input(harness.root, "verified-assets"),
+            assets: [{ _tag: "Bytes", key: "verified", contents: verified }],
+          });
+        }));
+    }));
+    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(harness.control.assets[0]).toEqual({ verified: contents });
+    expect(existsSync(join(harness.root, "verified.bin"))).toBe(false);
+  });
+
+  it("rejects an asset changed before verified consumption without starting assembly", async () => {
+    const harness = makeHarness();
+    const exit = await harness.run(Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const artifact = yield* File.publish({
+        destination: join(harness.root, "changed.bin"),
+        observation: "hashed",
+        provenance: Artifact.intrinsicProvenance("node-sea-asset-test"),
+      }, (candidate) => fileSystem.writeFile(candidate, new Uint8Array([1, 2, 3])));
+      yield* fileSystem.writeFile(artifact.path, new Uint8Array([3, 2, 1]));
+      return yield* File.withVerifiedBytes(artifact, (contents) =>
+        Assemble.assembleDirect({
+          ...input(harness.root, "rejected-assets"),
+          assets: [{ _tag: "Bytes", key: "changed", contents }],
+        }));
+    }));
+    expect(failure(exit)).toMatchObject({ _tag: "FileVerificationFailed" });
+    expect(harness.control.builds()).toBe(0);
+    expect(existsSync(join(harness.root, "rejected-assets"))).toBe(false);
+  });
+
+  it("rejects unknown, mixed, untagged, and malformed asset variants before checking the main", async () => {
+    const harness = makeHarness();
+    const malformed = [
+      [{ key: "asset", path: "asset.bin" }, "asset tag must be File or Bytes"],
+      [{ _tag: "Unknown", key: "asset" }, "asset tag must be File or Bytes"],
+      [
+        { _tag: "File", key: "asset", path: "asset.bin", contents: new Uint8Array() },
+        "unknown File asset field contents",
+      ],
+      [
+        { _tag: "Bytes", key: "asset", contents: new Uint8Array(), path: "asset.bin" },
+        "unknown Bytes asset field path",
+      ],
+      [{ _tag: "Bytes", key: "asset", contents: [], sourceName: "asset.bin" }, "unknown Bytes asset field sourceName"],
+      [{ _tag: "Bytes", key: "asset", contents: [] }, "asset asset contents must be Uint8Array"],
+      [{ _tag: "File", key: "asset", path: "" }, "asset asset path is invalid"],
+      [{ _tag: "Bytes", key: "", contents: new Uint8Array() }, "asset key must be non-empty and contain no NUL"],
+    ] as const;
+    for (const [asset, reason] of malformed) {
+      const exit = await harness.run(Assemble.assembleDirect({
+        ...input(harness.root, "invalid-asset"),
+        assets: [asset],
+      } as never));
+      expect(failure(exit)).toMatchObject({ _tag: "NodeSeaInputInvalid", reason });
+    }
+    expect(harness.control.invocations.some(({ args }) => args[0] === "--check")).toBe(false);
+    expect(harness.control.builds()).toBe(0);
+    expect(existsSync(join(harness.root, "invalid-asset"))).toBe(false);
   });
 
   it("materializes the package-private cache, snapshot, and explicit execArgv policies", async () => {
@@ -348,10 +469,13 @@ describe("Node SEA Command.AssembleExecutable", () => {
       .toMatchObject({ _tag: "NodeSeaInputInvalid", reason: "unknown input field useCodeCache" });
     const duplicateAssets = {
       ...input(harness.root, "assets"),
-      assets: [{ key: "x", path: "a" }, { key: "x", path: "b" }],
+      assets: [
+        { _tag: "Bytes" as const, key: "x", contents: new Uint8Array() },
+        { _tag: "File" as const, key: "x", path: "b" },
+      ],
     };
     expect(failure(await harness.run(Assemble.assembleDirect(duplicateAssets))))
-      .toMatchObject({ _tag: "NodeSeaInputInvalid" });
+      .toMatchObject({ _tag: "NodeSeaInputInvalid", reason: "duplicate asset key x" });
     expect(harness.control.builds()).toBe(0);
   });
 

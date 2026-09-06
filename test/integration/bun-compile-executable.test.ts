@@ -2,12 +2,14 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import type * as Artifact from "effect-build/Artifact";
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as Archive from "../../packages/effect-build-archives/src/Archive.js";
 import * as Compile from "../../packages/effect-build-bun/src/Command/CompileExecutable.js";
 import * as Runtime from "../../packages/effect-build-bun/src/internal/Runtime.js";
 import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
@@ -65,7 +67,7 @@ const run = <A, E>(
   );
 
 describe("real Bun 1.3.14 compileExecutable", () => {
-  it("compiles, authenticates, atomically publishes, hashes, and executes the host artifact", async () => {
+  it("compiles and directly archives the host executable while preserving its identity and exact bytes", async () => {
     const outfile = executablePath("app");
     const artifact = await run(Compile.compileExecutable({
       entrypoints: [entrypoint],
@@ -84,8 +86,39 @@ describe("real Bun 1.3.14 compileExecutable", () => {
     });
     expect(await realpath(artifact.path)).toBe(await realpath(outfile));
     expect(artifact.digest.value).toMatch(/^[0-9a-f]{64}$/u);
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(artifact.digest.value);
     expect(artifact.tool.participants[0].content.digest.value).toMatch(/^[0-9a-f]{64}$/u);
     expect((await execute(artifact.path, [])).stdout).toBe("effect-build-ok\n");
+
+    const identity = structuredClone(artifact);
+    const entryPath = `bin/${basename(artifact.path)}`;
+    const entry = new Archive.ArchiveEntry({ artifact, path: entryPath, executable: true });
+    expect(entry.artifact).toBe(artifact);
+    const archive = await Effect.runPromise(
+      Archive.archive(
+        new Archive.ArchiveInput({
+          format: "tar.gz",
+          entries: [entry],
+          outfile: join(root, "app.tar.gz"),
+        }),
+      ).pipe(Effect.provide(Archive.layer), Effect.provide(NodeServices.layer)),
+    );
+    const tar = process.env.EFFECT_BUILD_TAR_BIN ?? "tar";
+    const listing = await execute(tar, ["-tvzf", archive.path]);
+    expect(listing.stdout.trim().split("\n")).toHaveLength(1);
+    expect(listing.stdout).toMatch(/^-rwxr-xr-x\s/mu);
+    expect(listing.stdout).toContain(entryPath);
+    const extracted = join(root, "extracted");
+    await mkdir(extracted);
+    await execute(tar, ["-xzf", archive.path, "-C", extracted]);
+    const extractedExecutable = join(extracted, entryPath);
+    const extractedBytes = await readFile(extractedExecutable);
+    expect(extractedBytes.equals(bytes)).toBe(true);
+    expect(createHash("sha256").update(extractedBytes).digest("hex")).toBe(artifact.digest.value);
+    if (process.platform !== "win32") expect((await stat(extractedExecutable)).mode & 0o777).toBe(0o755);
+    expect((await execute(extractedExecutable, [])).stdout).toBe("effect-build-ok\n");
+    expect(artifact).toEqual(identity);
+    expect((await readFile(artifact.path)).equals(bytes)).toBe(true);
     await observeProviderNativeEvidence("CAN-BUN-012");
   }, 120_000);
 

@@ -297,7 +297,7 @@ describe("directly active final-public verifier", () => {
     expect(result.receipt.npmPackages).toHaveLength(11);
     expect(result.receipt.releaseAssets).toHaveLength(12);
     expect(result.receipt.provenance).toHaveLength(11);
-    expect(result.receipt.consumerSmoke.publicModules).toHaveLength(42);
+    expect(result.receipt.consumerSmoke.publicModules).toHaveLength(43);
     expect(result.receiptBytes.toString()).toBe(canonicalJson(result.receipt));
     expect(input.sigstoreVerify).toHaveBeenCalledTimes(11);
     expect(input.readinessVerify).toHaveBeenCalledTimes(1);

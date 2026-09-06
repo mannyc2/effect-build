@@ -101,6 +101,9 @@ part of a rollback transaction.
 
 ## Verify before downstream use
 
+See [artifact composition](artifact-composition.md) for verified consumer inputs, author-owned scopes, shared native
+observations, and Node SEA byte assets.
+
 A durable identity records what was committed; it cannot prevent later filesystem mutation. `File.withVerifiedBytes`
 checks the current file against that identity and provides a defensive byte copy. `Tree.withVerifiedSnapshot` revalidates
 the current tree and reconstructs a private snapshot for the continuation. Downstream work consumes those verified bytes

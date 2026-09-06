@@ -87,7 +87,7 @@ const CanonicalTimestamp = Schema.String.check(
 export class PackageContent extends Schema.Class<PackageContent>(
   "effect-build-nfpm/PackageContent",
 )({
-  artifact: ArtifactSchema.HashedFileSchema,
+  artifact: FileAuthor.VerifiedInputSchema,
   dst: PackagePath,
   /** Exact portable permission mode rendered as nFPM `file_info.mode`. */
   mode: Schema.optionalKey(ArtifactSchema.FileModeSchema),

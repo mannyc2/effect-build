@@ -60,9 +60,9 @@ The `Package` module exposes `buildDeb`, `buildRpm`, `buildApk`, `buildArchLinux
 `buildPackage(format, input)`. `formatProjection` supplies each format's extension and media type. MSIX additionally
 requires the closed `MsixOptions` configuration; it produces unsigned output for a separate signing step.
 
-Payloads must be `HashedFile` values from `File.publish` or a finalized tree's file projection. A compiler's
-`HashedExecutable` is a distinct identity; use `File.withVerifiedBytes` with `File.publish` to finalize those bytes
-as a file payload first. Payload artifacts are verified before private materialization. The selected nFPM bytes are checked before launch.
+Payloads accept `File.VerifiedInput`: a `HashedFile` from `File.publish` or a finalized tree's file projection, or a
+compiler's `HashedExecutable`. Pass the original artifact directly. Core verifies its bytes before private
+materialization, preserving the original identity and provenance. The selected nFPM bytes are checked before launch.
 Schemas constrain metadata, absolute destinations, modes, timestamps, format fields, and output extensions. Raw native
 configuration, scripts, globs, environment expansion, and signing options are not accepted.
 

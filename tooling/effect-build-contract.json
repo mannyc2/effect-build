@@ -33,11 +33,11 @@
       },
       {
         "path": "scripts/effect-build-contract/policy.mjs",
-        "sha256": "b4c1c1e2b05a0f64a810f8d308c885ae73dfad4810ee0c4978a9568498a76718"
+        "sha256": "47fb2c8c8f75459d5575f0d48839ea186f4ead170e915b033692b67890d4ccbc"
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "88c5b954f8d071e030df66dd783490bb6253b738e470405ce5943a1f95693ddd"
+        "sha256": "5e100b7d3fe1f81b1ff1b52c98ad6b26f59f7d36ade04ea6c04d125bb4e26ad6"
       },
       {
         "path": "package.json",
@@ -204,7 +204,7 @@
     ]
   },
   "coreCapabilityRegister": {
-    "count": 8,
+    "count": 9,
     "capabilities": [
       {
         "id": "CORE-ARTIFACT-IDENTITY",
@@ -237,7 +237,9 @@
           "revalidation",
           "atomic-no-replace-file-commit",
           "undelivered-commit-rollback",
-          "verified-byte-consumption"
+          "verified-byte-consumption",
+          "canonical-hashed-file-or-executable-input",
+          "callback-scope-ownership"
         ]
       },
       {
@@ -252,6 +254,7 @@
           "atomic-tree-rename",
           "undelivered-commit-rollback",
           "committed-file-projection",
+          "callback-scope-ownership",
           "verified-tree-consumption"
         ]
       },
@@ -264,7 +267,21 @@
           "native-inspection",
           "revalidation",
           "atomic-no-replace-executable-commit",
+          "callback-scope-ownership",
           "undelivered-commit-rollback"
+        ]
+      },
+      {
+        "id": "CORE-NATIVE-EXECUTABLE",
+        "module": "Author/NativeExecutable",
+        "visibility": "public",
+        "owns": [
+          "native-header-parsing",
+          "native-file-observation"
+        ],
+        "evidence": [
+          "docs/artifact-composition.md",
+          "test/unit/native-executable-inspection.test.ts"
         ]
       },
       {
@@ -1867,6 +1884,19 @@
         "operationId": "CAN-NODE-001",
         "provider": "node-sea",
         "semanticIdentity": "node-sea / assemble-direct / selected-command / one-shot / {caller-owned-value, atomic-published-durable}",
+        "inputContract": {
+          "assetSources": [
+            "File",
+            "Bytes"
+          ],
+          "assetDiscriminator": "_tag",
+          "assetKeys": "unique-nonempty-nul-free",
+          "byteOwnership": "defensive-copy-during-preparation",
+          "evidence": [
+            "docs/artifact-composition.md",
+            "test/integration/node-sea-assemble-executable.test.ts"
+          ]
+        },
         "mechanism": "selected-command",
         "resultSemantics": {
           "providerPublication": "provider-direct-durable",
@@ -4023,6 +4053,12 @@
         "exports": [
           "archive"
         ],
+        "inputs": "Author/File.VerifiedInputSchema",
+        "layout": "canonical-NFC-case-insensitive-ancestor-kinds",
+        "evidence": [
+          "docs/artifact-composition.md",
+          "test/integration/bun-compile-executable.test.ts"
+        ],
         "visibility": "public",
         "finalization": {
           "mode": "canonical-finalizing",
@@ -4037,6 +4073,10 @@
         "module": "SourceArchive",
         "exports": [
           "sourceArchive"
+        ],
+        "layout": "canonical-NFC-case-insensitive-ancestor-kinds",
+        "evidence": [
+          "test/unit/archive-layout-composition.test.ts"
         ],
         "visibility": "public",
         "finalization": {
@@ -4072,6 +4112,11 @@
           "buildApk",
           "buildArchLinux",
           "buildMsix"
+        ],
+        "inputs": "Author/File.VerifiedInputSchema",
+        "evidence": [
+          "docs/artifact-composition.md",
+          "test/integration/nfpm-real.test.ts"
         ],
         "visibility": "public",
         "finalization": {
@@ -5605,7 +5650,7 @@
       "version": "0.6.3",
       "tag": "v0.6.3",
       "packageCount": 11,
-      "moduleCount": 42,
+      "moduleCount": 43,
       "releaseAssetCount": 12
     },
     "npmOidcCertification": {
@@ -8645,7 +8690,7 @@
       "packageSource": "publicApiProjection.packages",
       "packageCount": 11,
       "moduleSource": "publicApiProjection.packages package roots and subpaths",
-      "moduleCount": 42,
+      "moduleCount": 43,
       "reservationSource": "publicApiProjection.privatePackages",
       "reservationCount": 1
     }
@@ -8663,6 +8708,7 @@
           "Executable",
           "File",
           "Matrix",
+          "NativeExecutable",
           "SystemTarget",
           "Tool",
           "Tree"
@@ -8679,6 +8725,9 @@
           ],
           "./Author/File": [
             "CORE-FINALIZE-FILE"
+          ],
+          "./Author/NativeExecutable": [
+            "CORE-NATIVE-EXECUTABLE"
           ],
           "./Author/Tool": [
             "CORE-SELECTED-TOOL"
@@ -8708,6 +8757,9 @@
           ],
           "Matrix": [
             "CORE-MATRIX"
+          ],
+          "NativeExecutable": [
+            "CORE-NATIVE-EXECUTABLE"
           ],
           "SystemTarget": [
             "CORE-SYSTEM-TARGET"
