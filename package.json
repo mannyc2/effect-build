@@ -50,7 +50,7 @@
     "@effect/platform-deno": "4.0.0-rc.108",
     "@effect/platform-node": "4.0.0-rc.108",
     "@types/node": "24.3.0",
-    "dprint": "0.49.1",
+    "dprint": "0.57.1",
     "effect": "4.0.0-rc.108",
     "effect-build": "workspace:*",
     "effect-build-apple": "workspace:*",
@@ -68,7 +68,7 @@
     "npm": "11.11.0",
     "oxlint": "0.15.1",
     "rolldown": "1.2.5",
-    "tstyche": "7.2.2",
+    "tstyche": "7.2.3",
     "typescript": "6.0.3",
     "vitest": "3.2.6",
     "yaml": "2.9.0"
