@@ -8,10 +8,9 @@
     ]
   },
   "include": [
-    "examples/bun/src/**/*.ts",
-    "examples/deno/src/**/*.ts",
-    "examples/esbuild/src/**/*.ts",
-    "examples/node-sea/src/**/*.ts"
+    "examples/*/src/**/*.ts",
+    "examples/*/app/**/*.ts",
+    "examples/*/test/**/*.ts"
   ],
   "exclude": [
     "node_modules"

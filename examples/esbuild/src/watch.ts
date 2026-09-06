@@ -1,17 +1,19 @@
-import { Effect } from "effect";
+import { NodeRuntime } from "@effect/platform-node";
+import { Console, Effect } from "effect";
 import { Context } from "effect-build-esbuild/Api";
 
-// The scoped API owner drains cancellation before disposal on interruption.
-await Effect.runPromise(
-  Effect.scoped(
-    Effect.gen(function*() {
-      const context = yield* Context.make({
-        entryPoints: ["src/main.ts"],
-        bundle: true,
-        write: false,
-      });
-      yield* context.watch();
-      return yield* Effect.never;
-    }),
-  ),
-);
+const program = Effect.gen(function*() {
+  const context = yield* Context.make({
+    entryPoints: ["src/main.ts"],
+    bundle: true,
+    format: "esm",
+    write: false,
+    logLevel: "info",
+  });
+  yield* context.watch();
+  yield* Console.log("Watching src/main.ts in memory. Edit the file to rebuild; press Ctrl+C to stop.");
+  return yield* Effect.never;
+}).pipe(Effect.scoped);
+
+// runMain interrupts on Ctrl+C; the scope cancels pending work and disposes esbuild.
+NodeRuntime.runMain(program);

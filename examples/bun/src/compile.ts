@@ -1,18 +1,19 @@
-import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Console, Effect } from "effect";
 import { Command } from "effect-build-bun";
 
-const artifact = await Effect.runPromise(
-  Command.CompileExecutable.compileExecutable({
-    entrypoints: ["src/main.ts"],
-    outfile: "dist/app",
-    target: "bun-linux-x64",
-    observation: "hashed",
-    options: { minify: true, sourcemap: "inline" },
-  }).pipe(
-    Effect.provide(Command.layer()),
-    Effect.provide(NodeServices.layer),
+const program = Command.CompileExecutable.compileExecutable({
+  entrypoints: ["src/main.ts"],
+  outfile: "dist/hello.exe",
+  // Omit target to compile for the selected Bun executable's host.
+  observation: "hashed",
+  options: { minify: true, sourcemap: "inline" },
+}).pipe(
+  Effect.tap((artifact) =>
+    Console.log(`${artifact.path} ${artifact.target} ${artifact.bytes} bytes sha256=${artifact.digest.value}`)
   ),
+  Effect.provide(Command.layer()),
+  Effect.provide(NodeServices.layer),
 );
 
-console.log(`${artifact.path} ${artifact.target} ${artifact.bytes} sha256=${artifact.digest.value}`);
+NodeRuntime.runMain(program);

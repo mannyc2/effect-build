@@ -2,8 +2,20 @@
   "name": "effect-build-example-esbuild",
   "private": true,
   "type": "module",
+  "scripts": {
+    "bundle": "node src/bundle.ts",
+    "bundle:directory": "node src/bundle-to-directory.ts",
+    "plugin": "node src/plugin.ts",
+    "watch": "node src/watch.ts",
+    "test": "node --test test/context.test.ts",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
+  },
   "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.108",
     "effect": "4.0.0-rc.108",
     "effect-build-esbuild": "workspace:^"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

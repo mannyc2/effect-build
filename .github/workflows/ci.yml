@@ -52,6 +52,8 @@ jobs:
         shell: bash
         run: echo "EFFECT_BUILD_BUN=$(bun -e 'console.log(process.execPath)')" >> "$GITHUB_ENV"
       - run: bun run test:integration:bun
+      - run: bun run build
+      - run: bun run --cwd examples/cli test:compile
 
   integration-deno:
     name: Real deno (${{ matrix.os }})

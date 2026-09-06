@@ -20,6 +20,7 @@
     "*.ts",
     "*.json",
     "README.md",
+    "CONTRIBUTING.md",
     "AGENTS.md",
     "docs/**/*.md",
     "examples/**/*.md",
