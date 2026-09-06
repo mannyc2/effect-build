@@ -35,11 +35,6 @@ import * as Model from "../src/Model.js";
 import * as Notary from "../src/Notary.js";
 import * as Staple from "../src/Staple.js";
 
-// @ts-expect-error Apple certification helpers are intentionally private Node script modules.
-const { extractAppleOperationToolObservations } = await import(
-  "../../../scripts/apple-certification/tool-observation.mjs"
-);
-
 interface Invocation {
   readonly command: string;
   readonly args: readonly string[];
@@ -101,35 +96,6 @@ const thinMachO = (file: string, architecture: "arm64" | "x64"): void => {
 
 const sha256 = (file: string): string => createHash("sha256").update(readFileSync(file)).digest("hex");
 const digest = "a".repeat(64);
-
-interface ExpectedAppleTool {
-  readonly name: string;
-  readonly capabilityId: string;
-}
-
-const appleToolLineage = (JSON.parse(
-  readFileSync(new URL("../../../tooling/effect-build-contract.json", import.meta.url), "utf8"),
-) as {
-  readonly releaseCertification: {
-    readonly apple: {
-      readonly operationToolLineage: {
-        readonly byOperationId: Readonly<Record<string, Readonly<Record<string, readonly ExpectedAppleTool[]>>>>;
-      };
-    };
-  };
-}).releaseCertification.apple.operationToolLineage.byOperationId;
-
-const extractedToolNames = (
-  operationId: string,
-  product: string,
-  carriers: readonly unknown[],
-): readonly string[] =>
-  extractAppleOperationToolObservations({
-    operationId,
-    product,
-    carriers,
-    expectedComponents: appleToolLineage[operationId]![product]!,
-  }).map((observation: { readonly name: string }) => observation.name);
 
 const toolObservation = <const Name extends string>(name: Name, version = "18.0"): Tool.Observation<Name> => ({
   name,
@@ -895,10 +861,6 @@ describe("effect-build-apple hard cut", () => {
       ],
     });
     expect(dmgs.x64.provenance).toEqual(dmgs.arm64.provenance);
-    expect(extractedToolNames("PROD-APPLE-005", "dmg", [dmgs.arm64.provenance])).toEqual([
-      "codesign",
-      "hdiutil",
-    ]);
     expect(dmgs).not.toHaveProperty("operationTools");
     expect(dmgs.arm64.architecture).toBe("arm64");
     expect(dmgs.x64.architecture).toBe("x64");
@@ -1135,12 +1097,6 @@ describe("effect-build-apple hard cut", () => {
     expect((packages.arm64.provenance as Tool.Observation<"productbuild">).participants.map(({ version }) => version))
       .toEqual(["18.0", "18.0", "15.0", "18.0"]);
     expect(packages.x64.provenance).toEqual(packages.arm64.provenance);
-    expect(extractedToolNames("PROD-APPLE-006", "pkg", [packages.arm64.provenance])).toEqual([
-      "codesign",
-      "pkgbuild",
-      "productbuild",
-      "pkgutil",
-    ]);
     expect(packages).not.toHaveProperty("operationTools");
     expect(packages.arm64.architecture).toBe("arm64");
     expect(packages.x64.architecture).toBe("x64");
@@ -1541,10 +1497,6 @@ describe("effect-build-apple hard cut", () => {
       ],
     });
     expect(submitted.tool).toMatchObject({ name: "notarytool", participants: [{ version: "18.0" }] });
-    expect(extractedToolNames("PROD-APPLE-007", "pkg", [submitted.submissionTool])).toEqual([
-      "pkgutil",
-      "notarytool",
-    ]);
     expect(submitted).not.toHaveProperty("structuralVerifier");
     expect(JSON.stringify(submitted)).not.toContain(profile);
     const stagedSubmission = runnerOneInvocations[5]!.args[1]!;
@@ -1575,10 +1527,6 @@ describe("effect-build-apple hard cut", () => {
         { name: "codesign", version: "18.0" },
       ],
     });
-    expect(extractedToolNames("PROD-APPLE-007", "dmg", [diskImageSubmission.submissionTool])).toEqual([
-      "codesign",
-      "notarytool",
-    ]);
 
     const reference = new Notary.SubmissionReference({
       submissionId: submitted.submissionId,
@@ -1658,8 +1606,8 @@ describe("effect-build-apple hard cut", () => {
     expect(log.submissionId).toBe(reference.submissionId);
     expect(log.artifactDigest.value).toBe(artifactDigest);
     expect(log.submissionTool).toBe(reference.submissionTool);
-    expect(extractedToolNames("PROD-APPLE-009", "pkg", [observed.tool])).toEqual(["notarytool"]);
-    expect(extractedToolNames("PROD-APPLE-010", "pkg", [log.tool])).toEqual(["notarytool"]);
+    expect(observed.tool.name).toBe("notarytool");
+    expect(log.tool.name).toBe("notarytool");
     expect(log.issues[0]?.message).toHaveLength(1_100_000);
     expect(JSON.stringify({ observed, log })).not.toContain(profile);
     expect(runnerTwoInvocations[4]!.args).toEqual([
@@ -1984,9 +1932,6 @@ describe("effect-build-apple hard cut", () => {
       },
       transportTool: { name: "ditto", participants: [{ version: "18.0" }] },
     });
-    expect(
-      extractedToolNames("PROD-APPLE-008", "app", [submission.submissionTool, submission.transportTool]),
-    ).toEqual(["codesign", "ditto", "notarytool"]);
     expect(submission.artifactDigest.value).toHaveLength(64);
     expect(acceptance.stapleTarget.artifactDigest.value).not.toBe(submission.artifactDigest.value);
     expect(notaryInvocations.map(({ args }) => args[0])).toEqual([
@@ -2040,10 +1985,6 @@ describe("effect-build-apple hard cut", () => {
         { name: "codesign", version: "18.0" },
       ],
     });
-    expect(extractedToolNames("PROD-APPLE-011", "app", [stapled.provenance])).toEqual([
-      "codesign",
-      "stapler",
-    ]);
 
     const changedApp = join(root, "Changed.app");
     cpSync(sourceApp, changedApp, { recursive: true, verbatimSymlinks: true });
@@ -2316,10 +2257,6 @@ describe("effect-build-apple hard cut", () => {
         { name: "codesign", version: "18.0" },
       ],
     });
-    expect(extractedToolNames("PROD-APPLE-012", "dmg", [stapled.provenance])).toEqual([
-      "codesign",
-      "stapler",
-    ]);
     expect(stapled.notarizationTicket).toMatchObject({
       submissionTool: { name: "notarytool", participants: [{ version: "17.4" }] },
       acceptanceTool: { name: "notarytool", participants: [{ version: "18.0" }] },
@@ -2369,10 +2306,6 @@ describe("effect-build-apple hard cut", () => {
         { name: "pkgutil", version: "15.0" },
       ],
     });
-    expect(extractedToolNames("PROD-APPLE-012", "pkg", [stapledPackage.provenance])).toEqual([
-      "pkgutil",
-      "stapler",
-    ]);
 
     const mismatchedAcceptance = new Notary.AcceptedReference({
       ...acceptance,
@@ -2465,25 +2398,17 @@ describe("effect-build-apple hard cut", () => {
         return { app, dmg, pkg };
       }).pipe(Effect.provide(assessProvider)),
     );
+    expect(app.gatekeeper.name).toBe("spctl");
     expect(app.structuralVerifier.name).toBe("codesign");
     expect(app.identityKind).toBe("tree-manifest");
     expect(app.artifactDigest.value).toHaveLength(64);
     expect(dmg.accepted).toBe(true);
+    expect(dmg.gatekeeper.name).toBe("spctl");
+    expect(dmg.structuralVerifier.name).toBe("codesign");
     expect(dmg.identityKind).toBe("file-bytes");
     expect(dmg.artifactDigest.value).toBe(sha256(stapled.path));
+    expect(pkg.gatekeeper.name).toBe("spctl");
     expect(pkg.structuralVerifier.name).toBe("pkgutil");
-    expect(extractedToolNames("PROD-APPLE-013", "app", [app.gatekeeper, app.structuralVerifier])).toEqual([
-      "spctl",
-      "codesign",
-    ]);
-    expect(extractedToolNames("PROD-APPLE-013", "dmg", [dmg.gatekeeper, dmg.structuralVerifier])).toEqual([
-      "spctl",
-      "codesign",
-    ]);
-    expect(extractedToolNames("PROD-APPLE-013", "pkg", [pkg.gatekeeper, pkg.structuralVerifier])).toEqual([
-      "spctl",
-      "pkgutil",
-    ]);
     const commands = assessInvocations.slice(3).map(({ command, args }) => [basename(command), ...args]);
     const assessedApp = commands[0]!.at(-1)!;
     const assessedDmg = commands[2]!.at(-1)!;

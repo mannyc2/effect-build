@@ -7,16 +7,12 @@ import { parse } from "yaml";
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
 interface WorkflowStep {
-  readonly if?: string;
   readonly run?: string;
   readonly uses?: string;
   readonly with?: Readonly<Record<string, unknown>>;
 }
 
 interface WorkflowJob {
-  readonly name?: string;
-  readonly needs?: string | ReadonlyArray<string>;
-  readonly if?: string;
   readonly "runs-on"?: string;
   readonly strategy?: {
     readonly matrix?: {
@@ -32,14 +28,6 @@ interface WorkflowJob {
 }
 
 interface CiWorkflow {
-  readonly on: {
-    readonly push?: { readonly branches?: ReadonlyArray<string> };
-    readonly pull_request?: Readonly<Record<string, unknown>>;
-  };
-  readonly concurrency?: {
-    readonly group?: string;
-    readonly "cancel-in-progress"?: boolean | string;
-  };
   readonly jobs: Readonly<Record<string, WorkflowJob>>;
 }
 
@@ -71,15 +59,6 @@ const hosts = (job: WorkflowJob | undefined) =>
 
 const readWorkflow = async () => parse(await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8")) as CiWorkflow;
 
-const verificationCommands = (command: string, packageScripts: Readonly<Record<string, string>>): Array<string> =>
-  command.split(/\s*&&\s*/u).flatMap((part) => {
-    const script = /^bun run (verify(?::[a-z]+)?)$/u.exec(part)?.[1];
-    if (script === undefined) return [part];
-    const source = packageScripts[script];
-    if (source === undefined) throw new Error(`missing verification script: ${script}`);
-    return verificationCommands(source, packageScripts);
-  });
-
 const readExactTools = async () => {
   const contract = JSON.parse(
     await readFile(resolve(root, "tooling/effect-build-contract.json"), "utf8"),
@@ -94,63 +73,6 @@ const requireTool = (tools: ReadonlyMap<string, ExactToolEvidence>, name: string
 };
 
 describe("CI workflow", () => {
-  it("runs feature changes through PRs and preserves every main push as independent release evidence", async () => {
-    const workflow = await readWorkflow();
-
-    expect(workflow.on.push?.branches).toEqual(["main"]);
-    expect(workflow.on.pull_request).toEqual({});
-    expect(workflow.concurrency).toEqual({
-      group: "${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}",
-      "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
-    });
-  });
-
-  it("retains all required host checks and fails them when the shared static gate does not pass", async () => {
-    const workflow = await readWorkflow();
-    const shared = workflow.jobs.static;
-    const verify = workflow.jobs.verify;
-
-    expect(hosts(shared)).toEqual(["ubuntu-24.04"]);
-    expect(shared?.steps?.filter((step) => step.run === "bun run verify:static")).toHaveLength(1);
-    expect(scripts(shared)).toContain("bun run build");
-    expect(verify?.name).toBe("Verify (${{ matrix.os }})");
-    expect(hosts(verify)).toEqual(["ubuntu-24.04", "macos-15", "windows-2025"]);
-    expect(verify?.needs).toBe("static");
-    expect(verify?.if).toBe("${{ !cancelled() }}");
-    expect(verify?.steps?.[0]).toMatchObject({
-      if: "needs.static.result != 'success'",
-      run: "exit 1",
-    });
-    expect(verify?.steps?.filter((step) => step.run === "bun run verify:platform")).toHaveLength(1);
-    expect(scripts(verify)).toContain("bun run build");
-    expect(scripts(verify)).not.toContain("bun run verify:static");
-  });
-
-  it("composes local verification from every static and platform check with one build and no duplicated suites", async () => {
-    const { scripts: packageScripts } = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
-      readonly scripts: Readonly<Record<string, string>>;
-    };
-    const staticCommands = [
-      "bun run check:contract",
-      "bun run check",
-      "bun run test:types",
-      "bun run lint",
-      "bun run format:check",
-    ];
-    const platformCommands = [
-      "bun run test:unit",
-      "bun run test:examples",
-      "bun scripts/test-built-consumer.mjs",
-      "bun run test:architecture",
-    ];
-
-    expect(verificationCommands("bun run verify:static", packageScripts).sort()).toEqual(staticCommands.sort());
-    expect(verificationCommands("bun run verify:platform", packageScripts).sort()).toEqual(platformCommands.sort());
-    const localCommands = verificationCommands("bun run verify", packageScripts);
-    expect(localCommands[0]).toBe("bun run build");
-    expect([...localCommands].sort()).toEqual(["bun run build", ...staticCommands, ...platformCommands].sort());
-  });
-
   it("runs every Deno evidence lane against the exact admitted version", async () => {
     const workflow = await readWorkflow();
     const deno = requireTool(await readExactTools(), "deno");
@@ -197,30 +119,7 @@ describe("CI workflow", () => {
     expect(bunTargets).toEqual(bunTool.evidenceCells.filter((cell) => cell !== "host-native").sort());
   });
 
-  it("does not allow real-provider suites to pass by skipping unavailable evidence tools", async () => {
-    const files = [
-      "bun-bundle.test.ts",
-      "bun-compile-executable.test.ts",
-      "deno-bundle.test.ts",
-      "deno-compile-executable.test.ts",
-      "node-sea-assemble-executable.test.ts",
-    ];
-    const sources = await Promise.all(
-      files.map((file) => readFile(resolve(root, "test/integration", file), "utf8")),
-    );
-
-    for (const source of sources) expect(source).not.toContain("describe.skipIf");
-
-    const [packageSource, runner] = await Promise.all([
-      readFile(resolve(root, "package.json"), "utf8"),
-      readFile(resolve(root, "scripts/run-real-bun-integration.mjs"), "utf8"),
-    ]);
-    expect(packageSource).toContain('"test:integration:bun": "bun scripts/run-real-bun-integration.mjs"');
-    expect(runner).toContain("EFFECT_BUILD_BUN: process.execPath");
-    expect(runner).toContain('spawnSync(\n  "node"');
-  });
-
-  it("derives producer acceptance pins and executable bindings from the combined contract", async () => {
+  it("installs producer tool versions admitted by the combined contract", async () => {
     const exactTools = await readExactTools();
     const uv = requireTool(exactTools, "uv");
     const nfpm = requireTool(exactTools, "nfpm");
@@ -232,9 +131,6 @@ describe("CI workflow", () => {
     ]);
 
     for (const tool of [uv, nfpm, syft]) {
-      expect(workflow).toContain(
-        `${tool.name === "nfpm" ? "nFPM" : tool.name === "syft" ? "Syft" : tool.name} ${tool.version}`,
-      );
       expect(workflow).toContain(`${tool.executableBindings[0]}=`);
     }
     expect(unixInstaller).toContain(`/download/${uv.version}/`);

@@ -16,9 +16,12 @@
 > completed implementation steps, or treat their pending boxes as current
 > blockers. Existing user authorization carries forward within its scope;
 > these historical per-action handoffs do not require it to be requested
-> again. Current artifact, OIDC, mutable-state, unknown-outcome, and
-> partial-publication preconditions remain enforced by the contract and
-> workflows. Green verification still grants no new mutation authority.
+> again. The certification/readiness protocol, custom trust machinery, and
+> deferred Apple certification described here have been removed. The current
+> workflow uses tag-authorized publication, retained candidate bytes, and
+> direct registry reconciliation. Its behavior and one-time settings migration
+> are documented in release-security.md; this plan grants no publication
+> authority.
 
 ## Historical execution record
 

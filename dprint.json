@@ -24,7 +24,9 @@
     "AGENTS.md",
     "docs/**/*.md",
     "examples/**/*.md",
-    "packages/**/*.md"
+    "packages/**/*.md",
+    "scripts/release/**/*.mjs",
+    "scripts/test-built-consumer.mjs"
   ],
   "excludes": [
     "node_modules",

@@ -1,176 +1,147 @@
-# Release boundary and evidence
+# Release behavior and trust boundaries
 
-The combined contract separates source implementation, ordinary CI,
-non-publishing certification, release-point selection, npm publication, tag
-creation, draft-Release creation, and public-Release publication. None implies
-the next, and a green local or hosted run grants no mutation authority.
-The user may authorize a complete sequence together; carry that authority
-forward within its scope without asking again at every checkpoint. Each step
-still requires its own applicable evidence and enforced preconditions.
+Ordinary [CI](../.github/workflows/ci.yml) exercises the library's supported
+scenarios. The [release workflow](../.github/workflows/release.yml) publishes
+the packages built from a tested source commit. Pushing a release tag expresses
+publication intent; there is no additional certification or manual reviewer
+step inside the workflow.
 
-The current [combined contract](../tooling/effect-build-contract.json) and
-[release workflows](../.github/workflows/release.yml) define the executable
-release protocol at the selected source SHA. [Plan 045](../plans/045-establish-v060-release-point.md)
-preserves the original release program and its historical observations; its
-old versions, commands, pending checklists, and per-action handoffs are not
-current execution instructions.
+The [combined contract](../tooling/effect-build-contract.json) owns library
+capabilities, public exports, and tool admission. The workflow and
+[`scripts/release/`](../scripts/release/) own this repository's distribution
+logic. Package manifests determine which workspaces are public and their
+versions; Rolldown remains private.
 
-effect-build returns provider-native results. Durable artifacts exist only
-after an explicit finalizer, and a downstream release owner adopts a finalized
-file or tree through the path-free `effect-build/artifact-adoption@1`
-projection: logical name, byte identity, and digest. The downstream owner—not
-the effect-build library—owns release plans, durable mutation journals
-(including Apple notarization continuation), upload, publication, and external
-registry state.
+## Release a version
 
-## This repository's npm release boundary
+Update the public package versions together, refresh the lockfile,
+and merge the reviewed change. After ordinary CI succeeds for that
+commit, push its matching `v<version>` tag. The workflow:
 
-Publishing effect-build's own npm packages is a separate distribution concern.
-The generated `releaseCertification` contract admits exactly eleven public
-packages and the 43-module public projection. Rolldown remains private and
-`effect-build-rolldown` is reservation-only.
+1. Waits for the latest main-push CI run for the exact tagged source commit
+   and requires its success. The source need not remain the tip of main, and
+   the passing run has no arbitrary age limit.
+2. Builds and packs the public packages once, recording their source, names,
+   versions, filenames, and byte digests in a candidate manifest. It retains
+   the tarballs and manifest as a workflow artifact for 90 days. Downstream
+   jobs download that upload's artifact ID and verify the manifest digest
+   from the candidate job.
+3. Installs, typechecks, and executes those candidate packages in both Node
+   and Bun on Linux, macOS, and Windows. These checks consume the packed files;
+   they do not substitute a fresh workspace build.
+4. Publishes the candidate tarballs to npm using trusted publishing and
+   provenance. A repository-wide queue serializes complete release workflows,
+   including different version tags.
+5. Downloads the published packages, verifies their bytes, `latest` tags, and
+   signed provenance, and exercises a fresh Node consumer from the public
+   registry. It then attaches the candidate assets and checksums to a draft
+   GitHub Release and publishes it as an immutable release.
 
-`.github/workflows/release.yml` has three hard-cut modes:
+Regular CI retains real compiler/target execution and producer acceptance
+jobs. Those establish platform behavior independently of npm publication.
+The release's packed-consumer checks establish that the actual distributed
+package layout, exports, dependencies, and runtime behavior work on the three
+hosts. None of these checks proves every downstream application will work.
 
-1. `prepare-exact-sha` checks an exact current-main SHA, installs the frozen
-   dependency graph without lifecycle scripts, and authenticates the latest
-   exact-SHA main push CI run as terminal and successful. It then builds once,
-   creates one candidate containing eleven once-packed tarballs plus one
-   manifest, and runs the packed consumer against those exact candidate bytes
-   before upload. It reuses authenticated source verification instead of
-   repeating the complete gate. This job has no OIDC or registry-mutation
-   authority.
-2. `certify-exact-sha` is a protected, no-checkout consumer of exact candidate
-   bytes. It reauthenticates GitHub state immediately before use and is designed
-   to prove GitHub claims plus one npm OIDC exchange and dry run per package
-   without uploading a tarball. A separate protected certification workflow
-   executes the exact publisher body against sealed fake GitHub/npm boundaries.
-3. `publish-certified-bytes` is a separately authorized protected consumer of
-   the exact candidate and readiness aggregate. It never repacks. Before each
-   possible npm mutation it re-observes package bytes, provenance, and `latest`,
-   and its state machine stops on conflict, unknown outcome, or incomplete
-   prior publication. An exact published prefix may resume only while the same
-   readiness packet remains valid. Once it expires, the release stops and
-   requires a new-version decision; no manual tag repair, repack, or bypass is
-   admitted.
+## Resume a partial publication
 
-Protected consumers execute no checked-out repository code. They obtain the
-contract from the authenticated exact source SHA, compare artifact REST
-coordinates and canonical `sha256:` digests, and parse candidate ZIP and npm
-tarball bytes in memory with contract-pinned bounded readers. They reject
-ambient registry authentication, supplied npm or Sigstore identity tokens,
-proxy/extra-CA configuration, redirects outside exact origins, and unsupported
-archive topology.
+npm cannot publish several packages atomically. Before publishing a package,
+the publisher reads its current registry state and compares npm's declared
+integrity with the candidate. The verification job independently downloads
+and hashes the published tarballs before the GitHub Release is published.
 
-## Certification and retained evidence
+| Registry observation                         | Action                                                  |
+| -------------------------------------------- | ------------------------------------------------------- |
+| Version absent                               | Publish the candidate tarball.                          |
+| Version present with matching integrity      | Skip that package.                                      |
+| Version present with different integrity     | Stop; the version cannot be overwritten.                |
+| Read failed or publication outcome uncertain | Stop and inspect or retry later; do not assume absence. |
 
-Readiness authenticates the candidate separately plus exactly three ordered
-hosted proofs:
+Use **Re-run failed jobs** to resume with the successful candidate job's
+retained artifact ID and digest. Re-running every job builds a new candidate;
+it does not promise to reproduce the original tarballs. There is no expiring
+readiness packet to refresh, and an unrelated commit on main does not require
+a new release version. A lost publish response is resolved by observing npm,
+with bounded visibility waits and a later rerun if the outcome remains unclear.
 
-1. exact-main CI at the exact source SHA;
-2. exact protected-body execution against the stateful fake registry; and
-3. eleven-package npm OIDC dry-run certification.
+If a published package's integrity matches but `latest` points elsewhere or
+is absent, the run stops with the observed state. A persistent mismatch requires an explicit
+decision about the intended version and a tag repair or a new release.
+Rerunning alone does not repair it, and the publisher never silently retags an
+existing version.
 
-Exact-main CI execution remains reusable while its source SHA is unchanged,
-but its authenticated observation must still satisfy the contract's freshness
-and validity windows. Candidate preparation and readiness reauthenticate the
-exact workflow, repository, run, attempt, terminal result, and current main;
-caller-authored reports and equivalent trees at other SHAs are not substitutes.
-Artifact retention, candidate bytes, fake-registry and OIDC certification,
-readiness expiry, and live registry or authorization observations retain their
-own validity requirements. Reusing source evidence never extends a partial
-publication's original readiness packet.
+Retain the original candidate whenever possible. If it is unavailable, a
+rebuilt candidate must still match any packages already published at that
+version. A successful repeat pack is evidence about that build, not a promise
+that every future rebuild produces identical bytes. Conflicting rebuilt
+bytes require a new version, not an overwrite or a bypass.
 
-Every readiness input is an authenticated GitHub run or artifact coordinate.
-There is no caller-authored receipt, external-evidence ingress, generated
-activation fixture, or secret-backed observer. Direct observation of current
-main, repository policy, and anonymous npm state happens inside the readiness
-job and is never promoted from caller bytes. Final-public verification is
-read-only and re-downloads npm and GitHub Release bytes before issuing its
-receipt.
+GitHub Release recovery also observes existing state. Matching draft assets
+are retained and missing assets are uploaded; conflicting or unexpected
+assets stop the run. An already published immutable release with the matching
+asset set completes without replacing its assets.
 
-`scripts/release/build-terminal-reference.mjs` is the sole constructor for the
-five terminal GitHub references used by this release: candidate, readiness,
-exact-main CI, fake-registry, and npm OIDC certification. Run it only after the
-named attempt has completed successfully. It authenticates the exact workflow,
-event, source SHA, branch, run attempt, repository IDs, artifact metadata and
-canonical REST digest; downloads the raw ZIP; accepts only the contract's exact
-files; derives manifest or retained-receipt identity; and re-reads current main
-before emitting canonical JSON. Artifact-reference expiry is the earlier of
-the contract validity window and GitHub retention expiry. The read token is
-consumed only by the sealed GitHub boundary and the CLI never prints it or a
-raw OIDC/npm credential.
+## Credentials and hosted configuration
 
-The post-merge command form is:
+Build and consumer jobs have no npm publication credentials. The publication
+job runs reviewed code from the tagged commit, uses the `npm` GitHub
+environment, and receives `id-token: write` for npm trusted publishing. npm
+and the registry provide the authentication and provenance protocol; this
+repository does not implement its own OIDC exchange, archive trust parser, or
+offline Sigstore trust tree.
 
-```sh
-ACTIONS_READ_TOKEN="$(gh auth token)" \
-  node scripts/release/build-terminal-reference.mjs \
-    --kind <candidate|readiness|fake-registry|npm-oidc-certification> \
-    --source-sha "$R" \
-    --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT" \
-    --artifact-id "$ARTIFACT_ID" \
-    --artifact-digest "sha256:$ARTIFACT_DIGEST_HEX" \
-    > terminal-reference.json
+`npm publish --dry-run` can succeed without credentials. Before any upload,
+the publisher therefore requires both a successful dry run and npm 11.11.0's
+successful OIDC exchange marker for every missing package. This checks the
+current trusted-publisher bindings; it does not guarantee a later upload will
+succeed. Actual publish results and registry observations determine progress.
+A credential or registry failure can still leave a partial release.
 
-ACTIONS_READ_TOKEN="$(gh auth token)" \
-  node scripts/release/build-terminal-reference.mjs \
-    --kind exact-main-ci --source-sha "$R" \
-    --run-id "$CI_RUN_ID" --run-attempt "$CI_RUN_ATTEMPT" \
-    > exact-main-ci-reference.json
-```
+Published provenance is authenticated with the maintained Sigstore verifier
+bundled with pinned npm 11.11.0, using live trust roots and the expected GitHub
+issuer and tag-workflow certificate identity. The policy check reads that
+same verified bundle and requires the candidate's package identity, SHA-512
+digest, source commit, release tag, repository, and workflow path. It does not
+authenticate one response and inspect claims from a separate response. Trust
+service or registry unavailability leaves verification incomplete and
+retryable; it does not invalidate the retained candidate or require another
+upload.
 
-`$ARTIFACT_DIGEST_HEX` above is the 64-lowercase-hex suffix from an
-independently read REST artifact `digest`; the CLI argument is always the full
-canonical `sha256:` form. Reference JSON contains no authority and must be
-regenerated, never edited, if it expires.
+The tag workflow requires this one-time migration **after the workflow change
+is merged**, before the first release through it:
 
-Checkout-capable release jobs use one frozen Bun 1.3.14 bootstrap. Sigstore
-verification is offline against an exact trusted-root target whose retained
-TUF seed/root/timestamp/snapshot/targets chain is independently replayed during
-contract generation. Runtime provenance verification has a fail-closed network
-guard and retains no OIDC token.
+- Change the `npm` environment's deployment policy from main to matching
+  `v*` tags and remove required reviewers. Keep the environment because the
+  npm trusted-publisher registrations bind to it and `release.yml`.
+- Extend the tag ruleset's update/delete protection from its existing explicit
+  version tags to `refs/tags/v*`. Only authorized release maintainers should
+  create release tags; published tags must not be moved or deleted.
+- Confirm the public packages' npm trusted publishers still name this
+  repository, `release.yml`, and the `npm` environment.
+- Keep GitHub Release immutability enabled; the final release check requires it.
 
-The npm OIDC certification is intentionally narrow. Under pinned Node
-24.14.1/npm 11.11.0 it rejects ambient npm/Sigstore tokens and registry auth,
-validates GitHub OIDC claims without retaining the token, requires exactly one
-private package-specific token-retrieval marker for each of the eleven dry
-runs, and proves anonymous registry state is unchanged. It proves that the
-exact protected workflow obtained package-specific authority at that instant.
-It does not prove tarball upload, provenance generation, publication,
-exclusive trusted-publisher administration, absence of legacy npm tokens, the
-package publishing-access toggle, or account 2FA state.
+These are repository/npm settings, not changes made by the implementation PR.
+Changing the environment before merge would break the previous main-based
+release workflow.
 
-Those npm administrative inventories are excluded from the current npm release
-gate because npm exposes no supported read interface for all of them. A local
-web login is neither required nor retained as release evidence. Real
-publication remains the proof of registry mutation and provenance, with exact
-byte/latest/provenance re-observation before every next mutation.
+## Library artifacts and Apple scope
 
-Repository Release immutability is an operator-admin preflight, not a hosted
-readiness role: the workflow token intentionally lacks Administration-read
-authority. The operator must observe `enabled: true` immediately before draft
-creation and again immediately before publication. The draft is created only
-after a guarded lightweight tag, with `--verify-tag`; all twelve assets are
-uploaded, downloaded, and byte-verified before publication. Final-public
-verification requires the actual published Release to report
-`immutable: true` and fails closed otherwise.
+effect-build returns provider-native results. Explicit finalizers produce
+durable file, tree, and executable identities. A downstream release system
+can adopt those through the path-free `effect-build/artifact-adoption@1`
+projection: logical name, byte identity, and digest. That downstream system
+owns uploads, registry state, and any durable continuation of external
+operations.
 
-Apple certification is an exact 28-coordinate deferred protocol: 2 native, 10
-protected product, 6 clean-host, and 10 aggregate-verdict receipts. v0.6.0
-defined the npm-only scope retained by the current release contract: the
-`effect-build-apple` API/library package is included, with no signed or notarized
-App, DMG, or PKG. Credential-backed Apple certification and its operational
-journal were not run, have not passed, and are excluded from readiness. Local
-codecs, fake boundaries, or ordinary CI do not prove Developer ID signing,
-notarization, stapling, Gatekeeper behavior, clean-host use, or durable
-continuation. Those products require a later, separately qualified release.
+This repository publishes the `effect-build-apple` npm library. It does not
+ship signed or notarized App, DMG, or PKG products. Apple unit tests and
+credential-free native CI cover their stated mechanics; they do not prove
+Developer ID signing, notarization service acceptance, stapling, or clean-host
+Gatekeeper acceptance. A consumer shipping those products must exercise those
+external boundaries. The retired certification scaffolding did not establish
+them.
 
-The local `verify` gate builds all workspace packages, validates the generated
-contract and archive/trust projections, runs type, lifecycle, consumer, and
-architecture tests, and proves the public surface stays exactly bounded. It is
-implementation evidence only. Credentialed certification, release-point R,
-npm publication, tag creation, GitHub Release creation/publication, repository
-settings, and future external infrastructure each require their own exact
-authority and terminal evidence, even when the user has authorized the full
-sequence together.
+[Plan 045](../plans/045-establish-v060-release-point.md) and
+[Plan 047](../plans/047-establish-canonical-operation-journal.md) preserve the
+old certification and journal designs as historical records. Their commands,
+receipt formats, and pending checklists are not part of the current workflow.
