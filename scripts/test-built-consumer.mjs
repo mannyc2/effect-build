@@ -1,23 +1,25 @@
-// Packs every contract-public package and proves a fresh npm consumer can
+// Consumes built packages or exact release-candidate tarballs in a fresh npm project to
 // install and typecheck every public module, run an in-memory provider API,
 // finalize immutable bytes, and adopt their path-free identity by logical name.
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { gunzipSync } from "node:zlib";
 
 import {
   assertCredentialFreeEffectiveNpmConfig,
   buildCredentialFreeChildEnvironment,
   credentialFreeConsumerPaths,
 } from "./release/credential-free-consumer.mjs";
+import { validateReleaseCandidate } from "./release/protocol.mjs";
+import { extractStrictPackageManifest } from "./release/tar-protocol.mjs";
 
 const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const combinedContract = JSON.parse(await readFile(join(root, "tooling/effect-build-contract.json"), "utf8"));
+const contractBytes = await readFile(join(root, "tooling/effect-build-contract.json"));
+const combinedContract = JSON.parse(contractBytes);
 const publicSurface = JSON.parse(await readFile(join(root, "tooling/public-api.json"), "utf8"));
 if (combinedContract.schema !== "effect-build/combined-contract@1") {
   throw new Error("unsupported combined contract schema");
@@ -61,19 +63,19 @@ const effectVersion = workspaceManifest.devDependencies.effect;
 const platformNodeVersion = workspaceManifest.devDependencies["@effect/platform-node"];
 const typescriptVersion = workspaceManifest.devDependencies.typescript;
 
-const registryModeArguments = (args) => {
+const consumerArguments = (args) => {
+  if (args.length === 0) return { mode: "workspace" };
+  if (args.length === 2 && args[0] === "--candidate" && args[1] !== "") {
+    return { mode: "candidate", directory: resolve(args[1]) };
+  }
   if (
     args.length === 5
     && args[0] === "--registry-version"
     && args[2] === "--runtime"
     && (args[3] === "node" || args[3] === "bun")
     && args[4] === "--json"
-  ) return { runtime: args[3], version: args[1] };
-  if (
-    args.length === 0
-    || (args.length === 1 && (args[0] === "--fresh-install" || args[0] === "--built"))
-  ) return undefined;
-  throw new Error("consumer arguments are not one exact local or registry mode");
+  ) return { mode: "registry", runtime: args[3], version: args[1] };
+  throw new Error("consumer arguments must select built workspace, --candidate <directory>, or exact registry mode");
 };
 
 const runtimeConsumerSource = `import { NodeServices } from "@effect/platform-node";
@@ -99,7 +101,7 @@ const artifact = await Effect.runPromise(
     {
       destination: "dist/adopt-me.txt",
       observation: "hashed",
-      provenance: Artifact.intrinsicProvenance("registry-consumer"),
+      provenance: Artifact.intrinsicProvenance("consumer"),
     },
     (candidate) => FileSystem.FileSystem.use((fileSystem) =>
       fileSystem.writeFileString(candidate, "immutable bytes\\n")
@@ -138,6 +140,21 @@ process.stdout.write(JSON.stringify({
   mutationErrorTag,
 }));
 `;
+
+const assertConsumerReport = (observed) => {
+  if (
+    observed.publicModules !== publicModuleSpecifiers.length
+    || observed.outputs !== 1
+    || observed.protocol !== "effect-build/artifact-adoption@1"
+    || observed.logicalName !== "consumer/adopt-me.txt"
+    || observed.digestLength !== 64
+    || observed.bytes !== "16"
+    || observed.pathFree !== true
+    || observed.adoptionMatchesArtifact !== true
+    || observed.verified !== "immutable bytes\n"
+    || observed.mutationErrorTag !== "FileVerificationFailed"
+  ) throw new Error("installed consumer did not prove all three pipelines");
+};
 
 const runRegistryConsumer = async ({ runtime, version }) => {
   const policy = combinedContract.releaseCertification.finalPublicVerification;
@@ -255,18 +272,7 @@ const runRegistryConsumer = async ({ runtime, version }) => {
       env: environment,
     });
     const observed = JSON.parse(result.stdout.trim());
-    if (
-      observed.publicModules !== publicModuleSpecifiers.length
-      || observed.outputs !== 1
-      || observed.protocol !== "effect-build/artifact-adoption@1"
-      || observed.logicalName !== "consumer/adopt-me.txt"
-      || observed.digestLength !== 64
-      || observed.bytes !== "16"
-      || observed.pathFree !== true
-      || observed.adoptionMatchesArtifact !== true
-      || observed.verified !== "immutable bytes\n"
-      || observed.mutationErrorTag !== "FileVerificationFailed"
-    ) throw new Error(`${runtime} registry consumer did not prove all three pipelines`);
+    assertConsumerReport(observed);
     const values = {
       executor: runtime,
       version: expected.version,
@@ -283,197 +289,148 @@ const runRegistryConsumer = async ({ runtime, version }) => {
   }
 };
 
-const registryArguments = registryModeArguments(process.argv.slice(2));
-if (registryArguments !== undefined) {
-  await runRegistryConsumer(registryArguments);
-} else {
-const bunExecutable = process.versions.bun === undefined ? "bun" : process.execPath;
+const runPackedConsumer = async (input) => {
+  const bunExecutable = process.versions.bun === undefined ? "bun" : process.execPath;
 
-const consumerRoot = await mkdtemp(join(tmpdir(), "effect-build-consumer-"));
-const cleanup = async () => rm(consumerRoot, { recursive: true, force: true });
+  const consumerRoot = await mkdtemp(join(tmpdir(), "effect-build-consumer-"));
+  const cleanup = async () => rm(consumerRoot, { recursive: true, force: true });
 
-const disallowedSpecifier = /^(?:workspace:|catalog:|file:|link:|portal:)/;
+  const disallowedSpecifier = /^(?:workspace:|catalog:|file:|link:|portal:)/;
 
-const packedManifest = async (tarball) => {
-  const archive = gunzipSync(await readFile(tarball));
-  const record = 512;
-  for (let offset = 0; offset < archive.byteLength; offset += record) {
-    const name = archive.subarray(offset, offset + 100).toString("utf8").split("\0", 1)[0];
-    const size = Number.parseInt(archive.subarray(offset + 124, offset + 136).toString("utf8").trim() || "0", 8);
-    if (name === "package/package.json") {
-      return JSON.parse(archive.subarray(offset + record, offset + record + size).toString("utf8"));
-    }
-    offset += Math.ceil(size / record) * record;
-  }
-  throw new Error(`package/package.json not found in ${tarball}`);
-};
-
-try {
-  const tarballs = {};
-  for (const name of packageNames) {
-    const packDirectory = join(consumerRoot, "tarballs");
-    await mkdir(packDirectory, { recursive: true });
-    const { stdout } = await execute(bunExecutable, ["pm", "pack", "--destination", packDirectory], {
-      cwd: join(root, "packages", name),
+  const embeddedManifest = (tarballBytes) => {
+    const bytes = extractStrictPackageManifest({
+      tarballBytes,
+      policy: combinedContract.releaseCertification.candidate.tarballInspection,
+      label: "consumer tarball",
     });
-    const line = stdout.split("\n").find((candidate) => candidate.trim().endsWith(".tgz"));
-    if (line === undefined) throw new Error(`bun pm pack produced no tarball for ${name}:\n${stdout}`);
-    const tarball = join(packDirectory, line.trim().split("/").at(-1));
-    const manifest = await packedManifest(tarball);
-    if (manifest.name !== name || manifest.private === true) {
-      throw new Error(`${name} packed with invalid public identity`);
-    }
-    for (const [dependency, specifier] of Object.entries(manifest.dependencies ?? {})) {
-      if (disallowedSpecifier.test(specifier)) {
-        throw new Error(`${name} packed with unresolved specifier ${dependency}: ${specifier}`);
+    const manifest = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+      for (const [dependency, specifier] of Object.entries(manifest[field] ?? {})) {
+        if (disallowedSpecifier.test(specifier)) {
+          throw new Error(`${manifest.name} packed with unresolved specifier ${dependency}: ${specifier}`);
+        }
       }
     }
-    tarballs[name] = tarball;
-  }
+    return { bytes, manifest };
+  };
 
-  await writeFile(
-    join(consumerRoot, "package.json"),
-    JSON.stringify(
-      {
-        name: "effect-build-consumer",
-        private: true,
-        type: "module",
-        dependencies: {
-          "@effect/platform-node": platformNodeVersion,
-          effect: effectVersion,
-          ...Object.fromEntries(packageNames.map((name) => [name, tarballs[name]])),
+  const candidateTarballs = async (directory, packDirectory) => {
+    const candidate = JSON.parse(await readFile(join(directory, combinedContract.releaseCertification.candidate.manifest), "utf8"));
+    const version = combinedContract.npmRegistryBoundary.publicationAdmission.target.version;
+    const packageBytes = new Map();
+    const packageManifests = new Map();
+    // Derive filenames from the trusted contract, never from an unvalidated manifest.
+    for (const name of packageNames) {
+      const bytes = await readFile(join(directory, `${name}-${version}.tgz`));
+      packageBytes.set(name, bytes);
+      packageManifests.set(name, embeddedManifest(bytes));
+    }
+    const { stdout } = await execute("git", ["rev-parse", "HEAD"], { cwd: root });
+    validateReleaseCandidate({
+      candidate,
+      contract: combinedContract,
+      contractBytes,
+      expectedSourceSha: stdout.trim(),
+      files: await readdir(directory),
+      packageBytes,
+      packageManifests,
+    });
+    const tarballs = {};
+    for (const entry of candidate.packages) {
+      const file = join(packDirectory, entry.file);
+      // npm reads a private copy of the exact bytes validated above.
+      await writeFile(file, packageBytes.get(entry.name), { flag: "wx", mode: 0o600 });
+      tarballs[entry.name] = file;
+    }
+    return tarballs;
+  };
+
+  try {
+    const packDirectory = join(consumerRoot, "tarballs");
+    await mkdir(packDirectory);
+    const tarballs = input.mode === "candidate" ? await candidateTarballs(input.directory, packDirectory) : {};
+    for (const name of input.mode === "workspace" ? packageNames : []) {
+      const { stdout } = await execute(bunExecutable, ["pm", "pack", "--destination", packDirectory], {
+        cwd: join(root, "packages", name),
+      });
+      const line = stdout.split("\n").find((candidate) => candidate.trim().endsWith(".tgz"));
+      if (line === undefined) throw new Error(`bun pm pack produced no tarball for ${name}:\n${stdout}`);
+      const tarball = join(packDirectory, line.trim().split("/").at(-1));
+      const { manifest } = embeddedManifest(await readFile(tarball));
+      if (manifest.name !== name || manifest.private === true) {
+        throw new Error(`${name} packed with invalid public identity`);
+      }
+      tarballs[name] = tarball;
+    }
+
+    await writeFile(
+      join(consumerRoot, "package.json"),
+      JSON.stringify(
+        {
+          name: "effect-build-consumer",
+          private: true,
+          type: "module",
+          dependencies: {
+            "@effect/platform-node": platformNodeVersion,
+            effect: effectVersion,
+            ...Object.fromEntries(packageNames.map((name) => [name, tarballs[name]])),
+          },
+          devDependencies: { typescript: typescriptVersion },
         },
-        devDependencies: { typescript: typescriptVersion },
-      },
-      null,
-      2,
-    ),
-  );
-  await writeFile(
-    join(consumerRoot, "tsconfig.json"),
-    JSON.stringify(
-      {
-        compilerOptions: {
-          module: "nodenext",
-          moduleResolution: "nodenext",
-          target: "es2022",
-          strict: true,
-          exactOptionalPropertyTypes: true,
-          noEmit: false,
-          outDir: "dist-consumer",
-          skipLibCheck: true,
+        null,
+        2,
+      ),
+    );
+    await writeFile(
+      join(consumerRoot, "tsconfig.json"),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            module: "nodenext",
+            moduleResolution: "nodenext",
+            target: "es2022",
+            strict: true,
+            exactOptionalPropertyTypes: true,
+            noEmit: false,
+            outDir: "dist-consumer",
+            skipLibCheck: true,
+          },
+          include: ["main.ts"],
         },
-        include: ["main.ts"],
-      },
-      null,
-      2,
-    ),
-  );
-  await writeFile(
-    join(consumerRoot, "main.ts"),
-    `import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, FileSystem } from "effect";
-import * as Artifact from "effect-build/Artifact";
-import * as FinalizedFile from "effect-build/Author/File";
-import * as EsbuildApi from "effect-build-esbuild/Api";
-${publicModuleImports}
+        null,
+        2,
+      ),
+    );
+    await writeFile(join(consumerRoot, "main.ts"), runtimeConsumerSource);
 
-const publicModules = [
-  ${publicModuleBindings},
-];
+    // Windows ships npm as npm.cmd, which node can only spawn through a shell.
+    const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+    const npmEnvironment = { ...process.env, npm_config_audit: "false", npm_config_fund: "false" };
+    const npmOptions = { cwd: consumerRoot, env: npmEnvironment, shell: process.platform === "win32" };
+    await execute(npm, ["install", "--no-audit", "--no-fund"], npmOptions);
 
-const bundle = await Effect.runPromise(
-  EsbuildApi.Build.build({
-    stdin: { contents: "export const consumer = 1;", loader: "ts", resolveDir: process.cwd() },
-    bundle: true,
-    write: false,
-    logLevel: "silent",
-  }),
-);
+    for (const name of packageNames) {
+      const installed = JSON.parse(await readFile(join(consumerRoot, "node_modules", name, "package.json"), "utf8"));
+      if (installed.name !== name) throw new Error(`consumer resolved ${name} to ${installed.name}`);
+    }
 
-const artifact = await Effect.runPromise(
-  FinalizedFile.publish(
-    {
-      destination: "dist/adopt-me.txt",
-      observation: "hashed",
-      provenance: Artifact.intrinsicProvenance("packed-consumer"),
-    },
-    (candidate) => FileSystem.FileSystem.use((fileSystem) => fileSystem.writeFileString(candidate, "immutable bytes\\n")),
-  ).pipe(Effect.provide(NodeServices.layer)),
-);
-const adoption = Artifact.adoptFile("consumer/adopt-me.txt", artifact);
-const verified = await Effect.runPromise(
-  FinalizedFile.withVerifiedBytes(
-    artifact,
-    (bytes) => Effect.succeed(new TextDecoder().decode(bytes)),
-  ).pipe(Effect.provide(NodeServices.layer)),
-);
-const mutationExit = await Effect.runPromise(
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem;
-    yield* fileSystem.writeFileString(artifact.path, "mutated\\n");
-    return yield* Effect.exit(FinalizedFile.withVerifiedBytes(artifact, () => Effect.void));
-  }).pipe(Effect.provide(NodeServices.layer)),
-);
-const mutationError = mutationExit._tag === "Failure" ? Cause.findErrorOption(mutationExit.cause) : undefined;
-const mutationErrorTag = mutationError?._tag === "Some" ? mutationError.value._tag : null;
+    await execute(
+      "node",
+      [join(consumerRoot, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
+      { cwd: consumerRoot, env: npmEnvironment },
+    );
 
-console.log(JSON.stringify({
-  publicModules: publicModules.length,
-  outputs: bundle.outputFiles.length,
-  protocol: adoption.protocol,
-  logicalName: adoption.logicalName,
-  digestLength: adoption.digest.value.length,
-  bytes: adoption.bytes,
-  pathFree: !("path" in adoption),
-  adoptionMatchesArtifact:
-    adoption.bytes === artifact.bytes
-    && adoption.digest.value === artifact.digest.value
-    && adoption.digest !== artifact.digest
-    && Object.isFrozen(adoption)
-    && Object.isFrozen(adoption.digest),
-  verified,
-  mutationErrorTag,
-}));
-`,
-  );
-
-  // Windows ships npm as npm.cmd, which node can only spawn through a shell.
-  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  const npmEnvironment = { ...process.env, npm_config_audit: "false", npm_config_fund: "false" };
-  const npmOptions = { cwd: consumerRoot, env: npmEnvironment, shell: process.platform === "win32" };
-  await execute(npm, ["install", "--no-audit", "--no-fund"], npmOptions);
-
-  for (const name of packageNames) {
-    const installed = JSON.parse(await readFile(join(consumerRoot, "node_modules", name, "package.json"), "utf8"));
-    if (installed.name !== name) throw new Error(`consumer resolved ${name} to ${installed.name}`);
+    const { stdout } = await execute("node", [join(consumerRoot, "dist-consumer", "main.js")], { cwd: consumerRoot });
+    assertConsumerReport(JSON.parse(stdout.trim()));
+    console.log("consumer install, typecheck, and runtime checks passed");
+  } finally {
+    await cleanup();
   }
+};
 
-  await execute(
-    "node",
-    [join(consumerRoot, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
-    { cwd: consumerRoot, env: npmEnvironment },
-  );
-
-  const { stdout } = await execute("node", [join(consumerRoot, "dist-consumer", "main.js")], { cwd: consumerRoot });
-  const report = JSON.parse(stdout.trim());
-  if (report.publicModules !== 42) throw new Error(`consumer loaded ${report.publicModules} public modules; expected 42`);
-  if (report.outputs !== 1) throw new Error(`consumer esbuild build produced ${report.outputs} outputs`);
-  if (report.protocol !== "effect-build/artifact-adoption@1") throw new Error(`unexpected adoption protocol`);
-  if (
-    report.logicalName !== "consumer/adopt-me.txt"
-    || report.digestLength !== 64
-    || report.bytes !== "16"
-    || report.pathFree !== true
-    || report.adoptionMatchesArtifact !== true
-  ) {
-    throw new Error(`consumer adoption identity is invalid: ${stdout}`);
-  }
-  if (report.verified !== "immutable bytes\n" || report.mutationErrorTag !== "FileVerificationFailed") {
-    throw new Error(`consumer immutable-byte verification failed: ${stdout}`);
-  }
-  console.log("consumer install, typecheck, and runtime checks passed");
-} finally {
-  await cleanup();
-}
+const input = consumerArguments(process.argv.slice(2));
+if (input.mode === "registry") {
+  await runRegistryConsumer(input);
+} else {
+  await runPackedConsumer(input);
 }

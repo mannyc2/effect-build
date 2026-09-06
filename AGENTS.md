@@ -11,3 +11,10 @@
 - `tooling/public-api.json` is a generated, tested projection of the combined contract and package declarations, never a second source of truth. Update and validate the contract before regenerating public API.
 - Use pinned Bun 1.3.14 for generation and verification. Local verification proves only local source and packed-consumer behavior; hosted CI, certification, merge, tag, npm publication, and release are separate gates and must be reported separately.
 - `plans/` and `research/` preserve provenance. The current combined contract resolves their dispositions; change a disposition by updating its evidence and contract in the same reviewed change, never by silently widening an export.
+
+## Completing changes
+
+- Establish the requested outcome, scope, and sufficient evidence. Prefer changes that remove duplicated ownership or invalid states, and test consequential assumptions through the actual tool or artifact boundary early.
+- Follow [CONTRIBUTING.md](CONTRIBUTING.md#verify-a-change) for the appropriate final gate. Reuse passing evidence only while the relevant source, dependencies, toolchain, artifact bytes, and observation conditions remain applicable. Do not rerun a full gate's constituent checks without a relevant change, failure, or unresolved concern.
+- Carry forward the user's authorization within its stated scope. Verification does not grant new mutation authority, but a sequence already authorized does not require permission again at every step. Historical plan checkpoints are provenance, not new standing approval requirements.
+- Finish when the requested outcome has sufficient evidence. Report the result and any unverified boundary accurately; broaden work or reopen completed checks only when new evidence warrants it.

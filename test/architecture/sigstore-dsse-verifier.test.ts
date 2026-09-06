@@ -59,6 +59,32 @@ const signer = () => ({
 });
 
 describe("npm provenance Sigstore verifier", () => {
+  it("verifies retained public provenance through the real isolated verifier and rejects changed signed bytes", async () => {
+    // This is the final-public 3.1.1 verifier boundary. The protected publisher's
+    // separate npm-bundled 3.1.0 verifier is exercised in release-provenance-verifier.test.ts.
+    const bundle = JSON.parse(
+      await readFile(
+        resolve(root, "test/fixtures/release/effect-build-0.6.1-provenance.json"),
+        "utf8",
+      ),
+    );
+    const observed = await verifySigstoreBundleIsolated(bundle, options, { contract });
+    expect(() =>
+      validateVerifiedSignerIdentity({
+        signer: observed,
+        verifier,
+        identity,
+        producerSourceSha: "3952abd1a31ab143c83f4a6c93e2c3a391e04859",
+      })
+    ).not.toThrow();
+
+    const payload = Buffer.from(bundle.dsseEnvelope.payload, "base64");
+    payload[0] = payload[0]! ^ 1;
+    bundle.dsseEnvelope.payload = payload.toString("base64");
+    await expect(verifySigstoreBundleIsolated(bundle, options, { contract }))
+      .rejects.toThrow("child rejected verification at verification");
+  });
+
   it("uses the exact top-level npm provenance policy and vendored TUF target", async () => {
     expect(verifier.purpose).toBe("npm-publication-provenance-verification-only");
     expect(verifier.module).toBe("scripts/release/sigstore-dsse-verifier.mjs");

@@ -1,91 +1,49 @@
 # effect-build implementation plans
 
-> Plans 001-044 are historical implementation and decision provenance. [Plan
-> 045](./045-establish-v060-release-point.md) is the current v0.6.0
-> release-readiness handoff written against PR 24
-> head e4511f12f2afdab0090de73fd6bf4d1f226b4d88, now merged as
-> dd39bd6104645d79fa52f40d0bbf291b5bf8f3dc with the same tree. It is subordinate to
-> AGENTS.md and tooling/effect-build-contract.json and grants no commit, push,
-> PR-creation, merge, repository-settings, credential, publication, tag, or
-> GitHub Release authority.
+Plans preserve implementation history, decisions, and deferred research. The
+current [engineering charter](../AGENTS.md) and
+[combined contract](../tooling/effect-build-contract.json) govern the product;
+[CONTRIBUTING.md](../CONTRIBUTING.md) defines routine verification, and
+[release-security.md](../docs/release-security.md) describes the current release
+protocol. A historical plan does not add an export, authorize a mutation, or
+require repeated approval for a sequence the user has already authorized.
 
-## Current v0.6.0 release-readiness program
+## Current release context
 
-[Plan 045](./045-establish-v060-release-point.md) defines the bounded path from
-an ordinary-CI-green source candidate to an honest release point and public
-release. PR 24 and the inert release infrastructure are already merged. The
-2026-09-01 scope hard cut releases exactly eleven npm packages, including the
-`effect-build-apple` API/library package. It does not release signed or
-notarized App, DMG, or PKG products.
+As re-observed on 2026-09-06, GitHub Releases exist for v0.6.2 and
+[v0.6.3](https://github.com/mannyc2/effect-build/releases/tag/v0.6.3); v0.6.3 was
+published at 2026-09-05T22:04:25Z. The [changelog](../CHANGELOG.md) records the
+partial 0.6.0/0.6.1 attempts and the later consumer fixes. This release listing
+is not a new audit of historical candidate, readiness, or final-public receipts.
 
-Credential-backed Apple artifact certification was not run and has not passed.
-Apple credentials, native signing/notarization, clean-host evidence, and the
-operational journal are excluded from v0.6.0 readiness and outputs. They belong
-to a later, separately qualified Apple-artifact release. Plan 047 records that
-future journal design only; AWS must not be provisioned for v0.6.0.
+[Plan 045](./045-establish-v060-release-point.md) is now a historical record of
+that release program. Its pending v0.6.0 checklist and later v0.6.3 execution
+amendment are no longer active handoffs. Use the current contract and workflows
+at the selected SHA for a future release; preserve prior publication bytes and
+failure evidence. Source verification, hosted certification, publication, and
+final-public verification still establish separate facts.
 
-The v0.6.0 release point uses one candidate plus exactly three ordered hosted
-proofs:
+Credential-backed Apple artifact certification remains deferred. The current
+npm-only scope includes the `effect-build-apple` API/library package, with no
+signed or notarized App, DMG, or PKG products or Apple/AWS readiness evidence.
+[Plan 047](./047-establish-canonical-operation-journal.md) records the future
+journal design. Those products require a separately qualified release;
+ordinary source work does not authorize Apple credentials or AWS provisioning.
 
-1. exact-main CI at the candidate SHA;
-2. exact protected publisher-body execution against sealed stateful fake
-   GitHub/npm boundaries; and
-3. protected npm OIDC certification for all eleven package-specific dry runs.
+## Historical program context
 
-There are no external-observation roles, caller-authored receipts, ingress
-workflow, secret-backed observer, or generated activation fixture. Readiness
-collects current-main, repository-policy, and anonymous npm observations
-directly. The npm dry-run proves exact OIDC exchange acceptance and unchanged
-registry state; it does not claim upload, provenance, publication, exclusive
-publisher inventory, token absence, package publishing-access policy, or
-account 2FA state. Unsupported npm administrative inventories are explicitly
-unobserved and excluded from the v0.6.0 gate.
+The remainder of this index preserves dated program decisions and status
+receipts. Its old API shapes, toolchains, commands, dependencies, and gates
+explain those programs; they do not override the current combined contract.
 
-Publication remains separately protected and resumable. It adopts the semantic
-three-proof readiness packet before the first npm command, never repacks, and
-re-verifies exact bytes, `latest`, and provenance before each next mutation.
-`effect-build-rolldown` remains reservation-only and is never included in the
-eleven-package publication ledger.
-
-GitHub Release immutability is not a hosted readiness role because the workflow
-token lacks Administration-read authority. An operator-admin preflight must
-observe immutability enabled immediately before draft creation and again before
-public publication. The guarded lightweight tag targets the exact release
-point; the draft uses `--verify-tag`; all twelve candidate-derived assets are
-downloaded and byte-verified before publication; and final-public verification
-requires the actual published Release to report `immutable: true`.
-
-Local verification is implementation evidence only. The release point still
-requires exact-main hosted CI, a retained candidate, the three authenticated
-proofs, fresh current-main/npm observations, and a downloaded readiness
-aggregate at one SHA. Real publication, tag creation, draft creation, public
-Release publication, and final-public verification remain distinct terminal
-acts even when one operator has authorized the full sequence.
-
-The exact Apple coordinate inventory remains mechanically frozen at 28 unique
-entries: 2 native, 10 protected product, 6 clean-host, and 10 aggregate
-verdicts. It is retained for the later Apple-artifact release and cannot enter
-the v0.6.0 candidate, readiness aggregate, or GitHub Release assets.
-
-
-The post-0.3 research-to-freeze program completed on 2026-08-21. Its exact
-machine-readable authority is
-`research/post-0.3/freeze/SURFACE.json` together with
-`research/post-0.3/freeze/MIGRATION.json`; `AGENTS.md` is the matching active
-execution instruction. Plans 039-044 have been rewritten from that frozen
-scope. Plans 039, 040, 041, 042, and 043 are complete at their export-inert
-stages: the six frozen core modules, the two admitted Esbuild operation
-modules, the Bun and Deno selected-command executable lanes, and the direct
-Node SEA assembly lane are implemented internally, while the released 0.3
-export map remains byte-identical. Plan 044 is the active unpublished
-hard-cut candidate; its exact-head certification receipt is the completion
-gate.
-No merge, publication, tag, or release is authorized by Plan 039, Plan 040,
-Plan 041, Plan 042, or Plan 043 completion.
-
-Plans 001-038 remain historical execution and decision records. Where their
-prose conflicts with the 0.4 freeze, the exact surface/migration artifacts and
-rewritten Plans 039-044 control future implementation.
+The post-0.3 research-to-freeze program completed on 2026-08-21. Its authority
+at that time was `research/post-0.3/freeze/SURFACE.json` together with
+`research/post-0.3/freeze/MIGRATION.json`. Plans 039-043 implemented the frozen
+core and provider lanes internally while retaining the 0.3 export map. Plan
+044 then recorded the unpublished 0.4 hard-cut candidate. That candidate was
+superseded by the later public-surface cuts documented in the changelog; it is
+not an active release gate. Plans 001-044 remain historical implementation and
+decision provenance under the current combined contract.
 
 Originally reconciled by the `improve` skill on 2026-08-09 at commit `15b6abb`
 after a product-direction interview and source/verification audit. Re-audited
@@ -358,7 +316,7 @@ direction. Plans 016-020 remain factual implementation history.
    same selected command used by both compile and bundle operations without
    exposing that bound command to applications.
 
-## Execution order and status
+## Historical execution order and status
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |---|---|---:|---:|---|---|
@@ -404,13 +362,14 @@ direction. Plans 016-020 remain factual implementation history.
 | 041 | Implement the frozen Bun executable lane | P1 | L | 039 | DONE |
 | 042 | Implement the frozen Deno executable lane | P1 | L | 039 | DONE |
 | 043 | Implement direct Node SEA assembly | P1 | L | 039 | DONE |
-| 044 | Hard-cut and certify the frozen 0.4 candidate | P0 | XL | 039-043 | CANDIDATE |
-| 045 | Establish the v0.6.0 release point and bounded publication handoff | P0 | XL | npm-only three-proof cut review, merge, and hosted certification | IN PROGRESS: LOCAL GATE VERIFIED; HOSTED CERTIFICATION PENDING |
-| 046 | Repair Apple native probe admission | P0 | S | 045 | COMPLETE LOCALLY; UNCOMMITTED |
-| 047 | Establish the canonical operation journal for a later Apple-artifact release | P0 | XL | future Apple release, external approval | DEFERRED OUTSIDE v0.6.0 |
+| 044 | Hard-cut and certify the frozen 0.4 candidate | P0 | XL | 039-043 | HISTORICAL: unpublished candidate, superseded |
+| 045 | Establish the v0.6.0 release point and bounded publication handoff | P0 | XL | npm-only three-proof cut review, merge, and hosted certification | HISTORICAL: release program through v0.6.3; dated evidence preserved |
+| 046 | Repair Apple native probe admission | P0 | S | 045 | HISTORICAL: local repair receipt |
+| 047 | Establish the canonical operation journal for a later Apple-artifact release | P0 | XL | future Apple release, external approval | DEFERRED: future Apple-artifact release |
 
-Status values: `READY`, `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, or
-`REJECTED: <reason>`. A historical `DONE` says
+Recorded status values include `READY`, `TODO`, `IN PROGRESS`, `DONE`,
+`BLOCKED: <reason>`, and `REJECTED: <reason>`. They describe the dated program,
+not a current execution queue. A historical `DONE` says
 the implementation happened; it does not make that design part of the active
 product. `DONE (NOT EARNED)` is the completed evidence-backed decision variant
 for a promotion plan whose proposed public abstraction failed its rent gate.
@@ -607,7 +566,7 @@ behavior, or the standalone operation invalidated that earlier work.
 - Temporary internal coexistence during Plans 007-009 is implementation
   sequencing. It is never a shipped tier or compatibility promise.
 
-## Planned product contract
+## Historical planned product contract
 
 Bun and Deno keep two cardinalities over one executable lifecycle:
 
@@ -668,7 +627,7 @@ committed partial artifacts. A JavaScript bundle is not this durable value: it
 is an opaque live handle available only inside a continuation. Fiber
 interruption remains interruption for every operation.
 
-## Architectural north star
+## Historical architectural direction
 
 ```text
 application chooses official Node/Bun/Deno host services
@@ -700,7 +659,7 @@ common scoped bundle contract; no integration selects or imports a sibling.
 Cross-provider or
 heterogeneously named work composes operations rather than widening a matrix.
 
-## Effect API baseline
+## Historical Effect API baseline
 
 The hard cut was implemented against `effect@4.0.0-beta.106` and local reference
 checkout `df431ae`. The broad v0.1.0 release-preparation commit upgraded Effect
@@ -839,7 +798,7 @@ user-owned unless explicitly listed in the assigned plan.
   Portable plans require closed content identities and real multiple bindings;
   replaceable executors require genuinely different backends.
 
-## Quality bar
+## Historical quality bar
 
 Every active plan must leave a machine-checkable green slice, preserve dirty
 WIP outside scope, and identify exact real-tool/host acceptance separately from

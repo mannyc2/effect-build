@@ -19,20 +19,17 @@ The build emits each package's `dist` files. Run it before executing examples, s
 
 ## Verify a change
 
+For source, executable examples, dependencies, generators, CI, or release-tooling changes, run the complete local gate on the final changes:
+
 ```sh
 bun run verify
 ```
 
-This gate builds the packages, checks the combined contract and public projection, typechecks source and examples, runs type tests, unit tests, and example behavior checks, exercises a packed consumer, runs architecture tests, and checks lint and formatting. It does not run all real external compilers or certify a release.
+This gate builds once, then runs `verify:static` and `verify:platform`. Static checks cover the combined contract and public projection, source and example typechecks, type tests, lint, and formatting. Platform checks cover unit tests, example behavior, a packed consumer, and architecture tests. Both component scripts require the current build. CI runs the static gate once and platform behavior on Linux, macOS, and Windows; it retains the required platform Verify checks. These gates do not run all real external compilers or certify a release.
 
-For a documentation or example change, start with the relevant checks while editing, then run the full gate before handing it off:
+Use focused checks while editing when their result can resolve a specific uncertainty or failure. Exercise consequential external assumptions with the pinned real tool or actual packed bytes early. Once the complete gate passes, reuse its results; rerun checks only when relevant changes, failures, or unresolved concerns invalidate that evidence.
 
-```sh
-bun run check
-bun run test:examples
-bun run lint
-bun run format:check
-```
+For prose-only changes, check formatting and verify affected links, API names, and commands against the current source. Execute an affected example when changing a claim about its behavior. A full source gate is unnecessary when no executable, dependency, generated, or workflow input changed.
 
 Format only the files you edited with `bun x --no-install dprint fmt <paths>`, especially in a checkout containing someone else's work. Update an example's workspace dependency declaration and `bun.lock` together when adding an import from another package.
 
@@ -73,4 +70,4 @@ changes. The [example index](examples/README.md#how-these-examples-are-organized
 
 Update the combined contract and its evidence before changing public dispositions, then regenerate and verify the projection with the repository scripts. Documentation changes must describe the implemented surface; historical plans and private research candidates do not add exports.
 
-Local verification, hosted CI, certification, merge, tags, npm publication, and release are separate steps. Report exactly which checks ran. See [the release boundary](docs/release-security.md) for how consumers adopt finished artifacts.
+Local verification, hosted CI, certification, merge, tags, npm publication, and release establish different facts. Report the applicable results and any missing evidence. Carry forward authorization for the requested sequence; green checks do not grant authority for additional mutations. See [the release boundary](docs/release-security.md) for current release guarantees and how consumers adopt finished artifacts. Historical plans preserve earlier decisions and receipts; their old commands and pending checklists do not replace the current contract or require repeated approval for work already authorized.
