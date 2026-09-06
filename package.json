@@ -46,7 +46,7 @@
     "test:release": "node --test scripts/release/*.test.mjs"
   },
   "devDependencies": {
-    "@effect/platform-bun": "4.0.0-rc.108",
+    "@effect/platform-bun": "4.0.0-rc.112",
     "@effect/platform-deno": "4.0.0-rc.108",
     "@effect/platform-node": "4.0.0-rc.108",
     "@types/node": "24.3.0",
