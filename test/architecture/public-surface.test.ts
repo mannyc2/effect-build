@@ -133,7 +133,7 @@ describe("public surface", () => {
     expect(surface.packages["effect-build-rolldown"]).toBeUndefined();
     expect(
       Object.values(surface.packages).reduce((count, entry) => count + 1 + Object.keys(entry.subpaths).length, 0),
-    ).toBe(42);
+    ).toBe(43);
     for (const [name, contract] of Object.entries(surface.packages)) {
       const manifest = await readManifest(name);
       expect(Object.keys(manifest.exports), name).toEqual([".", ...Object.keys(contract.subpaths)]);
@@ -194,7 +194,7 @@ describe("public surface", () => {
     }
   });
 
-  it("keeps the Apple Notary internals package-private without widening the 42-module surface", async () => {
+  it("keeps the Apple Notary internals package-private without widening the 43-module surface", async () => {
     const [surface, manifest, indexSource, notarySource, codecSource, rejectionSource, submissionSource] = await Promise
       .all([
         readSurface(),
@@ -219,7 +219,7 @@ describe("public surface", () => {
     expect(Object.keys(surface.packages)).toHaveLength(11);
     expect(
       Object.values(surface.packages).reduce((count, entry) => count + 1 + Object.keys(entry.subpaths).length, 0),
-    ).toBe(42);
+    ).toBe(43);
     for (
       const name of [
         "NotaryJournalCodecError",

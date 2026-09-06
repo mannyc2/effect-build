@@ -406,7 +406,7 @@ test("freezes one exact release-certification policy without copying public pack
     packageSource: "publicApiProjection.packages",
     packageCount: 11,
     moduleSource: "publicApiProjection.packages package roots and subpaths",
-    moduleCount: 42,
+    moduleCount: 43,
     reservationSource: "publicApiProjection.privatePackages",
     reservationCount: 1,
   });
@@ -784,7 +784,7 @@ test("freezes one exact release-certification policy without copying public pack
     version: "0.6.3",
     tag: "v0.6.3",
     packageCount: 11,
-    moduleCount: 42,
+    moduleCount: 43,
     releaseAssetCount: 12,
   });
 

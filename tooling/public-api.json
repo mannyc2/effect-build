@@ -8,6 +8,7 @@
         "Executable",
         "File",
         "Matrix",
+        "NativeExecutable",
         "SystemTarget",
         "Tool",
         "Tree"
@@ -182,6 +183,7 @@
             "FileDestinationInvalid",
             "FileDestinationLocked",
             "FileVerificationFailed",
+            "VerifiedInputSchema",
             "publish",
             "withVerifiedBytes"
           ],
@@ -197,8 +199,24 @@
             "PublicationFailure",
             "Request",
             "VerifiedInput",
+            "VerifiedInputSchema",
             "publish",
             "withVerifiedBytes"
+          ]
+        },
+        "./Author/NativeExecutable": {
+          "runtime": [
+            "NativeExecutableObservationFailed",
+            "NativeExecutableParseFailed",
+            "observe",
+            "parse"
+          ],
+          "declarations": [
+            "NativeExecutableObservationFailed",
+            "NativeExecutableParseFailed",
+            "Observation",
+            "observe",
+            "parse"
           ]
         },
         "./Author/Tool": {

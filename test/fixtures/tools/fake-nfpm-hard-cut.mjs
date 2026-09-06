@@ -12,10 +12,13 @@ if (process.env.FAKE_NFPM_LOG) {
   const configuration = configIndex === -1
     ? undefined
     : JSON.parse(await readFile(argv[configIndex + 1], "utf8"));
+  const payloads = configuration === undefined ? undefined : await Promise.all(configuration.contents.map(async (content) => ({
+    dst: content.dst, mode: content.file_info?.mode, hex: (await readFile(content.src)).toString("hex"),
+  })));
   await mkdir(dirname(process.env.FAKE_NFPM_LOG), { recursive: true });
   await writeFile(
     process.env.FAKE_NFPM_LOG,
-    `${JSON.stringify({ argv, cwd: process.cwd(), marker: process.env.FAKE_PROJECT_MARKER ?? "", configuration })}\n`,
+    `${JSON.stringify({ argv, cwd: process.cwd(), marker: process.env.FAKE_PROJECT_MARKER ?? "", configuration, payloads })}\n`,
     { flag: "a" },
   );
 }

@@ -366,7 +366,11 @@ export const publish = <
 ): Effect.Effect<
   HashedTree,
   Failure<ProduceFailure, InspectFailure>,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ProduceRequirements | InspectRequirements
+  | Crypto.Crypto
+  | FileSystem.FileSystem
+  | Path.Path
+  | Exclude<ProduceRequirements, Scope.Scope>
+  | Exclude<InspectRequirements, Scope.Scope>
 > =>
   Effect.scoped(
     Effect.gen(function*() {

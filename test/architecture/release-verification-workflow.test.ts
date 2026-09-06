@@ -30,7 +30,7 @@ describe("final public release verification", () => {
       "live-operator-admin-preflight-before-draft-and-public-release",
     );
     expect(policy.packageCount).toBe(11);
-    expect(policy.moduleCount).toBe(42);
+    expect(policy.moduleCount).toBe(43);
     expect(policy.releaseAssetCount).toBe(12);
     expect(policy.tag).toBe("v0.6.3");
     expect(policy.publicState.packageSource).toBe("publicApiProjection.packages");

@@ -49,6 +49,42 @@ node build.mts
 `Command.AssembleExecutable` is the public operation module. Prepare the JavaScript entrypoint before assembly;
 this package is not a TypeScript bundler. Its main input makes file versus in-memory acquisition explicit.
 
+## Embed file or byte assets
+
+Each asset uses one explicit input form:
+
+```ts
+const assets = [
+  { _tag: "File", key: "message", path: "assets/message.txt" },
+  { _tag: "Bytes", key: "binary", contents: new Uint8Array([0, 128, 255]) },
+] as const;
+```
+
+File paths resolve against `cwd`. Byte contents are defensively copied during preparation. Both forms are written
+to the operation's private staging directory for Node to embed; callers need no temporary asset file. Keys must
+be unique and non-empty. Untagged assets and records mixing `path` with `contents` are rejected.
+
+To embed an existing finalized file or executable, lend its verified bytes directly:
+
+```ts
+import * as Command from "effect-build-node-sea/Command";
+import * as File from "effect-build/Author/File";
+
+const assembleWithPayload = (artifact: File.VerifiedInput) =>
+  File.withVerifiedBytes(artifact, (contents) =>
+    Command.AssembleExecutable.assembleDirect({
+      main: { _tag: "File", path: "src/main.cjs", format: "commonjs" },
+      assets: [{ _tag: "Bytes", key: "payload", contents }],
+      outfile: "dist/app-with-payload",
+      observation: "hashed",
+    }));
+```
+
+Provide the same command and platform layers as above. The main can retrieve the exact embedded bytes with
+`require("node:sea").getAsset("payload")`. Changes to the source artifact before verified consumption fail with
+`FileVerificationFailed` before assembly starts. This handoff reuses the held bytes without reopening the original
+path or creating another finalized file.
+
 `Command.layer()` selects the builder and optional base executable once. Set `builderExecutable` and
 `baseExecutable` to explicit absolute paths when needed; distinct builder and base selections must report the same
 version. Selected bytes are reauthenticated before launch. There is no postject fallback, automatic installation,

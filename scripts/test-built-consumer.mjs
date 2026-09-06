@@ -1,6 +1,6 @@
 // Consumes built packages or exact release-candidate tarballs in a fresh npm project to
-// install and typecheck every public module, run an in-memory provider API,
-// finalize immutable bytes, and adopt their path-free identity by logical name.
+// install and typecheck every public module, finalize actual provider bytes,
+// adopt their path-free identity, and archive an authored executable unchanged.
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -45,9 +45,9 @@ if (
 ) {
   throw new Error("tooling/public-api.json is not the exact combined-contract topology");
 }
-if (packageNames.length !== 11 || publicModuleSpecifiers.length !== 42) {
+if (packageNames.length !== 11) {
   throw new Error(
-    `combined contract projects ${packageNames.length} public packages and ${publicModuleSpecifiers.length} modules; expected 11 and 42`,
+    `combined contract projects ${packageNames.length} public packages; expected 11`,
   );
 }
 if (packageNames.some((name) => privatePackages.has(name))) {
@@ -79,10 +79,17 @@ const consumerArguments = (args) => {
 };
 
 const runtimeConsumerSource = `import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, FileSystem } from "effect";
+import { Cause, Effect, FileSystem, Schema } from "effect";
 import * as Artifact from "effect-build/Artifact";
+import * as Executable from "effect-build/Author/Executable";
 import * as FinalizedFile from "effect-build/Author/File";
+import * as NativeExecutable from "effect-build/Author/NativeExecutable";
+import * as SystemTarget from "effect-build/SystemTarget";
+import * as Archive from "effect-build-archives/Archive";
 import * as EsbuildApi from "effect-build-esbuild/Api";
+import { strict as assert } from "node:assert";
+import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 ${publicModuleImports}
 
 const publicModules = [
@@ -92,27 +99,96 @@ const bundle = await Effect.runPromise(
   EsbuildApi.Build.build({
     stdin: { contents: "export const consumer = 1;", loader: "ts", resolveDir: process.cwd() },
     bundle: true,
+    format: "esm",
     write: false,
     logLevel: "silent",
   }),
 );
+assert.equal(bundle.outputFiles.length, 1);
+const bundleOutput = bundle.outputFiles[0];
 const artifact = await Effect.runPromise(
   FinalizedFile.publish(
     {
-      destination: "dist/adopt-me.txt",
+      destination: "dist/bundle.mjs",
       observation: "hashed",
       provenance: Artifact.intrinsicProvenance("consumer"),
     },
     (candidate) => FileSystem.FileSystem.use((fileSystem) =>
-      fileSystem.writeFileString(candidate, "immutable bytes\\n")
+      fileSystem.writeFile(candidate, bundleOutput.contents)
     ),
   ).pipe(Effect.provide(NodeServices.layer)),
 );
-const adoption = Artifact.adoptFile("consumer/adopt-me.txt", artifact);
+const adoption = Artifact.adoptFile("consumer/bundle.mjs", artifact);
 const verified = await Effect.runPromise(
   FinalizedFile.withVerifiedBytes(artifact, (value) => Effect.succeed(new TextDecoder().decode(value)))
     .pipe(Effect.provide(NodeServices.layer)),
 );
+const consumerValue = (await import(pathToFileURL(artifact.path).href)).consumer;
+
+// Header-only fixture: proves public observation and artifact handoff, not OS execution.
+const interpreter = new TextEncoder().encode("/lib64/ld-linux-x86-64.so.2\\0");
+const nativeBytes = new Uint8Array(120 + interpreter.byteLength);
+nativeBytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1]);
+const header = new DataView(nativeBytes.buffer);
+header.setUint16(18, 62, true);
+header.setBigUint64(32, 64n, true);
+header.setUint16(54, 56, true);
+header.setUint16(56, 1, true);
+header.setUint32(64, 3, true);
+header.setBigUint64(72, 120n, true);
+header.setBigUint64(96, BigInt(interpreter.byteLength), true);
+nativeBytes.set(interpreter, 120);
+const executable = await Effect.runPromise(
+  Executable.publish(
+    {
+      destination: "dist/header-fixture",
+      observation: "hashed",
+      provenance: Artifact.intrinsicProvenance("packed-consumer-header-fixture"),
+    },
+    (candidate) => Effect.gen(function*() {
+      const fileSystem = yield* FileSystem.FileSystem;
+      yield* fileSystem.writeFile(candidate, nativeBytes);
+      yield* fileSystem.chmod(candidate, 0o755);
+    }),
+    (candidate) => Effect.map(NativeExecutable.observe(candidate.path), (observed) => {
+      assert.deepEqual(observed, { nativeFormat: "elf", os: "linux", architecture: "x64", abi: "gnu" });
+      return {
+        nativeFormat: observed.nativeFormat,
+        runtime: { name: "packed-consumer-header-fixture", version: "1" },
+        target: Schema.decodeUnknownSync(SystemTarget.SystemTarget)("linux-x64-gnu"),
+      };
+    }),
+  ).pipe(Effect.provide(NodeServices.layer)),
+);
+const archived = await Effect.runPromise(
+  Archive.archive(new Archive.ArchiveInput({
+    format: "zip",
+    entries: [new Archive.ArchiveEntry({ artifact: executable, path: "bin/header-fixture", executable: true })],
+    outfile: "dist/header-fixture.zip",
+  })).pipe(Effect.provide(Archive.layer), Effect.provide(NodeServices.layer)),
+);
+const zip = await Effect.runPromise(
+  FinalizedFile.withVerifiedBytes(archived, (bytes) => Effect.succeed(Buffer.from(bytes)))
+    .pipe(Effect.provide(NodeServices.layer)),
+);
+// Independent reader for this single stored ZIP entry; no package-private decoder.
+const end = zip.length - 22;
+assert.equal(zip.readUInt32LE(end), 0x06054b50);
+assert.equal(zip.readUInt16LE(end + 10), 1);
+const central = zip.readUInt32LE(end + 16);
+assert.equal(zip.readUInt32LE(central), 0x02014b50);
+assert.equal(zip.readUInt16LE(central + 10), 0);
+const entryName = zip.subarray(central + 46, central + 46 + zip.readUInt16LE(central + 28)).toString("utf8");
+assert.equal(entryName, "bin/header-fixture");
+const local = zip.readUInt32LE(central + 42);
+assert.equal(zip.readUInt32LE(local), 0x04034b50);
+assert.equal(zip.readUInt16LE(local + 8), 0);
+const dataStart = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+const entryBytes = zip.subarray(dataStart, dataStart + zip.readUInt32LE(central + 20));
+assert.deepEqual(entryBytes, Buffer.from(nativeBytes));
+const executableArchiveMode = (zip.readUInt32LE(central + 38) >>> 16) & 0o777;
+assert.equal(executableArchiveMode, 0o755);
+const executableArchiveMatches = createHash("sha256").update(entryBytes).digest("hex") === executable.digest.value;
 const mutationExit = await Effect.runPromise(
   Effect.gen(function*() {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -137,6 +213,13 @@ process.stdout.write(JSON.stringify({
     && Object.isFrozen(adoption)
     && Object.isFrozen(adoption.digest),
   verified,
+  bundleMatchesArtifact:
+    artifact.bytes === String(bundleOutput.contents.byteLength)
+    && artifact.digest.value === createHash("sha256").update(bundleOutput.contents).digest("hex")
+    && verified === bundleOutput.text,
+  consumerValue,
+  executableArchiveMatches,
+  executableArchiveMode,
   mutationErrorTag,
 }));
 `;
@@ -146,14 +229,18 @@ const assertConsumerReport = (observed) => {
     observed.publicModules !== publicModuleSpecifiers.length
     || observed.outputs !== 1
     || observed.protocol !== "effect-build/artifact-adoption@1"
-    || observed.logicalName !== "consumer/adopt-me.txt"
+    || observed.logicalName !== "consumer/bundle.mjs"
     || observed.digestLength !== 64
-    || observed.bytes !== "16"
+    || !/^[1-9][0-9]*$/.test(observed.bytes)
     || observed.pathFree !== true
     || observed.adoptionMatchesArtifact !== true
-    || observed.verified !== "immutable bytes\n"
+    || typeof observed.verified !== "string"
+    || observed.bundleMatchesArtifact !== true
+    || observed.consumerValue !== 1
+    || observed.executableArchiveMatches !== true
+    || observed.executableArchiveMode !== 0o755
     || observed.mutationErrorTag !== "FileVerificationFailed"
-  ) throw new Error("installed consumer did not prove all three pipelines");
+  ) throw new Error("installed consumer did not prove provider, artifact adoption, verification, and executable archive composition");
 };
 
 const runRegistryConsumer = async ({ runtime, version }) => {

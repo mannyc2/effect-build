@@ -31,37 +31,37 @@ export type LayoutValidation =
   | { readonly _tag: "Invalid"; readonly error: UnsafeArchiveLayout };
 
 export const validateLayout = (entries: readonly Entry[]): LayoutValidation => {
-  const exact = new Map<string, string>();
-  const insensitive = new Map<string, string>();
+  const indexed = new Map<string, Entry>();
   const normalized: Entry[] = [];
   for (const entry of entries) {
     const path = normalizeEntryPath(entry.path, entry.kind);
     if (typeof path !== "string") return { _tag: "Invalid", error: path };
-    const previousExact = exact.get(path);
-    if (previousExact !== undefined) {
-      return { _tag: "Invalid", error: invalid(path, `duplicates ${JSON.stringify(previousExact)}`) };
-    }
     const folded = canonical(path);
-    const previousInsensitive = insensitive.get(folded);
-    if (previousInsensitive !== undefined) {
+    const previous = indexed.get(folded);
+    if (previous !== undefined) {
       return {
         _tag: "Invalid",
-        error: invalid(path, `case/Unicode-normalization collision with ${JSON.stringify(previousInsensitive)}`),
+        error: invalid(
+          path,
+          previous.path === path
+            ? `duplicates ${JSON.stringify(previous.path)}`
+            : `case/Unicode-normalization collision with ${JSON.stringify(previous.path)}`,
+        ),
       };
     }
-    exact.set(path, path);
-    insensitive.set(folded, path);
-    normalized.push({ ...entry, path });
+    const normalizedEntry = { ...entry, path };
+    indexed.set(folded, normalizedEntry);
+    normalized.push(normalizedEntry);
   }
   for (const entry of normalized) {
-    const segments = entry.path.split("/");
+    const segments = canonical(entry.path).split("/");
     for (let length = 1; length < segments.length; length++) {
       const parent = segments.slice(0, length).join("/");
-      const parentEntry = normalized.find((candidate) => candidate.path === parent);
-      if (parentEntry?.kind !== undefined && parentEntry.kind !== "directory") {
+      const parentEntry = indexed.get(parent);
+      if (parentEntry !== undefined && parentEntry.kind !== "directory") {
         return {
           _tag: "Invalid",
-          error: invalid(entry.path, `descends through non-directory entry ${JSON.stringify(parent)}`),
+          error: invalid(entry.path, `descends through non-directory entry ${JSON.stringify(parentEntry.path)}`),
         };
       }
     }

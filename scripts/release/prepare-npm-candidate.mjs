@@ -40,7 +40,7 @@ if (
   || policy.candidate.packageAdmission !== "releaseCertification.publicAdmission"
   || policy.candidate.repositoryCodeInProtectedConsumer !== "forbidden"
   || policy.publicAdmission.packageCount !== 11
-  || policy.publicAdmission.moduleCount !== 42
+  || policy.publicAdmission.moduleCount !== 43
   || JSON.stringify(expectedDistTags.map(({ name }) => name)) !== JSON.stringify(names)
   || names.includes("effect-build-rolldown")
   || JSON.stringify(reservedOnly) !== JSON.stringify(["effect-build-rolldown"])

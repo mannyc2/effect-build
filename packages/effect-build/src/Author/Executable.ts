@@ -1,4 +1,4 @@
-import { Crypto, Effect, FileSystem, Path, Schema } from "effect";
+import { Crypto, Effect, FileSystem, Path, Schema, type Scope } from "effect";
 import type {
   AbsolutePath,
   Executable,
@@ -147,7 +147,11 @@ export const publish = <
 ): Effect.Effect<
   Artifact<Mode>,
   Failure<ProduceFailure, InspectFailure>,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ProduceRequirements | InspectRequirements
+  | Crypto.Crypto
+  | FileSystem.FileSystem
+  | Path.Path
+  | Exclude<ProduceRequirements, Scope.Scope>
+  | Exclude<InspectRequirements, Scope.Scope>
 > =>
   DurableFile.publish(
     request,

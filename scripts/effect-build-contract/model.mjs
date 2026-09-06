@@ -23,6 +23,7 @@ import {
   npmTrustedPublishClient,
   npmTrustedPublisher,
   operationRegisterPath,
+  operationInputContracts,
   operationTargets,
   privateSupportRegister,
   producerCapabilityRegister,
@@ -264,6 +265,9 @@ const buildOperation = (row) => {
     operationId: row.operation_id,
     provider: row.proposed_package.replace(/^effect-build-/u, ""),
     semanticIdentity: row.semantic_identity,
+    ...(operationInputContracts[row.operation_id] === undefined
+      ? {}
+      : { inputContract: operationInputContracts[row.operation_id] }),
     mechanism,
     resultSemantics: {
       providerPublication: row.provider_publication,
@@ -1158,7 +1162,7 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || publicAdmission.packageCount !== admittedPackages.length
     || publicAdmission.packageCount !== 11
     || publicAdmission.moduleSource !== "publicApiProjection.packages package roots and subpaths"
-    || publicAdmission.moduleCount !== 42
+    || publicAdmission.moduleCount !== 43
     || publicAdmission.reservationSource !== "publicApiProjection.privatePackages"
     || publicAdmission.reservationCount !== reservedOnlyPackages.length
     || publicAdmission.reservationCount !== 1

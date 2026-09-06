@@ -16,10 +16,19 @@ export type Main =
     readonly sourceName?: string;
   };
 
-export interface Asset {
-  readonly key: string;
-  readonly path: string;
-}
+export type Asset =
+  | {
+    readonly _tag: "File";
+    readonly key: string;
+    readonly path: string;
+    readonly contents?: never;
+  }
+  | {
+    readonly _tag: "Bytes";
+    readonly key: string;
+    readonly contents: Uint8Array;
+    readonly path?: never;
+  };
 
 export interface Input<Mode extends Artifact.ObservationMode> {
   readonly main: Main;
@@ -130,16 +139,27 @@ const prepare = <Mode extends Artifact.ObservationMode>(
     const assets: PreparedAsset[] = [];
     for (const asset of sourceAssets) {
       if (typeof asset !== "object" || asset === null) return yield* invalid("each asset must be an object");
-      const extra = unknownKey(asset, ["key", "path"]);
-      if (extra !== undefined) return yield* invalid(`unknown asset field ${extra}`);
       if (!validPathInput(asset.key)) return yield* invalid("asset key must be non-empty and contain no NUL");
       if (seen.has(asset.key)) return yield* invalid(`duplicate asset key ${asset.key}`);
-      if (!validPathInput(asset.path)) return yield* invalid(`asset ${asset.key} path is invalid`);
       seen.add(asset.key);
-      assets.push({
-        key: asset.key,
-        contents: yield* readInput(path.normalize(path.resolve(cwd, asset.path)), `asset ${asset.key}`),
-      });
+      if (asset._tag === "File") {
+        const extra = unknownKey(asset, ["_tag", "key", "path"]);
+        if (extra !== undefined) return yield* invalid(`unknown File asset field ${extra}`);
+        if (!validPathInput(asset.path)) return yield* invalid(`asset ${asset.key} path is invalid`);
+        assets.push({
+          key: asset.key,
+          contents: yield* readInput(path.normalize(path.resolve(cwd, asset.path)), `asset ${asset.key}`),
+        });
+      } else if (asset._tag === "Bytes") {
+        const extra = unknownKey(asset, ["_tag", "key", "contents"]);
+        if (extra !== undefined) return yield* invalid(`unknown Bytes asset field ${extra}`);
+        if (!(asset.contents instanceof Uint8Array)) {
+          return yield* invalid(`asset ${asset.key} contents must be Uint8Array`);
+        }
+        assets.push({ key: asset.key, contents: Uint8Array.from(asset.contents) });
+      } else {
+        return yield* invalid("asset tag must be File or Bytes");
+      }
     }
     return { main: Uint8Array.from(main), assets, cwd };
   });
@@ -171,7 +191,7 @@ const materialize = <Mode extends Artifact.ObservationMode>(
       Effect.mapError(mapFileError(stagedPath, "write private main")),
     );
     yield* runtime.runChecked("check-main", ["--check", mainPath], prepared.cwd, false);
-    const assets: Record<string, string> = {};
+    const assets = Object.create(null) as Record<string, string>;
     for (const [index, asset] of prepared.assets.entries()) {
       const assetPath = path.join(assetsRoot, `${index}`);
       yield* fileSystem.writeFile(assetPath, asset.contents).pipe(

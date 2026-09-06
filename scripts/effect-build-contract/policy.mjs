@@ -2275,6 +2275,16 @@ export const operationTargets = Object.fromEntries([
   ["CAN-ROL-022", "Config", "load"],
 ].map(([id, module, exportName]) => [id, { module, exportName }]));
 
+export const operationInputContracts = {
+  "CAN-NODE-001": {
+    assetSources: ["File", "Bytes"],
+    assetDiscriminator: "_tag",
+    assetKeys: "unique-nonempty-nul-free",
+    byteOwnership: "defensive-copy-during-preparation",
+    evidence: ["docs/artifact-composition.md", "test/integration/node-sea-assemble-executable.test.ts"],
+  },
+};
+
 export const coreCapabilityRegister = [
   {
     id: "CORE-ARTIFACT-IDENTITY",
@@ -2298,6 +2308,8 @@ export const coreCapabilityRegister = [
       "atomic-no-replace-file-commit",
       "undelivered-commit-rollback",
       "verified-byte-consumption",
+      "canonical-hashed-file-or-executable-input",
+      "callback-scope-ownership",
     ],
   },
   {
@@ -2312,6 +2324,7 @@ export const coreCapabilityRegister = [
       "atomic-tree-rename",
       "undelivered-commit-rollback",
       "committed-file-projection",
+      "callback-scope-ownership",
       "verified-tree-consumption",
     ],
   },
@@ -2324,8 +2337,16 @@ export const coreCapabilityRegister = [
       "native-inspection",
       "revalidation",
       "atomic-no-replace-executable-commit",
+      "callback-scope-ownership",
       "undelivered-commit-rollback",
     ],
+  },
+  {
+    id: "CORE-NATIVE-EXECUTABLE",
+    module: "Author/NativeExecutable",
+    visibility: "public",
+    owns: ["native-header-parsing", "native-file-observation"],
+    evidence: ["docs/artifact-composition.md", "test/unit/native-executable-inspection.test.ts"],
   },
   {
     id: "CORE-SELECTED-TOOL",
@@ -2411,6 +2432,9 @@ export const producerCapabilityRegister = [
     package: "effect-build-archives",
     module: "Archive",
     exports: ["archive"],
+    inputs: "Author/File.VerifiedInputSchema",
+    layout: "canonical-NFC-case-insensitive-ancestor-kinds",
+    evidence: ["docs/artifact-composition.md", "test/integration/bun-compile-executable.test.ts"],
     visibility: "public",
     finalization: finalized("file"),
   },
@@ -2420,6 +2444,8 @@ export const producerCapabilityRegister = [
     package: "effect-build-archives",
     module: "SourceArchive",
     exports: ["sourceArchive"],
+    layout: "canonical-NFC-case-insensitive-ancestor-kinds",
+    evidence: ["test/unit/archive-layout-composition.test.ts"],
     visibility: "public",
     finalization: finalized("file"),
   },
@@ -2438,6 +2464,8 @@ export const producerCapabilityRegister = [
     package: "effect-build-nfpm",
     module: "Package",
     exports: ["buildPackage", "buildDeb", "buildRpm", "buildApk", "buildArchLinux", "buildMsix"],
+    inputs: "Author/File.VerifiedInputSchema",
+    evidence: ["docs/artifact-composition.md", "test/integration/nfpm-real.test.ts"],
     visibility: "public",
     finalization: finalized("file"),
   },
@@ -2584,12 +2612,13 @@ const appleCapabilityIds = producerCapabilityRegister
 
 export const fixedPublicSurface = {
   "effect-build": {
-    rootNamespaces: ["Artifact", "BorrowedOutput", "Executable", "File", "Matrix", "SystemTarget", "Tool", "Tree"],
+    rootNamespaces: ["Artifact", "BorrowedOutput", "Executable", "File", "Matrix", "NativeExecutable", "SystemTarget", "Tool", "Tree"],
     subpaths: {
       "./Artifact": ["CORE-ARTIFACT-IDENTITY"],
       "./Author/BorrowedOutput": ["CORE-BORROWED-OUTPUT"],
       "./Author/Executable": ["CORE-FINALIZE-EXECUTABLE"],
       "./Author/File": ["CORE-FINALIZE-FILE"],
+      "./Author/NativeExecutable": ["CORE-NATIVE-EXECUTABLE"],
       "./Author/Tool": ["CORE-SELECTED-TOOL"],
       "./Author/Tree": ["CORE-FINALIZE-TREE"],
       "./Matrix": ["CORE-MATRIX"],

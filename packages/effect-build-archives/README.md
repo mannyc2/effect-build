@@ -45,8 +45,9 @@ export const archiveFile = (file: Artifact.HashedFile) =>
 Use a destination that does not exist. Archive paths are relative and portable; traversal and colliding layouts are
 rejected. Each input is revalidated, and ordering, timestamps, ownership, modes, headers, and compression are normalized.
 Set `executable: true` explicitly for entries that need mode `0755`; ordinary entries use `0644`.
-An `ArchiveEntry` requires a `HashedFile`. A compiler's `HashedExecutable` has a different identity; to package those
-bytes, use `File.withVerifiedBytes` with `File.publish` to finalize a file payload first.
+An `ArchiveEntry` accepts `File.VerifiedInput`: a `HashedFile` (including a finalized tree file projection) or a
+compiler's `HashedExecutable`. Pass the original artifact directly; its identity, provenance, and publication facts
+are preserved. Core verifies its bytes before encoding. Archive permissions remain explicit.
 
 ## Archive source
 

@@ -45,20 +45,27 @@ machine's path. It creates a value; it does not upload or publish to a registry.
 
 ## Modules
 
-| Import                               | Use it for                                                                   |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| `effect-build/Artifact`              | Hashed file, tree, and executable identities; schemas and path-free adoption |
-| `effect-build/Author/File`           | Atomic file finalization and verified input bytes                            |
-| `effect-build/Author/Tree`           | Atomic tree finalization, verified snapshots, and file projections           |
-| `effect-build/Author/Executable`     | Executable inspection and atomic finalization                                |
-| `effect-build/Author/Tool`           | Resolve one executable, observe it, and reauthenticate it before launch      |
-| `effect-build/Author/BorrowedOutput` | Scope-bound ownership for native output                                      |
-| `effect-build/Matrix`                | Bounded compilation matrices with ordered success/failure cells              |
-| `effect-build/SystemTarget`          | System target identities shared by providers and artifacts                   |
+| Import                                 | Use it for                                                                   |
+| -------------------------------------- | ---------------------------------------------------------------------------- |
+| `effect-build/Artifact`                | Hashed file, tree, and executable identities; schemas and path-free adoption |
+| `effect-build/Author/File`             | Atomic file finalization and verified input bytes                            |
+| `effect-build/Author/Tree`             | Atomic tree finalization, verified snapshots, and file projections           |
+| `effect-build/Author/Executable`       | Executable inspection and atomic finalization                                |
+| `effect-build/Author/NativeExecutable` | Parse native header facts or observe an executable file                      |
+| `effect-build/Author/Tool`             | Resolve one executable, observe it, and reauthenticate it before launch      |
+| `effect-build/Author/BorrowedOutput`   | Scope-bound ownership for native output                                      |
+| `effect-build/Matrix`                  | Bounded compilation matrices with ordered success/failure cells              |
+| `effect-build/SystemTarget`            | System target identities shared by providers and artifacts                   |
 
 Pure producers use `Artifact.intrinsicProvenance`; selected-tool producers preserve the exact `Tool.Observation`.
 Core injects platform services and provides no compiler registry, installer, fallback runner, release journal, or
 publication workflow. Provider options and native results stay in their provider package.
+
+`NativeExecutable.parse(bytes)` observes supported ELF, Mach-O, and PE header facts without filesystem services.
+`NativeExecutable.observe(path)` additionally checks that the path is a regular file with execute permission on POSIX
+hosts. These operations report format, operating system, architecture, and an ELF ABI only when observed. They do not
+prove that a complete file can run, select a requested target, identify its runtime, or create a durable artifact.
+Use file observation inside `Executable.publish` inspection; the finalizer verifies the candidate bytes around it.
 
 ## More
 

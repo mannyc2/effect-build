@@ -138,6 +138,9 @@ finalizer.
 `Command.AssembleExecutable.assembleDirect` assembles an already-prepared CommonJS or ESM main into a finalized executable.
 Its `main` is `{ _tag: "File", path, format }` or `{ _tag: "Bytes", contents, format, sourceName? }`. Other inputs are
 `outfile`, `observation`, optional `cwd`, `assets`, and `disableExperimentalSEAWarning`.
+Assets use `{ _tag: "File", key, path }` or `{ _tag: "Bytes", key, contents }`, with unique non-empty keys. Byte assets
+are copied during preparation and both forms use the operation's private staging. `File.withVerifiedBytes` can pass an
+existing artifact directly into a byte asset, preserving verified consumption without a temporary caller-owned file.
 
 `Command.layer` takes `builderExecutable`, `baseExecutable`, `outputLimitBytes`, and `allowUntestedVersion`. The builder is
 selected from `PATH` if absent; the base defaults to that builder. Both must expose `--build-sea`, report the same version,

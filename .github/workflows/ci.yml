@@ -271,6 +271,7 @@ jobs:
           set -euo pipefail
           nfpm_bin="$(bash scripts/acceptance/install-unix-tool.sh nfpm "$RUNNER_TEMP/effect-build-tools")"
           echo "EFFECT_BUILD_NFPM_BIN=$nfpm_bin" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_BUN=$(bun -p 'process.execPath')" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_DOCKER_BIN=$(command -v docker)" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_NFPM_FORMAT=${{ matrix.format }}" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_ACCEPTANCE_OUTDIR=$RUNNER_TEMP/effect-build-package" >> "$GITHUB_ENV"

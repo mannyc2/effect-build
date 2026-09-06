@@ -27,7 +27,7 @@ registry state.
 
 Publishing effect-build's own npm packages is a separate distribution concern.
 The generated `releaseCertification` contract admits exactly eleven public
-packages and the 42-module public projection. Rolldown remains private and
+packages and the 43-module public projection. Rolldown remains private and
 `effect-build-rolldown` is reservation-only.
 
 `.github/workflows/release.yml` has three hard-cut modes:

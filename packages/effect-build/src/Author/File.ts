@@ -1,19 +1,14 @@
-import { Crypto, Effect, FileSystem, Path, Schema } from "effect";
-import type {
-  AbsolutePath,
-  HashedExecutable,
-  HashedFile,
-  HashedFileObservation,
-  Provenance,
-  Publication,
-} from "../Artifact.js";
-import { decimalBytes, sha256Digest } from "../Artifact.js";
+import { Crypto, Effect, FileSystem, Path, Schema, type Scope } from "effect";
+import type { AbsolutePath, HashedFile, HashedFileObservation, Provenance, Publication } from "../Artifact.js";
+import { decimalBytes, HashedExecutableSchema, HashedFileSchema, sha256Digest } from "../Artifact.js";
 import * as DurableFile from "./internal/DurableFile.js";
 
 export type Artifact = HashedFile & {
   readonly publication: Extract<Publication, { readonly scope: "file" }>;
 };
-export type VerifiedInput = HashedFile | HashedExecutable;
+/** Durable identities whose exact regular-file bytes can be verified without re-finalization. */
+export const VerifiedInputSchema = Schema.Union([HashedFileSchema, HashedExecutableSchema]);
+export type VerifiedInput = typeof VerifiedInputSchema.Type;
 
 export interface Request {
   readonly destination: string;
@@ -104,7 +99,11 @@ export const publish = <
 ): Effect.Effect<
   Artifact,
   Failure<ProduceFailure, InspectFailure>,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ProduceRequirements | InspectRequirements
+  | Crypto.Crypto
+  | FileSystem.FileSystem
+  | Path.Path
+  | Exclude<ProduceRequirements, Scope.Scope>
+  | Exclude<InspectRequirements, Scope.Scope>
 > =>
   DurableFile.publish(
     request,

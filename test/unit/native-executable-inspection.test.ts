@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, FileSystem } from "effect";
+import * as NativeExecutable from "effect-build/Author/NativeExecutable";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,12 +12,12 @@ import type { SystemTarget } from "../../packages/effect-build/src/SystemTarget.
 
 type Provider = "bun" | "deno";
 
-const elf = (interpreter?: string): Uint8Array => {
+const elf = (interpreter?: string, machine = 62): Uint8Array => {
   const encoded = interpreter === undefined ? undefined : new TextEncoder().encode(`${interpreter}\0`);
   const bytes = new Uint8Array(120 + (encoded?.byteLength ?? 0));
   bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1], 0);
   const view = new DataView(bytes.buffer);
-  view.setUint16(18, 62, true);
+  view.setUint16(18, machine, true);
   view.setBigUint64(32, 64n, true);
   view.setUint16(54, 56, true);
   view.setUint16(56, 1, true);
@@ -58,36 +59,195 @@ const errorOf = <A, E>(exit: Exit.Exit<A, E>): E => {
   return failure.value;
 };
 
-describe("Bun and Deno native executable inspection", () => {
-  it("Bun structurally validates the selected fat Mach-O slice", async () => {
-    const root = await mkdtemp(join(tmpdir(), "effect-build-bun-fat-macho-"));
-    try {
-      const validPath = join(root, "valid") as AbsolutePath;
-      await writeFile(validPath, fatMacho("valid"));
-      await chmod(validPath, 0o755);
-      const valid = await Effect.runPromiseExit(
-        inspect("bun", validPath, "macos-x64").pipe(Effect.provide(NodeServices.layer)),
-      );
-      expect(Exit.isSuccess(valid)).toBe(true);
+const thinMacho = (cpu: number): Uint8Array => {
+  const bytes = new Uint8Array(8);
+  bytes.set([0xcf, 0xfa, 0xed, 0xfe]);
+  new DataView(bytes.buffer).setUint32(4, cpu, true);
+  return bytes;
+};
 
-      for (const malformed of ["invalid-magic", "invalid-cpu"] as const) {
-        const path = join(root, malformed) as AbsolutePath;
-        await writeFile(path, fatMacho(malformed));
-        await chmod(path, 0o755);
+const pe = (machine: number): Uint8Array => {
+  const bytes = new Uint8Array(70);
+  bytes.set([0x4d, 0x5a]);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(60, 64, true);
+  bytes.set([0x50, 0x45], 64);
+  view.setUint16(68, machine, true);
+  return bytes;
+};
+
+const changed = (source: Uint8Array, update: (view: DataView) => void): Uint8Array => {
+  const bytes = Uint8Array.from(source);
+  update(new DataView(bytes.buffer));
+  return bytes;
+};
+
+const twoSliceMacho = (overlap: boolean): Uint8Array => {
+  const bytes = new Uint8Array(80);
+  bytes.set([0xca, 0xfe, 0xba, 0xbe]);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(4, 2, false);
+  for (const [entry, cpu, offset] of [[8, 0x01000007, 48], [28, 0x0100000c, overlap ? 56 : 64]]) {
+    view.setUint32(entry!, cpu!, false);
+    view.setUint32(entry! + 8, offset!, false);
+    view.setUint32(entry! + 12, 16, false);
+    bytes.set(thinMacho(cpu!), offset!);
+  }
+  return bytes;
+};
+
+const duplicateInterpreter = (): Uint8Array => {
+  const bytes = new Uint8Array(200);
+  bytes.set(elf("/lib/ld-linux.so.2"));
+  const view = new DataView(bytes.buffer);
+  view.setUint16(56, 2, true);
+  view.setBigUint64(72, 180n, true);
+  view.setBigUint64(96, 8n, true);
+  view.setUint32(120, 3, true);
+  return bytes;
+};
+
+describe("public native executable header observation", () => {
+  it.each(
+    [
+      ["ELF GNU x64", elf("/lib64/ld-linux-x86-64.so.2"), {
+        nativeFormat: "elf",
+        os: "linux",
+        architecture: "x64",
+        abi: "gnu",
+      }],
+      ["ELF musl aarch64", elf("/lib/ld-musl-aarch64.so.1", 183), {
+        nativeFormat: "elf",
+        os: "linux",
+        architecture: "aarch64",
+        abi: "musl",
+      }],
+      ["thin Mach-O x64", thinMacho(0x01000007), { nativeFormat: "mach-o", os: "macos", architecture: "x64" }],
+      ["thin Mach-O aarch64", thinMacho(0x0100000c), { nativeFormat: "mach-o", os: "macos", architecture: "aarch64" }],
+      ["fat Mach-O", fatMacho("valid"), { nativeFormat: "mach-o", os: "macos", architecture: "x64" }],
+      ["PE x64", pe(0x8664), { nativeFormat: "pe", os: "windows", architecture: "x64" }],
+      ["PE aarch64", pe(0xaa64), { nativeFormat: "pe", os: "windows", architecture: "aarch64" }],
+    ] as const,
+  )("parses %s without attaching runtime or requested target facts", async (_name, bytes, expected) => {
+    const observation = await Effect.runPromise(NativeExecutable.parse(bytes));
+    expect(observation).toEqual(expected);
+    expect(Object.isFrozen(observation)).toBe(true);
+  });
+
+  it.each([undefined, "/lib64/ld-unknown-x86-64.so.1"])(
+    "leaves unavailable ELF ABI unknown (%s)",
+    async (interpreter) => {
+      const observation = await Effect.runPromise(NativeExecutable.parse(elf(interpreter)));
+      expect(observation).toEqual({ nativeFormat: "elf", os: "linux", architecture: "x64" });
+    },
+  );
+
+  it.each(
+    [
+      ["truncated-header", new Uint8Array(3)],
+      ["invalid-native-magic", new Uint8Array(4)],
+      ["invalid-elf-header", changed(elf(), (view) => view.setUint8(4, 0))],
+      ["unsupported-machine", elf(undefined, 0)],
+      ["invalid-program-headers", changed(elf(), (view) => view.setUint16(56, 0, true))],
+      ["header-offset-overflow", changed(elf(), (view) => view.setBigUint64(32, 0xffff_ffff_ffff_ffffn, true))],
+      ["invalid-interpreter", changed(elf("/lib/ld-linux.so.2"), (view) => view.setBigUint64(96, 0n, true))],
+      ["multiple-elf-interpreters", duplicateInterpreter()],
+      ["unsupported-fat64", Uint8Array.of(0xca, 0xfe, 0xba, 0xbf, 0, 0, 0, 1)],
+      ["invalid-fat-header", changed(fatMacho("valid"), (view) => view.setUint32(4, 0, false))],
+      ["invalid-fat-slice-range", changed(fatMacho("valid"), (view) => view.setUint32(16, 16, false))],
+      ["overlapping-fat-slices", twoSliceMacho(true)],
+      ["ambiguous-fat-architecture", twoSliceMacho(false)],
+      ["invalid-fat-slice", fatMacho("invalid-magic")],
+      ["invalid-fat-slice", fatMacho("invalid-cpu")],
+      ["invalid-pe-signature", changed(pe(0x8664), (view) => view.setUint8(64, 0))],
+    ] as const,
+  )("reports the finite parse reason %s", async (reason, bytes) => {
+    const failure = errorOf(await Effect.runPromiseExit(NativeExecutable.parse(bytes)));
+    expect(failure).toBeInstanceOf(NativeExecutable.NativeExecutableParseFailed);
+    expect(failure.reason).toBe(reason);
+  });
+
+  it("observes a regular executable path and maps read failures without changing their reason", async () => {
+    const root = await mkdtemp(join(tmpdir(), "effect-build-native-observe-"));
+    try {
+      const path = join(root, "app") as AbsolutePath;
+      const missing = join(root, "missing") as AbsolutePath;
+      await writeFile(path, thinMacho(0x01000007));
+      await chmod(path, 0o755);
+      const result = await Effect.runPromise(
+        Effect.gen(function*() {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const observed = yield* NativeExecutable.observe(path);
+          const unreadable = yield* Effect.exit(
+            NativeExecutable.observe(path).pipe(
+              Effect.provideService(FileSystem.FileSystem, {
+                ...fileSystem,
+                readFile: () => fileSystem.readFile(missing),
+              }),
+            ),
+          );
+          const changedSize = yield* Effect.exit(
+            NativeExecutable.observe(path).pipe(
+              Effect.provideService(FileSystem.FileSystem, {
+                ...fileSystem,
+                readFile: () => Effect.succeed(new Uint8Array(1)),
+              }),
+            ),
+          );
+          const absent = yield* Effect.exit(NativeExecutable.observe(missing));
+          const directory = yield* Effect.exit(NativeExecutable.observe(root as AbsolutePath));
+          return { observed, unreadable, changedSize, absent, directory };
+        }).pipe(Effect.provide(NodeServices.layer)),
+      );
+      expect(result.observed).toEqual({ nativeFormat: "mach-o", os: "macos", architecture: "x64" });
+      for (
+        const [exit, reason, failedPath] of [
+          [result.unreadable, "unable-to-read", path],
+          [result.changedSize, "size-changed-during-read", path],
+          [result.absent, "unable-to-stat", missing],
+          [result.directory, "not-regular-file", root],
+        ] as const
+      ) {
+        expect(errorOf(exit)).toMatchObject({ _tag: "NativeExecutableObservationFailed", reason, path: failedPath });
+      }
+      if (process.platform !== "win32") {
+        await chmod(path, 0o644);
         const exit = await Effect.runPromiseExit(
-          inspect("bun", path, "macos-x64").pipe(Effect.provide(NodeServices.layer)),
+          NativeExecutable.observe(path).pipe(Effect.provide(NodeServices.layer)),
         );
         expect(errorOf(exit)).toMatchObject({
-          _tag: "NativeExecutableInspectionFailed",
-          reason: "invalid-fat-slice",
+          _tag: "NativeExecutableObservationFailed",
+          reason: "not-executable",
+          path,
         });
       }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
+});
 
+describe("Bun and Deno native executable inspection", () => {
   for (const provider of ["bun", "deno"] as const) {
+    it(`${provider} retains its error mapping for malformed native bytes`, async () => {
+      const root = await mkdtemp(join(tmpdir(), `effect-build-${provider}-malformed-`));
+      try {
+        const path = join(root, "app") as AbsolutePath;
+        await writeFile(path, fatMacho("invalid-magic"));
+        await chmod(path, 0o755);
+        const exit = await Effect.runPromiseExit(
+          inspect(provider, path, "macos-x64").pipe(Effect.provide(NodeServices.layer)),
+        );
+        expect(errorOf(exit)).toMatchObject({
+          _tag: "NativeExecutableInspectionFailed",
+          reason: "invalid-fat-slice",
+          path,
+        });
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+
     it(`${provider} rejects Linux artifacts whose ABI is absent or unknown`, async () => {
       const root = await mkdtemp(join(tmpdir(), `effect-build-${provider}-abi-`));
       try {
@@ -129,6 +289,13 @@ describe("Bun and Deno native executable inspection", () => {
             inspect(provider, path, target).pipe(Effect.provide(NodeServices.layer)),
           );
           expect(Exit.isSuccess(matching)).toBe(true);
+          if (Exit.isSuccess(matching)) {
+            expect(matching.value).toEqual({
+              nativeFormat: "elf",
+              target,
+              runtime: { name: provider, version: provider === "bun" ? "1.3.14" : "2.9.5" },
+            });
+          }
 
           const mismatched = await Effect.runPromiseExit(
             inspect(
