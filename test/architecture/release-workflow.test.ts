@@ -14,6 +14,7 @@ interface WorkflowStep {
   readonly name?: string;
   readonly run?: string;
   readonly uses?: string;
+  readonly env?: Readonly<Record<string, string>>;
   readonly with?: Readonly<Record<string, unknown>>;
 }
 
@@ -90,6 +91,26 @@ const embeddedNode = (body: string) => {
 };
 
 describe("release workflow hard cut", () => {
+  it("reuses exact-source CI before rebuilding and consuming the single candidate byte set", () => {
+    const preparation = steps(workflow.jobs["prepare-candidate"]);
+    const position = (fragment: string) => preparation.findIndex(({ run }) => run?.includes(fragment));
+    const ordered = [
+      "scripts/release/install-frozen-release-dependencies.mjs",
+      "scripts/release/admit-source-ci.mjs",
+      "bun run build",
+      "scripts/release/prepare-npm-candidate.mjs",
+      "scripts/test-built-consumer.mjs --candidate",
+    ].map(position);
+    expect(ordered.every((index) => index >= 0)).toBe(true);
+    expect(ordered).toEqual([...ordered].sort((left, right) => left - right));
+    const consumer = preparation[ordered[4]!];
+    const pack = preparation[ordered[3]!];
+    expect(consumer?.env?.CANDIDATE_DIR).toBe(pack?.env?.CANDIDATE_DIR);
+    expect(consumer?.env?.CANDIDATE_DIR).toBe("${{ runner.temp }}/npm-release-candidate");
+    expect(preparation.findIndex(({ id }) => id === "upload")).toBeGreaterThan(ordered[4]!);
+    expect(script(workflow.jobs["prepare-candidate"])).not.toContain("bun run verify");
+  });
+
   it("admits exactly three modes and keeps preparation separate from one protected npm job", () => {
     const inputs = workflow.on.workflow_dispatch?.inputs ?? {};
     const prepare = workflow.jobs["prepare-candidate"];

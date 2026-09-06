@@ -8,7 +8,7 @@ import { canonicalJson, sha256Digest } from "../../scripts/release/protocol.mjs"
 // @ts-expect-error The readiness protocol is an intentionally unprotected Node module.
 import * as readiness from "../../scripts/release/readiness-protocol.mjs";
 
-const { assertReadinessArtifactAllowed, validateGithubArtifactEvidence } = readiness;
+const { assertReadinessArtifactAllowed, validateGithubArtifactEvidence, validateRunCompletionFreshness } = readiness;
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const contract = JSON.parse(await readFile(resolve(root, "tooling/effect-build-contract.json"), "utf8"));
@@ -24,6 +24,32 @@ const coordinate = (workflow: string, seed: string) => ({
 });
 
 describe("release readiness protocol", () => {
+  it("admits old execution time only for the canonical exact-source CI role", () => {
+    const observedAt = Date.parse("2026-09-06T18:00:00.000Z");
+    const completedAt = observedAt - 30 * 86400_000;
+    const source = policy.evidenceRoles.find(({ role }: { role: string }) => role === "exact-main-ci");
+    expect(() => validateRunCompletionFreshness({ definition: source, completedAt, observedAt })).not.toThrow();
+    for (
+      const definition of [
+        { ...source, event: "workflow_dispatch" },
+        { ...source, type: "githubArtifact" },
+        { ...source, workflowPath: ".github/workflows/release.yml" },
+        { ...source, runCompletionFreshness: undefined },
+        { ...source, role: "npm-oidc-certification" },
+      ]
+    ) {
+      expect(() => validateRunCompletionFreshness({ definition, completedAt, observedAt }))
+        .toThrow(/freshness policy/u);
+    }
+    expect(() =>
+      validateRunCompletionFreshness({
+        definition: source,
+        completedAt: observedAt + 1,
+        observedAt,
+      })
+    ).toThrow(/future/u);
+  });
+
   it("hard-cuts directly to exactly three hosted proofs and two aggregate files", async () => {
     expect(() => assertReadinessArtifactAllowed(contract)).not.toThrow();
     expect(policy.protocol).toBe("effect-build/release-readiness@3");

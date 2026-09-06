@@ -156,6 +156,29 @@ const expectedToolchain = (contract) => {
   };
 };
 
+// An exact source CI result does not become false with age. Its authenticated
+// observation still expires under validateTemporalReference, independently of
+// the original run completion. Mutable certification and artifact evidence do
+// retain their completion-age limits.
+export const validateRunCompletionFreshness = ({ definition, completedAt, observedAt, clockSkewSeconds = 0 }) => {
+  const reusableSource = definition.runCompletionFreshness === "exact-source-no-time-expiry";
+  if (
+    reusableSource !== (definition.role === "exact-main-ci")
+    || (reusableSource && (
+      definition.type !== "githubRun"
+      || definition.workflowPath !== ".github/workflows/ci.yml"
+      || definition.event !== "push"
+    ))
+    || (definition.runCompletionFreshness !== undefined && !reusableSource)
+  ) throw new Error("GitHub run completion freshness policy is not exact");
+  if (
+    !Number.isFinite(completedAt)
+    || !Number.isFinite(observedAt)
+    || completedAt > observedAt + clockSkewSeconds * 1_000
+    || (!reusableSource && observedAt - completedAt > definition.maximumAgeSeconds * 1_000)
+  ) throw new Error("GitHub run completion is future or stale");
+};
+
 const validateTemporalReference = (value, aggregateObservedAt, validationTime, freshness, label) => {
   const observedAt = canonicalTimestamp(value.observedAt, `${label}.observedAt`);
   const expiresAt = canonicalTimestamp(value.expiresAt, `${label}.expiresAt`);

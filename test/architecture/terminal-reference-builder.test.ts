@@ -449,4 +449,31 @@ describe("terminal reference builder", () => {
     });
     expect(result.expiresAt).toBe("2026-09-01T18:30:00.000Z");
   });
+
+  it.each(["fake-registry", "npm-oidc-certification"] as const)(
+    "does not renew stale %s completion by freshly observing the retained artifact",
+    async (kind) => {
+      const fixture = boundary({
+        kind,
+        bytes: artifacts[kind].bytes,
+        run: runMetadata(kind, {
+          created_at: "2026-08-01T17:55:00Z",
+          updated_at: "2026-08-01T17:59:00Z",
+        }),
+      });
+      await expect(buildTerminalReference({
+        contract,
+        contractBytes,
+        kind,
+        sourceSha,
+        runId: "101",
+        runAttempt: "2",
+        artifactId: "202",
+        artifactDigest: fixture.digest,
+        github: fixture.github,
+        now: () => observedAt,
+        artifactEvidenceValidator: vi.fn(),
+      })).rejects.toThrow(/completion is future or stale/u);
+    },
+  );
 });

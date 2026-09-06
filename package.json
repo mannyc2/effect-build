@@ -23,8 +23,7 @@
     "test:types": "tstyche",
     "test:unit": "vitest run test/unit && bun run --cwd packages/effect-build-apple test",
     "test:architecture": "vitest run test/architecture --exclude test/architecture/release-publisher-state-machine.test.ts && vitest run test/architecture/release-publisher-state-machine.test.ts",
-    "test:consumer": "bun scripts/test-built-consumer.mjs",
-    "test:consumer:fresh": "bun scripts/test-built-consumer.mjs --fresh-install",
+    "test:consumer": "bun run build && bun scripts/test-built-consumer.mjs",
     "test:examples": "bun run --cwd examples/cli test && bun run --cwd examples/esbuild test && bun run --cwd examples/artifact-pipeline test",
     "test:integration:bun": "bun scripts/run-real-bun-integration.mjs",
     "test:integration:deno": "vitest run test/integration/deno-compile-executable.test.ts test/integration/deno-bundle.test.ts",
@@ -40,7 +39,9 @@
     "lint": "oxlint packages test typetest examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
-    "verify": "bun run build && bun run check:contract && bun run check && bun run test:types && bun run test:unit && bun run test:examples && bun scripts/test-built-consumer.mjs --built && bun run test:architecture && bun run lint && bun run format:check",
+    "verify:static": "bun run check:contract && bun run check && bun run test:types && bun run lint && bun run format:check",
+    "verify:platform": "bun run test:unit && bun run test:examples && bun scripts/test-built-consumer.mjs && bun run test:architecture",
+    "verify": "bun run build && bun run verify:static && bun run verify:platform",
     "verify:real": "bun run test:integration:bun && bun run test:integration:deno"
   },
   "devDependencies": {

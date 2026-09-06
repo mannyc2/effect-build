@@ -940,6 +940,7 @@ export const releaseCertificationPolicy = {
         terminal: "success",
         workflowPath: ".github/workflows/ci.yml",
         event: "push",
+        runCompletionFreshness: "exact-source-no-time-expiry",
         maximumAgeSeconds: 86400,
         maximumValiditySeconds: 172800,
       },

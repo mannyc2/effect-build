@@ -1,4 +1,26 @@
-# Plan 045: Establish the v0.6.0 release point and bounded publication handoff
+# Plan 045: Historical v0.6.0 release-point and publication program
+
+> **Historical record, reconciled 2026-09-06.** The publication handoff below
+> is retired. GitHub Releases exist for v0.6.2 and
+> [v0.6.3](https://github.com/mannyc2/effect-build/releases/tag/v0.6.3), the
+> latter published at 2026-09-05T22:04:25Z. The [changelog](../CHANGELOG.md)
+> records the earlier partial publications and consumer-verification fixes.
+> This update does not retroactively complete the original v0.6.0 checklist
+> or re-certify its historical artifacts.
+>
+> Current work follows [AGENTS.md](../AGENTS.md), the
+> [combined contract](../tooling/effect-build-contract.json), the workflows at
+> the actual source SHA, and [release-security.md](../docs/release-security.md).
+> Preserve the decisions, failures, receipts, and deferred Apple/AWS boundary
+> below as provenance. Do not execute old version-specific commands, repeat
+> completed implementation steps, or treat their pending boxes as current
+> blockers. Existing user authorization carries forward within its scope;
+> these historical per-action handoffs do not require it to be requested
+> again. Current artifact, OIDC, mutable-state, unknown-outcome, and
+> partial-publication preconditions remain enforced by the contract and
+> workflows. Green verification still grants no new mutation authority.
+
+## Historical execution record
 
 > **2026-09-05 execution amendment:** The current release target is **0.6.3**,
 > as recorded in the combined contract. The core-only 0.6.0/0.6.1 publications

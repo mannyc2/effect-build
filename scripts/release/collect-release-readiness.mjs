@@ -27,7 +27,11 @@ import {
 } from "./protocol.mjs";
 import { createGitHubReadOnlyBoundary } from "./github-read-only-boundary.mjs";
 import { createAnonymousNpmBoundary } from "./npm-read-only-boundary.mjs";
-import { assertReadinessArtifactAllowed, buildReadinessAggregate } from "./readiness-protocol.mjs";
+import {
+  assertReadinessArtifactAllowed,
+  buildReadinessAggregate,
+  validateRunCompletionFreshness,
+} from "./readiness-protocol.mjs";
 import { finalizeAfterTerminalObservation } from "./terminal-observation.mjs";
 import { extractStrictFlatZip } from "./zip-protocol.mjs";
 
@@ -181,9 +185,13 @@ const exactRun = async ({ github, contract, definition, identity, sourceSha, obs
   const observed = canonicalTimestamp(observedAt, "readiness observedAt");
   if (
     createdAt.milliseconds > updatedAt.milliseconds
-    || updatedAt.milliseconds > observed + policy.clockSkewSeconds * 1_000
-    || observed - updatedAt.milliseconds > definition.maximumAgeSeconds * 1_000
   ) throw new Error(`GitHub run is future or stale for ${definition.role ?? "candidate"}`);
+  validateRunCompletionFreshness({
+    definition,
+    completedAt: updatedAt.milliseconds,
+    observedAt: observed,
+    clockSkewSeconds: policy.clockSkewSeconds,
+  });
   return { run, createdAt: createdAt.value, updatedAt: updatedAt.value };
 };
 

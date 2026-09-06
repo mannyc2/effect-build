@@ -543,6 +543,7 @@ test("freezes one exact release-certification policy without copying public pack
       terminal: "success",
       workflowPath: ".github/workflows/ci.yml",
       event: "push",
+      runCompletionFreshness: "exact-source-no-time-expiry",
       maximumAgeSeconds: 86400,
       maximumValiditySeconds: 172800,
       workflow: "mannyc2/effect-build/.github/workflows/ci.yml@refs/heads/main",
@@ -2154,6 +2155,8 @@ test("rejects every release-certification policy mutation", () => {
   rejects((release) => release.readiness.evidenceRoles[0].terminal = "pending");
   rejects((release) => release.readiness.evidenceRoles[0].workflow += "-peer");
   rejects((release) => release.readiness.evidenceRoles[0].event = "workflow_dispatch");
+  rejects((release) => delete release.readiness.evidenceRoles[0].runCompletionFreshness);
+  rejects((release) => release.readiness.evidenceRoles[1].runCompletionFreshness = "exact-source-no-time-expiry");
   rejects((release) => release.readiness.evidenceRoles[0].maximumAgeSeconds = 31536000);
   rejects((release) => release.readiness.evidenceRoles[1].artifactName += "-peer");
   rejects((release) => release.finalPublicVerification.status = "blocked");

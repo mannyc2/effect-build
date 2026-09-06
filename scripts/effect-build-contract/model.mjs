@@ -1513,6 +1513,9 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || !sameJson(directObservation, releaseCertificationPolicy.readiness.directObservation)
     || readiness.evidenceRoles.some((entry) => !["push", "workflow_dispatch"].includes(entry.event))
     || readiness.evidenceRoles.some((entry) =>
+      entry.runCompletionFreshness !== (entry.role === "exact-main-ci" ? "exact-source-no-time-expiry" : undefined)
+    )
+    || readiness.evidenceRoles.some((entry) =>
       !Number.isSafeInteger(entry.maximumAgeSeconds)
       || entry.maximumAgeSeconds <= 0
       || !Number.isSafeInteger(entry.maximumValiditySeconds)

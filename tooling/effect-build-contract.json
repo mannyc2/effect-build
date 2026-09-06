@@ -33,15 +33,15 @@
       },
       {
         "path": "scripts/effect-build-contract/policy.mjs",
-        "sha256": "9481eceec3fce58afbdc23a06ca33d02cbfb2b057a2d28755e903e5784047457"
+        "sha256": "b4c1c1e2b05a0f64a810f8d308c885ae73dfad4810ee0c4978a9568498a76718"
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "46d37a51158f021ccc52cfd9e2b9c03155d782105d8a0f1349ba75cfbbd0c46a"
+        "sha256": "88c5b954f8d071e030df66dd783490bb6253b738e470405ce5943a1f95693ddd"
       },
       {
         "path": "package.json",
-        "sha256": "ef3415b0420bfef22d861352a225fb638a41abeaa85342569a43a69b2fee651e"
+        "sha256": "1f8af687d05609b4ec4025ae789657a24ff2ac6b1593ea94d3fe76b18eefdd4b"
       },
       {
         "path": "bun.lock",
@@ -57,7 +57,7 @@
       },
       {
         "path": "scripts/release/build-terminal-reference.mjs",
-        "sha256": "35dee060cc2549d21cec89293d21f2b83674de109522095932c9f5bb886f07ed"
+        "sha256": "20e0820ac89b2e1b3517b54f31cd618a4a661e84285100089058cc0648365057"
       },
       {
         "path": "scripts/release/deny-network.cjs",
@@ -5095,8 +5095,8 @@
           "path": "scripts/release/build-terminal-reference.mjs",
           "export": "buildTerminalReference",
           "sourceAuthority": "contract-provenance-exact-source-bytes",
-          "sourceBytes": 25894,
-          "sourceDigest": "sha256:35dee060cc2549d21cec89293d21f2b83674de109522095932c9f5bb886f07ed"
+          "sourceBytes": 25972,
+          "sourceDigest": "sha256:20e0820ac89b2e1b3517b54f31cd618a4a661e84285100089058cc0648365057"
         },
         "kinds": [
           {
@@ -5282,6 +5282,7 @@
           "terminal": "success",
           "workflowPath": ".github/workflows/ci.yml",
           "event": "push",
+          "runCompletionFreshness": "exact-source-no-time-expiry",
           "maximumAgeSeconds": 86400,
           "maximumValiditySeconds": 172800,
           "workflow": "mannyc2/effect-build/.github/workflows/ci.yml@refs/heads/main"

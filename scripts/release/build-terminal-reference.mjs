@@ -20,6 +20,7 @@ import {
 import {
   validateGithubArtifactEvidence,
   validateReadinessAggregate,
+  validateRunCompletionFreshness,
 } from "./readiness-protocol.mjs";
 import { extractStrictFlatZip } from "./zip-protocol.mjs";
 
@@ -460,9 +461,13 @@ export const buildTerminalReference = async ({
   const artifactCreatedAt = artifact?.createdAt.milliseconds ?? Number.NEGATIVE_INFINITY;
   if (
     observedAt.milliseconds < Math.max(run.updatedAt.milliseconds, artifactCreatedAt)
-    || observedAt.milliseconds - run.updatedAt.milliseconds > definition.maximumAgeSeconds * 1_000
     || (artifact !== undefined && observedAt.milliseconds >= artifact.expiresAt.milliseconds)
   ) throw new Error("terminal reference observation is before completion, stale, or after artifact expiry");
+  validateRunCompletionFreshness({
+    definition,
+    completedAt: run.updatedAt.milliseconds,
+    observedAt: observedAt.milliseconds,
+  });
   if (evidence !== undefined) {
     const evidenceAt = canonicalTimestamp(evidence.value, `${definition.kind} evidence observation time`);
     if (

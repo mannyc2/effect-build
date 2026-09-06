@@ -4,6 +4,16 @@ The combined contract separates source implementation, ordinary CI,
 non-publishing certification, release-point selection, npm publication, tag
 creation, draft-Release creation, and public-Release publication. None implies
 the next, and a green local or hosted run grants no mutation authority.
+The user may authorize a complete sequence together; carry that authority
+forward within its scope without asking again at every checkpoint. Each step
+still requires its own applicable evidence and enforced preconditions.
+
+The current [combined contract](../tooling/effect-build-contract.json) and
+[release workflows](../.github/workflows/release.yml) define the executable
+release protocol at the selected source SHA. [Plan 045](../plans/045-establish-v060-release-point.md)
+preserves the original release program and its historical observations; its
+old versions, commands, pending checklists, and per-action handoffs are not
+current execution instructions.
 
 effect-build returns provider-native results. Durable artifacts exist only
 after an explicit finalizer, and a downstream release owner adopts a finalized
@@ -23,9 +33,13 @@ packages and the 42-module public projection. Rolldown remains private and
 `.github/workflows/release.yml` has three hard-cut modes:
 
 1. `prepare-exact-sha` checks an exact current-main SHA, installs the frozen
-   dependency graph without lifecycle scripts, runs the complete verification
-   gate, and creates one candidate containing eleven once-packed tarballs plus
-   one manifest. This job has no OIDC or registry-mutation authority.
+   dependency graph without lifecycle scripts, and authenticates the latest
+   exact-SHA main push CI run as terminal and successful. It then builds once,
+   creates one candidate containing eleven once-packed tarballs plus one
+   manifest, and runs the packed consumer against those exact candidate bytes
+   before upload. It reuses authenticated source verification instead of
+   repeating the complete gate. This job has no OIDC or registry-mutation
+   authority.
 2. `certify-exact-sha` is a protected, no-checkout consumer of exact candidate
    bytes. It reauthenticates GitHub state immediately before use and is designed
    to prove GitHub claims plus one npm OIDC exchange and dry run per package
@@ -56,6 +70,16 @@ hosted proofs:
 1. exact-main CI at the exact source SHA;
 2. exact protected-body execution against the stateful fake registry; and
 3. eleven-package npm OIDC dry-run certification.
+
+Exact-main CI execution remains reusable while its source SHA is unchanged,
+but its authenticated observation must still satisfy the contract's freshness
+and validity windows. Candidate preparation and readiness reauthenticate the
+exact workflow, repository, run, attempt, terminal result, and current main;
+caller-authored reports and equivalent trees at other SHAs are not substitutes.
+Artifact retention, candidate bytes, fake-registry and OIDC certification,
+readiness expiry, and live registry or authorization observations retain their
+own validity requirements. Reusing source evidence never extends a partial
+publication's original readiness packet.
 
 Every readiness input is an authenticated GitHub run or artifact coordinate.
 There is no caller-authored receipt, external-evidence ingress, generated
@@ -117,7 +141,7 @@ It does not prove tarball upload, provenance generation, publication,
 exclusive trusted-publisher administration, absence of legacy npm tokens, the
 package publishing-access toggle, or account 2FA state.
 
-Those npm administrative inventories are excluded from the v0.6.0 release
+Those npm administrative inventories are excluded from the current npm release
 gate because npm exposes no supported read interface for all of them. A local
 web login is neither required nor retained as release evidence. Real
 publication remains the proof of registry mutation and provenance, with exact
@@ -134,7 +158,8 @@ verification requires the actual published Release to report
 
 Apple certification is an exact 28-coordinate deferred protocol: 2 native, 10
 protected product, 6 clean-host, and 10 aggregate-verdict receipts. v0.6.0
-ships the `effect-build-apple` API/library package but no signed or notarized
+defined the npm-only scope retained by the current release contract: the
+`effect-build-apple` API/library package is included, with no signed or notarized
 App, DMG, or PKG. Credential-backed Apple certification and its operational
 journal were not run, have not passed, and are excluded from readiness. Local
 codecs, fake boundaries, or ordinary CI do not prove Developer ID signing,
@@ -147,4 +172,5 @@ architecture tests, and proves the public surface stays exactly bounded. It is
 implementation evidence only. Credentialed certification, release-point R,
 npm publication, tag creation, GitHub Release creation/publication, repository
 settings, and future external infrastructure each require their own exact
-authority and terminal evidence.
+authority and terminal evidence, even when the user has authorized the full
+sequence together.
