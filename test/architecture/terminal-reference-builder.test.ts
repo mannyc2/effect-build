@@ -134,6 +134,17 @@ const readinessManifest = Buffer.from(canonicalJson({
 }));
 const readinessBundle = Buffer.from("opaque readiness evidence bundle");
 
+const fakeCertification = contract.releaseCertification.fakeRegistry.exactProtectedBodyCertification;
+const fakeCoordinates = fakeCertification.exactMutationLedger.map((entry: any, index: number) => ({
+  ...entry,
+  status: "passed",
+  candidateArtifactDigest: entry.candidateBinding === "exact-release-candidate"
+    ? candidateCoordinate.artifactDigest
+    : `sha256:${`${index + 3}`.padStart(64, "0")}`,
+  candidateManifestDigest: entry.candidateBinding === "exact-release-candidate"
+    ? `sha256:${"2".repeat(64)}`
+    : `sha256:${`${index + 101}`.padStart(64, "0")}`,
+}));
 const fakeReceipt = Buffer.from(canonicalJson({
   schema: contract.releaseCertification.fakeRegistry.exactProtectedBodyCertification.protocol,
   sourceSha,
@@ -143,10 +154,10 @@ const fakeReceipt = Buffer.from(canonicalJson({
   readinessProtocol: contract.releaseCertification.readiness.protocol,
   candidate: candidateCoordinate,
   candidateManifestDigest: `sha256:${"2".repeat(64)}`,
-  coordinates: [],
-  coordinateCount: 0,
-  claims: [],
-  doesNotProve: [],
+  coordinates: fakeCoordinates,
+  coordinateCount: fakeCoordinates.length,
+  claims: fakeCertification.requiredClaims,
+  doesNotProve: fakeCertification.doesNotProve,
   realRegistryMutation: false,
   realNpmOrRegistryCredentialsUsed: false,
   terminal: "success",
@@ -450,21 +461,22 @@ describe("terminal reference builder", () => {
     expect(result.expiresAt).toBe("2026-09-01T18:30:00.000Z");
   });
 
-  it.each(["fake-registry", "npm-oidc-certification"] as const)(
-    "does not renew stale %s completion by freshly observing the retained artifact",
-    async (kind) => {
+  it("reuses an older exact fake execution with a fresh reference and fully validated receipt", async () => {
+    const oldReceipt = { ...JSON.parse(fakeReceipt.toString()), observedAt: "2026-08-29T17:58:30.000Z" };
+    const observe = (receipt: unknown, artifactOverrides: Record<string, unknown> = {}) => {
       const fixture = boundary({
-        kind,
-        bytes: artifacts[kind].bytes,
-        run: runMetadata(kind, {
-          created_at: "2026-08-01T17:55:00Z",
-          updated_at: "2026-08-01T17:59:00Z",
+        kind: "fake-registry",
+        bytes: githubArtifactZip([[fakeCertification.orderedFiles[0], Buffer.from(canonicalJson(receipt))]]),
+        run: runMetadata("fake-registry", {
+          created_at: "2026-08-29T17:55:00Z",
+          updated_at: "2026-08-29T17:59:00Z",
         }),
+        artifactOverrides: { created_at: "2026-08-29T17:59:00Z", ...artifactOverrides },
       });
-      await expect(buildTerminalReference({
+      return buildTerminalReference({
         contract,
         contractBytes,
-        kind,
+        kind: "fake-registry",
         sourceSha,
         runId: "101",
         runAttempt: "2",
@@ -472,8 +484,45 @@ describe("terminal reference builder", () => {
         artifactDigest: fixture.digest,
         github: fixture.github,
         now: () => observedAt,
-        artifactEvidenceValidator: vi.fn(),
-      })).rejects.toThrow(/completion is future or stale/u);
-    },
-  );
+      });
+    };
+    const reference = await observe(oldReceipt);
+    expect(reference.evidenceObservedAt).toBe(oldReceipt.observedAt);
+    expect(reference.observedAt).toBe(observedAt);
+    expect(reference.expiresAt).toBe("2026-09-03T18:00:00.000Z");
+    await expect(observe(oldReceipt, { expires_at: observedAt })).rejects.toThrow(/expiry/u);
+    await expect(observe(oldReceipt, { expired: true })).rejects.toThrow();
+    await expect(observe({ ...oldReceipt, observedAt: "2026-09-01T18:00:00.001Z" }))
+      .rejects.toThrow(/future/u);
+    await expect(observe({ ...oldReceipt, sourceSha: "b".repeat(40) })).rejects.toThrow(/source/u);
+    await expect(observe({ ...oldReceipt, contractDigest: `sha256:${"0".repeat(64)}` }))
+      .rejects.toThrow(/certification receipt/u);
+    await expect(observe({ ...oldReceipt, candidateManifestDigest: `sha256:${"0".repeat(64)}` }))
+      .rejects.toThrow(/certification receipt/u);
+  });
+
+  it("does not renew stale npm OIDC completion by freshly observing the retained artifact", async () => {
+    const kind = "npm-oidc-certification";
+    const fixture = boundary({
+      kind,
+      bytes: artifacts[kind].bytes,
+      run: runMetadata(kind, {
+        created_at: "2026-08-01T17:55:00Z",
+        updated_at: "2026-08-01T17:59:00Z",
+      }),
+    });
+    await expect(buildTerminalReference({
+      contract,
+      contractBytes,
+      kind,
+      sourceSha,
+      runId: "101",
+      runAttempt: "2",
+      artifactId: "202",
+      artifactDigest: fixture.digest,
+      github: fixture.github,
+      now: () => observedAt,
+      artifactEvidenceValidator: vi.fn(),
+    })).rejects.toThrow(/future or stale/u);
+  });
 });

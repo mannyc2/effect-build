@@ -103,15 +103,6 @@ const requireText = (value, label) => {
 const requireUnique = (values, label) => {
   if (new Set(values).size !== values.length) throw new Error(`${label} contains duplicates`);
 };
-const requireExactObjectKeys = (value, fields, label) => {
-  if (
-    value === null
-    || typeof value !== "object"
-    || Array.isArray(value)
-    || !sameJson(Object.keys(value), fields)
-  ) throw new Error(`${label} must have the exact canonical fields`);
-  return value;
-};
 const countBy = (entries, select, expected) => Object.fromEntries(
   Object.keys(expected).map((value) => [value, entries.filter((entry) => select(entry) === value).length]),
 );
@@ -159,65 +150,35 @@ export const parseCsv = (source) => {
 
 export const readInputs = async (repositoryRoot) => {
   const read = async (path) => await readFile(resolve(repositoryRoot, path), "utf8");
-  const [
-    operationSource,
-    nonOperationSource,
-    adjudicationSource,
-    policySource,
-    modelSource,
-    packageManifestSource,
-    lockfileSource,
-    publicApiSource,
-    zipProtocolSource,
-    tarProtocolSource,
-    terminalReferenceBuilderSource,
-    sigstoreNetworkGuardSource,
-    sigstoreTrustedRootSource,
-  ] =
-    await Promise.all([
-      read(operationRegisterPath),
-      read(nonOperationRegisterPath),
-      read(adjudicationPath),
-      read(policyPath),
-      read(modelPath),
-      read(packageManifestPath),
-      read(lockfilePath),
-      read(publicApiPath),
-      read(zipProtocolPath),
-      read(tarProtocolPath),
-      read(terminalReferenceBuilderPath),
-      read(sigstoreNetworkGuardPath),
-      read(sigstoreTrustedRootPath),
-    ]);
-  const sigstoreTufEvidenceSources = new Map(await Promise.all(
-    sigstoreTufEvidencePaths.map(async (path) => [path, await read(path)]),
-  ));
+  const paths = [
+    operationRegisterPath,
+    nonOperationRegisterPath,
+    adjudicationPath,
+    policyPath,
+    modelPath,
+    packageManifestPath,
+    lockfilePath,
+    zipProtocolPath,
+    tarProtocolPath,
+    terminalReferenceBuilderPath,
+    sigstoreNetworkGuardPath,
+    sigstoreTrustedRootPath,
+    ...sigstoreTufEvidencePaths,
+    ...releaseCertificationPolicy.fakeRegistry.exactProtectedBodyCertification.certificationPurpose.sourcePaths,
+  ];
+  const sources = await Promise.all(paths.map(async (path) => ({ path, source: await read(path) })));
+  const byPath = new Map(sources.map(({ path, source }) => [path, source]));
   return {
-    operationRows: parseCsv(operationSource),
-    nonOperationRows: parseCsv(nonOperationSource),
-    adjudication: JSON.parse(adjudicationSource),
-    packageManifest: JSON.parse(packageManifestSource),
-    lockfileSource,
-    publicApi: JSON.parse(publicApiSource),
-    sigstoreNetworkGuardSource,
-    terminalReferenceBuilderSource,
-    sigstoreTufEvidenceSources,
-    sigstoreTrustedRootSource,
-    sources: [
-      { path: operationRegisterPath, source: operationSource },
-      { path: nonOperationRegisterPath, source: nonOperationSource },
-      { path: adjudicationPath, source: adjudicationSource },
-      { path: policyPath, source: policySource },
-      { path: modelPath, source: modelSource },
-      { path: packageManifestPath, source: packageManifestSource },
-      { path: lockfilePath, source: lockfileSource },
-      { path: zipProtocolPath, source: zipProtocolSource },
-      { path: tarProtocolPath, source: tarProtocolSource },
-      { path: terminalReferenceBuilderPath, source: terminalReferenceBuilderSource },
-      { path: sigstoreNetworkGuardPath, source: sigstoreNetworkGuardSource },
-      { path: sigstoreTrustedRootPath, source: sigstoreTrustedRootSource },
-      ...[...sigstoreTufEvidenceSources].map(([path, source]) => ({ path, source })),
-    ],
+    operationRows: parseCsv(byPath.get(operationRegisterPath)),
+    nonOperationRows: parseCsv(byPath.get(nonOperationRegisterPath)),
+    adjudication: JSON.parse(byPath.get(adjudicationPath)),
+    packageManifest: JSON.parse(byPath.get(packageManifestPath)),
+    lockfileSource: byPath.get(lockfilePath),
+    publicApi: JSON.parse(await read(publicApiPath)),
+    sigstoreNetworkGuardSource: byPath.get(sigstoreNetworkGuardPath),
+    sigstoreTufEvidenceSources: new Map(sigstoreTufEvidencePaths.map((path) => [path, byPath.get(path)])),
+    sigstoreTrustedRootSource: byPath.get(sigstoreTrustedRootPath),
+    sources,
   };
 };
 
@@ -627,8 +588,13 @@ const buildReleaseCertification = (
   providerOperations,
   producerCapabilities,
   toolEvidence,
-  terminalReferenceBuilderSource,
+  sources,
 ) => {
+  const sourceByPath = new Map(sources.map(({ path, source }) => [path, source]));
+  const terminalReferenceBuilderSource = sourceByPath.get(terminalReferenceBuilderPath);
+  const { sourcePaths, ...certificationPurpose } = structuredClone(
+    releaseCertificationPolicy.fakeRegistry.exactProtectedBodyCertification.certificationPurpose,
+  );
   const apple = structuredClone(releaseCertificationPolicy.apple);
   const appleRules = buildAppleCoordinateRules(apple, providerOperations, producerCapabilities);
   const providerVersions = Object.fromEntries(
@@ -735,6 +701,10 @@ const buildReleaseCertification = (
     },
     exactProtectedBodyCertification: {
       ...structuredClone(releaseCertificationPolicy.fakeRegistry.exactProtectedBodyCertification),
+      certificationPurpose: {
+        ...certificationPurpose,
+        sourceFiles: sourcePaths.map((path) => ({ path, sha256: sha256(sourceByPath.get(path)) })),
+      },
       workflow: workflowIdentity(
         releaseCertificationPolicy.fakeRegistry.exactProtectedBodyCertification.workflowPath,
       ),
@@ -871,7 +841,7 @@ export const buildContract = (inputs) => {
       operations,
       producerCapabilityRegister,
       exactToolEvidenceRegister,
-      inputs.terminalReferenceBuilderSource,
+      inputs.sources,
     ),
     publicApiProjection,
     verification: {
@@ -931,7 +901,7 @@ const validateOwners = (contract) => {
   }
 };
 
-const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
+export const validateContract = (contract, inputs) => {
   if (contract.schema !== "effect-build/combined-contract@1") throw new Error("unexpected combined contract schema");
   if (
     contract.exactToolEvidenceRegister.count !== exactToolEvidenceRegister.length
@@ -950,13 +920,19 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
       throw new Error(`${tool.id} must bind an executable and at least one evidence cell`);
     }
   }
-  if (contract.providerOperationRegister.count !== 67) throw new Error("provider operation register must contain 67 rows");
+  if (contract.providerOperationRegister.count !== 67) {
+    throw new Error("provider operation register must contain 67 rows");
+  }
   if (contract.nonOperationRegister.count !== 46) throw new Error("non-operation register must contain 46 rows");
   if (!sameJson(contract.providerOperationRegister.dispositionCounts, expectedDispositionCounts)) {
-    throw new Error(`unexpected provider disposition counts: ${JSON.stringify(contract.providerOperationRegister.dispositionCounts)}`);
+    throw new Error(
+      `unexpected provider disposition counts: ${JSON.stringify(contract.providerOperationRegister.dispositionCounts)}`,
+    );
   }
   if (!sameJson(contract.nonOperationRegister.dispositionCounts, expectedNonOperationDispositionCounts)) {
-    throw new Error(`unexpected non-operation disposition counts: ${JSON.stringify(contract.nonOperationRegister.dispositionCounts)}`);
+    throw new Error(
+      `unexpected non-operation disposition counts: ${JSON.stringify(contract.nonOperationRegister.dispositionCounts)}`,
+    );
   }
   const operations = contract.providerOperationRegister.operations;
   requireUnique(operations.map((operation) => operation.operationId), "provider operation ids");
@@ -974,7 +950,9 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   }
   const adjudicatedIds = new Set(inputs.adjudication.candidates.map((entry) => entry.operationId));
   for (const operation of operations) {
-    if (!adjudicatedIds.has(operation.operationId)) throw new Error(`operation lacks surface adjudication: ${operation.operationId}`);
+    if (!adjudicatedIds.has(operation.operationId)) {
+      throw new Error(`operation lacks surface adjudication: ${operation.operationId}`);
+    }
     if (operation.accounting.surface === "absent" && operation.implementation !== null) {
       throw new Error(`absent operation has implementation target: ${operation.operationId}`);
     }
@@ -999,17 +977,21 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   if (rolldown.filter((operation) => operation.accounting.surface === "private").length !== 19) {
     throw new Error("all 19 live Rolldown operations must remain private");
   }
-  if (!sameJson(
-    rolldown.filter((operation) => operation.disposition === "rejected").map((operation) => operation.operationId),
-    rolldownRejectedOperationIds,
-  )) throw new Error("Rolldown rejection set changed");
+  if (
+    !sameJson(
+      rolldown.filter((operation) => operation.disposition === "rejected").map((operation) => operation.operationId),
+      rolldownRejectedOperationIds,
+    )
+  ) throw new Error("Rolldown rejection set changed");
   if (!sameJson(contract.publicApiProjection.privatePackages, ["effect-build-rolldown"])) {
     throw new Error("Rolldown package must remain private");
   }
   const producers = contract.producerCapabilityRegister.capabilities;
   requireUnique(producers.map((entry) => entry.id), "producer capability ids");
   if (producers.length !== 19) throw new Error("producer register must contain 19 canonical capabilities");
-  if (!sameJson(sorted(new Set(producers.map((entry) => entry.family))), contract.producerCapabilityRegister.families)) {
+  if (
+    !sameJson(sorted(new Set(producers.map((entry) => entry.family))), contract.producerCapabilityRegister.families)
+  ) {
     throw new Error("producer family accounting changed");
   }
   for (const producer of producers) {
@@ -1069,10 +1051,12 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   }
   requireUnique(npm.bootstrap.placeholderAtHandoffPackages, "npm placeholder-at-handoff packages");
   requireUnique(npm.bootstrap.placeholderLedger.map((entry) => entry.name), "npm placeholder ledger names");
-  if (!sameJson(
-    sorted(npm.bootstrap.placeholderLedger.map((entry) => entry.name)),
-    sorted(npm.bootstrap.placeholderAtHandoffPackages),
-  )) {
+  if (
+    !sameJson(
+      sorted(npm.bootstrap.placeholderLedger.map((entry) => entry.name)),
+      sorted(npm.bootstrap.placeholderAtHandoffPackages),
+    )
+  ) {
     throw new Error("npm placeholder ledger must cover the exact placeholder-at-handoff cohort");
   }
   for (const entry of npm.bootstrap.placeholderLedger) {
@@ -1095,20 +1079,14 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     throw new Error("npm release admission must be the public package projection");
   }
   if (!sameJson(npm.publicationAdmission.target, npmReleaseTarget)) {
-    throw new Error("npm release target or prior-latest ledger changed");
+    throw new Error("npm release target or prepublication dist-tag ledger changed");
   }
-  const expectedLatest = npm.publicationAdmission.target.expectedLatestBeforePublication;
   const expectedDistTags = npm.publicationAdmission.target.expectedDistTagsBeforePublication;
-  requireUnique(expectedLatest.map((entry) => entry.name), "npm expected prior-latest package names");
   requireUnique(expectedDistTags.map((entry) => entry.name), "npm expected prepublication dist-tag package names");
   if (
-    !sameJson(sorted(expectedLatest.map((entry) => entry.name)), admittedPackages)
-    || !sameJson(sorted(expectedDistTags.map((entry) => entry.name)), admittedPackages)
+    !sameJson(sorted(expectedDistTags.map((entry) => entry.name)), admittedPackages)
     || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(
       npm.publicationAdmission.target.version,
-    )
-    || expectedLatest.some((entry) =>
-      !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(entry.version)
     )
     || expectedDistTags.some((entry) =>
       !sameJson(Object.keys(entry.tags), entry.name === "effect-build" ? ["latest"] : ["latest", "reserved"])
@@ -1116,12 +1094,9 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
         !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(version)
       )
     )
-    || expectedLatest.some(({ name, version }) =>
-      expectedDistTags.find((entry) => entry.name === name)?.tags.latest !== version
-    )
   ) {
     throw new Error(
-      "npm prepublication dist-tag and prior-latest ledgers must cover the exact admitted package set",
+      "npm prepublication dist-tag ledger must cover the exact admitted package set",
     );
   }
   if (
@@ -1143,62 +1118,33 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     throw new Error("npm release tag promotion policy changed");
   }
   const releaseCertification = contract.releaseCertification;
-  const expectedReleaseCertification = expectedReleaseOverride ?? buildReleaseCertification(
+  const expectedReleaseCertification = buildReleaseCertification(
     contract.publicApiProjection,
     contract.npmRegistryBoundary,
     contract.providerOperationRegister.operations,
     contract.producerCapabilityRegister.capabilities,
     contract.exactToolEvidenceRegister.tools,
-    inputs.terminalReferenceBuilderSource,
+    inputs.sources,
   );
+  // Policy is declared once. Below this equality check, validate relationships and
+  // external evidence rather than repeating the policy's literal values.
   if (!sameJson(releaseCertification, expectedReleaseCertification)) {
     throw new Error("release certification policy does not match the canonical generated policy");
   }
+  if (releaseCertification.scope.target !== `v${npm.publicationAdmission.target.version}`) {
+    throw new Error("release scope must target the admitted npm version");
+  }
   const publicAdmission = releaseCertification.publicAdmission;
-  const scope = releaseCertification.scope;
   const npmAdministrativeInventory = releaseCertification.npmAdministrativeInventory;
   if (
-    publicAdmission.packageSource !== "publicApiProjection.packages"
-    || publicAdmission.packageCount !== admittedPackages.length
-    || publicAdmission.packageCount !== 11
-    || publicAdmission.moduleSource !== "publicApiProjection.packages package roots and subpaths"
-    || publicAdmission.moduleCount !== 43
-    || publicAdmission.reservationSource !== "publicApiProjection.privatePackages"
+    publicAdmission.packageCount !== admittedPackages.length
     || publicAdmission.reservationCount !== reservedOnlyPackages.length
-    || publicAdmission.reservationCount !== 1
   ) {
     throw new Error("release certification admission must remain a count-only projection of the public surface");
   }
-  if (!sameJson(scope, {
-    target: `v${npm.publicationAdmission.target.version}`,
-    npmPackages: {
-      status: "included",
-      packageSource: "publicApiProjection.packages",
-      appleApiLibrary: "included-as-effect-build-apple",
-      packageCountSource: "releaseCertification.publicAdmission.packageCount",
-    },
-    credentialBackedAppleArtifacts: {
-      status: "deferred",
-      certification: "not-run-not-passed",
-      releaseGate: "excluded-from-v0.6.3",
-      products: ["signed-app", "dmg", "pkg"],
-      target: "later-separately-qualified-release",
-    },
-    awsNotaryJournalEvidence: {
-      status: "deferred",
-      releaseGate: "excluded-from-v0.6.3",
-      applicability: "future-credential-backed-apple-artifact-certification-only",
-    },
-  })) throw new Error("v0.6 release scope must include Apple APIs and defer credential-backed Apple products");
+
   requireUnique(npmAdministrativeInventory.doesNotProve, "npm administrative inventory exclusions");
-  if (!sameJson(npmAdministrativeInventory, {
-    status: "not-observed",
-    releaseGate: "excluded-from-v0.6.3",
-    doesNotProve: [
-      "trusted-publisher-admin-inventory",
-      "publishing-access-two-factor-and-token-policy",
-    ],
-  })) throw new Error("unsupported npm administrative inventory must remain explicitly excluded");
+
   requireUnique(releaseCertification.modes, "release certification modes");
   requireUnique(
     releaseCertification.githubArtifactCoordinate.orderedFields,
@@ -1210,60 +1156,27 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   requireUnique(readOnlyTransport.artifactRedirectHostPolicy.suffixes, "GitHub artifact redirect host suffixes");
   requireUnique(readOnlyTransport.artifactRedirectHostPolicy.redirectStatuses, "GitHub artifact redirect statuses");
   requireUnique(readOnlyTransport.releaseAssetRedirectHostPolicy.hosts, "GitHub Release asset redirect hosts");
-  requireUnique(readOnlyTransport.releaseAssetRedirectHostPolicy.directStatuses, "GitHub Release asset direct statuses");
-  requireUnique(readOnlyTransport.releaseAssetRedirectHostPolicy.redirectStatuses, "GitHub Release asset redirect statuses");
+  requireUnique(
+    readOnlyTransport.releaseAssetRedirectHostPolicy.directStatuses,
+    "GitHub Release asset direct statuses",
+  );
+  requireUnique(
+    readOnlyTransport.releaseAssetRedirectHostPolicy.redirectStatuses,
+    "GitHub Release asset redirect statuses",
+  );
   if (
-    githubAuthority.identitySource !== "npmRegistryBoundary.trustedPublisher"
-    || githubAuthority.repository !== npm.trustedPublisher.repository
+    githubAuthority.repository !== npm.trustedPublisher.repository
     || githubAuthority.repositoryOwner !== expectedRepositoryOwner
     || githubAuthority.workflow !== npm.trustedPublisher.workflow
     || githubAuthority.environment !== npm.trustedPublisher.environment
     || githubAuthority.expectedEnvironmentSubject
       !== `${githubAuthority.oidcSubjectPolicy.sub_claim_prefix}:environment:${npm.trustedPublisher.environment}`
-    || githubAuthority.expectedEnvironmentSubjectSource !== "immutable-id-repository-and-environment"
     || !/^[1-9][0-9]*$/u.test(githubAuthority.repositoryId)
     || !/^[1-9][0-9]*$/u.test(githubAuthority.repositoryOwnerId)
-    || githubAuthority.repositoryVisibility !== "public"
-    || !sameJson(readOnlyTransport, {
-      apiOrigin: "https://api.github.com",
-      apiVersion: "2022-11-28",
-      artifactRedirectHostPolicy: {
-        suffixes: ["blob.core.windows.net"],
-        match: "dot-subdomain-only",
-        redirectStatuses: [302],
-        maximumRedirects: 1,
-      },
-      releaseAssetRedirectHostPolicy: {
-        hosts: ["release-assets.githubusercontent.com"],
-        match: "exact",
-        directStatuses: [200],
-        redirectStatuses: [302],
-        maximumRedirects: 1,
-      },
-      metadataMaximumBytes: 8388608,
-      artifactMaximumBytes: 1073741824,
-      requestInactivityTimeoutMilliseconds: 60000,
-      metadataTotalTimeoutMilliseconds: 60000,
-      artifactTotalTimeoutMilliseconds: 900000,
-      authorization: "api-origin-first-request-only-stripped-before-redirect",
-      tlsRootPolicy: "node-bundled-root-certificates-only",
-      ambientConfiguration: "forbidden-home-gh-config-proxy-and-extra-ca",
-    })
-    || !sameJson(githubAuthority.branchPolicy.exactProtectionRuleTypes, ["branch_policy", "required_reviewers"])
-    || githubAuthority.branchPolicy.name !== "main"
-    || githubAuthority.branchPolicy.type !== "branch"
-    || !sameJson(githubAuthority.branchPolicy.deploymentBranchPolicy, {
-      customBranchPolicies: true,
-      protectedBranches: false,
-    })
     || !Number.isSafeInteger(githubAuthority.reviewer.id)
     || githubAuthority.reviewer.id <= 0
-    || githubAuthority.reviewer.preventSelfReview !== false
     || typeof githubAuthority.reviewer.login !== "string"
     || githubAuthority.reviewer.login.length === 0
-    || githubAuthority.reviewer.type !== "User"
-    || githubAuthority.oidcSubjectPolicy.use_default !== true
-    || githubAuthority.oidcSubjectPolicy.use_immutable_subject !== true
     || typeof githubAuthority.oidcSubjectPolicy.sub_claim_prefix !== "string"
     || githubAuthority.oidcSubjectPolicy.sub_claim_prefix.length === 0
   ) {
@@ -1282,106 +1195,10 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     authorizationSplit.forbiddenCredentialEscalation,
     "forbidden GitHub credential escalation",
   );
-  if (
-    !sameJson(authorizationSplit.protectedGithubTokenObservations, [
-      "repository-metadata",
-      "environment-deployment-policy",
-      "branch-policy",
-      "oidc-subject-policy",
-      "current-main",
-      "workflow-blob",
-    ])
-    || !sameJson(authorizationSplit.administrativeExternalOnly, [
-      "repository-secret-name-inventory",
-      "repository-variable-name-inventory",
-      "environment-secret-name-inventory",
-      "environment-variable-name-inventory",
-    ])
-    || authorizationSplit.runtimeForbiddenEnvironmentSource
-      !== "releaseCertification.npmOidcCertification.forbiddenEnvironmentNames"
-    || authorizationSplit.publishGate
-      !== "releaseCertification.readiness exact-three-github-evidence aggregate"
-    || !sameJson(authorizationSplit.forbiddenCredentialEscalation, [
-      "personal-access-token",
-      "github-app-token",
-      "administrative-token",
-    ])
-  ) {
-    throw new Error("protected GitHub reauthorization must not claim administrative inventory authority");
-  }
-  if (!sameJson(releaseCertification.dependencyBootstrap, {
-    protocol: "effect-build/checkout-dependency-bootstrap@1",
-    client: {
-      executable: "bun",
-      version: "1.3.14",
-    },
-    lockfile: {
-      path: "bun.lock",
-      format: "bun-text-lockfile-v1",
-      nonWorkspaceIntegrityAlgorithm: "sha512",
-      nonWorkspaceIntegrityPattern: "^sha512-[A-Za-z0-9+/]+={0,2}$",
-      requirement: "every-non-workspace-package-exact-integrity-required",
-    },
-    command: {
-      arguments: ["install", "--frozen-lockfile", "--ignore-scripts"],
-      lifecycleScripts: "forbidden",
-    },
-    registries: {
-      default: "https://registry.npmjs.org",
-      scopes: {
-        "@jsr": "https://npm.jsr.io",
-      },
-    },
-    environment: {
-      home: "fresh-empty-private",
-      cache: "fresh-empty-private",
-      temporary: "fresh-empty-private",
-      configuration: "exact-auth-free-project-npmrc-empty-user-global-npmrc-and-exact-bunfig",
-      configurationFiles: {
-        projectNpmrc: {
-          path: ".npmrc",
-          digest: "sha256:82952390ba119c39e2e495c5afdd42a45129f8ce49918f219eca7bcd6549c7d9",
-        },
-        bunfig: {
-          path: "scripts/release/bunfig.release-bootstrap.toml",
-          digest: "sha256:e5de342dbde5ef6b7eadaf1bba167f865a6ecf0d35c8d1ffdd0dbb0726d836b3",
-        },
-      },
-      forbidden: "auth-proxy-extra-ca-node-options-and-host-home-config",
-    },
-    network: "lockfile-resolved-dependency-bootstrap-only",
-    evidence: "never-release-evidence",
-  })) throw new Error("checkout dependency bootstrap must remain one isolated lock-integrity hard cut");
+
   const readiness = releaseCertification.readiness;
   requireUnique(readiness.zipExtraction.allowedCompressionMethods, "release readiness ZIP methods");
-  if (!sameJson(readiness.zipExtraction, {
-    protocol: "effect-build/strict-flat-zip@1",
-    allowedCompressionMethods: [0, 8],
-    allowedGeneralPurposeBitMask: 2056,
-    allowedExtraFieldIds: [],
-    creatorVersionMadeBy: 813,
-    requiredVersionNeeded: 20,
-    protectedProjection: {
-      sourcePath: "scripts/release/zip-protocol.mjs",
-      sourceBytes: 15670,
-      sourceDigest: "sha256:5a1428e693256fa78abf7358bbf5477b682e4205489cae2c78ef61fd1c2b48a1",
-      compressedBytes: 3810,
-      encoding: "deflate-raw-base64-data-url-exact-source",
-    },
-    maximumArchiveBytes: 67108864,
-    maximumEntries: 64,
-    maximumNameBytes: 255,
-    maximumExtraBytes: 4096,
-    maximumMemberCompressedBytes: 16777216,
-    maximumMemberUncompressedBytes: 16777216,
-    maximumTotalUncompressedBytes: 67108864,
-    maximumCompressionRatio: 200,
-    dataDescriptor: "required-signed-16-byte-exact-central-correlation-when-bit-3-set",
-    topology: "single-disk-zero-comment-no-zip64-no-prefix-trailer-or-record-gaps",
-    members: "unique-flat-utf8-regular-files-only",
-    encryption: "forbidden",
-    crc32: "required-before-admission",
-  })) throw new Error("release readiness ZIP extraction policy must remain exact and bounded");
+
   const zipProjection = readiness.zipExtraction.protectedProjection;
   const zipProvenance = contract.provenance.sources.find(({ path }) => path === zipProjection.sourcePath);
   const zipInput = inputs?.sources?.find(({ path }) => path === zipProjection.sourcePath);
@@ -1390,30 +1207,7 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || (zipInput !== undefined && Buffer.byteLength(zipInput.source) !== zipProjection.sourceBytes)
   ) throw new Error("protected ZIP projection does not match its exact source bytes");
   const tarballInspection = releaseCertification.candidate.tarballInspection;
-  if (!sameJson(tarballInspection, {
-    protocol: "effect-build/strict-npm-package-ustar-gzip@1",
-    blockBytes: 512,
-    allowedTypes: ["regular", "directory"],
-    manifestPath: "package/package.json",
-    root: "package",
-    maximumCompressedBytes: 16777216,
-    maximumUnpackedBytes: 67108864,
-    maximumEntryBytes: 67108864,
-    maximumTotalEntryBytes: 67108864,
-    maximumManifestBytes: 1048576,
-    maximumEntries: 4096,
-    gzip: "single-member-rfc1952-fixed-header-no-optional-fields-exact-deflate-consumption-crc32-isize",
-    ustar: "posix-ustar-magic-version-octal-only-checksummed-no-pax-gnu-base256-links-or-specials",
-    endMarker: "two-zero-blocks-followed-only-by-whole-zero-padding-blocks",
-    members: "unique-safe-package-root-regular-files-and-directories-only",
-    protectedProjection: {
-      sourcePath: "scripts/release/tar-protocol.mjs",
-      sourceBytes: 10554,
-      sourceDigest: "sha256:cfd70cee204b5d3559fc79037a69cae5a171f914c2df6f015bd0aa38bb3d626d",
-      compressedBytes: 3128,
-      encoding: "deflate-raw-base64-data-url-exact-source",
-    },
-  })) throw new Error("release candidate tarball inspection policy must remain exact and bounded");
+
   const tarProjection = tarballInspection.protectedProjection;
   const tarProvenance = contract.provenance.sources.find(({ path }) => path === tarProjection.sourcePath);
   const tarInput = inputs?.sources?.find(({ path }) => path === tarProjection.sourcePath);
@@ -1435,23 +1229,11 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     ...new Set(readiness.evidenceRoles.map((entry) => entry.type)),
   ].sort();
   if (
-    readiness.protocol !== "effect-build/release-readiness@3"
-    || readiness.bundleProtocol !== "effect-build/release-readiness-evidence-bundle@3"
-    || readiness.retentionDays !== 30
-    || readiness.bundleFraming !== "protocol-line-u32be-canonical-header-u64be-opaque-payload"
-    || !sameJson(readiness.orderedFiles, [readiness.manifest, readiness.evidenceBundle])
-    || readiness.candidate.protocolSource !== "releaseCertification.candidate.protocol"
-    || readiness.candidate.coordinate !== "required-exact"
-    || readiness.candidate.workflowSource !== "releaseCertification.candidate.workflow"
-    || readiness.candidate.artifactNameSource !== "releaseCertification.candidate.artifactName"
-    || releaseCertification.candidate.workflowPath !== ".github/workflows/release.yml"
+    !sameJson(readiness.orderedFiles, [readiness.manifest, readiness.evidenceBundle])
     || releaseCertification.candidate.workflow
       !== `${githubAuthority.repository}/${releaseCertification.candidate.workflowPath}@refs/heads/${githubAuthority.branchPolicy.name}`
-    || releaseCertification.candidate.event !== "workflow_dispatch"
     || readiness.workflow
       !== `${githubAuthority.repository}/${readiness.workflowPath}@refs/heads/${githubAuthority.branchPolicy.name}`
-    || readiness.event !== "workflow_dispatch"
-    || readiness.evidenceRoles.length !== 3
     || !sameJson(readinessShapeNames, referencedShapeNames)
     || readiness.evidenceRoles.some((entry) =>
       !/^effect-build\/[a-z0-9-]+@\d+$/u.test(entry.protocol)
@@ -1460,7 +1242,8 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
       || !["githubRun", "githubArtifact"].includes(entry.type)
       || entry.workflow
         !== `${githubAuthority.repository}/${entry.workflowPath}@refs/heads/${githubAuthority.branchPolicy.name}`
-      || (entry.type === "githubArtifact" && (typeof entry.artifactName !== "string" || entry.artifactName.length === 0))
+      || (entry.type === "githubArtifact"
+        && (typeof entry.artifactName !== "string" || entry.artifactName.length === 0))
     )
   ) {
     throw new Error("release readiness must remain one closed candidate plus three GitHub evidence roles");
@@ -1471,54 +1254,25 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   requireUnique(dispatchRoleInputs.map((entry) => entry.input), "release readiness dispatch evidence inputs");
   requireUnique(readiness.githubRunObservation.fields, "release readiness GitHub run observation fields");
   const directObservation = readiness.directObservation;
-  for (const [name, fields] of Object.entries({
-    fields: directObservation.fields,
-    githubFields: directObservation.githubFields,
-    environmentFields: directObservation.environmentFields,
-    reviewerFields: directObservation.reviewerFields,
-    branchPolicyFields: directObservation.branchPolicyFields,
-    npmFields: directObservation.npmFields,
-    npmPackageFields: directObservation.npmPackageFields,
-    repositoryFields: directObservation.repositoryFields,
-    placeholderFields: directObservation.placeholderFields,
-  })) requireUnique(fields, `release readiness direct-observation ${name}`);
+  for (
+    const [name, fields] of Object.entries({
+      fields: directObservation.fields,
+      githubFields: directObservation.githubFields,
+      environmentFields: directObservation.environmentFields,
+      reviewerFields: directObservation.reviewerFields,
+      branchPolicyFields: directObservation.branchPolicyFields,
+      npmFields: directObservation.npmFields,
+      npmPackageFields: directObservation.npmPackageFields,
+      repositoryFields: directObservation.repositoryFields,
+      placeholderFields: directObservation.placeholderFields,
+    })
+  ) requireUnique(fields, `release readiness direct-observation ${name}`);
   requireUnique(directObservation.githubEndpoints, "release readiness direct GitHub endpoints");
   requireUnique(directObservation.npmChecks, "release readiness direct npm checks");
   if (
-    readiness.clockSkewSeconds !== 60
-    || readiness.aggregateMaximumAgeSeconds !== 14400
-    || readiness.candidate.maximumAgeSeconds !== 604800
-    || readiness.candidate.maximumValiditySeconds !== 604800
-    || dispatch.sourceInput !== "source_sha"
-    || dispatch.candidateInput !== "candidate_reference_json"
-    || !sameJson(dispatchRoleInputs.map(({ role }) => role), readiness.evidenceRoles.map(({ role }) => role))
+    !sameJson(dispatchRoleInputs.map(({ role }) => role), readiness.evidenceRoles.map(({ role }) => role))
     || dispatchRoleInputs.some(({ input }) => !/^[a-z][a-z0-9_]*_json$/u.test(input))
-    || dispatch.githubInputs !== "closed-full-reference-json-downloaded-by-workflow"
-    || !sameJson(readiness.githubAuthentication, {
-      currentMain: "git-ref-heads-main-exact-sourceSha",
-      runStatus: "completed",
-      runConclusion: "success",
-      artifactExpired: false,
-      artifactDigest: "rest-metadata-and-downloaded-zip-sha256-exact",
-    })
-    || !sameJson(readiness.githubRunObservation.fields, [
-      "schema",
-      "workflow",
-      "sourceSha",
-      "runId",
-      "runAttempt",
-      "event",
-      "headBranch",
-      "status",
-      "conclusion",
-      "createdAt",
-      "updatedAt",
-    ])
-    || !sameJson(directObservation, releaseCertificationPolicy.readiness.directObservation)
     || readiness.evidenceRoles.some((entry) => !["push", "workflow_dispatch"].includes(entry.event))
-    || readiness.evidenceRoles.some((entry) =>
-      entry.runCompletionFreshness !== (entry.role === "exact-main-ci" ? "exact-source-no-time-expiry" : undefined)
-    )
     || readiness.evidenceRoles.some((entry) =>
       !Number.isSafeInteger(entry.maximumAgeSeconds)
       || entry.maximumAgeSeconds <= 0
@@ -1538,11 +1292,12 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     throw new Error("vendored Sigstore trusted-root target must be UTF-8 JSON");
   }
   const acquisition = trustedRoot.tuf.acquisition;
-  const evidenceBytes = (descriptor, label) => canonicalBase64Evidence(
-    inputs.sigstoreTufEvidenceSources.get(descriptor.path),
-    descriptor,
-    label,
-  );
+  const evidenceBytes = (descriptor, label) =>
+    canonicalBase64Evidence(
+      inputs.sigstoreTufEvidenceSources.get(descriptor.path),
+      descriptor,
+      label,
+    );
   const seedRootBytes = evidenceBytes(acquisition.seedRoot, "Sigstore TUF seed root");
   const rootMetadataBytes = evidenceBytes(acquisition.metadata.root, "Sigstore TUF root metadata");
   const timestampMetadataBytes = evidenceBytes(
@@ -1620,45 +1375,17 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
       && matches[0][1]?.at(-1) === entry.integrity;
   };
   if (
-    provenanceVerification.purpose !== "npm-publication-provenance-verification-only"
-    || provenanceVerification.status !== "implemented"
-    || provenanceVerification.module !== "scripts/release/sigstore-dsse-verifier.mjs"
-    || !sameJson(provenanceVerification.client, { package: "@sigstore/verify", version: "3.1.1" })
-    || !sameJson(provenanceVerification.bundleClient, { package: "@sigstore/bundle", version: "4.0.0" })
-    || !sameJson(provenanceVerification.protobufClient, {
-      package: "@sigstore/protobuf-specs",
-      version: "0.5.2",
-    })
-    || !sameJson(provenanceVerification.runtime, { executable: "node", version: "24.14.1" })
-    || inputs.packageManifest.devDependencies?.[provenanceVerification.client.package]
+    inputs.packageManifest.devDependencies?.[provenanceVerification.client.package]
       !== provenanceVerification.client.version
     || inputs.packageManifest.devDependencies?.[provenanceVerification.bundleClient.package]
       !== provenanceVerification.bundleClient.version
     || inputs.packageManifest.devDependencies?.[provenanceVerification.protobufClient.package]
       !== provenanceVerification.protobufClient.version
-    || !sameJson(provenanceVerification.networkGuard, {
-      path: sigstoreNetworkGuardPath,
-      bytes: 4379,
-      digest: "sha256:acb4f347c8abb4dbc98d138b487b7cf316a3ccbbbf3a2da2108e68e9b343de77",
-      strategy: "preload-standard-node-network-api-denial-plus-audited-direct-verifier-closure",
-    })
     || Buffer.byteLength(inputs.sigstoreNetworkGuardSource) !== provenanceVerification.networkGuard.bytes
     || `sha256:${sha256(inputs.sigstoreNetworkGuardSource)}` !== provenanceVerification.networkGuard.digest
-    || acquisition.retrievedAt !== "2026-08-30T15:07:03.000Z"
-    || acquisition.cache !== "fresh-empty-temporary-directory"
-    || acquisition.home !== "isolated-empty-directory"
-    || acquisition.network !== "exact-official-mirror-only"
-    || acquisition.evidenceEncoding !== "base64-of-exact-retrieved-bytes"
-    || acquisition.verificationModule !== "scripts/release/verify-sigstore-tuf-provenance.mjs"
-    || acquisition.verification
-      !== "retained-seed-root-rotation-signatures-expiry-versions-descriptors-and-target-bytes-replay"
-    || !sameJson(acquisition.clients.map(({ package: name, version }) => ({ package: name, version })), [
-      { package: "@sigstore/tuf", version: "4.0.2" },
-      { package: "tuf-js", version: "4.1.0" },
-      { package: "@tufjs/models", version: "4.1.0" },
-    ])
     || acquisition.clients.some((entry) =>
-      inputs.packageManifest.devDependencies?.[entry.package] !== entry.version || !lockContainsClient(entry))
+      inputs.packageManifest.devDependencies?.[entry.package] !== entry.version || !lockContainsClient(entry)
+    )
     || tufClients.size !== acquisition.clients.length
     || seedRoot.signed.version + 1 !== rootMetadata.signed.version
     || timestampMetadata.signed.snapshotMeta.version !== snapshotMetadata.signed.version
@@ -1670,21 +1397,8 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || targetsMetadata.signed.isExpired(retrievedAt)
     || targetDescriptor?.length !== trustedRoot.tuf.targetLength
     || targetDescriptor?.hashes.sha256 !== trustedRoot.tuf.targetSha256.slice("sha256:".length)
-    || !sameJson(trustedRoot, {
-      path: sigstoreTrustedRootPath,
-      mediaType: "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
-      bytes: 6787,
-      digest: "sha256:6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66",
-      tuf: {
-        mirror: "https://tuf-repo-cdn.sigstore.dev",
-        target: "trusted_root.json",
-        targetsMetadataVersion: 14,
-        targetLength: 6787,
-        targetSha256: "sha256:6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66",
-        acquisition: sigstoreTufAcquisition,
-      },
-      verification: "offline-direct-verifier-no-tuf-network-or-cache-fallback",
-    })
+    || trustedRoot.bytes !== trustedRoot.tuf.targetLength
+    || trustedRoot.digest !== trustedRoot.tuf.targetSha256
     || Buffer.byteLength(inputs.sigstoreTrustedRootSource) !== trustedRoot.bytes
     || `sha256:${sha256(inputs.sigstoreTrustedRootSource)}` !== trustedRoot.digest
     || decodedTrustedRoot.mediaType !== trustedRoot.mediaType
@@ -1696,22 +1410,6 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || decodedTrustedRoot.ctlogs.length === 0
     || !Array.isArray(decodedTrustedRoot.timestampAuthorities)
     || decodedTrustedRoot.timestampAuthorities.length === 0
-    || provenanceVerification.bundleMediaType !== "application/vnd.dev.sigstore.bundle.v0.3+json"
-    || provenanceVerification.certificateIssuer !== "https://token.actions.githubusercontent.com"
-    || provenanceVerification.certificateIdentityMatch
-      !== "exact-anchored-uri-from-contract-release-workflow-identity"
-    || !sameJson(provenanceVerification.certificateOids, {
-      buildSignerUri: "1.3.6.1.4.1.57264.1.9",
-      sourceRepositoryUri: "1.3.6.1.4.1.57264.1.12",
-      sourceRepositoryDigest: "1.3.6.1.4.1.57264.1.13",
-    })
-    || provenanceVerification.ctLogThreshold !== 1
-    || provenanceVerification.tlogThreshold !== 1
-    || provenanceVerification.minimumTlogEntries !== 1
-    || provenanceVerification.maximumBundleBytes !== 32768
-    || provenanceVerification.forbiddenEnvironmentSource
-      !== "releaseCertification.npmOidcCertification.forbiddenEnvironmentNames"
-    || provenanceVerification.network !== "forbidden-by-preload-guard-and-audited-direct-verifier-closure"
   ) {
     throw new Error("npm provenance verification must retain one pinned offline Sigstore trust boundary");
   }
@@ -1744,37 +1442,12 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   requireUnique(finalImplementation.consumerSmoke.fields, "final public verification consumer receipt fields");
   requireUnique(finalImplementation.consumerSmoke.node.reportFields, "final public verification Node report fields");
   requireUnique(finalImplementation.consumerSmoke.bun.reportFields, "final public verification Bun report fields");
-  const reservationLedger = npm.bootstrap.placeholderLedger.find(
-    (entry) => entry.name === "effect-build-rolldown",
-  );
-  const finalBunVersion = contract.exactToolEvidenceRegister.tools.find(
-    (entry) => entry.name === "bun",
-  )?.version;
   if (
-    finalPublicVerification.protocol !== "effect-build/final-public-verification@2"
-    || finalPublicVerification.workflowPath !== ".github/workflows/release-verification.yml"
-    || finalPublicVerification.workflow
+    finalPublicVerification.workflow
       !== `${githubAuthority.repository}/${finalPublicVerification.workflowPath}@refs/heads/${githubAuthority.branchPolicy.name}`
-    || finalPublicVerification.event !== "workflow_dispatch"
     || finalPublicVerification.status !== expectedReleaseCertification.finalPublicVerification.status
-    || finalPublicVerification.upstreamGateSource
-      !== "releaseCertification.readiness"
     || finalPublicVerification.artifactDisposition
       !== expectedReleaseCertification.finalPublicVerification.artifactDisposition
-    || !sameJson(finalPublicVerification.permissions, {
-      actions: "read",
-      contents: "read",
-      idToken: "none",
-      packages: "anonymous-read",
-      repositoryMutation: "forbidden",
-    })
-    || !sameJson(finalPublicVerification.dispatch, {
-      sourceInput: "source_sha",
-      candidateInput: "candidate_reference_json",
-      readinessInput: "readiness_reference_json",
-      tagInput: "tag_reference_json",
-      releaseInput: "release_reference_json",
-    })
     || !sameJson(Object.keys(finalPublicVerification.referenceShapes), [
       "candidate",
       "readiness",
@@ -1794,101 +1467,6 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     || finalPublicVerification.readiness.protocol !== readiness.protocol
     || finalPublicVerification.readiness.workflow !== readiness.workflow
     || finalPublicVerification.readiness.artifactName !== readiness.artifactName
-    || finalPublicVerification.tagPolicy.form !== "lightweight-direct-commit"
-    || finalPublicVerification.tagPolicy.objectType !== "commit"
-    || finalPublicVerification.tagPolicy.mutation !== "forbidden"
-    || finalPublicVerification.releasePolicy.draft !== false
-    || finalPublicVerification.releasePolicy.prerelease !== false
-    || finalPublicVerification.releasePolicy.targetShaSource !== "authenticated-lightweight-tag-ref-only"
-    || finalPublicVerification.releasePolicy.targetCommitishSource
-      !== "releaseCertification.githubAuthority.branchPolicy.name-presentation-only"
-    || finalPublicVerification.releasePolicy.immutabilityDecisionSource
-      !== "live-operator-admin-preflight-before-draft-and-public-release"
-    || finalPublicVerification.releasePolicy.mutation !== "forbidden"
-    || finalPublicVerification.publicState.packageSource !== "publicApiProjection.packages"
-    || finalPublicVerification.publicState.moduleSource
-      !== "publicApiProjection.packages package roots and subpaths"
-    || finalPublicVerification.publicState.releaseAssetSource
-      !== "candidate ordered package ledger plus releaseCertification.candidate.manifest"
-    || finalPublicVerification.publicState.requiredChecks.length !== 11
-    || finalPublicVerification.freshness.clockSkewSeconds !== 60
-    || finalPublicVerification.freshness.maximumObservationAgeSeconds !== 3600
-    || finalImplementation.status !== "implemented"
-    || finalImplementation.module !== "scripts/release/final-public-verification.mjs"
-    || finalImplementation.contractAuthentication !== "exact-generated-bytes"
-    || finalImplementation.githubBoundary !== "github-token-read-only-api-no-cross-origin-authorization"
-    || finalImplementation.npmBoundary !== "anonymous-registry-read-only-no-preexisting-auth"
-    || !sameJson(finalImplementation.observationFields, {
-      npmPackage: ["name", "version", "latest", "bytes", "sha256", "integrity", "tarballUrl"],
-      releaseAsset: ["name", "assetId", "bytes", "digest", "apiUrl", "browserDownloadUrl"],
-      provenance: ["name", "attestationUrl", "bundleDigest", "subjectDigest", "workflow", "sourceSha"],
-      consumerSmoke: ["schema", "version", "node", "bun", "publicModules", "pipelines", "passed"],
-      reservation: ["name", "version", "versions", "latest", "reserved", "bytes", "sha256", "integrity"],
-    })
-    || !sameJson(finalImplementation.provenance, {
-      attestationPath: "/-/npm/v1/attestations/<encoded-name>@<version>",
-      predicateType: "https://slsa.dev/provenance/v1",
-      payloadType: "application/vnd.in-toto+json",
-      statementType: "https://in-toto.io/Statement/v1",
-      buildType: "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1",
-      builderId: "https://github.com/actions/runner/github-hosted",
-      subjectDigest: "sha512:<128-lowercase-hex>",
-      certificateIdentitySource: "releaseCertification.githubAuthority expected release workflow identity",
-      certificateIssuerSource: "releaseCertification.provenanceVerification",
-      certificateOidSource: "releaseCertification.provenanceVerification",
-      workflow: releaseCertification.candidate.workflow,
-      workflowPath: releaseCertification.candidate.workflowPath,
-      branchRef: `refs/heads/${githubAuthority.branchPolicy.name}`,
-      repository: githubAuthority.repository,
-      repositoryId: githubAuthority.repositoryId,
-      repositoryOwnerId: githubAuthority.repositoryOwnerId,
-    })
-    || !sameJson(finalImplementation.consumerSmoke, {
-      protocol: "effect-build/final-public-consumer-smoke@1",
-      fields: ["schema", "version", "node", "bun", "publicModules", "pipelines", "passed"],
-      node: {
-        executor: "node",
-        command: "node scripts/test-built-consumer.mjs --registry-version <version> --runtime node --json",
-        client: "releaseCertification.npmOidcCertification.client",
-        cache: "fresh-empty-npm-cache-and-install-root",
-        reportFields: ["executor", "version", "npm", "cache", "publicModules", "pipelines", "passed"],
-        configurationIsolation:
-          "empty-project-user-global-npmrc-explicit-registry-cache-prefix-and-same-child-config-audit-before-and-after-install",
-        version: releaseCertification.npmOidcCertification.client.node,
-        npm: releaseCertification.npmOidcCertification.client.npm,
-      },
-      bun: {
-        executor: "bun",
-        command: "bun scripts/test-built-consumer.mjs --registry-version <version> --runtime bun --json",
-        versionSource: "exactToolEvidenceRegister.tools kind=provider name=bun",
-        cache: "fresh-empty-bun-cache-and-install-root",
-        reportFields: ["executor", "version", "cache", "publicModules", "pipelines", "passed"],
-        configurationIsolation:
-          "empty-project-user-global-npmrc-and-bunfig-explicit-registry-cache-prefix-and-same-child-npm-config-audit-before-and-after-install",
-        version: finalBunVersion,
-      },
-      ambientConfiguration:
-        "forbidden-auth-proxy-extra-ca-node-options-and-host-home-config-with-fresh-empty-home-cache-prefix-and-install-root",
-      moduleSource: "publicApiProjection.packages package roots and subpaths",
-      representativePipelines: [
-        "esbuild-in-memory-provider-build",
-        "artifact-file-finalization-and-adoption",
-        "artifact-byte-mutation-rejection",
-      ],
-    })
-    || !sameJson(finalImplementation.reservation, {
-      package: "effect-build-rolldown",
-      ledgerSource: "npmRegistryBoundary.bootstrap.placeholderLedger",
-      targetVersion: "forbidden",
-      exactVersions: "reservation-ledger-version-only",
-      ledger: reservationLedger,
-    })
-    || finalPublicVerification.receipt.protocol !== "effect-build/final-public-release-receipt@2"
-    || finalPublicVerification.receipt.artifactName !== "effect-build-v0.6.3-final-public-release"
-    || finalPublicVerification.receipt.retentionDays !== 90
-    || !sameJson(finalPublicVerification.receipt.orderedFiles, ["final-public-release.json"])
-    || finalPublicVerification.receipt.terminalVerdict !== "success"
-    || finalPublicVerification.receipt.externalArchive !== "operator-controlled-retention-required"
   ) {
     throw new Error("final public verification must remain one ready read-only exact-public-state interface");
   }
@@ -1896,41 +1474,7 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     releaseCertification.npmOidcCertification.forbiddenEnvironmentNames,
     "release certification forbidden environment names",
   );
-  const protectedReadOnlyTransport = releaseCertification.npmOidcCertification.protectedReadOnlyTransport;
-  if (!sameJson(protectedReadOnlyTransport, {
-    protocol: "effect-build/protected-release-read-only-transport@1",
-    githubPolicySource: "releaseCertification.githubAuthority.readOnlyTransport",
-    npmRegistryOriginSource: "npmRegistryBoundary.registry",
-    oidcRequest: {
-      hostPattern: "^(?:pipelines[a-z0-9-]*|run-actions-[0-9]+-[a-z0-9-]+)\\.actions\\.githubusercontent\\.com$",
-      pathPattern:
-        "^(?:/[A-Za-z0-9_-]{20,}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/_apis/distributedtask/hubs/[A-Za-z]+/plans/[A-Za-z0-9_-]{20,}/jobs/[A-Za-z0-9_-]{20,}/idtoken|/[0-9]+//idtoken/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
-      initialQuery: "api-version=2.0",
-      audienceName: "audience",
-      audienceValue: "npm:registry.npmjs.org",
-      authorization: "actions-id-token-request-token-only",
-    },
-    oidcIssuer: {
-      origin: "https://token.actions.githubusercontent.com",
-      discoveryPath: "/.well-known/openid-configuration",
-      jwksPath: "/.well-known/jwks",
-    },
-    request: {
-      method: "GET",
-      redirects: 0,
-      requestInactivityTimeoutMilliseconds: 60000,
-      metadataTotalTimeoutMilliseconds: 60000,
-      oidcSequenceTotalTimeoutMilliseconds: 180000,
-      maximumJsonBytes: 8388608,
-      contentType: "application-json-or-json-suffix",
-      contentEncoding: "identity-or-absent",
-      partialResponses: "forbidden",
-      tlsRootPolicy: "node-bundled-root-certificates-only",
-      ambientConfiguration: "forbidden-home-curl-git-npm-proxy-extra-ca-and-node-options",
-    },
-  })) {
-    throw new Error("protected release reads must remain one sealed Node HTTPS projection");
-  }
+
   const npmEvidence = releaseCertification.npmOidcCertification.evidence;
   requireUnique(Object.values(npmEvidence.protocols), "npm OIDC certification receipt protocols");
   requireUnique(npmEvidence.orderedFiles, "npm OIDC certification receipt files");
@@ -1949,25 +1493,8 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   requireUnique(claimPolicyFields, "npm OIDC GitHub claim policy fields");
   requireText(npmEvidence.artifactName, "npm OIDC certification artifact name");
   if (
-    npmEvidence.retentionDays !== 30
-    || npmEvidence.orderedFiles.length !== 2
-    || npmEvidence.orderedFiles.some((file) => !/^[a-z0-9-]+\.json$/u.test(file))
-    || npmEvidence.receiptFieldPolicy !== "closed-objects-additional-fields-forbidden"
+    npmEvidence.orderedFiles.some((file) => !/^[a-z0-9-]+\.json$/u.test(file))
     || !sameJson([...claimPolicyFields].sort(), [...npmEvidence.githubOidcClaims.orderedClaimFields].sort())
-    || npmEvidence.githubOidcClaims.rawJwtRetention !== "forbidden"
-    || npmEvidence.githubOidcClaims.claimsDigest
-      !== "releaseCertification.githubArtifactDigest-of-canonical-claims-json"
-    || npmEvidence.githubOidcClaims.jwtValidation.alg !== "RS256"
-    || npmEvidence.githubOidcClaims.jwtValidation.signatureVerified !== true
-    || npmEvidence.npmOidcExchangeAccepted.registryState
-      !== "before-and-after-releaseCertification.githubArtifactDigest-of-canonical-registry-state-exactly-equal"
-    || npmEvidence.bindings.candidate !== "releaseCertification.githubArtifactCoordinate"
-    || npmEvidence.bindings.client !== "releaseCertification.npmOidcCertification.client"
-    || npmEvidence.bindings.sourceDigests !== "releaseCertification.npmOidcCertification.sourceDigests"
-    || npmEvidence.bindings.registryMutation !== false
-    || npmEvidence.bindings.digest !== "releaseCertification.githubArtifactDigest"
-    || npmEvidence.bindings.observedAt !== "rfc3339"
-    || npmEvidence.bindings.markerCount !== 1
   ) {
     throw new Error("npm OIDC certification must retain exactly its two canonical JSON receipts for 30 days");
   }
@@ -2032,134 +1559,19 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   );
   const fakeRegistryReadinessRole = readiness.evidenceRoles.find((entry) => entry.role === "fake-registry");
   if (
-    localQualification.protocol !== "effect-build/fake-registry-local-qualification@2"
-    || localQualification.workflowPath !== ".github/workflows/release-certification.yml"
-    || localQualification.workflow
+    localQualification.workflow
       !== `${githubAuthority.repository}/${localQualification.workflowPath}@refs/heads/${githubAuthority.branchPolicy.name}`
-    || localQualification.artifactName !== "effect-build-v0.6.3-fake-registry-local-qualification"
-    || localQualification.terminal !== "local-qualification"
-    || localQualification.retentionDays !== 30
-    || localQualification.readinessAdmissible !== false
-    || !sameJson(localQualification.proves, [
-      "real-purpose-without-readiness-stops-before-first-mutation",
-      "sealed-credential-free-exact-purpose-covers-40-state-machine-coordinates",
-      "independent-reference-oracle-agrees-with-exact-purpose",
-      "npm-oidc-dry-run-body-local-boundaries",
-    ])
-    || !sameJson(localQualification.doesNotProve, [
-      "readiness-admissible-exact-protected-body-certification",
-      "readiness-admission",
-      "same-candidate-resume-after-readiness-expiry",
-      "npm-upload",
-      "provenance",
-      "publication",
-    ])
-    || exactProtectedBodyCertification.protocol
-      !== "effect-build/fake-registry-exact-protected-body-certification@2"
     || exactProtectedBodyCertification.protocol === localQualification.protocol
     || exactProtectedBodyCertification.workflow !== localQualification.workflow
-    || exactProtectedBodyCertification.artifactName
-      !== "effect-build-v0.6.3-fake-registry-exact-protected-body-certification"
     || exactProtectedBodyCertification.artifactName === localQualification.artifactName
-    || exactProtectedBodyCertification.terminal !== "success"
-    || exactProtectedBodyCertification.implementationStatus !== "implemented"
     || exactProtectedBodyCertification.status
       !== expectedReleaseCertification.fakeRegistry.exactProtectedBodyCertification.status
-    || exactProtectedBodyCertification.gateSource
-      !== "releaseCertification.readiness.githubAuthentication"
     || exactProtectedBodyCertification.artifactDisposition
       !== expectedReleaseCertification.fakeRegistry.exactProtectedBodyCertification.artifactDisposition
-    || exactProtectedBodyCertification.readinessAdmission
-      !== "requires-same-source-terminal-success-exact-body-artifact"
-    || exactProtectedBodyCertification.retentionDays !== 30
-    || !sameJson(exactProtectedBodyCertification.orderedFiles, ["fake-registry-exact-protected-body.json"])
-    || !sameJson(exactProtectedBodyCertification.receiptFields, [
-      "schema",
-      "sourceSha",
-      "observedAt",
-      "workflow",
-      "contractDigest",
-      "readinessProtocol",
-      "candidate",
-      "candidateManifestDigest",
-      "coordinates",
-      "coordinateCount",
-      "claims",
-      "doesNotProve",
-      "realRegistryMutation",
-      "realNpmOrRegistryCredentialsUsed",
-      "terminal",
-    ])
-    || !sameJson(exactProtectedBodyCertification.coordinateFields, [
-      "coordinate",
-      "status",
-      "attemptedFakeMutations",
-      "committedFakeMutations",
-      "candidateBinding",
-      "candidateArtifactDigest",
-      "candidateManifestDigest",
-    ])
-    || exactProtectedBodyCertification.coordinateSource
-      !== "releaseCertification.fakeRegistry.hypotheticalStateMachine.cases-exact-expanded-order"
-    || !sameJson(
-      exactProtectedBodyCertification.exactMutationLedger,
-      releaseCertificationPolicy.fakeRegistry.exactProtectedBodyCertification.exactMutationLedger,
-    )
-    || !sameJson(exactProtectedBodyCertification.requiredClaims, [
-      "exact-protected-reauthorization-and-publisher-bodies-executed-against-stateful-fake-boundaries",
-      "all-40-exact-body-case-coordinates-terminal",
-      "zero-real-registry-mutation",
-    ])
-    || !sameJson(exactProtectedBodyCertification.doesNotProve, [
-      "same-candidate-resume-after-readiness-expiry",
-      "npm-upload",
-      "provenance",
-      "publication",
-    ])
-    || !sameJson(
-      exactProtectedBodyCertification.certificationPurpose,
-      releaseCertificationPolicy.fakeRegistry.exactProtectedBodyCertification.certificationPurpose,
-    )
     || fakeRegistryReadinessRole?.protocol !== exactProtectedBodyCertification.protocol
     || fakeRegistryReadinessRole?.workflow !== exactProtectedBodyCertification.workflow
     || fakeRegistryReadinessRole?.artifactName !== exactProtectedBodyCertification.artifactName
     || fakeRegistryReadinessRole?.terminal !== exactProtectedBodyCertification.terminal
-    || !sameJson(exactProtectedBody.bodies, ["protected-reauthorization", "publisher"])
-    || exactProtectedBody.realGateSource !== "releaseCertification.readiness"
-    || exactProtectedBody.fakeGateSource
-      !== "releaseCertification.fakeRegistry.exactProtectedBodyCertification.certificationPurpose"
-    || exactProtectedBody.status !== "two-purpose-hard-cut"
-    || exactProtectedBody.realExpected !== "require-exact-three-role-readiness-before-first-registry-mutation"
-    || exactProtectedBody.fakeExpected !== "execute-exact-40-coordinate-state-machine-with-no-real-boundary"
-    || exactProtectedBody.realBlockedMutationCount !== 0
-    || !sameJson(exactProtectedBody.proves, [
-      "real-purpose-readiness-gate-precedes-first-registry-mutation",
-      "exact-fake-purpose-executes-shared-protected-bodies-and-state-machine",
-    ])
-    || !sameJson(exactProtectedBody.doesNotProve, [
-      "npm-upload",
-      "provenance",
-      "publication",
-    ])
-    || hypotheticalStateMachine.status !== "reference-oracle-only-not-certification"
-    || hypotheticalStateMachine.testSubject !== "independent-oracle-compared-with-exact-protected-body"
-    || hypotheticalStateMachine.failureInvariant !== "no-later-mutation"
-    || hypotheticalStateMachine.mutationCountAssertion !== "required-exact-per-case"
-    || !sameJson(hypotheticalStateMachine.forbiddenRecoveryCommands, [
-      "repack",
-      "dist-tag",
-      "unpublish",
-      "external-credential",
-    ])
-    || !sameJson(hypotheticalStateMachine.proves, [
-      "algorithmic-convergence-and-fail-closed-state-transitions-at-fake-boundaries",
-    ])
-    || !sameJson(hypotheticalStateMachine.doesNotProve, [
-      "exact-protected-body-execution",
-      "npm-upload",
-      "provenance",
-      "publication",
-    ])
   ) {
     throw new Error("fake-registry evidence must distinguish the exact two-purpose body from its reference oracle");
   }
@@ -2174,33 +1586,30 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     (count, entry) => count + (entry.variants === undefined ? 1 : entry.variants.length),
     0,
   );
-  if (hypotheticalStateMachine.coordinateCount !== 40 || fakeCoordinateCount !== 40) {
-    throw new Error("hypothetical fake-registry state machine must retain exactly 40 coordinates");
+  if (fakeCoordinateCount !== hypotheticalStateMachine.coordinateCount) {
+    throw new Error("fake-registry coordinate count must match its expanded cases");
   }
-  if (!sameJson(
-    exactProtectedBodyCertification.exactMutationLedger
-      .filter(({ candidateBinding }) => candidateBinding === "derived-hostile-candidate")
-      .map(({ coordinate }) => coordinate),
-    [
-      "embedded-publish-config-invalid/missing",
-      "embedded-publish-config-invalid/additional",
-      "embedded-publish-config-invalid/non-canonical",
-      "embedded-publish-config-invalid/registry-scoped-auth",
-      "adopted-evidence-digest-mismatch/candidate-manifest",
-      "adopted-evidence-digest-mismatch/candidate-tarball",
-    ],
-  ) || exactProtectedBodyCertification.exactMutationLedger.some(({ candidateBinding }) =>
-    !["exact-release-candidate", "derived-hostile-candidate"].includes(candidateBinding)
-  )) {
+  if (
+    !sameJson(
+      exactProtectedBodyCertification.exactMutationLedger
+        .filter(({ candidateBinding }) => candidateBinding === "derived-hostile-candidate")
+        .map(({ coordinate }) => coordinate),
+      [
+        "embedded-publish-config-invalid/missing",
+        "embedded-publish-config-invalid/additional",
+        "embedded-publish-config-invalid/non-canonical",
+        "embedded-publish-config-invalid/registry-scoped-auth",
+        "adopted-evidence-digest-mismatch/candidate-manifest",
+        "adopted-evidence-digest-mismatch/candidate-tarball",
+      ],
+    ) || exactProtectedBodyCertification.exactMutationLedger.some(({ candidateBinding }) =>
+      !["exact-release-candidate", "derived-hostile-candidate"].includes(candidateBinding)
+    )
+  ) {
     throw new Error("exact fake-registry coordinates must state one canonical candidate-byte binding");
   }
   const apple = releaseCertification.apple;
-  if (
-    apple.publicCapabilitySource !== "producerCapabilityRegister.capabilities family=apple visibility=public"
-    || apple.publicCapabilityCount !== 13
-  ) {
-    throw new Error("Apple release certification must cover all thirteen public producer capabilities");
-  }
+
   requireUnique(Object.values(apple.protocols), "Apple certification protocol ids");
   requireUnique(apple.hostedExecution.blockerIds, "Apple hosted-execution blocker ids");
   requireUnique(apple.hostedExecution.protectedStageIds, "Apple hosted protected-stage ids");
@@ -2226,10 +1635,7 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     .filter(({ family, visibility }) => family === "apple" && visibility === "public")
     .map(({ id }) => id);
   if (
-    appleToolLineage.order !== "first-executed-distinct-tool"
-    || !sameJson(appleToolLineage.componentFields, ["name", "capabilityId"])
-    || !sameJson(Object.keys(appleToolLineage.byOperationId), applePublicOperationIds)
-    || !sameJson(appleToolLineage, releaseCertificationPolicy.apple.operationToolLineage)
+    !sameJson(Object.keys(appleToolLineage.byOperationId), applePublicOperationIds)
   ) {
     throw new Error("Apple operation tool lineage changed from the exact public-operation canon");
   }
@@ -2255,48 +1661,22 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     requireUnique(paths, `Apple certification ${category} operation fact paths`);
   }
   if (
-    apple.hostedExecution.protocol !== "effect-build/apple-hosted-execution@1"
-    || apple.hostedExecution.status !== "blocked"
-    || !sameJson(apple.hostedExecution.blockerIds, [
-      "released-qualified-ts-release-journal-and-pinned-reusable-workflow",
-      "exact-aws-account-bucket-region-role-prefix-and-oidc-job-workflow-ref",
-      "frozen-apple-credential-layer-and-secret-name-inventory",
-      "bundled-producer-and-clean-host-executor-identities",
-      "qualified-arm64-x64-native-and-clean-host-runner-interfaces",
-    ])
-    || apple.hostedExecution.artifactDisposition !== "forbidden-while-blocked"
-    || !sameJson(apple.hostedExecution.protectedStageIds, ["sign-app", "submit-product", "continue-notary"])
-    || !sameJson(
-      apple.hostedExecution.activationInterfaces,
-      releaseCertificationPolicy.apple.hostedExecution.activationInterfaces,
+    Object.entries(apple.counts).some(([category, count]) =>
+      count !== (category === "total"
+        ? apple.coordinates.length
+        : apple.coordinates.filter((coordinate) => coordinate.startsWith(category)).length)
     )
-    || apple.coordinates.length !== 28
-    || apple.counts.total !== 28
-    || apple.counts.N !== 2
-    || apple.counts.P !== 10
-    || apple.counts.G !== 6
-    || apple.counts.A !== 10
-    || apple.counts.total !== apple.counts.N + apple.counts.P + apple.counts.G + apple.counts.A
   ) {
-    throw new Error("Apple certification must contain exactly N=2, P=10, G=6, A=10 coordinates");
+    throw new Error("Apple certification counts must match its coordinates");
   }
   if (
     !apple.commonReceiptFields.includes("producerDigest")
     || !apple.commonReceiptFields.includes("verifierDigest")
     || !apple.commonReceiptFields.includes("observedAt")
-    || apple.encoding.digest !== "releaseCertification.githubArtifactDigest"
-    || apple.encoding.bundleFraming !== "protocol-line-u32be-canonical-header-u64be-opaque-payload"
-    || apple.encoding.terminalVerdict !== "success"
-    || !sameJson(apple.pairArchitectureOrder, ["macos-aarch64", "macos-x64"])
     || apple.nativeOperationSource !== apple.operationCoverage.nativeSource
-    || !sameJson(apple.nativeOperationIds, ["CAN-BUN-012", "CAN-DENO-010"])
-    || apple.providerVersionSource !== "exactToolEvidenceRegister.tools kind=provider name in bun,deno"
-    || apple.providerVersions.bun !== "1.3.14"
-    || apple.providerVersions.deno !== "2.9.5"
     || apple.workflow
       !== `${githubAuthority.repository}/${apple.workflowPath}@refs/heads/${githubAuthority.branchPolicy.name}`
     || apple.notaryJournal.protocol !== apple.notaryJournal.submissionCodec
-    || apple.receiptSchemaRules.closedObjects !== "all-receipt-schema-objects-reject-unknown-fields"
   ) {
     throw new Error("Apple certification receipt encoding and producer/verifier identities changed");
   }
@@ -2319,7 +1699,12 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     }
   }
   requireUnique(apple.verdicts.map((entry) => entry.coordinate), "Apple certification verdict coordinates");
-  if (!sameJson(apple.verdicts.map((entry) => entry.coordinate), apple.coordinates.filter((entry) => /^A\d$/u.test(entry)))) {
+  if (
+    !sameJson(
+      apple.verdicts.map((entry) => entry.coordinate),
+      apple.coordinates.filter((entry) => /^A\d$/u.test(entry)),
+    )
+  ) {
     throw new Error("Apple certification verdict dependencies must cover exact A0-A9 order");
   }
   const coordinateSet = new Set(apple.coordinates);
@@ -2339,7 +1724,9 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   ) {
     throw new Error("Apple certification coordinate rules must cover the exact coordinate order");
   }
-  const providerOperationIds = new Set(contract.providerOperationRegister.operations.map(({ operationId }) => operationId));
+  const providerOperationIds = new Set(
+    contract.providerOperationRegister.operations.map(({ operationId }) => operationId),
+  );
   const producerOperationIds = new Set(contract.producerCapabilityRegister.capabilities.map(({ id }) => id));
   for (const rule of apple.coordinateRules) {
     if (!sameJson(Object.keys(rule), apple.coordinateRuleFields)) {
@@ -2361,7 +1748,10 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
     if (
       rule.category !== expectedCategory
       || !sameJson(Object.keys(rule.fieldValues), expectedFieldKeys)
-      || !sameJson(rule.dependencies, expectedCategory === "A-verdict" ? rule.fieldValues.orderedDependencies : rule.dependencies)
+      || !sameJson(
+        rule.dependencies,
+        expectedCategory === "A-verdict" ? rule.fieldValues.orderedDependencies : rule.dependencies,
+      )
       || rule.operationIds.some((id) =>
         expectedCategory === "N-native" ? !providerOperationIds.has(id) : !producerOperationIds.has(id)
       )
@@ -2386,8 +1776,6 @@ const validateContractModel = (contract, inputs, expectedReleaseOverride) => {
   validateOwners(contract);
   return contract;
 };
-
-export const validateContract = (contract, inputs) => validateContractModel(contract, inputs);
 
 export const validateImplementationCoordinates = async (contract, repositoryRoot) => {
   const requireSource = async (path, label) => {

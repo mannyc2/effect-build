@@ -156,27 +156,16 @@ const expectedToolchain = (contract) => {
   };
 };
 
-// An exact source CI result does not become false with age. Its authenticated
-// observation still expires under validateTemporalReference, independently of
-// the original run completion. Mutable certification and artifact evidence do
-// retain their completion-age limits.
-export const validateRunCompletionFreshness = ({ definition, completedAt, observedAt, clockSkewSeconds = 0 }) => {
-  const reusableSource = definition.runCompletionFreshness === "exact-source-no-time-expiry";
+// Source CI and exact-candidate fake execution remain true for the same inputs.
+// Reauthentication, reference expiry, and artifact retention have separate limits.
+export const validateExecutionFreshness = ({ definition, executedAt, observedAt, clockSkewSeconds = 0 }) => {
   if (
-    reusableSource !== (definition.role === "exact-main-ci")
-    || (reusableSource && (
-      definition.type !== "githubRun"
-      || definition.workflowPath !== ".github/workflows/ci.yml"
-      || definition.event !== "push"
-    ))
-    || (definition.runCompletionFreshness !== undefined && !reusableSource)
-  ) throw new Error("GitHub run completion freshness policy is not exact");
-  if (
-    !Number.isFinite(completedAt)
+    !Number.isFinite(executedAt)
     || !Number.isFinite(observedAt)
-    || completedAt > observedAt + clockSkewSeconds * 1_000
-    || (!reusableSource && observedAt - completedAt > definition.maximumAgeSeconds * 1_000)
-  ) throw new Error("GitHub run completion is future or stale");
+    || executedAt > observedAt + clockSkewSeconds * 1_000
+    || (definition.runCompletionFreshness !== "exact-source-no-time-expiry"
+      && observedAt - executedAt > definition.maximumAgeSeconds * 1_000)
+  ) throw new Error("GitHub execution evidence is future or stale");
 };
 
 const validateTemporalReference = (value, aggregateObservedAt, validationTime, freshness, label) => {
@@ -697,11 +686,8 @@ const validateEvidenceReference = async ({
       `readiness ${definition.role}.evidenceObservedAt`,
     );
     const artifactObservedAt = canonicalTimestamp(value.observedAt, `readiness ${definition.role}.observedAt`);
-    if (
-      evidenceObservedAt > artifactObservedAt
-      || evidenceObservedAt > aggregateObservedAt
-      || aggregateObservedAt - evidenceObservedAt > definition.maximumAgeSeconds * 1_000
-    ) throw new Error(`readiness ${definition.role} evidence time is future or stale`);
+    if (evidenceObservedAt > artifactObservedAt) throw new Error(`readiness ${definition.role} evidence time is future`);
+    validateExecutionFreshness({ definition, executedAt: evidenceObservedAt, observedAt: aggregateObservedAt });
     const coordinate = artifactCoordinate(release, value.coordinate);
     if (
       coordinate.sourceSha !== sourceSha

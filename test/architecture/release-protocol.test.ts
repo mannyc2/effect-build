@@ -184,12 +184,10 @@ describe("unprotected release protocol", () => {
     expect(() => artifactCoordinate(contract.releaseCertification, missing, workflow)).toThrow(/fields/u);
   });
 
-  it("derives exactly eleven package roots and the ordered 43-module projection from the contract", () => {
-    expect(names).toHaveLength(11);
-    expect(names).toEqual([...names].sort());
+  it("derives admitted package roots and ordered public modules from the contract", () => {
+    expect(names).toEqual(Object.keys(contract.publicApiProjection.packages).sort());
     expect(names).not.toContain("effect-build-rolldown");
-    expect(publicModules).toHaveLength(43);
-    expect(new Set(publicModules).size).toBe(43);
+    expect(new Set(publicModules).size).toBe(publicModules.length);
     expect(publicModules[0]).toBe("effect-build");
     expect(publicModules).toContain("effect-build-apple/Notary");
 

@@ -71,15 +71,19 @@ hosted proofs:
 2. exact protected-body execution against the stateful fake registry; and
 3. eleven-package npm OIDC dry-run certification.
 
-Exact-main CI execution remains reusable while its source SHA is unchanged,
-but its authenticated observation must still satisfy the contract's freshness
-and validity windows. Candidate preparation and readiness reauthenticate the
-exact workflow, repository, run, attempt, terminal result, and current main;
+Exact-main CI execution remains reusable while its source SHA is unchanged.
+Fake-registry execution remains reusable for the exact source, contract, and
+candidate bytes it certified. Both require a fresh authenticated observation
+within the contract's reference validity windows; artifact retention still
+limits reuse. Their original execution and receipt timestamps do not force
+reruns. npm OIDC certification retains its execution-age limit.
+
+Candidate preparation and readiness reauthenticate the exact workflow, repository, run, attempt, terminal result, and current main;
 caller-authored reports and equivalent trees at other SHAs are not substitutes.
-Artifact retention, candidate bytes, fake-registry and OIDC certification,
-readiness expiry, and live registry or authorization observations retain their
-own validity requirements. Reusing source evidence never extends a partial
-publication's original readiness packet.
+Candidate bytes, artifact retention, readiness expiry, and live registry or
+authorization observations retain their own validity requirements. Reusing
+execution evidence never extends a partial publication's original readiness
+packet.
 
 Every readiness input is an authenticated GitHub run or artifact coordinate.
 There is no caller-authored receipt, external-evidence ingress, generated

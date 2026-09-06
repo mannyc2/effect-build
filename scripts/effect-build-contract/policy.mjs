@@ -51,19 +51,6 @@ export const npmReleaseTarget = {
       tags: { latest: "0.6.2", reserved: "0.0.0-reserved.0" },
     },
   ],
-  expectedLatestBeforePublication: [
-    { name: "effect-build", version: "0.6.2" },
-    { name: "effect-build-apple", version: "0.6.2" },
-    { name: "effect-build-archives", version: "0.6.2" },
-    { name: "effect-build-bun", version: "0.6.2" },
-    { name: "effect-build-deno", version: "0.6.2" },
-    { name: "effect-build-esbuild", version: "0.6.2" },
-    { name: "effect-build-nfpm", version: "0.6.2" },
-    { name: "effect-build-node-sea", version: "0.6.2" },
-    { name: "effect-build-python", version: "0.6.2" },
-    { name: "effect-build-sbom", version: "0.6.2" },
-    { name: "effect-build-windows", version: "0.6.2" },
-  ],
 };
 
 const appleCertificationCoordinates = [
@@ -380,6 +367,8 @@ const fakeRegistryExactMutationLedger = [
     : "exact-release-candidate",
 }));
 
+const releaseTag = `v${npmReleaseTarget.version}`;
+
 export const releaseCertificationPolicy = {
   modes: [
     "prepare-exact-sha",
@@ -387,7 +376,7 @@ export const releaseCertificationPolicy = {
     "publish-certified-bytes",
   ],
   scope: {
-    target: "v0.6.3",
+    target: releaseTag,
     npmPackages: {
       status: "included",
       packageSource: "publicApiProjection.packages",
@@ -397,19 +386,19 @@ export const releaseCertificationPolicy = {
     credentialBackedAppleArtifacts: {
       status: "deferred",
       certification: "not-run-not-passed",
-      releaseGate: "excluded-from-v0.6.3",
+      releaseGate: `excluded-from-${releaseTag}`,
       products: ["signed-app", "dmg", "pkg"],
       target: "later-separately-qualified-release",
     },
     awsNotaryJournalEvidence: {
       status: "deferred",
-      releaseGate: "excluded-from-v0.6.3",
+      releaseGate: `excluded-from-${releaseTag}`,
       applicability: "future-credential-backed-apple-artifact-certification-only",
     },
   },
   npmAdministrativeInventory: {
     status: "not-observed",
-    releaseGate: "excluded-from-v0.6.3",
+    releaseGate: `excluded-from-${releaseTag}`,
     doesNotProve: [
       "trusted-publisher-admin-inventory",
       "publishing-access-two-factor-and-token-policy",
@@ -745,7 +734,7 @@ export const releaseCertificationPolicy = {
     manifest: "release-readiness.json",
     evidenceBundle: "release-readiness.bin",
     orderedFiles: ["release-readiness.json", "release-readiness.bin"],
-    artifactName: "effect-build-v0.6.3-release-readiness",
+    artifactName: `effect-build-${releaseTag}-release-readiness`,
     workflowPath: ".github/workflows/release-readiness.yml",
     event: "workflow_dispatch",
     coordinate: "releaseCertification.githubArtifactCoordinate",
@@ -950,8 +939,9 @@ export const releaseCertificationPolicy = {
         protocol: fakeRegistryExactProtectedBodyProtocol,
         terminal: "success",
         workflowPath: ".github/workflows/release-certification.yml",
-        artifactName: "effect-build-v0.6.3-fake-registry-exact-protected-body-certification",
+        artifactName: `effect-build-${releaseTag}-fake-registry-exact-protected-body-certification`,
         event: "workflow_dispatch",
+        runCompletionFreshness: "exact-source-no-time-expiry",
         maximumAgeSeconds: 86400,
         maximumValiditySeconds: 172800,
       },
@@ -961,7 +951,7 @@ export const releaseCertificationPolicy = {
         protocol: npmOidcCertificationArtifactProtocol,
         terminal: "success",
         workflowPath: ".github/workflows/release.yml",
-        artifactName: "effect-build-v0.6.3-npm-oidc-certification",
+        artifactName: `effect-build-${releaseTag}-npm-oidc-certification`,
         event: "workflow_dispatch",
         maximumAgeSeconds: 3600,
         maximumValiditySeconds: 14400,
@@ -1122,7 +1112,7 @@ export const releaseCertificationPolicy = {
     },
     receipt: {
       protocol: "effect-build/final-public-release-receipt@2",
-      artifactName: "effect-build-v0.6.3-final-public-release",
+      artifactName: `effect-build-${releaseTag}-final-public-release`,
       retentionDays: 90,
       orderedFiles: ["final-public-release.json"],
       fields: [
@@ -1185,7 +1175,7 @@ export const releaseCertificationPolicy = {
         githubOidcClaims: "effect-build/github-oidc-claims@1",
         npmOidcExchangeAccepted: "effect-build/npm-oidc-exchange-accepted@1",
       },
-      artifactName: "effect-build-v0.6.3-npm-oidc-certification",
+      artifactName: `effect-build-${releaseTag}-npm-oidc-certification`,
       retentionDays: 30,
       orderedFiles: [
         "github-oidc-claims.json",
@@ -1368,7 +1358,7 @@ export const releaseCertificationPolicy = {
     localQualification: {
       protocol: fakeRegistryLocalQualificationProtocol,
       workflowPath: ".github/workflows/release-certification.yml",
-      artifactName: "effect-build-v0.6.3-fake-registry-local-qualification",
+      artifactName: `effect-build-${releaseTag}-fake-registry-local-qualification`,
       terminal: "local-qualification",
       retentionDays: 30,
       readinessAdmissible: false,
@@ -1390,7 +1380,7 @@ export const releaseCertificationPolicy = {
     exactProtectedBodyCertification: {
       protocol: fakeRegistryExactProtectedBodyProtocol,
       workflowPath: ".github/workflows/release-certification.yml",
-      artifactName: "effect-build-v0.6.3-fake-registry-exact-protected-body-certification",
+      artifactName: `effect-build-${releaseTag}-fake-registry-exact-protected-body-certification`,
       terminal: "success",
       implementationStatus: "implemented",
       status: "supported",
@@ -1478,39 +1468,15 @@ export const releaseCertificationPolicy = {
         authorityPolicy: "credential-free-fake-boundaries-only-real-authentication-forbidden",
         networkPolicy: "no-real-github-npm-or-oidc-network",
         realPurposeReadinessPolicy: "semantic-final-readiness-required-unconditionally",
-        sourceFiles: [
-          {
-            path: "test/fixtures/release/exact-fake-boundary.sh",
-            sha256: "287bad6308ec315e9b24baba6a8b6c52473dc21e94f82cadb3bd85720aa07f28",
-          },
-          {
-            path: "test/fixtures/release/fake-boundary.mjs",
-            sha256: "0b24b3163e7e1bb5282088ea35819f67dfd82db954ecc3a74d86af14969b61f9",
-          },
-          {
-            path: "test/fixtures/release/release-state.mjs",
-            sha256: "8dc05ea37bc8847256f72f7d7d6411cc6ccaa0fefc2567c496f85c70a02fc49b",
-          },
-          {
-            path: "test/fixtures/release/exact-fake-fetch.mjs",
-            sha256: "de0b29d9ab95f8e2fd3f167852766bc61d88cdbe6488e913bd36974dcbce0bed",
-          },
-          {
-            path: "test/fixtures/release/make-candidate.mjs",
-            sha256: "52721e48868e86bc316090d591d5922a67eff951282e3eaa1a9bc8394ad8fc68",
-          },
-          {
-            path: "test/fixtures/release/make-fixture-contract.mjs",
-            sha256: "17cc8f2f7aa446a0bc5faad0215dbbd948d14b088c9907bcb3796110cffd4419",
-          },
-          {
-            path: "test/fixtures/release/github-artifact-zip.mjs",
-            sha256: "f2d59408673713620f7cf7640f10981d17b40111ad1df2f1ba809081977e1505",
-          },
-          {
-            path: "scripts/release/prepare-fake-certification-inputs.mjs",
-            sha256: "9087e4d544028e92703021c20c58837b9242cf5c1f2b6e1b61914e7069532c3d",
-          },
+        sourcePaths: [
+          "test/fixtures/release/exact-fake-boundary.sh",
+          "test/fixtures/release/fake-boundary.mjs",
+          "test/fixtures/release/release-state.mjs",
+          "test/fixtures/release/exact-fake-fetch.mjs",
+          "test/fixtures/release/make-candidate.mjs",
+          "test/fixtures/release/make-fixture-contract.mjs",
+          "test/fixtures/release/github-artifact-zip.mjs",
+          "scripts/release/prepare-fake-certification-inputs.mjs",
         ],
       },
     },
@@ -1641,11 +1607,11 @@ export const releaseCertificationPolicy = {
       submissionCodec: "effect-build-apple/notary-journal@1",
     },
     artifact: {
-      name: "effect-build-v0.6.3-apple-certification",
+      name: `effect-build-${releaseTag}-apple-certification`,
       retentionDays: 30,
       orderedFiles: [
         "apple-certification-index.json",
-        "effect-build-v0.6.3-apple-certification.bin",
+        `effect-build-${releaseTag}-apple-certification.bin`,
       ],
       attempt: 1,
     },

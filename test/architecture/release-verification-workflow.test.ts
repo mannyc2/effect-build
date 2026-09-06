@@ -19,7 +19,7 @@ const contract = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(con
 const policy = contract.releaseCertification.finalPublicVerification;
 
 describe("final public release verification", () => {
-  it("derives exact public counts and the twelve-asset boundary without copying package or module sets", () => {
+  it("derives public release counts without copying package or module sets", () => {
     expect(policy.protocol).toBe("effect-build/final-public-verification@2");
     expect(policy.receipt.protocol).toBe("effect-build/final-public-release-receipt@2");
     expect(policy.implementation.consumerSmoke.protocol).toBe("effect-build/final-public-consumer-smoke@1");
@@ -29,9 +29,12 @@ describe("final public release verification", () => {
     expect(policy.releasePolicy.immutabilityDecisionSource).toBe(
       "live-operator-admin-preflight-before-draft-and-public-release",
     );
-    expect(policy.packageCount).toBe(11);
-    expect(policy.moduleCount).toBe(43);
-    expect(policy.releaseAssetCount).toBe(12);
+    expect(policy.packageCount).toBe(Object.keys(contract.publicApiProjection.packages).length);
+    expect(policy.moduleCount).toBe(
+      Object.values(contract.publicApiProjection.packages)
+        .reduce((count: number, entry: any) => count + 1 + Object.keys(entry.subpaths).length, 0),
+    );
+    expect(policy.releaseAssetCount).toBe(policy.packageCount + 1);
     expect(policy.tag).toBe("v0.6.3");
     expect(policy.publicState.packageSource).toBe("publicApiProjection.packages");
     expect(policy.publicState.moduleSource).toBe("publicApiProjection.packages package roots and subpaths");

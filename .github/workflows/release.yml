@@ -1744,8 +1744,7 @@ jobs:
             || policy.publicAdmission.packageCount !== publicPackageNames.length
             || policy.publicAdmission.moduleCount !== publicModules.length
             || !isDeepStrictEqual(candidateFiles, expectedCandidateFiles)
-            || names.length !== 11
-            || new Set(names).size !== 11
+            || new Set(names).size !== names.length
             || names.includes("effect-build-rolldown")
             || !isDeepStrictEqual(reservedOnly, ["effect-build-rolldown"])
             || placeholders.length !== 7
@@ -1990,7 +1989,8 @@ jobs:
                   || !Number.isFinite(evidenceObservedAt)
                   || new Date(evidenceObservedAt).toISOString() !== reference.evidenceObservedAt
                   || evidenceObservedAt > Date.parse(reference.observedAt)
-                  || readinessObservedAt - evidenceObservedAt > definition.maximumAgeSeconds * 1_000
+                  || (definition.runCompletionFreshness !== "exact-source-no-time-expiry"
+                    && readinessObservedAt - evidenceObservedAt > definition.maximumAgeSeconds * 1_000)
                 ) fail(`release readiness ${definition.role} artifact identity changed`);
               } else fail(`release readiness ${definition.role} type changed`);
             }

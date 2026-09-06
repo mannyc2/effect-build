@@ -827,7 +827,7 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
     });
   }, 120_000);
 
-  it("adopts the canonical semantic readiness artifact and runs real convergence without checkout", async () => {
+  it("adopts freshly authenticated older fake evidence and runs real convergence without checkout", async () => {
     await withScenario("full-convergence", async ({ directory, statePath }) => {
       const stateBefore = await readState(statePath);
       const canonicalContract = JSON.parse(
@@ -836,6 +836,14 @@ describe.skipIf(process.platform === "win32")("release publisher boundary certif
       expect(() => assertReadinessArtifactAllowed(canonicalContract)).not.toThrow();
       expect(() => assertFinalPublicVerificationAllowed(canonicalContract)).not.toThrow();
       const readiness = JSON.parse(await readFile(resolve(directory, "readiness/release-readiness.json"), "utf8"));
+      const fakeEvidence = readiness.evidence.find(({ role }: { readonly role: string }) => role === "fake-registry");
+      const fakePolicy = canonicalContract.releaseCertification.readiness.evidenceRoles.find(
+        ({ role }: { readonly role: string }) => role === "fake-registry",
+      );
+      expect(Date.parse(readiness.observedAt) - Date.parse(fakeEvidence.evidenceObservedAt))
+        .toBeGreaterThan(fakePolicy.maximumAgeSeconds * 1_000);
+      expect(Date.parse(readiness.observedAt) - Date.parse(fakeEvidence.observedAt))
+        .toBeLessThan(fakePolicy.maximumAgeSeconds * 1_000);
       for (const observed of readiness.directObservation.npm.packages) {
         const registryPackage = stateBefore.registry.packages[observed.name]!;
         expect(observed.versions, observed.name).toEqual(Object.keys(registryPackage.versions).sort());

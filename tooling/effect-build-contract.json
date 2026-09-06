@@ -33,15 +33,15 @@
       },
       {
         "path": "scripts/effect-build-contract/policy.mjs",
-        "sha256": "47fb2c8c8f75459d5575f0d48839ea186f4ead170e915b033692b67890d4ccbc"
+        "sha256": "ebd7d2e2cfb01065829e2c738cdb9d3300a1d1da6dbae033f2696a8ad9d94242"
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "5e100b7d3fe1f81b1ff1b52c98ad6b26f59f7d36ade04ea6c04d125bb4e26ad6"
+        "sha256": "a28831211b28d198d99d815d4e10134f830833aef13e9f2a1f64944bb28ffe68"
       },
       {
         "path": "package.json",
-        "sha256": "1f8af687d05609b4ec4025ae789657a24ff2ac6b1593ea94d3fe76b18eefdd4b"
+        "sha256": "dcb0abe7b4c4a113bf0ac3c8ab82936107161cf3d50c7b45ce6a75466f574afe"
       },
       {
         "path": "bun.lock",
@@ -57,7 +57,7 @@
       },
       {
         "path": "scripts/release/build-terminal-reference.mjs",
-        "sha256": "20e0820ac89b2e1b3517b54f31cd618a4a661e84285100089058cc0648365057"
+        "sha256": "c672e257ec8e0744d04892c6ce2773689a84d3898a62803fb91d2696183f6c2a"
       },
       {
         "path": "scripts/release/deny-network.cjs",
@@ -86,6 +86,38 @@
       {
         "path": "tooling/sigstore/tuf/targets-v14.json.base64",
         "sha256": "1abada998c3e942def5bd00029dbcafad0aad2440951d32def5cc4cb3c27f8f2"
+      },
+      {
+        "path": "test/fixtures/release/exact-fake-boundary.sh",
+        "sha256": "287bad6308ec315e9b24baba6a8b6c52473dc21e94f82cadb3bd85720aa07f28"
+      },
+      {
+        "path": "test/fixtures/release/fake-boundary.mjs",
+        "sha256": "0b24b3163e7e1bb5282088ea35819f67dfd82db954ecc3a74d86af14969b61f9"
+      },
+      {
+        "path": "test/fixtures/release/release-state.mjs",
+        "sha256": "8dc05ea37bc8847256f72f7d7d6411cc6ccaa0fefc2567c496f85c70a02fc49b"
+      },
+      {
+        "path": "test/fixtures/release/exact-fake-fetch.mjs",
+        "sha256": "de0b29d9ab95f8e2fd3f167852766bc61d88cdbe6488e913bd36974dcbce0bed"
+      },
+      {
+        "path": "test/fixtures/release/make-candidate.mjs",
+        "sha256": "99b769f2789e0b93fc07250b23d8844963c906a967f35b4d7d0612d8e057346f"
+      },
+      {
+        "path": "test/fixtures/release/make-fixture-contract.mjs",
+        "sha256": "17cc8f2f7aa446a0bc5faad0215dbbd948d14b088c9907bcb3796110cffd4419"
+      },
+      {
+        "path": "test/fixtures/release/github-artifact-zip.mjs",
+        "sha256": "f2d59408673713620f7cf7640f10981d17b40111ad1df2f1ba809081977e1505"
+      },
+      {
+        "path": "scripts/release/prepare-fake-certification-inputs.mjs",
+        "sha256": "9087e4d544028e92703021c20c58837b9242cf5c1f2b6e1b61914e7069532c3d"
       }
     ]
   },
@@ -4608,52 +4640,6 @@
               "reserved": "0.0.0-reserved.0"
             }
           }
-        ],
-        "expectedLatestBeforePublication": [
-          {
-            "name": "effect-build",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-apple",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-archives",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-bun",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-deno",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-esbuild",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-nfpm",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-node-sea",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-python",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-sbom",
-            "version": "0.6.2"
-          },
-          {
-            "name": "effect-build-windows",
-            "version": "0.6.2"
-          }
         ]
       },
       "command": "npm-publish",
@@ -5140,8 +5126,8 @@
           "path": "scripts/release/build-terminal-reference.mjs",
           "export": "buildTerminalReference",
           "sourceAuthority": "contract-provenance-exact-source-bytes",
-          "sourceBytes": 25972,
-          "sourceDigest": "sha256:20e0820ac89b2e1b3517b54f31cd618a4a661e84285100089058cc0648365057"
+          "sourceBytes": 25864,
+          "sourceDigest": "sha256:c672e257ec8e0744d04892c6ce2773689a84d3898a62803fb91d2696183f6c2a"
         },
         "kinds": [
           {
@@ -5340,6 +5326,7 @@
           "workflowPath": ".github/workflows/release-certification.yml",
           "artifactName": "effect-build-v0.6.3-fake-registry-exact-protected-body-certification",
           "event": "workflow_dispatch",
+          "runCompletionFreshness": "exact-source-no-time-expiry",
           "maximumAgeSeconds": 86400,
           "maximumValiditySeconds": 172800,
           "workflow": "mannyc2/effect-build/.github/workflows/release-certification.yml@refs/heads/main"
@@ -6277,7 +6264,7 @@
             },
             {
               "path": "test/fixtures/release/make-candidate.mjs",
-              "sha256": "52721e48868e86bc316090d591d5922a67eff951282e3eaa1a9bc8394ad8fc68"
+              "sha256": "99b769f2789e0b93fc07250b23d8844963c906a967f35b4d7d0612d8e057346f"
             },
             {
               "path": "test/fixtures/release/make-fixture-contract.mjs",

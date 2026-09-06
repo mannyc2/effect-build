@@ -8,7 +8,7 @@ import { canonicalJson, sha256Digest } from "../../scripts/release/protocol.mjs"
 // @ts-expect-error The readiness protocol is an intentionally unprotected Node module.
 import * as readiness from "../../scripts/release/readiness-protocol.mjs";
 
-const { assertReadinessArtifactAllowed, validateGithubArtifactEvidence, validateRunCompletionFreshness } = readiness;
+const { assertReadinessArtifactAllowed, validateGithubArtifactEvidence, validateExecutionFreshness } = readiness;
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const contract = JSON.parse(await readFile(resolve(root, "tooling/effect-build-contract.json"), "utf8"));
@@ -24,30 +24,16 @@ const coordinate = (workflow: string, seed: string) => ({
 });
 
 describe("release readiness protocol", () => {
-  it("admits old execution time only for the canonical exact-source CI role", () => {
+  it("reuses immutable execution evidence while retaining future checks and OIDC freshness", () => {
     const observedAt = Date.parse("2026-09-06T18:00:00.000Z");
-    const completedAt = observedAt - 30 * 86400_000;
-    const source = policy.evidenceRoles.find(({ role }: { role: string }) => role === "exact-main-ci");
-    expect(() => validateRunCompletionFreshness({ definition: source, completedAt, observedAt })).not.toThrow();
-    for (
-      const definition of [
-        { ...source, event: "workflow_dispatch" },
-        { ...source, type: "githubArtifact" },
-        { ...source, workflowPath: ".github/workflows/release.yml" },
-        { ...source, runCompletionFreshness: undefined },
-        { ...source, role: "npm-oidc-certification" },
-      ]
-    ) {
-      expect(() => validateRunCompletionFreshness({ definition, completedAt, observedAt }))
-        .toThrow(/freshness policy/u);
+    const executedAt = observedAt - 30 * 86400_000;
+    for (const definition of policy.evidenceRoles) {
+      const validate = () => validateExecutionFreshness({ definition, executedAt, observedAt });
+      if (definition.role === "npm-oidc-certification") expect(validate).toThrow(/stale/u);
+      else expect(validate).not.toThrow();
+      expect(() => validateExecutionFreshness({ definition, executedAt: observedAt + 1, observedAt }))
+        .toThrow(/future/u);
     }
-    expect(() =>
-      validateRunCompletionFreshness({
-        definition: source,
-        completedAt: observedAt + 1,
-        observedAt,
-      })
-    ).toThrow(/future/u);
   });
 
   it("hard-cuts directly to exactly three hosted proofs and two aggregate files", async () => {

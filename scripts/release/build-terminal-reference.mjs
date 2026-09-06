@@ -18,9 +18,9 @@ import {
   sha256Digest,
 } from "./protocol.mjs";
 import {
+  validateExecutionFreshness,
   validateGithubArtifactEvidence,
   validateReadinessAggregate,
-  validateRunCompletionFreshness,
 } from "./readiness-protocol.mjs";
 import { extractStrictFlatZip } from "./zip-protocol.mjs";
 
@@ -463,17 +463,18 @@ export const buildTerminalReference = async ({
     observedAt.milliseconds < Math.max(run.updatedAt.milliseconds, artifactCreatedAt)
     || (artifact !== undefined && observedAt.milliseconds >= artifact.expiresAt.milliseconds)
   ) throw new Error("terminal reference observation is before completion, stale, or after artifact expiry");
-  validateRunCompletionFreshness({
+  validateExecutionFreshness({
     definition,
-    completedAt: run.updatedAt.milliseconds,
+    executedAt: run.updatedAt.milliseconds,
     observedAt: observedAt.milliseconds,
   });
   if (evidence !== undefined) {
     const evidenceAt = canonicalTimestamp(evidence.value, `${definition.kind} evidence observation time`);
-    if (
-      evidenceAt.milliseconds > observedAt.milliseconds
-      || observedAt.milliseconds - evidenceAt.milliseconds > definition.maximumAgeSeconds * 1_000
-    ) throw new Error(`${definition.kind} retained receipt is future or stale`);
+    validateExecutionFreshness({
+      definition,
+      executedAt: evidenceAt.milliseconds,
+      observedAt: observedAt.milliseconds,
+    });
   }
   const expiresAt = expiration({
     observedAt,

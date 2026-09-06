@@ -45,11 +45,6 @@ if (
 ) {
   throw new Error("tooling/public-api.json is not the exact combined-contract topology");
 }
-if (packageNames.length !== 11) {
-  throw new Error(
-    `combined contract projects ${packageNames.length} public packages; expected 11`,
-  );
-}
 if (packageNames.some((name) => privatePackages.has(name))) {
   throw new Error("combined contract projects a private package into the packed consumer");
 }

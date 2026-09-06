@@ -293,13 +293,16 @@ describe("directly active final-public verifier", () => {
   it("produces one canonical receipt for exact npm, Release, provenance, smoke, and reservation state", async () => {
     const input = fixture();
     const result = await validateFinalPublicState(input);
+    const packageNames = [...input.candidate.packageBytes.keys()];
     expect(result.receipt.verdict).toBe("success");
-    expect(result.receipt.npmPackages).toHaveLength(11);
-    expect(result.receipt.releaseAssets).toHaveLength(12);
-    expect(result.receipt.provenance).toHaveLength(11);
-    expect(result.receipt.consumerSmoke.publicModules).toHaveLength(43);
+    expect(result.receipt.npmPackages.map(({ name }: { name: string }) => name)).toEqual(packageNames);
+    expect(result.receipt.releaseAssets.map(({ name }: { name: string }) => name)).toEqual(
+      [...input.candidate.files].sort(),
+    );
+    expect(result.receipt.provenance.map(({ name }: { name: string }) => name)).toEqual(packageNames);
+    expect(result.receipt.consumerSmoke.publicModules).toEqual(input.consumerSmoke.publicModules);
     expect(result.receiptBytes.toString()).toBe(canonicalJson(result.receipt));
-    expect(input.sigstoreVerify).toHaveBeenCalledTimes(11);
+    expect(input.sigstoreVerify).toHaveBeenCalledTimes(packageNames.length);
     expect(input.readinessVerify).toHaveBeenCalledTimes(1);
   });
 

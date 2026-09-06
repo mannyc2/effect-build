@@ -30,7 +30,7 @@ import { createAnonymousNpmBoundary } from "./npm-read-only-boundary.mjs";
 import {
   assertReadinessArtifactAllowed,
   buildReadinessAggregate,
-  validateRunCompletionFreshness,
+  validateExecutionFreshness,
 } from "./readiness-protocol.mjs";
 import { finalizeAfterTerminalObservation } from "./terminal-observation.mjs";
 import { extractStrictFlatZip } from "./zip-protocol.mjs";
@@ -186,9 +186,9 @@ const exactRun = async ({ github, contract, definition, identity, sourceSha, obs
   if (
     createdAt.milliseconds > updatedAt.milliseconds
   ) throw new Error(`GitHub run is future or stale for ${definition.role ?? "candidate"}`);
-  validateRunCompletionFreshness({
+  validateExecutionFreshness({
     definition,
-    completedAt: updatedAt.milliseconds,
+    executedAt: updatedAt.milliseconds,
     observedAt: observed,
     clockSkewSeconds: policy.clockSkewSeconds,
   });
@@ -214,14 +214,16 @@ const artifactBytes = async ({ github, contract, definition, reference, sourceSh
     || artifact.workflow_run?.head_branch !== release.githubAuthority.branchPolicy.name
     || artifact.workflow_run?.repository_id !== Number(release.githubAuthority.repositoryId)
     || artifact.workflow_run?.head_repository_id !== Number(release.githubAuthority.repositoryId)
-    || createdAt.milliseconds > canonicalTimestamp(observedAt, "readiness observedAt")
-    || canonicalTimestamp(observedAt, "readiness observedAt") - createdAt.milliseconds
-      > definition.maximumAgeSeconds * 1_000
     || canonicalTimestamp(reference.observedAt, `${definition.role ?? "candidate"}.observedAt`)
       < Math.max(createdAt.milliseconds, Date.parse(run.updatedAt))
     || canonicalTimestamp(reference.expiresAt, `${definition.role ?? "candidate"}.expiresAt`)
       > expiresAt.milliseconds
   ) throw new Error(`GitHub artifact metadata changed for ${definition.role ?? "candidate"}`);
+  validateExecutionFreshness({
+    definition,
+    executedAt: createdAt.milliseconds,
+    observedAt: canonicalTimestamp(observedAt, "readiness observedAt"),
+  });
   const bytes = await github.readArtifactZip(
     `${endpoint}/zip`,
     release.readiness.zipExtraction.maximumArchiveBytes,

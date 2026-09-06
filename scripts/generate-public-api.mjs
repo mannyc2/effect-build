@@ -36,13 +36,6 @@ const accountedPackages = [...packages, ...contract.publicApiProjection.privateP
 if (JSON.stringify(accountedPackages) !== JSON.stringify(packageDirectories)) {
   throw new Error("combined contract does not account for every workspace package");
 }
-const moduleCount = packages.reduce(
-  (count, name) => count + 1 + Object.keys(contract.publicApiProjection.packages[name].subpaths).length,
-  0,
-);
-if (packages.length !== 11 || moduleCount !== 43) {
-  throw new Error(`combined contract projects ${packages.length} public packages and ${moduleCount} modules`);
-}
 const surface = { schema: "effect-build/public-surface@3", packages: {} };
 
 for (const name of packages) {

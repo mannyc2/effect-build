@@ -194,7 +194,9 @@ const makePublisherReadinessFixture = ({
           artifactDigest: canonicalDigest(payload),
         },
         artifactName: definition.artifactName,
-        evidenceObservedAt,
+        evidenceObservedAt: definition.role === "fake-registry"
+          ? new Date(observedTime - 3 * 86400_000).toISOString()
+          : evidenceObservedAt,
       };
     }
     throw new Error(`unsupported readiness evidence type: ${definition.type}`);

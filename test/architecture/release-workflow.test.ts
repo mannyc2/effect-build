@@ -436,7 +436,6 @@ describe("release workflow hard cut", () => {
       expect(workflowSource.match(mutation) ?? [], name).toEqual([]);
       if (name !== "release.yml") expect(workflowSource).not.toMatch(/\bnpm\s+publish\b/u);
     }
-    expect(contract.npmRegistryBoundary.publicationAdmission.packages).toHaveLength(11);
     expect(contract.npmRegistryBoundary.publicationAdmission.target.version).toBe("0.6.3");
   });
 
