@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { readCandidate } from "./release/candidate.mjs";
@@ -209,7 +209,7 @@ const runConsumer = async (input) => {
         "candidate must contain every public package",
       );
       for (const entry of candidate.packages) {
-        dependencies[entry.name] = pathToFileURL(join(input.directory, entry.file)).href;
+        dependencies[entry.name] = `file:${join(input.directory, entry.file).replaceAll("\\", "/")}`;
         expectedVersions[entry.name] = candidate.version;
       }
     } else {
@@ -219,7 +219,7 @@ const runConsumer = async (input) => {
       for (const { name, version, directory } of packages) {
         await execute(bun, ["pm", "pack", "--destination", packDirectory], { cwd: directory });
         const file = `${name.replace(/^@/u, "").replaceAll("/", "-")}-${version}.tgz`;
-        dependencies[name] = pathToFileURL(join(packDirectory, file)).href;
+        dependencies[name] = `file:${join(packDirectory, file).replaceAll("\\", "/")}`;
         expectedVersions[name] = version;
       }
     }
