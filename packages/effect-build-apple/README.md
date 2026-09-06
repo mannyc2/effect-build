@@ -4,6 +4,45 @@ Effect-native direct Developer ID distribution operations for macOS. The
 package keeps the product forms separate instead of erasing their different
 Apple semantics behind a generic signing or packaging function.
 
+## Install
+
+```sh
+npm install --save-exact effect-build-apple@0.6.3 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+```
+
+These examples use Effect v4 and its matching Node platform package.
+
+Run these operations on macOS with the required Apple tools installed. Signing needs the appropriate Developer ID
+certificate; notarization additionally needs configured Apple credentials and network access. Tool layer options
+require explicit version facts, described below.
+
+## Start with an application bundle
+
+This helper composes the public bundle operation with the application's chosen tools and platform services. Its
+`BuildAppBundlesInput` contains both previously finalized arm64 and x64 executables, application metadata, distinct
+new `.app` output paths, and any finalized resource files. It returns an Effect for your application's entry point.
+
+```ts
+import { NodeServices } from "@effect/platform-node";
+import { Effect } from "effect";
+import * as AppBundle from "effect-build-apple/AppBundle";
+
+export const buildApps = (
+  input: AppBundle.BuildAppBundlesInput,
+  tools: AppBundle.LayerOptions,
+) => {
+  const builder = AppBundle.layer(tools);
+  return AppBundle.buildAppBundles(input).pipe(
+    Effect.provide(builder),
+    Effect.provide(NodeServices.layer),
+  );
+};
+```
+
+`tools.plutil` requires a caller-adjudicated `version` and optionally an explicit `executable`. The resulting
+`arm64` and `x64` bundles enter the separate signing, packaging, notarization, stapling, and assessment operations.
+Their types retain the product and architecture throughout that sequence.
+
 ## Operations
 
 - `AppBundle.buildAppBundles` constructs exactly one arm64 and one x64 `.app`,
@@ -94,3 +133,7 @@ Notary journal were not run and have not passed. They are explicitly excluded
 from v0.6.0 readiness and outputs. Producing signed/notarized App, DMG, or PKG
 artifacts requires a later, separately qualified release with its own
 credentials, journal, hosts, evidence, and publication decision.
+
+## More
+
+[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [API guide](https://github.com/mannyc2/effect-build/blob/main/docs/api.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md) · [Release and credential boundaries](https://github.com/mannyc2/effect-build/blob/main/docs/release-security.md)

@@ -1,51 +1,104 @@
 # effect-build
 
-effect-build models build tools as Effect v4 programs while keeping provider semantics, resource lifetimes, tool identity, and durable artifact ownership explicit. It is a hard-cut API: there are no legacy provider subpaths, generic process kernel, automatic installers, fallback candidates, raw public argv, or release/publication state.
+Build executables, bundle JavaScript, and produce distribution artifacts with Effect v4.
 
-The authoritative scope is the generated [`effect-build/combined-contract@1`](tooling/effect-build-contract.json). It accounts for 67 provider operations, 46 non-operation findings, and 19 capabilities across six producer families. [`tooling/public-api.json`](tooling/public-api.json) is its tested projection: 11 public packages and 42 public root/subpath modules. The private Rolldown evidence package is still built and tested, but is neither projected nor packed for publication.
+effect-build wraps tools such as Bun, Deno, and esbuild in composable Effect programs. It keeps their native options and diagnostics, manages the lifetime of processes and watchers, and offers explicit operations for validating and atomically committing finished artifacts.
 
-## Provider lanes
+## Compile your first executable
 
-| Package                 | Public lanes                             | Durable finalizer                          |
-| ----------------------- | ---------------------------------------- | ------------------------------------------ |
-| `effect-build-bun`      | `Api`, `Command`                         | `Command.CompileExecutable`                |
-| `effect-build-deno`     | `Command`                                | `Command.CompileExecutable`                |
-| `effect-build-esbuild`  | `Api`, `Command`                         | none; directory writes are provider-direct |
-| `effect-build-node-sea` | `Command`                                | `Command.AssembleExecutable`               |
-| `effect-build-rolldown` | none; package-private evidence candidate | none                                       |
+This example runs the build script with **Node.js 24.14.1** and uses **Bun 1.3.14** as the compiler. Install [Bun](https://bun.com/docs/installation) separately and check `bun --version`: the command adapter admits exactly `1.3.14`.
 
-`Api` is an in-process provider host. `Command` selects and observes one executable, applies provider-owned admission, and reauthenticates its content immediately before every launch. In-memory results remain native values and provider-direct directory writes explicitly do not claim atomic finalization.
+In a new project, install the provider and matching Effect packages:
+
+```sh
+npm init -y
+npm install --save-exact effect-build-bun@0.6.3 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+```
+
+Create `hello.ts`:
 
 ```ts
-import { NodeServices } from "@effect/platform-node";
+console.log("Hello from a standalone executable!");
+```
+
+Create `build.mts`:
+
+```ts
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { Command } from "effect-build-bun";
 
-const executable = await Effect.runPromise(
-  Command.CompileExecutable.compileExecutable({
-    entrypoints: ["src/main.ts"],
-    outfile: "dist/app",
-    target: "bun-linux-x64",
+const program = Effect.gen(function*() {
+  const artifact = yield* Command.CompileExecutable.compileExecutable({
+    entrypoints: ["hello.ts"],
+    outfile: "dist/hello.exe",
     observation: "hashed",
-    options: { minify: true },
-  }).pipe(
+  });
+
+  yield* Effect.log(`Built ${artifact.path} (${artifact.bytes} bytes, ${artifact.target})`);
+  yield* Effect.log(`SHA-256: ${artifact.digest.value}`);
+});
+
+NodeRuntime.runMain(
+  program.pipe(
     Effect.provide(Command.layer()),
     Effect.provide(NodeServices.layer),
   ),
 );
 ```
 
-## Producers and adoption
+Run from that project directory:
 
-Archives, Python wheel/sdist builds, nFPM packages, Apple distribution artifacts, Windows MSIX signing, and SBOM documents all use the same core hashed file/tree/executable identities. Explicit finalizers stage privately beside the destination, observe, inspect, re-observe, reconstruct from held verified content, and commit direct files with an atomic no-replace link or trees with one same-parent rename. A file projected from an atomic tree generation retains that tree root, relative path, and manifest digest in its publication identity.
-
-```ts
-import * as Artifact from "effect-build/Artifact";
-
-const adoption = Artifact.adoptFile("app-linux-x64", executable);
-// { protocol, kind: "file", logicalName, bytes, digest } — deliberately no path
+```sh
+node build.mts
+./dist/hello.exe
 ```
 
-effect-build produces and finalizes artifacts. A downstream release owner such as ts-release adopts immutable identities by logical name and digest, and separately owns release plans, mutation journals, continuation, publication, and registry state. Apple notarization is an effect-build operation; its durable workflow journal is not.
+The executable prints `Hello from a standalone executable!`. In PowerShell, run it as `.\dist\hello.exe`. The filename works on all three OS families; omitting `target` uses the selected compiler's native default. The returned artifact records the target inspected from the finished binary.
 
-See [`docs/`](docs/README.md) and the runnable [`examples/`](examples/README.md). Local verification, hosted CI, certification, merge, tag, and publication are separate authorities.
+**The destination must not already exist.** To build again, choose a new `outfile` or explicitly remove this demo's output. Finalization checks the candidate before committing it and refuses to overwrite an existing file. `NodeRuntime.runMain` reports failures and turns Ctrl+C into Effect interruption so scoped resources can close.
+
+See the [getting started guide](docs/getting-started.md) for compiler selection, build options, artifact fields, and an in-memory esbuild example.
+
+For complete workflows, try the [typed bundle-budget CLI](examples/cli/README.md), the
+[bundle-to-archive pipeline](examples/artifact-pipeline/README.md), or [native plugins and scoped rebuilds](examples/esbuild/README.md).
+
+## Choose a package
+
+Install the provider or producer you need. Each depends on the shared `effect-build` core.
+
+| Task                                                   | Package                 | Start here                                                            |
+| ------------------------------------------------------ | ----------------------- | --------------------------------------------------------------------- |
+| Bun bundling, transpilation, or executable compilation | `effect-build-bun`      | [Bun examples](examples/README.md#bun)                                |
+| Deno transpilation or executable compilation           | `effect-build-deno`     | [Deno examples](examples/README.md#deno)                              |
+| esbuild bundles, transforms, or watch contexts         | `effect-build-esbuild`  | [esbuild examples](examples/README.md#esbuild)                        |
+| Assemble a Node.js single executable                   | `effect-build-node-sea` | [Node SEA example and host requirements](examples/README.md#node-sea) |
+| ZIP, tar.gz, or exact Git-tree source archives         | `effect-build-archives` | [Package guide](packages/effect-build-archives/README.md)             |
+| Python wheels and source distributions with uv         | `effect-build-python`   | [Package guide](packages/effect-build-python/README.md)               |
+| Linux packages and unsigned MSIX with nFPM             | `effect-build-nfpm`     | [Package guide](packages/effect-build-nfpm/README.md)                 |
+| Apple bundles, signing, notarization, DMG, and pkg     | `effect-build-apple`    | [Package guide](packages/effect-build-apple/README.md)                |
+| MSIX signing and signature verification                | `effect-build-windows`  | [Package guide](packages/effect-build-windows/README.md)              |
+| SPDX or CycloneDX documents                            | `effect-build-sbom`     | [Package guide](packages/effect-build-sbom/README.md)                 |
+| Artifact identities, finalizers, or bounded matrices   | `effect-build`          | [Core API](docs/api.md#imports)                                       |
+
+## How the API fits together
+
+Providers expose two kinds of modules, where supported:
+
+- **`Api`** calls the provider in process. Use it for native values such as esbuild output files, Bun transpilation results, or scoped build contexts. Bun's `Api` needs the Bun runtime; esbuild's `Api` uses the installed esbuild dependency.
+- **`Command`** selects an installed executable through an Effect layer. Use it to invoke a compiler from another runtime, keep a specific tool version, or run an executable finalizer. The selected tool's bytes are checked again before each launch.
+
+These choices are independent: a Node.js build script can invoke Bun to produce a Linux executable. Cross-target support and runtime acquisition depend on the selected provider; see [compiler versions and targets](docs/drivers.md).
+
+Output ownership depends on the operation. An in-memory build returns provider-native data. A direct-directory build follows the provider's filesystem behavior and can leave partial output on failure. An **explicit finalizer**, such as `Command.CompileExecutable.compileExecutable`, returns an artifact only after inspection and atomic commit to an unused destination. See [the API guide](docs/api.md) for the distinction and the [architecture](docs/architecture.md) for filesystem guarantees.
+
+## Documentation
+
+- [Getting started](docs/getting-started.md) — install, run, customize, and inspect a build.
+- [Runnable examples](examples/README.md) — included inputs, commands, and expected results.
+- [API reference](docs/api.md) — public modules, artifacts, matrices, and adoption.
+- [Provider guide](docs/drivers.md) — versions, host requirements, options, and targets.
+- [Errors and troubleshooting](docs/errors.md) — typed failures and recovery decisions.
+- [Contributing](CONTRIBUTING.md) — workspace setup and verification.
+
+The [combined contract](tooling/effect-build-contract.json) records implementation scope; [the public API projection](tooling/public-api.json) lists the exported modules. Rolldown is a private evidence package and is not a public installation option. Downstream release systems own publishing; effect-build supplies [artifact identities they can adopt](docs/release-security.md).

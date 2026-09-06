@@ -41,11 +41,11 @@
       },
       {
         "path": "package.json",
-        "sha256": "8d71bc1a4ec6286ea058e6a4a59d39b854d6e04e6d0f507e68363de4e678edab"
+        "sha256": "ef3415b0420bfef22d861352a225fb638a41abeaa85342569a43a69b2fee651e"
       },
       {
         "path": "bun.lock",
-        "sha256": "8f6b0cd99bed066932b4aac31eafc477277de67653e5da1a19636301529bfb7c"
+        "sha256": "53e8197a852141956a19d08ea0fcdaf7e7f7bfa04768023e8f29413b4e5b7535"
       },
       {
         "path": "scripts/release/zip-protocol.mjs",

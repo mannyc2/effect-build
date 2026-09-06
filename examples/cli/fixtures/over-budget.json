@@ -1,0 +1,6 @@
+{
+  "assets": [
+    { "name": "app.js", "bytes": 61000, "budgetBytes": 50000 },
+    { "name": "vendor.js", "bytes": 130000, "budgetBytes": 120000 }
+  ]
+}
