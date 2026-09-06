@@ -9,7 +9,7 @@
 - Archives, Python, nFPM, Apple, Windows, and SBOM are operation-specific producer packages. Apple notarization is an effect-build operation, but effect-build owns no release plan, durable mutation journal, continuation, publication state, or registry mutation. A release consumer adopts finalized immutable bytes by logical name and digest.
 - Library source must not call `Effect.runPromise`. Platform access is injected through Effect services and layers; provider-owned runtimes may use their platform's process and filesystem services without leaking them into the core model.
 - `tooling/public-api.json` is a generated, tested projection of the combined contract and package declarations, never a second source of truth. Update and validate the contract before regenerating public API.
-- Use pinned Bun 1.3.14 for generation and verification. Local verification proves only local source and packed-consumer behavior; hosted CI, certification, merge, tag, npm publication, and release are separate gates and must be reported separately.
+- Use pinned Bun 1.3.14 for generation and verification. Ordinary CI exercises supported scenarios; the release workflow tests and publishes one packed candidate. A release tag authorizes publication. Report local checks, hosted checks, and publication results accurately.
 - `plans/` and `research/` preserve provenance. The current combined contract resolves their dispositions; change a disposition by updating its evidence and contract in the same reviewed change, never by silently widening an export.
 
 ## Completing changes

@@ -1,5 +1,12 @@
 # Plan 047: Establish the canonical operation journal
 
+> **Historical design.** This unimplemented journal and its Apple certification
+> integration are not part of effect-build's current release workflow. The
+> certification scaffolding has been removed; no AWS journal is required for
+> npm publication. See [release-security.md](../docs/release-security.md) for
+> the implemented tag flow. Retain the design below as provenance, not as a
+> standing implementation plan or approval checklist.
+
 - **Status**: DESIGN COMPLETE; CROSS-REPOSITORY AND INFRASTRUCTURE
   IMPLEMENTATION NOT STARTED
 - **Implementation repository**: `mannyc2/ts-release`
