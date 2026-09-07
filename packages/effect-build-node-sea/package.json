@@ -1,7 +1,7 @@
 {
   "name": "effect-build-node-sea",
   "version": "0.7.0",
-  "description": "Effect-native provider command access for direct Node SEA assembly.",
+  "description": "Package CommonJS scripts and assets as Node single executable applications.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -11,18 +11,33 @@
     "url": "git+https://github.com/mannyc2/effect-build.git",
     "directory": "packages/effect-build-node-sea"
   },
-  "bugs": { "url": "https://github.com/mannyc2/effect-build/issues" },
+  "bugs": {
+    "url": "https://github.com/mannyc2/effect-build/issues"
+  },
   "homepage": "https://github.com/mannyc2/effect-build#readme",
   "files": ["dist", "README.md", "LICENSE"],
-  "publishConfig": { "access": "public", "provenance": true },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",
     "check": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": { "effect-build": "workspace:^" },
-  "peerDependencies": { "effect": ">=4.0.0-beta.104 <4.1.0-0" },
-  "devDependencies": { "effect": "4.0.0-rc.108" }
+  "dependencies": {
+    "effect-build": "workspace:^",
+    "postject": "1.0.0-alpha.6"
+  },
+  "peerDependencies": {
+    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+  },
+  "devDependencies": {
+    "effect": "4.0.0-rc.108"
+  }
 }

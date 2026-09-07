@@ -57,4 +57,6 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Deno embeds the output basename**; Windows outputs require lowercase `.exe`
   so staging and the committed executable have the same name.
 - **Explicit `denort` is hashed and recorded, not executed** to establish identity.
+- **Node SEA uses a CommonJS preparation blob and resource injection** across Node
+  22–26; the builder and base executable must have matching Node versions.
 - **Effect stays pinned to the RC** until 4.0.0 ships; bump is its own change.

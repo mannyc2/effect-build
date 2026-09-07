@@ -3,6 +3,7 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
+    "types": ["node"],
     "tsBuildInfoFile": "../../node_modules/.cache/effect-build-node-sea.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],

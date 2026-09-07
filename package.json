@@ -21,7 +21,8 @@
     "verify": "bun run build && bun run check && bun run lint && bun run test:unit && bun run test:examples",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
     "test:integration:bun": "vitest run test/integration/bun.test.ts test/integration/bun-api.test.ts",
-    "test:integration:deno": "vitest run test/integration/deno.test.ts test/integration/deno-api.test.ts"
+    "test:integration:deno": "vitest run test/integration/deno.test.ts test/integration/deno-api.test.ts",
+    "test:integration:node-sea": "vitest run test/integration/node-sea.test.ts"
   },
   "devDependencies": {
     "@effect/platform-bun": "4.0.0-rc.108",

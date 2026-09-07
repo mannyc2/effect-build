@@ -5,6 +5,7 @@ import * as Archive from "effect-build-archives";
 import * as Deno from "effect-build-deno";
 import * as Esbuild from "effect-build-esbuild";
 import * as Rolldown from "effect-build-rolldown";
+import * as NodeSea from "effect-build-node-sea";
 
 const program = Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
@@ -21,12 +22,19 @@ const program = Effect.scoped(Effect.gen(function*() {
   const artifacts: Artifact.Artifact[] = [file, zip, tarGz];
   const entrypoint = path.join(root, "hello.ts");
   yield* fs.writeFileString(entrypoint, 'console.log("hello from effect-build");\n');
-  artifacts.push(yield* Esbuild.buildToDirectory({
-    entryPoints: [entrypoint], bundle: true, platform: "node", outdir: path.join(root, "esbuild"),
-  }));
+  const bundled = yield* Esbuild.buildToDirectory({
+    entryPoints: [entrypoint], bundle: true, platform: "node", format: "cjs", outdir: path.join(root, "esbuild"),
+  });
+  artifacts.push(bundled);
   artifacts.push(yield* Rolldown.buildToDirectory({
     input: entrypoint, outdir: path.join(root, "rolldown"), output: { format: "es" },
   }));
+  if (process.env.EFFECT_BUILD_NODE !== undefined) {
+    const main = yield* Artifact.file(path.join(bundled.path, "hello.js"), bundled.producedBy);
+    artifacts.push(yield* NodeSea.assemble({
+      main, outfile: path.join(root, process.platform === "win32" ? "node-hello.exe" : "node-hello"),
+    }).pipe(Effect.provide(NodeSea.layer({ executable: process.env.EFFECT_BUILD_NODE }))));
+  }
   if (process.env.EFFECT_BUILD_DENO !== undefined) {
     const executable = yield* Deno.compile({
       entrypoint, outfile: path.join(root, process.platform === "win32" ? "deno-hello.exe" : "deno-hello"),
