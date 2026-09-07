@@ -36,10 +36,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./Package": {
-      "types": "./dist/Package.d.ts",
-      "import": "./dist/Package.js"
     }
   },
   "scripts": {

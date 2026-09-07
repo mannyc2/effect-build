@@ -34,10 +34,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./Generate": {
-      "types": "./dist/Generate.d.ts",
-      "import": "./dist/Generate.js"
     }
   },
   "scripts": {

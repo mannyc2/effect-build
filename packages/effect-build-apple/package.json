@@ -35,44 +35,11 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./AppBundle": {
-      "types": "./dist/AppBundle.d.ts",
-      "import": "./dist/AppBundle.js"
-    },
-    "./Assess": {
-      "types": "./dist/Assess.d.ts",
-      "import": "./dist/Assess.js"
-    },
-    "./CodeSign": {
-      "types": "./dist/CodeSign.d.ts",
-      "import": "./dist/CodeSign.js"
-    },
-    "./DiskImage": {
-      "types": "./dist/DiskImage.d.ts",
-      "import": "./dist/DiskImage.js"
-    },
-    "./InstallerPackage": {
-      "types": "./dist/InstallerPackage.d.ts",
-      "import": "./dist/InstallerPackage.js"
-    },
-    "./Model": {
-      "types": "./dist/Model.d.ts",
-      "import": "./dist/Model.js"
-    },
-    "./Notary": {
-      "types": "./dist/Notary.d.ts",
-      "import": "./dist/Notary.js"
-    },
-    "./Staple": {
-      "types": "./dist/Staple.d.ts",
-      "import": "./dist/Staple.js"
     }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --config vitest.config.ts"
+    "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "effect-build": "workspace:^"

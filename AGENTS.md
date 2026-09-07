@@ -1,27 +1,45 @@
-## 1. Rules for this work
+# effect-build
+
+effect-build compiles TypeScript into things you can ship — native executables,
+bundles, archives, OS packages, wheels, signed Apple/Windows products, SBOMs — as
+composable Effect programs, and returns a plain record of what it made. Publishing is
+not its job; see `DESIGN.md` for the boundary and the reasoning.
+
+## Working here
+
+- `bun install --frozen-lockfile`, then `bun run verify` (build, typecheck, lint,
+  unit tests, examples). It must be green before you push.
+- Real-tool tests: `bun run test:integration:*` and `bun run acceptance:*`. They need
+  the tool installed; CI runs them on Linux.
+- Read `DESIGN.md` before changing a public signature. It's short.
+
+## Rules
 
 1. **One artifact type.** `Artifact.File | Artifact.Executable | Artifact.Directory`.
-   Every operation accepts these and returns one of these. No package defines a
-   second identity, digest, path, or byte-count type. `bytes` is a `number`.
+   Every operation accepts these and returns one of these. No package defines its own
+   identity, digest, path, or size type. `bytes` is a `number`.
 2. **Defenses are combinators or options, never services.** `Commit.atomic`,
-   `Executable.expectTarget`, `Tool.requireVersion`, `Artifact.verify`. There is no
-   `Policy`, no admission, no reauthentication, no claim registry.
-3. **Core stays domain-free.** Core knows about files, executables, directories,
-   tools, and rename. It does not know about Bun, zip, wheels, or Apple. A concept
-   enters core only when two packages need it for the same reason.
-4. **An edge case in one provider is fixed in that provider.** Node SEA's temp tree,
-   Bun's `.exe` suffix, Deno's basename rule: local, not core.
+   `Executable.expectTarget`, `Tool.requireVersion`, `Artifact.verify`. If you need
+   a service to hold a decision, make a combinator instead.
+3. **Core is domain-free.** It knows files, executables, directories, tools, and
+   rename. It does not know Bun, zip, wheels, or Apple. A concept enters core only
+   when two packages need it for the same reason.
+4. **Provider edge cases stay in the provider.** Bun's `.exe` suffix, Deno's basename
+   rule, Node SEA's temp tree: local, not core.
 5. **Vocabulary.** Artifact, target, tool, build, compile, bundle, package, sign,
    commit, verify. Not: observation, admission, durable, borrowed, finalizer, claim,
-   adoption, lane, provenance (it's `producedBy`), publication.
-6. **Every PR description states one thing a user can do that they couldn't before,
-   or one thing deleted.** No PR whose description is only "certify", "audit",
-   "harden", or "establish".
-7. **Delete, don't deprecate.** No aliases, no compatibility exports, no
-   `@deprecated`. Version is 0.7.0 for every package.
-8. **Tests test behavior on real files.** Compile a real hello.ts, read the real
-   header, rename a real file. Unit-test the header parser with byte fixtures. No
-   tests that assert the shape of the public API, the contents of a contract file,
-   or the workflow YAML.
+   adoption, lane, publication, provenance (it's `producedBy`).
+6. **Delete, don't deprecate.** No aliases, no compatibility exports, no `@deprecated`.
+7. **Tests test behavior on real files.** Compile a real program, read the real
+   header, rename a real file. No tests that assert the shape of an API or the
+   contents of a workflow file.
+8. **No plan documents.** A change is described by its commit message and, if it's a
+   durable decision, one line under "Decided" in `DESIGN.md`. No document may be
+   longer than the code it describes.
 
-Read `DESIGN.md`.
+## Layout
+
+`packages/effect-build` is core. Every other package wraps one external toolchain
+or one domain and depends on core only. Providers share a shape: a `Context.Service`
+holding a `Tool.Resolved`, a `layer({ executable?, version? })`, and operations that
+take `outfile`/`outdir` and return an `Artifact`.

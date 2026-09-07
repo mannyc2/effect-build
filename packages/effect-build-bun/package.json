@@ -34,14 +34,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./Api": {
-      "types": "./dist/Api/index.d.ts",
-      "import": "./dist/Api/index.js"
-    },
-    "./Command": {
-      "types": "./dist/Command/index.d.ts",
-      "import": "./dist/Command/index.js"
     }
   },
   "scripts": {

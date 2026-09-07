@@ -34,22 +34,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./Archive": {
-      "types": "./dist/Archive.d.ts",
-      "import": "./dist/Archive.js"
-    },
-    "./ArchiveError": {
-      "types": "./dist/ArchiveError.d.ts",
-      "import": "./dist/ArchiveError.js"
-    },
-    "./Model": {
-      "types": "./dist/Model.d.ts",
-      "import": "./dist/Model.js"
-    },
-    "./SourceArchive": {
-      "types": "./dist/SourceArchive.d.ts",
-      "import": "./dist/SourceArchive.js"
     }
   },
   "scripts": {

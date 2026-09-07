@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.examples.json",
-  "include": ["src/**/*.ts", "app/**/*.ts", "test/**/*.ts"],
-  "references": [
-    { "path": "../../packages/effect-build" },
-    { "path": "../../packages/effect-build-esbuild" },
-    { "path": "../../packages/effect-build-archives" }
-  ]
-}

@@ -36,61 +36,13 @@
         "@effect/platform-node": "4.0.0-rc.108",
         "effect": "4.0.0-rc.108",
         "effect-build": "workspace:^",
-        "effect-build-archives": "workspace:^",
-        "effect-build-esbuild": "workspace:^",
-      },
-      "devDependencies": {
-        "fflate": "0.8.3",
-      },
-    },
-    "examples/bun": {
-      "name": "@effect-build/example-bun",
-      "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
-        "effect-build-bun": "workspace:^",
-      },
-    },
-    "examples/cli": {
-      "name": "@effect-build/example-cli",
-      "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
-        "effect-build": "workspace:^",
-        "effect-build-bun": "workspace:^",
-      },
-    },
-    "examples/deno": {
-      "name": "@effect-build/example-deno",
-      "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
-        "effect-build-deno": "workspace:^",
-      },
-    },
-    "examples/esbuild": {
-      "name": "effect-build-example-esbuild",
-      "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
-        "effect-build-esbuild": "workspace:^",
-      },
-      "devDependencies": {
-        "esbuild": "0.28.2",
-      },
-    },
-    "examples/node-sea": {
-      "name": "effect-build-example-node-sea",
-      "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
-        "effect-build-node-sea": "workspace:^",
       },
     },
     "packages/effect-build": {
       "name": "effect-build",
       "version": "0.7.0",
       "devDependencies": {
+        "@types/node": "24.3.0",
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
@@ -268,12 +220,6 @@
     "@dprint/win32-x64": ["@dprint/win32-x64@0.49.1", "", { "os": "win32", "cpu": "x64" }, "sha512-nPU6+hoVze5JJlgET7woYWElBw0IUaB/9XKTaglknQuUUfsmD75D9pkgJTxdIxl9Bg/i5O7c9wb3Nj4XNiTIfw=="],
 
     "@effect-build/example-artifact-pipeline": ["@effect-build/example-artifact-pipeline@workspace:examples/artifact-pipeline"],
-
-    "@effect-build/example-bun": ["@effect-build/example-bun@workspace:examples/bun"],
-
-    "@effect-build/example-cli": ["@effect-build/example-cli@workspace:examples/cli"],
-
-    "@effect-build/example-deno": ["@effect-build/example-deno@workspace:examples/deno"],
 
     "@effect/platform-bun": ["@effect/platform-bun@4.0.0-rc.108", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.108" }, "peerDependencies": { "effect": "^4.0.0-rc.108" } }, "sha512-27RoALzmzx6Qp4LrPIE8bYJfHe+8ZaAO3xLhJMEE6mVA8fxcPh4HAGwBv09Nk2qTFVh578SlSCY5ojUlqeSJ4A=="],
 
@@ -541,10 +487,6 @@
 
     "effect-build-esbuild": ["effect-build-esbuild@workspace:packages/effect-build-esbuild"],
 
-    "effect-build-example-esbuild": ["effect-build-example-esbuild@workspace:examples/esbuild"],
-
-    "effect-build-example-node-sea": ["effect-build-example-node-sea@workspace:examples/node-sea"],
-
     "effect-build-nfpm": ["effect-build-nfpm@workspace:packages/effect-build-nfpm"],
 
     "effect-build-node-sea": ["effect-build-node-sea@workspace:packages/effect-build-node-sea"],
@@ -568,8 +510,6 @@
     "fast-check": ["fast-check@4.9.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-7ms6T7SybUev/PQITciI0yLM2pOSFy5zpG8Ty7tQofcVaQUvrMXp6CBwqF6fThLCLOrfBtuHAtwq6Yu4XPCllg=="],
 
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
-
-    "fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 

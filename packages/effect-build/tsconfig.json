@@ -3,9 +3,14 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "tsBuildInfoFile": "../../node_modules/.cache/effect-build.tsbuildinfo"
+    "tsBuildInfoFile": "../../node_modules/.cache/effect-build.tsbuildinfo",
+    "resolveJsonModule": true,
+    "types": [
+      "node"
+    ]
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "package.json"
   ]
 }

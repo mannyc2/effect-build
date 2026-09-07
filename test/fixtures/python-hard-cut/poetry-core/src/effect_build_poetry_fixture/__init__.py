@@ -1,1 +1,0 @@
-BACKEND = "poetry-core"

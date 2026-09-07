@@ -3,18 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node src/main.ts",
-    "test": "node --test test/pipeline.test.ts",
-    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
+    "test": "node src/main.ts"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.108",
     "effect": "4.0.0-rc.108",
-    "effect-build": "workspace:^",
-    "effect-build-archives": "workspace:^",
-    "effect-build-esbuild": "workspace:^"
-  },
-  "devDependencies": {
-    "fflate": "0.8.3"
+    "effect-build": "workspace:^"
   }
 }

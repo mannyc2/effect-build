@@ -16,11 +16,7 @@
   "files": ["dist", "README.md", "LICENSE"],
   "publishConfig": { "access": "public", "provenance": true },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./Command": {
-      "types": "./dist/Command/index.d.ts",
-      "import": "./dist/Command/index.js"
-    }
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",

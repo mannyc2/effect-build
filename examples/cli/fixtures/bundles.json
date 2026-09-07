@@ -1,7 +1,0 @@
-{
-  "assets": [
-    { "name": "app.js", "bytes": 48000, "budgetBytes": 50000 },
-    { "name": "vendor.js", "bytes": 110000, "budgetBytes": 120000 },
-    { "name": "styles.css", "bytes": 8000, "budgetBytes": 10000 }
-  ]
-}
