@@ -1,7 +1,7 @@
 {
   "name": "effect-build-deno",
   "version": "0.7.0",
-  "description": "Provider-native Deno selected-command operations for effect-build.",
+  "description": "Compile, bundle, and transpile TypeScript with Deno as Effect programs.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -33,6 +33,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/Api/index.d.ts",
+      "import": "./dist/Api/index.js"
     }
   },
   "scripts": {

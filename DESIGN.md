@@ -54,5 +54,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
   emitted-program bug (regression test in the Bun package).
 - **Deno `tested` is exactly 2.9.5**: 2.9.6 removed `transpile --conditions` and
   `compile --allow-scripts`.
+- **Deno embeds the output basename**; Windows outputs require lowercase `.exe`
+  so staging and the committed executable have the same name.
 - **Explicit `denort` is hashed and recorded, not executed** to establish identity.
 - **Effect stays pinned to the RC** until 4.0.0 ships; bump is its own change.
