@@ -188,7 +188,16 @@ describe("provider target support", () => {
         target = Schema.decodeUnknownSync(BunCompile.Target)(variant);
         const outfile = join(root, `${compiler}-${target}${target.includes("windows") ? ".exe" : ""}`);
         artifact = await Effect.runPromise(
-          BunCompile.compileExecutable({ entrypoints: [entrypoint], outfile, target, observation: "hashed" }).pipe(
+          BunCompile.compileExecutable({
+            entrypoints: [entrypoint],
+            outfile,
+            target,
+            observation: "hashed",
+            // Bun 1.3.14 extracts downloads in cwd, then moves them into its cache.
+            // Keep this empty fixture cache on the same volume as extraction.
+            cwd: root,
+            environment: { values: { BUN_INSTALL_CACHE_DIR: join(root, "bun-cache") } },
+          }).pipe(
             Effect.provide(BunRuntime.layer({ executable: executable as Artifact.AbsolutePath })),
             Effect.provide(NodeServices.layer),
             Effect.tapError((error) => reportCompileFailure(fixture.id, target, error)),
