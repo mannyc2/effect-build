@@ -1,8 +1,7 @@
 {
   "name": "effect-build-rolldown",
   "version": "0.7.0",
-  "private": true,
-  "description": "Effect-native provider API and command candidates for Rolldown.",
+  "description": "Bundle TypeScript with Rolldown as scoped Effect programs.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -26,6 +25,10 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
   },

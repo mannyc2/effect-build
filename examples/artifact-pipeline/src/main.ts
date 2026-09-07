@@ -4,6 +4,7 @@ import { Artifact, Checksums, Commit } from "effect-build";
 import * as Archive from "effect-build-archives";
 import * as Deno from "effect-build-deno";
 import * as Esbuild from "effect-build-esbuild";
+import * as Rolldown from "effect-build-rolldown";
 
 const program = Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
@@ -22,6 +23,9 @@ const program = Effect.scoped(Effect.gen(function*() {
   yield* fs.writeFileString(entrypoint, 'console.log("hello from effect-build");\n');
   artifacts.push(yield* Esbuild.buildToDirectory({
     entryPoints: [entrypoint], bundle: true, platform: "node", outdir: path.join(root, "esbuild"),
+  }));
+  artifacts.push(yield* Rolldown.buildToDirectory({
+    input: entrypoint, outdir: path.join(root, "rolldown"), output: { format: "es" },
   }));
   if (process.env.EFFECT_BUILD_DENO !== undefined) {
     const executable = yield* Deno.compile({

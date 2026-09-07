@@ -39,6 +39,7 @@
         "effect-build-archives": "workspace:^",
         "effect-build-deno": "workspace:^",
         "effect-build-esbuild": "workspace:^",
+        "effect-build-rolldown": "workspace:^",
       },
     },
     "examples/cli": {
