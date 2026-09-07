@@ -4,7 +4,7 @@ import metadata from "../package.json" with { type: "json" };
 
 const encoder = new TextEncoder();
 
-/** Write basename entries compatible with `sha256sum -c`. */
+/** Paths are relative to the working directory used to write and check the file. */
 export const write = (input: {
   readonly artifacts: readonly Artifact.Regular[];
   readonly outfile: string;
@@ -17,8 +17,8 @@ export const write = (input: {
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     const lines = [...input.artifacts]
-      .sort((a, b) => p.basename(a.path).localeCompare(p.basename(b.path)))
-      .map((a) => `${a.sha256}  ${p.basename(a.path)}\n`)
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .map((a) => `${a.sha256}  ${p.relative(p.resolve("."), a.path).split(p.sep).join("/")}\n`)
       .join("");
     const outfile = p.resolve(input.outfile);
     yield* fs.writeFile(outfile, encoder.encode(lines)).pipe(

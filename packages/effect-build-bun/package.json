@@ -1,7 +1,7 @@
 {
   "name": "effect-build-bun",
   "version": "0.7.0",
-  "description": "Provider-native Bun API and selected-command operations for effect-build.",
+  "description": "Compile executables and bundle TypeScript with Bun as Effect programs.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -34,6 +34,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/Api/index.d.ts",
+      "import": "./dist/Api/index.js"
     }
   },
   "scripts": {

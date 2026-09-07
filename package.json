@@ -6,19 +6,21 @@
   "packageManager": "bun@1.3.14",
   "workspaces": [
     "packages/*",
-    "examples/artifact-pipeline"
+    "examples/artifact-pipeline",
+    "examples/cli"
   ],
   "scripts": {
     "clean": "node scripts/clean-dist.mjs",
     "check": "bun run typecheck",
     "build": "bun run clean && tsc -b tsconfig.packages.json --force",
     "test:unit": "vitest run test/unit",
-    "test:examples": "bun run --cwd examples/artifact-pipeline test",
+    "test:examples": "bun run --cwd examples/artifact-pipeline test && bun run --cwd examples/cli test",
     "lint": "oxlint packages test examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
     "verify": "bun run build && bun run check && bun run lint && bun run test:unit && bun run test:examples",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
+    "test:integration:bun": "vitest run test/integration/bun.test.ts test/integration/bun-api.test.ts"
   },
   "devDependencies": {
     "@effect/platform-bun": "4.0.0-rc.108",

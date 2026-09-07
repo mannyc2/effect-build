@@ -48,7 +48,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Static Linux binaries report as glibc** when no target is requested.
 - **Two zip encoders** (archives, python wheel). Cheaper than a shared package until a
   third consumer appears.
-- **Bun forces `.exe` on Windows outputs**, so callers' `outfile` must end in `.exe`
+- **Bun forces lowercase `.exe` on Windows outputs**, so callers' `outfile` must end in `.exe`
   for Windows targets; the provider rejects otherwise rather than renaming.
 - **Bun `tested` excludes 1.4.0 and 1.4.1**: 1.4.0 unreviewed, 1.4.1 has a reproduced
   emitted-program bug (regression test in the Bun package).

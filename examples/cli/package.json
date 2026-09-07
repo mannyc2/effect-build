@@ -1,0 +1,15 @@
+{
+  "name": "@effect-build/example-cli",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node index.ts",
+    "build": "node index.ts"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.108",
+    "effect": "4.0.0-rc.108",
+    "effect-build": "workspace:^",
+    "effect-build-bun": "workspace:^"
+  }
+}
