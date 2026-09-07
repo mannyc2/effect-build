@@ -6,7 +6,7 @@ canonical `Artifact.HashedFile` with an atomically finalized path and SHA-256 di
 ## Install
 
 ```sh
-npm install --save-exact effect-build-archives@0.6.3 effect-build@0.6.3 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-exact effect-build-archives@0.7.0 effect-build@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
 ```
 
 These examples use Effect v4 and its matching Node platform package.
@@ -63,4 +63,4 @@ The public `Model` and `ArchiveError` modules expose the shared input schemas an
 
 ## More
 
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [API guide](https://github.com/mannyc2/effect-build/blob/main/docs/api.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)
+[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)

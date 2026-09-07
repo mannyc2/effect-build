@@ -12,7 +12,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Archive from "../../packages/effect-build-archives/src/Archive.js";
 import * as Compile from "../../packages/effect-build-bun/src/Command/CompileExecutable.js";
 import * as Runtime from "../../packages/effect-build-bun/src/internal/Runtime.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
 const selectedBun = process.env.EFFECT_BUILD_BUN ?? process.execPath;
@@ -119,7 +118,6 @@ describe("real Bun 1.3.14 compileExecutable", () => {
     expect((await execute(extractedExecutable, [])).stdout).toBe("effect-build-ok\n");
     expect(artifact).toEqual(identity);
     expect((await readFile(artifact.path)).equals(bytes)).toBe(true);
-    await observeProviderNativeEvidence("CAN-BUN-012");
   }, 120_000);
 
   it("compiles and executes the provider-native full-stack HTML request mode", async () => {
@@ -151,7 +149,6 @@ describe("real Bun 1.3.14 compileExecutable", () => {
       apiStatus: 200,
       apiMarker: true,
     });
-    await observeProviderNativeEvidence("B10.1");
   }, 120_000);
 
   it("preserves native diagnostics as the provider-local typed failure", async () => {

@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as EsbuildContext from "../../packages/effect-build-esbuild/src/Api/Context.js";
 import * as ContextToDirectory from "../../packages/effect-build-esbuild/src/Api/ContextToDirectory.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 let root = "";
 
@@ -79,7 +78,6 @@ describe("esbuild Context", () => {
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(await readFile(outfile, "utf8")).toContain("written");
-    await observeProviderNativeEvidence("CAN-ESB-012", "E04.1");
   });
 
   it("rejects erased context write-mode mismatches before acquisition", async () => {
@@ -152,7 +150,6 @@ describe("esbuild Context", () => {
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     await waitFor(() => disposeObserved === 1, "Scope close did not dispose the watched context");
-    await observeProviderNativeEvidence("E05.1");
   });
 
   it("serves a native context response and closes the listener with its Scope", async () => {
@@ -179,7 +176,6 @@ describe("esbuild Context", () => {
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     await expect(fetch(address)).rejects.toThrow();
-    await observeProviderNativeEvidence("E06.1");
   });
 
   it("coalesces concurrent rebuilds exactly as esbuild 0.28.2", async () => {
@@ -219,7 +215,6 @@ describe("esbuild Context", () => {
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) expect(exit.value).toEqual([1, 1]);
     expect(starts).toBe(1);
-    await observeProviderNativeEvidence("CAN-ESB-011", "E04.1");
   });
 
   it("cancel rejects the active rebuild without disposing the context", async () => {
@@ -266,7 +261,6 @@ describe("esbuild Context", () => {
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) expect(exit.value).toBe(1);
-    await observeProviderNativeEvidence("E07.1");
   });
 
   it("hides dispose, releases exactly once at Scope close, and rejects post-dispose methods", async () => {
@@ -305,7 +299,6 @@ describe("esbuild Context", () => {
     expect(Exit.isFailure(postServe)).toBe(true);
     expect((failureOf(postWatch) as EsbuildContext.EsbuildFailed)._tag).toBe("EsbuildFailed");
     expect((failureOf(postServe) as EsbuildContext.EsbuildFailed)._tag).toBe("EsbuildFailed");
-    await observeProviderNativeEvidence("E08.1", "E12.1");
   });
 
   it("finalization does not await delayed async onDispose work, which still completes later", async () => {
@@ -338,6 +331,5 @@ describe("esbuild Context", () => {
     expect(cleanupFinished).toBe(false);
     releaseCleanup();
     await waitFor(() => cleanupFinished, "delayed plugin cleanup never finished");
-    await observeProviderNativeEvidence("E09.2");
   });
 });

@@ -14,7 +14,6 @@
     "packages/**/*.ts",
     "packages/**/*.json",
     "test/**/*.ts",
-    "typetest/**/*.ts",
     "examples/**/*.ts",
     "examples/**/*.json",
     "*.ts",
@@ -25,15 +24,12 @@
     "docs/**/*.md",
     "examples/**/*.md",
     "packages/**/*.md",
-    "scripts/release/**/*.mjs",
-    "scripts/test-built-consumer.mjs"
+    "DESIGN.md",
+    "scripts/**/*.mjs"
   ],
   "excludes": [
     "node_modules",
     "dist",
-    ".agent-sources",
-    "plans",
-    "research/post-0.3/corpus",
-    "tooling/effect-build-contract.json"
+    ".agent-sources"
   ]
 }

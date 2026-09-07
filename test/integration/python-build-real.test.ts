@@ -16,7 +16,7 @@ const execute = promisify(execFile);
 const uv = requiredExecutable("EFFECT_BUILD_UV_BIN");
 const python = requiredExecutable("EFFECT_BUILD_PYTHON_BIN");
 const fixtures = resolve(fileURLToPath(new URL("./fixtures/python", import.meta.url)));
-const oracle = resolve(fileURLToPath(new URL("../../scripts/acceptance/assert-python-artifacts.py", import.meta.url)));
+const oracle = resolve(fileURLToPath(new URL("./fixtures/assert-python-artifacts.py", import.meta.url)));
 let root = "";
 
 beforeAll(async () => {

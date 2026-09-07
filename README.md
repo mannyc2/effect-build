@@ -12,7 +12,7 @@ In a new project, install the provider and matching Effect packages:
 
 ```sh
 npm init -y
-npm install --save-exact effect-build-bun@0.6.3 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-exact effect-build-bun@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
 ```
 
 Create `hello.ts`:
@@ -79,7 +79,7 @@ Install the provider or producer you need. Each depends on the shared `effect-bu
 | Apple bundles, signing, notarization, DMG, and pkg     | `effect-build-apple`    | [Package guide](packages/effect-build-apple/README.md)                |
 | MSIX signing and signature verification                | `effect-build-windows`  | [Package guide](packages/effect-build-windows/README.md)              |
 | SPDX or CycloneDX documents                            | `effect-build-sbom`     | [Package guide](packages/effect-build-sbom/README.md)                 |
-| Artifact identities, finalizers, or bounded matrices   | `effect-build`          | [Core API](docs/api.md#imports)                                       |
+| Artifact identities, finalizers, or bounded matrices   | `effect-build`          | [Core package](packages/effect-build/README.md)                       |
 
 ## How the API fits together
 
@@ -88,17 +88,17 @@ Providers expose two kinds of modules, where supported:
 - **`Api`** calls the provider in process. Use it for native values such as esbuild output files, Bun transpilation results, or scoped build contexts. Bun's `Api` needs the Bun runtime; esbuild's `Api` uses the installed esbuild dependency.
 - **`Command`** selects an installed executable through an Effect layer. Use it to invoke a compiler from another runtime, keep a specific tool version, or run an executable finalizer. The selected tool's bytes are checked again before each launch.
 
-These choices are independent: a Node.js build script can invoke Bun to produce a Linux executable. Cross-target support and runtime acquisition depend on the selected provider; see [compiler versions and targets](docs/drivers.md).
+These choices are independent: a Node.js build script can invoke Bun to produce a Linux executable. Cross-target support and runtime acquisition depend on the selected provider; see [compiler versions and targets](docs/providers.md).
 
-Output ownership depends on the operation. An in-memory build returns provider-native data. A direct-directory build follows the provider's filesystem behavior and can leave partial output on failure. An **explicit finalizer**, such as `Command.CompileExecutable.compileExecutable`, returns an artifact only after inspection and atomic commit to an unused destination. See [the API guide](docs/api.md) for the distinction and the [architecture](docs/architecture.md) for filesystem guarantees.
+Output ownership depends on the operation. An in-memory build returns provider-native data. A direct-directory build follows the provider's filesystem behavior and can leave partial output on failure. An **explicit finalizer**, such as `Command.CompileExecutable.compileExecutable`, returns an artifact only after inspection and atomic commit to an unused destination. See the [core package](packages/effect-build/README.md) for artifact operations.
 
 ## Documentation
 
 - [Getting started](docs/getting-started.md) — install, run, customize, and inspect a build.
 - [Runnable examples](examples/README.md) — included inputs, commands, and expected results.
-- [API reference](docs/api.md) — public modules, artifacts, matrices, and adoption.
-- [Provider guide](docs/drivers.md) — versions, host requirements, options, and targets.
+- [Provider guide](docs/providers.md) — versions, host requirements, options, and targets.
 - [Errors and troubleshooting](docs/errors.md) — typed failures and recovery decisions.
 - [Contributing](CONTRIBUTING.md) — workspace setup and verification.
 
-The [combined contract](tooling/effect-build-contract.json) records implementation scope; [the public API projection](tooling/public-api.json) lists the exported modules. Rolldown is a private evidence package and is not a public installation option. Downstream release systems own publishing; effect-build supplies [artifact identities they can adopt](docs/release-security.md).
+[DESIGN.md](DESIGN.md) describes the 0.7 design being implemented. Rolldown remains private until its provider is ported.
+Downstream release systems own publishing.

@@ -12,7 +12,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Bundle from "../../packages/effect-build-deno/src/Command/Bundle.js";
 import * as Transpile from "../../packages/effect-build-deno/src/Command/Transpile.js";
 import * as Runtime from "../../packages/effect-build-deno/src/internal/Runtime.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
 const selectedDeno = process.env.EFFECT_BUILD_DENO ?? (() => {
@@ -121,15 +120,6 @@ describe("real Deno 2.9.5 provider breadth", () => {
     }));
     expect(declarations.publication).toBe("provider-direct-durable");
     expect((await readdir(declarationDir, { recursive: true })).some((path) => path.endsWith("hello.d.ts"))).toBe(true);
-    await observeProviderNativeEvidence(
-      "CAN-DENO-003",
-      "CAN-DENO-004",
-      "CAN-DENO-006",
-      "CAN-DENO-007",
-      "CAN-DENO-008",
-      "CAN-DENO-009",
-      "D06.1",
-    );
   }, 120_000);
 
   it("executes bundle watch under Scope and interrupts the real provider child", async () => {
@@ -161,7 +151,6 @@ describe("real Deno 2.9.5 provider breadth", () => {
     expect(Exit.isFailure(watchExit)).toBe(true);
     if (Exit.isFailure(watchExit)) expect(Cause.hasInterrupts(watchExit.cause)).toBe(true);
     await expect(access(watchOut)).resolves.toBeUndefined();
-    await observeProviderNativeEvidence("CAN-DENO-005");
   }, 120_000);
 
   it("enforces explicit real-host allow-import and deny-import authority", async () => {
@@ -309,6 +298,5 @@ describe("real Deno 2.9.5 provider breadth", () => {
         server.close((error) => error === undefined ? resolveClose() : rejectClose(error));
       });
     }
-    await observeProviderNativeEvidence("CAN-DENO-001", "CAN-DENO-002", "D10.1");
   }, 120_000);
 });

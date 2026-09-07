@@ -55,7 +55,7 @@ plugin recipe prints a generated module with a size report. Read each local READ
 
 The command layers select installed tools and check the admitted versions. Install the tools yourself before running an
 example; effect-build does not install them or try another executable after a selected tool fails. See
-[tool selection](../docs/drivers.md#select-a-command) for explicit executable paths. If multiple distinct installations
+[tool selection](../docs/providers.md#select-a-command) for explicit executable paths. If multiple distinct installations
 match a tool name on `PATH`, selection fails with an ambiguity error.
 
 ## Bun

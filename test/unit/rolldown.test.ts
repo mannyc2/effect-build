@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Build from "../../packages/effect-build-rolldown/src/Api/Build.js";
 import * as Watch from "../../packages/effect-build-rolldown/src/Api/Watch.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 let root = "";
 
@@ -28,7 +27,6 @@ describe("rolldown Build", () => {
       expect(chunk.type).toBe("chunk");
       expect(chunk.code).toContain("shared()");
     }
-    await observeProviderNativeEvidence("CAN-ROL-005");
   });
 
   it("writes bundles onto disk with rolldown's own file naming", async () => {
@@ -41,7 +39,6 @@ describe("rolldown Build", () => {
       expect(await readdir(outdir)).toContain("main.js");
       expect(await readFile(join(outdir, "main.js"), "utf8")).toContain("shared()");
     }
-    await observeProviderNativeEvidence("CAN-ROL-006");
   });
 
   it("reuses one graph for several outputs inside a single scope", async () => {
@@ -76,12 +73,6 @@ describe("rolldown Build", () => {
       expect(await readFile(join(root, "scoped-dist", "main.js"), "utf8")).toContain("shared()");
     }
     expect(closes).toBe(1);
-    await observeProviderNativeEvidence(
-      "CAN-ROL-001",
-      "CAN-ROL-002",
-      "CAN-ROL-003",
-      "OP-ROL-004.release",
-    );
   });
 
   it("preserves scoped build cleanup failure in Cause", async () => {
@@ -197,7 +188,6 @@ describe("rolldown Watch", () => {
     for (const event of events) expect(event.superseded).toBeGreaterThanOrEqual(0);
     expect(resultCloses).toBe(2);
     expect(watcherCloses).toBe(1);
-    await observeProviderNativeEvidence("CAN-ROL-007", "OP-ROL-009.release");
   }, 60_000);
 
   it("keeps only the latest pending completion and reports superseded completions", async () => {

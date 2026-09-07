@@ -18,7 +18,7 @@ requiredExecutable("EFFECT_BUILD_DOCKER_BIN");
 requiredExecutable("EFFECT_BUILD_SBOM_UTILITY_BIN");
 const outdir = requiredEnvironment("EFFECT_BUILD_ACCEPTANCE_OUTDIR");
 const subject = resolve(fileURLToPath(new URL("./fixtures/sbom-subject", import.meta.url)));
-const oracle = resolve(fileURLToPath(new URL("../../scripts/acceptance/assert-sbom-documents.sh", import.meta.url)));
+const oracle = resolve(fileURLToPath(new URL("./fixtures/assert-sbom-documents.sh", import.meta.url)));
 
 const run = <A, E>(effect: Effect.Effect<A, E, Sbom.Generator>) =>
   Effect.runPromise(

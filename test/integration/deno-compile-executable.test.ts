@@ -11,7 +11,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Compile from "../../packages/effect-build-deno/src/Command/CompileExecutable.js";
 import * as CompileWatch from "../../packages/effect-build-deno/src/Command/CompileWatch.js";
 import * as Runtime from "../../packages/effect-build-deno/src/internal/Runtime.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
 const selectedDeno = process.env.EFFECT_BUILD_DENO ?? (() => {
@@ -111,7 +110,6 @@ describe("real Deno 2.9.5 compileExecutable", () => {
     expect(await realpath(artifact.path)).toBe(await realpath(outfile));
     expect(artifact.digest.value).toMatch(/^[0-9a-f]{64}$/u);
     expect((await execute(artifact.path, [])).stdout).toBe("effect-build-ok\n");
-    await observeProviderNativeEvidence("CAN-DENO-010", "D08.1");
   }, 300_000);
 
   it("executes compile watch under Scope and interrupts the real provider child", async () => {
@@ -146,7 +144,6 @@ describe("real Deno 2.9.5 compileExecutable", () => {
     expect(Exit.isFailure(watchExit)).toBe(true);
     if (Exit.isFailure(watchExit)) expect(Cause.hasInterrupts(watchExit.cause)).toBe(true);
     await expect(access(outfile)).resolves.toBeUndefined();
-    await observeProviderNativeEvidence("CAN-DENO-011");
   }, 300_000);
 
   it("records the pinned compiled-runtime Deno.bundle capability as unavailable", async () => {

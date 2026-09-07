@@ -14,7 +14,6 @@ import * as AssembleModes from "../../packages/effect-build-node-sea/src/interna
 import { Runtime } from "../../packages/effect-build-node-sea/src/internal/Runtime.js";
 import * as Artifact from "../../packages/effect-build/src/Artifact.js";
 import * as File from "../../packages/effect-build/src/Author/File.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
 const fixture = fileURLToPath(new URL("../fixtures/tools/node-sea/", import.meta.url));
@@ -89,7 +88,6 @@ describe.sequential("real Node SEA Command.AssembleExecutable exact cell", () =>
     });
     expect(artifact.digest.value).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect((await execute(artifact.path, [])).stdout).toBe("node-sea-cjs-ok\n");
-    await observeProviderNativeEvidence("CAN-NODE-001", "S02.1", "S09.1", "S10.1");
   }, 300_000);
 
   it("assembles an ESM main with embedded assets", async () => {
@@ -104,7 +102,6 @@ describe.sequential("real Node SEA Command.AssembleExecutable exact cell", () =>
     const completion = await execute(artifact.path, []);
     expect(completion.stdout).toContain("node-sea-esm-ok");
     expect(completion.stdout).toContain("node-sea-asset-ok");
-    await observeProviderNativeEvidence("S03.1", "S04.1", "S04.2");
   }, 300_000);
 
   it("surfaces exact Node diagnostics for a broken main", async () => {
@@ -180,7 +177,6 @@ describe.sequential("real Node SEA Command.AssembleExecutable exact cell", () =>
       useSnapshot: true,
     }));
     expect((await execute(snapshot.path, [])).stdout).toBe("node-sea-snapshot-ok\n");
-    await observeProviderNativeEvidence("S05.1", "S06.1");
   }, 300_000);
 
   it("executes none, env, and cli embedded-argument extension policies", async () => {
@@ -246,6 +242,5 @@ describe.sequential("real Node SEA Command.AssembleExecutable exact cell", () =>
     expect(cliOutput.execArgv).toEqual(expect.arrayContaining(["--no-warnings", "--disable-proto=throw"]));
     expect(cliOutput.argv).toEqual(["script-value"]);
     expect(cliOutput.prototypeAccessThrows).toBe(true);
-    await observeProviderNativeEvidence("S07.1");
   }, 300_000);
 });

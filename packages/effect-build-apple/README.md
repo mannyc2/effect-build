@@ -7,7 +7,7 @@ Apple semantics behind a generic signing or packaging function.
 ## Install
 
 ```sh
-npm install --save-exact effect-build-apple@0.6.3 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-exact effect-build-apple@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
 ```
 
 These examples use Effect v4 and its matching Node platform package.
@@ -126,14 +126,10 @@ rollback, typed failures, provider result facts, runner-two resumption,
 acceptance correlation, and secret non-persistence. It does not claim Apple
 acceptance.
 
-The v0.6.0 release includes this npm API/library package, but no
-credential-backed Apple artifact. Developer ID signing, notarization,
-stapling, Gatekeeper, quarantined clean-host execution, and the durable AWS
-Notary journal were not run and have not passed. They are explicitly excluded
-from v0.6.0 readiness and outputs. Producing signed/notarized App, DMG, or PKG
-artifacts requires a later, separately qualified release with its own
-credentials, journal, hosts, evidence, and publication decision.
+This package is experimental. Developer ID signing, notarization, stapling,
+Gatekeeper, and quarantined clean-host execution have not been verified with
+real credentials. Unit tests do not establish that Apple accepts the products.
 
 ## More
 
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [API guide](https://github.com/mannyc2/effect-build/blob/main/docs/api.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md) · [Release and credential boundaries](https://github.com/mannyc2/effect-build/blob/main/docs/release-security.md)
+[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)

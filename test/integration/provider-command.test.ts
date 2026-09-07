@@ -14,7 +14,6 @@ import * as RolldownBundle from "../../packages/effect-build-rolldown/src/Comman
 import * as RolldownBundleToDirectory from "../../packages/effect-build-rolldown/src/Command/BundleToDirectory.js";
 import { layer as rolldownLayer } from "../../packages/effect-build-rolldown/src/Command/Runtime.js";
 import * as RolldownWatch from "../../packages/effect-build-rolldown/src/Command/Watch.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 let root = "";
 
@@ -117,7 +116,6 @@ describe("real provider command binaries", () => {
     );
     expect(direct.publication).toBe("provider-direct-durable");
     expect(await readFile(join(outdir, "esbuild-entry.js"), "utf8")).toContain("commandEsbuild");
-    await observeProviderNativeEvidence("CAN-ESB-015", "CAN-ESB-016");
   });
 
   it("executes exact esbuild 0.28.2 watch and interrupts its scoped child", async () => {
@@ -156,7 +154,6 @@ describe("real provider command binaries", () => {
     expect(Exit.isFailure(watchExit)).toBe(true);
     if (Exit.isFailure(watchExit)) expect(Cause.hasInterrupts(watchExit.cause)).toBe(true);
     expect(await readFile(outfile, "utf8")).toContain("watchedEsbuild");
-    await observeProviderNativeEvidence("CAN-ESB-017");
   }, 30_000);
 
   it("executes exact esbuild 0.28.2 serve, answers a request, and closes with Scope", async () => {
@@ -190,7 +187,6 @@ describe("real provider command binaries", () => {
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     await expect(fetch(url)).rejects.toThrow();
-    await observeProviderNativeEvidence("CAN-ESB-018");
   }, 30_000);
 
   it("executes exact Rolldown 1.2.5 stdout and direct-directory candidates", async () => {
@@ -214,7 +210,6 @@ describe("real provider command binaries", () => {
     );
     expect(direct.publication).toBe("provider-direct-durable");
     expect(await readFile(join(outdir, "rolldown-entry.js"), "utf8")).toContain("commandRolldown");
-    await observeProviderNativeEvidence("CAN-ROL-010", "CAN-ROL-011");
   });
 
   it("executes exact Rolldown 1.2.5 watch and interrupts its scoped child", async () => {
@@ -253,6 +248,5 @@ describe("real provider command binaries", () => {
     expect(Exit.isFailure(watchExit)).toBe(true);
     if (Exit.isFailure(watchExit)) expect(Cause.hasInterrupts(watchExit.cause)).toBe(true);
     expect(await readFile(join(outdir, "rolldown-watch-entry.js"), "utf8")).toContain("watchedRolldown");
-    await observeProviderNativeEvidence("CAN-ROL-012");
   }, 30_000);
 });

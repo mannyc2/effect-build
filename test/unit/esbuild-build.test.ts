@@ -8,7 +8,6 @@ import * as Build from "../../packages/effect-build-esbuild/src/Api/Build.js";
 import * as BuildToDirectory from "../../packages/effect-build-esbuild/src/Api/BuildToDirectory.js";
 import * as FormatMessages from "../../packages/effect-build-esbuild/src/Api/FormatMessages.js";
 import * as Transform from "../../packages/effect-build-esbuild/src/Api/Transform.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 let root = "";
 
@@ -47,7 +46,6 @@ describe("esbuild Build", () => {
       expect(new TextDecoder().decode(exit.value.outputFiles[0]!.contents)).toContain("in-memory");
       expect(exit.value.errors).toEqual([]);
     }
-    await observeProviderNativeEvidence("CAN-ESB-001");
   });
 
   it("keeps provider-direct publication distinct from the in-memory operation", async () => {
@@ -61,7 +59,6 @@ describe("esbuild Build", () => {
     );
     expect(result.outputFiles).toBeUndefined();
     expect(await readFile(outfile, "utf8")).toContain("provider-write");
-    await observeProviderNativeEvidence("CAN-ESB-002");
   });
 
   it("rejects erased write-mode mismatches before invoking esbuild", async () => {
@@ -142,7 +139,6 @@ describe("esbuild Build", () => {
     expect(failure._tag).toBe("EsbuildFailed");
     expect(failure.operation).toBe("transform");
     expect(failure.errors.length).toBeGreaterThan(0);
-    await observeProviderNativeEvidence("CAN-ESB-003");
   });
 
   it("renders a metafile report through esbuild's own analyzer", async () => {
@@ -154,7 +150,6 @@ describe("esbuild Build", () => {
     );
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) expect(exit.value).toContain("stdin");
-    await observeProviderNativeEvidence("CAN-ESB-004", "E10.1");
   });
 
   it("formats native diagnostics without normalizing their structure", async () => {
@@ -164,7 +159,6 @@ describe("esbuild Build", () => {
       FormatMessages.formatMessages(failure.errors, { kind: "error", color: false }),
     );
     expect(formatted[0]).toContain("ERROR");
-    await observeProviderNativeEvidence("CAN-ESB-005");
   });
 
   it("stops only the Effect waiter on interruption while the provider and delayed plugin complete", async () => {
@@ -212,6 +206,5 @@ describe("esbuild Build", () => {
       await new Promise((resolveTick) => setTimeout(resolveTick, 10));
     }
     expect(onEndObserved).toBe(true);
-    await observeProviderNativeEvidence("E09.1");
   });
 });

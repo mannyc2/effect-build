@@ -4,15 +4,15 @@ The [README quick start](../README.md#compile-your-first-executable) creates a c
 
 ## Install and run
 
-The examples use `effect-build` packages at `0.6.3` and matching Effect/platform packages at `4.0.0-rc.108`. Pin the Effect release explicitly: an unqualified `effect` install can select a different major or prerelease. The supported peer range is recorded in each package's `package.json`; the examples use the workspace's exact development pins.
+The examples use `effect-build` packages at `0.7.0` and matching Effect/platform packages at `4.0.0-rc.108`. Pin the Effect release explicitly: an unqualified `effect` install can select a different major or prerelease. The supported peer range is recorded in each package's `package.json`; the examples use the workspace's exact development pins.
 
 ```sh
-npm install --save-exact effect-build-bun@0.6.3 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-exact effect-build-bun@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
 ```
 
 There is no `effect-build` CLI. Write a build program and execute it with your chosen runtime. The quick start uses `build.mts`, which [Node runs as a TypeScript ES module](https://nodejs.org/dist/latest-v24.x/docs/api/typescript.html); Node 24.14.1 is the workspace's Node host pin. Running TypeScript this way does not typecheck it.
 
-The compiler is a separate installation. Bun's command adapter admits **Bun 1.3.14**, Deno's admits **Deno 2.9.5**, and esbuild's command adapter admits **esbuild 0.28.2**. A newer executable is not automatically admitted. See the [provider guide](drivers.md) for the full requirements, including Node SEA's Linux host restriction.
+The compiler is a separate installation. Bun's command adapter admits **Bun 1.3.14**, Deno's admits **Deno 2.9.5**, and esbuild's command adapter admits **esbuild 0.28.2**. A newer executable is not automatically admitted. See the [provider guide](providers.md) for the full requirements, including Node SEA's Linux host restriction.
 
 For a TypeScript editor or CI check of a standalone `build.mts`, add the toolchain and check without emitting JavaScript:
 
@@ -53,7 +53,7 @@ const compiler = Command.layer({
 
 Use `Effect.provide(compiler)` where the quick start uses `Effect.provide(Command.layer())`. Replace the example path with your installation's normalized absolute path. On Windows, use a normalized absolute Windows path with escaped backslashes. Decoding `Artifact.AbsolutePath` validates the path's form; selection checks whether a usable executable exists there.
 
-Install `effect-build@0.6.3` directly when importing its modules in your application. Provider packages depend on core, but a direct dependency makes your own imports explicit.
+Install `effect-build@0.7.0` directly when importing its modules in your application. Provider packages depend on core, but a direct dependency makes your own imports explicit.
 
 ## Customize a Bun executable
 
@@ -100,7 +100,7 @@ The destination must be unused. Finalizers create parent directories as needed, 
 If you want JavaScript bytes to consume in your application, start with the in-process API:
 
 ```sh
-npm install --save-exact effect-build-esbuild@0.6.3 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-exact effect-build-esbuild@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
 ```
 
 Save as `bundle.mts` and run `node bundle.mts`:
@@ -135,5 +135,5 @@ This prints bundled JavaScript. The package supplies esbuild as a dependency, so
 
 - Run [Bun, Deno, esbuild, and Node SEA examples](../examples/README.md), including a bounded matrix.
 - Use [typed errors](errors.md) to handle expected failures without parsing compiler messages.
-- Read [output ownership and artifact adoption](api.md) before handing results to another system.
-- Consult [provider options and support](drivers.md) before changing compiler versions or targets.
+- Read the [core package guide](../packages/effect-build/README.md) before handing results to another system.
+- Consult [provider options and support](providers.md) before changing compiler versions or targets.

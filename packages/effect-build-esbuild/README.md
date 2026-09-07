@@ -6,7 +6,7 @@ results or the command lane when your build must select and authenticate a speci
 ## Install
 
 ```sh
-npm install --save-exact effect-build-esbuild@0.6.3 effect@4.0.0-rc.108
+npm install --save-exact effect-build-esbuild@0.7.0 effect@4.0.0-rc.108
 ```
 
 This example uses Effect v4. The package includes esbuild **0.28.2** as a dependency.
@@ -53,4 +53,4 @@ and do not return a core atomically finalized tree.
 
 ## More
 
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [API guide](https://github.com/mannyc2/effect-build/blob/main/docs/api.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md) · [Runnable build and watch examples](https://github.com/mannyc2/effect-build/blob/main/examples/README.md) · [Provider guide](https://github.com/mannyc2/effect-build/blob/main/docs/drivers.md)
+[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md) · [Runnable build and watch examples](https://github.com/mannyc2/effect-build/blob/main/examples/README.md) · [Provider guide](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md)
