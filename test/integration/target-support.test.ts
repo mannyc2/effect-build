@@ -9,8 +9,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
 import * as BunCompile from "../../packages/effect-build-bun/src/Command/CompileExecutable.js";
+import { BunCommandFailed } from "../../packages/effect-build-bun/src/internal/CommandError.js";
 import * as BunRuntime from "../../packages/effect-build-bun/src/internal/Runtime.js";
 import * as DenoCompile from "../../packages/effect-build-deno/src/Command/CompileExecutable.js";
+import { DenoCommandFailed } from "../../packages/effect-build-deno/src/internal/CommandError.js";
 import * as DenoRuntime from "../../packages/effect-build-deno/src/internal/Runtime.js";
 import type * as Artifact from "../../packages/effect-build/src/Artifact.js";
 import { selectToolFixture } from "./helpers/exact-tool.js";
@@ -48,6 +50,24 @@ const requiredEnvironment = (name: string): string => {
 };
 
 type Execution = "headers" | "native" | "alpine";
+
+const reportCompileFailure = (fixture: string, target: string, error: unknown): Effect.Effect<void> =>
+  Effect.sync(() => {
+    if (!(error instanceof BunCommandFailed) && !(error instanceof DenoCommandFailed)) return;
+    const decoder = new TextDecoder();
+    console.error(`EFFECT_BUILD_TARGET_FAILURE=${
+      JSON.stringify({
+        fixture,
+        target,
+        failure: error._tag,
+        exitCode: error.exitCode,
+        stdout: decoder.decode(error.stdout),
+        stderr: decoder.decode(error.stderr),
+        stdoutTruncated: error.stdoutTruncated,
+        stderrTruncated: error.stderrTruncated,
+      })
+    }`);
+  });
 
 const peMachineOracle = (bytes: Uint8Array, target: string): void => {
   if (target !== "windows-x64" && target !== "windows-aarch64") return;
@@ -171,6 +191,7 @@ describe("provider target support", () => {
           BunCompile.compileExecutable({ entrypoints: [entrypoint], outfile, target, observation: "hashed" }).pipe(
             Effect.provide(BunRuntime.layer({ executable: executable as Artifact.AbsolutePath })),
             Effect.provide(NodeServices.layer),
+            Effect.tapError((error) => reportCompileFailure(fixture.id, target, error)),
           ),
         );
       } else {
@@ -180,6 +201,7 @@ describe("provider target support", () => {
           DenoCompile.compileExecutable({ entrypoint, outfile, target, observation: "hashed" }).pipe(
             Effect.provide(DenoRuntime.layer({ executable: executable as Artifact.AbsolutePath })),
             Effect.provide(NodeServices.layer),
+            Effect.tapError((error) => reportCompileFailure(fixture.id, target, error)),
           ),
         );
       }

@@ -1,8 +1,8 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Stream } from "effect";
 import type * as Artifact from "effect-build/Artifact";
 import { execFile } from "node:child_process";
-import { access, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,19 +22,19 @@ const findings = fileURLToPath(new URL("../fixtures/bun-positive-findings/", imp
 const executablePath = (path: string): string => process.platform === "win32" ? `${path}.exe` : path;
 const portablePath = (path: string): string => path.replaceAll("\\", "/");
 
-const waitForText = async (path: string, expected: string): Promise<string> => {
+const waitForText = async (path: string, expected: string, diagnostics: () => string): Promise<string> => {
   const deadline = Date.now() + 10_000;
   while (true) {
     const text = await readFile(path, "utf8").catch(() => undefined);
     if (text?.includes(expected) === true) return text;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${path}`);
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${expected} in ${path}\n${diagnostics()}`);
     await new Promise((resolveTick) => setTimeout(resolveTick, 10));
   }
 };
 
 let root = "";
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "effect-build-bun-api-real-"));
+  root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-bun-api-real-")));
 });
 afterAll(async () => {
   await rm(root, { recursive: true, force: true });
@@ -74,6 +74,7 @@ describe(`real Bun ${fixture.version} provider breadth`, () => {
     const outdir = join(root, "command-watch");
     const output = join(outdir, "hello.js");
     const watchedEntry = join(root, "hello.ts");
+    let diagnostics = "";
     await writeFile(watchedEntry, 'console.log("watch-initial");\n');
     const result = await run(
       Effect.gen(function*() {
@@ -82,17 +83,28 @@ describe(`real Bun ${fixture.version} provider breadth`, () => {
           const watch = yield* Watch.watch({
             entrypoints: [watchedEntry],
             outdir,
+            cwd: root,
             target: "bun",
             noClearScreen: true,
           });
+          for (const stream of [watch.process.stdout, watch.process.stderr]) {
+            yield* stream.pipe(
+              Stream.runForEach((bytes) =>
+                Effect.sync(() => {
+                  diagnostics = (diagnostics + new TextDecoder().decode(bytes)).slice(-8192);
+                })
+              ),
+              Effect.forkChild,
+            );
+          }
           yield* Deferred.succeed(acquired, watch);
           return yield* Effect.never;
         }).pipe(Effect.scoped, Effect.forkChild);
         const watch = yield* Deferred.await(acquired).pipe(Effect.timeout("10 seconds"));
-        yield* Effect.promise(() => waitForText(output, "watch-initial"));
+        yield* Effect.promise(() => waitForText(output, "watch-initial", () => diagnostics));
         expect((yield* Effect.promise(() => execute(selectedBun, [output]))).stdout).toBe("watch-initial\n");
         yield* Effect.promise(() => writeFile(watchedEntry, 'console.log("watch-edited");\n'));
-        const outputText = yield* Effect.promise(() => waitForText(output, "watch-edited"));
+        const outputText = yield* Effect.promise(() => waitForText(output, "watch-edited", () => diagnostics));
         expect((yield* Effect.promise(() => execute(selectedBun, [output]))).stdout).toBe("watch-edited\n");
         const runningBeforeInterruption = yield* watch.process.isRunning;
         yield* Fiber.interrupt(watchFiber).pipe(Effect.timeout("10 seconds"));
