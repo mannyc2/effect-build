@@ -10,7 +10,7 @@ npm install --save-exact effect-build-deno@0.6.3 effect@4.0.0-rc.108 @effect/pla
 
 These examples use Effect v4 and its matching Node platform package.
 
-Install Deno **2.9.5** separately. The command lane admits that exact version. Your build script may run under
+Install Deno **2.9.5** separately. The command lane currently admits that exact version: 2.9.6 removed exposed options. See the [compatibility audit](https://github.com/mannyc2/effect-build/blob/main/docs/provider-compatibility-audit.md). Your build script may run under
 Node while the selected Deno executable performs compilation or transpilation.
 
 ## Compile an executable

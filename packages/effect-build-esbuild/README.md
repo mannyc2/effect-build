@@ -45,7 +45,7 @@ API contexts and command watches require an Effect scope; keep rebuild, watch, a
 The standalone command `Serve` candidate is not publicly exported.
 
 For the command lane, install a matching Effect platform adapter, provide its services, and provide
-`Command.layer()`. It selects esbuild **0.28.2** from PATH or an explicit absolute `executable` and reauthenticates
+`Command.layer()`. It selects esbuild from PATH or an explicit absolute `executable`, applies the [Command compatibility policy](https://github.com/mannyc2/effect-build/blob/main/docs/compiler-compatibility.md), and reauthenticates
 those bytes before launch. The API dependency alone does not put its executable on your shell's PATH.
 
 Directory operations preserve esbuild's direct writes. They may leave partial output after failure or interruption

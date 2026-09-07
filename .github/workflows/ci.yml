@@ -64,12 +64,15 @@ jobs:
       - run: bun run verify:platform
 
   integration-bun:
-    name: Real bun (${{ matrix.os }})
+    name: Real bun (${{ matrix.fixture }} / ${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-15, windows-2025]
+        fixture: [EVIDENCE-BUN, EVIDENCE-BUN-1.4.2]
     runs-on: ${{ matrix.os }}
+    env:
+      EFFECT_BUILD_EXACT_EVIDENCE_DIRECTORY: outputs/exact-provider-evidence
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -82,20 +85,30 @@ jobs:
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
-      - name: Bind the exact setup-installed Bun executable
-        shell: bash
-        run: echo "EFFECT_BUILD_BUN=$(bun -e 'console.log(process.execPath)')" >> "$GITHUB_ENV"
+      - name: Install and bind the exact native compiler fixture
+        run: node scripts/install-provider-fixture.mjs ${{ matrix.fixture }}
       - run: bun run test:integration:bun
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: bun-${{ matrix.fixture }}-${{ matrix.os }}
+          path: outputs/exact-provider-evidence
+          if-no-files-found: error
       - run: bun run build
+        if: matrix.fixture == 'EVIDENCE-BUN'
       - run: bun run --cwd examples/cli test:compile
+        if: matrix.fixture == 'EVIDENCE-BUN'
 
   integration-deno:
-    name: Real deno (${{ matrix.os }})
+    name: Real deno (${{ matrix.fixture }} / ${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-15, windows-2025]
+        fixture: [EVIDENCE-DENO, EVIDENCE-DENO-2.9.6]
     runs-on: ${{ matrix.os }}
+    env:
+      EFFECT_BUILD_EXACT_EVIDENCE_DIRECTORY: outputs/exact-provider-evidence
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -107,14 +120,52 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
-      - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
-        with:
-          deno-version: v2.9.5
       - run: bun install --frozen-lockfile
-      - name: Bind the exact setup-installed Deno executable
-        shell: bash
-        run: echo "EFFECT_BUILD_DENO=$(deno eval 'console.log(Deno.execPath())')" >> "$GITHUB_ENV"
+      - name: Install the admitted compiler and exact native runtime pair
+        if: matrix.fixture == 'EVIDENCE-DENO'
+        run: node scripts/install-provider-fixture.mjs ${{ matrix.fixture }} --denort
+      - name: Install the rejected exact compiler fixture
+        if: matrix.fixture != 'EVIDENCE-DENO'
+        run: node scripts/install-provider-fixture.mjs ${{ matrix.fixture }}
       - run: bun run test:integration:deno
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: deno-${{ matrix.fixture }}-${{ matrix.os }}
+          path: outputs/exact-provider-evidence
+          if-no-files-found: error
+
+  integration-esbuild:
+    name: Real esbuild (${{ matrix.fixture }} / ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+        fixture: [EVIDENCE-ESBUILD]
+    runs-on: ${{ matrix.os }}
+    env:
+      EFFECT_BUILD_EXACT_EVIDENCE_DIRECTORY: outputs/exact-provider-evidence
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Install and bind the exact native compiler fixture
+        run: node scripts/install-provider-fixture.mjs ${{ matrix.fixture }}
+      - run: bun run test:integration:esbuild
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: esbuild-${{ matrix.fixture }}-${{ matrix.os }}
+          path: outputs/exact-provider-evidence
+          if-no-files-found: error
 
   integration-node-sea:
     name: Real Node SEA (ubuntu-24.04 / linux-x64-gnu)
@@ -137,24 +188,34 @@ jobs:
       - run: bun run test:integration:node-sea
 
   target-cells:
-    name: Target ${{ matrix.compiler }}/${{ matrix.target }} / build+run
+    name: Target ${{ matrix.fixture }}/${{ matrix.target }} / build+run
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { compiler: bun, target: macos-x64, os: macos-15-intel, execution: native }
-          - { compiler: bun, target: macos-aarch64, os: macos-15, execution: native }
-          - { compiler: bun, target: linux-x64-gnu, os: ubuntu-24.04, execution: native }
-          - { compiler: bun, target: linux-x64-musl, os: ubuntu-24.04, execution: alpine }
-          - { compiler: bun, target: linux-aarch64-gnu, os: ubuntu-24.04-arm, execution: native }
-          - { compiler: bun, target: windows-x64, os: windows-2025, execution: native }
-          - { compiler: deno, target: macos-x64, os: macos-15-intel, execution: native }
-          - { compiler: deno, target: macos-aarch64, os: macos-15, execution: native }
-          - { compiler: deno, target: linux-x64-gnu, os: ubuntu-24.04, execution: native }
-          - { compiler: deno, target: linux-aarch64-gnu, os: ubuntu-24.04-arm, execution: native }
-          - { compiler: deno, target: windows-x64, os: windows-2025, execution: native }
-          - { compiler: deno, target: windows-aarch64, os: windows-11-arm, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN, target: macos-x64, os: macos-15-intel, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN, target: macos-aarch64, os: macos-15, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN, target: linux-x64-gnu, os: ubuntu-24.04, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN, target: linux-x64-musl, os: ubuntu-24.04, execution: alpine }
+          - { compiler: bun, fixture: EVIDENCE-BUN, target: linux-aarch64-gnu, os: ubuntu-24.04-arm, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN, target: windows-x64, os: windows-2025, execution: native }
+          - { compiler: deno, fixture: EVIDENCE-DENO, target: macos-x64, os: macos-15-intel, execution: native }
+          - { compiler: deno, fixture: EVIDENCE-DENO, target: macos-aarch64, os: macos-15, execution: native }
+          - { compiler: deno, fixture: EVIDENCE-DENO, target: linux-x64-gnu, os: ubuntu-24.04, execution: native }
+          - { compiler: deno, fixture: EVIDENCE-DENO, target: linux-aarch64-gnu, os: ubuntu-24.04-arm, execution: native }
+          - { compiler: deno, fixture: EVIDENCE-DENO, target: windows-x64, os: windows-2025, execution: native }
+          - { compiler: deno, fixture: EVIDENCE-DENO, target: windows-aarch64, os: windows-11-arm, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN-1.4.2, target: macos-x64, os: macos-15-intel, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN-1.4.2, target: macos-aarch64, os: macos-15, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN-1.4.2, target: linux-x64-gnu, os: ubuntu-24.04, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN-1.4.2, target: linux-x64-musl, os: ubuntu-24.04, execution: alpine }
+          - { compiler: bun, fixture: EVIDENCE-BUN-1.4.2, target: linux-aarch64-gnu, os: ubuntu-24.04-arm, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN-1.4.2, target: windows-x64, os: windows-2025, execution: native }
+          - { compiler: bun, fixture: EVIDENCE-BUN-1.4.2, target: linux-aarch64-musl, os: ubuntu-24.04-arm, execution: alpine }
+          - { compiler: bun, fixture: EVIDENCE-BUN-1.4.2, target: windows-aarch64, os: windows-11-arm, execution: native }
     runs-on: ${{ matrix.os }}
+    env:
+      EFFECT_BUILD_EXACT_EVIDENCE_DIRECTORY: outputs/exact-provider-evidence
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -166,11 +227,9 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
-      - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
-        if: matrix.compiler == 'deno'
-        with:
-          deno-version: v2.9.5
       - run: bun install --frozen-lockfile
+      - name: Install and bind the exact native compiler fixture
+        run: node scripts/install-provider-fixture.mjs ${{ matrix.fixture }}
       - name: Compile and validate the cell with independent oracles
         shell: bash
         run: |
@@ -178,14 +237,17 @@ jobs:
           export EFFECT_BUILD_TARGET_COMPILER='${{ matrix.compiler }}'
           export EFFECT_BUILD_TARGET='${{ matrix.target }}'
           export EFFECT_BUILD_TARGET_EXECUTION='${{ matrix.execution }}'
-          export EFFECT_BUILD_BUN_BIN="$(bun -e 'console.log(process.execPath)')"
-          if [[ '${{ matrix.compiler }}' == 'deno' ]]; then
-            export EFFECT_BUILD_DENO_BIN="$(deno eval 'console.log(Deno.execPath())')"
-          fi
           if [[ '${{ matrix.execution }}' == 'alpine' ]]; then
             export EFFECT_BUILD_DOCKER_BIN="$(command -v docker)"
           fi
           bun run test:integration:target
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: target-${{ matrix.fixture }}-${{ matrix.target }}
+          path: outputs/exact-provider-evidence
+          if-no-files-found: error
 
   acceptance-archives:
     name: Acceptance / deterministic archives and exact Git tree

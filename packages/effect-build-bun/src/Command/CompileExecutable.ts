@@ -9,7 +9,7 @@ import * as NativeExecutable from "../internal/Executable.js";
 import type { InvocationOptions, RunError } from "../internal/Runtime.js";
 import { Runtime } from "../internal/Runtime.js";
 
-/** Exact documented Bun 1.3.14 standalone-executable targets. */
+/** Reviewed standalone-executable targets for admitted Bun command versions. */
 export const Target = Schema.Literals(
   [
     "bun-darwin-x64",
@@ -206,7 +206,7 @@ const validate = <Mode extends CoreArtifact.ObservationMode>(
     return Effect.fail(
       new BunCommandInputInvalid({
         operation: "compileExecutable",
-        reason: `unsupported Bun 1.3.14 target: ${String(input.target)}`,
+        reason: `unsupported Bun command target: ${String(input.target)}`,
       }),
     );
   }

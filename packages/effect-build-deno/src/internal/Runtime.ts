@@ -11,6 +11,12 @@ import {
   DenoCommandTransportFailed,
   DenoCommandUnsupported,
 } from "./CommandError.js";
+import {
+  acceptsRelease,
+  compatibilityByOperation,
+  explainRefusal,
+  parseReleaseVersion,
+} from "./Compatibility.generated.js";
 
 export {
   DenoCommandFailed,
@@ -217,6 +223,20 @@ const provisional = <Name extends "deno" | "denort">(
   capabilities: [],
 });
 
+const decodeIdentity = (banner: string): { readonly version: string; readonly channel: string } | undefined => {
+  const [header, ...components] = banner.trim().split(/\r?\n/u);
+  const identity = /^deno (\S+)(?: \(([a-z][a-z0-9-]*), release, [a-z0-9_]+(?:-[a-z0-9_]+)+\))?$/u.exec(
+    header ?? "",
+  );
+  if (
+    identity?.[1] === undefined
+    || (components.length !== 0
+      && (components.length !== 2 || !/^v8 \S+$/u.test(components[0] ?? "")
+        || !/^typescript \S+$/u.test(components[1] ?? "")))
+  ) return undefined;
+  return { version: identity[1], channel: identity[2] ?? "unreported" };
+};
+
 const observeDeno = (
   candidate: Tool.Candidate<"deno">,
   outputLimit: number,
@@ -232,20 +252,10 @@ const observeDeno = (
       provisional("deno", candidate.content),
       outputLimit,
     );
-    if (completion.exitCode !== 0) {
-      return yield* new DenoCommandFailed({
-        operation: "probe",
-        publication: "none",
-        exitCode: completion.exitCode,
-        stdout: completion.stdout.bytes,
-        stderr: completion.stderr.bytes,
-        stdoutTruncated: completion.stdout.truncated,
-        stderrTruncated: completion.stderr.truncated,
-      });
-    }
-    const match = /^deno\s+(\S+)/u.exec(completion.stdout.text.trim());
-    const version = match?.[1];
-    if (version === undefined) {
+    const identity = decodeIdentity(completion.stdout.text);
+    if (
+      completion.exitCode !== 0 || completion.stdout.truncated || completion.stderr.truncated || identity === undefined
+    ) {
       return yield* new DenoCommandFailed({
         operation: "probe",
         publication: "none",
@@ -261,57 +271,130 @@ const observeDeno = (
       participants: Object.freeze([Object.freeze({
         role: "selected-command",
         name: "deno",
-        version,
+        version: identity.version,
         revision: "unreported",
-        channel: "stable",
+        channel: identity.channel,
         content: candidate.content,
       })]) as readonly [Tool.ParticipantIdentity],
       capabilities: Object.freeze([
-        { _tag: "Present" as const, id: "deno-bundle-command", evidence: "source-exact:deno-v2.9.5" },
-        { _tag: "Present" as const, id: "deno-transpile-command", evidence: "source-exact:deno-v2.9.5" },
-        { _tag: "Present" as const, id: "deno-compile-command", evidence: "source-exact:deno-v2.9.5" },
+        {
+          _tag: "Indeterminate" as const,
+          id: "deno-bundle-command",
+          reason: "only command identity was probed with --version",
+        },
+        {
+          _tag: "Indeterminate" as const,
+          id: "deno-transpile-command",
+          reason: "only command identity was probed with --version",
+        },
+        {
+          _tag: "Indeterminate" as const,
+          id: "deno-compile-command",
+          reason: "only command identity was probed with --version",
+        },
       ]),
     });
   });
 
+const probeFailure = (completion: Completion): DenoCommandFailed =>
+  new DenoCommandFailed({
+    operation: "probe",
+    publication: "none",
+    exitCode: completion.exitCode,
+    stdout: completion.stdout.bytes,
+    stderr: completion.stderr.bytes,
+    stdoutTruncated: completion.stdout.truncated,
+    stderrTruncated: completion.stderr.truncated,
+  });
+
 const observeDenort = (
   candidate: Tool.Candidate<"denort">,
+  compiler: Tool.SelectedTool<"deno">,
   outputLimit: number,
 ): Effect.Effect<
   Tool.Observation<"denort">,
-  DenoCommandTransportFailed | DenoCommandFailed,
-  ChildProcessSpawner.ChildProcessSpawner
+  ReauthenticationError | DenoCommandTransportFailed | DenoCommandFailed | DenoCommandUnsupported,
+  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > =>
-  Effect.gen(function*() {
-    const denoObservation = provisional("deno", candidate.content);
-    const completion = yield* runCommand(candidate.command(["--version"]), "probe", denoObservation, outputLimit);
-    if (completion.exitCode !== 0) {
-      return yield* new DenoCommandFailed({
-        operation: "probe",
-        publication: "none",
-        exitCode: completion.exitCode,
-        stdout: completion.stdout.bytes,
-        stderr: completion.stderr.bytes,
-        stdoutTruncated: completion.stdout.truncated,
-        stderrTruncated: completion.stderr.truncated,
+  Effect.scoped(
+    Effect.gen(function*() {
+      // Bare denort has no CLI: it requires an embedded standalone program.
+      // Deno.version comes from that runtime, including its canary/prerelease suffix.
+      const { version, channel } = compiler.observation.participants[0];
+      const policy = compatibilityByOperation.compileExecutable;
+      if (!acceptsRelease(policy, parseReleaseVersion(version), channel)) {
+        return yield* new DenoCommandUnsupported({
+          operation: "probe",
+          version,
+          reason: explainRefusal(policy, version, channel),
+        });
+      }
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { directory, source, output } = yield* Effect.gen(function*() {
+        const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "effect-build-denort-identity-" });
+        const source = path.join(directory, "identity.ts");
+        const output = path.join(directory, "identity.exe");
+        yield* fileSystem.writeFileString(source, "console.log(Deno.version.deno);\n");
+        return { directory, source, output };
+      }).pipe(Effect.mapError((cause) => new DenoCommandTransportFailed({ operation: "probe", cause })));
+      yield* compiler.reauthenticate;
+      const compiled = yield* runCommand(
+        compiler.command([
+          "compile",
+          "--no-check",
+          "--no-config",
+          "--no-lock",
+          "--no-npm",
+          "--no-remote",
+          "--no-code-cache",
+          "--output",
+          output,
+          source,
+        ], {
+          cwd: directory,
+          env: { DENORT_BIN: candidate.executablePath, DENO_DIR: path.join(directory, "cache") },
+          extendEnv: true,
+          forceKillAfter: "2 seconds",
+        }),
+        "probe",
+        compiler.observation,
+        outputLimit,
+      );
+      if (compiled.exitCode !== 0 || compiled.stdout.truncated || compiled.stderr.truncated) {
+        return yield* probeFailure(compiled);
+      }
+      const completion = yield* runCommand(
+        ChildProcess.make(output, [], { cwd: directory, shell: false, forceKillAfter: "2 seconds" }),
+        "probe",
+        provisional("deno", candidate.content),
+        outputLimit,
+      );
+      const runtimeVersion = completion.stdout.text.trim();
+      if (
+        completion.exitCode !== 0 || completion.stdout.truncated || completion.stderr.truncated
+        || runtimeVersion.length === 0
+      ) return yield* probeFailure(completion);
+      return Object.freeze({
+        name: "denort" as const,
+        participants: Object.freeze([Object.freeze({
+          role: "compile-runtime-override",
+          name: "denort",
+          version: runtimeVersion,
+          revision: "unreported",
+          channel: "unreported",
+          content: candidate.content,
+        })]) as readonly [Tool.ParticipantIdentity],
+        capabilities: Object.freeze([
+          {
+            _tag: "Indeterminate" as const,
+            id: "denort-runtime-override",
+            reason: "only a scoped runtime identity program was compiled and executed",
+          },
+        ]),
       });
-    }
-    const version = /^deno\s+(\S+)/u.exec(completion.stdout.text.trim())?.[1] ?? "unreported";
-    return Object.freeze({
-      name: "denort" as const,
-      participants: Object.freeze([Object.freeze({
-        role: "compile-runtime-override",
-        name: "denort",
-        version,
-        revision: "unreported",
-        channel: "unreported",
-        content: candidate.content,
-      })]) as readonly [Tool.ParticipantIdentity],
-      capabilities: Object.freeze([
-        { _tag: "Present" as const, id: "denort-runtime-override", evidence: "executed:--version" },
-      ]),
-    });
-  });
+    }),
+  );
 
 const makeService = (
   rawOptions?: LayerOptions,
@@ -327,7 +410,7 @@ const makeService = (
       Context.add(Path.Path, path),
       Context.add(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
-    const probeLimit = Math.min(options.outputLimitBytes, 64 * 1024);
+    const probeLimit = 64 * 1024;
     const selected = yield* ToolAuthor.select({
       name: "deno",
       ...(options.executable === undefined ? {} : { executable: options.executable }),
@@ -338,37 +421,45 @@ const makeService = (
       : yield* ToolAuthor.select({
         name: "denort",
         executable: options.denort,
-        observe: (candidate) => observeDenort(candidate, probeLimit),
+        observe: (candidate) => observeDenort(candidate, selected, probeLimit),
       });
-    const version = selected.observation.participants[0].version;
+    const { version, channel } = selected.observation.participants[0];
+    const release = parseReleaseVersion(version);
+    const runtimeIdentity = denort?.observation.participants[0];
+    const runtimeRelease = runtimeIdentity === undefined ? undefined : parseReleaseVersion(runtimeIdentity.version);
     const definition = ToolAuthor.define({
       tool: selected,
       evaluate: (request: AdmissionRequest) => {
-        if (version !== "2.9.5") {
+        const policy = compatibilityByOperation[request.operation];
+        if (!acceptsRelease(policy, release, channel)) {
           return Effect.fail(
             new DenoCommandUnsupported({
               operation: request.operation,
               version,
-              reason: "only the exact Deno 2.9.5 command contract is admitted",
+              reason: explainRefusal(policy, version, channel),
             }),
           );
         }
         if (
-          denort !== undefined
+          runtimeIdentity !== undefined
           && (request.operation === "compileExecutable" || request.operation === "compileWatch")
-          && denort.observation.participants[0].version !== "2.9.5"
         ) {
-          return Effect.fail(
-            new DenoCommandUnsupported({
-              operation: request.operation,
-              version: denort.observation.participants[0].version,
-              reason: "the explicit denort override does not report Deno 2.9.5 identity",
-            }),
-          );
+          if (!acceptsRelease(policy, runtimeRelease, runtimeIdentity.channel) || runtimeIdentity.version !== version) {
+            return Effect.fail(
+              new DenoCommandUnsupported({
+                operation: request.operation,
+                version: runtimeIdentity.version,
+                reason: `the explicit denort override must report release identity matching selected Deno ${version}; `
+                  + (runtimeIdentity.version !== version
+                    ? `observed denort ${runtimeIdentity.version} (${runtimeIdentity.channel})`
+                    : explainRefusal(policy, runtimeIdentity.version, runtimeIdentity.channel)),
+              }),
+            );
+          }
         }
         return Effect.succeed({
           _tag: "ReviewedAdmission" as const,
-          admissionKey: `deno@2.9.5:${request.operation}`,
+          admissionKey: `${policy.key}:${version}:${request.operation}`,
         });
       },
     });

@@ -11,6 +11,12 @@ import {
   BunCommandUnsupported,
   type CommandOperation,
 } from "./CommandError.js";
+import {
+  acceptsRelease,
+  compatibilityByOperation,
+  explainRefusal,
+  parseReleaseVersion,
+} from "./Compatibility.generated.js";
 
 export {
   BunCommandFailed,
@@ -179,13 +185,13 @@ const observe = (
         name: "bun",
         version: "unobserved",
         revision: "unreported",
-        channel: "release",
+        channel: "unreported",
         content: candidate.content,
       }],
       capabilities: [],
     };
     const completion = yield* runCommand(candidate.command(["--version"]), "probe", provisional, outputLimit);
-    if (completion.exitCode !== 0) {
+    if (completion.exitCode !== 0 || completion.stdout.truncated || completion.stderr.truncated) {
       return yield* new BunCommandFailed({
         operation: "probe",
         publication: "none",
@@ -196,8 +202,8 @@ const observe = (
         stderrTruncated: completion.stderr.truncated,
       });
     }
-    const version = completion.stdout.text.trim().split(/\s+/u)[0];
-    if (version === undefined || version.length === 0) {
+    const version = completion.stdout.text.trim();
+    if (version.length === 0) {
       return yield* new BunCommandFailed({
         operation: "probe",
         publication: "none",
@@ -215,13 +221,25 @@ const observe = (
         name: "bun",
         version,
         revision: "unreported",
-        channel: "release",
+        channel: "unreported",
         content: candidate.content,
       })]) as readonly [Tool.ParticipantIdentity],
       capabilities: Object.freeze([
-        { _tag: "Present" as const, id: "bun-build-command", evidence: "source-exact:bun-v1.3.14" },
-        { _tag: "Present" as const, id: "bun-build-watch-command", evidence: "source-exact:bun-v1.3.14" },
-        { _tag: "Present" as const, id: "bun-compile-command", evidence: "source-exact:bun-v1.3.14" },
+        {
+          _tag: "Indeterminate" as const,
+          id: "bun-build-command",
+          reason: "only command identity was probed with --version",
+        },
+        {
+          _tag: "Indeterminate" as const,
+          id: "bun-build-watch-command",
+          reason: "only command identity was probed with --version",
+        },
+        {
+          _tag: "Indeterminate" as const,
+          id: "bun-compile-command",
+          reason: "only command identity was probed with --version",
+        },
       ]),
     });
   });
@@ -243,24 +261,27 @@ const makeService = (
     const selected = yield* ToolAuthor.select({
       name: "bun",
       ...(options.executable === undefined ? {} : { executable: options.executable }),
-      observe: (candidate) => observe(candidate, Math.min(options.outputLimitBytes, 64 * 1024)),
+      observe: (candidate) => observe(candidate, 64 * 1024),
     });
-    const version = selected.observation.participants[0].version;
+    const { version, channel } = selected.observation.participants[0];
+    const release = parseReleaseVersion(version);
     const definition = ToolAuthor.define({
       tool: selected,
-      evaluate: (request: AdmissionRequest) =>
-        version === "1.3.14"
+      evaluate: (request: AdmissionRequest) => {
+        const policy = compatibilityByOperation[request.operation];
+        return acceptsRelease(policy, release, channel)
           ? Effect.succeed({
             _tag: "ReviewedAdmission" as const,
-            admissionKey: `bun@1.3.14:${request.operation}`,
+            admissionKey: `${policy.key}:${version}:${request.operation}`,
           })
           : Effect.fail(
             new BunCommandUnsupported({
               operation: request.operation,
               version,
-              reason: "only the exact Bun 1.3.14 command contract is admitted",
+              reason: explainRefusal(policy, version, channel),
             }),
-          ),
+          );
+      },
     });
     const run: Service["run"] = (operation, publication, argv, invocation) =>
       Effect.gen(function*() {

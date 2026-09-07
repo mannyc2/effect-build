@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import {
   adjudicationPath,
+  commandCompatibilityPolicies,
   contractPath,
   coreCapabilityRegister,
   denoPrivateOperationIds,
@@ -12,8 +13,8 @@ import {
   fixedPublicSurface,
   mandatoryOperationIds,
   nonOperationRegisterPath,
-  operationRegisterPath,
   operationInputContracts,
+  operationRegisterPath,
   operationTargets,
   privateSupportRegister,
   producerCapabilityRegister,
@@ -58,19 +59,23 @@ const sorted = (values) => [...values].sort();
 const splitRefs = (value) => value === "" ? [] : value.split(";").filter(Boolean);
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-const exportedDeclaration = (source, name) => new RegExp(
-  `\\bexport\\s+(?:(?:declare|async)\\s+)*(?:const|function|class|interface|type|enum|namespace)\\s+${escapeRegExp(name)}\\b`,
-  "u",
-).test(source);
+const exportedDeclaration = (source, name) =>
+  new RegExp(
+    `\\bexport\\s+(?:(?:declare|async)\\s+)*(?:const|function|class|interface|type|enum|namespace)\\s+${
+      escapeRegExp(name)
+    }\\b`,
+    "u",
+  ).test(source);
 const requireText = (value, label) => {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${label} must be non-empty text`);
 };
 const requireUnique = (values, label) => {
   if (new Set(values).size !== values.length) throw new Error(`${label} contains duplicates`);
 };
-const countBy = (entries, select, expected) => Object.fromEntries(
-  Object.keys(expected).map((value) => [value, entries.filter((entry) => select(entry) === value).length]),
-);
+const countBy = (entries, select, expected) =>
+  Object.fromEntries(
+    Object.keys(expected).map((value) => [value, entries.filter((entry) => select(entry) === value).length]),
+  );
 export const parseCsv = (source) => {
   const records = [];
   let record = [];
@@ -121,6 +126,7 @@ export const readInputs = async (repositoryRoot) => {
     adjudicationPath,
     policyPath,
     modelPath,
+    "scripts/effect-build-contract/projections.mjs",
   ];
   const sources = await Promise.all(paths.map(async (path) => ({ path, source: await read(path) })));
   const byPath = new Map(sources.map(({ path, source }) => [path, source]));
@@ -188,7 +194,11 @@ const buildOperation = (row) => {
     },
     disposition,
     accounting: {
-      implementation: visibility === "public" ? "required-public" : visibility === "private" ? "required-private" : "prohibited",
+      implementation: visibility === "public"
+        ? "required-public"
+        : visibility === "private"
+        ? "required-private"
+        : "prohibited",
       surface: visibility,
       test: visibility === "public"
         ? "positive-and-lifecycle"
@@ -209,6 +219,7 @@ const buildOperation = (row) => {
         lane,
         module: target.module,
         export: target.exportName,
+        ...(target.commandOperation === undefined ? {} : { commandOperation: target.commandOperation }),
         path: `packages/${row.proposed_package}/src/${lane}/${target.module}.ts`,
       }
       : null,
@@ -255,45 +266,54 @@ const buildNonOperation = (row) => {
   };
 };
 
-const buildProviderSurface = (operations) => Object.fromEntries(
-  providerPackages.flatMap((packageName) => {
-    const packageOperations = operations.filter((operation) => operation.implementation?.package === packageName);
-    const publicOperations = packageOperations.filter((operation) => operation.accounting.surface === "public");
-    if (publicOperations.length === 0) return [];
-    const lanes = Object.fromEntries(["Api", "Command"].flatMap((lane) => {
-      const laneOperations = publicOperations.filter((operation) => operation.implementation.lane === lane);
-      if (laneOperations.length === 0) return [];
-      const modules = [...new Set(laneOperations.map((operation) => operation.implementation.module))].sort();
-      return [[`./${lane}`, {
-        ownerIds: laneOperations.map((operation) => operation.operationId),
-        operationNamespaces: modules,
-        supportExports: providerSupportExports[packageName]?.[lane] ?? { runtime: [], declarations: [] },
-      }]];
-    }));
-    return [[packageName, { rootNamespaces: Object.keys(lanes).map((lane) => lane.slice(2)), subpaths: lanes }]];
-  }),
-);
+const buildProviderSurface = (operations) =>
+  Object.fromEntries(
+    providerPackages.flatMap((packageName) => {
+      const packageOperations = operations.filter((operation) => operation.implementation?.package === packageName);
+      const publicOperations = packageOperations.filter((operation) => operation.accounting.surface === "public");
+      if (publicOperations.length === 0) return [];
+      const lanes = Object.fromEntries(["Api", "Command"].flatMap((lane) => {
+        const laneOperations = publicOperations.filter((operation) => operation.implementation.lane === lane);
+        if (laneOperations.length === 0) return [];
+        const modules = [...new Set(laneOperations.map((operation) => operation.implementation.module))].sort();
+        return [[`./${lane}`, {
+          ownerIds: laneOperations.map((operation) => operation.operationId),
+          operationNamespaces: modules,
+          supportExports: providerSupportExports[packageName]?.[lane] ?? { runtime: [], declarations: [] },
+        }]];
+      }));
+      return [[packageName, { rootNamespaces: Object.keys(lanes).map((lane) => lane.slice(2)), subpaths: lanes }]];
+    }),
+  );
 
 const buildPublicSurfaceProjection = (operations) => {
   const packages = structuredClone(fixedPublicSurface);
-  for (const [packageName, surface] of Object.entries(buildProviderSurface(operations))) packages[packageName] = surface;
-  const packagesWithRootOwners = Object.fromEntries(Object.entries(packages).map(([packageName, surface]) => {
-    const rootOwners = Object.fromEntries(surface.rootNamespaces.map((namespace) => {
-      const matchingSubpath = Object.entries(surface.subpaths).find(([subpath]) =>
-        subpath === `./${namespace}` || subpath.endsWith(`/${namespace}`)
-      )?.[1];
-      const fallbackOwners = [...new Set(Object.values(surface.subpaths).flatMap((subpathSurface) =>
-        Array.isArray(subpathSurface) ? subpathSurface : subpathSurface.ownerIds
-      ))];
-      const owners = matchingSubpath === undefined
-        ? fallbackOwners
-        : Array.isArray(matchingSubpath)
-        ? matchingSubpath
-        : matchingSubpath.ownerIds;
-      return [namespace, owners];
-    }));
-    return [packageName, { ...surface, rootOwners }];
-  }));
+  for (const [packageName, surface] of Object.entries(buildProviderSurface(operations))) {
+    packages[packageName] = surface;
+  }
+  const packagesWithRootOwners = Object.fromEntries(
+    Object.entries(packages).map(([packageName, surface]) => {
+      const rootOwners = Object.fromEntries(surface.rootNamespaces.map((namespace) => {
+        const matchingSubpath = Object.entries(surface.subpaths).find(([subpath]) =>
+          subpath === `./${namespace}` || subpath.endsWith(`/${namespace}`)
+        )?.[1];
+        const fallbackOwners = [
+          ...new Set(
+            Object.values(surface.subpaths).flatMap((subpathSurface) =>
+              Array.isArray(subpathSurface) ? subpathSurface : subpathSurface.ownerIds
+            ),
+          ),
+        ];
+        const owners = matchingSubpath === undefined
+          ? fallbackOwners
+          : Array.isArray(matchingSubpath)
+          ? matchingSubpath
+          : matchingSubpath.ownerIds;
+        return [namespace, owners];
+      }));
+      return [packageName, { ...surface, rootOwners }];
+    }),
+  );
   return {
     artifact: publicApiPath,
     authority: "derived-projection-only",
@@ -327,7 +347,8 @@ export const buildContract = (inputs) => {
       semanticAuthority: [operationRegisterPath, nonOperationRegisterPath, adjudicationPath],
       implementationAuthority: contractPath,
       supersedes: ["tooling/research-complete-contract.json", "tooling/v05-contract.json"],
-      rule: "one generated contract; source and public-surface snapshots are inputs or projections, never peer product authorities",
+      rule:
+        "one generated contract; source and public-surface snapshots are inputs or projections, never peer product authorities",
     },
     provenance: {
       deterministicGeneration: true,
@@ -337,11 +358,13 @@ export const buildContract = (inputs) => {
     },
     invariants: {
       providerSurface: "permanent operation-specific provider-native Api and Command lanes; no flat legacy surface",
-      toolSelection: "explicit path or one deterministic PATH walk; no registry, fallback, raw argv, retry, or automatic installation",
+      toolSelection:
+        "explicit path or one deterministic PATH walk; no registry, fallback, raw argv, retry, or automatic installation",
       launch: "selected authenticated tool is reauthenticated immediately before every launch",
       identities: ["construction-host", "selected-authenticated-tool", "artifact-target", "target-runner"],
       lifecycle: "scoped ownership, interruption safety, and provider-owned typed errors",
-      durableBoundary: "only explicit finalizing operations return canonical durable file, tree, or executable artifacts",
+      durableBoundary:
+        "only explicit finalizing operations return canonical durable file, tree, or executable artifacts",
       nativeResults: "in-memory native results and provider-direct writes retain provider-native result types",
       artifactCanon: "one core artifact, digest, logical-name, tree, and selected-tool identity model",
       directoryNoReplaceBoundary:
@@ -351,6 +374,10 @@ export const buildContract = (inputs) => {
     exactToolEvidenceRegister: {
       count: exactToolEvidenceRegister.length,
       tools: exactToolEvidenceRegister,
+    },
+    commandCompatibilityRegister: {
+      count: commandCompatibilityPolicies.length,
+      policies: buildCompatibilityPolicies(commandCompatibilityPolicies),
     },
     coreCapabilityRegister: {
       count: coreCapabilityRegister.length,
@@ -410,9 +437,13 @@ const validateOwners = (contract) => {
       if (!packageSurface.rootNamespaces.includes(namespace)) {
         throw new Error(`${packageName} has owners for an undeclared root namespace ${namespace}`);
       }
-      if (!Array.isArray(ownerIds) || ownerIds.length === 0) throw new Error(`${packageName}.${namespace} has no owners`);
+      if (!Array.isArray(ownerIds) || ownerIds.length === 0) {
+        throw new Error(`${packageName}.${namespace} has no owners`);
+      }
       for (const ownerId of ownerIds) {
-        if (!allowedOwnerIds.has(ownerId)) throw new Error(`${packageName}.${namespace} has unadmitted owner ${ownerId}`);
+        if (!allowedOwnerIds.has(ownerId)) {
+          throw new Error(`${packageName}.${namespace} has unadmitted owner ${ownerId}`);
+        }
         observedOwners.push(ownerId);
       }
     }
@@ -426,11 +457,166 @@ const validateOwners = (contract) => {
     }
   }
   for (const operationId of publicOperationIds) {
-    if (!observedOwners.includes(operationId)) throw new Error(`public operation has no public surface owner: ${operationId}`);
+    if (!observedOwners.includes(operationId)) {
+      throw new Error(`public operation has no public surface owner: ${operationId}`);
+    }
   }
   for (const capability of contract.producerCapabilityRegister.capabilities) {
     if (capability.visibility === "public" && !observedOwners.includes(capability.id)) {
       throw new Error(`public producer capability has no public surface owner: ${capability.id}`);
+    }
+  }
+};
+
+export const buildCompatibilityPolicies = (policies) => {
+  requireUnique(policies.map((policy) => policy.id), "command compatibility policy ids");
+  const bindings = [];
+  return policies.map((policy) => {
+    requireText(policy.id, "command compatibility policy id");
+    if (!/^[a-z][a-z0-9-]*$/u.test(policy.id)) throw new Error(`invalid policy id: ${policy.id}`);
+    if (policy.lane !== "Command" || !["public", "private"].includes(policy.visibility)) {
+      throw new Error(`${policy.id} must identify its Command visibility`);
+    }
+    if (!Array.isArray(policy.operationIds) || policy.operationIds.length === 0 || policy.accepts.length === 0) {
+      throw new Error(`${policy.id} needs operations and accepted windows`);
+    }
+    requireUnique(policy.operationIds, `${policy.id}.operationIds`);
+    const windows = policy.accepts.map((window) => {
+      for (const [field, value] of Object.entries(window)) {
+        if (field === "beforePatch" && value === null) continue;
+        if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${policy.id}: invalid ${field}`);
+      }
+      if (
+        !["major", "minor", "fromPatch", "beforePatch"].every((field) => Object.hasOwn(window, field))
+        || Object.keys(window).length !== 4
+        || window.minor === Number.MAX_SAFE_INTEGER
+        || (window.beforePatch !== null && window.beforePatch <= window.fromPatch)
+      ) throw new Error(`${policy.id}: invalid or empty patch window`);
+      return { ...window };
+    }).sort((a, b) => a.major - b.major || a.minor - b.minor || a.fromPatch - b.fromPatch);
+    for (let index = 1; index < windows.length; index++) {
+      const previous = windows[index - 1];
+      const current = windows[index];
+      if (
+        previous.major === current.major && previous.minor === current.minor
+        && (previous.beforePatch === null || previous.beforePatch > current.fromPatch)
+      ) throw new Error(`${policy.id}: overlapping patch windows`);
+    }
+    const entries = policy.operationIds.map((id) => {
+      const operation = operationTargets[id]?.commandOperation;
+      if (operation === undefined) throw new Error(`${policy.id}: ${id} has no command coordinate`);
+      return [operation, id];
+    }).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+    requireUnique(entries.map(([operation]) => operation), `${policy.id} command operation names`);
+    const operations = Object.fromEntries(entries);
+    for (const [operation, id] of Object.entries(operations)) {
+      if (!/^[a-z][A-Za-z]+$/u.test(operation) || operation === "probe") {
+        throw new Error(`${policy.id}: invalid command operation ${operation}`);
+      }
+      requireText(id, `${policy.id}.${operation}`);
+      bindings.push(`${policy.provider}:${operation}`);
+    }
+    requireUnique(bindings, "command compatibility operation bindings");
+    const range = windows.map((window) => {
+      const first = `${window.major}.${window.minor}.${window.fromPatch}`;
+      if (window.beforePatch === window.fromPatch + 1) return `=${first}`;
+      const last = window.beforePatch === null
+        ? `${window.major}.${window.minor + 1}.0`
+        : `${window.major}.${window.minor}.${window.beforePatch}`;
+      return `>=${first} <${last}`;
+    }).join(" || ");
+    const semantics = {
+      provider: policy.provider,
+      lane: policy.lane,
+      visibility: policy.visibility,
+      operations,
+      accepts: windows,
+    };
+    return {
+      ...policy,
+      operations,
+      accepts: windows,
+      range,
+      key: `${policy.id}:${sha256(JSON.stringify(semantics)).slice(0, 16)}`,
+    };
+  });
+};
+
+export const validateCompatibility = (contract) => {
+  const register = contract.commandCompatibilityRegister;
+  if (register.count !== register.policies.length) throw new Error("command compatibility count mismatch");
+  const normalized = buildCompatibilityPolicies(register.policies);
+  if (!sameJson(normalized, register.policies)) throw new Error("command compatibility projections are stale");
+  const covered = new Set();
+  for (const policy of register.policies) {
+    for (const [runtimeOperation, id] of Object.entries(policy.operations)) {
+      const operation = contract.providerOperationRegister.operations.find((entry) => entry.operationId === id);
+      if (
+        operation?.provider !== policy.provider || operation.implementation?.lane !== policy.lane
+        || operation.accounting.surface !== policy.visibility
+        || operation.implementation.commandOperation !== runtimeOperation
+      ) throw new Error(`${policy.id}: operation ${id} has the wrong provider, lane, or visibility`);
+      if (covered.has(id)) throw new Error(`command compatibility operation ${id} is bound twice`);
+      covered.add(id);
+    }
+  }
+  for (const operation of contract.providerOperationRegister.operations) {
+    if (
+      operation.implementation?.commandOperation !== undefined
+      && !covered.has(operation.operationId)
+    ) throw new Error(`missing command compatibility binding: ${operation.operationId}`);
+  }
+  for (const fixture of contract.exactToolEvidenceRegister.tools) {
+    if (fixture.lane !== "Command") continue;
+    if (!Array.isArray(fixture.operations) || fixture.operations.length === 0) {
+      throw new Error(`${fixture.id}: command fixture requires lane and operations`);
+    }
+    requireUnique(fixture.operations, `${fixture.id}.operations`);
+    if (fixture.expectation !== undefined && fixture.expectation !== "rejected") {
+      throw new Error(`${fixture.id}: invalid fixture expectation`);
+    }
+    const parts = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(fixture.version);
+    if (parts === null) throw new Error(`${fixture.id}: expected exact release version`);
+    const [major, minor, patch] = parts.slice(1).map(Number);
+    if (![major, minor, patch].every(Number.isSafeInteger)) throw new Error(`${fixture.id}: unsafe version`);
+    if (fixture.denortFixtures !== undefined) {
+      if (fixture.name !== "deno" || fixture.expectation === "rejected") {
+        throw new Error(`${fixture.id}: denort pairs require an admitted Deno compiler`);
+      }
+      for (const relation of ["matched", "mismatched"]) {
+        const runtime = contract.exactToolEvidenceRegister.tools.find((entry) =>
+          entry.id === fixture.denortFixtures[relation]
+        );
+        if (
+          runtime?.name !== "deno" || runtime.lane !== "Command"
+          || (runtime.version === fixture.version) !== (relation === "matched")
+        ) throw new Error(`${fixture.id}: invalid ${relation} denort fixture`);
+      }
+    }
+    for (const operation of fixture.operations) {
+      const policy = register.policies.find((entry) =>
+        entry.provider === fixture.name && Object.hasOwn(entry.operations, operation)
+      );
+      const admitted = policy?.accepts.some((window) =>
+        major === window.major && minor === window.minor && patch >= window.fromPatch
+        && (window.beforePatch === null || patch < window.beforePatch)
+      );
+      if (policy === undefined || admitted !== (fixture.expectation !== "rejected")) {
+        throw new Error(`${fixture.id}: ${operation} fixture does not match its admission expectation`);
+      }
+    }
+  }
+  for (const policy of register.policies) {
+    for (const window of policy.accepts) {
+      const floor = `${window.major}.${window.minor}.${window.fromPatch}`;
+      for (const operation of Object.keys(policy.operations)) {
+        if (
+          !contract.exactToolEvidenceRegister.tools.some((fixture) =>
+            fixture.name === policy.provider && fixture.version === floor && fixture.expectation !== "rejected"
+            && fixture.operations?.includes(operation)
+          )
+        ) throw new Error(`${policy.id}: missing minimum fixture ${floor}/${operation}`);
+      }
     }
   }
 };
@@ -444,7 +630,10 @@ export const validateContract = (contract, inputs) => {
     throw new Error("exact tool evidence register does not match canonical policy");
   }
   requireUnique(contract.exactToolEvidenceRegister.tools.map((entry) => entry.id), "exact tool evidence ids");
-  requireUnique(contract.exactToolEvidenceRegister.tools.map((entry) => entry.name), "exact tool evidence names");
+  requireUnique(
+    contract.exactToolEvidenceRegister.tools.map((entry) => `${entry.name}:${entry.lane ?? "native"}:${entry.version}`),
+    "exact tool evidence coordinates",
+  );
   for (const tool of contract.exactToolEvidenceRegister.tools) {
     requireText(tool.name, `${tool.id}.name`);
     requireText(tool.version, `${tool.id}.version`);
@@ -453,6 +642,12 @@ export const validateContract = (contract, inputs) => {
     if (tool.executableBindings.length === 0 || tool.evidenceCells.length === 0) {
       throw new Error(`${tool.id} must bind an executable and at least one evidence cell`);
     }
+  }
+  validateCompatibility(contract);
+  if (
+    !sameJson(contract.commandCompatibilityRegister.policies, buildCompatibilityPolicies(commandCompatibilityPolicies))
+  ) {
+    throw new Error("command compatibility register does not match canonical policy");
   }
   if (contract.providerOperationRegister.count !== 67) {
     throw new Error("provider operation register must contain 67 rows");

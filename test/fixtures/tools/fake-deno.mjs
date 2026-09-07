@@ -4,6 +4,14 @@ import { join } from "node:path";
 
 const argv = process.argv.slice(2);
 
+// Bare denort is exercised by compiling a private identity program, not --version.
+if (argv[0] === "compile" && argv.at(-1)?.endsWith("identity.ts")) {
+  const output = argv[argv.indexOf("--output") + 1];
+  await writeFile(output, `#!/usr/bin/env node\nconsole.log(${JSON.stringify(process.env.FAKE_DENORT_VERSION ?? "2.9.5")});\n`);
+  await chmod(output, 0o755);
+  process.exit(0);
+}
+
 if (argv[0] === "--version") {
   const version = process.env.FAKE_DENO_VERSION ?? "2.9.5";
   process.stdout.write(`deno ${version} (stable, release, x86_64-unknown-linux-gnu)\nv8 13.0\ntypescript 5.8\n`);

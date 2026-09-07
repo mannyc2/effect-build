@@ -10,7 +10,7 @@ npm install --save-exact effect-build-bun@0.6.3 effect@4.0.0-rc.108 @effect/plat
 
 These examples use Effect v4 and its matching Node platform package.
 
-Install Bun **1.3.14** separately. The command lane admits that exact version. It can be called from a Node-hosted
+Install Bun separately; this example uses **1.3.14**. The [compatibility policy](https://github.com/mannyc2/effect-build/blob/main/docs/compiler-compatibility.md) records accepted Command release lines. It can be called from a Node-hosted
 Effect program; the in-process API lane requires the build script itself to run under Bun 1.3.14.
 
 ## Compile an executable

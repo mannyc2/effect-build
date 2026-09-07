@@ -13,19 +13,22 @@ import * as BunRuntime from "../../packages/effect-build-bun/src/internal/Runtim
 import * as DenoCompile from "../../packages/effect-build-deno/src/Command/CompileExecutable.js";
 import * as DenoRuntime from "../../packages/effect-build-deno/src/internal/Runtime.js";
 import type * as Artifact from "../../packages/effect-build/src/Artifact.js";
+import { selectToolFixture } from "./helpers/exact-tool.js";
 
 const execute = promisify(execFile);
 const root = mkdtempSync(join(tmpdir(), "effect-build-target-support-"));
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 
 const bunTargets = {
-  "macos-x64": "bun-darwin-x64",
-  "macos-aarch64": "bun-darwin-arm64",
-  "linux-x64-gnu": "bun-linux-x64",
-  "linux-x64-musl": "bun-linux-x64-musl",
-  "linux-aarch64-gnu": "bun-linux-arm64",
-  "windows-x64": "bun-windows-x64",
-} as const satisfies Readonly<Record<string, BunCompile.Target>>;
+  "macos-x64": ["bun-darwin-x64", "bun-darwin-x64-baseline"],
+  "macos-aarch64": ["bun-darwin-arm64"],
+  "linux-x64-gnu": ["bun-linux-x64", "bun-linux-x64-baseline", "bun-linux-x64-modern"],
+  "linux-x64-musl": ["bun-linux-x64-musl"],
+  "linux-aarch64-gnu": ["bun-linux-arm64"],
+  "linux-aarch64-musl": ["bun-linux-arm64-musl"],
+  "windows-x64": ["bun-windows-x64", "bun-windows-x64-baseline", "bun-windows-x64-modern"],
+  "windows-aarch64": ["bun-windows-arm64"],
+} as const satisfies Readonly<Record<string, readonly BunCompile.Target[]>>;
 
 const denoTargets = {
   "macos-x64": "x86_64-apple-darwin",
@@ -153,42 +156,53 @@ describe("provider target support", () => {
     if (!isAbsolute(executable)) throw new Error(`the provisioned ${compiler} executable must be absolute`);
     accessSync(executable, constants.X_OK);
 
-    let target: BunCompile.Target | DenoCompile.Target;
-    let artifact: BunCompile.Artifact<"hashed"> | DenoCompile.Artifact<"hashed">;
-    if (compiler === "bun") {
-      target = Schema.decodeUnknownSync(BunCompile.Target)(bunTargets[requested as keyof typeof bunTargets]);
-      const outfile = join(root, `${compiler}-${target}${target.includes("windows") ? ".exe" : ""}`);
-      artifact = await Effect.runPromise(
-        BunCompile.compileExecutable({ entrypoints: [entrypoint], outfile, target, observation: "hashed" }).pipe(
-          Effect.provide(BunRuntime.layer({ executable: executable as Artifact.AbsolutePath })),
-          Effect.provide(NodeServices.layer),
-        ),
-      );
-    } else {
-      target = Schema.decodeUnknownSync(DenoCompile.Target)(denoTargets[requested as keyof typeof denoTargets]);
-      const outfile = join(root, `${compiler}-${target}${target.includes("windows") ? ".exe" : ""}`);
-      artifact = await Effect.runPromise(
-        DenoCompile.compileExecutable({ entrypoint, outfile, target, observation: "hashed" }).pipe(
-          Effect.provide(DenoRuntime.layer({ executable: executable as Artifact.AbsolutePath })),
-          Effect.provide(NodeServices.layer),
-        ),
-      );
+    const fixture = selectToolFixture(compiler, executable);
+    const variants: readonly (BunCompile.Target | DenoCompile.Target)[] = compiler === "bun"
+      ? bunTargets[requested as keyof typeof bunTargets]
+      : [Schema.decodeUnknownSync(DenoCompile.Target)(denoTargets[requested as keyof typeof denoTargets])];
+    if (variants === undefined) throw new Error(`unknown ${compiler} target cell ${requested}`);
+    for (const variant of variants) {
+      let target: BunCompile.Target | DenoCompile.Target;
+      let artifact: BunCompile.Artifact<"hashed"> | DenoCompile.Artifact<"hashed">;
+      if (compiler === "bun") {
+        target = Schema.decodeUnknownSync(BunCompile.Target)(variant);
+        const outfile = join(root, `${compiler}-${target}${target.includes("windows") ? ".exe" : ""}`);
+        artifact = await Effect.runPromise(
+          BunCompile.compileExecutable({ entrypoints: [entrypoint], outfile, target, observation: "hashed" }).pipe(
+            Effect.provide(BunRuntime.layer({ executable: executable as Artifact.AbsolutePath })),
+            Effect.provide(NodeServices.layer),
+          ),
+        );
+      } else {
+        target = Schema.decodeUnknownSync(DenoCompile.Target)(variant);
+        const outfile = join(root, `${compiler}-${target}${target.includes("windows") ? ".exe" : ""}`);
+        artifact = await Effect.runPromise(
+          DenoCompile.compileExecutable({ entrypoint, outfile, target, observation: "hashed" }).pipe(
+            Effect.provide(DenoRuntime.layer({ executable: executable as Artifact.AbsolutePath })),
+            Effect.provide(NodeServices.layer),
+          ),
+        );
+      }
+      const bytes = readFileSync(artifact.path);
+      expect(artifact).toMatchObject({
+        _tag: "HashedExecutable",
+        bytes: `${bytes.byteLength}`,
+        provider: compiler,
+        publication: { scope: "file", commit: "same-parent-no-replace-link", committed: true },
+      });
+      expect(artifact.tool.participants[0]).toMatchObject({ name: compiler, version: fixture.version });
+      expect(artifact.digest.value).toBe(createHash("sha256").update(bytes).digest("hex"));
+      expect(isAbsolute(artifact.path)).toBe(true);
+      expect(artifact.target).toBe(requested);
+      expect(basename(artifact.path).endsWith(".exe")).toBe(artifact.target.startsWith("windows-"));
+      peMachineOracle(bytes, artifact.target);
+      if (process.platform !== "win32") await headerOracle(artifact.path, artifact.target);
+      await executionOracle(artifact.path, execution);
+      await fixture.observe(`target-${target}-${execution}`, artifact.tool, {
+        operation: "compileExecutable",
+        target,
+        runner: execution,
+      });
     }
-    const bytes = readFileSync(artifact.path);
-    expect(artifact).toMatchObject({
-      _tag: "HashedExecutable",
-      bytes: `${bytes.byteLength}`,
-      provider: compiler,
-      publication: { scope: "file", commit: "same-parent-no-replace-link", committed: true },
-    });
-    expect(artifact.tool.participants[0]).toMatchObject({ name: compiler });
-    expect(artifact.tool.participants[0].version).toMatch(/^\d+\.\d+\.\d+/);
-    expect(artifact.digest.value).toBe(createHash("sha256").update(bytes).digest("hex"));
-    expect(isAbsolute(artifact.path)).toBe(true);
-    expect(artifact.target).toBe(requested);
-    expect(basename(artifact.path).endsWith(".exe")).toBe(artifact.target.startsWith("windows-"));
-    peMachineOracle(bytes, artifact.target);
-    if (process.platform !== "win32") await headerOracle(artifact.path, artifact.target);
-    await executionOracle(artifact.path, execution);
   }, 300_000);
 });

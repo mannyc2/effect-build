@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import type * as Artifact from "effect-build/Artifact";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,27 +13,16 @@ import * as Archive from "../../packages/effect-build-archives/src/Archive.js";
 import * as Compile from "../../packages/effect-build-bun/src/Command/CompileExecutable.js";
 import * as Runtime from "../../packages/effect-build-bun/src/internal/Runtime.js";
 import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
+import { selectToolFixture } from "./helpers/exact-tool.js";
 
 const execute = promisify(execFile);
-const selectedBun = process.env.EFFECT_BUILD_BUN ?? process.execPath;
+const fixture = selectToolFixture("bun");
+const selectedBun = fixture.executable;
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 const fullStackEntrypoint = fileURLToPath(
   new URL("../fixtures/bun-positive-findings/fullstack/server.ts", import.meta.url),
 );
 const executablePath = (name: string): string => join(root, process.platform === "win32" ? `${name}.exe` : name);
-
-const exactBunAvailable = (): boolean => {
-  try {
-    return execFileSync(selectedBun, ["--version"], { encoding: "utf8" }).trim() === "1.3.14";
-  } catch {
-    return false;
-  }
-};
-
-const exactBun = exactBunAvailable();
-if (!exactBun || (process.env.CI === "true" && process.env.EFFECT_BUILD_BUN === undefined)) {
-  throw new Error("real Bun evidence requires exact Bun 1.3.14 and an explicit hosted EFFECT_BUILD_BUN binding");
-}
 
 const hostTarget = (): Compile.Target => {
   if (process.platform === "darwin") return process.arch === "arm64" ? "bun-darwin-arm64" : "bun-darwin-x64";
@@ -66,7 +55,7 @@ const run = <A, E>(
     ) as Effect.Effect<A, E>,
   );
 
-describe("real Bun 1.3.14 compileExecutable", () => {
+describe(`real Bun ${fixture.version} compileExecutable`, () => {
   it("compiles and directly archives the host executable while preserving its identity and exact bytes", async () => {
     const outfile = executablePath("app");
     const artifact = await run(Compile.compileExecutable({
@@ -81,7 +70,7 @@ describe("real Bun 1.3.14 compileExecutable", () => {
       provider: "bun",
       bytes: `${bytes.byteLength}`,
       bunTarget: hostTarget(),
-      runtime: { name: "bun", version: "1.3.14" },
+      runtime: { name: "bun", version: fixture.version },
       publication: { scope: "file", commit: "same-parent-no-replace-link", committed: true },
     });
     expect(await realpath(artifact.path)).toBe(await realpath(outfile));
@@ -120,6 +109,26 @@ describe("real Bun 1.3.14 compileExecutable", () => {
     expect(artifact).toEqual(identity);
     expect((await readFile(artifact.path)).equals(bytes)).toBe(true);
     await observeProviderNativeEvidence("CAN-BUN-012");
+    await fixture.observe("compile-hash-execute-archive", artifact.tool, {
+      operation: "compileExecutable",
+      target: hostTarget(),
+      runner: "native",
+    });
+  }, 120_000);
+
+  it("executes the permanent variable-collision fixture from a compiled executable", async () => {
+    const collision = fileURLToPath(new URL("./fixtures/bun-variable-collision.cjs", import.meta.url));
+    const artifact = await run(Compile.compileExecutable({
+      entrypoints: [collision],
+      outfile: executablePath("variable-collision"),
+      observation: "hashed",
+    }));
+    expect((await execute(artifact.path, [])).stdout).toBe("42\n");
+    await fixture.observe("collision-compile-execution", artifact.tool, {
+      operation: "compileExecutable",
+      target: hostTarget(),
+      runner: "native",
+    });
   }, 120_000);
 
   it("compiles and executes the provider-native full-stack HTML request mode", async () => {
@@ -132,7 +141,7 @@ describe("real Bun 1.3.14 compileExecutable", () => {
     expect(artifact).toMatchObject({
       _tag: "UnhashedExecutable",
       provider: "bun",
-      runtime: { name: "bun", version: "1.3.14" },
+      runtime: { name: "bun", version: fixture.version },
       publication: { scope: "file", commit: "same-parent-no-replace-link", committed: true },
       runtimeAcquisition: { _tag: "SelectedHostRuntime", evidence: "selected-command-content" },
     });
@@ -152,6 +161,11 @@ describe("real Bun 1.3.14 compileExecutable", () => {
       apiMarker: true,
     });
     await observeProviderNativeEvidence("B10.1");
+    await fixture.observe("compile-full-stack-execution", artifact.tool, {
+      operation: "compileExecutable",
+      target: hostTarget(),
+      runner: "native",
+    });
   }, 120_000);
 
   it("preserves native diagnostics as the provider-local typed failure", async () => {

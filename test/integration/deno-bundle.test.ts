@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import type * as Artifact from "effect-build/Artifact";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { access, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -10,32 +10,14 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Bundle from "../../packages/effect-build-deno/src/Command/Bundle.js";
-import * as Transpile from "../../packages/effect-build-deno/src/Command/Transpile.js";
 import * as Runtime from "../../packages/effect-build-deno/src/internal/Runtime.js";
 import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
+import { selectToolFixture } from "./helpers/exact-tool.js";
 
 const execute = promisify(execFile);
-const selectedDeno = process.env.EFFECT_BUILD_DENO ?? (() => {
-  try {
-    return execFileSync("deno", ["eval", "console.log(Deno.execPath())"], { encoding: "utf8" }).trim();
-  } catch {
-    return "deno-unavailable";
-  }
-})();
+const fixture = selectToolFixture("deno");
+const selectedDeno = fixture.executable;
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
-
-const exactDenoAvailable = (): boolean => {
-  try {
-    return /^deno 2\.9\.5\b/u.test(execFileSync(selectedDeno, ["--version"], { encoding: "utf8" }));
-  } catch {
-    return false;
-  }
-};
-
-const exactDeno = exactDenoAvailable();
-if (!exactDeno || (process.env.CI === "true" && process.env.EFFECT_BUILD_DENO === undefined)) {
-  throw new Error("real Deno evidence requires exact Deno 2.9.5 and an explicit hosted EFFECT_BUILD_DENO binding");
-}
 
 const waitForFile = async (path: string): Promise<void> => {
   const deadline = Date.now() + 30_000;
@@ -66,11 +48,11 @@ const run = <A, E>(effect: Effect.Effect<A, E, Runtime.Runtime>) =>
     ) as Effect.Effect<A, E>,
   );
 
-describe("real Deno 2.9.5 provider breadth", () => {
-  it("executes every one-shot bundle and transpile command shape", async () => {
+describe.skipIf(fixture.version !== "2.9.5")(`real Deno ${fixture.version} provider breadth`, () => {
+  it("executes every private one-shot bundle command shape", async () => {
     const bundled = await run(Bundle.stdout({ entrypoint, noRemote: true }));
     expect(new TextDecoder().decode(bundled.output)).toContain("effect-build-ok");
-    expect(bundled.tool.participants[0]).toMatchObject({ name: "deno", version: "2.9.5" });
+    expect(bundled.tool.participants[0]).toMatchObject({ name: "deno", version: fixture.version });
 
     const bundleOut = join(root, "bundle.js");
     const directBundle = await run(Bundle.direct({
@@ -101,33 +83,10 @@ describe("real Deno 2.9.5 provider breadth", () => {
     expect(bundleDeclarationFiles.some((path) => path.endsWith("hello.js"))).toBe(true);
     expect(bundleDeclarationFiles.some((path) => path.endsWith("hello.d.ts"))).toBe(true);
 
-    const transpiled = await run(Transpile.transpile({ file: entrypoint, noRemote: true }));
-    expect(new TextDecoder().decode(transpiled.output)).toContain("effect-build-ok");
-
-    const transpileDir = join(root, "transpiled");
-    const directTranspile = await run(Transpile.transpileToDirectory({
-      files: [entrypoint],
-      outdir: transpileDir,
-      noRemote: true,
-    }));
-    expect(directTranspile.publication).toBe("provider-direct-durable");
-    expect((await readdir(transpileDir, { recursive: true })).some((path) => path.endsWith("hello.js"))).toBe(true);
-
-    const declarationDir = join(root, "declarations");
-    const declarations = await run(Transpile.emitDeclarations({
-      files: [entrypoint],
-      outdir: declarationDir,
-      noRemote: true,
-    }));
-    expect(declarations.publication).toBe("provider-direct-durable");
-    expect((await readdir(declarationDir, { recursive: true })).some((path) => path.endsWith("hello.d.ts"))).toBe(true);
     await observeProviderNativeEvidence(
       "CAN-DENO-003",
       "CAN-DENO-004",
       "CAN-DENO-006",
-      "CAN-DENO-007",
-      "CAN-DENO-008",
-      "CAN-DENO-009",
       "D06.1",
     );
   }, 120_000);

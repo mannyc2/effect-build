@@ -33,11 +33,15 @@
       },
       {
         "path": "scripts/effect-build-contract/policy.mjs",
-        "sha256": "568f8ef4254d566ac8f38ef3704e7a8f87ff41b0aa9a387653b4a071e64f6ae2"
+        "sha256": "8cd0b095f7571fc92cc9f2218c59874209e5e2286d8acb2d98146e32c553ed29"
       },
       {
         "path": "scripts/effect-build-contract/model.mjs",
-        "sha256": "3e7b548df70a1781d909d526c99eac78617e2d3c9539d89d1c3881fce38ef8ce"
+        "sha256": "66c2f68e0c8a8c34bc5038b557db62b0e41376bf5283b573f24f5a173e0865d0"
+      },
+      {
+        "path": "scripts/effect-build-contract/projections.mjs",
+        "sha256": "9e8aa85e9c59ab140a9092e5f42a0b3e3b1168b98768bc1bde641fbbcbc66dca"
       }
     ]
   },
@@ -59,13 +63,20 @@
     "hardCut": "no compatibility layer or legacy fallback"
   },
   "exactToolEvidenceRegister": {
-    "count": 6,
+    "count": 9,
     "tools": [
       {
         "id": "EVIDENCE-BUN",
         "kind": "provider",
         "name": "bun",
         "version": "1.3.14",
+        "lane": "Command",
+        "operations": [
+          "buildStdout",
+          "buildDirect",
+          "buildWatch",
+          "compileExecutable"
+        ],
         "executableBindings": [
           "EFFECT_BUILD_BUN",
           "EFFECT_BUILD_BUN_BIN"
@@ -81,10 +92,54 @@
         ]
       },
       {
+        "id": "EVIDENCE-BUN-1.4.2",
+        "kind": "provider",
+        "name": "bun",
+        "version": "1.4.2",
+        "lane": "Command",
+        "operations": [
+          "buildStdout",
+          "buildDirect",
+          "buildWatch",
+          "compileExecutable"
+        ],
+        "executableBindings": [
+          "EFFECT_BUILD_BUN",
+          "EFFECT_BUILD_BUN_BIN"
+        ],
+        "evidenceCells": [
+          "host-native",
+          "macos-x64",
+          "macos-aarch64",
+          "linux-x64-gnu",
+          "linux-x64-musl",
+          "linux-aarch64-gnu",
+          "windows-x64",
+          "linux-aarch64-musl",
+          "windows-aarch64"
+        ]
+      },
+      {
         "id": "EVIDENCE-DENO",
         "kind": "provider",
         "name": "deno",
         "version": "2.9.5",
+        "lane": "Command",
+        "operations": [
+          "transpileStdout",
+          "transpileDirect",
+          "transpileDeclarations",
+          "compileExecutable",
+          "bundleStdout",
+          "bundleDirect",
+          "bundleWatch",
+          "bundleDeclarations",
+          "compileWatch"
+        ],
+        "denortFixtures": {
+          "matched": "EVIDENCE-DENO",
+          "mismatched": "EVIDENCE-DENO-2.9.6"
+        },
         "executableBindings": [
           "EFFECT_BUILD_DENO",
           "EFFECT_BUILD_DENO_BIN"
@@ -97,6 +152,46 @@
           "linux-aarch64-gnu",
           "windows-x64",
           "windows-aarch64"
+        ]
+      },
+      {
+        "id": "EVIDENCE-DENO-2.9.6",
+        "kind": "provider",
+        "name": "deno",
+        "version": "2.9.6",
+        "expectation": "rejected",
+        "lane": "Command",
+        "operations": [
+          "transpileStdout",
+          "transpileDirect",
+          "transpileDeclarations",
+          "compileExecutable"
+        ],
+        "executableBindings": [
+          "EFFECT_BUILD_DENO",
+          "EFFECT_BUILD_DENO_BIN"
+        ],
+        "evidenceCells": [
+          "host-native"
+        ]
+      },
+      {
+        "id": "EVIDENCE-ESBUILD",
+        "kind": "provider",
+        "name": "esbuild",
+        "version": "0.28.2",
+        "lane": "Command",
+        "operations": [
+          "buildStdout",
+          "buildDirect",
+          "buildWatch",
+          "serve"
+        ],
+        "executableBindings": [
+          "EFFECT_BUILD_ESBUILD"
+        ],
+        "evidenceCells": [
+          "host-native"
         ]
       },
       {
@@ -152,6 +247,153 @@
           "spdx-json",
           "cyclonedx-json"
         ]
+      }
+    ]
+  },
+  "commandCompatibilityRegister": {
+    "count": 5,
+    "policies": [
+      {
+        "id": "esbuild-command-public",
+        "provider": "esbuild",
+        "lane": "Command",
+        "visibility": "public",
+        "operationIds": [
+          "CAN-ESB-015",
+          "CAN-ESB-016",
+          "CAN-ESB-017"
+        ],
+        "accepts": [
+          {
+            "major": 0,
+            "minor": 28,
+            "fromPatch": 2,
+            "beforePatch": null
+          }
+        ],
+        "operations": {
+          "buildDirect": "CAN-ESB-016",
+          "buildStdout": "CAN-ESB-015",
+          "buildWatch": "CAN-ESB-017"
+        },
+        "range": ">=0.28.2 <0.29.0",
+        "key": "esbuild-command-public:2f74d0614ccedfe4"
+      },
+      {
+        "id": "esbuild-command-private",
+        "provider": "esbuild",
+        "lane": "Command",
+        "visibility": "private",
+        "operationIds": [
+          "CAN-ESB-018"
+        ],
+        "accepts": [
+          {
+            "major": 0,
+            "minor": 28,
+            "fromPatch": 2,
+            "beforePatch": 3
+          }
+        ],
+        "operations": {
+          "serve": "CAN-ESB-018"
+        },
+        "range": "=0.28.2",
+        "key": "esbuild-command-private:5405ec65aba464df"
+      },
+      {
+        "id": "deno-command-public",
+        "provider": "deno",
+        "lane": "Command",
+        "visibility": "public",
+        "operationIds": [
+          "CAN-DENO-007",
+          "CAN-DENO-008",
+          "CAN-DENO-009",
+          "CAN-DENO-010"
+        ],
+        "accepts": [
+          {
+            "major": 2,
+            "minor": 9,
+            "fromPatch": 5,
+            "beforePatch": 6
+          }
+        ],
+        "rationale": "Deno 2.9.6 removed public transpile --conditions and compile --allow-scripts options. Admission stays at 2.9.5 until an upstream repair is reviewed.",
+        "operations": {
+          "compileExecutable": "CAN-DENO-010",
+          "transpileDeclarations": "CAN-DENO-009",
+          "transpileDirect": "CAN-DENO-008",
+          "transpileStdout": "CAN-DENO-007"
+        },
+        "range": "=2.9.5",
+        "key": "deno-command-public:138e16439d828b49"
+      },
+      {
+        "id": "deno-command-private",
+        "provider": "deno",
+        "lane": "Command",
+        "visibility": "private",
+        "operationIds": [
+          "CAN-DENO-003",
+          "CAN-DENO-004",
+          "CAN-DENO-005",
+          "CAN-DENO-006",
+          "CAN-DENO-011"
+        ],
+        "accepts": [
+          {
+            "major": 2,
+            "minor": 9,
+            "fromPatch": 5,
+            "beforePatch": 6
+          }
+        ],
+        "operations": {
+          "bundleDeclarations": "CAN-DENO-006",
+          "bundleDirect": "CAN-DENO-004",
+          "bundleStdout": "CAN-DENO-003",
+          "bundleWatch": "CAN-DENO-005",
+          "compileWatch": "CAN-DENO-011"
+        },
+        "range": "=2.9.5",
+        "key": "deno-command-private:4a5e074b28ff982f"
+      },
+      {
+        "id": "bun-command-public",
+        "provider": "bun",
+        "lane": "Command",
+        "visibility": "public",
+        "operationIds": [
+          "CAN-BUN-008",
+          "CAN-BUN-009",
+          "CAN-BUN-010",
+          "CAN-BUN-012"
+        ],
+        "accepts": [
+          {
+            "major": 1,
+            "minor": 3,
+            "fromPatch": 14,
+            "beforePatch": null
+          },
+          {
+            "major": 1,
+            "minor": 4,
+            "fromPatch": 2,
+            "beforePatch": null
+          }
+        ],
+        "rationale": "Bun 1.4.1 has a reproduced variable-collision regression; 1.4.0 is unreviewed. See docs/provider-compatibility-audit.md.",
+        "operations": {
+          "buildDirect": "CAN-BUN-009",
+          "buildStdout": "CAN-BUN-008",
+          "buildWatch": "CAN-BUN-010",
+          "compileExecutable": "CAN-BUN-012"
+        },
+        "range": ">=1.3.14 <1.4.0 || >=1.4.2 <1.5.0",
+        "key": "bun-command-public:ca9e8a2bc545cd1b"
       }
     ]
   },
@@ -567,6 +809,7 @@
           "lane": "Command",
           "module": "Build",
           "export": "build",
+          "commandOperation": "buildStdout",
           "path": "packages/effect-build-bun/src/Command/Build.ts"
         },
         "evidenceGate": {
@@ -605,6 +848,7 @@
           "lane": "Command",
           "module": "Build",
           "export": "buildToDirectory",
+          "commandOperation": "buildDirect",
           "path": "packages/effect-build-bun/src/Command/Build.ts"
         },
         "evidenceGate": {
@@ -645,6 +889,7 @@
           "lane": "Command",
           "module": "Watch",
           "export": "watch",
+          "commandOperation": "buildWatch",
           "path": "packages/effect-build-bun/src/Command/Watch.ts"
         },
         "evidenceGate": {
@@ -726,6 +971,7 @@
           "lane": "Command",
           "module": "CompileExecutable",
           "export": "compileExecutable",
+          "commandOperation": "compileExecutable",
           "path": "packages/effect-build-bun/src/Command/CompileExecutable.ts"
         },
         "evidenceGate": null,
@@ -888,6 +1134,7 @@
           "lane": "Command",
           "module": "Bundle",
           "export": "stdout",
+          "commandOperation": "bundleStdout",
           "path": "packages/effect-build-deno/src/Command/Bundle.ts"
         },
         "evidenceGate": {
@@ -929,6 +1176,7 @@
           "lane": "Command",
           "module": "Bundle",
           "export": "direct",
+          "commandOperation": "bundleDirect",
           "path": "packages/effect-build-deno/src/Command/Bundle.ts"
         },
         "evidenceGate": {
@@ -967,6 +1215,7 @@
           "lane": "Command",
           "module": "Bundle",
           "export": "watch",
+          "commandOperation": "bundleWatch",
           "path": "packages/effect-build-deno/src/Command/Bundle.ts"
         },
         "evidenceGate": {
@@ -1008,6 +1257,7 @@
           "lane": "Command",
           "module": "Bundle",
           "export": "declarations",
+          "commandOperation": "bundleDeclarations",
           "path": "packages/effect-build-deno/src/Command/Bundle.ts"
         },
         "evidenceGate": {
@@ -1046,6 +1296,7 @@
           "lane": "Command",
           "module": "Transpile",
           "export": "transpile",
+          "commandOperation": "transpileStdout",
           "path": "packages/effect-build-deno/src/Command/Transpile.ts"
         },
         "evidenceGate": {
@@ -1084,6 +1335,7 @@
           "lane": "Command",
           "module": "Transpile",
           "export": "transpileToDirectory",
+          "commandOperation": "transpileDirect",
           "path": "packages/effect-build-deno/src/Command/Transpile.ts"
         },
         "evidenceGate": {
@@ -1122,6 +1374,7 @@
           "lane": "Command",
           "module": "Transpile",
           "export": "emitDeclarations",
+          "commandOperation": "transpileDeclarations",
           "path": "packages/effect-build-deno/src/Command/Transpile.ts"
         },
         "evidenceGate": {
@@ -1160,6 +1413,7 @@
           "lane": "Command",
           "module": "CompileExecutable",
           "export": "compileExecutable",
+          "commandOperation": "compileExecutable",
           "path": "packages/effect-build-deno/src/Command/CompileExecutable.ts"
         },
         "evidenceGate": null,
@@ -1192,6 +1446,7 @@
           "lane": "Command",
           "module": "CompileWatch",
           "export": "watch",
+          "commandOperation": "compileWatch",
           "path": "packages/effect-build-deno/src/Command/CompileWatch.ts"
         },
         "evidenceGate": {
@@ -1669,6 +1924,7 @@
           "lane": "Command",
           "module": "Build",
           "export": "build",
+          "commandOperation": "buildStdout",
           "path": "packages/effect-build-esbuild/src/Command/Build.ts"
         },
         "evidenceGate": {
@@ -1709,6 +1965,7 @@
           "lane": "Command",
           "module": "BuildToDirectory",
           "export": "buildToDirectory",
+          "commandOperation": "buildDirect",
           "path": "packages/effect-build-esbuild/src/Command/BuildToDirectory.ts"
         },
         "evidenceGate": {
@@ -1749,6 +2006,7 @@
           "lane": "Command",
           "module": "Watch",
           "export": "watch",
+          "commandOperation": "buildWatch",
           "path": "packages/effect-build-esbuild/src/Command/Watch.ts"
         },
         "evidenceGate": {
@@ -1789,6 +2047,7 @@
           "lane": "Command",
           "module": "Serve",
           "export": "serve",
+          "commandOperation": "serve",
           "path": "packages/effect-build-esbuild/src/Command/Serve.ts"
         },
         "evidenceGate": {

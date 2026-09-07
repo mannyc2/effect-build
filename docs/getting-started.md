@@ -12,7 +12,7 @@ npm install --save-exact effect-build-bun@0.6.3 effect@4.0.0-rc.108 @effect/plat
 
 There is no `effect-build` CLI. Write a build program and execute it with your chosen runtime. The quick start uses `build.mts`, which [Node runs as a TypeScript ES module](https://nodejs.org/dist/latest-v24.x/docs/api/typescript.html); Node 24.14.1 is the workspace's Node host pin. Running TypeScript this way does not typecheck it.
 
-The compiler is a separate installation. Bun's command adapter admits **Bun 1.3.14**, Deno's admits **Deno 2.9.5**, and esbuild's command adapter admits **esbuild 0.28.2**. A newer executable is not automatically admitted. See the [provider guide](drivers.md) for the full requirements, including Node SEA's Linux host restriction.
+The compiler is a separate installation. The examples pin Bun **1.3.14**, Deno **2.9.5**, and esbuild **0.28.2** for reproducibility. The [generated compatibility table](compiler-compatibility.md) separately records which release lines the command adapters admit. See the [provider guide](drivers.md) for runtime and target requirements, including Node SEA's Linux host restriction.
 
 For a TypeScript editor or CI check of a standalone `build.mts`, add the toolchain and check without emitting JavaScript:
 

@@ -1,15 +1,17 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Layer, PlatformError, Sink, Stream } from "effect";
+import type * as Tool from "effect-build/Author/Tool";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import * as BunBuild from "../../packages/effect-build-bun/src/Command/Build.js";
 import * as BunCommand from "../../packages/effect-build-bun/src/Command/index.js";
 import * as DenoBundle from "../../packages/effect-build-deno/src/Command/Bundle.js";
 import * as DenoCommand from "../../packages/effect-build-deno/src/Command/index.js";
 import * as DenoTranspile from "../../packages/effect-build-deno/src/Command/Transpile.js";
+import { Runtime as DenoRuntime } from "../../packages/effect-build-deno/src/internal/Runtime.js";
 import * as EsbuildBuild from "../../packages/effect-build-esbuild/src/Command/Build.js";
 import * as EsbuildBuildToDirectory from "../../packages/effect-build-esbuild/src/Command/BuildToDirectory.js";
 import * as EsbuildCommand from "../../packages/effect-build-esbuild/src/Command/index.js";
@@ -35,8 +37,12 @@ interface Control {
   readonly invocations: readonly Invocation[];
 }
 
-const makeSpawner = (): readonly [ChildProcessSpawner.ChildProcessSpawner["Service"], Control] => {
+const makeSpawner = (
+  banners: Readonly<Record<string, string>> = {},
+  probeStderr = "",
+): readonly [ChildProcessSpawner.ChildProcessSpawner["Service"], Control] => {
   const invocations: Invocation[] = [];
+  const runtimeProbes = new Set<string>();
   const handle = (stdout: string, stderr = "", code = 0) =>
     ChildProcessSpawner.makeHandle({
       pid: ChildProcessSpawner.ProcessId(45001),
@@ -63,6 +69,9 @@ const makeSpawner = (): readonly [ChildProcessSpawner.ChildProcessSpawner["Servi
     return Effect.sync(() => {
       const tool = basename(command.command);
       invocations.push({ tool, argv: command.args });
+      if (runtimeProbes.has(command.command)) {
+        return handle((banners.denort ?? "deno 2.9.5\n").replace(/^deno /u, ""));
+      }
       if (command.args[0] === "--version") {
         const version = tool === "bun"
           ? "1.3.14\n"
@@ -71,7 +80,11 @@ const makeSpawner = (): readonly [ChildProcessSpawner.ChildProcessSpawner["Servi
           : tool === "esbuild"
           ? "0.28.2\n"
           : "rolldown v1.2.5\n";
-        return handle(version);
+        return handle(banners[tool] ?? version, probeStderr);
+      }
+      if (tool === "deno" && command.args[0] === "compile" && command.args.at(-1)?.endsWith("identity.ts")) {
+        runtimeProbes.add(command.args[command.args.indexOf("--output") + 1]!);
+        return handle("");
       }
       const writesDirectly = command.args.some((arg) =>
         arg.startsWith("--outdir=") || arg === "--outdir" || arg === "--output" || arg === "--dir"
@@ -101,6 +114,258 @@ const failure = <A, E>(exit: Exit.Exit<A, E>): E => {
   if (found._tag === "None") throw new Error("expected typed failure");
   return found.value;
 };
+
+const publicBuild = async (provider: "bun" | "deno" | "esbuild", banner: string, probeStderr = "") => {
+  const binary = executable(makeRoot(), provider);
+  const [spawner, control] = makeSpawner({ [provider]: banner }, probeStderr);
+  const platform = Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner));
+  const options = { executable: binary as never };
+  const exit: Exit.Exit<{ readonly tool: Tool.Observation<string> }, unknown> = provider === "bun"
+    ? await Effect.runPromiseExit(
+      BunBuild.build({ entrypoint: "src/main.ts" }).pipe(
+        Effect.provide(Layer.provide(BunCommand.layer(options), platform)),
+      ),
+    )
+    : provider === "deno"
+    ? await Effect.runPromiseExit(
+      DenoTranspile.transpile({ file: "src/main.ts" }).pipe(
+        Effect.provide(Layer.provide(DenoCommand.layer(options), platform)),
+      ),
+    )
+    : await Effect.runPromiseExit(
+      EsbuildBuild.build({ entrypoint: "src/main.ts" }).pipe(
+        Effect.provide(Layer.provide(EsbuildCommand.layer(options), platform)),
+      ),
+    );
+  return { exit, control };
+};
+
+describe("provider command compatibility", () => {
+  it.each(
+    [
+      ["esbuild", "0.28.2", "0.28.2"],
+      ["esbuild", "0.28.99", "0.28.99"],
+      ["bun", "1.3.14", "1.3.14"],
+      ["bun", "1.3.99", "1.3.99"],
+      ["bun", "1.4.2", "1.4.2"],
+      ["bun", "1.4.99", "1.4.99"],
+      ["deno", "deno 2.9.5", "2.9.5"],
+    ] as const,
+  )("admits %s public builds at %s with truthful observations", async (provider, banner, version) => {
+    const { exit, control } = await publicBuild(provider, `${banner}\n`);
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (!Exit.isSuccess(exit)) return;
+    expect(exit.value.tool.participants[0]).toMatchObject({ version, channel: "unreported" });
+    expect(exit.value.tool.capabilities).toHaveLength(3);
+    expect(exit.value.tool.capabilities.every((capability) => capability._tag === "Indeterminate")).toBe(true);
+    expect(control.invocations).toHaveLength(2);
+  });
+
+  it.each(
+    [
+      ["esbuild", "0.28.1"],
+      ["esbuild", "0.29.0"],
+      ["esbuild", "0.28.2-canary"],
+      ["esbuild", "0.28.2+metadata"],
+      ["esbuild", "00.28.2"],
+      ["esbuild", "0.28"],
+      ["esbuild", "0.28.2\n0.29.0"],
+      ["bun", "1.3.13"],
+      ["bun", "1.4.0"],
+      ["bun", "1.4.1"],
+      ["bun", "1.5.0"],
+      ["bun", "1.3.14-canary"],
+      ["bun", "1.3.14 canary"],
+      ["bun", "1.3.14\n1.4.2"],
+      ["bun", "1.3.14+metadata"],
+      ["bun", "1.3"],
+      ["bun", "1.03.14"],
+      ["deno", "deno 2.9.4"],
+      ["deno", "deno 2.9.6"],
+      ["deno", "deno 2.9.99"],
+      ["deno", "deno 2.10.0"],
+      ["deno", "deno 2.9.5-canary"],
+      ["deno", "deno 2.9.5+metadata"],
+      ["deno", "deno 2.9"],
+      ["deno", "deno 2.09.5"],
+      ["deno", "deno 2.9.5 (canary, release, aarch64-apple-darwin)"],
+    ] as const,
+  )("refuses %s identity %s before operation spawn", async (provider, banner) => {
+    const { exit, control } = await publicBuild(provider, `${banner}\n`);
+    expect(failure(exit)).toMatchObject({
+      _tag: `${provider === "bun" ? "Bun" : provider === "deno" ? "Deno" : "Esbuild"}CommandUnsupported`,
+      reason: expect.stringContaining(provider === "bun" ? "1.3.14" : provider === "deno" ? "2.9.5" : "0.28.2"),
+    });
+    expect(control.invocations).toEqual([{ tool: provider, argv: ["--version"] }]);
+  });
+
+  it.each([
+    "deno 2.9.5 (stable, canary, aarch64-apple-darwin)",
+    "deno 2.9.5 (stable, release, aarch64-apple-darwin) canary",
+    "deno 2.9.5\ndeno 2.10.0",
+    "deno 2.9.5\nv8 14.0",
+    "deno 2.9.5\nv8 14.0\ntypescript 6.0\ncanary",
+  ])("refuses malformed or conflicting Deno banner %s", async (banner) => {
+    const { exit, control } = await publicBuild("deno", banner);
+    expect(failure(exit)).toMatchObject({ _tag: "DenoCommandFailed", operation: "probe" });
+    expect(control.invocations).toHaveLength(1);
+  });
+
+  it.each(["bun", "deno", "esbuild"] as const)("rejects a truncated %s identity probe", async (provider) => {
+    const version = provider === "bun" ? "1.3.14" : provider === "deno" ? "deno 2.9.5" : "0.28.2";
+    for (const stream of ["stdout", "stderr"] as const) {
+      const { exit, control } = await publicBuild(
+        provider,
+        `${version}\n${stream === "stdout" ? " ".repeat(65536) : ""}`,
+        stream === "stderr" ? " ".repeat(65537) : "",
+      );
+      expect(failure(exit)).toMatchObject({ operation: "probe", [`${stream}Truncated`]: true });
+      expect(control.invocations).toHaveLength(1);
+    }
+  });
+
+  it("records the reported Deno channel and retains private bundle admission at its exact version", async () => {
+    const banner = "deno 2.9.6 (stable, release, aarch64-apple-darwin)\nv8 14.0\ntypescript 6.0\n";
+    const { exit } = await publicBuild("deno", banner.replace("2.9.6", "2.9.5"));
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) expect(exit.value.tool.participants[0].channel).toBe("stable");
+    const binary = executable(makeRoot(), "deno");
+    const [spawner, control] = makeSpawner({ deno: banner });
+    const platform = Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner));
+    const refused = await Effect.runPromiseExit(
+      DenoBundle.stdout({ entrypoint: "src/main.ts" }).pipe(
+        Effect.provide(Layer.provide(DenoCommand.layer({ executable: binary as never }), platform)),
+      ),
+    );
+    expect(failure(refused)).toMatchObject({
+      _tag: "DenoCommandUnsupported",
+      operation: "bundleStdout",
+      version: "2.9.6",
+    });
+    expect(control.invocations).toHaveLength(1);
+  });
+
+  it("retains private esbuild serve admission at its exact version", async () => {
+    const binary = executable(makeRoot(), "esbuild");
+    const [spawner, control] = makeSpawner({ esbuild: "0.28.3\n" });
+    const platform = Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner));
+    const refused = await Effect.runPromiseExit(
+      Effect.scoped(EsbuildServe.serve({
+        entrypoints: ["src/main.ts"],
+        output: { _tag: "Outdir", path: "dist" },
+        port: 4173,
+      })).pipe(Effect.provide(Layer.provide(EsbuildCommand.layer({ executable: binary as never }), platform))),
+    );
+    expect(failure(refused)).toMatchObject({
+      _tag: "EsbuildCommandUnsupported",
+      operation: "serve",
+      version: "0.28.3",
+    });
+    expect(control.invocations).toHaveLength(1);
+  });
+
+  it.each(
+    [
+      ["2.9.5", "deno 2.9.5", "compileExecutable", true],
+      ["2.9.5", "deno 2.9.6", "compileExecutable", false],
+      ["2.9.5", "deno 2.9.4", "compileExecutable", false],
+      ["2.9.5", "deno 2.9.5-canary", "compileExecutable", false],
+      ["2.9.5", "deno 2.9.5+abcdef0", "compileExecutable", false],
+      ["2.9.5", "deno 2.9.5", "compileWatch", true],
+      ["2.9.5", "deno 2.9.6", "compileWatch", false],
+      ["2.9.5", "deno 2.9.5+abcdef0", "compileWatch", false],
+    ] as const,
+  )("checks Deno %s against denort %s for %s", async (version, runtimeBanner, operation, admitted) => {
+    const root = makeRoot();
+    const binary = executable(root, "deno");
+    const denort = executable(root, "denort");
+    const [spawner, control] = makeSpawner({ deno: `deno ${version}\n`, denort: `${runtimeBanner}\n` });
+    const platform = Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner));
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function*() {
+        const runtime = yield* DenoRuntime;
+        expect(runtime.denort?.observation.capabilities[0]?._tag).toBe("Indeterminate");
+        // This operation has no runtime relation even when an override was selected.
+        yield* runtime.run("transpileStdout", "none", ["transpile", "main.ts"]);
+        return operation === "compileWatch"
+          ? yield* Effect.scoped(runtime.watch(operation, ["compile", "--watch", "main.ts"]))
+          : yield* runtime.run(operation, "none", ["compile", "main.ts"]);
+      }).pipe(Effect.provide(Layer.provide(
+        DenoCommand.layer({
+          executable: binary as never,
+          denort: denort as never,
+        }),
+        platform,
+      ))),
+    );
+    expect(Exit.isSuccess(exit)).toBe(admitted);
+    expect(
+      control.invocations.filter((invocation) =>
+        invocation.argv[0] === "compile" && invocation.argv.at(-1) === "main.ts"
+      ),
+    ).toHaveLength(admitted ? 1 : 0);
+    expect(control.invocations.some((invocation) => invocation.tool === "denort")).toBe(false);
+    const identitySource = control.invocations.find((invocation) => invocation.argv.at(-1)?.endsWith("identity.ts"))
+      ?.argv.at(-1);
+    expect(identitySource).toBeDefined();
+    expect(existsSync(dirname(identitySource!))).toBe(false);
+    if (!admitted) {
+      expect(failure(exit)).toMatchObject({
+        _tag: "DenoCommandUnsupported",
+        operation,
+        reason: expect.stringContaining(`Deno ${version}`),
+      });
+    }
+  });
+
+  it.each(["", " ".repeat(65537)])("fails closed and cleans up incomplete denort identity output", async (banner) => {
+    const root = makeRoot();
+    const binary = executable(root, "deno");
+    const denort = executable(root, "denort");
+    const [spawner, control] = makeSpawner({ denort: banner });
+    const platform = Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner));
+    const exit = await Effect.runPromiseExit(
+      DenoTranspile.transpile({ file: "main.ts" }).pipe(
+        Effect.provide(Layer.provide(
+          DenoCommand.layer({
+            executable: binary as never,
+            denort: denort as never,
+          }),
+          platform,
+        )),
+      ),
+    );
+    expect(failure(exit)).toMatchObject({ _tag: "DenoCommandFailed", operation: "probe" });
+    const identitySource = control.invocations.find((invocation) => invocation.argv.at(-1)?.endsWith("identity.ts"))
+      ?.argv.at(-1);
+    expect(identitySource).toBeDefined();
+    expect(existsSync(dirname(identitySource!))).toBe(false);
+    expect(control.invocations).toHaveLength(3);
+  });
+
+  it("reauthenticates the matched denort before compile launch", async () => {
+    const root = makeRoot();
+    const binary = executable(root, "deno");
+    const denort = executable(root, "denort");
+    const [spawner, control] = makeSpawner({ deno: "deno 2.9.5\n", denort: "deno 2.9.5\n" });
+    const platform = Layer.merge(NodeServices.layer, Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner));
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function*() {
+        const runtime = yield* DenoRuntime;
+        writeFileSync(denort, "replaced-runtime");
+        return yield* runtime.run("compileExecutable", "none", ["compile", "main.ts"]);
+      }).pipe(Effect.provide(Layer.provide(
+        DenoCommand.layer({
+          executable: binary as never,
+          denort: denort as never,
+        }),
+        platform,
+      ))),
+    );
+    expect(failure(exit)).toMatchObject({ _tag: "SelectedToolChanged", tool: "denort" });
+    expect(control.invocations).toHaveLength(3);
+  });
+});
 
 describe("provider command lanes", () => {
   it("fails closed when Bun or Deno primary stdout exceeds its capture bound", async () => {

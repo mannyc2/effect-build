@@ -26,7 +26,7 @@
     "test:consumer": "bun run build && bun scripts/test-built-consumer.mjs",
     "test:examples": "bun run --cwd examples/cli test && bun run --cwd examples/esbuild test && bun run --cwd examples/artifact-pipeline test",
     "test:integration:bun": "bun scripts/run-real-bun-integration.mjs",
-    "test:integration:deno": "vitest run test/integration/deno-compile-executable.test.ts test/integration/deno-bundle.test.ts",
+    "test:integration:deno": "vitest run test/integration/deno-compile-executable.test.ts test/integration/deno-bundle.test.ts test/integration/deno-transpile.test.ts",
     "test:integration:node-sea": "vitest run test/integration/node-sea-assemble-executable.test.ts",
     "test:integration:target": "vitest run test/integration/target-support.test.ts",
     "acceptance:archives": "vitest run test/integration/archives-real.test.ts",
@@ -42,8 +42,9 @@
     "verify:static": "bun run check:contract && bun run test:release && bun run check && bun run test:types && bun run lint && bun run format:check",
     "verify:platform": "bun run test:unit && bun run test:examples && bun scripts/test-built-consumer.mjs && bun run test:architecture",
     "verify": "bun run build && bun run verify:static && bun run verify:platform",
-    "verify:real": "bun run test:integration:bun && bun run test:integration:deno",
-    "test:release": "node --test scripts/release/*.test.mjs"
+    "verify:real": "bun run test:integration:bun && bun run test:integration:deno && bun run test:integration:esbuild",
+    "test:release": "node --test scripts/release/*.test.mjs",
+    "test:integration:esbuild": "vitest run test/integration/esbuild-command.test.ts"
   },
   "devDependencies": {
     "@effect/platform-bun": "4.0.0-rc.108",

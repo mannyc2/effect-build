@@ -61,13 +61,13 @@ These versions describe this checkout's implemented admission policy, not the la
 | Lane               | Current requirement                                                         |
 | ------------------ | --------------------------------------------------------------------------- |
 | Bun `Api`          | Host exposes `globalThis.Bun` version `1.3.14` and the requested capability |
-| Bun `Command`      | Selected Bun reports exactly `1.3.14`                                       |
-| Deno `Command`     | Selected Deno reports exactly `2.9.5`                                       |
+| Bun `Command`      | [Reviewed Command release lines](compiler-compatibility.md)                 |
+| Deno `Command`     | [Reviewed Command policy and rejected fixture](compiler-compatibility.md)   |
 | esbuild `Api`      | Uses the package's pinned `esbuild` dependency, `0.28.2`                    |
-| esbuild `Command`  | Selected esbuild reports exactly `0.28.2`                                   |
+| esbuild `Command`  | [Reviewed Command release line](compiler-compatibility.md)                  |
 | Node SEA `Command` | Reviewed version `26.7.0`, `linux-x64-gnu`, with `--build-sea` capability   |
 
-Bun, Deno, and esbuild command operations reject other versions. Node SEA alone exposes `allowUntestedVersion`, described
+The generated Command policy distinguishes accepted ranges from exact integration fixtures. Patches in admitted windows run normally; other identities receive typed refusals. Node SEA alone exposes `allowUntestedVersion`, described
 below. No lane installs a missing tool or retries with an alternate candidate. Local unit or consumer checks do not
 establish cross-platform execution support; see [contributing](../CONTRIBUTING.md) for the separate verification gates.
 
@@ -115,8 +115,10 @@ every field.
 - `denort`: explicit absolute runtime binary for compilation, selected and authenticated separately.
 
 `DENORT_BIN` is controlled by `layer({ denort })`. Per-call `environment.values.DENORT_BIN` is rejected, and an inherited
-value is not adopted implicitly. An explicit `denort` must report the reviewed Deno version and is inspected against the
-requested target. QuickJS engine relation evidence remains open. Without `denort`, the result records
+value is not adopted implicitly. An explicit `denort` must report exactly the selected compiler's version and is inspected against the
+requested target. During layer acquisition, the selected compiler embeds a trusted identity program in that runtime, executes it,
+and removes the temporary files. Bare `denort` has no version command, so this probe requires a runtime that can execute on the
+orchestrator host. It disables project configuration and network imports and uses a temporary cache. QuickJS engine relation evidence remains open. Without `denort`, the result records
 provider-managed acquisition with an open cache/offline/target-relation evidence gate.
 
 ## esbuild

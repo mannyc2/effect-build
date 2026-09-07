@@ -202,7 +202,7 @@ const validateCommon = (
     if (input.target !== undefined && !targetSet.has(input.target)) {
       return yield* new DenoCommandInputInvalid({
         operation,
-        reason: `unsupported Deno 2.9.5 target: ${String(input.target)}`,
+        reason: `unsupported Deno command target: ${String(input.target)}`,
       });
     }
   });

@@ -1,6 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
+if (process.env.EFFECT_BUILD_TOOL_FIXTURE !== undefined && process.env.EFFECT_BUILD_BUN === undefined) {
+  throw new Error("an exact Bun matrix fixture requires EFFECT_BUILD_BUN; the orchestration runtime is not a fallback");
+}
+
 const result = spawnSync(
   "node",
   [
@@ -11,7 +15,7 @@ const result = spawnSync(
   ],
   {
     cwd: process.cwd(),
-    env: { ...process.env, EFFECT_BUILD_BUN: process.execPath },
+    env: { ...process.env, EFFECT_BUILD_BUN: process.env.EFFECT_BUILD_BUN ?? process.execPath },
     stdio: "inherit",
   },
 );

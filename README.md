@@ -6,7 +6,7 @@ effect-build wraps tools such as Bun, Deno, and esbuild in composable Effect pro
 
 ## Compile your first executable
 
-This example runs the build script with **Node.js 24.14.1** and uses **Bun 1.3.14** as the compiler. Install [Bun](https://bun.com/docs/installation) separately and check `bun --version`: the command adapter admits exactly `1.3.14`.
+This example runs the build script with **Node.js 24.14.1** and uses **Bun 1.3.14** as the compiler. Install [Bun](https://bun.com/docs/installation) separately and check `bun --version`: this example pins `1.3.14` for reproducibility. The [generated compatibility table](docs/compiler-compatibility.md) records accepted command versions.
 
 In a new project, install the provider and matching Effect packages:
 

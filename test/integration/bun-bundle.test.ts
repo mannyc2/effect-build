@@ -1,8 +1,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import type * as Artifact from "effect-build/Artifact";
-import { execFile, execFileSync } from "node:child_process";
-import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,26 +12,15 @@ import * as Build from "../../packages/effect-build-bun/src/Command/Build.js";
 import * as Watch from "../../packages/effect-build-bun/src/Command/Watch.js";
 import * as Runtime from "../../packages/effect-build-bun/src/internal/Runtime.js";
 import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
+import { selectToolFixture } from "./helpers/exact-tool.js";
 
 const execute = promisify(execFile);
-const selectedBun = process.env.EFFECT_BUILD_BUN ?? process.execPath;
+const fixture = selectToolFixture("bun");
+const selectedBun = fixture.executable;
 const entrypoint = fileURLToPath(new URL("../fixtures/app/hello.ts", import.meta.url));
 const findings = fileURLToPath(new URL("../fixtures/bun-positive-findings/", import.meta.url));
 const executablePath = (path: string): string => process.platform === "win32" ? `${path}.exe` : path;
 const portablePath = (path: string): string => path.replaceAll("\\", "/");
-
-const exactBunAvailable = (): boolean => {
-  try {
-    return execFileSync(selectedBun, ["--version"], { encoding: "utf8" }).trim() === "1.3.14";
-  } catch {
-    return false;
-  }
-};
-
-const exactBun = exactBunAvailable();
-if (!exactBun || (process.env.CI === "true" && process.env.EFFECT_BUILD_BUN === undefined)) {
-  throw new Error("real Bun evidence requires exact Bun 1.3.14 and an explicit hosted EFFECT_BUILD_BUN binding");
-}
 
 const waitForText = async (path: string, expected: string): Promise<string> => {
   const deadline = Date.now() + 10_000;
@@ -59,28 +48,39 @@ const run = <A, E>(effect: Effect.Effect<A, E, Runtime.Runtime>) =>
     ) as Effect.Effect<A, E>,
   );
 
-describe("real Bun 1.3.14 provider breadth", () => {
+describe(`real Bun ${fixture.version} provider breadth`, () => {
   it("executes command stdout and provider-direct directory build without synthetic output", async () => {
     const stdout = await run(Build.build({ entrypoint, target: "bun" }));
     expect(new TextDecoder().decode(stdout.output)).toContain("effect-build-ok");
-    expect(stdout.tool.participants[0]).toMatchObject({ name: "bun", version: "1.3.14" });
+    expect(stdout.tool.participants[0]).toMatchObject({ name: "bun", version: fixture.version });
+    const stdoutFile = join(root, "stdout.mjs");
+    await writeFile(stdoutFile, stdout.output);
+    expect((await execute(selectedBun, [stdoutFile])).stdout).toBe("effect-build-ok\n");
+    await fixture.observe("build-stdout", stdout.tool, { operation: "buildStdout", runner: `bun-${fixture.version}` });
 
     const outdir = join(root, "command-direct");
     const direct = await run(Build.buildToDirectory({ entrypoints: [entrypoint], outdir, target: "bun" }));
     expect(direct.publication).toBe("provider-direct-durable");
     await access(join(outdir, "hello.js"));
+    expect((await execute(selectedBun, [join(outdir, "hello.js")])).stdout).toBe("effect-build-ok\n");
+    await fixture.observe("build-directory", direct.tool, {
+      operation: "buildDirect",
+      runner: `bun-${fixture.version}`,
+    });
     await observeProviderNativeEvidence("CAN-BUN-008", "CAN-BUN-009");
   }, 120_000);
 
-  it("starts a real command watch, publishes its initial build, and terminates it on scope interruption", async () => {
+  it("executes a watch rebuild after an edit and terminates its scoped child", async () => {
     const outdir = join(root, "command-watch");
     const output = join(outdir, "hello.js");
+    const watchedEntry = join(root, "hello.ts");
+    await writeFile(watchedEntry, 'console.log("watch-initial");\n');
     const result = await run(
       Effect.gen(function*() {
         const acquired = yield* Deferred.make<Watch.Watch>();
         const watchFiber = yield* Effect.gen(function*() {
           const watch = yield* Watch.watch({
-            entrypoints: [entrypoint],
+            entrypoints: [watchedEntry],
             outdir,
             target: "bun",
             noClearScreen: true,
@@ -89,7 +89,11 @@ describe("real Bun 1.3.14 provider breadth", () => {
           return yield* Effect.never;
         }).pipe(Effect.scoped, Effect.forkChild);
         const watch = yield* Deferred.await(acquired).pipe(Effect.timeout("10 seconds"));
-        const outputText = yield* Effect.promise(() => waitForText(output, "effect-build-ok"));
+        yield* Effect.promise(() => waitForText(output, "watch-initial"));
+        expect((yield* Effect.promise(() => execute(selectedBun, [output]))).stdout).toBe("watch-initial\n");
+        yield* Effect.promise(() => writeFile(watchedEntry, 'console.log("watch-edited");\n'));
+        const outputText = yield* Effect.promise(() => waitForText(output, "watch-edited"));
+        expect((yield* Effect.promise(() => execute(selectedBun, [output]))).stdout).toBe("watch-edited\n");
         const runningBeforeInterruption = yield* watch.process.isRunning;
         yield* Fiber.interrupt(watchFiber).pipe(Effect.timeout("10 seconds"));
         const watchExit = yield* Fiber.await(watchFiber);
@@ -102,9 +106,9 @@ describe("real Bun 1.3.14 provider breadth", () => {
       _tag: "BuildWatch",
       outdir,
       publication: "provider-direct-durable",
-      tool: { participants: [{ name: "bun", version: "1.3.14" }] },
+      tool: { participants: [{ name: "bun", version: fixture.version }] },
     });
-    expect(result.outputText).toContain("effect-build-ok");
+    expect(result.outputText).toContain("watch-edited");
     expect(result.runningBeforeInterruption).toBe(true);
     expect(result.runningAfterInterruption).toBe(false);
     expect(Exit.isFailure(result.watchExit)).toBe(true);
@@ -112,12 +116,39 @@ describe("real Bun 1.3.14 provider breadth", () => {
       expect(Cause.hasInterrupts(result.watchExit.cause)).toBe(true);
     }
     await observeProviderNativeEvidence("CAN-BUN-010");
+    await fixture.observe("watch-rebuild-cleanup", result.watch.tool, {
+      operation: "buildWatch",
+      runner: `bun-${fixture.version}`,
+    });
   }, 120_000);
 
-  it("executes native Transpiler, Build memory/direct, and host compile APIs in the exact Bun host", async () => {
-    const apiOutdir = join(root, "api-direct");
-    const apiExecutable = executablePath(join(root, "api-executable"));
-    const script = String.raw`
+  it("executes the variable-collision regression through both public build forms", async () => {
+    const collision = fileURLToPath(new URL("./fixtures/bun-variable-collision.cjs", import.meta.url));
+    const stdout = await run(Build.build({ entrypoint: collision, target: "bun", format: "esm" }));
+    const output = join(root, "collision.mjs");
+    await writeFile(output, stdout.output);
+    expect((await execute(selectedBun, [output])).stdout).toBe("42\n");
+    await fixture.observe("collision-stdout-execution", stdout.tool, {
+      operation: "buildStdout",
+      runner: `bun-${fixture.version}`,
+    });
+    const outdir = join(root, "collision-direct");
+    const direct = await run(
+      Build.buildToDirectory({ entrypoints: [collision], outdir, target: "bun", format: "esm" }),
+    );
+    expect((await execute(selectedBun, [join(outdir, "bun-variable-collision.js")])).stdout).toBe("42\n");
+    await fixture.observe("collision-directory-execution", direct.tool, {
+      operation: "buildDirect",
+      runner: `bun-${fixture.version}`,
+    });
+  }, 120_000);
+
+  it.skipIf(fixture.version !== "1.3.14")(
+    "executes native Transpiler, Build memory/direct, and host compile APIs in the exact Bun host",
+    async () => {
+      const apiOutdir = join(root, "api-direct");
+      const apiExecutable = executablePath(join(root, "api-executable"));
+      const script = String.raw`
       import { Effect } from "effect";
       import * as Transpiler from "./packages/effect-build-bun/src/Api/Transpiler.ts";
       import * as Build from "./packages/effect-build-bun/src/Api/Build.ts";
@@ -132,54 +163,58 @@ describe("real Bun 1.3.14 provider breadth", () => {
       const compiled = await Effect.runPromise(Compile.compileExecutableDirect({ entrypoints: [process.env.API_ENTRY], compile: { outfile: process.env.API_EXECUTABLE } }).pipe(Effect.provide(Compile.layer)));
       console.log(JSON.stringify({ version: Bun.version, transformed, transformedSync, scanImports: scan.imports.length, imports: imports.length, memory: memory.outputs.length, direct: direct.outputs.length, compiled: compiled.outputs.length }));
     `;
-    const completion = await execute(selectedBun, ["-e", script], {
-      cwd: fileURLToPath(new URL("../../", import.meta.url)),
-      env: {
-        ...process.env,
-        API_ENTRY: entrypoint,
-        API_OUTDIR: apiOutdir,
-        API_EXECUTABLE: apiExecutable,
-      },
-      maxBuffer: 10 * 1024 * 1024,
-    });
-    const receipt = JSON.parse(completion.stdout.trim()) as {
-      readonly version: string;
-      readonly transformed: string;
-      readonly transformedSync: string;
-      readonly scanImports: number;
-      readonly imports: number;
-      readonly memory: number;
-      readonly direct: number;
-      readonly compiled: number;
-    };
-    expect(receipt).toMatchObject({
-      version: "1.3.14",
-      scanImports: 1,
-      imports: 1,
-      memory: 1,
-      direct: 1,
-      compiled: 1,
-    });
-    expect(receipt.transformed).toContain("const value = 1");
-    expect(receipt.transformedSync).toContain("const other = 2");
-    await access(join(apiOutdir, "hello.js"));
-    await access(apiExecutable);
-    await observeProviderNativeEvidence(
-      "CAN-BUN-001",
-      "CAN-BUN-002",
-      "CAN-BUN-003",
-      "CAN-BUN-004",
-      "CAN-BUN-005",
-      "CAN-BUN-006",
-      "CAN-BUN-007",
-      "CAN-BUN-011",
-    );
-  }, 120_000);
+      const completion = await execute(selectedBun, ["-e", script], {
+        cwd: fileURLToPath(new URL("../../", import.meta.url)),
+        env: {
+          ...process.env,
+          API_ENTRY: entrypoint,
+          API_OUTDIR: apiOutdir,
+          API_EXECUTABLE: apiExecutable,
+        },
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      const receipt = JSON.parse(completion.stdout.trim()) as {
+        readonly version: string;
+        readonly transformed: string;
+        readonly transformedSync: string;
+        readonly scanImports: number;
+        readonly imports: number;
+        readonly memory: number;
+        readonly direct: number;
+        readonly compiled: number;
+      };
+      expect(receipt).toMatchObject({
+        version: "1.3.14",
+        scanImports: 1,
+        imports: 1,
+        memory: 1,
+        direct: 1,
+        compiled: 1,
+      });
+      expect(receipt.transformed).toContain("const value = 1");
+      expect(receipt.transformedSync).toContain("const other = 2");
+      await access(join(apiOutdir, "hello.js"));
+      await access(apiExecutable);
+      await observeProviderNativeEvidence(
+        "CAN-BUN-001",
+        "CAN-BUN-002",
+        "CAN-BUN-003",
+        "CAN-BUN-004",
+        "CAN-BUN-005",
+        "CAN-BUN-006",
+        "CAN-BUN-007",
+        "CAN-BUN-011",
+      );
+    },
+    120_000,
+  );
 
-  it("executes every selected Bun host-API positive finding without normalizing native results", async () => {
-    const findingsRoot = join(root, "host-positive-findings");
-    const fullStackExecutable = executablePath(join(findingsRoot, "full-stack-api"));
-    const script = String.raw`
+  it.skipIf(fixture.version !== "1.3.14")(
+    "executes every selected Bun host-API positive finding without normalizing native results",
+    async () => {
+      const findingsRoot = join(root, "host-positive-findings");
+      const fullStackExecutable = executablePath(join(findingsRoot, "full-stack-api"));
+      const script = String.raw`
       import { Effect } from "effect";
       import { join } from "node:path";
       import * as Build from "./packages/effect-build-bun/src/Api/Build.ts";
@@ -362,82 +397,84 @@ describe("real Bun 1.3.14 provider breadth", () => {
         },
       }));
     `;
-    const completion = await execute(selectedBun, ["-e", script], {
-      cwd: fileURLToPath(new URL("../../", import.meta.url)),
-      env: {
-        ...process.env,
-        API_FINDINGS_FIXTURE: findings,
-        API_FINDINGS_ROOT: findingsRoot,
-        API_FULL_STACK_EXECUTABLE: fullStackExecutable,
-      },
-      maxBuffer: 20 * 1024 * 1024,
-      timeout: 120_000,
-    });
-    const receiptLine = completion.stdout.split("\n").find((line) =>
-      line.startsWith("EFFECT_BUILD_BUN_POSITIVE_FINDINGS=")
-    );
-    expect(receiptLine).toBeDefined();
-    const receipt = JSON.parse(receiptLine?.slice("EFFECT_BUILD_BUN_POSITIVE_FINDINGS=".length) ?? "null");
+      const completion = await execute(selectedBun, ["-e", script], {
+        cwd: fileURLToPath(new URL("../../", import.meta.url)),
+        env: {
+          ...process.env,
+          API_FINDINGS_FIXTURE: findings,
+          API_FINDINGS_ROOT: findingsRoot,
+          API_FULL_STACK_EXECUTABLE: fullStackExecutable,
+        },
+        maxBuffer: 20 * 1024 * 1024,
+        timeout: 120_000,
+      });
+      const receiptLine = completion.stdout.split("\n").find((line) =>
+        line.startsWith("EFFECT_BUILD_BUN_POSITIVE_FINDINGS=")
+      );
+      expect(receiptLine).toBeDefined();
+      const receipt = JSON.parse(receiptLine?.slice("EFFECT_BUILD_BUN_POSITIVE_FINDINGS=".length) ?? "null");
 
-    expect(receipt).toMatchObject({
-      version: "1.3.14",
-      virtual: { success: true },
-      mixed: { success: true },
-      plugins: {
-        memorySuccess: true,
-        directSuccess: true,
-        counts: { setup: 2, start: 2, resolve: 2, load: 2, "end:true": 2 },
-        missingWithoutPluginSuccess: false,
-        countsUnchangedByMissingBuild: true,
-      },
-      html: { memorySuccess: true, directSuccess: true },
-      topology: {
-        memorySuccess: true,
-        directSuccess: true,
-        nativeArtifactShape: true,
-        assetHashesPresent: true,
-        metafileChunkImportPresent: true,
-        retainedArtifactReadableAfterNextBuild: true,
-      },
-      fullStack: { success: true, outputs: 1 },
-    });
-    expect(receipt.virtual.text).toContain("virtual-graph-ok");
-    expect(receipt.virtual.text).toContain("virtual-loader-ok");
-    expect(receipt.mixed.text).toContain("mixed-virtual-ok");
-    expect(receipt.mixed.text).toContain("loader-text-ok");
-    expect(receipt.plugins.memoryText).toContain("plugin-callback-ok");
-    expect(receipt.plugins.directText).toContain("plugin-callback-ok");
-    expect(receipt.html.memoryKinds).toEqual(expect.arrayContaining(["asset", "entry-point"]));
-    expect(receipt.html.memoryText).toContain("html-graph-ok");
-    expect(receipt.html.metafileInputs).toBeGreaterThanOrEqual(4);
-    expect(receipt.topology.memoryKinds).toEqual(
-      expect.arrayContaining(["asset", "chunk", "entry-point", "sourcemap"]),
-    );
-    expect(receipt.topology.directKinds).toEqual(
-      expect.arrayContaining(["asset", "chunk", "entry-point", "sourcemap"]),
-    );
-    expect(receipt.topology.metafileInputCount).toBeGreaterThanOrEqual(6);
-    expect(receipt.topology.metafileOutputCount).toBeGreaterThanOrEqual(6);
+      expect(receipt).toMatchObject({
+        version: "1.3.14",
+        virtual: { success: true },
+        mixed: { success: true },
+        plugins: {
+          memorySuccess: true,
+          directSuccess: true,
+          counts: { setup: 2, start: 2, resolve: 2, load: 2, "end:true": 2 },
+          missingWithoutPluginSuccess: false,
+          countsUnchangedByMissingBuild: true,
+        },
+        html: { memorySuccess: true, directSuccess: true },
+        topology: {
+          memorySuccess: true,
+          directSuccess: true,
+          nativeArtifactShape: true,
+          assetHashesPresent: true,
+          metafileChunkImportPresent: true,
+          retainedArtifactReadableAfterNextBuild: true,
+        },
+        fullStack: { success: true, outputs: 1 },
+      });
+      expect(receipt.virtual.text).toContain("virtual-graph-ok");
+      expect(receipt.virtual.text).toContain("virtual-loader-ok");
+      expect(receipt.mixed.text).toContain("mixed-virtual-ok");
+      expect(receipt.mixed.text).toContain("loader-text-ok");
+      expect(receipt.plugins.memoryText).toContain("plugin-callback-ok");
+      expect(receipt.plugins.directText).toContain("plugin-callback-ok");
+      expect(receipt.html.memoryKinds).toEqual(expect.arrayContaining(["asset", "entry-point"]));
+      expect(receipt.html.memoryText).toContain("html-graph-ok");
+      expect(receipt.html.metafileInputs).toBeGreaterThanOrEqual(4);
+      expect(receipt.topology.memoryKinds).toEqual(
+        expect.arrayContaining(["asset", "chunk", "entry-point", "sourcemap"]),
+      );
+      expect(receipt.topology.directKinds).toEqual(
+        expect.arrayContaining(["asset", "chunk", "entry-point", "sourcemap"]),
+      );
+      expect(receipt.topology.metafileInputCount).toBeGreaterThanOrEqual(6);
+      expect(receipt.topology.metafileOutputCount).toBeGreaterThanOrEqual(6);
 
-    await access(join(findingsRoot, "mixed-direct", "mixed-entry.js"));
-    await access(join(findingsRoot, "html-direct", "index.html"));
-    await access(fullStackExecutable);
-    const fullStackRun = await execute(fullStackExecutable, [], { timeout: 30_000 });
-    const fullStackLine = fullStackRun.stdout.split("\n").find((line) =>
-      line.startsWith("EFFECT_BUILD_FULL_STACK_RECEIPT=")
-    );
-    expect(JSON.parse(fullStackLine?.slice("EFFECT_BUILD_FULL_STACK_RECEIPT=".length) ?? "null")).toEqual({
-      htmlStatus: 200,
-      htmlMarker: true,
-      scriptStatus: 200,
-      scriptMarker: true,
-      styleStatus: 200,
-      styleMarker: true,
-      apiStatus: 200,
-      apiMarker: true,
-    });
-    await observeProviderNativeEvidence("B02.1", "B06.1", "B06.2", "B07.1", "B08.1", "B08.2");
-  }, 180_000);
+      await access(join(findingsRoot, "mixed-direct", "mixed-entry.js"));
+      await access(join(findingsRoot, "html-direct", "index.html"));
+      await access(fullStackExecutable);
+      const fullStackRun = await execute(fullStackExecutable, [], { timeout: 30_000 });
+      const fullStackLine = fullStackRun.stdout.split("\n").find((line) =>
+        line.startsWith("EFFECT_BUILD_FULL_STACK_RECEIPT=")
+      );
+      expect(JSON.parse(fullStackLine?.slice("EFFECT_BUILD_FULL_STACK_RECEIPT=".length) ?? "null")).toEqual({
+        htmlStatus: 200,
+        htmlMarker: true,
+        scriptStatus: 200,
+        scriptMarker: true,
+        styleStatus: 200,
+        styleMarker: true,
+        apiStatus: 200,
+        apiMarker: true,
+      });
+      await observeProviderNativeEvidence("B02.1", "B06.1", "B06.2", "B07.1", "B08.1", "B08.2");
+    },
+    180_000,
+  );
 
   it("executes every eligible selected-command loader, HTML, splitting, asset, map, and metafile shape", async () => {
     const loaderEntry = join(findings, "command-loader-entry.ts");
@@ -484,9 +521,17 @@ describe("real Bun 1.3.14 provider breadth", () => {
       >;
     };
     expect(Object.keys(metadata.inputs).length).toBeGreaterThanOrEqual(6);
-    expect(Object.keys(metadata.outputs).length).toBeGreaterThanOrEqual(6);
+    // Chunk count and helper placement are provider-native and changed in Bun 1.4.
+    for (const path of Object.keys(metadata.outputs)) await access(join(topologyOutdir, path));
     expect(Object.values(metadata.outputs).some((output) => output.imports.some((item) => item.path.includes("chunk"))))
       .toBe(true);
+    for (const name of ["entry-a", "entry-b"]) {
+      const path = topologyFiles.find((path) => path.startsWith(`entries/${name}-`) && path.endsWith(".js"));
+      expect(path).toBeDefined();
+      const executed = await execute(process.execPath, [join(topologyOutdir, path!)]);
+      expect(executed.stdout).toContain(`topology-${name} topology-shared-ok`);
+      if (name === "entry-b") expect(executed.stdout).toContain("topology-lazy-ok");
+    }
 
     const htmlOutdir = join(root, "command-positive-html");
     const html = await run(Build.buildToDirectory({
@@ -507,5 +552,9 @@ describe("real Bun 1.3.14 provider breadth", () => {
     const cssPath = htmlFiles.find((path) => path.endsWith(".css"));
     expect(cssPath).toBeDefined();
     expect(await readFile(join(htmlOutdir, cssPath ?? "missing.css"), "utf8")).toContain("data:image/svg+xml");
+    await fixture.observe("build-option-topology-execution", topology.tool, {
+      operation: "buildDirect",
+      runner: `node-${process.versions.node}`,
+    });
   }, 120_000);
 });

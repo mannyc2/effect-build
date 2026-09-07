@@ -11,12 +11,66 @@ export const expectedDispositionCounts = {
   superseded: 2,
 };
 
+// Acceptance is independent of the exact executable fixtures below. Private
+// operations keep separate policies even when they share a runtime service.
+export const commandCompatibilityPolicies = [
+  {
+    id: "esbuild-command-public",
+    provider: "esbuild",
+    lane: "Command",
+    visibility: "public",
+    operationIds: ["CAN-ESB-015", "CAN-ESB-016", "CAN-ESB-017"],
+    accepts: [{ major: 0, minor: 28, fromPatch: 2, beforePatch: null }],
+  },
+  {
+    id: "esbuild-command-private",
+    provider: "esbuild",
+    lane: "Command",
+    visibility: "private",
+    operationIds: ["CAN-ESB-018"],
+    accepts: [{ major: 0, minor: 28, fromPatch: 2, beforePatch: 3 }],
+  },
+  {
+    id: "deno-command-public",
+    provider: "deno",
+    lane: "Command",
+    visibility: "public",
+    operationIds: ["CAN-DENO-007", "CAN-DENO-008", "CAN-DENO-009", "CAN-DENO-010"],
+    accepts: [{ major: 2, minor: 9, fromPatch: 5, beforePatch: 6 }],
+    rationale:
+      "Deno 2.9.6 removed public transpile --conditions and compile --allow-scripts options. Admission stays at 2.9.5 until an upstream repair is reviewed.",
+  },
+  {
+    id: "deno-command-private",
+    provider: "deno",
+    lane: "Command",
+    visibility: "private",
+    operationIds: ["CAN-DENO-003", "CAN-DENO-004", "CAN-DENO-005", "CAN-DENO-006", "CAN-DENO-011"],
+    accepts: [{ major: 2, minor: 9, fromPatch: 5, beforePatch: 6 }],
+  },
+  {
+    id: "bun-command-public",
+    provider: "bun",
+    lane: "Command",
+    visibility: "public",
+    operationIds: ["CAN-BUN-008", "CAN-BUN-009", "CAN-BUN-010", "CAN-BUN-012"],
+    accepts: [
+      { major: 1, minor: 3, fromPatch: 14, beforePatch: null },
+      { major: 1, minor: 4, fromPatch: 2, beforePatch: null },
+    ],
+    rationale:
+      "Bun 1.4.1 has a reproduced variable-collision regression; 1.4.0 is unreviewed. See docs/provider-compatibility-audit.md.",
+  },
+];
+
 export const exactToolEvidenceRegister = [
   {
     id: "EVIDENCE-BUN",
     kind: "provider",
     name: "bun",
     version: "1.3.14",
+    lane: "Command",
+    operations: ["buildStdout", "buildDirect", "buildWatch", "compileExecutable"],
     executableBindings: ["EFFECT_BUILD_BUN", "EFFECT_BUILD_BUN_BIN"],
     evidenceCells: [
       "host-native",
@@ -29,10 +83,43 @@ export const exactToolEvidenceRegister = [
     ],
   },
   {
+    id: "EVIDENCE-BUN-1.4.2",
+    kind: "provider",
+    name: "bun",
+    version: "1.4.2",
+    lane: "Command",
+    operations: ["buildStdout", "buildDirect", "buildWatch", "compileExecutable"],
+    executableBindings: ["EFFECT_BUILD_BUN", "EFFECT_BUILD_BUN_BIN"],
+    evidenceCells: [
+      "host-native",
+      "macos-x64",
+      "macos-aarch64",
+      "linux-x64-gnu",
+      "linux-x64-musl",
+      "linux-aarch64-gnu",
+      "windows-x64",
+      "linux-aarch64-musl",
+      "windows-aarch64",
+    ],
+  },
+  {
     id: "EVIDENCE-DENO",
     kind: "provider",
     name: "deno",
     version: "2.9.5",
+    lane: "Command",
+    operations: [
+      "transpileStdout",
+      "transpileDirect",
+      "transpileDeclarations",
+      "compileExecutable",
+      "bundleStdout",
+      "bundleDirect",
+      "bundleWatch",
+      "bundleDeclarations",
+      "compileWatch",
+    ],
+    denortFixtures: { matched: "EVIDENCE-DENO", mismatched: "EVIDENCE-DENO-2.9.6" },
     executableBindings: ["EFFECT_BUILD_DENO", "EFFECT_BUILD_DENO_BIN"],
     evidenceCells: [
       "host-native",
@@ -43,6 +130,27 @@ export const exactToolEvidenceRegister = [
       "windows-x64",
       "windows-aarch64",
     ],
+  },
+  {
+    id: "EVIDENCE-DENO-2.9.6",
+    kind: "provider",
+    name: "deno",
+    version: "2.9.6",
+    expectation: "rejected",
+    lane: "Command",
+    operations: ["transpileStdout", "transpileDirect", "transpileDeclarations", "compileExecutable"],
+    executableBindings: ["EFFECT_BUILD_DENO", "EFFECT_BUILD_DENO_BIN"],
+    evidenceCells: ["host-native"],
+  },
+  {
+    id: "EVIDENCE-ESBUILD",
+    kind: "provider",
+    name: "esbuild",
+    version: "0.28.2",
+    lane: "Command",
+    operations: ["buildStdout", "buildDirect", "buildWatch", "serve"],
+    executableBindings: ["EFFECT_BUILD_ESBUILD"],
+    evidenceCells: ["host-native"],
   },
   {
     id: "EVIDENCE-NODE-SEA",
@@ -108,22 +216,22 @@ export const operationTargets = Object.fromEntries([
   ["CAN-BUN-005", "Transpiler", "scanImports"],
   ["CAN-BUN-006", "Build", "build"],
   ["CAN-BUN-007", "Build", "buildToDirectory"],
-  ["CAN-BUN-008", "Build", "build"],
-  ["CAN-BUN-009", "Build", "buildToDirectory"],
-  ["CAN-BUN-010", "Watch", "watch"],
+  ["CAN-BUN-008", "Build", "build", "buildStdout"],
+  ["CAN-BUN-009", "Build", "buildToDirectory", "buildDirect"],
+  ["CAN-BUN-010", "Watch", "watch", "buildWatch"],
   ["CAN-BUN-011", "CompileExecutable", "compileExecutableDirect"],
-  ["CAN-BUN-012", "CompileExecutable", "compileExecutable"],
+  ["CAN-BUN-012", "CompileExecutable", "compileExecutable", "compileExecutable"],
   ["CAN-DENO-001", "Bundle", "memory"],
   ["CAN-DENO-002", "Bundle", "direct"],
-  ["CAN-DENO-003", "Bundle", "stdout"],
-  ["CAN-DENO-004", "Bundle", "direct"],
-  ["CAN-DENO-005", "Bundle", "watch"],
-  ["CAN-DENO-006", "Bundle", "declarations"],
-  ["CAN-DENO-007", "Transpile", "transpile"],
-  ["CAN-DENO-008", "Transpile", "transpileToDirectory"],
-  ["CAN-DENO-009", "Transpile", "emitDeclarations"],
-  ["CAN-DENO-010", "CompileExecutable", "compileExecutable"],
-  ["CAN-DENO-011", "CompileWatch", "watch"],
+  ["CAN-DENO-003", "Bundle", "stdout", "bundleStdout"],
+  ["CAN-DENO-004", "Bundle", "direct", "bundleDirect"],
+  ["CAN-DENO-005", "Bundle", "watch", "bundleWatch"],
+  ["CAN-DENO-006", "Bundle", "declarations", "bundleDeclarations"],
+  ["CAN-DENO-007", "Transpile", "transpile", "transpileStdout"],
+  ["CAN-DENO-008", "Transpile", "transpileToDirectory", "transpileDirect"],
+  ["CAN-DENO-009", "Transpile", "emitDeclarations", "transpileDeclarations"],
+  ["CAN-DENO-010", "CompileExecutable", "compileExecutable", "compileExecutable"],
+  ["CAN-DENO-011", "CompileWatch", "watch", "compileWatch"],
   ["CAN-ESB-001", "Build", "build"],
   ["CAN-ESB-002", "BuildToDirectory", "buildToDirectory"],
   ["CAN-ESB-003", "Transform", "transform"],
@@ -131,10 +239,10 @@ export const operationTargets = Object.fromEntries([
   ["CAN-ESB-005", "FormatMessages", "formatMessages"],
   ["CAN-ESB-011", "Context", "make"],
   ["CAN-ESB-012", "ContextToDirectory", "make"],
-  ["CAN-ESB-015", "Build", "build"],
-  ["CAN-ESB-016", "BuildToDirectory", "buildToDirectory"],
-  ["CAN-ESB-017", "Watch", "watch"],
-  ["CAN-ESB-018", "Serve", "serve"],
+  ["CAN-ESB-015", "Build", "build", "buildStdout"],
+  ["CAN-ESB-016", "BuildToDirectory", "buildToDirectory", "buildDirect"],
+  ["CAN-ESB-017", "Watch", "watch", "buildWatch"],
+  ["CAN-ESB-018", "Serve", "serve", "serve"],
   ["CAN-NODE-001", "AssembleExecutable", "assembleDirect"],
   ["CAN-ROL-001", "Build", "make"],
   ["CAN-ROL-002", "Build", "generateScoped"],
@@ -155,7 +263,10 @@ export const operationTargets = Object.fromEntries([
   ["CAN-ROL-018B", "DevEngine", "makeToDirectory"],
   ["CAN-ROL-020", "Declaration", "emit"],
   ["CAN-ROL-022", "Config", "load"],
-].map(([id, module, exportName]) => [id, { module, exportName }]));
+].map(([id, module, exportName, commandOperation]) => [
+  id,
+  { module, exportName, ...(commandOperation === undefined ? {} : { commandOperation }) },
+]));
 
 export const operationInputContracts = {
   "CAN-NODE-001": {
@@ -494,7 +605,17 @@ const appleCapabilityIds = producerCapabilityRegister
 
 export const fixedPublicSurface = {
   "effect-build": {
-    rootNamespaces: ["Artifact", "BorrowedOutput", "Executable", "File", "Matrix", "NativeExecutable", "SystemTarget", "Tool", "Tree"],
+    rootNamespaces: [
+      "Artifact",
+      "BorrowedOutput",
+      "Executable",
+      "File",
+      "Matrix",
+      "NativeExecutable",
+      "SystemTarget",
+      "Tool",
+      "Tree",
+    ],
     subpaths: {
       "./Artifact": ["CORE-ARTIFACT-IDENTITY"],
       "./Author/BorrowedOutput": ["CORE-BORROWED-OUTPUT"],

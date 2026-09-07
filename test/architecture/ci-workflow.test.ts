@@ -17,8 +17,10 @@ interface WorkflowJob {
   readonly strategy?: {
     readonly matrix?: {
       readonly os?: ReadonlyArray<string>;
+      readonly fixture?: ReadonlyArray<string>;
       readonly include?: ReadonlyArray<{
         readonly compiler?: string;
+        readonly fixture?: string;
         readonly target?: string;
         readonly os?: string;
       }>;
@@ -32,6 +34,9 @@ interface CiWorkflow {
 }
 
 interface ExactToolEvidence {
+  readonly id: string;
+  readonly lane?: string;
+  readonly expectation?: "rejected";
   readonly name: string;
   readonly version: string;
   readonly executableBindings: ReadonlyArray<string>;
@@ -43,9 +48,6 @@ interface CombinedContract {
     readonly tools: ReadonlyArray<ExactToolEvidence>;
   };
 }
-
-const denoVersion = (job: WorkflowJob | undefined) =>
-  job?.steps?.find((step) => step.uses?.startsWith("denoland/setup-deno@"))?.with?.["deno-version"];
 
 const nodeVersion = (job: WorkflowJob | undefined) =>
   job?.steps?.find((step) => step.uses?.startsWith("actions/setup-node@"))?.with?.["node-version"];
@@ -63,60 +65,71 @@ const readExactTools = async () => {
   const contract = JSON.parse(
     await readFile(resolve(root, "tooling/effect-build-contract.json"), "utf8"),
   ) as CombinedContract;
-  return new Map(contract.exactToolEvidenceRegister.tools.map((tool) => [tool.name, tool]));
+  return new Map(contract.exactToolEvidenceRegister.tools.map((tool) => [tool.id, tool]));
 };
 
 const requireTool = (tools: ReadonlyMap<string, ExactToolEvidence>, name: string) => {
-  const tool = tools.get(name);
+  const tool = [...tools.values()].find((entry) => entry.name === name);
   if (tool === undefined) throw new Error(`combined contract is missing exact ${name} evidence`);
   return tool;
 };
 
 describe("CI workflow", () => {
-  it("runs every Deno evidence lane against the exact admitted version", async () => {
+  it("binds each exact compiler fixture to a real job independently of orchestration", async () => {
     const workflow = await readWorkflow();
-    const deno = requireTool(await readExactTools(), "deno");
-
-    expect(denoVersion(workflow.jobs["integration-deno"])).toBe(`v${deno.version}`);
-    expect(denoVersion(workflow.jobs["target-cells"])).toBe(`v${deno.version}`);
-    const denoTargets = workflow.jobs["target-cells"]?.strategy?.matrix?.include
-      ?.filter((cell) => cell.compiler === "deno")
-      .map((cell) => cell.target)
-      .sort();
-    expect(denoTargets).toEqual(deno.evidenceCells.filter((cell) => cell !== "host-native").sort());
+    const tools = await readExactTools();
+    for (const provider of ["bun", "deno", "esbuild"]) {
+      const job = workflow.jobs[`integration-${provider}`];
+      const expected = [...tools.values()].filter((tool) => tool.name === provider && tool.lane === "Command");
+      expect([...(job?.strategy?.matrix?.fixture ?? [])].sort()).toEqual(expected.map((tool) => tool.id).sort());
+      expect(hosts(job)).toEqual(["ubuntu-24.04", "macos-15", "windows-2025"]);
+      expect(scripts(job)).toContain("node scripts/install-provider-fixture.mjs ${{ matrix.fixture }}");
+      expect(scripts(job)).toContain(`bun run test:integration:${provider}`);
+    }
+    const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as { packageManager: string };
+    const orchestrationVersion = manifest.packageManager.replace(/^bun@/u, "");
+    const bunVersions = Object.values(workflow.jobs).flatMap((job) =>
+      job.steps?.filter((step) => step.uses?.startsWith("oven-sh/setup-bun@"))
+        .map((step) => step.with?.["bun-version"]) ?? []
+    );
+    expect(bunVersions.length).toBeGreaterThan(0);
+    expect(new Set(bunVersions)).toEqual(new Set([orchestrationVersion]));
   });
 
-  it("binds hosted real-provider jobs to setup-installed tools and does not certify skipped Node SEA hosts", async () => {
+  it("covers declared target coordinates per admitted fixture and keeps rejected tools out", async () => {
     const workflow = await readWorkflow();
-    const bun = workflow.jobs["integration-bun"];
-    const deno = workflow.jobs["integration-deno"];
-    const nodeSea = workflow.jobs["integration-node-sea"];
-    const exactTools = await readExactTools();
-    const bunTool = requireTool(exactTools, "bun");
-    const denoTool = requireTool(exactTools, "deno");
-    const nodeTool = requireTool(exactTools, "node");
+    const tools = await readExactTools();
+    const cells = workflow.jobs["target-cells"]?.strategy?.matrix?.include ?? [];
+    expect(scripts(workflow.jobs["target-cells"])).toContain(
+      "node scripts/install-provider-fixture.mjs ${{ matrix.fixture }}",
+    );
+    const identities = cells.map((cell) => `${cell.fixture}:${cell.target}`);
+    expect(new Set(identities).size).toBe(identities.length);
+    for (const cell of cells) {
+      const tool = tools.get(cell.fixture ?? "");
+      expect(tool).toBeDefined();
+      expect(tool?.expectation).not.toBe("rejected");
+      expect(tool?.name).toBe(cell.compiler);
+      expect(tool?.evidenceCells).toContain(cell.target);
+    }
+    for (const tool of tools.values()) {
+      if (tool.lane !== "Command") continue;
+      const observed = cells.filter((cell) => cell.fixture === tool.id).map((cell) => cell.target).sort();
+      const expected = tool.expectation === "rejected"
+        ? []
+        : tool.evidenceCells.filter((cell) => cell !== "host-native").sort();
+      expect(observed, tool.id).toEqual(expected);
+    }
+  });
 
-    expect(scripts(bun)).toContain(`${bunTool.executableBindings[0]}=`);
-    expect(scripts(deno)).toContain(`${denoTool.executableBindings[0]}=`);
+  it("keeps Node SEA evidence bound to its exact admitted host and executable", async () => {
+    const workflow = await readWorkflow();
+    const nodeSea = workflow.jobs["integration-node-sea"];
+    const nodeTool = requireTool(await readExactTools(), "node");
     expect(scripts(nodeSea)).toContain(`${nodeTool.executableBindings[0]}=`);
     expect(nodeVersion(nodeSea)).toBe(nodeTool.version);
     expect(hosts(nodeSea)).toEqual(["ubuntu-24.04"]);
     expect(nodeTool.evidenceCells).toEqual(["linux-x64-gnu"]);
-
-    const bunVersions = Object.values(workflow.jobs).flatMap((job) =>
-      job.steps
-        ?.filter((step) => step.uses?.startsWith("oven-sh/setup-bun@"))
-        .map((step) => step.with?.["bun-version"])
-        ?? []
-    );
-    expect(bunVersions.length).toBeGreaterThan(0);
-    expect(new Set(bunVersions)).toEqual(new Set([bunTool.version]));
-
-    const bunTargets = workflow.jobs["target-cells"]?.strategy?.matrix?.include
-      ?.filter((cell) => cell.compiler === "bun")
-      .map((cell) => cell.target)
-      .sort();
-    expect(bunTargets).toEqual(bunTool.evidenceCells.filter((cell) => cell !== "host-native").sort());
   });
 
   it("installs producer tool versions admitted by the combined contract", async () => {

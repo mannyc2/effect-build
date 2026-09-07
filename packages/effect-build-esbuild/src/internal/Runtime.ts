@@ -18,6 +18,12 @@ import {
   EsbuildCommandTransportFailed,
   EsbuildCommandUnsupported,
 } from "./CommandError.js";
+import {
+  acceptsRelease,
+  compatibilityByOperation,
+  explainRefusal,
+  parseReleaseVersion,
+} from "./Compatibility.generated.js";
 
 export {
   EsbuildCommandFailed,
@@ -187,14 +193,16 @@ const observe = (
         name: "esbuild",
         version: "unobserved",
         revision: "unreported",
-        channel: "release",
+        channel: "unreported",
         content: candidate.content,
       }],
       capabilities: [],
     };
     const completion = yield* invoke(candidate.command(["--version"]), "probe", provisional, limit);
     const version = completion.stdout.text.trim();
-    if (completion.exitCode !== 0 || version.length === 0) {
+    if (
+      completion.exitCode !== 0 || completion.stdout.truncated || completion.stderr.truncated || version.length === 0
+    ) {
       return yield* new EsbuildCommandFailed({
         operation: "probe",
         publication: "none",
@@ -212,13 +220,25 @@ const observe = (
         name: "esbuild",
         version,
         revision: "unreported",
-        channel: "release",
+        channel: "unreported",
         content: candidate.content,
       })]) as readonly [Tool.ParticipantIdentity],
       capabilities: Object.freeze([
-        { _tag: "Present" as const, id: "esbuild-build-command", evidence: "source-exact:esbuild-0.28.2" },
-        { _tag: "Present" as const, id: "esbuild-watch-command", evidence: "source-exact:esbuild-0.28.2" },
-        { _tag: "Present" as const, id: "esbuild-serve-command", evidence: "source-exact:esbuild-0.28.2" },
+        {
+          _tag: "Indeterminate" as const,
+          id: "esbuild-build-command",
+          reason: "only command identity was probed with --version",
+        },
+        {
+          _tag: "Indeterminate" as const,
+          id: "esbuild-watch-command",
+          reason: "only command identity was probed with --version",
+        },
+        {
+          _tag: "Indeterminate" as const,
+          id: "esbuild-serve-command",
+          reason: "only command identity was probed with --version",
+        },
       ]),
     });
   });
@@ -242,21 +262,27 @@ const makeService = (raw?: LayerOptions): Effect.Effect<
     const selected = yield* ToolAuthor.select({
       name: "esbuild",
       ...(options.executable === undefined ? {} : { executable: options.executable }),
-      observe: (candidate) => observe(candidate, Math.min(options.outputLimitBytes, 64 * 1024)),
+      observe: (candidate) => observe(candidate, 64 * 1024),
     });
-    const version = selected.observation.participants[0].version;
+    const { version, channel } = selected.observation.participants[0];
+    const release = parseReleaseVersion(version);
     const definition = ToolAuthor.define({
       tool: selected,
-      evaluate: (operation: Exclude<CommandOperation, "probe">) =>
-        version === "0.28.2"
-          ? Effect.succeed({ _tag: "ReviewedAdmission" as const, admissionKey: `esbuild@0.28.2:${operation}` })
+      evaluate: (operation: Exclude<CommandOperation, "probe">) => {
+        const policy = compatibilityByOperation[operation];
+        return acceptsRelease(policy, release, channel)
+          ? Effect.succeed({
+            _tag: "ReviewedAdmission" as const,
+            admissionKey: `${policy.key}:${version}:${operation}`,
+          })
           : Effect.fail(
             new EsbuildCommandUnsupported({
               operation,
               version,
-              reason: "only the exact esbuild 0.28.2 command contract is admitted",
+              reason: explainRefusal(policy, version, channel),
             }),
-          ),
+          );
+      },
     });
     const run: Service["run"] = (operation, publication, argv, invocationOptions) =>
       Effect.gen(function*() {
