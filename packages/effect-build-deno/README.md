@@ -5,7 +5,7 @@ Deno compilation and native build operations as Effect v4 programs, with explici
 ## Install
 
 ```sh
-npm install --save-exact effect-build-deno@0.6.3 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-exact effect-build-deno@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
 ```
 
 These examples use Effect v4 and its matching Node platform package.
@@ -66,4 +66,4 @@ sets an explicit absolute path. `denoDir` provides explicit cache authority. A r
 
 ## More
 
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [API guide](https://github.com/mannyc2/effect-build/blob/main/docs/api.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md) · [Runnable Deno examples](https://github.com/mannyc2/effect-build/blob/main/examples/README.md) · [Provider guide](https://github.com/mannyc2/effect-build/blob/main/docs/drivers.md)
+[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md) · [Runnable Deno examples](https://github.com/mannyc2/effect-build/blob/main/examples/README.md) · [Provider guide](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md)

@@ -1,20 +1,27 @@
-# effect-build engineering charter
+## 1. Rules for this work
 
-- `effect-build` is a library of Effect v4 programs that select authenticated build tools, preserve provider-native semantics, and explicitly finalize durable artifacts. The machine-readable contract at `tooling/effect-build-contract.json` is the implementation and public-surface authority; its provider register contains 67 operations and its non-operation register contains 46 findings, each with one explicit disposition.
-- The workspace contains one core package, five provider packages, and six producer packages. Every non-core package depends one way on `effect-build` and never on a sibling. Core owns the only durable artifact, system-target, selected-tool, and finalization identities.
-- Provider packages expose permanent operation-specific `Api` and `Command` lanes only where the contract admits them. Keep native/in-memory results native. Conditional or private operations remain package-private; rejected and superseded rows have no implementation or export. Do not add a flat `Build`, `Bundle`, or `CompileExecutable` compatibility surface.
-- Provider options, results, diagnostics, and typed errors stay provider-owned. Tool selection is resolve-once and fail-closed: an explicit path wins, otherwise one deterministic PATH walk. Never install, retry another candidate, fall back, accept raw argv, or substitute at operation time.
-- Construction host, artifact target, selected/authenticated tool, and target runner are separate facts. Selection records the executable's content identity and admission evidence. Reauthenticate the same selected tool immediately before every launch.
-- Durable output follows one protocol: private same-parent staging, production, observation, inspection, re-observation, held-byte or held-tree verification, then one uninterruptible atomic commit. Only explicit finalizing operations return canonical durable file, tree, or executable values. Scoped native resources and borrowed output do not escape their lifetime.
-- Archives, Python, nFPM, Apple, Windows, and SBOM are operation-specific producer packages. Apple notarization is an effect-build operation, but effect-build owns no release plan, durable mutation journal, continuation, publication state, or registry mutation. A release consumer adopts finalized immutable bytes by logical name and digest.
-- Library source must not call `Effect.runPromise`. Platform access is injected through Effect services and layers; provider-owned runtimes may use their platform's process and filesystem services without leaking them into the core model.
-- `tooling/public-api.json` is a generated, tested projection of the combined contract and package declarations, never a second source of truth. Update and validate the contract before regenerating public API.
-- Use pinned Bun 1.3.14 for generation and verification. Ordinary CI exercises supported scenarios; the release workflow tests and publishes one packed candidate. A release tag authorizes publication. Report local checks, hosted checks, and publication results accurately.
-- `plans/` and `research/` preserve provenance. The current combined contract resolves their dispositions; change a disposition by updating its evidence and contract in the same reviewed change, never by silently widening an export.
+1. **One artifact type.** `Artifact.File | Artifact.Executable | Artifact.Directory`.
+   Every operation accepts these and returns one of these. No package defines a
+   second identity, digest, path, or byte-count type. `bytes` is a `number`.
+2. **Defenses are combinators or options, never services.** `Commit.atomic`,
+   `Executable.expectTarget`, `Tool.requireVersion`, `Artifact.verify`. There is no
+   `Policy`, no admission, no reauthentication, no claim registry.
+3. **Core stays domain-free.** Core knows about files, executables, directories,
+   tools, and rename. It does not know about Bun, zip, wheels, or Apple. A concept
+   enters core only when two packages need it for the same reason.
+4. **An edge case in one provider is fixed in that provider.** Node SEA's temp tree,
+   Bun's `.exe` suffix, Deno's basename rule: local, not core.
+5. **Vocabulary.** Artifact, target, tool, build, compile, bundle, package, sign,
+   commit, verify. Not: observation, admission, durable, borrowed, finalizer, claim,
+   adoption, lane, provenance (it's `producedBy`), publication.
+6. **Every PR description states one thing a user can do that they couldn't before,
+   or one thing deleted.** No PR whose description is only "certify", "audit",
+   "harden", or "establish".
+7. **Delete, don't deprecate.** No aliases, no compatibility exports, no
+   `@deprecated`. Version is 0.7.0 for every package.
+8. **Tests test behavior on real files.** Compile a real hello.ts, read the real
+   header, rename a real file. Unit-test the header parser with byte fixtures. No
+   tests that assert the shape of the public API, the contents of a contract file,
+   or the workflow YAML.
 
-## Completing changes
-
-- Establish the requested outcome, scope, and sufficient evidence. Prefer changes that remove duplicated ownership or invalid states, and test consequential assumptions through the actual tool or artifact boundary early.
-- Follow [CONTRIBUTING.md](CONTRIBUTING.md#verify-a-change) for the appropriate final gate. Reuse passing evidence only while the relevant source, dependencies, toolchain, artifact bytes, and observation conditions remain applicable. Do not rerun a full gate's constituent checks without a relevant change, failure, or unresolved concern.
-- Carry forward the user's authorization within its stated scope. Verification does not grant new mutation authority, but a sequence already authorized does not require permission again at every step. Historical plan checkpoints are provenance, not new standing approval requirements.
-- Finish when the requested outcome has sufficient evidence. Report the result and any unverified boundary accurately; broaden work or reopen completed checks only when new evidence warrants it.
+Read `DESIGN.md`.

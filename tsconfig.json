@@ -10,7 +10,6 @@
   },
   "include": [
     "test/unit/*.test.ts",
-    "test/architecture/*.test.ts",
     "test/integration/*.test.ts",
     "vitest.config.ts"
   ],

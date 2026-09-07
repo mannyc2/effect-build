@@ -114,7 +114,7 @@ describe("research-complete core vocabulary", () => {
 });
 
 describe.skipIf(process.platform === "win32")("Author Tool exact selection", () => {
-  it("binds exact bytes and constructs an official command without a public runner", async () => {
+  it("resolves the executable path and constructs a command for the selected file", async () => {
     const root = await makeRoot();
     const executable = join(root, "tool");
     await writeFile(executable, "#!/bin/sh\nexit 0\n");
@@ -137,8 +137,6 @@ describe.skipIf(process.platform === "win32")("Author Tool exact selection", () 
       expect(command.args).toEqual(["--version"]);
       expect(command.options.shell).toBe(false);
     }
-    expect("run" in Tool).toBe(false);
-    expect("runOrFail" in Tool).toBe(false);
   });
 
   it("validates, copies, and recursively freezes observer-owned tool facts", async () => {

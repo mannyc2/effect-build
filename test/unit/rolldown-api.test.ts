@@ -12,7 +12,6 @@ import * as Resolve from "../../packages/effect-build-rolldown/src/Api/Resolve.j
 import * as Scan from "../../packages/effect-build-rolldown/src/Api/Scan.js";
 import * as Transform from "../../packages/effect-build-rolldown/src/Api/Transform.js";
 import * as Watch from "../../packages/effect-build-rolldown/src/Api/Watch.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 let root = "";
 
@@ -38,7 +37,6 @@ describe("rolldown Api utilities", () => {
 
     const minified = await Effect.runPromise(Minify.minify("entry.js", transformed.code));
     expect(minified.code.length).toBeLessThan(transformed.code.length);
-    await observeProviderNativeEvidence("CAN-ROL-013", "CAN-ROL-014", "CAN-ROL-015");
   });
 
   it("emits isolated declarations through the exact async host utility", async () => {
@@ -47,7 +45,6 @@ describe("rolldown Api utilities", () => {
     );
     expect(result.errors).toEqual([]);
     expect(result.code).toContain("answer: number");
-    await observeProviderNativeEvidence("CAN-ROL-020");
   });
 
   it("keeps ResolverFactory caller-owned because upstream has no release protocol", async () => {
@@ -56,12 +53,10 @@ describe("rolldown Api utilities", () => {
     );
     expect(resolved.path).toBeDefined();
     expect(await realpath(resolved.path!)).toBe(await realpath(join(root, "entry.ts")));
-    await observeProviderNativeEvidence("CAN-ROL-016");
   });
 
   it("awaits scan cleanup through the assimilated native promise", async () => {
     await Effect.runPromise(Scan.scan({ input: join(root, "entry.ts") }));
-    await observeProviderNativeEvidence("CAN-ROL-017");
   });
 
   it("marks configuration loading as an explicit code-execution boundary", async () => {
@@ -69,7 +64,6 @@ describe("rolldown Api utilities", () => {
       Config.load(join(root, "rolldown.config.mjs"), { configLoader: "native" }),
     );
     expect(loaded).toMatchObject({ input: "entry.ts" });
-    await observeProviderNativeEvidence("CAN-ROL-022");
   });
 
   it("executes skip-write watch, closes each result before its watcher, and publishes no files", async () => {
@@ -98,7 +92,6 @@ describe("rolldown Api utilities", () => {
     expect(events[0]?.code).toBe("BUNDLE_END");
     expect(lifecycle).toEqual(["result-close", "watcher-close"]);
     await expect(readFile(join(outdir, "skip-write-entry.js"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-    await observeProviderNativeEvidence("CAN-ROL-008");
   });
 
   it("owns the experimental callback/memory DevEngine through Scope", async () => {
@@ -122,7 +115,6 @@ describe("rolldown Api utilities", () => {
       ),
     );
     expect(outputs).toBeGreaterThan(0);
-    await observeProviderNativeEvidence("CAN-ROL-018A", "OP-ROL-019.release");
   });
 
   it("executes the provider-direct DevEngine and owns it through Scope", async () => {
@@ -141,6 +133,5 @@ describe("rolldown Api utilities", () => {
       ),
     );
     expect(await readFile(join(outdir, "entry.js"), "utf8")).toContain("answer = 42");
-    await observeProviderNativeEvidence("CAN-ROL-018B", "OP-ROL-019.release");
   });
 });

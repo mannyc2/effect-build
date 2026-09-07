@@ -57,7 +57,7 @@ time; the sample measurements are not embedded. Paths are relative to the curren
 command above passes `examples/cli/fixtures/bundles.json` when run from the repository root.
 
 The compiler must be Bun 1.3.14. If multiple Bun installations appear on `PATH`, choose one explicitly in
-`Command.layer({ executable })` in [build.ts](src/build.ts); see [tool selection](../../docs/drivers.md#select-a-command).
+`Command.layer({ executable })` in [build.ts](src/build.ts); see [tool selection](../../docs/providers.md#select-a-command).
 
 Finalization requires an unused destination. Before compiling to the same path again:
 

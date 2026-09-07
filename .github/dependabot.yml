@@ -18,10 +18,8 @@ updates:
           - "@types/node"
           - dprint
           - oxlint
-          - tstyche
           - typescript
           - vitest
-          - yaml
         update-types:
           - minor
           - patch

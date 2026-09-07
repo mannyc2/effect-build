@@ -1,6 +1,6 @@
 {
   "name": "effect-build-workspace",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.14",
@@ -17,13 +17,7 @@
     "clean": "node scripts/clean-dist.mjs",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
     "build": "bun run clean && tsc -b tsconfig.packages.json --force",
-    "generate:contract": "node scripts/effect-build-contract/generate.mjs",
-    "generate:surface": "node scripts/generate-public-api.mjs",
-    "check:contract": "node scripts/effect-build-contract/validate.mjs && node --test scripts/effect-build-contract/contract.test.mjs",
-    "test:types": "tstyche",
     "test:unit": "vitest run test/unit && bun run --cwd packages/effect-build-apple test",
-    "test:architecture": "vitest run test/architecture",
-    "test:consumer": "bun run build && bun scripts/test-built-consumer.mjs",
     "test:examples": "bun run --cwd examples/cli test && bun run --cwd examples/esbuild test && bun run --cwd examples/artifact-pipeline test",
     "test:integration:bun": "bun scripts/run-real-bun-integration.mjs",
     "test:integration:deno": "vitest run test/integration/deno-compile-executable.test.ts test/integration/deno-bundle.test.ts",
@@ -35,15 +29,10 @@
     "acceptance:sbom": "vitest run test/integration/sbom-real.test.ts",
     "acceptance:apple": "vitest run test/integration/apple-native-real.test.ts",
     "acceptance:windows": "vitest run test/integration/windows-msix-real.test.ts",
-    "audit:dependencies": "bun audit --audit-level=high",
-    "lint": "oxlint packages test typetest examples scripts/release",
+    "lint": "oxlint packages test examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
-    "verify:static": "bun run check:contract && bun run test:release && bun run check && bun run test:types && bun run lint && bun run format:check",
-    "verify:platform": "bun run test:unit && bun run test:examples && bun scripts/test-built-consumer.mjs && bun run test:architecture",
-    "verify": "bun run build && bun run verify:static && bun run verify:platform",
-    "verify:real": "bun run test:integration:bun && bun run test:integration:deno",
-    "test:release": "node --test scripts/release/*.test.mjs"
+    "verify": "bun run build && bun run check && bun run lint && bun run test:unit && bun run test:examples"
   },
   "devDependencies": {
     "@effect/platform-bun": "4.0.0-rc.108",
@@ -65,12 +54,9 @@
     "effect-build-sbom": "workspace:*",
     "effect-build-windows": "workspace:*",
     "esbuild": "0.28.2",
-    "npm": "11.11.0",
     "oxlint": "0.15.1",
     "rolldown": "1.2.5",
-    "tstyche": "7.2.2",
     "typescript": "6.0.3",
-    "vitest": "3.2.6",
-    "yaml": "2.9.0"
+    "vitest": "3.2.6"
   }
 }

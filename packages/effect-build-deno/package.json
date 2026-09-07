@@ -1,6 +1,6 @@
 {
   "name": "effect-build-deno",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "Provider-native Deno selected-command operations for effect-build.",
   "type": "module",
   "license": "MIT",

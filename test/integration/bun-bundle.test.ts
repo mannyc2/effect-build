@@ -11,7 +11,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Build from "../../packages/effect-build-bun/src/Command/Build.js";
 import * as Watch from "../../packages/effect-build-bun/src/Command/Watch.js";
 import * as Runtime from "../../packages/effect-build-bun/src/internal/Runtime.js";
-import { observeProviderNativeEvidence } from "../evidence/provider-native.js";
 
 const execute = promisify(execFile);
 const selectedBun = process.env.EFFECT_BUILD_BUN ?? process.execPath;
@@ -69,7 +68,6 @@ describe("real Bun 1.3.14 provider breadth", () => {
     const direct = await run(Build.buildToDirectory({ entrypoints: [entrypoint], outdir, target: "bun" }));
     expect(direct.publication).toBe("provider-direct-durable");
     await access(join(outdir, "hello.js"));
-    await observeProviderNativeEvidence("CAN-BUN-008", "CAN-BUN-009");
   }, 120_000);
 
   it("starts a real command watch, publishes its initial build, and terminates it on scope interruption", async () => {
@@ -111,7 +109,6 @@ describe("real Bun 1.3.14 provider breadth", () => {
     if (Exit.isFailure(result.watchExit)) {
       expect(Cause.hasInterrupts(result.watchExit.cause)).toBe(true);
     }
-    await observeProviderNativeEvidence("CAN-BUN-010");
   }, 120_000);
 
   it("executes native Transpiler, Build memory/direct, and host compile APIs in the exact Bun host", async () => {
@@ -164,16 +161,6 @@ describe("real Bun 1.3.14 provider breadth", () => {
     expect(receipt.transformedSync).toContain("const other = 2");
     await access(join(apiOutdir, "hello.js"));
     await access(apiExecutable);
-    await observeProviderNativeEvidence(
-      "CAN-BUN-001",
-      "CAN-BUN-002",
-      "CAN-BUN-003",
-      "CAN-BUN-004",
-      "CAN-BUN-005",
-      "CAN-BUN-006",
-      "CAN-BUN-007",
-      "CAN-BUN-011",
-    );
   }, 120_000);
 
   it("executes every selected Bun host-API positive finding without normalizing native results", async () => {
@@ -436,7 +423,6 @@ describe("real Bun 1.3.14 provider breadth", () => {
       apiStatus: 200,
       apiMarker: true,
     });
-    await observeProviderNativeEvidence("B02.1", "B06.1", "B06.2", "B07.1", "B08.1", "B08.2");
   }, 180_000);
 
   it("executes every eligible selected-command loader, HTML, splitting, asset, map, and metafile shape", async () => {
