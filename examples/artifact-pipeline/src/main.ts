@@ -1,27 +1,55 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Path } from "effect";
-import { Artifact, Checksums, Commit } from "effect-build";
+import { Artifact, Checksums } from "effect-build";
 import * as Archive from "effect-build-archives";
+import * as Bun from "effect-build-bun";
 import * as Deno from "effect-build-deno";
 import * as Esbuild from "effect-build-esbuild";
 import * as Rolldown from "effect-build-rolldown";
 import * as NodeSea from "effect-build-node-sea";
+import * as Nfpm from "effect-build-nfpm";
+import * as Python from "effect-build-python";
 
 const program = Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = yield* fs.makeTempDirectoryScoped();
-  const file = yield* Commit.atomic(path.join(root, "hello.txt"), (staged) =>
-    fs.writeFileString(staged, "hello from effect-build\n").pipe(
-      Effect.andThen(Artifact.file(staged, { name: "example", version: "0.7.0" })),
-    ));
-  yield* Artifact.verify(file);
-  const entries = [{ artifact: file, path: "hello/README.txt" }];
-  const zip = yield* Archive.zip({ entries, outfile: path.join(root, "hello.zip") });
-  const tarGz = yield* Archive.tarGz({ entries, outfile: path.join(root, "hello.tar.gz") });
-  const artifacts: Artifact.Artifact[] = [file, zip, tarGz];
   const entrypoint = path.join(root, "hello.ts");
   yield* fs.writeFileString(entrypoint, 'console.log("hello from effect-build");\n');
+  const bun = process.env.EFFECT_BUILD_BUN;
+  const executable = yield* Bun.compile({
+    entrypoints: [entrypoint], outfile: path.join(root, process.platform === "win32" ? "hello.exe" : "hello"),
+  }).pipe(Effect.provide(Bun.layer(bun === undefined ? {} : { executable: bun })));
+  yield* Artifact.verify(executable);
+  const entries = [{ artifact: executable, path: `bin/${path.basename(executable.path)}` }];
+  const zip = yield* Archive.zip({ entries, outfile: path.join(root, "hello.zip") });
+  const tarGz = yield* Archive.tarGz({ entries, outfile: path.join(root, "hello.tar.gz") });
+  const wheel = yield* Python.wheel({
+    metadata: { name: "effect-build-hello", version: "0.7.0" },
+    tags: { python: "py3", abi: "none", platform: process.platform === "win32" ? `win_${process.arch === "arm64" ? "arm64" : "amd64"}` : process.platform === "darwin" ? `macosx_13_0_${process.arch === "arm64" ? "arm64" : "x86_64"}` : `linux_${process.arch === "arm64" ? "aarch64" : "x86_64"}` },
+    entries, outdir: path.join(root, "wheels"),
+  });
+  const artifacts: Artifact.Artifact[] = [executable, zip, tarGz, wheel];
+  if (process.env.EFFECT_BUILD_NFPM_BIN !== undefined) {
+    artifacts.push(yield* Nfpm.package({
+      format: "deb", name: "effect-build-hello", version: "0.7.0", release: "1",
+      architecture: process.arch === "arm64" ? "arm64" : "amd64", maintainer: "effect-build",
+      description: "A compiled TypeScript CLI", mtime: "2026-01-01T00:00:00Z",
+      contents: [{ artifact: executable, dst: "/usr/bin/effect-build-hello" }],
+      outfile: path.join(root, "hello.deb"),
+    }).pipe(Effect.provide(Nfpm.layer({ executable: process.env.EFFECT_BUILD_NFPM_BIN }))));
+  }
+  const uv = process.env.EFFECT_BUILD_UV_BIN;
+  if (uv !== undefined) {
+    const project = path.join(root, "python-project");
+    yield* fs.makeDirectory(path.join(project, "src", "effect_build_example"), { recursive: true });
+    yield* fs.writeFileString(path.join(project, "src", "effect_build_example", "__init__.py"), 'message = "hello from effect-build"\n');
+    yield* fs.writeFileString(path.join(project, "pyproject.toml"), '[project]\nname = "effect-build-example"\nversion = "0.7.0"\n[build-system]\nrequires = ["hatchling==1.27.0"]\nbuild-backend = "hatchling.build"\n');
+    const built = yield* Python.build({ project, outdir: path.join(root, "python-dist") }).pipe(
+      Effect.provide(Python.layer({ executable: uv })),
+    );
+    artifacts.push(built.wheel, built.sdist);
+  }
   const bundled = yield* Esbuild.buildToDirectory({
     entryPoints: [entrypoint], bundle: true, platform: "node", format: "cjs", outdir: path.join(root, "esbuild"),
   });

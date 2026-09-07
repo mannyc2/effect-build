@@ -13,6 +13,9 @@
     "effect-build-deno": "workspace:^",
     "effect-build-esbuild": "workspace:^",
     "effect-build-rolldown": "workspace:^",
-    "effect-build-node-sea": "workspace:^"
+    "effect-build-node-sea": "workspace:^",
+    "effect-build-bun": "workspace:^",
+    "effect-build-nfpm": "workspace:^",
+    "effect-build-python": "workspace:^"
   }
 }

@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Path } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import * as Commit from "effect-build/Commit";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -63,6 +63,19 @@ describe("atomic output", () => {
     expect(await readFile(outfile, "utf8")).toBe("replacement");
     expect(await readdir(root)).toEqual(["cli.txt"]);
     expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+  });
+
+  it("keeps a dangling destination symlink when onExists is fail", async () => {
+    const outfile = join(root, "cli.txt");
+    const target = join(root, "missing");
+    await symlink(target, outfile, process.platform === "win32" ? "junction" : "file");
+    const before = await readlink(outfile);
+    const failure = await run(Commit.atomic(outfile, (staged) => write(staged, "replacement"), {
+      onExists: "fail",
+    }).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "CommitError", reason: "exists" });
+    expect(await readlink(outfile)).toBe(before);
+    expect(await readdir(root)).toEqual(["cli.txt"]);
   });
 
   it("replaces a nonempty directory with the produced tree", async () => {

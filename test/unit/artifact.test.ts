@@ -55,9 +55,32 @@ describe("artifacts from real files", () => {
       path: root, reason: "not-a-file",
     });
   });
+
+  it("rejects a recorded byte count that does not match the file", async () => {
+    const path = join(root, "size.txt");
+    await writeFile(path, "hello");
+    const file = await run(Artifact.file(path, producer));
+    const changed = { ...file, bytes: file.bytes + 1 };
+    expect(await run(Artifact.readVerified(changed).pipe(Effect.flip))).toMatchObject({
+      _tag: "ArtifactError", path, reason: "changed",
+    });
+  });
 });
 
 describe("directory manifests", () => {
+  it.skipIf(process.platform === "win32")("distinguishes newlines in filenames from separate manifest entries", async () => {
+    const first = join(root, "first"), second = join(root, "second");
+    await mkdir(first);
+    await mkdir(second);
+    const digest = createHash("sha256").update("").digest("hex");
+    await writeFile(join(first, `a\nfile 644 0 ${digest} b`), "");
+    await writeFile(join(second, "a"), "");
+    await writeFile(join(second, "b"), "");
+    const [one, two] = await Promise.all([run(Artifact.directory(first, producer)), run(Artifact.directory(second, producer))]);
+    expect(one.bytes).toBe(two.bytes);
+    expect(one.sha256).not.toBe(two.sha256);
+  });
+
   it("sorts nested entries and produces the same digest across repeated reads", async () => {
     await mkdir(join(root, "nested"));
     await writeFile(join(root, "z.txt"), "last");

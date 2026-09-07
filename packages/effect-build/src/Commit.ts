@@ -1,6 +1,5 @@
 import { Effect, FileSystem, Path, Schema } from "effect";
 import type * as Artifact from "./Artifact.js";
-
 export class CommitError extends Schema.TaggedError<CommitError>()("CommitError", {
   destination: Schema.String,
   reason: Schema.Literals(["exists", "rename-failed", "staging-failed", "remove-failed", "staged-path-mismatch"] as const),
@@ -48,7 +47,8 @@ export const atomic = <A extends Artifact.Artifact, E, R>(
       if (artifact.path !== staged) {
         return yield* new CommitError({ destination, reason: "staged-path-mismatch", detail: artifact.path });
       }
-      const exists = yield* fs.exists(destination).pipe(Effect.orElseSucceed(() => false));
+      // exists follows symlinks; a dangling link still occupies the destination.
+      const exists = yield* fs.readLink(destination).pipe(Effect.map(() => true), Effect.catch(() => fs.exists(destination)), Effect.orElseSucceed(() => false));
       if (exists && options.onExists === "fail") {
         return yield* new CommitError({ destination, reason: "exists" });
       }

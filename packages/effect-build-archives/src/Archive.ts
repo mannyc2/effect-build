@@ -66,7 +66,7 @@ const archive = (format: Format, input: ArchiveInput): Effect.Effect<Artifact.Fi
       entries.push({
         path: entry.path,
         kind: "file",
-        mode: entry.executable === true ? 0o755 : 0o644,
+        mode: (entry.executable ?? entry.artifact.kind === "executable") ? 0o755 : 0o644,
         contents: yield* Artifact.readVerified(entry.artifact),
       });
     }

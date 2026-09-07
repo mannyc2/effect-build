@@ -1,7 +1,7 @@
 {
   "name": "effect-build-python",
   "version": "0.7.0",
-  "description": "Effect-native Python wheel and sdist builds through one pinned uv frontend.",
+  "description": "Build Python projects with uv or write wheels directly from artifacts.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,

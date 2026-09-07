@@ -175,7 +175,8 @@ export const directory = (root: string, producedBy: Producer): Effect.Effect<Dir
       }
     }
     entries.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-    const manifest = entries.map((e) => `${e.kind} ${e.mode.toString(8)} ${e.bytes} ${e.sha256 ?? e.linkTarget ?? ""} ${e.path}`).join("\n");
+    // JSON separates entry fields even when a filename or symlink target contains newlines.
+    const manifest = JSON.stringify(entries.map((e) => [e.kind, e.mode, e.bytes, e.sha256, e.linkTarget, e.path]));
     return {
       kind: "directory" as const,
       path: absolute,
@@ -198,11 +199,10 @@ export const verify = <A extends Artifact>(artifact: A): Effect.Effect<A, Artifa
     return artifact;
   });
 
-/** Read the bytes of a regular artifact, verifying them on the way in. */
 export const readVerified = (artifact: Regular): Effect.Effect<Uint8Array, ArtifactError, Fs> =>
   readRegular(artifact.path).pipe(
     Effect.flatMap(({ contents, digest }) =>
-      digest === artifact.sha256
+      digest === artifact.sha256 && contents.byteLength === artifact.bytes
         ? Effect.succeed(contents)
         : Effect.fail(new ArtifactError({ path: artifact.path, reason: "changed" }))
     ),

@@ -37,6 +37,18 @@ beforeEach(async () => {
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
 describe("archives from real files", () => {
+  it.each(formats)("keeps a native executable runnable after extracting %s", async (format) => {
+    const executable = await run(Artifact.executable(process.execPath, { name: "fixture", version: "0.7.0" }));
+    const name = windows ? "tool.exe" : "tool";
+    const archived = await run(pack(format, {
+      entries: [{ artifact: executable, path: name }], outfile: join(root, `executable.${format}`),
+    }));
+    const directory = join(root, "extracted");
+    await extract(format, archived.path, directory);
+    expect((await execute(join(directory, name), ["-e", "console.log(42)"])).stdout.trim()).toBe("42");
+    if (!windows) expect((await stat(join(directory, name))).mode & 0o777).toBe(0o755);
+  }, 60_000);
+
   it.each(formats)("makes deterministic %s archives with executable modes and long paths", async (format) => {
     const longPath = `${"long-".repeat(28)}/${"é".repeat(55)}/payload.txt`;
     const entries = [
