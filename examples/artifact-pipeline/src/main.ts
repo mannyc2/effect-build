@@ -3,6 +3,7 @@ import { Effect, FileSystem, Path } from "effect";
 import { Artifact, Checksums, Commit } from "effect-build";
 import * as Archive from "effect-build-archives";
 import * as Deno from "effect-build-deno";
+import * as Esbuild from "effect-build-esbuild";
 
 const program = Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
@@ -19,6 +20,9 @@ const program = Effect.scoped(Effect.gen(function*() {
   const artifacts: Artifact.Artifact[] = [file, zip, tarGz];
   const entrypoint = path.join(root, "hello.ts");
   yield* fs.writeFileString(entrypoint, 'console.log("hello from effect-build");\n');
+  artifacts.push(yield* Esbuild.buildToDirectory({
+    entryPoints: [entrypoint], bundle: true, platform: "node", outdir: path.join(root, "esbuild"),
+  }));
   if (process.env.EFFECT_BUILD_DENO !== undefined) {
     const executable = yield* Deno.compile({
       entrypoint, outfile: path.join(root, process.platform === "win32" ? "deno-hello.exe" : "deno-hello"),

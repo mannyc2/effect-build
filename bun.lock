@@ -38,6 +38,7 @@
         "effect-build": "workspace:^",
         "effect-build-archives": "workspace:^",
         "effect-build-deno": "workspace:^",
+        "effect-build-esbuild": "workspace:^",
       },
     },
     "examples/cli": {

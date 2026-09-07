@@ -10,6 +10,7 @@
     "effect": "4.0.0-rc.108",
     "effect-build": "workspace:^",
     "effect-build-archives": "workspace:^",
-    "effect-build-deno": "workspace:^"
+    "effect-build-deno": "workspace:^",
+    "effect-build-esbuild": "workspace:^"
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "effect-build-esbuild",
   "version": "0.7.0",
-  "description": "Effect-native provider API and command access for esbuild.",
+  "description": "Build JavaScript bundles and scoped esbuild contexts as Effect programs.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
