@@ -59,4 +59,6 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Explicit `denort` is hashed and recorded, not executed** to establish identity.
 - **Node SEA uses a CommonJS preparation blob and resource injection** across Node
   22–26; the builder and base executable must have matching Node versions.
+- **SignTool keeps its full SDK version**; string ranges select the first three
+  components, while a caller predicate can pin the full four-component version.
 - **Effect stays pinned to the RC** until 4.0.0 ships; bump is its own change.

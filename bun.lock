@@ -45,6 +45,7 @@
         "effect-build-python": "workspace:^",
         "effect-build-rolldown": "workspace:^",
         "effect-build-sbom": "workspace:^",
+        "effect-build-windows": "workspace:^",
       },
     },
     "examples/cli": {

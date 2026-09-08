@@ -1,7 +1,7 @@
 {
   "name": "effect-build-windows",
   "version": "0.7.0",
-  "description": "Effect-native Windows artifact signing operations.",
+  "description": "Experimental MSIX signing with Windows SignTool and shared artifacts.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
