@@ -1,26 +1,13 @@
 # effect-build-python
 
-Build Python projects into a wheel and source distribution, or write a wheel
-directly from existing artifacts.
+`build({ project, outdir })` returns `{ wheel: Artifact.File, sdist: Artifact.File }`.
+Provide platform services and `Python.layer({ executable?, version? })` for uv.
+`tested` is `>=0.12.0 <1.0.0`. uv builds the sdist, then its wheel using the project backend.
+Exactly one wheel and one `.tar.gz` sdist must exist; clean stale distributions
+before changing versions with `atomic: false`.
 
-```ts
-import * as Python from "effect-build-python";
+`wheel({ metadata, tags, entries, outdir })` writes a wheel from regular artifacts
+using platform services, **without Python, uv, or a tool layer**. It verifies inputs
+and creates METADATA, WHEEL, and SHA-256 RECORD files plus optional entry points.
 
-const distributions = Python.build({ project: "python", outdir: "dist/python" });
-```
-
-`build` returns `{ wheel: Artifact.File, sdist: Artifact.File }`. Provide
-`Python.layer()` and platform services to run it. The layer resolves `uv` from
-PATH; `executable` selects a different binary and `version` overrides the tested
-`>=0.12.0 <1.0.0` range. uv builds the sdist first, then builds the wheel from that
-archive using the project's build backend. A `uv.lock` file is not required.
-
-Both outputs are checked before the output directory is committed. Existing
-output is replaced by default; `atomic: false` writes directly. Output must contain
-exactly one wheel and one `.tar.gz` sdist, so stale distributions in a direct
-output directory must be removed before rebuilding another version.
-
-`Python.wheel({ metadata, tags, entries, outdir })` writes a wheel without uv or
-Python. Entries contain a core regular artifact and its path inside the wheel.
-The writer verifies entry bytes and adds METADATA, WHEEL, and SHA-256 RECORD files;
-the wheel filename comes from its package name, version, and compatibility tags.
+[Setup and atomic output](../../docs/getting-started.md) · [Providers](../../docs/providers.md) · [Errors](../../docs/errors.md)

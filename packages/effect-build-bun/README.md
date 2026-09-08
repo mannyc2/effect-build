@@ -1,16 +1,18 @@
 # effect-build-bun
 
-`compile` produces an `Artifact.Executable`; `bundle` produces an
-`Artifact.Directory`; `build` returns stdout bytes. `watch` owns its process in an
-Effect scope. Provide `Bun.layer({ executable?, version? })` and platform services.
+```ts
+import * as Bun from "effect-build-bun";
+const executable = Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" });
+```
 
-Targets accept core names such as `linux-arm64` and Bun names such as
-`bun-linux-x64-baseline`. Windows outputs require an `.exe` suffix.
+Provide `Bun.layer({ executable?, version? })` and platform services. The CLI provider
+also runs from Node. `compile` returns `Artifact.Executable`, `bundle` returns
+`Artifact.Directory`, and `build` returns stdout bytes. `watch` requires an Effect scope.
+Targets accept core names and Bun variants; Windows output requires lowercase `.exe`.
 
-The tested range is `>=1.3.14 <1.4.0 || >=1.4.2 <1.5.0`: 1.4.0 is unreviewed and
-1.4.1 has a reproduced variable-collision bug. An explicit `version` range or
-predicate overrides this default.
+`tested` is `>=1.3.14 <1.4.0 || >=1.4.2 <1.5.0`: 1.4.0 is unreviewed and 1.4.1 has a
+reproduced variable-collision bug. `version` overrides this guard.
+`effect-build-bun/api` exports `Build`, `Transpiler`, and their combined `layer`;
+**that subpath requires the Bun runtime** and preserves native API results.
 
-`effect-build-bun/api` exports `Build` and `Transpiler` wrappers for native results.
-**The API subpath requires the Bun runtime.** The root CLI provider also runs from
-Node. See the [four-target example](../../examples/cli).
+[Setup](../../docs/getting-started.md) · [Providers](../../docs/providers.md) · [Four-target example](../../examples/cli)

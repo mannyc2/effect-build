@@ -1,44 +1,19 @@
 # effect-build-apple
 
-Build macOS apps, DMGs, and installer packages, then sign, notarize, staple, and
-assess them as composable Effect programs. Every product is a core `Artifact.File`
-or `Artifact.Directory` with product-specific fields.
+**Experimental:** credentialed signing and notarization use scripted-process tests;
+unsigned app construction is also checked with native macOS tools.
+`import * as Apple from "effect-build-apple"` for `appBundle`, `sign`, `dmg`, `pkg`,
+`notarize`, `staple`, and `assess`. Products refine core file/directory artifacts.
+Provide platform services and `Apple.layer({ executable?, version? })` for xcrun 70.
+Signing needs macOS and Developer ID certificates; notarization also needs credentials.
 
-```ts
-import * as Apple from "effect-build-apple";
+`appBundle` takes a Darwin executable and bundle metadata. `sign` takes a certificate
+SHA-1 directly; apps may declare nested code and entitlement artifacts. `dmg` and
+`pkg` package signed apps. Files use `outfile`; apps use `outdir`. Signing/stapling
+default to the source path, with staged replacement unless `atomic: false`.
+`notarize` submits a private copy with a keychain, API-key, or Apple ID credential.
+Apple ID passwords use Effect `Redacted`. Pass its result through
+`Notary.acceptedReference` before `staple`, then `assess` the stapled product.
+`Notary.info` and `Notary.log` retrieve later results from a saved reference.
 
-const app = yield* Apple.appBundle({
-  executable, outdir: "dist/Hello.app", bundleIdentifier: "com.example.hello",
-  bundleName: "Hello", version: "1.0.0",
-});
-const signed = yield* Apple.sign({ artifact: app, certificateSha1 });
-const submitted = yield* Apple.notarize({
-  artifact: signed, credential: { kind: "keychain", profile: "release" },
-});
-const acceptance = yield* Apple.Notary.acceptedReference(submitted);
-const stapled = yield* Apple.staple({ artifact: signed, acceptance });
-yield* Apple.assess({ artifact: stapled });
-```
-
-Provide `Apple.layer({ executable?, version? })` and your runtime's platform layer.
-The service resolves `xcrun` once; the active Xcode command-line tools select the
-native programs, and `producedBy` records that xcrun binary. `tested` selects xcrun
-70. Override its version guard explicitly for another toolchain.
-
-`dmg` accepts a signed app and optional layout resources and an Applications link.
-`pkg` accepts a signed app, identifier, version, and optional install location.
-`sign` takes a certificate SHA-1 fingerprint directly. Apps can declare nested
-code and entitlement artifacts; nested code is signed before its containers.
-Files use `outfile`, app directories use `outdir`, and signing/stapling default
-to replacing the source. Mutation uses sibling staging by default; `atomic: false`
-writes directly. Inputs are checked against their recorded hashes before use.
-
-Notarization retains a reference to the submitted signed artifact. Accepted
-references can be serialized, and `Notary.info` / `Notary.log` retrieve later
-provider results. Apps are zipped privately for submission. Apple ID passwords
-use `Redacted`, and tool failures redact credentials from native diagnostics.
-
-Credentialed signing and Apple network operations are experimental: portable
-tests exercise real files through scripted native processes; local unsigned app
-construction also uses native `plutil`. Run credentialed workflows on macOS with
-the required Developer ID certificates and notarization credentials installed.
+[Pipeline example](../../examples/artifact-pipeline/src/signing.ts) · [Setup](../../docs/getting-started.md) · [Errors](../../docs/errors.md)

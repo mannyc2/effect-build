@@ -9,8 +9,8 @@ not its job; see `DESIGN.md` for the boundary and the reasoning.
 
 - `bun install --frozen-lockfile`, then `bun run verify` (build, typecheck, lint,
   unit tests, examples). It must be green before you push.
-- Real-tool tests: `bun run test:integration:*` and `bun run acceptance:*`. They need
-  the tool installed; CI runs them on Linux.
+- Real-tool tests: `bun run test:integration:*`. They need the tool installed;
+  CI runs them on Linux. See `CONTRIBUTING.md` for the commands.
 - Read `DESIGN.md` before changing a public signature. It's short.
 
 ## Rules

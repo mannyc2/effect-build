@@ -8,6 +8,7 @@ export interface LayerOptions {
   readonly executable?: string;
   readonly version?: string | ((version: string) => boolean);
 }
+/** nFPM 2.47.0 is exercised with real deb, rpm, apk, archlinux, and MSIX packages. */
 export const tested = ">=2.47.0 <3.0.0";
 type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
 

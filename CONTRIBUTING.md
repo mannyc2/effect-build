@@ -1,48 +1,26 @@
-# Contributing to effect-build
+# Contributing
 
-Read [AGENTS.md](AGENTS.md) for the rules and [DESIGN.md](DESIGN.md) for the 0.7 design.
-
-## Set up
-
-Use **Bun 1.3.14** and **Node.js 24.14.1**, matching CI. From the repository root:
+Read [AGENTS.md](AGENTS.md) and [DESIGN.md](DESIGN.md). Use Bun 1.3.14 and Node 24.14.1.
 
 ```sh
 bun install --frozen-lockfile
-bun run build
-```
-
-Bun manages workspace dependencies and `bun.lock`. Build before running examples because their imports resolve to the
-packages' `dist` files. Example commands and prerequisites are in [examples/README.md](examples/README.md).
-
-## Verify a change
-
-```sh
 bun run verify
 ```
 
-This gate runs build, source and example typechecks, lint, unit tests, and example tests, in that order. Use focused
-checks while editing; run the complete gate on the final change. Reuse passing results until relevant source,
-dependencies, toolchain, or test conditions change.
+The gate builds packages, typechecks source and examples, runs lint and unit tests,
+and executes both examples. Imports resolve built `dist` files. Tests use real files,
+native tools where available, and byte fixtures for executable headers.
 
-Format edited files with `bun x --no-install dprint fmt <paths>`. For prose-only changes, check formatting, links, API
-names, and commands; run any example whose behavior you change.
+| Integration command | Tool selection |
+| --- | --- |
+| `bun run test:integration:bun` | `EFFECT_BUILD_BUN`; CI uses 1.3.14 and 1.4.2 |
+| `bun run test:integration:deno` | `EFFECT_BUILD_DENO`; 2.9.5 |
+| `bun run test:integration:node-sea` | `EFFECT_BUILD_NODE`; CI uses 22.0.0 and 26.7.0 |
+| `bun run test:integration:nfpm` | `EFFECT_BUILD_NFPM_BIN`; 2.47.0, C compiler, archive tools |
+| `bun run test:integration:python` | `EFFECT_BUILD_UV_BIN`; 0.12.0, Python |
+| `bun run test:integration:sbom` | `EFFECT_BUILD_SYFT_BIN`; 1.50.0 |
 
-Tests should exercise real files and outputs: compile and execute a program, inspect its header, extract an archive,
-or check a failed rename. Keep inputs, commands, expected results, and useful failure cases beside each example.
-
-## Run real tools
-
-| Command                             | Requires                            |
-| ----------------------------------- | ----------------------------------- |
-| `bun run test:integration:bun`      | Bun 1.3.14                          |
-| `bun run test:integration:deno`     | Deno 2.9.5                          |
-| `bun run test:integration:node-sea` | Node 26.7.0 on Linux x64 with glibc |
-| `bun run acceptance:archives`       | Git, tar, unzip, and zipinfo        |
-| `bun run acceptance:python`         | uv and Python                       |
-| `bun run acceptance:nfpm:linux`     | nFPM 2.47.0 and Bun 1.3.14 on Linux |
-| `bun run acceptance:sbom`           | Syft                                |
-
-See [CI](.github/workflows/ci.yml) and each integration test for tool selection and environment variables. Apple and
-Windows signing need the appropriate host and credentials; unit tests do not establish that real signing works.
-
-Release tags trigger [the release workflow](.github/workflows/release.yml), which publishes packages to npm with provenance.
+[CI](.github/workflows/ci.yml) installs exact fixtures and runs the real pipeline on Linux.
+Apple/Windows signing examples are typechecked; portable tests use scripted processes.
+Keep Bun's Windows extraction cache on the checkout volume. Format with `bun run format`.
+Release tags trigger [one npm publishing job](.github/workflows/release.yml).

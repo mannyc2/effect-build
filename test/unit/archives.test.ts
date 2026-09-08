@@ -10,12 +10,13 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
+const gitExecutable = process.env.EFFECT_BUILD_GIT;
 const windows = process.platform === "win32";
 const formats = ["zip", "tar.gz"] as const;
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 const runSource = <A, E>(effect: Effect.Effect<A, E, Archive.Archive | NodeServices.NodeServices>) =>
-  run(effect.pipe(Effect.provide(Archive.layer())));
+  run(effect.pipe(Effect.provide(Archive.layer(gitExecutable === undefined ? {} : { executable: gitExecutable }))));
 const pack = (format: typeof formats[number], input: Archive.ArchiveInput) =>
   format === "zip" ? Archive.zip(input) : Archive.tarGz(input);
 const extract = async (format: typeof formats[number], archive: string, directory: string) => {
@@ -26,7 +27,7 @@ const extract = async (format: typeof formats[number], archive: string, director
     : ["-xzf", archive, "-C", directory]);
 };
 const git = async (repository: string, args: readonly string[]) =>
-  (await execute("git", [...args], { cwd: repository })).stdout.trim();
+  (await execute(gitExecutable ?? "git", [...args], { cwd: repository })).stdout.trim();
 let root: string;
 let payload: Artifact.File;
 beforeEach(async () => {

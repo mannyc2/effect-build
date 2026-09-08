@@ -1,7 +1,13 @@
 # effect-build
 
-Effect programs for files, executables, directories, tools, targets, atomic commits, and checksums.
+Core Effect programs for files, executables, directories, tools, targets, and checksums.
+`Artifact.File`, `Artifact.Executable`, and `Artifact.Directory` share `path`, numeric
+`bytes`, `sha256`, and `producedBy`; executables add inspected `target` and `format`.
 
-Use `Artifact.file`, `Artifact.executable`, or `Artifact.directory` to describe existing output.
-Compose `Commit.atomic`, `Artifact.verify`, and `Executable.expectTarget` when those checks are useful.
-See the [repository README](https://github.com/mannyc2/effect-build#readme) for a complete build.
+Use `Artifact.file`, `executable`, or `directory` to record existing output, and
+`Artifact.encode` / `decode` for JSON. Directory hashes include modes and symlinks.
+Compose `Artifact.verify`, `Executable.expectTarget`, `Tool.requireVersion`, and
+`Commit.atomic` where needed. Atomic commits replace existing output by default;
+`{ onExists: "fail" }` rejects it. `Checksums.write` creates a SHA256SUMS file.
+
+[Get started](../../docs/getting-started.md) · [Providers](../../docs/providers.md) · [Errors](../../docs/errors.md)

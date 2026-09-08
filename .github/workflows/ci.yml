@@ -38,14 +38,14 @@ jobs:
       - run: bun run verify
 
   bun:
-    name: Tools (Bun ${{ matrix.version }}, Node ${{ matrix.node }})
+    name: Tools (Bun ${{ matrix.version }}, Node ${{ matrix.node }}, Git ${{ matrix.git }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { version: '1.3.14', node: '22.0.0' }
-          - { version: '1.4.2', node: '26.7.0' }
+          - { version: '1.3.14', node: '22.0.0', git: '2.40.0' }
+          - { version: '1.4.2', node: '26.7.0', git: '2.55.0' }
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -72,6 +72,14 @@ jobs:
           echo "EFFECT_BUILD_BUN=$fixture" >> "$GITHUB_ENV"
       - run: bun run test:integration:bun
       - run: bun run test:integration:node-sea
+      - name: Build exact Git source fixture and test archives
+        env:
+          GIT_VERSION: ${{ matrix.git }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y build-essential zlib1g-dev
+          EFFECT_BUILD_GIT=$(node scripts/install-provider-fixture.mjs git "$GIT_VERSION")
+          export EFFECT_BUILD_GIT
+          bun x --no-install vitest run test/unit/archives.test.ts
       - if: matrix.version == '1.3.14'
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:

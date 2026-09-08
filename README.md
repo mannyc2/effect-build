@@ -7,43 +7,35 @@ import * as Bun from "effect-build-bun";
 Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" });
 ```
 
-The call returns an Effect that builds an executable and records its path, byte count,
-SHA-256, target, and compiler. Run it with a compiler layer and platform services:
+The result is an Effect that builds an executable and records its path, numeric byte
+count, SHA-256, target, and compiler. [Run this example](docs/getting-started.md) with
+Bun 1.3.14 or 1.4.2 and platform services. Windows outputs require `dist/cli.exe`.
 
-```sh
-bun add effect-build-bun@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
-```
+Every file-producing package returns the same `Artifact.File`, `Artifact.Executable`,
+or `Artifact.Directory`. Pass a compiled executable straight into an archive, an OS
+package, or a Python wheel. Native memory APIs retain their tool's result types.
 
-Create `src/cli.ts` containing `console.log("Hello!")`, then save this as `build.ts`:
+| Package | What you can build |
+| --- | --- |
+| [effect-build](packages/effect-build) | Artifacts, targets, tools, commits, checksums |
+| [effect-build-bun](packages/effect-build-bun) | Executables, bundles, scoped watch; native Bun API |
+| [effect-build-deno](packages/effect-build-deno) | Executables, bundles, transpilation, scoped watch; native Deno API |
+| [effect-build-esbuild](packages/effect-build-esbuild) | Bundles, transforms, scoped rebuild/watch/serve |
+| [effect-build-rolldown](packages/effect-build-rolldown) | Bundles, transforms, scoped builders and watch |
+| [effect-build-node-sea](packages/effect-build-node-sea) | Node single executables with assets |
+| [effect-build-archives](packages/effect-build-archives) | Deterministic ZIP, tar.gz, Git source archives |
+| [effect-build-python](packages/effect-build-python) | uv builds and wheels written directly from artifacts |
+| [effect-build-nfpm](packages/effect-build-nfpm) | Debian, RPM, Alpine, Arch Linux, MSIX packages |
+| [effect-build-sbom](packages/effect-build-sbom) | SPDX and CycloneDX JSON |
+| [effect-build-windows](packages/effect-build-windows) | MSIX signing (experimental) |
+| [effect-build-apple](packages/effect-build-apple) | Apps, DMGs, installers, signing and notarization (experimental) |
 
-```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import * as Bun from "effect-build-bun";
+Checks are combinators: `Executable.expectTarget`, `Tool.requireVersion`, and
+`Artifact.verify`. Producers stage and check output before committing by default;
+`atomic: false` writes directly. `Commit.atomic(..., { onExists: "fail" })` rejects
+an existing destination; replacement is the default. See [errors](docs/errors.md).
 
-NodeRuntime.runMain(
-  Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }).pipe(
-    Effect.tap((artifact) => Effect.log(artifact)),
-    Effect.provide(Bun.layer()),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-```
-
-With Node 24 and Bun 1.3.14 or 1.4.2 installed, run `node build.ts`, then `./dist/cli`.
-Windows outputs must use an `.exe` suffix: change `outfile` to `dist/cli.exe` and run
-`.\dist\cli.exe`. Existing outputs are replaced by default.
-
-The [CLI example](examples/cli) compiles four targets, writes `dist/manifest.json`,
-and writes checksums checked from the same working directory with
-`sha256sum -c dist/SHA256SUMS`. The [artifact pipeline](examples/artifact-pipeline)
-shows how producers consume the same artifacts.
-
-Every output is an `Artifact.File`, `Artifact.Executable`, or `Artifact.Directory`.
-Add `Executable.expectTarget`, `Tool.requireVersion`, or `Artifact.verify` when you
-need an explicit check. Producing operations stage and commit by default;
-`atomic: false` writes directly and `Commit.atomic(..., { onExists: "fail" })`
-rejects an existing destination. Native in-memory APIs return their tool's values.
-
-See [DESIGN.md](DESIGN.md) for the API and decisions. Downstream release systems own
-publishing.
+The [CLI example](examples/cli) compiles four targets, writes a JSON manifest, and
+passes `sha256sum -c dist/SHA256SUMS`. The [artifact pipeline](examples/artifact-pipeline)
+composes all producers. Read [providers](docs/providers.md) for tested tool versions
+and [DESIGN.md](DESIGN.md) for decisions. Release systems own publishing.

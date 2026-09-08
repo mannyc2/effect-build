@@ -1,12 +1,10 @@
 # effect-build-esbuild
 
-`import * as Esbuild from "effect-build-esbuild"` for `build`, `buildToDirectory`,
-`context`, `transform`, and `analyzeMetafile`. Uses the pinned esbuild 0.28.2 npm
-dependency; no tool layer is needed.
+Uses pinned esbuild 0.28.2; no tool layer is needed. `build` preserves native options
+and results. `buildToDirectory({ ...options, outdir })` returns `Artifact.Directory` and needs platform services.
+`transform` and `analyzeMetafile` wrap the corresponding native utilities.
+`context` requires a scope and exposes Effect rebuild/watch/serve/cancel operations.
+Scope closure cancels and disposes the context; esbuild's asynchronous `onDispose`
+callbacks can finish later.
 
-`build` preserves esbuild options and native results. `buildToDirectory({ ...options,
-outdir })` returns an `Artifact.Directory` and commits output atomically by default;
-set `atomic: false` for direct output. Supply `NodeServices.layer` for file operations.
-`context` is scoped: rebuild, watch, serve, and cancel use Effect, and closing the
-scope cancels and disposes the native context. esbuild schedules plugin `onDispose`
-callbacks separately; their asynchronous work can finish after the scope closes.
+[Setup and atomic output](../../docs/getting-started.md) · [Errors](../../docs/errors.md)
