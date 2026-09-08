@@ -52,8 +52,10 @@ describe("archives from real files", () => {
 
   it.each(formats)("makes deterministic %s archives with executable modes and long paths", async (format) => {
     const longPath = `${"long-".repeat(28)}/${"é".repeat(55)}/payload.txt`;
+    const unicodePaths = ["café.txt", `prefix/${"é".repeat(55)}/payload.txt`];
     const entries = [
       { artifact: payload, path: longPath },
+      ...unicodePaths.map((path) => ({ artifact: payload, path })),
       { artifact: payload, path: "bin/tool", executable: true },
     ];
     const first = await run(pack(format, { entries, outfile: join(root, `one.${format}`) }));
@@ -63,6 +65,7 @@ describe("archives from real files", () => {
     const directory = join(root, "extracted");
     await extract(format, first.path, directory);
     expect(await readFile(join(directory, longPath), "utf8")).toBe("archive payload\n");
+    for (const path of unicodePaths) expect(await readFile(join(directory, path), "utf8")).toBe("archive payload\n");
     expect(await readFile(join(directory, "bin/tool"), "utf8")).toBe("archive payload\n");
     if (!windows) {
       expect((await stat(join(directory, "bin/tool"))).mode & 0o777).toBe(0o755);
@@ -143,6 +146,7 @@ describe("archives from a Git tree", () => {
     await git(repository, ["config", "user.name", "archive fixture"]);
     await git(repository, ["config", "user.email", "archive@example.test"]);
     await writeFile(join(repository, "README.md"), "committed readme\n");
+    await writeFile(join(repository, "café.txt"), "short Unicode path\n");
     await writeFile(join(repository, "secret"), "excluded by git attributes\n");
     await writeFile(join(repository, ".gitattributes"), "secret export-ignore\n");
     await writeFile(join(repository, "dist/compiled.js"), "excluded build output\n");
@@ -151,7 +155,10 @@ describe("archives from a Git tree", () => {
     const longPath = `${"é".repeat(55)}/${windows ? "long-name" : "trailing-name "}`;
     await mkdir(join(repository, "é".repeat(55)));
     await writeFile(join(repository, longPath), "long path contents\n");
-    if (!windows) await symlink(longPath, join(repository, "long.link"));
+    if (!windows) {
+      await symlink(longPath, join(repository, "long.link"));
+      await symlink("café.txt", join(repository, "short.link"));
+    }
     await git(repository, ["add", "."]);
     await git(repository, ["commit", "-m", "add source fixture"]);
     const commit = await git(repository, ["rev-parse", "HEAD"]);
@@ -173,6 +180,10 @@ describe("archives from a Git tree", () => {
     expect(await readFile(join(project, "README.md"), "utf8")).toBe("committed readme\n");
     expect(await readFile(join(project, "asset.lfs"), "utf8")).toBe(lfs);
     expect(await readFile(join(project, longPath), "utf8")).toBe("long path contents\n");
-    if (!windows) expect((await readlink(join(project, "long.link"))).normalize("NFC")).toBe(longPath);
+    expect(await readFile(join(project, "café.txt"), "utf8")).toBe("short Unicode path\n");
+    if (!windows) {
+      expect((await readlink(join(project, "long.link"))).normalize("NFC")).toBe(longPath);
+      expect((await readlink(join(project, "short.link"))).normalize("NFC")).toBe("café.txt");
+    }
   }, 15_000);
 });

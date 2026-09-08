@@ -13,7 +13,7 @@ const withPath = (value: string) => Effect.provideService(
   ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ PATH: value }),
 );
 let root: string;
-beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "effect-build-tool-")); });
+beforeEach(async () => { root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-tool-"))); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
 describe("tool resolution and execution", () => {

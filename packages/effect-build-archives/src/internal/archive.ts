@@ -156,6 +156,8 @@ const octal = (value: number, width: number): string => {
 };
 
 const tarPath = (path: string): { readonly name: string; readonly prefix: string } => {
+  // USTAR has no charset declaration; non-ASCII names need the UTF-8 PAX path record.
+  if (/\P{ASCII}/u.test(path)) throw new RangeError("non-ASCII tar paths require PAX");
   if (encoder.encode(path).byteLength <= 100) return { name: path, prefix: "" };
   for (let index = path.lastIndexOf("/"); index > 0; index = path.lastIndexOf("/", index - 1)) {
     const prefix = path.slice(0, index);
@@ -229,7 +231,7 @@ export const encodeTar = (unsorted: readonly Entry[]): Uint8Array => {
       records.push(paxRecord("path", entry.path));
       headerPath = `PaxEntries/${index.toString().padStart(12, "0")}`;
     }
-    if (entry.kind === "symlink" && encoder.encode(entry.linkTarget ?? "").byteLength > 100) {
+    if (entry.kind === "symlink" && (encoder.encode(entry.linkTarget ?? "").byteLength > 100 || /\P{ASCII}/u.test(entry.linkTarget ?? ""))) {
       records.push(paxRecord("linkpath", entry.linkTarget ?? ""));
       headerLink = paxLongSymlinkPlaceholder;
     }
