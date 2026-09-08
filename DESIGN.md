@@ -40,6 +40,8 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 ## Decided
 
 - Replacing a non-empty directory removes the old tree before renaming; file replacement uses one atomic rename.
+- **Checksum paths are relative to their file's directory**, so a staged release tree can move without rewriting them.
+- **Directory archive inputs preserve descendant modes and symlinks**; the archive prefix has mode `0755` because directory artifacts do not record their root mode.
 
 - **Replace on exists by default.** `onExists: "fail"` is one option away.
 - **No tool re-check before launch.** The hash at resolve time is a record, not a lock.

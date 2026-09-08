@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { Artifact } from "effect-build";
 import * as Archive from "effect-build-archives";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -106,6 +106,108 @@ describe("archives from real files", () => {
     expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
     expect(await readFile(outfile, "utf8")).toBe("previous output");
     expect((await readdir(root)).sort()).toEqual([`existing.${format}`, "payload"]);
+  });
+});
+
+describe("archives from real directories", () => {
+  it.each(formats)("round-trips executable trees, links, empty directories and modes through deterministic %s", async (format) => {
+    const source = join(root, "source"), tool = windows ? "tool.exe" : "tool";
+    await mkdir(join(source, "share"), { recursive: true });
+    await mkdir(join(source, "empty"));
+    await copyFile(process.execPath, join(source, tool));
+    await writeFile(join(source, "share/data.txt"), "directory payload\n");
+    if (!windows) {
+      await chmod(source, 0o700);
+      await chmod(join(source, tool), 0o751);
+      await chmod(join(source, "share/data.txt"), 0o640);
+      await chmod(join(source, "empty"), 0o750);
+      await symlink("share", join(source, "current"));
+      await symlink("missing", join(source, "dangling"));
+    }
+    const artifact = await run(Artifact.directory(source, payload.producedBy));
+    const entries = [{ artifact, path: "app" }, { artifact: payload, path: "README" }];
+    const first = await run(pack(format, { entries, outfile: join(root, `one.${format}`) }));
+    await utimes(join(source, "share/data.txt"), 0, 0);
+    await utimes(join(source, "empty"), 0, 0);
+    const second = await run(pack(format, { entries: [...entries].reverse(), outfile: join(root, `two.${format}`) }));
+    expect((await readFile(second.path)).equals(await readFile(first.path))).toBe(true);
+    const directory = join(root, "extracted");
+    await extract(format, first.path, directory);
+    expect((await execute(join(directory, "app", tool), ["-e", "console.log(42)"])).stdout.trim()).toBe("42");
+    expect(await readFile(join(directory, "app/share/data.txt"), "utf8")).toBe("directory payload\n");
+    expect(await readdir(join(directory, "app/empty"))).toEqual([]);
+    expect(await readFile(join(directory, "README"), "utf8")).toBe("archive payload\n");
+    if (!windows) {
+      expect((await stat(join(directory, "app"))).mode & 0o777).toBe(0o755);
+      expect((await stat(join(directory, "app", tool))).mode & 0o777).toBe(0o751);
+      expect((await stat(join(directory, "app/share/data.txt"))).mode & 0o777).toBe(0o640);
+      expect((await stat(join(directory, "app/empty"))).mode & 0o777).toBe(0o750);
+      expect(await readlink(join(directory, "app/current"))).toBe("share");
+      expect(await readlink(join(directory, "app/dangling"))).toBe("missing");
+    }
+  }, 60_000);
+
+  it.each(formats)("refuses changed tree contents or membership before replacing %s", async (format) => {
+    const source = join(root, "source"), outfile = join(root, `existing.${format}`);
+    await mkdir(source);
+    await writeFile(join(source, "file"), "original");
+    const artifact = await run(Artifact.directory(source, payload.producedBy));
+    await writeFile(outfile, "previous output");
+    for (const change of ["contents", "addition", "removal"] as const) {
+      if (change === "contents") await writeFile(join(source, "file"), "modified");
+      if (change === "addition") {
+        await writeFile(join(source, "file"), "original");
+        await mkdir(join(source, "added"));
+      }
+      if (change === "removal") {
+        await rm(join(source, "added"), { recursive: true });
+        await rm(join(source, "file"));
+      }
+      const failure = await run(pack(format, { entries: [{ artifact, path: "app" }], outfile }).pipe(Effect.flip));
+      expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
+      expect(await readFile(outfile, "utf8")).toBe("previous output");
+    }
+    expect((await readdir(root)).sort()).toEqual([`existing.${format}`, "payload", "source"]);
+  });
+
+  it.each(formats)("uses the verified tree instead of forged manifest paths when producing %s", async (format) => {
+    const source = join(root, "source");
+    await mkdir(source);
+    await writeFile(join(source, "inside"), "real tree\n");
+    const artifact = await run(Artifact.directory(source, payload.producedBy));
+    const forged: Artifact.Directory = {
+      ...artifact,
+      entries: [{ path: "../payload", kind: "file", bytes: payload.bytes, sha256: payload.sha256, mode: 0o644 }],
+    };
+    const first = await run(pack(format, { entries: [{ artifact, path: "app" }], outfile: join(root, `real.${format}`) }));
+    const second = await run(pack(format, { entries: [{ artifact: forged, path: "app" }], outfile: join(root, `forged.${format}`) }));
+    expect(await readFile(second.path)).toEqual(await readFile(first.path));
+    const directory = join(root, "extracted");
+    await extract(format, second.path, directory);
+    expect(await readdir(directory)).toEqual(["app"]);
+    expect(await readdir(join(directory, "app"))).toEqual(["inside"]);
+    expect(await readFile(join(directory, "app/inside"), "utf8")).toBe("real tree\n");
+  });
+
+  it.each(formats)("rejects directory prefix traversal, overrides and mixed-entry collisions in %s", async (format) => {
+    const source = join(root, "source"), outfile = join(root, `invalid.${format}`);
+    await mkdir(source);
+    await writeFile(join(source, "file"), "inside\n");
+    const artifact = await run(Artifact.directory(source, payload.producedBy));
+    const invalid: readonly (readonly Archive.ArchiveEntry[])[] = [
+      ...["", "../escape", "/absolute", "C:\\escape"].map((path) => [{ artifact, path }]),
+      [{ artifact, path: "app", executable: true }],
+      ...["app/file", "APP/file", "APP", "app/file/child"].map((path) => [
+        { artifact, path: "app" }, { artifact: payload, path },
+      ]),
+    ];
+    for (const entries of invalid) {
+      for (const ordered of [entries, [...entries].reverse()]) {
+        const failure = await run(pack(format, { entries: ordered, outfile }).pipe(Effect.flip));
+        expect(failure._tag).toBe("ArchiveInputInvalid");
+      }
+    }
+    expect((await readdir(root)).sort()).toEqual(["payload", "source"]);
   });
 });
 

@@ -1,7 +1,9 @@
 # Artifact pipeline
 
-Run `bun run test` here after the workspace build, with Node 24 and Bun 1.3.14 or 1.4.2 installed. The program compiles with Bun and puts that executable into ZIP, tar.gz, and a Python wheel.
-Esbuild and Rolldown add bundles. The program prints an artifact manifest, writes checksums, and removes its temporary outputs on completion.
+Run `bun run test` here after the workspace build, with Node 24 and Bun 1.3.14 or 1.4.2 installed. The program compiles with Bun and puts that executable into ZIP, tar.gz, and a Python wheel. The wheel places it in `.data/scripts`, so installation adds `hello` (`hello.exe` on Windows) to the Python environment's command directory without a Python wrapper.
+Esbuild and Rolldown add bundles, and the complete esbuild directory goes directly into a tar.gz. The program prints an artifact manifest, writes checksums, and removes its temporary outputs on completion.
+
+Wheel platform tags are explicit compatibility promises; choose minimum OS and libc versions for the binary you actually build. The Python integration tests install wheels with uv and run their native commands; ordinary example verification needs no Python installation.
 
 Select tools and optional operations with executable paths:
 

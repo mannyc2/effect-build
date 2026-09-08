@@ -95,6 +95,24 @@ describe("atomic output", () => {
     expect(await readdir(root)).toEqual(["bundle"]);
   });
 
+  it("keeps the previous release when a later build in the staged tree fails", async () => {
+    const outdir = join(root, "release");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "cli"), "previous release");
+    const previous = await run(Artifact.directory(outdir, producer));
+    const failure = await run(Commit.atomic(outdir, (staged) => Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* fs.makeDirectory(staged);
+      yield* write(path.join(staged, "cli"), "first target compiled");
+      return yield* Effect.fail("second target failed");
+    })).pipe(Effect.flip));
+    expect(failure).toBe("second target failed");
+    expect(await run(Artifact.verify(previous))).toEqual(previous);
+    expect(await readFile(join(outdir, "cli"), "utf8")).toBe("previous release");
+    expect(await readdir(root)).toEqual(["release"]);
+  });
+
   it("rejects a producer returning a different path", async () => {
     const outfile = join(root, "cli.txt");
     const different = join(root, "different.txt");

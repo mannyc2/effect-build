@@ -28,7 +28,9 @@ const program = Effect.scoped(Effect.gen(function*() {
   const wheel = yield* Python.wheel({
     metadata: { name: "effect-build-hello", version: "0.7.0" },
     tags: { python: "py3", abi: "none", platform: process.platform === "win32" ? `win_${process.arch === "arm64" ? "arm64" : "amd64"}` : process.platform === "darwin" ? `macosx_13_0_${process.arch === "arm64" ? "arm64" : "x86_64"}` : `linux_${process.arch === "arm64" ? "aarch64" : "x86_64"}` },
-    entries, outdir: path.join(root, "wheels"),
+    // Wheel installers put .data/scripts entries on the environment's command path.
+    entries: [{ artifact: executable, path: `effect_build_hello-0.7.0.data/scripts/${path.basename(executable.path)}` }],
+    outdir: path.join(root, "wheels"),
   });
   const artifacts: Artifact.Artifact[] = [executable, zip, tarGz, wheel];
   const syft = process.env.EFFECT_BUILD_SYFT_BIN;
@@ -61,6 +63,9 @@ const program = Effect.scoped(Effect.gen(function*() {
     entryPoints: [entrypoint], bundle: true, platform: "node", format: "cjs", outdir: path.join(root, "esbuild"),
   });
   artifacts.push(bundled);
+  artifacts.push(yield* Archive.tarGz({
+    entries: [{ artifact: bundled, path: "hello" }], outfile: path.join(root, "hello-bundle.tar.gz"),
+  }));
   artifacts.push(yield* Rolldown.buildToDirectory({
     input: entrypoint, outdir: path.join(root, "rolldown"), output: { format: "es" },
   }));

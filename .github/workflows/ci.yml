@@ -114,4 +114,4 @@ jobs:
         working-directory: examples/cli
         run: |
           bun run test
-          sha256sum -c dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)

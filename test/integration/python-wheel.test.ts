@@ -22,26 +22,26 @@ afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
 describe("real Python wheel installation", () => {
   it.each([["1.2.3", "1.2.3"], ["v02!01.0-preview_2.post01.dev3+LOCAL-002", "2!1.0rc2.post1.dev3+local.2"]])(
-    "installs version %s with uv and runs the packaged native program",
+    "installs version %s with uv and runs native and Python commands",
     async (version, normalized) => {
-      const windows = process.platform === "win32", nativeName = windows ? "program.exe" : "program";
+      const windows = process.platform === "win32", nativeName = windows ? "native-wheel-fixture.exe" : "native-wheel-fixture";
       const source = join(root, "__init__.py");
       await writeFile(source, [
-        "from pathlib import Path", "import subprocess", "",
+        "from pathlib import Path", "import subprocess, sysconfig", "",
         "def main():",
-        `    subprocess.run([str(Path(__file__).parent / '_bin' / '${nativeName}'), '-e', 'console.log(42)'], check=True)`, "",
+        `    subprocess.run([str(Path(sysconfig.get_path('scripts')) / '${nativeName}'), '-e', 'console.log(42)'], check=True)`, "",
       ].join("\n"));
       const native = await run(Artifact.executable(process.execPath, { name: "fixture", version: "0.7.0" }, Target.host()));
       const module = await run(Artifact.file(source, { name: "fixture", version: "0.7.0" }));
       const options = {
         metadata: { name: "Native-Wheel-Fixture", version, requiresPython: ">=3.9" },
-        tags: { python: "py3", abi: "none", platform: windows ? "win_amd64" : process.platform === "darwin" ? `macosx_11_0_${process.arch === "arm64" ? "arm64" : "x86_64"}` : `linux_${process.arch === "arm64" ? "aarch64" : "x86_64"}` },
+        tags: { python: "py3", abi: "none", platform: windows ? `win_${process.arch === "arm64" ? "arm64" : "amd64"}` : process.platform === "darwin" ? `macosx_11_0_${process.arch === "arm64" ? "arm64" : "x86_64"}` : `linux_${process.arch === "arm64" ? "aarch64" : "x86_64"}` },
         entries: [
           { artifact: module, path: "native_wheel_fixture/__init__.py" },
-          { artifact: native, path: `native_wheel_fixture/_bin/${nativeName}` },
+          { artifact: native, path: `native_wheel_fixture-${normalized}.data/scripts/${nativeName}` },
           { artifact: module, path: 'native_wheel_fixture/data,"é".txt' },
         ],
-        entryPoints: { console_scripts: { "native-wheel-fixture": "native_wheel_fixture:main" } },
+        entryPoints: { console_scripts: { "native-wheel-wrapper": "native_wheel_fixture:main" } },
         outdir: join(root, "dist"),
       };
       const wheel = await run(Python.wheel(options));
@@ -71,7 +71,7 @@ describe("real Python wheel installation", () => {
         "  assert entry.date_time == (1980, 1, 1, 0, 0, 0)",
         "  assert entry.compress_type == zipfile.ZIP_STORED",
         "  assert entry.create_system == 3",
-        "  assert entry.external_attr >> 16 == (0o100755 if '/_bin/' in entry.filename else 0o100644)",
+        "  assert entry.external_attr >> 16 == (0o100755 if '/scripts/' in entry.filename else 0o100644)",
       ].join("\n"), wheel.path]);
       const environment = join(root, "venv");
       await execute(uv, ["--no-cache", "venv", "--python", python, environment], { timeout: 60_000 });
@@ -79,7 +79,9 @@ describe("real Python wheel installation", () => {
       await execute(uv, ["--no-cache", "pip", "install", "--python", interpreter, "--no-index", "--no-deps", wheel.path], { timeout: 60_000 });
       await rm(source);
       const command = join(environment, windows ? "Scripts/native-wheel-fixture.exe" : "bin/native-wheel-fixture");
-      expect((await execute(command, [], { cwd: root })).stdout.trim()).toBe("42");
+      expect((await execute(command, ["-e", "console.log(42)"], { cwd: root })).stdout.trim()).toBe("42");
+      const wrapper = join(environment, windows ? "Scripts/native-wheel-wrapper.exe" : "bin/native-wheel-wrapper");
+      expect((await execute(wrapper, [], { cwd: root })).stdout.trim()).toBe("42");
       expect((await execute(interpreter, ["-c", "from importlib.metadata import version; print(version('native-wheel-fixture'))"], { cwd: root })).stdout.trim()).toBe(normalized);
       expect((await readdir(root)).sort()).toEqual(["dist", "repeat", "venv"]);
     },

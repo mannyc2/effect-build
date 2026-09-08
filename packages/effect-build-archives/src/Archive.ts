@@ -9,8 +9,10 @@ import { normalizeEntryPath, validateLayout } from "./internal/layout.js";
 export { InputInvalid } from "./InputInvalid.js";
 export type Format = "zip" | "tar.gz";
 export interface ArchiveEntry {
-  readonly artifact: Artifact.Regular;
+  readonly artifact: Artifact.Artifact;
+  /** A directory is expanded beneath this archive prefix. */
   readonly path: string;
+  /** Regular files only; directory entries retain their recorded modes. */
   readonly executable?: boolean;
 }
 export interface ArchiveInput {
@@ -61,14 +63,42 @@ const writeArchive = (
 
 const archive = (format: Format, input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> =>
   Effect.gen(function*() {
-    const entries = yield* Effect.forEach(input.entries, (entry) =>
-      Artifact.readVerified(entry.artifact).pipe(Effect.map((contents): Entry => ({
-        path: entry.path,
-        kind: "file",
-        mode: (entry.executable ?? entry.artifact.kind === "executable") ? 0o755 : 0o644,
-        contents,
-      })))
-    );
+    const p = yield* Path.Path;
+    const entries: Entry[] = [];
+    const empty = new Uint8Array(0);
+    for (const entry of input.entries) {
+      const artifact = entry.artifact;
+      const path = normalizeEntryPath(entry.path, artifact.kind === "directory" ? "directory" : "file");
+      if (typeof path !== "string") return yield* path;
+      if (artifact.kind !== "directory") {
+        entries.push({
+          path, kind: "file",
+          mode: (entry.executable ?? artifact.kind === "executable") ? 0o755 : 0o644,
+          contents: yield* Artifact.readVerified(artifact),
+        });
+        continue;
+      }
+      if (entry.executable !== undefined) {
+        return yield* new InputInvalid({ path, reason: "executable overrides apply only to regular files" });
+      }
+      // Rebuild the manifest from disk: decoded records can contain entries inconsistent with their digest.
+      const tree = yield* Artifact.directory(artifact.path, artifact.producedBy);
+      if (tree.sha256 !== artifact.sha256 || tree.bytes !== artifact.bytes) {
+        return yield* new Artifact.ArtifactError({ path: tree.path, reason: "changed" });
+      }
+      // The artifact records descendant modes, so give the newly introduced archive root a fixed mode.
+      entries.push({ path, kind: "directory", mode: 0o755, contents: empty });
+      for (const child of tree.entries) {
+        const childPath = normalizeEntryPath(`${path}/${child.path}`, child.kind);
+        if (typeof childPath !== "string") return yield* childPath;
+        // Verify the bytes actually encoded even if a file changes after the tree was read.
+        const contents = child.kind === "file" ? yield* Artifact.readVerified({
+          kind: "file", path: p.join(tree.path, child.path), bytes: child.bytes,
+          sha256: child.sha256!, producedBy: tree.producedBy,
+        }) : empty;
+        entries.push({ ...child, path: childPath, contents });
+      }
+    }
     return yield* writeArchive(input.outfile, entries, format, input.atomic ?? true, {
       name: metadata.name,
       version: metadata.version,

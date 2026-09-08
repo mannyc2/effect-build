@@ -13,7 +13,8 @@ Bun 1.3.14 or 1.4.2 and platform services. Windows outputs require `dist/cli.exe
 
 Every file-producing package returns the same `Artifact.File`, `Artifact.Executable`,
 or `Artifact.Directory`. Pass a compiled executable straight into an archive, an OS
-package, or a Python wheel. Native memory APIs retain their tool's result types.
+package, or a Python wheel; archive complete bundle directories with the same API.
+Native memory APIs retain their tool's result types.
 
 | Package | What you can build |
 | --- | --- |
@@ -35,7 +36,9 @@ Checks are combinators: `Executable.expectTarget`, `Tool.requireVersion`, and
 `atomic: false` writes directly. `Commit.atomic(..., { onExists: "fail" })` rejects
 an existing destination; replacement is the default. See [errors](docs/errors.md).
 
-The [CLI example](examples/cli) compiles four targets, writes a JSON manifest, and
-passes `sha256sum -c dist/SHA256SUMS`. The [artifact pipeline](examples/artifact-pipeline)
-composes all producers. Read [providers](docs/providers.md) for tested tool versions
+The [CLI example](examples/cli) stages four targets as one release directory and
+passes `(cd dist && sha256sum -c SHA256SUMS)`, even after moving the tree.
+The [artifact pipeline](examples/artifact-pipeline) composes all producers, archives
+a complete bundle, and puts a native CLI in a wheel's installed command directory.
+Read [providers](docs/providers.md) for tested tool versions
 and [DESIGN.md](DESIGN.md) for decisions. Release systems own publishing.
