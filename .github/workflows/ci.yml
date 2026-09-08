@@ -36,6 +36,9 @@ jobs:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
       - run: bun run verify
+      - name: Sign and verify a native Windows executable
+        if: runner.os == 'Windows'
+        run: bun run test:integration:windows
 
   bun:
     name: Tools (Bun ${{ matrix.version }}, Node ${{ matrix.node }}, Git ${{ matrix.git }})

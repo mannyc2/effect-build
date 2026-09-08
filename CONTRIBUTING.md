@@ -19,8 +19,10 @@ native tools where available, and byte fixtures for executable headers.
 | `bun run test:integration:nfpm` | `EFFECT_BUILD_NFPM_BIN`; 2.47.0, C compiler, archive tools |
 | `bun run test:integration:python` | `EFFECT_BUILD_UV_BIN`; 0.12.0, Python |
 | `bun run test:integration:sbom` | `EFFECT_BUILD_SYFT_BIN`; 1.50.0 |
+| `bun run test:integration:windows` | Windows SDK SignTool (or `EFFECT_BUILD_SIGNTOOL`), Bun, access to DigiCert's RFC3161 timestamp service |
 
 [CI](.github/workflows/ci.yml) installs exact fixtures and runs the real pipeline on Linux.
+Windows CI also compiles, signs, timestamps, and runs an executable with a temporary self-signed certificate; the test removes its certificate, trust entry, and private key afterward.
 Apple/Windows signing examples are typechecked; portable tests use scripted processes.
 Keep Bun's Windows extraction cache on the checkout volume. Format with `bun run format`.
 Release tags trigger [one npm publishing job](.github/workflows/release.yml).

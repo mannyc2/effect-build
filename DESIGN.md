@@ -64,5 +64,6 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
   22–26; the builder and base executable must have matching Node versions.
 - **SignTool keeps its full SDK version**; string ranges select the first three
   components, while a caller predicate can pin the full four-component version.
+- **Windows signing accepts MSIX files and PE executables**; signed executables must retain their input target before commit.
 - **Apple resolves xcrun once**; active Xcode tools select its native commands, and copied app trees preserve framework symlinks.
 - **Effect stays pinned to the RC** until 4.0.0 ships; bump is its own change.

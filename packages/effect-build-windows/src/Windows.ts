@@ -1,6 +1,6 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Redacted, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { Artifact, Commit, Tool } from "effect-build";
+import { Artifact, Commit, Executable, Tool } from "effect-build";
 
 export class Windows extends Context.Service<Windows, { readonly tool: Tool.Resolved }>()("effect-build-windows/Windows") {}
 export class InputInvalid extends Schema.TaggedError<InputInvalid>()("WindowsInputInvalid", {
@@ -40,8 +40,8 @@ export type Credential = {
   readonly storeName?: string;
   readonly machineStore?: boolean;
 };
-export type SignMsixInput = Credential & {
-  readonly artifact: Artifact.File;
+export type SignInput<A extends Artifact.Regular = Artifact.Regular> = Credential & {
+  readonly artifact: A;
   readonly outfile?: string;
   readonly cwd?: string;
   readonly atomic?: boolean;
@@ -56,8 +56,8 @@ export interface Signature {
   readonly timestampUrl: string;
   readonly verification: "Authenticode";
 }
-export type SignedMsix = Artifact.File & { readonly signature: Signature };
-export type SignMsixError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
+export type Signed<A extends Artifact.Regular = Artifact.Regular> = A & { readonly signature: Signature };
+export type SignError = InputInvalid | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
 const textValid = (value: string): boolean => value.length > 0 && !value.includes("\0");
 const urlValid = (value: string, httpsOnly: boolean): boolean => {
   if (!textValid(value) || /\s/u.test(value) || value.includes("?") || value.includes("#") || !URL.canParse(value)) return false;
@@ -72,11 +72,18 @@ const scrubFailure = (password: string | undefined) => (error: Tool.Failed | Too
     : new Tool.SpawnFailed({ name: error.name, detail: scrub(error.detail) });
 };
 
-export const signMsix = (input: SignMsixInput): Effect.Effect<SignedMsix, SignMsixError, Windows | Env> =>
-  Effect.gen(function*() {
+export function sign(input: SignInput<Artifact.Executable>): Effect.Effect<Signed<Artifact.Executable>, SignError, Windows | Env>;
+export function sign(input: SignInput<Artifact.File>): Effect.Effect<Signed<Artifact.File>, SignError, Windows | Env>;
+export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows | Env>;
+export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows | Env> {
+  return Effect.gen(function*() {
     const output = input.outfile ?? input.artifact.path;
-    if (![input.artifact.path, output].every((path) => textValid(path) && path.toLowerCase().endsWith(".msix"))) {
-      return yield* new InputInvalid({ reason: "artifact and outfile must be non-empty .msix paths without NUL" });
+    const extension = input.artifact.kind === "executable" ? ".exe" : ".msix";
+    if (input.artifact.kind === "executable" && (input.artifact.format !== "pe" || !input.artifact.target.startsWith("windows-"))) {
+      return yield* new InputInvalid({ reason: "executable artifacts must use PE and target Windows" });
+    }
+    if (![input.artifact.path, output].every((path) => textValid(path) && path.toLowerCase().endsWith(extension))) {
+      return yield* new InputInvalid({ reason: `artifact and outfile must be non-empty ${extension} paths without NUL` });
     }
     if (!urlValid(input.timestampUrl, false) || (input.descriptionUrl !== undefined && !urlValid(input.descriptionUrl, true))) {
       return yield* new InputInvalid({ reason: "timestampUrl must be HTTP(S) and descriptionUrl HTTPS, without credentials, whitespace, query, or fragment" });
@@ -106,6 +113,11 @@ export const signMsix = (input: SignMsixInput): Effect.Effect<SignedMsix, SignMs
       credential.push("/sha1", input.thumbprint);
     }
     const contents = yield* Artifact.readVerified(input.artifact);
+    if (input.artifact.kind === "executable") {
+      // Check the captured bytes, since signing must agree with the declared target even for decoded records.
+      const facts = yield* Executable.parse(contents).pipe(Effect.mapError((error) => new Executable.InspectError({ path: input.artifact.path, reason: error.reason })));
+      yield* Executable.resolveTarget(input.artifact.path, facts, input.artifact.target);
+    }
     const { tool } = yield* Windows;
     const fs = yield* FileSystem.FileSystem;
     const produce = (out: string) => Effect.gen(function*() {
@@ -119,7 +131,9 @@ export const signMsix = (input: SignMsixInput): Effect.Effect<SignedMsix, SignMs
         ...credential, out,
       ], { cwd }).pipe(Effect.mapError(scrubFailure(password)));
       yield* Tool.run(tool, ["verify", "/pa", "/all", "/v", "/tw", out], { cwd }).pipe(Effect.mapError(scrubFailure(password)));
-      return yield* Artifact.file(out, Tool.producer(tool));
+      return yield* input.artifact.kind === "executable"
+        ? Artifact.executable(out, Tool.producer(tool), input.artifact.target)
+        : Artifact.file(out, Tool.producer(tool));
     });
     const artifact = yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
     return { ...artifact, signature: {
@@ -127,3 +141,4 @@ export const signMsix = (input: SignMsixInput): Effect.Effect<SignedMsix, SignMs
       timestampUrl: input.timestampUrl, verification: "Authenticode",
     } };
   });
+}

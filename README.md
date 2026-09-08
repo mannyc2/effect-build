@@ -28,7 +28,7 @@ Native memory APIs retain their tool's result types.
 | [effect-build-python](packages/effect-build-python) | uv builds and wheels written directly from artifacts |
 | [effect-build-nfpm](packages/effect-build-nfpm) | Debian, RPM, Alpine, Arch Linux, MSIX packages |
 | [effect-build-sbom](packages/effect-build-sbom) | SPDX and CycloneDX JSON |
-| [effect-build-windows](packages/effect-build-windows) | MSIX signing (experimental) |
+| [effect-build-windows](packages/effect-build-windows) | Executable and MSIX signing (experimental) |
 | [effect-build-apple](packages/effect-build-apple) | Apps, DMGs, installers, signing and notarization (experimental) |
 
 Checks are combinators: `Executable.expectTarget`, `Tool.requireVersion`, and

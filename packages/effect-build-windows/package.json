@@ -1,13 +1,14 @@
 {
   "name": "effect-build-windows",
   "version": "0.7.0",
-  "description": "Experimental MSIX signing with Windows SignTool and shared artifacts.",
+  "description": "Experimental executable and MSIX signing with Windows SignTool and shared artifacts.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
   "keywords": [
     "effect",
     "windows",
+    "executable",
     "msix",
     "authenticode",
     "signtool"

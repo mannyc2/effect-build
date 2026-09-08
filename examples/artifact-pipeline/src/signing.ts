@@ -1,15 +1,29 @@
 import { Effect, Redacted } from "effect";
 import { Artifact } from "effect-build";
 import * as Apple from "effect-build-apple";
+import * as Archive from "effect-build-archives";
 import * as Windows from "effect-build-windows";
 
 // CI typechecks signing examples; running them requires the caller's signing credentials.
+export const buildWindowsRelease = (
+  executable: Artifact.Executable,
+  pfxFile: string,
+  password: Redacted.Redacted<string>,
+  timestampUrl: string,
+) => Effect.gen(function*() {
+  const signed = yield* Windows.sign({
+    artifact: executable, outfile: "dist/signed/example.exe", kind: "pfx", file: pfxFile, password, timestampUrl,
+  });
+  const archive = yield* Archive.zip({ entries: [{ artifact: signed, path: "example.exe" }], outfile: "dist/example-windows.zip" });
+  return { executable: signed, archive };
+}).pipe(Effect.provide(Windows.layer()));
+
 export const signWindowsPackage = (
   artifact: Artifact.File,
   pfxFile: string,
   password: Redacted.Redacted<string>,
   timestampUrl: string,
-) => Windows.signMsix({
+) => Windows.sign({
   artifact, outfile: "dist/signed.msix", kind: "pfx", file: pfxFile, password, timestampUrl,
 }).pipe(Effect.provide(Windows.layer()));
 

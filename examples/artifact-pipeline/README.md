@@ -14,4 +14,4 @@ Select tools and optional operations with executable paths:
 - `EFFECT_BUILD_NFPM_BIN`: package the same Bun executable as a deb.
 - `EFFECT_BUILD_SYFT_BIN`: scan the wheel into an SPDX JSON SBOM.
 
-`src/signing.ts` contains Apple and Windows signing functions that CI typechecks; running them requires native tools and the caller's credentials.
+[`src/signing.ts`](src/signing.ts) signs a compiled Windows executable and archives it directly, signs MSIX packages, and builds signed Apple products. CI typechecks these examples and separately tests native Windows executable signing with a temporary certificate. Running the examples requires native tools and the caller's credentials.

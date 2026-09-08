@@ -16,7 +16,7 @@ Provide platform services, such as `NodeServices.layer`, to resolve and run tool
 | uv | `>=0.12.0 <1.0.0` | 0.12.0; direct wheel writer needs no tool |
 | nFPM | `>=2.47.0 <3.0.0` | 2.47.0 |
 | Syft | `>=1.50.0 <2.0.0` | 1.50.0 |
-| Windows SignTool | `>=10.0.26100 <11.0.0` | Experimental; portable file tests, signing example typechecked |
+| Windows SignTool | `>=10.0.26100 <11.0.0` | Experimental; native executable CI uses a temporary certificate, MSIX uses scripted tests |
 | Apple xcrun | `>=70.0.0 <71.0.0` | Local unsigned app checked; credentialed operations experimental |
 
 Override a default with `Bun.layer({ executable: "/opt/bun/bin/bun", version: "=1.4.2" })`.
