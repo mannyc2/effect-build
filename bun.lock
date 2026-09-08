@@ -36,6 +36,7 @@
         "@effect/platform-node": "4.0.0-rc.108",
         "effect": "4.0.0-rc.108",
         "effect-build": "workspace:^",
+        "effect-build-apple": "workspace:^",
         "effect-build-archives": "workspace:^",
         "effect-build-bun": "workspace:^",
         "effect-build-deno": "workspace:^",

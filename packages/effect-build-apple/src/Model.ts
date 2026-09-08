@@ -1,0 +1,25 @@
+import { Schema } from "effect";
+import { Artifact } from "effect-build";
+import type { AcceptedReference } from "./Notary.js";
+
+export const App = Schema.Struct({ ...Artifact.Directory.fields, product: Schema.Literal("app") });
+export type App = typeof App.Type;
+export const Dmg = Schema.Struct({ ...Artifact.File.fields, product: Schema.Literal("dmg") });
+export type Dmg = typeof Dmg.Type;
+export const Pkg = Schema.Struct({ ...Artifact.File.fields, product: Schema.Literal("pkg") });
+export type Pkg = typeof Pkg.Type;
+export const Product = Schema.Union([App, Dmg, Pkg]);
+export type Product = typeof Product.Type;
+const signature = { certificateSha1: Schema.String, secureTimestamp: Schema.Literal(true) };
+export const SignedApp = Schema.Struct({ ...App.fields, signature: Schema.Struct({ ...signature, hardenedRuntime: Schema.Literal(true) }) });
+export type SignedApp = typeof SignedApp.Type;
+export const SignedDmg = Schema.Struct({ ...Dmg.fields, signature: Schema.Struct(signature) });
+export type SignedDmg = typeof SignedDmg.Type;
+export const SignedPkg = Schema.Struct({ ...Pkg.fields, signature: Schema.Struct(signature) });
+export type SignedPkg = typeof SignedPkg.Type;
+export const SignedProduct = Schema.Union([SignedApp, SignedDmg, SignedPkg]);
+export type SignedProduct = typeof SignedProduct.Type;
+export type StapledApp = SignedApp & { readonly ticket: AcceptedReference };
+export type StapledDmg = SignedDmg & { readonly ticket: AcceptedReference };
+export type StapledPkg = SignedPkg & { readonly ticket: AcceptedReference };
+export type StapledProduct = StapledApp | StapledDmg | StapledPkg;

@@ -4,7 +4,7 @@ import { Artifact, Checksums } from "effect-build";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
@@ -53,4 +53,21 @@ it("checks files with the same basename in different directories from the produc
   const reordered = await run(Checksums.write({ artifacts: [arm, x64], outfile: join(root, "dist", "REORDERED") }));
   expect(await readFile(reordered.path, "utf8")).toBe(contents);
   expect(reordered.sha256).toBe(sums.sha256);
+});
+
+it.skipIf(process.platform === "win32")("escapes newlines and backslashes exactly like native checksum tools", async () => {
+  const paths = [join(root, "line\nbreak.txt"), join(root, "back\\slash.txt")].sort();
+  const artifacts: Artifact.File[] = [];
+  for (const path of paths) {
+    await writeFile(path, "checksum payload\n");
+    artifacts.push(await run(Artifact.file(path, producer)));
+  }
+  const checksum = await run(Checksums.write({ artifacts, outfile: join(root, "dist", "SHA256SUMS") }));
+  const command = process.platform === "darwin" ? "shasum" : "sha256sum";
+  const args = process.platform === "darwin" ? ["-a", "256"] : [];
+  const options = { cwd: process.cwd(), env: { ...process.env, LC_ALL: "C", LC_CTYPE: "C", LANG: "C" } };
+  const native = await execute(command, [...args, ...paths.map((path) => relative(process.cwd(), path))], options);
+  expect(await readFile(checksum.path, "utf8")).toBe(native.stdout);
+  const checked = await execute(command, [...args, "-c", checksum.path], options);
+  expect(checked.stdout.match(/: OK/g)).toHaveLength(2);
 });

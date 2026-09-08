@@ -1,7 +1,7 @@
 {
   "name": "effect-build-apple",
   "version": "0.7.0",
-  "description": "Effect-native direct Developer ID distribution operations for macOS.",
+  "description": "macOS app bundles, signing, packaging, and notarization as composable Effect programs.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,

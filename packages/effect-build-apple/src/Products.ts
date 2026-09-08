@@ -1,0 +1,82 @@
+import { Effect, FileSystem, Path } from "effect";
+import { Artifact, Commit, Tool } from "effect-build";
+import { Apple, InputInvalid, type Env } from "./Apple.js";
+import { validateResources, type Resource } from "./AppBundle.js";
+import { copyProduct, copyRegular, fileError, outputPath, runNative, textValid, verifySignature } from "./internal.js";
+import type { Dmg, Pkg, SignedApp } from "./Model.js";
+
+export interface DmgInput {
+  readonly artifact: SignedApp;
+  readonly outfile: string;
+  readonly volumeName: string;
+  readonly layout?: readonly Resource[];
+  readonly applicationsLink?: true;
+  readonly cwd?: string;
+  readonly atomic?: boolean;
+}
+export interface PkgInput {
+  readonly artifact: SignedApp;
+  readonly outfile: string;
+  readonly identifier: string;
+  readonly version: string;
+  readonly installLocation?: string;
+  readonly cwd?: string;
+  readonly atomic?: boolean;
+}
+export type ProductError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
+
+export const dmg = (input: DmgInput): Effect.Effect<Dmg, ProductError, Apple | Env> => Effect.scoped(Effect.gen(function*() {
+  const outfile = yield* outputPath(input.outfile, ".dmg", input.cwd);
+  if (!textValid(input.volumeName) || /[/:]/u.test(input.volumeName) || Array.from(input.volumeName).some((character) => character.charCodeAt(0) < 32)) {
+    return yield* new InputInvalid({ reason: "volumeName must be non-empty and contain no slash, colon, or control characters" });
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const p = yield* Path.Path;
+  const appName = p.basename(input.artifact.path);
+  if (!appName.toLowerCase().endsWith(".app")) return yield* new InputInvalid({ reason: "the input app path must end in .app" });
+  yield* validateResources(input.layout ?? [], [appName, ...(input.applicationsLink === true ? ["Applications"] : [])]);
+  const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-dmg-" }).pipe(Effect.mapError(fileError(outfile)));
+  const volume = p.join(temporary, "volume");
+  yield* fs.makeDirectory(volume).pipe(Effect.mapError(fileError(volume)));
+  const app = p.join(volume, appName);
+  yield* copyProduct(input.artifact, app);
+  yield* verifySignature(input.artifact, app);
+  for (const entry of input.layout ?? []) yield* copyRegular(entry.artifact, p.join(volume, entry.path), entry.executable ?? entry.artifact.kind === "executable");
+  if (input.applicationsLink === true) yield* fs.symlink("/Applications", p.join(volume, "Applications")).pipe(Effect.mapError(fileError(volume)));
+  const { tool } = yield* Apple;
+  const cwd = p.resolve(input.cwd ?? "");
+  const produce = (out: string) => Effect.gen(function*() {
+    yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError(out)));
+    yield* runNative("hdiutil", ["create", "-ov", "-volname", input.volumeName, "-srcfolder", volume, "-fs", "HFS+", "-format", "UDZO", out], { cwd });
+    yield* runNative("hdiutil", ["verify", out], { cwd });
+    return { ...yield* Artifact.file(out, Tool.producer(tool)), product: "dmg" as const };
+  });
+  return yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
+}));
+
+export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | Env> => Effect.scoped(Effect.gen(function*() {
+  const outfile = yield* outputPath(input.outfile, ".pkg", input.cwd);
+  const installLocation = input.installLocation ?? "/Applications";
+  if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u.test(input.identifier) || !textValid(input.version) || !textValid(installLocation) || !installLocation.startsWith("/") || installLocation.split("/").includes("..")) {
+    return yield* new InputInvalid({ reason: "pkg requires a reverse-DNS identifier, non-empty version, and absolute installLocation without traversal or NUL" });
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const p = yield* Path.Path;
+  const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-pkg-" }).pipe(Effect.mapError(fileError(outfile)));
+  const appName = p.basename(input.artifact.path);
+  if (!appName.toLowerCase().endsWith(".app")) return yield* new InputInvalid({ reason: "the input app path must end in .app" });
+  const app = p.join(temporary, appName);
+  yield* copyProduct(input.artifact, app);
+  yield* verifySignature(input.artifact, app);
+  const component = p.join(temporary, "component.pkg");
+  const cwd = p.resolve(input.cwd ?? "");
+  yield* runNative("pkgbuild", ["--component", app, "--identifier", input.identifier, "--version", input.version, "--install-location", installLocation, component], { cwd });
+  const { tool } = yield* Apple;
+  const produce = (out: string) => Effect.gen(function*() {
+    yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError(out)));
+    yield* runNative("productbuild", ["--package", component, out], { cwd });
+    yield* runNative("pkgutil", ["--payload-files", out], { cwd });
+    return { ...yield* Artifact.file(out, Tool.producer(tool)), product: "pkg" as const };
+  });
+  return yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
+}));

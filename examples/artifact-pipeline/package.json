@@ -18,6 +18,7 @@
     "effect-build-nfpm": "workspace:^",
     "effect-build-python": "workspace:^",
     "effect-build-sbom": "workspace:^",
-    "effect-build-windows": "workspace:^"
+    "effect-build-windows": "workspace:^",
+    "effect-build-apple": "workspace:^"
   }
 }
