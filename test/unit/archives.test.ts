@@ -107,6 +107,35 @@ describe("archives from real files", () => {
 });
 
 describe("archives from a Git tree", () => {
+  it.each(formats)("keeps %s bytes independent of checkout line-ending preferences", async (format) => {
+    const repository = join(root, "repository");
+    await mkdir(repository);
+    await git(repository, ["init", "--initial-branch=main"]);
+    await git(repository, ["config", "core.autocrlf", "false"]);
+    await git(repository, ["config", "core.eol", "lf"]);
+    const binary = Buffer.from([0, 13, 10, 255]);
+    await writeFile(join(repository, "plain.txt"), "selected tree\n");
+    await writeFile(join(repository, "text.txt"), "tracked text\n");
+    await writeFile(join(repository, "windows.txt"), "tracked CRLF\n");
+    await writeFile(join(repository, "binary.bin"), binary);
+    await writeFile(join(repository, ".gitattributes"), "text.txt text\nwindows.txt text eol=crlf\nbinary.bin -text\n");
+    await git(repository, ["add", "."]);
+    const tree = await git(repository, ["write-tree"]);
+    const input = { repository, tree, project: "fixture", version: "1.2.3", format };
+    const first = await runSource(Archive.source({ ...input, outfile: join(root, `lf.${format}`) }));
+    await git(repository, ["config", "core.autocrlf", "true"]);
+    await git(repository, ["config", "core.eol", "crlf"]);
+    const second = await runSource(Archive.source({ ...input, outfile: join(root, `crlf.${format}`) }));
+    expect(await readFile(second.path)).toEqual(await readFile(first.path));
+    const directory = join(root, "extracted");
+    await extract(format, second.path, directory);
+    const project = join(directory, "fixture-1.2.3");
+    expect(await readFile(join(project, "plain.txt"), "utf8")).toBe("selected tree\n");
+    expect(await readFile(join(project, "text.txt"), "utf8")).toBe("tracked text\n");
+    expect(await readFile(join(project, "windows.txt"), "utf8")).toBe("tracked CRLF\r\n");
+    expect(await readFile(join(project, "binary.bin"))).toEqual(binary);
+  });
+
   it.each(formats)("preserves the selected tree's files and symlinks in deterministic %s output", async (format) => {
     const repository = join(root, "repository");
     await mkdir(join(repository, "dist"), { recursive: true });

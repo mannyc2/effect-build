@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { ConfigProvider, Effect } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, Fiber } from "effect";
 import * as Tool from "effect-build/Tool";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -46,11 +46,33 @@ describe("tool resolution and execution", () => {
   it("reports a failed first PATH hit instead of trying another executable", async () => {
     const name = basename(process.execPath);
     const broken = join(root, name);
-    await writeFile(broken, "not an executable");
+    await writeFile(broken, new Uint8Array([0x4d, 0x5a, 0, 0, 0, 0]), { mode: 0o755 });
     const failure = await run(Tool.resolve({ name }).pipe(
       withPath([root, dirname(process.execPath)].join(delimiter)), Effect.flip,
     ));
-    expect(failure).toMatchObject({ _tag: "ToolProbeFailed", path: await realpath(broken) });
+    expect(failure).toMatchObject({ _tag: "ToolProbeFailed", path: await realpath(broken), detail: expect.stringMatching(/\S/u) });
+  });
+
+  it("reports synchronous native argument rejection as a spawn failure", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const failure = await run(Tool.run(tool, ["\0"]).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "ToolSpawnFailed", name: "node", detail: expect.stringContaining("null bytes") });
+  });
+
+  it("keeps interruption as interruption while stopping a real process", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const marker = join(root, "started");
+    const fiber = Effect.runFork(Tool.run(tool, [
+      "-e", "require('node:fs').writeFileSync(process.argv[1], 'ready'); setInterval(() => {}, 1000)", marker,
+    ]).pipe(Effect.provide(NodeServices.layer)));
+    try {
+      await expect.poll(() => readFile(marker, "utf8"), { timeout: 10_000 }).toBe("ready");
+    } finally {
+      await Effect.runPromise(Fiber.interrupt(fiber));
+    }
+    const exit = await Effect.runPromise(Fiber.await(fiber));
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
   });
 
   it("reports a missing explicit tool even when PATH contains a matching name", async () => {

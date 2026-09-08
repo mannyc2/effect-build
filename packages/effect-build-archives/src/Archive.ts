@@ -155,7 +155,8 @@ export const source = (input: SourceInput): Effect.Effect<
   });
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-git-" }).pipe(Effect.mapError(fileError(outfile)));
   const exported = p.join(temporary, "tree.tar");
-  yield* Tool.run(tool, ["archive", "--format=tar", `--prefix=${root}/`, `--output=${exported}`, input.tree], { cwd: repository });
+  // Archive applies checkout conversion too; host preferences must not change bytes, but tracked attributes still apply.
+  yield* Tool.run(tool, ["-c", "core.autocrlf=false", "-c", "core.eol=lf", "archive", "--format=tar", `--prefix=${root}/`, `--output=${exported}`, input.tree], { cwd: repository });
   const tar = yield* fs.readFile(exported).pipe(Effect.mapError(fileError(exported)));
   const projected = yield* Effect.try({
     try: () => decodeGitTar(tar),

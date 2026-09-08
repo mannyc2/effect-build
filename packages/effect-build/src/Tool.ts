@@ -111,7 +111,11 @@ export const run = (
         ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
         ...(options.env === undefined ? {} : { env: options.env, extendEnv: options.extendEnv ?? true }),
         shell: false,
-      }).pipe(Effect.mapError((e) => new SpawnFailed({ name: tool.name, detail: String(e) })));
+      }).pipe(
+        // Native spawners can throw synchronously before reporting a typed launch error.
+        Effect.catchDefect(Effect.fail),
+        Effect.mapError((e) => new SpawnFailed({ name: tool.name, detail: String(e) })),
+      );
       const [stdout, stderr, exit] = yield* Effect.all(
         [collect(handle.stdout, limit), collect(handle.stderr, limit), handle.exitCode] as const,
         { concurrency: "unbounded" },
@@ -166,7 +170,7 @@ export const resolve = (options: ResolveOptions): Effect.Effect<Resolved, NotFou
     const digest = yield* sha256(contents);
     const provisional: Resolved = { name: options.name, path: real, version: "", bytes: contents.byteLength, sha256: digest };
     const completion = yield* run(provisional, options.versionArgs ?? ["--version"]).pipe(
-      Effect.mapError((e) => new ProbeFailed({ name: options.name, path: real, detail: e.message })),
+      Effect.mapError((e) => new ProbeFailed({ name: options.name, path: real, detail: e instanceof SpawnFailed ? e.detail : e.message })),
     );
     const version = (options.parseVersion ?? ((c) => text(c.stdout).trim().split(/\s+/u)[0]))(completion);
     if (version === undefined || version.length === 0) {
@@ -185,12 +189,7 @@ export const parseVersion = (text: string): Version | undefined => {
 
 const compare = (a: Version, b: Version): number => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 
-/**
- * A tiny range grammar: comparators `>= > <= < =` joined by spaces (and) and
- * `||` (or). Example: `">=1.3.14 <1.4.0 || >=1.4.2 <1.5.0"`. Non-canonical
- * versions never satisfy any range. Throws on a malformed range, since ranges
- * are written by package authors, not users.
- */
+/** Ranges use `>= > <= < =`, spaces (and), and `||` (or); malformed ranges throw. */
 export const satisfies = (range: string): ((version: string) => boolean) => {
   if (range.split("||").some((alt) => alt.trim().length === 0)) throw new Error(`invalid version range: ${range}`);
   const alternatives = range.split("||").map((alt) =>

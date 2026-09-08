@@ -57,6 +57,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Deno embeds the output basename**; Windows outputs require lowercase `.exe`
   so staging and the committed executable have the same name.
 - **Explicit `denort` is hashed and recorded, not executed** to establish identity.
+- **Git source archives fix host newline defaults to LF**; committed `.gitattributes` still controls file conversion.
 - **Node SEA uses a CommonJS preparation blob and resource injection** across Node
   22–26; the builder and base executable must have matching Node versions.
 - **SignTool keeps its full SDK version**; string ranges select the first three
