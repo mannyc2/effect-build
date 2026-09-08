@@ -29,9 +29,14 @@ function Remove-TestCertificate([string] $thumbprint) {
 it.skipIf(process.platform !== "win32")("signs and timestamps a compiled executable with the real Windows SDK", async () => {
   // Bun's Windows extraction cache and outputs must stay on the checkout volume.
   const root = await mkdtemp(join(process.cwd(), ".effect-build-signing-"));
+  // Node does not translate pwsh's module paths when it starts Windows PowerShell.
+  const powershellEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => name.toLowerCase() !== "psmodulepath"));
   const powershell = (script: string, env: Readonly<Record<string, string>> = {}) => execute("powershell.exe", [
-    "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", `$ErrorActionPreference = 'Stop'\n${removeCertificate}\n${script}`,
-  ], { env: { ...process.env, EFFECT_BUILD_SIGN_TEST_ROOT: root, ...env }, timeout: 60_000 });
+    "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", String.raw`$ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1')
+${removeCertificate}
+${script}`,
+  ], { env: { ...powershellEnv, EFFECT_BUILD_SIGN_TEST_ROOT: root, ...env }, timeout: 60_000 });
   try {
     const tool = process.env.EFFECT_BUILD_SIGNTOOL ?? (await powershell(String.raw`
 $kits = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
@@ -75,6 +80,7 @@ try {
     expect(signed.kind).toBe("executable");
     expect(signed.target).toBe(original.target);
     expect(signed.format).toBe("pe");
+    expect(signed.producedBy.version).toBe(version);
     expect(signed.sha256).not.toBe(original.sha256);
     expect(signed.signature).toMatchObject({ fileDigest: "SHA256", timestampDigest: "SHA256", timestampProtocol: "RFC3161", verification: "Authenticode" });
     expect(await run(Artifact.verify(original))).toEqual(original);

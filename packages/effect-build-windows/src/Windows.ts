@@ -12,9 +12,27 @@ export interface LayerOptions {
   readonly version?: string | ((version: string) => boolean);
 }
 type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
-/** Windows SDK 26100 is the scripted baseline; real credentialed signing remains experimental. */
+/** Windows SDK 26100 is the native CI baseline; production credentials remain experimental. */
 export const tested = ">=10.0.26100 <11.0.0";
-const versionPattern = /^Version\s*:?\s*((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*)){2,3})\s*$/imu;
+// SignTool's help has no version. Search its language-independent VS_FIXEDFILEINFO resource:
+// https://learn.microsoft.com/en-us/windows/win32/api/verrsrc/ns-verrsrc-vs_fixedfileinfo
+const productVersion = (contents: Uint8Array): string | undefined => {
+  const view = new DataView(contents.buffer, contents.byteOffset, contents.byteLength);
+  const key = "VS_VERSION_INFO\0";
+  let version: string | undefined;
+  for (let offset = 0; offset + 92 <= contents.byteLength; offset += 4) {
+    const length = view.getUint16(offset, true);
+    if (length < 92 || offset + length > contents.byteLength || view.getUint16(offset + 2, true) !== 52 || view.getUint16(offset + 4, true) !== 0) continue;
+    if (!Array.from(key).every((char, i) => view.getUint16(offset + 6 + i * 2, true) === char.charCodeAt(0))) continue;
+    if (view.getUint32(offset + 40, true) !== 0xfeef04bd || view.getUint32(offset + 44, true) !== 0x10000) continue;
+    const high = view.getUint32(offset + 56, true);
+    const low = view.getUint32(offset + 60, true);
+    const native = [high >>> 16, high & 0xffff, low >>> 16, low & 0xffff].join(".");
+    if (version !== undefined && version !== native) return undefined;
+    version = native;
+  }
+  return version;
+};
 export const layer = (options: LayerOptions = {}): Layer.Layer<
   Windows, Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported, Env
 > => {
@@ -26,7 +44,7 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
     name: "signtool",
     ...(options.executable === undefined ? {} : { executable: options.executable }),
     versionArgs: ["/?"],
-    parseVersion: (completion) => versionPattern.exec(`${new TextDecoder().decode(completion.stdout)}\n${new TextDecoder().decode(completion.stderr)}`)?.[1],
+    parseVersion: (_completion, contents) => productVersion(contents),
   }).pipe(Tool.requireVersion(accepts), Effect.map((tool) => ({ tool }))));
 };
 

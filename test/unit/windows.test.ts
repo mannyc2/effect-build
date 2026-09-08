@@ -16,8 +16,22 @@ const unsigned = "unsigned msix payload\n";
 const signed = `${unsigned}signed:SHA256\ntimestamp:RFC3161\n`;
 const encoded = (bytes: string | Uint8Array): string => Buffer.from(bytes).toString("base64");
 const timestampUrl = "https://timestamp.example.test/rfc3161";
+const versionOffset = 64, fixedOffset = versionOffset + 40;
+const versionResource = (version = "10.0.26100.4188"): Buffer => {
+  const bytes = Buffer.alloc(fixedOffset + 52);
+  bytes.writeUInt16LE(92, versionOffset);
+  bytes.writeUInt16LE(52, versionOffset + 2);
+  bytes.write("VS_VERSION_INFO\0", versionOffset + 6, "utf16le");
+  bytes.writeUInt32LE(0xfeef04bd, fixedOffset);
+  bytes.writeUInt32LE(0x00010000, fixedOffset + 4);
+  // FileVersion differs so a successful probe must have read ProductVersion.
+  bytes.writeUInt32LE(0x000b0000, fixedOffset + 8);
+  const [major = 0, minor = 0, build = 0, revision = 0] = version.split(".").map(Number);
+  bytes.writeUInt32LE(major * 0x10000 + minor, fixedOffset + 16);
+  bytes.writeUInt32LE(build * 0x10000 + revision, fixedOffset + 20);
+  return bytes;
+};
 interface FixtureConfig {
-  readonly probe: string;
   readonly source: string;
   readonly outfile: string;
   readonly log: string;
@@ -43,7 +57,7 @@ const fixture = String.raw`
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 const [configPath, ...args] = process.argv.slice(2);
 const config = JSON.parse(readFileSync(configPath, "utf8"));
-if (args.length === 1 && args[0] === '/?') { process.stdout.write(config.probe); process.exit(0); }
+if (args.length === 1 && args[0] === '/?') { process.stdout.write('Usage: signtool <command> [options]\n'); process.exit(0); }
 if (!['sign', 'verify'].includes(args[0])) throw new Error('unsupported signtool command');
 appendFileSync(config.log, JSON.stringify({args, cwd: process.cwd(), source: readFileSync(config.source).toString('base64'), output: existsSync(config.outfile) ? readFileSync(config.outfile).toString('base64') : null}) + '\n');
 const target = args.at(-1);
@@ -73,8 +87,8 @@ beforeEach(async () => {
   tool = join(root, "signtool.fixture");
   const script = join(root, "signtool.mjs");
   configPath = join(root, "config.json");
-  config = { probe: "Microsoft (R) Sign Tool\nVersion: 10.0.26100.4188\n", source: join(root, "unsigned.msix"), outfile: join(root, "signed.msix"), log: join(root, "calls.jsonl") };
-  await writeFile(tool, "signtool fixture bytes\n");
+  config = { source: join(root, "unsigned.msix"), outfile: join(root, "signed.msix"), log: join(root, "calls.jsonl") };
+  await writeFile(tool, versionResource());
   await writeFile(script, fixture);
   await writeFile(configPath, JSON.stringify(config));
   await writeFile(config.source, unsigned);
@@ -317,8 +331,8 @@ describe("Windows signing through real files and a scripted native tool", () => 
     expect(await readdir(root)).not.toContain("signed.msix");
   });
 
-  it.each(["10.0.26100", "10.0.26100.4188"])("accepts native SDK version %s and preserves it on the output", async (version) => {
-    await configure({ probe: `Version: ${version}\n` });
+  it.each(["10.0.26100.0", "10.0.26100.4188", "10.0.26100.65535"])("reads native SDK ProductVersion %s and preserves all components on the output", async (version) => {
+    await writeFile(tool, versionResource(version));
     const result = await run(Windows.sign(input()));
     expect(await readFile(result.path, "utf8")).toBe(signed);
     expect(result.producedBy.version).toBe(version);
@@ -327,19 +341,40 @@ describe("Windows signing through real files and a scripted native tool", () => 
   it("applies a family range while giving custom predicates the full SDK version", async () => {
     const result = await run(Windows.sign(input()), "=10.0.26100");
     expect(result.producedBy.version).toBe("10.0.26100.4188");
-    const second = await run(Windows.sign({ ...input(), outfile: join(root, "custom.msix") }), (version) => version === "10.0.26100.4188");
+    await writeFile(tool, versionResource("12.34.56789.65535"));
+    const second = await run(Windows.sign({ ...input(), outfile: join(root, "custom.msix") }), (version) => version === "12.34.56789.65535");
+    expect(second.producedBy.version).toBe("12.34.56789.65535");
     expect(await readFile(second.path, "utf8")).toBe(signed);
   });
 
   it.each(["10.0.26000.1", "11.0.0.0"])("rejects unsupported SDK %s before signing", async (version) => {
-    await configure({ probe: `Version: ${version}\n` });
+    await writeFile(tool, versionResource(version));
     await expect(run(Windows.sign(input()))).rejects.toBeInstanceOf(Tool.VersionUnsupported);
     expect(await readdir(root)).not.toContain("calls.jsonl");
   });
 
-  it.each(["10.0.26100.1-preview", "10.0.026100.1"])("rejects malformed SDK probe %s before signing", async (version) => {
-    await configure({ probe: `Version: ${version}\n` });
+  it.each(["missing", "signature", "structure", "length", "root length", "type", "truncated"] as const)("rejects a %s SDK version resource before signing", async (corruption) => {
+    const bytes = versionResource();
+    if (corruption === "missing") bytes.fill(0);
+    if (corruption === "signature") bytes.writeUInt32LE(0, fixedOffset);
+    if (corruption === "structure") bytes.writeUInt32LE(0, fixedOffset + 4);
+    if (corruption === "length") bytes.writeUInt16LE(0, versionOffset + 2);
+    if (corruption === "root length") bytes.writeUInt16LE(40, versionOffset);
+    if (corruption === "type") bytes.writeUInt16LE(1, versionOffset + 4);
+    await writeFile(tool, corruption === "truncated" ? bytes.subarray(0, fixedOffset + 20) : bytes);
     await expect(run(Windows.sign(input()))).rejects.toBeInstanceOf(Tool.ProbeFailed);
     expect(await readdir(root)).not.toContain("calls.jsonl");
+  });
+
+  it.each([false, true])("handles multiple version resources with conflict=%s", async (conflict) => {
+    await writeFile(tool, Buffer.concat([versionResource(), versionResource(conflict ? "10.0.26100.8249" : "10.0.26100.4188")]));
+    if (conflict) {
+      await expect(run(Windows.sign(input()))).rejects.toBeInstanceOf(Tool.ProbeFailed);
+      expect(await readdir(root)).not.toContain("calls.jsonl");
+    } else {
+      const result = await run(Windows.sign(input()));
+      expect(result.producedBy.version).toBe("10.0.26100.4188");
+      expect(await readFile(result.path, "utf8")).toBe(signed);
+    }
   });
 });

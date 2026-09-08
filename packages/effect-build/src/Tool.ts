@@ -73,8 +73,8 @@ export interface ResolveOptions {
   readonly executable?: string;
   /** Arguments that print the version. Default `["--version"]`. */
   readonly versionArgs?: readonly string[];
-  /** Extract the version from the probe output. Default: first token of stdout. */
-  readonly parseVersion?: (completion: Completion) => string | undefined;
+  /** Extract the version from probe output or captured executable bytes. Default: first token of stdout. */
+  readonly parseVersion?: (completion: Completion, contents: Uint8Array) => string | undefined;
 }
 
 type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
@@ -159,7 +159,7 @@ export const resolve = Effect.fn("Tool.resolve")(function*(options: ResolveOptio
   const completion = yield* run(provisional, options.versionArgs ?? ["--version"]).pipe(
     Effect.mapError((e) => new ProbeFailed({ name: options.name, path: real, detail: e instanceof SpawnFailed ? e.detail : e.message })),
   );
-  const version = (options.parseVersion ?? ((c) => text(c.stdout).trim().split(/\s+/u)[0]))(completion);
+  const version = (options.parseVersion ?? ((c) => text(c.stdout).trim().split(/\s+/u)[0]))(completion, contents);
   if (version === undefined || version.length === 0) {
     return yield* new ProbeFailed({ name: options.name, path: real, detail: "could not read version" });
   }

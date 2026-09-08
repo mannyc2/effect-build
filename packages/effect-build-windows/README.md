@@ -5,7 +5,7 @@ with a temporary self-signed certificate. Production certificates and native MSI
 signing remain unverified; portable tests use a scripted SignTool process.
 Import `* as Windows` from `"effect-build-windows"` and
 provide platform services plus `Windows.layer({ executable?, version? })` for SignTool.
-The SDK baseline is `>=10.0.26100 <11.0.0`. Native versions remain complete; string
+The SDK baseline is `>=10.0.26100 <11.0.0`. Versions come from the tool's binary resource and remain complete; string
 ranges compare three components, while predicates receive the fourth revision too.
 
 `sign` takes a Windows `Artifact.Executable` or an MSIX `Artifact.File`, `timestampUrl`, and either `kind: "store"` with

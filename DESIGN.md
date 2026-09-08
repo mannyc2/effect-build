@@ -62,7 +62,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Git source archives fix host newline defaults to LF**; committed `.gitattributes` still controls file conversion.
 - **Node SEA uses a CommonJS preparation blob and resource injection** across Node
   22–26; the builder and base executable must have matching Node versions.
-- **SignTool keeps its full SDK version**; string ranges select the first three
+- **SignTool reads its full SDK version from its binary resource**; string ranges select the first three
   components, while a caller predicate can pin the full four-component version.
 - **Windows signing accepts MSIX files and PE executables**; signed executables must retain their input target before commit.
 - **Apple resolves xcrun once**; active Xcode tools select its native commands, and copied app trees preserve framework symlinks.
