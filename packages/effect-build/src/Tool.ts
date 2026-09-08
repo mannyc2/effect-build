@@ -132,7 +132,8 @@ const candidatesOnPath = (name: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
-    const path = yield* Config.string("PATH").pipe(Effect.orElseSucceed(() => ""));
+    // Windows commonly names this key Path; both reads must honor the caller's ConfigProvider.
+    const path = yield* Config.string("PATH").pipe(Config.orElse(() => Config.string("Path")), Effect.orElseSucceed(() => ""));
     const names = p.sep === "\\" ? [name, `${name}.exe`, `${name}.cmd`] : [name];
     const found: string[] = [];
     const searched: string[] = [];

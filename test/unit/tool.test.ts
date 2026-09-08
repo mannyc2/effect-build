@@ -9,8 +9,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
-const withPath = (value: string) => Effect.provideService(
-  ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ PATH: value }),
+const withPath = (value: string, key = "PATH") => Effect.provideService(
+  ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ [key]: value }),
 );
 let root: string;
 beforeEach(async () => { root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-tool-"))); });
@@ -34,13 +34,22 @@ describe("tool resolution and execution", () => {
     expect(new TextDecoder().decode(completion.stderr)).toBe("warning");
   });
 
-  it("finds the first PATH hit and reads the first stdout token by default", async () => {
+  it.each(["PATH", "Path"])("finds the first %s hit and reads the first stdout token by default", async (key) => {
     const tool = await run(Tool.resolve({
       name: basename(process.execPath),
       versionArgs: ["-e", "process.stdout.write('1.3.14 fixture\\n')"],
-    }).pipe(withPath([root, dirname(process.execPath)].join(delimiter))));
+    }).pipe(withPath([root, dirname(process.execPath)].join(delimiter), key)));
     expect(tool.path).toBe(await realpath(process.execPath));
     expect(tool.version).toBe("1.3.14");
+  });
+
+  it.each(["empty", "unmatched"])("honors an %s PATH over Path and the host environment", async (kind) => {
+    const path = kind === "empty" ? "" : root;
+    const failure = await run(Tool.resolve({ name: basename(process.execPath) }).pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ PATH: path, Path: dirname(process.execPath) }, { preserveEmptyStrings: true })),
+      Effect.flip,
+    ));
+    expect(failure).toMatchObject({ _tag: "ToolNotFound", searched: path === "" ? [] : [path] });
   });
 
   it("reports a failed first PATH hit instead of trying another executable", async () => {
