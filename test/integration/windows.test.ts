@@ -17,11 +17,11 @@ const removeCertificate = String.raw`
 function Remove-TestCertificate([string] $thumbprint) {
   if ($thumbprint -notmatch '^[A-Fa-f0-9]{40}$') { throw 'Invalid test certificate thumbprint' }
   try {
-    $trusted = "Cert:\CurrentUser\Root\$thumbprint"
-    if (Test-Path $trusted) { Remove-Item $trusted }
+    $trusted = "Cert:\LocalMachine\Root\$thumbprint"
+    if (Test-Path $trusted) { Remove-Item $trusted -Confirm:$false }
   } finally {
     $personal = "Cert:\CurrentUser\My\$thumbprint"
-    if (Test-Path $personal) { Remove-Item $personal -DeleteKey }
+    if (Test-Path $personal) { Remove-Item $personal -DeleteKey -Confirm:$false }
   }
 }
 `;
@@ -56,12 +56,15 @@ $tool.FullName
     })).stdout.trim();
     await run(Effect.log(`SignTool ${tool} (${version})\n${help}`));
     await powershell(String.raw`
+$principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run the Windows signing integration test from an elevated administrator shell' }
 $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=effect-build integration test' -CertStoreLocation 'Cert:\CurrentUser\My' -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -NotAfter (Get-Date).AddDays(1)
 try {
   [IO.File]::WriteAllText((Join-Path $env:EFFECT_BUILD_SIGN_TEST_ROOT 'thumbprint'), $certificate.Thumbprint)
   $public = Join-Path $env:EFFECT_BUILD_SIGN_TEST_ROOT 'certificate.cer'
   Export-Certificate -Cert $certificate -FilePath $public | Out-Null
-  Import-Certificate -FilePath $public -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+  # CurrentUser root trust requires UI; the disposable administrator runner can import machine trust without it.
+  Import-Certificate -FilePath $public -CertStoreLocation 'Cert:\LocalMachine\Root' -Confirm:$false | Out-Null
 } catch {
   Remove-TestCertificate $certificate.Thumbprint
   throw
