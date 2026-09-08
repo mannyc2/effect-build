@@ -24,7 +24,8 @@
     "test:integration:deno": "vitest run test/integration/deno.test.ts test/integration/deno-api.test.ts",
     "test:integration:node-sea": "vitest run test/integration/node-sea.test.ts",
     "test:integration:nfpm": "vitest run test/integration/nfpm.test.ts",
-    "test:integration:python": "vitest run test/integration/python-build.test.ts test/integration/python-wheel.test.ts"
+    "test:integration:python": "vitest run test/integration/python-build.test.ts test/integration/python-wheel.test.ts",
+    "test:integration:sbom": "vitest run test/integration/sbom.test.ts"
   },
   "devDependencies": {
     "@effect/platform-bun": "4.0.0-rc.108",

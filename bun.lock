@@ -44,6 +44,7 @@
         "effect-build-node-sea": "workspace:^",
         "effect-build-python": "workspace:^",
         "effect-build-rolldown": "workspace:^",
+        "effect-build-sbom": "workspace:^",
       },
     },
     "examples/cli": {

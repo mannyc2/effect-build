@@ -9,6 +9,7 @@ import * as Rolldown from "effect-build-rolldown";
 import * as NodeSea from "effect-build-node-sea";
 import * as Nfpm from "effect-build-nfpm";
 import * as Python from "effect-build-python";
+import * as Sbom from "effect-build-sbom";
 
 const program = Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
@@ -30,6 +31,12 @@ const program = Effect.scoped(Effect.gen(function*() {
     entries, outdir: path.join(root, "wheels"),
   });
   const artifacts: Artifact.Artifact[] = [executable, zip, tarGz, wheel];
+  const syft = process.env.EFFECT_BUILD_SYFT_BIN;
+  if (syft !== undefined) {
+    artifacts.push(yield* Sbom.generate({
+      subject: wheel, format: "spdx-json", outfile: path.join(root, "hello.spdx.json"),
+    }).pipe(Effect.provide(Sbom.layer({ executable: syft }))));
+  }
   if (process.env.EFFECT_BUILD_NFPM_BIN !== undefined) {
     artifacts.push(yield* Nfpm.package({
       format: "deb", name: "effect-build-hello", version: "0.7.0", release: "1",

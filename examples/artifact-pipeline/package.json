@@ -16,6 +16,7 @@
     "effect-build-node-sea": "workspace:^",
     "effect-build-bun": "workspace:^",
     "effect-build-nfpm": "workspace:^",
-    "effect-build-python": "workspace:^"
+    "effect-build-python": "workspace:^",
+    "effect-build-sbom": "workspace:^"
   }
 }

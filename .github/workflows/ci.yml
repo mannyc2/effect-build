@@ -91,11 +91,13 @@ jobs:
           }
           install_tool uv https://github.com/astral-sh/uv/releases/download/0.12.0/uv-x86_64-unknown-linux-gnu.tar.gz eaf842262aa1c418d8ecc5605f02ee1ebfd369124fa48548e85f9481a47831a9 uv-x86_64-unknown-linux-gnu/uv
           install_tool nfpm https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783 nfpm
+          install_tool syft https://github.com/anchore/syft/releases/download/v1.50.0/syft_1.50.0_linux_amd64.tar.gz bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788 syft
           echo "EFFECT_BUILD_UV_BIN=$RUNNER_TEMP/uv" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_NFPM_BIN=$RUNNER_TEMP/nfpm" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_SYFT_BIN=$RUNNER_TEMP/syft" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_PYTHON_BIN=$(command -v python)" >> "$GITHUB_ENV"
       - if: matrix.version == '1.3.14'
-        run: bun run test:integration:nfpm && bun run test:integration:python
+        run: bun run test:integration:nfpm && bun run test:integration:python && bun run test:integration:sbom
       - if: matrix.version == '1.3.14'
         run: echo "EFFECT_BUILD_DENO=$(node scripts/install-provider-fixture.mjs deno 2.9.5)" >> "$GITHUB_ENV"
       - if: matrix.version == '1.3.14'
