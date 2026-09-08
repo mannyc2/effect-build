@@ -13,40 +13,34 @@ export const watch = (options: rolldown.WatchOptions | rolldown.WatchOptions[]):
       try: () => {
         const watcher = rolldown.watch(options);
         let superseded = 0;
-        let listenerFailure: unknown;
+        let listenerResult: Effect.Effect<void> = Effect.void;
         let chain = Promise.resolve();
         const listener = (event: rolldown.RolldownWatcherEvent): Promise<void> => {
           if (event.code !== "BUNDLE_END" && event.code !== "ERROR") return chain;
           chain = chain.then(async () => {
             try {
               await event.result.close();
-              const next = Queue.sizeUnsafe(queue) === 0 ? 0 : superseded + 1;
-              superseded = next;
+              superseded = Queue.sizeUnsafe(queue) === 0 ? 0 : superseded + 1;
               Queue.offerUnsafe(queue, event.code === "BUNDLE_END"
-                ? { code: "BUNDLE_END", duration: event.duration, output: event.output, superseded: next }
-                : { code: "ERROR", error: event.error, superseded: next });
+                ? { code: "BUNDLE_END", duration: event.duration, output: event.output, superseded }
+                : { code: "ERROR", error: event.error, superseded });
             } catch (cause) {
-              listenerFailure = cause;
+              listenerResult = Effect.die(cause);
               Queue.failCauseUnsafe(queue, Cause.die(cause));
             }
           });
           return chain;
         };
         watcher.on("event", listener);
-        return { watcher, listener, wait: () => chain, failure: () => listenerFailure };
+        return { watcher, listener, wait: () => chain, result: () => listenerResult };
       },
       catch: (cause) => new Failed({ operation: "watch", cause }),
     }),
-    ({ watcher, listener, wait, failure }) => Effect.promise(async () => {
+    ({ watcher, listener, wait, result }) => Effect.promise(async () => {
       watcher.off("event", listener);
       await wait();
-      let closeFailure: unknown;
-      try { await watcher.close(); } catch (cause) { closeFailure = cause; }
-      const callbackFailure = failure();
-      if (callbackFailure !== undefined && closeFailure !== undefined) {
-        throw new AggregateError([callbackFailure, closeFailure], "rolldown watch cleanup failed");
-      }
-      if (callbackFailure !== undefined) throw callbackFailure;
-      if (closeFailure !== undefined) throw closeFailure;
-    }),
+    }).pipe(
+      Effect.andThen(result),
+      Effect.ensuring(Effect.promise(() => watcher.close())),
+    ),
   ).pipe(Effect.catchCause((cause) => Queue.failCause(queue, cause))), { bufferSize: 1, strategy: "sliding" });

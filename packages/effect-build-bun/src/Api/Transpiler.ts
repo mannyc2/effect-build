@@ -32,12 +32,11 @@ export class Factory extends Context.Service<Factory, FactoryService>()("effect-
 const invoke = <A>(operation: string, run: () => A): Effect.Effect<A, BunApiFailed> =>
   Effect.try({ try: run, catch: (cause) => new BunApiFailed({ operation, cause }) });
 
-export const layer = Layer.effect(Factory, Effect.gen(function*() {
-  const Native = yield* globalApi("Transpiler");
+export const layer = Layer.effect(Factory, Effect.map(globalApi("Transpiler"), (Native) => {
   return {
-    make: (options) => invoke("makeTranspiler", () => {
+    make: Effect.fn("Bun.Api.Transpiler.make")((options?: Options) => invoke("makeTranspiler", () => {
       const native = new Native(options);
-      const transformSync: Transpiler["transformSync"] = (
+      const transformSync: Transpiler["transformSync"] = Effect.fn("Bun.Api.Transpiler.transformSync")((
         source: Source,
         loaderOrContext?: Loader | object,
         context?: object,
@@ -46,19 +45,19 @@ export const layer = Layer.effect(Factory, Effect.gen(function*() {
         return typeof loaderOrContext === "object"
           ? native.transformSync(source, loaderOrContext)
           : native.transformSync(source, loaderOrContext);
-      });
+      }));
       return {
         native,
-        transform: (source, loader) => Effect.tryPromise({
+        transform: Effect.fn("Bun.Api.Transpiler.transform")((source: Source, loader?: Loader) => Effect.tryPromise({
           // Bun's worker pool has no cancellation handle; interruption stops awaiting.
           try: () => native.transform(source, loader),
           catch: (cause) => new BunApiFailed({ operation: "transform", cause }),
-        }),
+        })),
         transformSync,
-        scan: (source) => invoke("scan", () => native.scan(source)),
-        scanImports: (source) => invoke("scanImports", () => native.scanImports(source)),
+        scan: Effect.fn("Bun.Api.Transpiler.scan")((source: Source) => invoke("scan", () => native.scan(source))),
+        scanImports: Effect.fn("Bun.Api.Transpiler.scanImports")((source: Source) => invoke("scanImports", () => native.scanImports(source))),
       } satisfies Transpiler;
-    }),
+    })),
   } satisfies FactoryService;
 }));
 

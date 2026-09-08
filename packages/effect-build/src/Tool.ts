@@ -1,4 +1,4 @@
-import { Config, Crypto, Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { Config, Crypto, Effect, FileSystem, Path, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import type * as Artifact from "./Artifact.js";
 import { sha256 } from "./Artifact.js";
@@ -99,86 +99,72 @@ const collect = (stream: Stream.Stream<Uint8Array, unknown>, limit: number) =>
 const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
 /** Run a resolved tool with argv. Non-zero exit is `Failed`; the stderr is in the error. */
-export const run = (
+export const run = Effect.fn("Tool.run")(function*(
   tool: Resolved,
   args: readonly string[],
   options: RunOptions = {},
-): Effect.Effect<Completion, Failed | SpawnFailed, ChildProcessSpawner.ChildProcessSpawner> =>
-  Effect.scoped(
-    Effect.gen(function*() {
-      const limit = options.outputLimit ?? 8 * 1024 * 1024;
-      const handle = yield* ChildProcess.make(tool.path, [...args], {
-        ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-        ...(options.env === undefined ? {} : { env: options.env, extendEnv: options.extendEnv ?? true }),
-        shell: false,
-      }).pipe(
-        // Native spawners can throw synchronously before reporting a typed launch error.
-        Effect.catchDefect(Effect.fail),
-        Effect.mapError((e) => new SpawnFailed({ name: tool.name, detail: String(e) })),
-      );
-      const [stdout, stderr, exit] = yield* Effect.all(
-        [collect(handle.stdout, limit), collect(handle.stderr, limit), handle.exitCode] as const,
-        { concurrency: "unbounded" },
-      ).pipe(Effect.mapError((e) => new SpawnFailed({ name: tool.name, detail: String(e) })));
-      const exitCode = Number(exit);
-      if (exitCode !== 0) {
-        return yield* new Failed({ name: tool.name, args: [...args], exitCode, stderr: text(stderr) });
-      }
-      return { exitCode, stdout, stderr };
-    }),
+): Effect.fn.Return<Completion, Failed | SpawnFailed, ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> {
+  const limit = options.outputLimit ?? 8 * 1024 * 1024;
+  const handle = yield* ChildProcess.make(tool.path, [...args], {
+    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    ...(options.env === undefined ? {} : { env: options.env, extendEnv: options.extendEnv ?? true }),
+    shell: false,
+  }).pipe(
+    // Native spawners can throw synchronously before reporting a typed launch error.
+    Effect.catchDefect(Effect.fail),
+    Effect.mapError((e) => new SpawnFailed({ name: tool.name, detail: String(e) })),
   );
+  const { stdout, stderr, exitCode } = yield* Effect.all(
+    { stdout: collect(handle.stdout, limit), stderr: collect(handle.stderr, limit), exitCode: handle.exitCode },
+    { concurrency: "unbounded" },
+  ).pipe(Effect.mapError((e) => new SpawnFailed({ name: tool.name, detail: String(e) })));
+  if (exitCode !== 0) {
+    return yield* new Failed({ name: tool.name, args: [...args], exitCode, stderr: text(stderr) });
+  }
+  return { exitCode, stdout, stderr };
+}, Effect.scoped);
 
-const candidatesOnPath = (name: string) =>
+const findOnPath = (name: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     // Windows commonly names this key Path; both reads must honor the caller's ConfigProvider.
     const path = yield* Config.string("PATH").pipe(Config.orElse(() => Config.string("Path")), Effect.orElseSucceed(() => ""));
     const names = p.sep === "\\" ? [name, `${name}.exe`, `${name}.cmd`] : [name];
-    const found: string[] = [];
-    const searched: string[] = [];
-    for (const dir of path.split(p.sep === "\\" ? ";" : ":")) {
-      if (dir.length === 0) continue;
-      searched.push(dir);
+    const searched = path.split(p.sep === "\\" ? ";" : ":").filter((dir) => dir.length > 0);
+    for (const dir of searched) {
       for (const n of names) {
         const candidate = p.join(dir, n);
         const info = yield* fs.stat(candidate).pipe(Effect.option);
-        if (info._tag === "Some" && info.value.type !== "Directory") found.push(candidate);
+        if (info._tag === "Some" && info.value.type !== "Directory") return candidate;
       }
     }
-    return { found, searched };
+    return yield* new NotFound({ name, searched });
   });
 
 /** Resolve once per layer; later runs use the recorded path without rechecking bytes. */
-export const resolve = (options: ResolveOptions): Effect.Effect<Resolved, NotFound | ProbeFailed, Env> =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem;
-    const p = yield* Path.Path;
-    let executable: string;
-    if (options.executable !== undefined) {
-      executable = p.resolve(options.executable);
-      const info = yield* fs.stat(executable).pipe(Effect.option);
-      if (info._tag === "None") return yield* new NotFound({ name: options.name, searched: [executable] });
-    } else {
-      const { found, searched } = yield* candidatesOnPath(options.name);
-      if (found.length === 0) return yield* new NotFound({ name: options.name, searched });
-      executable = found[0]!;
-    }
-    const real = yield* fs.realPath(executable).pipe(Effect.orElseSucceed(() => executable));
-    const contents = yield* fs.readFile(real).pipe(
-      Effect.mapError((e) => new ProbeFailed({ name: options.name, path: real, detail: String(e) })),
-    );
-    const digest = yield* sha256(contents);
-    const provisional: Resolved = { name: options.name, path: real, version: "", bytes: contents.byteLength, sha256: digest };
-    const completion = yield* run(provisional, options.versionArgs ?? ["--version"]).pipe(
-      Effect.mapError((e) => new ProbeFailed({ name: options.name, path: real, detail: e instanceof SpawnFailed ? e.detail : e.message })),
-    );
-    const version = (options.parseVersion ?? ((c) => text(c.stdout).trim().split(/\s+/u)[0]))(completion);
-    if (version === undefined || version.length === 0) {
-      return yield* new ProbeFailed({ name: options.name, path: real, detail: "could not read version" });
-    }
-    return { ...provisional, version };
-  });
+export const resolve = Effect.fn("Tool.resolve")(function*(options: ResolveOptions): Effect.fn.Return<Resolved, NotFound | ProbeFailed, Env> {
+  const fs = yield* FileSystem.FileSystem;
+  const p = yield* Path.Path;
+  const executable = options.executable === undefined ? yield* findOnPath(options.name) : p.resolve(options.executable);
+  if (options.executable !== undefined) {
+    yield* fs.stat(executable).pipe(Effect.mapError(() => new NotFound({ name: options.name, searched: [executable] })));
+  }
+  const real = yield* fs.realPath(executable).pipe(Effect.orElseSucceed(() => executable));
+  const contents = yield* fs.readFile(real).pipe(
+    Effect.mapError((e) => new ProbeFailed({ name: options.name, path: real, detail: String(e) })),
+  );
+  const digest = yield* sha256(contents);
+  const provisional: Resolved = { name: options.name, path: real, version: "", bytes: contents.byteLength, sha256: digest };
+  const completion = yield* run(provisional, options.versionArgs ?? ["--version"]).pipe(
+    Effect.mapError((e) => new ProbeFailed({ name: options.name, path: real, detail: e instanceof SpawnFailed ? e.detail : e.message })),
+  );
+  const version = (options.parseVersion ?? ((c) => text(c.stdout).trim().split(/\s+/u)[0]))(completion);
+  if (version === undefined || version.length === 0) {
+    return yield* new ProbeFailed({ name: options.name, path: real, detail: "could not read version" });
+  }
+  return { ...provisional, version };
+});
 
 type Version = readonly [number, number, number];
 

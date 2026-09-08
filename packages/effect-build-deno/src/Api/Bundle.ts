@@ -66,7 +66,7 @@ interface Service {
 }
 export class Bundle extends Context.Service<Bundle, Service>()("effect-build-deno/Api/Bundle") {}
 
-const globalBundle = () => Effect.gen(function*() {
+const globalBundle = Effect.gen(function*() {
   const host: unknown = Reflect.get(globalThis, "Deno");
   const versionValue: unknown = typeof host === "object" && host !== null ? Reflect.get(host, "version") : undefined;
   const version: unknown = typeof versionValue === "object" && versionValue !== null ? Reflect.get(versionValue, "deno") : undefined;
@@ -89,22 +89,26 @@ export const memory = (options: MemoryOptions): Effect.Effect<Native.Result, Fai
 export const direct = (options: DirectOptions): Effect.Effect<Native.Result, Failure, Bundle> =>
   Bundle.use((service) => service.direct(options));
 
-export const layer = Layer.effect(Bundle, Effect.gen(function*() {
-  const native = yield* globalBundle();
+export const layer = Layer.effect(Bundle, Effect.map(globalBundle, (native) => {
   const invoke = (mode: "memory" | "direct", options: Native.Options) => Effect.tryPromise({
     // Deno.bundle has no cancellation handle; interruption only stops awaiting it.
     try: () => native(options),
     catch: (cause) => new DenoBundleFailed({ mode, cause }),
   });
   return {
-    memory: (options) => options.write === false
-      ? invoke("memory", options)
-      : Effect.fail(new DenoBundleModeInvalid({ mode: "memory", reason: "write must be false for memory output" })),
-    direct: (options) => options.write === true && (
-        (typeof options.outputPath === "string" && options.outputPath.length > 0 && options.outputDir === undefined)
-        || (typeof options.outputDir === "string" && options.outputDir.length > 0 && options.outputPath === undefined)
-      )
-      ? invoke("direct", options)
-      : Effect.fail(new DenoBundleModeInvalid({ mode: "direct", reason: "write must be true with one outputPath or outputDir" })),
+    memory: Effect.fn("Deno.Api.Bundle.memory")(function*(options: MemoryOptions) {
+      if (options.write !== false) {
+        return yield* new DenoBundleModeInvalid({ mode: "memory", reason: "write must be false for memory output" });
+      }
+      return yield* invoke("memory", options);
+    }),
+    direct: Effect.fn("Deno.Api.Bundle.direct")(function*(options: DirectOptions) {
+      const output = options.outputPath ?? options.outputDir;
+      if (options.write !== true || typeof output !== "string" || output.length === 0
+        || (options.outputPath !== undefined && options.outputDir !== undefined)) {
+        return yield* new DenoBundleModeInvalid({ mode: "direct", reason: "write must be true with one outputPath or outputDir" });
+      }
+      return yield* invoke("direct", options);
+    }),
   } satisfies Service;
 }));

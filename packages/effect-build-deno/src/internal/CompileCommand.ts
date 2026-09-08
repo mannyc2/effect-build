@@ -80,24 +80,16 @@ export interface Input extends Options {
   readonly target?: Target;
 }
 
-const targetSet = new Set<string>(Target.literals);
+const systemTargets = {
+  "x86_64-unknown-linux-gnu": "linux-x64",
+  "aarch64-unknown-linux-gnu": "linux-arm64",
+  "x86_64-pc-windows-msvc": "windows-x64",
+  "aarch64-pc-windows-msvc": "windows-arm64",
+  "x86_64-apple-darwin": "darwin-x64",
+  "aarch64-apple-darwin": "darwin-arm64",
+} satisfies Record<Target, CoreTarget>;
 
-export const systemTarget = (target: Target): CoreTarget => {
-  switch (target) {
-    case "x86_64-unknown-linux-gnu":
-      return "linux-x64";
-    case "aarch64-unknown-linux-gnu":
-      return "linux-arm64";
-    case "x86_64-pc-windows-msvc":
-      return "windows-x64";
-    case "aarch64-pc-windows-msvc":
-      return "windows-arm64";
-    case "x86_64-apple-darwin":
-      return "darwin-x64";
-    case "aarch64-apple-darwin":
-      return "darwin-arm64";
-  }
-};
+export const systemTarget = (target: Target): CoreTarget => systemTargets[target];
 
 const permissionFields = [
   ["allow-read", "allowRead"],
@@ -173,34 +165,17 @@ export const renderArgv = (
   ...(input.scriptArgs ?? []),
 ];
 
-const validatePermissionLists = (
-  operation: "compile" | "watch",
-  input: Options,
-): Effect.Effect<void, InputInvalid> =>
-  Effect.gen(function*() {
-    for (const [, field] of permissionFields) {
-      yield* validatePermission(operation, field, input[field]);
-    }
-    yield* validatePermission(operation, "allowScripts", input.allowScripts);
-  });
-
-const validateCommon = (
-  operation: "compile" | "watch",
-  input: Input,
-): Effect.Effect<void, InputInvalid> =>
-  Effect.gen(function*() {
-    yield* validatePath(operation, "entrypoint", input.entrypoint);
-    yield* validatePath(operation, "outfile", input.outfile);
-    yield* validatePermissionLists(operation, input);
-    if (input.target !== undefined && !targetSet.has(input.target)) {
-      return yield* new InputInvalid({
-        operation,
-        reason: `unsupported Deno 2.9.5 target: ${String(input.target)}`,
-      });
-    }
-  });
-
-export const validateInput = (
-  input: Input,
-): Effect.Effect<void, InputInvalid> =>
-  validateCommon("compile", input);
+export const validateInput = Effect.fnUntraced(function*(input: Input): Effect.fn.Return<void, InputInvalid> {
+  yield* validatePath("compile", "entrypoint", input.entrypoint);
+  yield* validatePath("compile", "outfile", input.outfile);
+  for (const [, field] of permissionFields) {
+    yield* validatePermission("compile", field, input[field]);
+  }
+  yield* validatePermission("compile", "allowScripts", input.allowScripts);
+  if (input.target !== undefined && !Target.literals.includes(input.target)) {
+    return yield* new InputInvalid({
+      operation: "compile",
+      reason: `unsupported Deno 2.9.5 target: ${String(input.target)}`,
+    });
+  }
+});

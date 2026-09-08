@@ -1,4 +1,4 @@
-import { Crypto, Effect, FileSystem, Path, Schema } from "effect";
+import { Crypto, Effect, Encoding, FileSystem, Path, Schema } from "effect";
 import * as Inspect from "./Executable.js";
 import { Target } from "./Target.js";
 
@@ -72,10 +72,8 @@ export class ArtifactError extends Schema.TaggedError<ArtifactError>()("Artifact
 
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
 
-const hex = (bytes: Uint8Array): string => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-
 export const sha256 = (data: Uint8Array): Effect.Effect<string, never, Crypto.Crypto> =>
-  Crypto.Crypto.use((crypto) => crypto.digest("SHA-256", data)).pipe(Effect.map(hex), Effect.orDie);
+  Crypto.Crypto.use((crypto) => crypto.digest("SHA-256", data)).pipe(Effect.map(Encoding.encodeHex), Effect.orDie);
 
 const readRegular = (path: string) =>
   Effect.gen(function*() {
@@ -89,7 +87,7 @@ const readRegular = (path: string) =>
     const contents = yield* fs.readFile(absolute).pipe(
       Effect.mapError(() => new ArtifactError({ path: absolute, reason: "unreadable" })),
     );
-    return { absolute, contents, digest: yield* sha256(contents), mode: info.mode };
+    return { absolute, contents, digest: yield* sha256(contents) };
   });
 
 export const file = (path: string, producedBy: Producer): Effect.Effect<File, ArtifactError, Fs> =>
@@ -201,11 +199,11 @@ export const verify = <A extends Artifact>(artifact: A): Effect.Effect<A, Artifa
 
 export const readVerified = (artifact: Regular): Effect.Effect<Uint8Array, ArtifactError, Fs> =>
   readRegular(artifact.path).pipe(
-    Effect.flatMap(({ contents, digest }) =>
-      digest === artifact.sha256 && contents.byteLength === artifact.bytes
-        ? Effect.succeed(contents)
-        : Effect.fail(new ArtifactError({ path: artifact.path, reason: "changed" }))
+    Effect.filterOrFail(
+      ({ contents, digest }) => digest === artifact.sha256 && contents.byteLength === artifact.bytes,
+      () => new ArtifactError({ path: artifact.path, reason: "changed" }),
     ),
+    Effect.map(({ contents }) => contents),
   );
 
 export const encode = Schema.encodeSync(Schema.Array(Artifact));

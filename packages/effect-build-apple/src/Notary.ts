@@ -17,24 +17,21 @@ export type Rejected = typeof Rejected.Type;
 export const Status = Schema.Union([Pending, Accepted, Rejected]);
 export type Status = typeof Status.Type;
 
-const referenceFields = {
-  submissionId: SubmissionId,
-  kind: SubmissionKind,
-  artifact: SignedProduct,
-  producedBy: Artifact.Producer,
-};
 const matchingKind = Schema.makeFilter((value: { readonly kind: SubmissionKind; readonly artifact: SignedProduct }) =>
   value.kind === (value.artifact.product === "app" ? "zip" : value.artifact.product)
     ? undefined
     : "submission kind does not match its artifact product");
-export const SubmissionReference = Schema.Struct(referenceFields).check(matchingKind);
+export const SubmissionReference = Schema.Struct({
+  submissionId: SubmissionId,
+  kind: SubmissionKind,
+  artifact: SignedProduct,
+  producedBy: Artifact.Producer,
+}).check(matchingKind);
 export type SubmissionReference = typeof SubmissionReference.Type;
-export const Submission = Schema.Struct({ ...referenceFields, status: Status, message: Schema.optionalKey(Schema.NonEmptyString) }).check(matchingKind);
+export const Submission = Schema.Struct({ ...SubmissionReference.fields, status: Status, message: Schema.optionalKey(Schema.NonEmptyString) }).check(matchingKind);
 export type Submission = typeof Submission.Type;
 export const Info = Schema.Struct({
-  ...referenceFields,
-  status: Status,
-  message: Schema.optionalKey(Schema.NonEmptyString),
+  ...Submission.fields,
   name: Schema.optionalKey(Schema.NonEmptyString),
   createdDate: Schema.optionalKey(Schema.NonEmptyString),
 }).check(matchingKind);
@@ -49,7 +46,7 @@ export const LogIssue = Schema.Struct({
 });
 export type LogIssue = typeof LogIssue.Type;
 export const Log = Schema.Struct({
-  ...referenceFields,
+  ...SubmissionReference.fields,
   status: Status,
   statusSummary: Schema.optionalKey(Schema.NonEmptyString),
   statusCode: Schema.optionalKey(Schema.Number),
@@ -58,7 +55,7 @@ export const Log = Schema.Struct({
 }).check(matchingKind);
 export type Log = typeof Log.Type;
 export type Result = Submission | Info | Log;
-export const AcceptedReference = Schema.Struct({ ...referenceFields, providerStatus: Schema.Literal("Accepted") }).check(matchingKind);
+export const AcceptedReference = Schema.Struct({ ...SubmissionReference.fields, providerStatus: Schema.Literal("Accepted") }).check(matchingKind);
 export type AcceptedReference = typeof AcceptedReference.Type;
 
 export class ResultNotAccepted extends Schema.TaggedError<ResultNotAccepted>()("NotaryResultNotAccepted", {
@@ -77,19 +74,18 @@ const reference = (value: SubmissionReference) => Schema.decodeUnknownEffect(Sub
   // A persisted reference may include additional artifact refinements; retain the original record.
   Effect.as(value),
 );
-export const acceptedReference = (result: Result): Effect.Effect<AcceptedReference, ResultNotAccepted | InputInvalid> =>
-  Effect.gen(function*() {
-    yield* reference(result);
-    const status = yield* Schema.decodeUnknownEffect(Status)(result.status).pipe(Effect.mapError((error) => new InputInvalid({ reason: String(error) })));
-    if (status._tag !== "Accepted") return yield* new ResultNotAccepted({ submissionId: result.submissionId, providerStatus: status.providerStatus });
-    return { submissionId: result.submissionId, kind: result.kind, artifact: result.artifact, producedBy: result.producedBy, providerStatus: "Accepted" };
-  });
+export const acceptedReference = Effect.fn("Apple.Notary.acceptedReference")(function*(result: Result): Effect.fn.Return<AcceptedReference, ResultNotAccepted | InputInvalid> {
+  yield* reference(result);
+  const status = yield* Schema.decodeUnknownEffect(Status)(result.status).pipe(Effect.mapError((error) => new InputInvalid({ reason: String(error) })));
+  if (status._tag !== "Accepted") return yield* new ResultNotAccepted({ submissionId: result.submissionId, providerStatus: status.providerStatus });
+  return { submissionId: result.submissionId, kind: result.kind, artifact: result.artifact, producedBy: result.producedBy, providerStatus: "Accepted" };
+});
 
 export type Credential =
   | { readonly kind: "keychain"; readonly profile: string; readonly keychain?: string }
   | { readonly kind: "api-key"; readonly keyFile: string; readonly keyId: string; readonly issuer: string }
   | { readonly kind: "apple-id"; readonly appleId: string; readonly teamId: string; readonly password: Redacted.Redacted<string> };
-const credentials = (credential: Credential) => Effect.gen(function*() {
+const credentials = Effect.fn("Apple.Notary.credentials")(function*(credential: Credential) {
   let args: string[];
   let values: string[];
   switch (credential.kind) {
@@ -120,7 +116,7 @@ type Operation = "submit" | "info" | "log";
 type LookupError = InputInvalid | ResponseInvalid | Tool.Failed | Tool.SpawnFailed;
 const objectValue = (value: unknown): Readonly<Record<string, unknown>> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? value as Readonly<Record<string, unknown>> : undefined;
-const runJson = (operation: Operation, args: readonly string[], credential: Credential, cwd?: string) => Effect.gen(function*() {
+const runJson = Effect.fn("Apple.Notary.runJson")(function*(operation: Operation, args: readonly string[], credential: Credential, cwd?: string) {
   if (cwd !== undefined && !textValid(cwd)) return yield* new InputInvalid({ reason: "cwd must be non-empty and contain no NUL" });
   const auth = yield* credentials(credential);
   const completion = yield* runNative("notarytool", [operation, ...args, "--output-format", "json", ...auth.args], {
@@ -140,7 +136,7 @@ const runJson = (operation: Operation, args: readonly string[], credential: Cred
 });
 const submissionId = (operation: Operation, value: string | undefined) => {
   const canonical = value?.toLowerCase();
-  return canonical !== undefined && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(canonical)
+  return Schema.is(SubmissionId)(canonical)
     ? Effect.succeed(canonical)
     : Effect.fail(new ResponseInvalid({ operation, reason: "response is missing a valid submission UUID" }));
 };
@@ -196,7 +192,7 @@ export interface LookupInput {
   readonly credential: Credential;
   readonly cwd?: string;
 }
-export const info = (input: LookupInput): Effect.Effect<Info, LookupError, Apple | Env> => Effect.gen(function*() {
+export const info = Effect.fn("Apple.Notary.info")(function*(input: LookupInput): Effect.fn.Return<Info, LookupError, Apple | Env> {
   yield* reference(input.reference);
   const { tool } = yield* Apple;
   // A persisted ID remains useful after the local artifact has moved or been removed.
@@ -212,7 +208,7 @@ export const info = (input: LookupInput): Effect.Effect<Info, LookupError, Apple
     ...(message === undefined ? {} : { message }), ...(name === undefined ? {} : { name }), ...(createdDate === undefined ? {} : { createdDate }),
   };
 });
-export const log = (input: LookupInput): Effect.Effect<Log, LookupError, Apple | Env> => Effect.gen(function*() {
+export const log = Effect.fn("Apple.Notary.log")(function*(input: LookupInput): Effect.fn.Return<Log, LookupError, Apple | Env> {
   yield* reference(input.reference);
   const { tool } = yield* Apple;
   const response = yield* runJson("log", [input.reference.submissionId], input.credential, input.cwd);
@@ -220,8 +216,7 @@ export const log = (input: LookupInput): Effect.Effect<Log, LookupError, Apple |
   if (id !== input.reference.submissionId) return yield* new ResponseInvalid({ operation: "log", reason: "response submission UUID differs from the requested UUID" });
   const nativeIssues = response.data.issues ?? [];
   if (!Array.isArray(nativeIssues)) return yield* new ResponseInvalid({ operation: "log", reason: "issues must be an array or null" });
-  const issues: LogIssue[] = [];
-  for (const [index, value] of nativeIssues.entries()) {
+  const issues = yield* Effect.forEach(nativeIssues, (value: unknown, index) => Effect.gen(function*() {
     const issue = objectValue(value);
     const severity = response.safeText(issue?.severity);
     const message = response.safeText(issue?.message);
@@ -230,8 +225,8 @@ export const log = (input: LookupInput): Effect.Effect<Log, LookupError, Apple |
     const code = response.safeText(typeof issue?.code === "number" ? String(issue.code) : issue?.code);
     const docUrl = response.safeText(issue?.docUrl);
     const architecture = response.safeText(issue?.architecture);
-    issues.push({ severity, message, ...(path === undefined ? {} : { path }), ...(code === undefined ? {} : { code }), ...(docUrl === undefined ? {} : { docUrl }), ...(architecture === undefined ? {} : { architecture }) });
-  }
+    return { severity, message, ...(path === undefined ? {} : { path }), ...(code === undefined ? {} : { code }), ...(docUrl === undefined ? {} : { docUrl }), ...(architecture === undefined ? {} : { architecture }) };
+  }));
   const statusSummary = response.safeText(response.data.statusSummary);
   const archiveFilename = response.safeText(response.data.archiveFilename);
   const statusCode = typeof response.data.statusCode === "number" ? response.data.statusCode : undefined;

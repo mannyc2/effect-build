@@ -31,8 +31,7 @@ export const buildToDirectory = (
   input: BuildToDirectoryOptions,
 ): Effect.Effect<Output, BunApiFailed | InputInvalid, Build> => Build.use((service) => service.buildToDirectory(input));
 
-export const layer = Layer.effect(Build, Effect.gen(function*() {
-  const native = yield* globalApi("build");
+export const layer = Layer.effect(Build, Effect.map(globalApi("build"), (native) => {
   const invoke = (input: bun.BuildConfig) =>
     Effect.tryPromise({
       // Bun.build has no cancellation handle; interruption only stops awaiting it.
@@ -40,11 +39,17 @@ export const layer = Layer.effect(Build, Effect.gen(function*() {
       catch: (cause) => new BunApiFailed({ operation: "build", cause }),
     });
   return {
-    build: (input) => input.outdir !== undefined || input.compile !== undefined
-      ? Effect.fail(new InputInvalid({ reason: "Use buildToDirectory for outdir or Bun.compile for an executable" }))
-      : invoke(input),
-    buildToDirectory: (input) => typeof input.outdir === "string" && input.outdir.length > 0 && input.compile === undefined
-      ? invoke(input)
-      : Effect.fail(new InputInvalid({ reason: "buildToDirectory requires outdir and does not accept compile" })),
+    build: Effect.fn("Bun.Api.Build.build")(function*(input: BuildOptions) {
+      if (input.outdir !== undefined || input.compile !== undefined) {
+        return yield* new InputInvalid({ reason: "Use buildToDirectory for outdir or Bun.compile for an executable" });
+      }
+      return yield* invoke(input);
+    }),
+    buildToDirectory: Effect.fn("Bun.Api.Build.buildToDirectory")(function*(input: BuildToDirectoryOptions) {
+      if (typeof input.outdir !== "string" || input.outdir.length === 0 || input.compile !== undefined) {
+        return yield* new InputInvalid({ reason: "buildToDirectory requires outdir and does not accept compile" });
+      }
+      return yield* invoke(input);
+    }),
   } satisfies Service;
 }));

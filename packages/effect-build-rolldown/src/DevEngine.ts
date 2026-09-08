@@ -28,12 +28,11 @@ export const make = (
   input: InputOptions,
   output?: OutputOptions,
   options: DevOptions = {},
-): Effect.Effect<DevEngine, Failed, Scope.Scope> => Effect.gen(function*() {
-  const native = yield* Effect.acquireRelease(
-    invoke("dev.create", () => NativeDevEngine.create(input, output, options)),
-    (native) => Effect.promise(() => native.close()),
-  );
-  return {
+): Effect.Effect<DevEngine, Failed, Scope.Scope> => Effect.acquireRelease(
+  invoke("dev.create", () => NativeDevEngine.create(input, output, options)),
+  (native) => Effect.promise(() => native.close()),
+).pipe(
+  Effect.map((native) => ({
     run: invoke("dev.run", () => native.run()),
     ensureCurrentBuildFinish: invoke("dev.ensureCurrentBuildFinish", () => native.ensureCurrentBuildFinish()),
     ensureLatestBuildOutput: invoke("dev.ensureLatestBuildOutput", () => native.ensureLatestBuildOutput()),
@@ -43,5 +42,5 @@ export const make = (
     notifyPayloadDelivered: (filename) => invoke("dev.notifyPayloadDelivered", () => native.notifyPayloadDelivered(filename)),
     removeClient: (clientId) => invoke("dev.removeClient", () => native.removeClient(clientId)),
     compileEntry: (moduleId, clientId) => invoke("dev.compileEntry", () => native.compileEntry(moduleId, clientId)),
-  } satisfies DevEngine;
-});
+  } satisfies DevEngine)),
+);

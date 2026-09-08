@@ -61,15 +61,14 @@ const writeArchive = (
 
 const archive = (format: Format, input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> =>
   Effect.gen(function*() {
-    const entries: Entry[] = [];
-    for (const entry of input.entries) {
-      entries.push({
+    const entries = yield* Effect.forEach(input.entries, (entry) =>
+      Artifact.readVerified(entry.artifact).pipe(Effect.map((contents): Entry => ({
         path: entry.path,
         kind: "file",
         mode: (entry.executable ?? entry.artifact.kind === "executable") ? 0o755 : 0o644,
-        contents: yield* Artifact.readVerified(entry.artifact),
-      });
-    }
+        contents,
+      })))
+    );
     return yield* writeArchive(input.outfile, entries, format, input.atomic ?? true, {
       name: metadata.name,
       version: metadata.version,

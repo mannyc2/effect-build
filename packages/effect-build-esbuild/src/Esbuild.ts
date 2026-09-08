@@ -45,18 +45,17 @@ export interface Context<Input extends esbuild.BuildOptions = esbuild.BuildOptio
 
 export const context = <const Input extends esbuild.BuildOptions>(
   input: Input,
-): Effect.Effect<Context<Input>, EsbuildFailed, Scope.Scope> => Effect.gen(function*() {
-  const native = yield* Effect.acquireRelease(
-    invoke("context", () => esbuild.context(input as esbuild.BuildOptions) as Promise<esbuild.BuildContext<Input>>),
-    (native) => Effect.promise(() => native.cancel()).pipe(Effect.ensuring(Effect.promise(() => native.dispose()))),
-  );
-  return {
+): Effect.Effect<Context<Input>, EsbuildFailed, Scope.Scope> => Effect.acquireRelease(
+  invoke("context", () => esbuild.context(input as esbuild.BuildOptions) as Promise<esbuild.BuildContext<Input>>),
+  (native) => Effect.promise(() => native.cancel()).pipe(Effect.ensuring(Effect.promise(() => native.dispose()))),
+).pipe(
+  Effect.map((native) => ({
     rebuild: invoke("rebuild", () => native.rebuild()),
     watch: (options) => invoke("watch", () => native.watch(options)),
     serve: (options) => invoke("serve", () => native.serve(options)),
     cancel: invoke("cancel", () => native.cancel()),
-  } satisfies Context<Input>;
-});
+  } satisfies Context<Input>)),
+);
 
 export type DirectoryOptions = Omit<esbuild.BuildOptions, "outdir" | "outfile" | "write"> & {
   readonly outdir: string;

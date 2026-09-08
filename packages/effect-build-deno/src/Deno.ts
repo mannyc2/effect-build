@@ -66,8 +66,8 @@ const runOptions = (input: Invocation, runtime?: Service["runtime"]): Tool.RunOp
     ...(input.extendEnv === undefined ? {} : { extendEnv: input.extendEnv }),
   };
 };
-const outputPath = (path: string, cwd?: string) => Path.Path.use((p) => Effect.succeed(p.resolve(cwd ?? "", path)));
-const compileInput = (input: CompileInput, outfile: string) => Effect.gen(function*() {
+const outputPath = (path: string, cwd?: string) => Effect.map(Path.Path, (p) => p.resolve(cwd ?? "", path));
+const compileInput = Effect.fnUntraced(function*(input: CompileInput, outfile: string) {
   const target = input.target === undefined ? undefined : Native.Target.literals.find((t) => t === input.target || Native.systemTarget(t) === input.target);
   if (input.target !== undefined && target === undefined) {
     return yield* new InputInvalid({ operation: "compile", reason: `Deno does not compile target ${input.target}` });
@@ -87,7 +87,7 @@ const compileInput = (input: CompileInput, outfile: string) => Effect.gen(functi
   return { native, target: expected };
 });
 
-export const compile = (input: CompileInput): Effect.Effect<CompileArtifact, CompileError, Env> => Effect.gen(function*() {
+export const compile = Effect.fn("Deno.compile")(function*(input: CompileInput): Effect.fn.Return<CompileArtifact, CompileError, Env> {
   const outfile = yield* outputPath(input.outfile, input.cwd);
   const { native, target } = yield* compileInput(input, outfile);
   const { tool, runtime } = yield* Deno;
@@ -150,10 +150,14 @@ const renderBundle = (input: BundleOptions): readonly string[] => [
   ...(input.external ?? []).flatMap((external) => ["--external", external]),
   ...(input.quiet === true ? ["--quiet"] : []), ...(input.declaration === true ? ["--declaration"] : []),
 ];
-const directory = (input: Invocation & { readonly outdir: string; readonly atomic?: boolean }, files: readonly string[], args: readonly string[]) => Effect.gen(function*() {
+const directory = Effect.fnUntraced(function*(
+  input: Invocation & { readonly outdir: string; readonly atomic?: boolean },
+  files: readonly string[],
+  args: readonly [string, ...string[]],
+) {
   if (files.length === 0) return yield* new InputInvalid({ reason: "At least one input file is required" });
-  for (const file of files) yield* validatePath(args[0]!, "input", file);
-  yield* validatePath(args[0]!, "outdir", input.outdir);
+  for (const file of files) yield* validatePath(args[0], "input", file);
+  yield* validatePath(args[0], "outdir", input.outdir);
   const outdir = yield* outputPath(input.outdir, input.cwd);
   const { tool } = yield* Deno;
   const fs = yield* FileSystem.FileSystem;
@@ -164,19 +168,19 @@ const directory = (input: Invocation & { readonly outdir: string; readonly atomi
   });
   return yield* input.atomic === false ? produce(outdir) : Commit.atomic(outdir, produce);
 });
-export const bundle = (input: BundleInput): Effect.Effect<Artifact.Directory, BuildError, Env> => Effect.gen(function*() {
+export const bundle = Effect.fn("Deno.bundle")(function*(input: BundleInput): Effect.fn.Return<Artifact.Directory, BuildError, Env> {
   const options = input.options ?? {};
   yield* validatePermission("bundle", "allowImport", options.allowImport);
   yield* validatePermission("bundle", "denyImport", options.denyImport);
   yield* validatePermission("bundle", "allowScripts", options.allowScripts);
   return yield* directory(input, input.entrypoints, ["bundle", ...renderBundle(options)]);
 });
-export const transpile = (input: TranspileInput): Effect.Effect<Artifact.Directory, BuildError, Env> => {
+export const transpile = Effect.fn("Deno.transpile")((input: TranspileInput): Effect.Effect<Artifact.Directory, BuildError, Env> => {
   const options = input.options ?? {};
   return directory(input, input.files, ["transpile", ...renderProject(options),
     ...(options.sourceMap === undefined ? [] : ["--source-map", options.sourceMap]),
     ...(options.quiet === true ? ["--quiet"] : []), ...(options.declaration === true ? ["--declaration"] : [])]);
-};
+});
 
 export interface WatchInput extends Omit<CompileInput, "atomic"> {
   readonly noClearScreen?: boolean;
@@ -188,7 +192,7 @@ export interface Watch {
   readonly outfile: string;
 }
 /** Rebuilds directly into outfile while its scope is open. */
-export const watch = (input: WatchInput): Effect.Effect<Watch, InputInvalid | Tool.SpawnFailed, Deno | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> => Effect.gen(function*() {
+export const watch = Effect.fn("Deno.watch")(function*(input: WatchInput): Effect.fn.Return<Watch, InputInvalid | Tool.SpawnFailed, Deno | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> {
   const outfile = yield* outputPath(input.outfile, input.cwd);
   const { native } = yield* compileInput(input, outfile);
   const { tool, runtime } = yield* Deno;

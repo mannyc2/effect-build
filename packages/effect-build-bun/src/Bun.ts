@@ -137,15 +137,14 @@ const renderArgv = (input: CompileInput, out: string, target: BunTarget): string
 };
 
 const validPath = (value: string): boolean => value.length > 0 && !value.includes("\0");
-const validate = (entrypoints: readonly string[], output?: string) =>
-  Effect.gen(function*() {
-    if (entrypoints.length === 0 || entrypoints.some((entrypoint) => !validPath(entrypoint))) {
-      return yield* new InputInvalid({ reason: "entrypoints must be non-empty paths without NUL" });
-    }
-    if (output !== undefined && !validPath(output)) {
-      return yield* new InputInvalid({ reason: "output must be a non-empty path without NUL" });
-    }
-  });
+const validate = Effect.fnUntraced(function*(entrypoints: readonly string[], output?: string) {
+  if (entrypoints.length === 0 || entrypoints.some((entrypoint) => !validPath(entrypoint))) {
+    return yield* new InputInvalid({ reason: "entrypoints must be non-empty paths without NUL" });
+  }
+  if (output !== undefined && !validPath(output)) {
+    return yield* new InputInvalid({ reason: "output must be a non-empty path without NUL" });
+  }
+});
 
 const outputPath = (output: string, cwd?: string) =>
   Effect.map(Path.Path, (p) => p.resolve(cwd ?? ".", output));
@@ -154,36 +153,34 @@ const outputPath = (output: string, cwd?: string) =>
  * `bun build --compile` as an Effect. Verifies the produced binary's header
  * against the requested target before returning it.
  */
-export const compile = (
+export const compile = Effect.fn("Bun.compile")(function*(
   input: CompileInput,
-): Effect.Effect<
+): Effect.fn.Return<
   Artifact.Executable,
   CompileError,
   Bun | FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner
-> =>
-  Effect.gen(function*() {
-    yield* validate(input.entrypoints, input.outfile);
-    const { tool } = yield* Bun;
-    const requested = input.target ?? Target.host();
-    if (requested === undefined) return yield* new InputInvalid({ reason: "unsupported host; pass target" });
-    const bunTarget = toBunTarget(requested);
-    if (!BunTarget.literals.includes(bunTarget)) {
-      return yield* new InputInvalid({ reason: `unsupported Bun target: ${requested}` });
-    }
-    const target = toTarget(bunTarget);
-    const suffix = Target.parts(target).executableSuffix;
-    if (suffix !== "" && !input.outfile.endsWith(suffix)) {
-      // Bun always names Windows outputs *.exe, so the caller's outfile must too.
-      return yield* new InputInvalid({ reason: `outfile for ${target} must end with ${suffix}` });
-    }
-    const produce = (out: string) =>
-      Effect.gen(function*() {
-        yield* Tool.run(tool, renderArgv(input, out, bunTarget), input.cwd === undefined ? {} : { cwd: input.cwd });
-        return yield* Artifact.executable(out, Tool.producer(tool), target);
-      });
-    const outfile = yield* outputPath(input.outfile, input.cwd);
-    return input.atomic === false ? yield* produce(outfile) : yield* Commit.atomic(outfile, produce);
-  });
+> {
+  yield* validate(input.entrypoints, input.outfile);
+  const { tool } = yield* Bun;
+  const requested = input.target ?? Target.host();
+  if (requested === undefined) return yield* new InputInvalid({ reason: "unsupported host; pass target" });
+  const bunTarget = toBunTarget(requested);
+  if (!BunTarget.literals.includes(bunTarget)) {
+    return yield* new InputInvalid({ reason: `unsupported Bun target: ${requested}` });
+  }
+  const target = toTarget(bunTarget);
+  const suffix = Target.parts(target).executableSuffix;
+  if (suffix !== "" && !input.outfile.endsWith(suffix)) {
+    // Bun always names Windows outputs *.exe, so the caller's outfile must too.
+    return yield* new InputInvalid({ reason: `outfile for ${target} must end with ${suffix}` });
+  }
+  const produce = (out: string) =>
+    Tool.run(tool, renderArgv(input, out, bunTarget), input.cwd === undefined ? {} : { cwd: input.cwd }).pipe(
+      Effect.andThen(Artifact.executable(out, Tool.producer(tool), target)),
+    );
+  const outfile = yield* outputPath(input.outfile, input.cwd);
+  return input.atomic === false ? yield* produce(outfile) : yield* Commit.atomic(outfile, produce);
+});
 
 export type Loader = "js" | "jsx" | "ts" | "tsx" | "json" | "toml" | "yaml" | "text" | "file"
   | "dataurl" | "base64" | "css" | "html" | "sqlite" | "wasm" | "napi";
@@ -252,45 +249,40 @@ const renderBundleOptions = (o: BundleOptions): string[] => [
   ...(o.bundle === false ? ["--no-bundle"] : []),
 ];
 
-export const build = (input: BuildInput) =>
-  Effect.gen(function*() {
-    yield* validate(input.entrypoints);
-    const { tool } = yield* Bun;
-    const result = yield* Tool.run(tool, ["build", ...renderBundleOptions(input.options ?? {}), ...input.entrypoints],
-      input.cwd === undefined ? {} : { cwd: input.cwd });
-    return result.stdout;
-  });
+export const build = Effect.fn("Bun.build")(function*(input: BuildInput) {
+  yield* validate(input.entrypoints);
+  const { tool } = yield* Bun;
+  const result = yield* Tool.run(tool, ["build", ...renderBundleOptions(input.options ?? {}), ...input.entrypoints],
+    input.cwd === undefined ? {} : { cwd: input.cwd });
+  return result.stdout;
+});
 
-export const bundle = (input: BundleInput) =>
-  Effect.gen(function*() {
-    yield* validate(input.entrypoints, input.outdir);
-    const { tool } = yield* Bun;
-    const outdir = yield* outputPath(input.outdir, input.cwd);
-    const produce = (out: string) =>
-      Effect.gen(function*() {
-        yield* Tool.run(tool,
-          ["build", ...renderBundleOptions(input.options ?? {}), `--outdir=${out}`, ...input.entrypoints],
-          input.cwd === undefined ? {} : { cwd: input.cwd });
-        return yield* Artifact.directory(out, Tool.producer(tool));
-      });
-    return input.atomic === false ? yield* produce(outdir) : yield* Commit.atomic(outdir, produce);
-  });
+export const bundle = Effect.fn("Bun.bundle")(function*(input: BundleInput) {
+  yield* validate(input.entrypoints, input.outdir);
+  const { tool } = yield* Bun;
+  const outdir = yield* outputPath(input.outdir, input.cwd);
+  const produce = (out: string) => Tool.run(tool,
+    ["build", ...renderBundleOptions(input.options ?? {}), `--outdir=${out}`, ...input.entrypoints],
+    input.cwd === undefined ? {} : { cwd: input.cwd }).pipe(
+      Effect.andThen(Artifact.directory(out, Tool.producer(tool))),
+    );
+  return input.atomic === false ? yield* produce(outdir) : yield* Commit.atomic(outdir, produce);
+});
 
 export interface WatchInput extends Omit<BundleInput, "atomic"> {
   readonly noClearScreen?: boolean;
 }
 
 /** The caller owns the scope and drains the child's stdout/stderr streams. */
-export const watch = (input: WatchInput) =>
-  Effect.gen(function*() {
-    yield* validate(input.entrypoints, input.outdir);
-    const { tool } = yield* Bun;
-    const outdir = yield* outputPath(input.outdir, input.cwd);
-    const process = yield* ChildProcess.make(tool.path, ["build", "--watch",
-      ...(input.noClearScreen === true ? ["--no-clear-screen"] : []),
-      ...renderBundleOptions(input.options ?? {}), `--outdir=${outdir}`, ...input.entrypoints], {
-      ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-      shell: false,
-    }).pipe(Effect.mapError((e) => new Tool.SpawnFailed({ name: tool.name, detail: String(e) })));
-    return { tool, process, outdir };
-  });
+export const watch = Effect.fn("Bun.watch")(function*(input: WatchInput) {
+  yield* validate(input.entrypoints, input.outdir);
+  const { tool } = yield* Bun;
+  const outdir = yield* outputPath(input.outdir, input.cwd);
+  const process = yield* ChildProcess.make(tool.path, ["build", "--watch",
+    ...(input.noClearScreen === true ? ["--no-clear-screen"] : []),
+    ...renderBundleOptions(input.options ?? {}), `--outdir=${outdir}`, ...input.entrypoints], {
+    ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    shell: false,
+  }).pipe(Effect.mapError((e) => new Tool.SpawnFailed({ name: tool.name, detail: String(e) })));
+  return { tool, process, outdir };
+});
