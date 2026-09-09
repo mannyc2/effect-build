@@ -13,13 +13,15 @@ and TypeScript 6.0.3 / Node types 24.13.3. The latter pairing accounts for Node/
 `effect-build-bun/api`, are imported and typechecked. JavaScript maps embed sources;
 declaration maps resolve to the `src` files shipped in each package.
 
-Effect and Effect platform packages are pinned to **4.0.0-rc.108** for 0.7. This is
-an explicit prerelease dependency; Effect 3 and other Effect 4 prereleases are
-unsupported. Pin `@effect/platform-node-shared` to the same RC as well: platform
-packages' caret dependency can otherwise select a newer shared RC with a newer
-Effect peer. Each Effect upgrade is a separate change tested through installed
-consumers. Stable Effect 4 support will be added after its release and verification;
-0.7 does not promise future compatibility before that evidence exists.
+Effect is a prerelease dependency. Every package accepts `>=4.0.0-rc.108 <4.1.0-0`
+as its Effect peer range, the shape Effect's own platform packages use, and
+**4.0.0-rc.108** is the tested version: the workspace pins it and every
+installed-consumer check installs it. A newer release candidate installs, and a
+non-gating CI consumer tracks the `rc` dist-tag to observe it, but nothing newer is
+promised until it becomes the tested version. Effect 3 is unsupported. Install
+`effect`, `@effect/platform-node`, and `@effect/platform-node-shared` at one version:
+platform packages' caret dependency can otherwise select a newer shared RC with a
+newer Effect peer. Stable Effect 4 support follows its release and verification.
 
 | Operation                                        | Host / tool                                                       | Target and current evidence                                                                                                                                                                             |
 | ------------------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

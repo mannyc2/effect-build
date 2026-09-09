@@ -25,6 +25,11 @@ are gone. ZIP32 and ustar field widths are the only size limits, reported as
 `Archive.FormatLimit` (archives) or `InputInvalid` (wheels) before any output is staged,
 and tar.gz no longer inherits ZIP's entry count. ZIP entries carry data descriptors.
 
+Effect peer ranges accept `>=4.0.0-rc.108 <4.1.0-0`, the shape Effect's platform packages use;
+4.0.0-rc.108 stays the tested version and a non-gating CI consumer observes the `rc` dist-tag.
+`bun-types` is an optional peer of `effect-build-bun/api` rather than a dependency, so Node
+consumers install no Bun declarations.
+
 Upgrade instructions: [0.6 to 0.7 migration](docs/migration-0.7.md).
 
 ## 0.6.3

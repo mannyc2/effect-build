@@ -3,10 +3,7 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "tsBuildInfoFile": "../../node_modules/.cache/effect-build-bun.tsbuildinfo",
-    "types": [
-      "bun-types"
-    ]
+    "tsBuildInfoFile": "../../node_modules/.cache/effect-build-bun.tsbuildinfo"
   },
   "include": [
     "src/**/*.ts"

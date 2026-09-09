@@ -14,6 +14,7 @@ Targets accept core names and Bun variants; Windows output requires lowercase `.
 Emitted builds reject 1.4.1 for a reproduced variable-collision bug; native API
 capabilities are checked independently. `version` accepts npm semver or a predicate.
 `effect-build-bun/api` exports `Build`, `Transpiler`, and their combined `layer`;
-**that subpath requires the Bun runtime** and preserves native API results.
+**that subpath requires the Bun runtime** and `bun-types` (an optional peer,
+`>=1.3.14 <2.0.0`) and preserves native API results. The package root needs neither.
 
 [Setup](../../docs/getting-started.md) · [Providers](../../docs/providers.md) · [Four-target example](../../examples/cli)

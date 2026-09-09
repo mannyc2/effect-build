@@ -39,8 +39,10 @@ execute-probing it. Node SEA defaults to the host Node executable and packages
 bundled CommonJS.
 
 `effect-build-bun/api` requires Bun to execute, and `effect-build-deno/api` requires
-Deno. Bun's public declarations retain native `bun-types@1.3.14` contracts with a
-small scoped declaration repair for that package's missing Node type names.
+Deno. The Bun API declarations retain native `bun-types` contracts, so that subpath
+needs `bun-types` (an optional peer, `>=1.3.14 <2.0.0`) plus a small scoped
+declaration repair for names its Node module declarations leave unimported. The
+package root references no Bun types, and a Node consumer installs none.
 Bun/Deno watch inherit stdout/stderr by default; select `stdio: "pipe"` to consume
 the child streams yourself. `Tool.run` and Bun/Deno operations expose `onOutput`
 for live stdout/stderr feedback; command failures retain both captured streams.

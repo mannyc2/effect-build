@@ -1,7 +1,8 @@
 # Migrating 0.6 to 0.7
 
-0.7 is a breaking replacement. Update all effect-build packages together, pin Effect
-and platform packages to 4.0.0-rc.108, and use ESM. See [compatibility](compatibility.md)
+0.7 is a breaking replacement. Update all effect-build packages together, install
+Effect and its platform packages at one 4.0 release candidate (4.0.0-rc.108 is the
+tested version), and use ESM. See [compatibility](compatibility.md)
 and the complete [first build](getting-started.md). There are no compatibility aliases.
 
 | 0.6 contract                                                 | 0.7 replacement                                                                                                                                             |

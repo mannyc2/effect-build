@@ -72,7 +72,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-apple": {
@@ -87,7 +87,7 @@
         "vitest": "3.2.6",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-archives": {
@@ -101,22 +101,26 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-bun": {
       "name": "effect-build-bun",
       "version": "0.7.0",
       "dependencies": {
-        "bun-types": "1.3.14",
         "effect-build": "workspace:^",
       },
       "devDependencies": {
+        "bun-types": "1.3.14",
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "bun-types": ">=1.3.14 <2.0.0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
+      "optionalPeers": [
+        "bun-types",
+      ],
     },
     "packages/effect-build-deno": {
       "name": "effect-build-deno",
@@ -128,7 +132,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-esbuild": {
@@ -142,7 +146,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-nfpm": {
@@ -155,7 +159,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-node-sea": {
@@ -169,7 +173,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-python": {
@@ -183,7 +187,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-rolldown": {
@@ -197,7 +201,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-sbom": {
@@ -210,7 +214,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-windows": {
@@ -223,7 +227,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": "4.0.0-rc.108",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
   },

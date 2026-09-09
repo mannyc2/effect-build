@@ -73,7 +73,9 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
   prints as `Tag: message`.
 - **Windows signing accepts MSIX files and PE executables**; signed executables must retain their input target before commit.
 - **Apple resolves xcrun once**; active Xcode tools select its native commands, and copied app trees preserve framework symlinks.
-- **Effect stays pinned to the RC** until 4.0.0 ships; bump is its own change.
+- **Effect peers accept every 4.0 release candidate from rc.108.** The workspace pins the tested RC, a
+  non-gating consumer observes the `rc` tag, and moving the tested version is its own change.
+- **bun-types is an optional peer of the Bun API subpath**; the package root references no Bun types.
 
 - **Core manifests project core fields only.** Provider schemas preserve richer signing/runtime/product/notary records.
 - **Release retries consume retained exact tarballs** and verify registry bytes before skipping an existing version.
