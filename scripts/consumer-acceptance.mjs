@@ -10,6 +10,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = async (path) => JSON.parse(await readFile(path, "utf8"));
 const workspace = await manifest(join(root, "package.json"));
 const bunPackage = await manifest(join(root, "packages/effect-build-bun/package.json"));
+const esbuildPackage = await manifest(join(root, "packages/effect-build-esbuild/package.json"));
 const directory = await mkdtemp(join(tmpdir(), "effect-build-consumer-"));
 const packed = process.argv[2] ? resolve(process.argv[2]) : join(directory, "packages");
 const installArgs = ["install", "--strict-peer-deps", "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact"];
@@ -21,6 +22,8 @@ try {
   // The workspace pins the tested release candidate; `CONSUMER_EFFECT=rc` observes the newest one.
   const effect = process.env.CONSUMER_EFFECT ?? workspace.devDependencies.effect;
   const bunTypes = process.env.CONSUMER_BUN_TYPES ?? bunPackage.devDependencies["bun-types"];
+  // esbuild is a peer; the tested version is installed explicitly so the gate does not float with the registry.
+  const esbuild = process.env.CONSUMER_ESBUILD ?? esbuildPackage.devDependencies.esbuild;
   await writeFile(
     join(directory, "package.json"),
     JSON.stringify({ name: "installed-consumer", private: true, type: "module" }),
@@ -34,6 +37,7 @@ try {
     `effect@${effect}`,
     `@effect/platform-node@${effect}`,
     `@effect/platform-node-shared@${effect}`,
+    `esbuild@${esbuild}`,
   ], { cwd: directory });
   const installed = (name) => manifest(join(directory, "node_modules", name, "package.json"));
   const exports = [];
@@ -110,7 +114,7 @@ try {
   execFileSync(process.execPath, [join(directory, "build.mjs")], { cwd: directory, stdio: "inherit" });
   assert.equal(execFileSync(executable, { cwd: directory, encoding: "utf8" }).trim(), "Hello!");
   console.log(
-    `Installed consumer passed: ${candidate.packages.length} packages, ${exports.length} exports; Node ${process.version}, TypeScript ${typescript}, Node types ${nodeTypes}, Effect ${(await installed("effect")).version}, bun-types ${(await installed("bun-types")).version}`,
+    `Installed consumer passed: ${candidate.packages.length} packages, ${exports.length} exports; Node ${process.version}, TypeScript ${typescript}, Node types ${nodeTypes}, Effect ${(await installed("effect")).version}, bun-types ${(await installed("bun-types")).version}, esbuild ${(await installed("esbuild")).version}`,
   );
 } finally {
   await rm(directory, { recursive: true, force: true });

@@ -78,6 +78,8 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Effect peers accept every 4.0 release candidate from rc.108.** The workspace pins the tested RC, a
   non-gating consumer observes the `rc` tag, and moving the tested version is its own change.
 - **bun-types is an optional peer of the Bun API subpath**; the package root references no Bun types.
+- **esbuild is a peer, Rolldown a dependency.** esbuild's API is stable within a minor, so the consumer's
+  install runs in process; the Rolldown wrapper uses `rolldown/experimental`, whose types move outside semver.
 - **Standalone executables sign with the hardened runtime, notarize as ZIPs, and are assessed, never stapled**:
   Apple issues tickets for them but cannot attach one. Entitlements come from the caller; the Bun provider lists its own.
 - **PKGs carry one signed app or one signed executable.** An executable's payload root installs to

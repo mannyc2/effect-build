@@ -29,7 +29,9 @@ and tar.gz no longer inherits ZIP's entry count. ZIP entries carry data descript
 Effect peer ranges accept `>=4.0.0-rc.108 <4.1.0-0`, the shape Effect's platform packages use;
 4.0.0-rc.108 stays the tested version and a non-gating CI consumer observes the `rc` dist-tag.
 `bun-types` is an optional peer of `effect-build-bun/api` rather than a dependency, so Node
-consumers install no Bun declarations.
+consumers install no Bun declarations. esbuild is a peer of `effect-build-esbuild`
+(`>=0.28.2 <0.29.0`, tested with 0.28.2), so one esbuild serves the consumer and the wrapper;
+Rolldown stays pinned while the wrapper uses its experimental engine API.
 
 Standalone Darwin executables sign through `Apple.sign` with the hardened runtime, a secure
 timestamp, and entitlements given as a plist artifact or as keys; `Bun.entitlements` lists what

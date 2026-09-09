@@ -140,13 +140,14 @@
       "version": "0.7.0",
       "dependencies": {
         "effect-build": "workspace:^",
-        "esbuild": "0.28.2",
       },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
+        "esbuild": "0.28.2",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-rc.108 <4.1.0-0",
+        "esbuild": ">=0.28.2 <0.29.0",
       },
     },
     "packages/effect-build-nfpm": {
