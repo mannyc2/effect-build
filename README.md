@@ -43,10 +43,10 @@ Native memory APIs retain their tool's result types.
 
 Checks are combinators: `Executable.expectTarget`, `Tool.requireVersion`, and
 `Artifact.verify`. Producers stage and check output before committing by default;
-`atomic: false` writes directly, and `Commit.output` gives your own producers the same
-switch. `Commit.atomic(..., { onExists: "fail" })` atomically refuses an occupied regular-file
-destination; directory no-replace is unsupported. Replacement is the default. Every
-error prints as `Tag: message`. See [errors](docs/errors.md).
+`atomic: false` writes directly, `onExists: "fail"` refuses an occupied regular-file
+destination, `prefix` names the staging directory, and `Commit.output` gives your own
+producers the same options. Directory no-replace is unsupported. Replacement is the
+default. Every error prints as `Tag: message`. See [errors](docs/errors.md).
 
 The [CLI example](examples/cli) stages four targets as one release directory and
 passes `(cd dist && sha256sum -c SHA256SUMS)`, even after moving the tree.

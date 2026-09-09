@@ -38,7 +38,9 @@ manual recovery.
 
 `onExists: "fail"` uses atomic hard-link creation for regular files and returns an
 explicit unsupported error for directories. File no-replace requires a filesystem
-that supports hard links; failures leave the existing destination intact.
+that supports hard links; failures leave the existing destination intact. Every
+producer forwards `onExists` and `prefix`; with `atomic: false` the existence check
+runs before production and is not exclusive.
 Use `{ staging: "sibling" }` for directory trees containing bundles, so external
 imports and source maps are computed at the final path's depth.
 

@@ -52,10 +52,9 @@ export const make = (input: rolldown.InputOptions): Effect.Effect<Build, Failed,
   } satisfies Build;
 });
 
-export type DirectoryOptions = rolldown.InputOptions & {
+export type DirectoryOptions = rolldown.InputOptions & Commit.ProducerOptions & {
   readonly outdir: string;
   readonly output?: Omit<rolldown.OutputOptions, "dir" | "file"> & { readonly dir?: never; readonly file?: never } | undefined;
-  readonly atomic?: boolean | undefined;
 };
 export const buildToDirectory = Effect.fn("Rolldown.buildToDirectory")((input: DirectoryOptions): Effect.Effect<
   Artifact.Directory,
@@ -66,14 +65,15 @@ export const buildToDirectory = Effect.fn("Rolldown.buildToDirectory")((input: D
     return yield* new InputInvalid({ reason: "buildToDirectory requires outdir and does not accept output.dir or output.file" });
   }
   const p = yield* Path.Path;
-  const { outdir, output, atomic, ...options } = input;
+  // Rolldown validates its input keys, so the commit choices leave before the native call.
+  const { outdir, output, atomic, onExists, prefix, ...options } = input;
   const destination = p.resolve(options.cwd ?? "", outdir);
   const produce = (out: string) => Effect.gen(function*() {
     yield* Effect.scoped(Effect.flatMap(make(options), (builder) => builder.write({ ...output, dir: out })));
     // closeBundle hooks finish before the directory's final bytes are recorded.
     return yield* Artifact.directory(out, { name: "rolldown", version: rolldown.VERSION });
   });
-  return yield* Commit.output(destination, produce, { atomic, staging: "sibling" });
+  return yield* Commit.output(destination, produce, { atomic, onExists, prefix }, "sibling");
 }));
 
 export const transform = (

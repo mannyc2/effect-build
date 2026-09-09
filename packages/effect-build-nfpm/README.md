@@ -5,7 +5,7 @@ and MSIX packages with `Nfpm.package`, returning `Artifact.File`.
 Provide `Nfpm.layer({ executable?, version? })` and platform services; the layer
 resolves nFPM once. `supported` is `>=2.47.0 <3.0.0`; CI tests 2.47.0.
 
-Pass `{ format, config, contents, outfile, cwd?, atomic? }`. `config` uses
+Pass `{ format, config, contents, outfile, cwd?, atomic?, onExists?, prefix? }`. `config` uses
 [nFPM's native configuration](https://nfpm.goreleaser.com/configuration/), including
 `arch`, `depends`, format-specific settings, lifecycle `scripts`, overrides, and
 native environment expansion. JSON-compatible fields are preserved and nFPM

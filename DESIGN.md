@@ -18,7 +18,7 @@ in the README includes the runtime and layers needed to execute it. Everything d
 | `Target`     | 8 literals (`linux-x64`, `linux-x64-musl`, `linux-arm64`, `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `windows-x64`, `windows-arm64`), `parts`, `all`, `host` | Same names ts-release uses. Linux without suffix means glibc.                                                                                                    |
 | `Artifact`   | `File`, `Executable`, `Directory`, `Regular`, `Producer`; `file`, `executable`, `directory`, `verify`, `streamVerified`, `copyVerified`, `readVerified`, `sha256`, `encode`, `decode` | Observe what's on disk into a record. `Executable.target` comes from the header. `Directory.sha256` hashes the sorted manifest; symlinks recorded, not followed. |
 | `Executable` | `parse`, `inspect`, `matches`, `resolveTarget`, `expectTarget`                                                                                                      | ELF/Mach-O/PE header facts. A static Linux binary matches gnu and musl.                                                                                          |
-| `Commit`     | `atomic(outfile, produce, { onExists, staging })`, `output(outfile, produce, { atomic, ... })`                                                                     | Stage with final path depth or basename, then commit with recovery. Checks run inside `produce` run before the rename. `output` is what providers do with `atomic`. |
+| `Commit`     | `atomic(outfile, produce, { onExists, prefix, staging })`, `output(outfile, produce, ProducerOptions, staging?)`                                                    | Stage with final path depth or basename, then commit with recovery. Checks run inside `produce` run before the rename. `output` is what producers do with `atomic`, `onExists` and `prefix`; the producer picks `staging`. |
 | `Tool`       | `locate`, `resolve`, `run`, `parseVersion`, `satisfies`, `requireVersion`, `producer`                                                                               | Locate and resolve once, record path/version/hash. Nothing re-checks the binary later. Ranges use npm semver.                                                     |
 | `Checksums`  | `write`                                                                                                                                                             | `sha256sum -c` compatible.                                                                                                                                       |
 
@@ -31,12 +31,13 @@ class X extends Context.Service<X, { tool: Tool.Resolved }>()("effect-build-x/X"
 const supported: string                                   // accepted range; the layer's default policy
 const tested: string                                      // exact versions real-tool CI runs
 const layer: (o?: { executable?; version?: string | ((v) => boolean) }) => Layer<X, ...>
-const compile/build/package/...: (input & { outfile; atomic?: boolean }) => Effect<Artifact, ...>
+const compile/build/package/...: (input & { outfile } & Commit.ProducerOptions) => Effect<Artifact, ...>
 ```
 
 Operations verify their own output before the rename (executables: header vs
 requested target) and commit through `Commit.output`, so `atomic: false` writes
-directly. Optional inputs accept `undefined`; callers forward `process.env` values
+directly and `onExists`/`prefix` reach the commit; staging depth is the operation's
+own choice. Optional inputs accept `undefined`; callers forward `process.env` values
 and their own optionals without spreading. Domain packages may refine core
 types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 
@@ -46,7 +47,8 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Checksum paths are relative to their file's directory**, so a staged release tree can move without rewriting them.
 - **Directory archive inputs preserve descendant modes and symlinks**; the archive prefix has mode `0755` because directory artifacts do not record their root mode.
 
-- **Replace on exists by default.** `onExists: "fail"` is one option away.
+- **Replace on exists by default.** Every producer takes `onExists: "fail"` and `prefix`; `staging` stays
+  the producer's, because files stage nested and import-bearing directories stage sibling.
 - **No tool re-check before launch.** The hash at resolve time is a record, not a lock.
 - **No overwrite guard on executables' inputs.** `Artifact.verify` is opt-in.
 - **Inputs stream.** Hashing, verified copies, archives, wheels and Git source tars move 64 KiB at a

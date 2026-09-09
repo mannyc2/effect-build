@@ -228,4 +228,37 @@ describe("atomic output", () => {
     expect(failure).toMatchObject({ _tag: "CommitError", reason: "directory-no-replace-unsupported" });
     expect(await readdir(root)).toEqual([]);
   });
+
+  it("refuses an occupied destination before direct production when onExists is fail", async () => {
+    const outfile = join(root, "cli.txt");
+    await writeFile(outfile, "existing");
+    let produced = false;
+    const failure = await run(Commit.output(outfile, (path) => {
+      produced = true;
+      return write(path, "replacement");
+    }, { atomic: false, onExists: "fail" }).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "CommitError", destination: outfile, reason: "exists" });
+    expect(produced).toBe(false);
+    expect(await readFile(outfile, "utf8")).toBe("existing");
+    const artifact = await run(Commit.output(join(root, "fresh.txt"), (path) => write(path, "direct"), { atomic: false, onExists: "fail" }));
+    expect(await readFile(artifact.path, "utf8")).toBe("direct");
+  });
+
+  it("names staging with the caller's prefix while the producer picks its depth", async () => {
+    const outfile = join(root, "cli.txt");
+    await run(Commit.output(outfile, (staged) => Effect.gen(function*() {
+      expect(basename(dirname(staged)).startsWith(".release-")).toBe(true);
+      expect(basename(staged)).toBe("cli.txt");
+      return yield* write(staged, "nested");
+    }), { prefix: ".release-" }));
+    const outdir = join(root, "bundle");
+    await run(Commit.output(outdir, (staged) => Effect.gen(function*() {
+      expect(dirname(staged)).toBe(root);
+      expect(basename(staged).startsWith(".release-")).toBe(true);
+      const fs = yield* FileSystem.FileSystem;
+      yield* fs.makeDirectory(staged, { recursive: true });
+      return yield* Artifact.directory(staged, producer);
+    }), { prefix: ".release-" }, "sibling"));
+    expect((await readdir(root)).sort()).toEqual(["bundle", "cli.txt"]);
+  });
 });

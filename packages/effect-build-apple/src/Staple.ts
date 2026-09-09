@@ -5,10 +5,9 @@ import { copyProduct, inspectProduct, outputPath, runNative, verifySignature } f
 import { SignedProduct, type SignedApp, type SignedDmg, type SignedPkg, type StapledApp, type StapledDmg, type StapledPkg, type StapledProduct } from "./Model.js";
 import { AcceptedReference } from "./Notary.js";
 
-interface StapleOptions {
+interface StapleOptions extends Commit.ProducerOptions {
   readonly acceptance: AcceptedReference;
   readonly cwd?: string | undefined;
-  readonly atomic?: boolean | undefined;
 }
 export interface StapleAppInput extends StapleOptions {
   readonly artifact: SignedApp;
@@ -52,6 +51,6 @@ export function staple(input: StapleInput): Effect.Effect<StapledProduct, Staple
       const current = yield* inspectProduct(source, out);
       return { ...current, ticket: input.acceptance };
     });
-    return yield* Commit.output(destination, produce, { atomic: input.atomic });
+    return yield* Commit.output(destination, produce, input);
   });
 }

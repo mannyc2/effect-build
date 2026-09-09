@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import type { Artifact, Commit } from "effect-build";
 import * as Bun from "effect-build-bun";
 import * as Esbuild from "effect-build-esbuild";
 import * as Rolldown from "effect-build-rolldown";
@@ -51,5 +52,20 @@ describe("committed bundle paths", () => {
         expect(await readFile(location, "utf8")).toMatch(/answer/);
       }
     }
+  });
+});
+
+describe("forwarded commit options", () => {
+  it.each(["bun", "esbuild", "rolldown"])("passes commit options through %s without reaching the native options", async (compiler) => {
+    const build = (options: Commit.ProducerOptions): Effect.Effect<Artifact.Directory, unknown, NodeServices.NodeServices | Bun.Bun> => compiler === "bun"
+      ? Bun.bundle({ cwd: root, entrypoints: ["src/main.ts"], outdir: "dist", ...options })
+      : compiler === "esbuild"
+      ? Esbuild.buildToDirectory({ absWorkingDir: root, entryPoints: ["src/main.ts"], outdir: "dist", bundle: true, ...options })
+      : Rolldown.buildToDirectory({ cwd: root, input: "src/main.ts", outdir: "dist", ...options });
+    const artifact = await run(build({ prefix: ".staged-" }));
+    expect(artifact.path).toBe(join(root, "dist"));
+    // Directories have no exclusive rename, so a forwarded onExists surfaces as the core's refusal.
+    expect(await run(Effect.flip(build({ onExists: "fail" })))).toMatchObject({ _tag: "CommitError", reason: "directory-no-replace-unsupported" });
+    expect((await readdir(root)).sort()).toEqual(["dist", "package.json", "src"]);
   });
 });

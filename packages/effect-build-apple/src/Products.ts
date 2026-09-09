@@ -5,23 +5,21 @@ import { validateResources, type Resource } from "./AppBundle.js";
 import { copyProduct, copyRegular, fileError, outputPath, runNative, textValid, verifySignature } from "./internal.js";
 import type { Dmg, Pkg, SignedApp } from "./Model.js";
 
-export interface DmgInput {
+export interface DmgInput extends Commit.ProducerOptions {
   readonly artifact: SignedApp;
   readonly outfile: string;
   readonly volumeName: string;
   readonly layout?: readonly Resource[] | undefined;
   readonly applicationsLink?: true | undefined;
   readonly cwd?: string | undefined;
-  readonly atomic?: boolean | undefined;
 }
-export interface PkgInput {
+export interface PkgInput extends Commit.ProducerOptions {
   readonly artifact: SignedApp;
   readonly outfile: string;
   readonly identifier: string;
   readonly version: string;
   readonly installLocation?: string | undefined;
   readonly cwd?: string | undefined;
-  readonly atomic?: boolean | undefined;
 }
 export type ProductError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
 
@@ -50,7 +48,7 @@ export const dmg = (input: DmgInput): Effect.Effect<Dmg, ProductError, Apple | E
     yield* runNative("hdiutil", ["verify", out], { cwd });
     return { ...yield* Artifact.file(out, Tool.producer(tool)), product: "dmg" as const };
   });
-  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+  return yield* Commit.output(outfile, produce, input);
 }));
 
 export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | Env> => Effect.scoped(Effect.gen(function*() {
@@ -76,5 +74,5 @@ export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | E
     yield* runNative("pkgutil", ["--payload-files", out], { cwd });
     return { ...yield* Artifact.file(out, Tool.producer(tool)), product: "pkg" as const };
   });
-  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+  return yield* Commit.output(outfile, produce, input);
 }));

@@ -68,6 +68,8 @@ export const PackageInput = Schema.Struct({
   outfile: LocalPath,
   cwd: Schema.optional(LocalPath),
   atomic: Schema.optional(Schema.Boolean),
+  onExists: Schema.optional(Schema.Literals(["replace", "fail"] as const)),
+  prefix: Schema.optional(LocalPath),
 });
 export type PackageInput = typeof PackageInput.Type;
 export type PackageError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
@@ -132,7 +134,7 @@ const packageArtifact = Effect.fn("Nfpm.package")((candidate: PackageInput): Eff
       Tool.run(tool, ["package", "--config", configPath, "--packager", input.format, "--target", out], { cwd }).pipe(
         Effect.andThen(Artifact.file(out, Tool.producer(tool))),
       );
-    return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+    return yield* Commit.output(outfile, produce, input);
   })));
 
 export { packageArtifact as package };

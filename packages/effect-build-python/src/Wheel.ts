@@ -15,13 +15,12 @@ export interface WheelMetadata {
 export interface WheelTags { readonly python: string; readonly abi: string; readonly platform: string; }
 export interface WheelEntry { readonly artifact: Artifact.Regular; readonly path: string; readonly executable?: boolean; }
 export type EntryPointGroups = Readonly<Record<string, Readonly<Record<string, string>>>>;
-export interface WheelInput {
+export interface WheelInput extends Commit.ProducerOptions {
   readonly metadata: WheelMetadata;
   readonly tags: WheelTags;
   readonly entries: readonly WheelEntry[];
   readonly outdir: string;
   readonly cwd?: string | undefined;
-  readonly atomic?: boolean | undefined;
   readonly rootIsPurelib?: boolean | undefined;
   readonly entryPoints?: EntryPointGroups | undefined;
 }
@@ -152,5 +151,5 @@ export const wheel = Effect.fn("Python.wheel")((input: WheelInput): Effect.Effec
     }));
     return yield* Artifact.file(path, { name: packageMetadata.name, version: packageMetadata.version });
   });
-  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+  return yield* Commit.output(outfile, produce, input);
 }));

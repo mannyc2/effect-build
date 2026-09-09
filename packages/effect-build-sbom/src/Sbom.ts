@@ -35,7 +35,7 @@ export const Format = Schema.Literals(["spdx-json", "cyclonedx-json"] as const);
 export type Format = typeof Format.Type;
 const nativeFormat = { "spdx-json": "spdx-json@2.3", "cyclonedx-json": "cyclonedx-json@1.6" } as const;
 
-export interface GenerateInput {
+export interface GenerateInput extends Commit.ProducerOptions {
   /** Release artifact associated with the inventory; always verified. */
   readonly subject: Artifact.Artifact;
   /** Source tree or named lockfile to scan for bundled dependencies. Without this, only the subject is scanned. */
@@ -43,7 +43,6 @@ export interface GenerateInput {
   readonly format: Format;
   readonly outfile: string;
   readonly cwd?: string | undefined;
-  readonly atomic?: boolean | undefined;
 }
 export type GenerateError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
 
@@ -68,5 +67,5 @@ export const generate = Effect.fn("Sbom.generate")((input: GenerateInput): Effec
         "scan", source.path, "--from", source.kind === "directory" ? "dir" : "file",
         "--output", `${nativeFormat[format]}=${out}`, "--quiet",
       ], { cwd }).pipe(Effect.andThen(Artifact.file(out, Tool.producer(tool))));
-    return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+    return yield* Commit.output(outfile, produce, input);
   }));

@@ -45,6 +45,17 @@ describe("archives from real files", () => {
     expect(await readdir(root)).toEqual(["payload"]);
   });
 
+  it.each(formats)("refuses to replace an existing %s archive when onExists is fail", async (format) => {
+    const outfile = join(root, `archive.${format}`);
+    const first = await run(pack(format, { entries: [{ artifact: payload, path: "payload" }], outfile }));
+    for (const atomic of [true, false]) {
+      const failure = await run(pack(format, { entries: [{ artifact: payload, path: "payload" }], outfile, atomic, onExists: "fail" }).pipe(Effect.flip));
+      expect(failure).toMatchObject({ _tag: "CommitError", destination: outfile, reason: "exists" });
+    }
+    expect(await run(Artifact.verify(first))).toEqual(first);
+    expect((await readdir(root)).sort()).toEqual([`archive.${format}`, "payload"]);
+  });
+
   it("streams an input larger than any fixed buffer into a zip", async () => {
     const size = 600 * 1024 * 1024, large = join(root, "large.bin");
     await writeFile(large, "");

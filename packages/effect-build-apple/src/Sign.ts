@@ -9,10 +9,9 @@ export interface NestedCode {
   readonly path: string;
   readonly entitlements?: Entitlements | undefined;
 }
-interface SignOptions {
+interface SignOptions extends Commit.ProducerOptions {
   readonly certificateSha1: string;
   readonly cwd?: string | undefined;
-  readonly atomic?: boolean | undefined;
 }
 export interface SignAppInput extends SignOptions {
   readonly artifact: App;
@@ -82,7 +81,7 @@ const signProduct = (input: SignAppInput | SignDmgInput | SignPkgInput): Effect.
         ? { ...yield* Artifact.directory(out, Tool.producer(tool)), product: "app" as const, signature: { ...signature, hardenedRuntime: true as const } }
         : { ...yield* Artifact.file(out, Tool.producer(tool)), product: input.artifact.product, signature };
     }, Effect.tap(verifySignature));
-    return yield* Commit.output(destination, produce, { atomic: input.atomic });
+    return yield* Commit.output(destination, produce, input);
   }));
 const signExecutable = (input: SignExecutableInput): Effect.Effect<SignedExecutable, SignError, Apple | Env> =>
   Effect.scoped(Effect.gen(function*() {
@@ -107,7 +106,7 @@ const signExecutable = (input: SignExecutableInput): Effect.Effect<SignedExecuta
       // Signing rewrites the binary; its header must still describe the input target.
       return { ...yield* Artifact.executable(out, Tool.producer(tool), input.artifact.target), signature };
     }, Effect.tap(verifySignature));
-    return yield* Commit.output(destination, produce, { atomic: input.atomic });
+    return yield* Commit.output(destination, produce, input);
   }));
 
 export function sign(input: SignAppInput): Effect.Effect<SignedApp, SignError, Apple | Env>;

@@ -10,7 +10,7 @@ export interface Resource {
   readonly path: string;
   readonly executable?: boolean | undefined;
 }
-export interface AppBundleInput {
+export interface AppBundleInput extends Commit.ProducerOptions {
   readonly executable: Artifact.Executable;
   readonly outdir: string;
   readonly bundleIdentifier: string;
@@ -22,7 +22,6 @@ export interface AppBundleInput {
   readonly minimumSystemVersion?: string | undefined;
   readonly resources?: readonly Resource[] | undefined;
   readonly cwd?: string | undefined;
-  readonly atomic?: boolean | undefined;
 }
 export type AppBundleError = InputInvalid | Artifact.ArtifactError | Commit.CommitError | Tool.Failed | Tool.SpawnFailed;
 const escapeXml = (value: string): string => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
@@ -87,5 +86,5 @@ export const appBundle = (input: AppBundleInput): Effect.Effect<App, AppBundleEr
     yield* runNative("plutil", ["-lint", info]);
     return { ...yield* Artifact.directory(out, Tool.producer(tool)), product: "app" as const };
   });
-  return yield* Commit.output(outdir, produce, { atomic: input.atomic });
+  return yield* Commit.output(outdir, produce, input);
 });

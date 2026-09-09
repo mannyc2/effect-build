@@ -61,9 +61,8 @@ export const context = <const Input extends esbuild.BuildOptions>(
   } satisfies Context<Input>)),
 );
 
-export type DirectoryOptions = Omit<esbuild.BuildOptions, "outdir" | "outfile" | "write"> & {
+export type DirectoryOptions = Omit<esbuild.BuildOptions, "outdir" | "outfile" | "write"> & Commit.ProducerOptions & {
   readonly outdir: string;
-  readonly atomic?: boolean | undefined;
   readonly outfile?: never;
   readonly write?: never;
 };
@@ -77,7 +76,8 @@ export const buildToDirectory = Effect.fn("Esbuild.buildToDirectory")((input: Di
     return yield* new InputInvalid({ reason: "buildToDirectory requires outdir and does not accept outfile or write" });
   }
   const p = yield* Path.Path;
-  const { outdir, atomic, ...options } = input;
+  // esbuild rejects unknown options, so the commit choices leave before the native call.
+  const { outdir, atomic, onExists, prefix, ...options } = input;
   const destination = p.resolve(input.absWorkingDir ?? "", outdir);
   const produce = (out: string) => Effect.scoped(Effect.gen(function*() {
     // A scoped rebuild cancels writing before failed or interrupted staging is removed.
@@ -85,7 +85,7 @@ export const buildToDirectory = Effect.fn("Esbuild.buildToDirectory")((input: Di
     yield* builder.rebuild;
     return yield* Artifact.directory(out, { name: "esbuild", version: esbuild.version });
   }));
-  return yield* Commit.output(destination, produce, { atomic, staging: "sibling" });
+  return yield* Commit.output(destination, produce, { atomic, onExists, prefix }, "sibling");
 }));
 
 export const transform = (input: string | Uint8Array, options?: esbuild.TransformOptions): Effect.Effect<

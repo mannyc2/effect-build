@@ -75,11 +75,10 @@ export type Credential = {
   readonly library: string;
   readonly metadata: string;
 };
-export type SignInput<A extends Artifact.Regular = Artifact.Regular> = Credential & {
+export type SignInput<A extends Artifact.Regular = Artifact.Regular> = Credential & Commit.ProducerOptions & {
   readonly artifact: A;
   readonly outfile?: string | undefined;
   readonly cwd?: string | undefined;
-  readonly atomic?: boolean | undefined;
   readonly timestampUrl: string;
   readonly description?: string | undefined;
   readonly descriptionUrl?: string | undefined;
@@ -167,7 +166,7 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
         ? Artifact.executable(out, Tool.producer(tool), input.artifact.target)
         : Artifact.file(out, Tool.producer(tool));
     });
-    const artifact = yield* Commit.output(outfile, produce, { atomic: input.atomic });
+    const artifact = yield* Commit.output(outfile, produce, input);
     return { ...artifact, signature: {
       fileDigest: "SHA256", timestampProtocol: "RFC3161", timestampDigest: "SHA256",
       timestampUrl: input.timestampUrl, verification: "Authenticode",

@@ -51,13 +51,12 @@ interface Invocation {
   readonly extendEnv?: boolean | undefined;
   readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
 }
-export interface CompileInput extends Invocation {
+export interface CompileInput extends Invocation, Commit.ProducerOptions {
   readonly entrypoint: string;
   readonly outfile: string;
   readonly target?: Target.Target | Native.Target | undefined;
   readonly options?: Native.Options | undefined;
   readonly scriptArgs?: readonly string[] | undefined;
-  readonly atomic?: boolean | undefined;
 }
 const fileError = (path: string) => (error: unknown) =>
   new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
@@ -101,7 +100,7 @@ export const compile = Effect.fn("Deno.compile")(function*(input: CompileInput):
       Effect.andThen(Artifact.executable(out, Tool.producer(tool), target)),
       Effect.map((artifact): CompileArtifact => runtime === undefined ? artifact : { ...artifact, runtime }),
     );
-  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+  return yield* Commit.output(outfile, produce, input);
 });
 
 export interface BundleOptions extends ProjectOptions, ImportPermissions {
@@ -120,22 +119,20 @@ export interface BundleOptions extends ProjectOptions, ImportPermissions {
   readonly envFile?: true | string | undefined;
   readonly declaration?: boolean | undefined;
 }
-export interface BundleInput extends Invocation {
+export interface BundleInput extends Invocation, Commit.ProducerOptions {
   readonly entrypoints: readonly string[];
   readonly outdir: string;
   readonly options?: BundleOptions | undefined;
-  readonly atomic?: boolean | undefined;
 }
 export interface TranspileOptions extends ProjectOptions {
   readonly sourceMap?: "none" | "inline" | "separate" | undefined;
   readonly quiet?: boolean | undefined;
   readonly declaration?: boolean | undefined;
 }
-export interface TranspileInput extends Invocation {
+export interface TranspileInput extends Invocation, Commit.ProducerOptions {
   readonly files: readonly string[];
   readonly outdir: string;
   readonly options?: TranspileOptions | undefined;
-  readonly atomic?: boolean | undefined;
 }
 const renderBundle = (input: BundleOptions): readonly string[] => [
   ...renderProject(input), ...renderCheck(input.check),
@@ -153,7 +150,7 @@ const renderBundle = (input: BundleOptions): readonly string[] => [
   ...(input.quiet === true ? ["--quiet"] : []), ...(input.declaration === true ? ["--declaration"] : []),
 ];
 const directory = Effect.fnUntraced(function*(
-  input: Invocation & { readonly outdir: string; readonly atomic?: boolean | undefined },
+  input: Invocation & Commit.ProducerOptions & { readonly outdir: string },
   files: readonly string[],
   args: readonly [string, ...string[]],
 ) {
@@ -169,7 +166,7 @@ const directory = Effect.fnUntraced(function*(
     yield* Tool.run(tool, [...args, "--outdir", out, ...files], { ...environment(input), onOutput: input.onOutput });
     return yield* Artifact.directory(out, Tool.producer(tool));
   });
-  return yield* Commit.output(outdir, produce, { atomic: input.atomic, staging: "sibling" });
+  return yield* Commit.output(outdir, produce, input, "sibling");
 });
 export const bundle = Effect.fn("Deno.bundle")(function*(input: BundleInput): Effect.fn.Return<Artifact.Directory, BuildError, Env> {
   const options = input.options ?? {};
@@ -185,7 +182,7 @@ export const transpile = Effect.fn("Deno.transpile")((input: TranspileInput): Ef
     ...(options.quiet === true ? ["--quiet"] : []), ...(options.declaration === true ? ["--declaration"] : [])]);
 });
 
-export interface WatchInput extends Omit<CompileInput, "atomic" | "onOutput"> {
+export interface WatchInput extends Omit<CompileInput, keyof Commit.ProducerOptions | "onOutput"> {
   readonly noClearScreen?: boolean | undefined;
   readonly watchExclude?: readonly string[] | undefined;
   /** Inherit live diagnostics by default; use pipe to consume process streams. */

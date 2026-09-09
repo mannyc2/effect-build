@@ -88,15 +88,13 @@ export interface CompileOptions {
   } | undefined;
 }
 
-export interface CompileInput {
+export interface CompileInput extends Commit.ProducerOptions {
   readonly entrypoints: readonly [string, ...string[]];
   readonly outfile: string;
   /** Default: the host. */
   readonly target?: Target.Target | BunTarget | undefined;
   readonly cwd?: string | undefined;
   readonly options?: CompileOptions | undefined;
-  /** Build into a sibling temp path and rename into place. Default true. */
-  readonly atomic?: boolean | undefined;
   readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
 }
 
@@ -204,7 +202,7 @@ export const compile = Effect.fn("Bun.compile")(function*(
       Effect.andThen(Artifact.executable(out, Tool.producer(tool), target)),
     );
   const outfile = yield* outputPath(input.outfile, input.cwd);
-  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+  return yield* Commit.output(outfile, produce, input);
 });
 
 export type Loader = "js" | "jsx" | "ts" | "tsx" | "json" | "toml" | "yaml" | "text" | "file"
@@ -230,12 +228,11 @@ export interface BundleOptions extends Omit<CompileOptions,
   readonly bundle?: boolean | undefined;
 }
 
-export interface BundleInput {
+export interface BundleInput extends Commit.ProducerOptions {
   readonly entrypoints: readonly [string, ...string[]];
   readonly outdir: string;
   readonly cwd?: string | undefined;
   readonly options?: BundleOptions | undefined;
-  readonly atomic?: boolean | undefined;
   readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
 }
 
@@ -295,10 +292,10 @@ export const bundle = Effect.fn("Bun.bundle")(function*(input: BundleInput) {
     { cwd: input.cwd, onOutput: input.onOutput }).pipe(
       Effect.andThen(Artifact.directory(out, Tool.producer(tool))),
     );
-  return yield* Commit.output(outdir, produce, { atomic: input.atomic, staging: "sibling" });
+  return yield* Commit.output(outdir, produce, input, "sibling");
 });
 
-export interface WatchInput extends Omit<BundleInput, "atomic" | "onOutput"> {
+export interface WatchInput extends Omit<BundleInput, keyof Commit.ProducerOptions | "onOutput"> {
   readonly noClearScreen?: boolean | undefined;
   /** Inherit live diagnostics by default; use pipe to consume process streams. */
   readonly stdio?: "inherit" | "pipe" | undefined;

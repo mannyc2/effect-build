@@ -15,7 +15,8 @@ Every error prints as `Tag: message`, and tool errors name their tool in `tool` 
 shadowing `Error.name`. Tool providers export `supported` (the range their layer accepts by
 default) and `tested` (the exact versions real-tool CI runs). `Tool.locate` finds an executable
 without probing it, `Tool.resolve` hashes every tool incrementally, and `Commit.output` is the
-provider default that honors `atomic`. Optional inputs accept `undefined`, so
+provider default that honors `atomic`, `onExists`, and `prefix` (`Commit.ProducerOptions`)
+through every producer. Optional inputs accept `undefined`, so
 `Bun.layer({ executable: process.env.EFFECT_BUILD_BUN })` needs no branch.
 
 Archives, wheels, verified copies and Git source tars stream their inputs in 64 KiB

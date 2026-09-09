@@ -54,13 +54,12 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
   return { builder, base };
 }));
 
-export interface Input {
+export interface Input extends Commit.ProducerOptions {
   /** One bundled CommonJS script. Its require() can load Node built-ins. */
   readonly main: Artifact.Regular;
   readonly assets?: Readonly<Record<string, Artifact.Regular>> | undefined;
   readonly outfile: string;
   readonly cwd?: string | undefined;
-  readonly atomic?: boolean | undefined;
   readonly disableExperimentalSEAWarning?: boolean | undefined;
 }
 export type AssembleError =
@@ -128,5 +127,5 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
       if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--sign", "-", out]);
       return yield* Artifact.executable(out, Tool.producer(builder), target);
     });
-    return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+    return yield* Commit.output(outfile, produce, input);
   })));

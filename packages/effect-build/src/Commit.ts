@@ -28,10 +28,16 @@ export interface Options {
   readonly staging?: "sibling" | "nested" | undefined;
 }
 
-export interface OutputOptions extends Options {
+/** What every producing operation accepts and forwards to `output`. Staging depth is the producer's own decision. */
+export interface ProducerOptions extends Omit<Options, "staging"> {
   /** `false` writes at the destination itself, with no staging or rename. Default: stage and commit atomically. */
   readonly atomic?: boolean | undefined;
 }
+
+// exists follows symlinks; a dangling link still occupies the destination.
+const occupied = (destination: string): Effect.Effect<boolean, never, FileSystem.FileSystem> =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) =>
+    fs.readLink(destination).pipe(Effect.map(() => true), Effect.catch(() => fs.exists(destination)), Effect.orElseSucceed(() => false)));
 
 /**
  * Sibling staging keeps failed builds from leaving truncated output.
@@ -59,8 +65,7 @@ export const atomic = <A extends Artifact.Artifact, E, R>(
       const staged = options.staging === "sibling" ? staging : p.join(staging, p.basename(destination));
       const artifact = yield* produce(staged);
       if (artifact.path !== staged) return yield* fail("staged-path-mismatch", artifact.path);
-      // exists follows symlinks; a dangling link still occupies the destination.
-      const exists = yield* fs.readLink(destination).pipe(Effect.map(() => true), Effect.catch(() => fs.exists(destination)), Effect.orElseSucceed(() => false));
+      const exists = yield* occupied(destination);
       yield* Effect.uninterruptible(
         Effect.gen(function*() {
           if (options.onExists === "fail") {
@@ -95,23 +100,27 @@ export const atomic = <A extends Artifact.Artifact, E, R>(
   );
 
 /**
- * What every provider does with its `atomic` option: stage and commit through
- * `atomic`, or with `atomic: false` create the destination's parent and let
- * `produce` write the final path directly.
+ * What every producer does with its options: stage and commit through `atomic`,
+ * or with `atomic: false` create the destination's parent and let `produce` write
+ * the final path directly. The producer chooses `staging` from what it writes:
+ * files stage nested, directories holding relative imports stage sibling.
  */
 export const output = <A extends Artifact.Artifact, E, R>(
   outfile: string,
   produce: (path: string) => Effect.Effect<A, E, R>,
-  options: OutputOptions = {},
+  options: ProducerOptions = {},
+  staging?: Options["staging"],
 ): Effect.Effect<A, E | CommitError, R | FileSystem.FileSystem | Path.Path> =>
   options.atomic === false
     ? Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const p = yield* Path.Path;
       const destination = p.resolve(outfile);
+      // Direct output has no exclusive operation: the check precedes production, and a concurrent writer can still win.
+      if (options.onExists === "fail" && (yield* occupied(destination))) return yield* new CommitError({ destination, reason: "exists" });
       yield* fs.makeDirectory(p.dirname(destination), { recursive: true }).pipe(
         Effect.mapError((e) => new CommitError({ destination, reason: "staging-failed", detail: String(e) })),
       );
       return yield* produce(destination);
     })
-    : atomic(outfile, produce, options);
+    : atomic(outfile, produce, { onExists: options.onExists, prefix: options.prefix, staging });

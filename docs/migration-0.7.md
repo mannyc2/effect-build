@@ -48,7 +48,8 @@ Persist a richer result using its exported provider schema with Effect
 a signed or notarized product. Filesystem records can become stale; call
 `Artifact.verify` before a later consumer needs byte equality.
 
-File replacement uses atomic rename. `onExists: "fail"` uses exclusive hard-link
+File replacement uses atomic rename. Every producer accepts `atomic`, `onExists`, and
+`prefix`. `onExists: "fail"` uses exclusive hard-link
 creation for regular files and fails explicitly for directories, where the portable
 filesystem API has no atomic no-replace operation. Directory replacement retains a
 recoverable previous tree and restores it if the new rename fails, but readers can

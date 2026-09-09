@@ -17,12 +17,11 @@ export interface ArchiveEntry {
   /** Regular files only; directory entries retain their recorded modes. */
   readonly executable?: boolean | undefined;
 }
-export interface ArchiveInput {
+export interface ArchiveInput extends Commit.ProducerOptions {
   readonly entries: readonly ArchiveEntry[];
   readonly outfile: string;
-  readonly atomic?: boolean | undefined;
 }
-export interface SourceInput {
+export interface SourceInput extends Commit.ProducerOptions {
   readonly repository: string;
   /** A Git tree object ID, from `git rev-parse HEAD^{tree}`. */
   readonly tree: string;
@@ -30,7 +29,6 @@ export interface SourceInput {
   readonly version: string;
   readonly format: Format;
   readonly outfile: string;
-  readonly atomic?: boolean | undefined;
   readonly cwd?: string | undefined;
   readonly additionalExcludes?: readonly string[] | undefined;
 }
@@ -44,7 +42,7 @@ const writeArchive = (
   outfile: string,
   entries: readonly Entry[],
   format: Format,
-  atomic: boolean | undefined,
+  options: Commit.ProducerOptions,
   producer: Artifact.Producer,
 ): Effect.Effect<Artifact.File, ArchiveError, Fs> => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
@@ -61,7 +59,7 @@ const writeArchive = (
     }));
     return yield* Artifact.file(out, producer);
   });
-  return yield* Commit.output(outfile, produce, { atomic });
+  return yield* Commit.output(outfile, produce, options);
 });
 
 const archive = (format: Format, input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> =>
@@ -102,7 +100,7 @@ const archive = (format: Format, input: ArchiveInput): Effect.Effect<Artifact.Fi
         entries.push({ ...child, path: childPath, contents });
       }
     }
-    return yield* writeArchive(input.outfile, entries, format, input.atomic, {
+    return yield* writeArchive(input.outfile, entries, format, input, {
       name: metadata.name,
       version: metadata.version,
     });
@@ -208,5 +206,5 @@ export const source = Effect.fn("Archive.source")((input: SourceInput): Effect.E
         : Stream.empty,
     });
   }
-  return yield* writeArchive(outfile, entries, input.format, input.atomic, Tool.producer(tool));
+  return yield* writeArchive(outfile, entries, input.format, input, Tool.producer(tool));
 })));

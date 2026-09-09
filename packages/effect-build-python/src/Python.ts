@@ -22,10 +22,9 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
   parseVersion: (completion) => /^uv (\S+)/u.exec(new TextDecoder().decode(completion.stdout))?.[1],
 }).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))));
 
-export interface BuildInput {
+export interface BuildInput extends Commit.ProducerOptions {
   readonly project: string;
   readonly outdir: string;
-  readonly atomic?: boolean | undefined;
 }
 export interface BuildResult {
   readonly wheel: Artifact.File;
@@ -54,7 +53,7 @@ export const build = Effect.fn("Python.build")((input: BuildInput): Effect.Effec
       }
       return directory;
     });
-    const directory = yield* Commit.output(outdir, produce, { atomic: input.atomic, staging: "sibling" });
+    const directory = yield* Commit.output(outdir, produce, input, "sibling");
     // Re-read at the committed paths so callers receive ordinary core file artifacts.
     const wheel = directory.entries.find((entry) => entry.kind === "file" && !entry.path.includes("/") && entry.path.endsWith(".whl"))!;
     const sdist = directory.entries.find((entry) => entry.kind === "file" && !entry.path.includes("/") && entry.path.endsWith(".tar.gz"))!;

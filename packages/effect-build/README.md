@@ -13,7 +13,9 @@ move a file's bytes in 64 KiB chunks and fail at the end when they changed, so u
 them inside staged output. Files replace atomically; directory replacement retains
 a backup for recovery and has a brief visibility gap. `{ onExists: "fail" }` uses
 exclusive hard-link creation for files and returns an unsupported error for directories.
-Use `{ staging: "sibling" }` for bundle directories to preserve relative path semantics.
+Every producer accepts `Commit.ProducerOptions` (`atomic`, `onExists`, `prefix`) and
+chooses its own staging depth; use `{ staging: "sibling" }` with `Commit.atomic` around
+your own bundle directories to preserve relative path semantics.
 `Checksums.write` creates a SHA256SUMS file with
 paths relative to its directory; run `sha256sum -c SHA256SUMS` from that directory.
 
