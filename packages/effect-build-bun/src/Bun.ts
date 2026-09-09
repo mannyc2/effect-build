@@ -15,6 +15,18 @@ export interface LayerOptions {
 export const tested = "1.3.14 || 1.4.2";
 /** Compatible major; emitted builds separately reject the known 1.4.1 defect. */
 export const supported = ">=1.3.14 <2.0.0";
+/**
+ * Hardened-runtime entitlements Bun documents for its compiled executables: the
+ * JavaScript engine needs JIT and dynamic-library allowances to start once signed.
+ * Pass to `Apple.sign({ artifact, entitlements: Bun.entitlements })`.
+ */
+export const entitlements: readonly string[] = [
+  "com.apple.security.cs.allow-jit",
+  "com.apple.security.cs.allow-unsigned-executable-memory",
+  "com.apple.security.cs.disable-executable-page-protection",
+  "com.apple.security.cs.allow-dyld-environment-variables",
+  "com.apple.security.cs.disable-library-validation",
+];
 
 export const layer = (
   options: LayerOptions = {},

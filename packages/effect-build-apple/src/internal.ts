@@ -2,7 +2,7 @@ import { Effect, FileSystem, Path } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
-import type { Product, SignedProduct } from "./Model.js";
+import type { Product, Signed } from "./Model.js";
 
 export type NativeTool = "codesign" | "hdiutil" | "plutil" | "pkgbuild" | "productbuild" | "productsign" | "pkgutil" | "notarytool" | "stapler" | "spctl" | "ditto";
 export const runNative = (name: NativeTool, args: readonly string[], options: { readonly cwd?: string; readonly redact?: readonly string[] } = {}): Effect.Effect<
@@ -19,9 +19,9 @@ export const fileError = (path: string) => (error: unknown): Artifact.ArtifactEr
   new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
 export const textValid = (value: string): boolean => value.length > 0 && !value.includes("\0");
 export const relativeValid = (value: string): boolean => textValid(value) && !/^[a-z]:/iu.test(value) && !value.includes("\\") && value.split("/").every((part) => part !== "" && part !== "." && part !== "..");
-export const outputPath = (value: string, extension: ".app" | ".dmg" | ".pkg", cwd?: string) => Effect.gen(function*() {
-  if (!textValid(value) || !value.toLowerCase().endsWith(extension) || (cwd !== undefined && !textValid(cwd))) {
-    return yield* new InputInvalid({ reason: `output must end in ${extension}; paths must be non-empty and contain no NUL` });
+export const outputPath = (value: string, extension: ".app" | ".dmg" | ".pkg" | undefined, cwd?: string) => Effect.gen(function*() {
+  if (!textValid(value) || (extension !== undefined && !value.toLowerCase().endsWith(extension)) || (cwd !== undefined && !textValid(cwd))) {
+    return yield* new InputInvalid({ reason: `${extension === undefined ? "output" : `output must end in ${extension};`} paths must be non-empty and contain no NUL` });
   }
   const p = yield* Path.Path;
   return p.resolve(cwd ?? "", value);
@@ -65,11 +65,37 @@ export const copyProduct = (artifact: Artifact.Artifact, destination: string): E
   yield* runNative("ditto", [artifact.path, destination]);
   yield* Artifact.verify({ ...artifact, path: destination });
 });
-export const verifySignature = (product: SignedProduct, path = product.path): Effect.Effect<
+export const verifySignature = (signed: Signed, path = signed.path): Effect.Effect<
   void, Tool.Failed | Tool.SpawnFailed, Apple | ChildProcessSpawner.ChildProcessSpawner
-> => (product.product === "pkg"
+> => ("product" in signed && signed.product === "pkg"
   ? runNative("pkgutil", ["--check-signature", path])
-  : runNative("codesign", ["--verify", ...(product.product === "app" ? ["--deep"] : []), "--strict", path])).pipe(Effect.asVoid);
+  : runNative("codesign", ["--verify", ...("product" in signed && signed.product === "app" ? ["--deep"] : []), "--strict", path])).pipe(Effect.asVoid);
+/** Entitlements arrive as a plist artifact or as keys; both are linted as the file codesign receives. */
+export type Entitlements = Artifact.Regular | readonly string[];
+const xml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+export const entitlementsFile = (entitlements: Entitlements | undefined, path: string): Effect.Effect<
+  string | undefined, InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed, Apple | Env
+> => Effect.gen(function*() {
+  if (entitlements === undefined) return undefined;
+  if (Array.isArray(entitlements)) {
+    const keys = entitlements as readonly string[];
+    if (keys.length === 0 || keys.some((key) => !textValid(key) || key.trim() !== key) || new Set(keys).size !== keys.length) {
+      return yield* new InputInvalid({ reason: "entitlement keys must be distinct, trimmed, non-empty, and contain no NUL" });
+    }
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.writeFileString(path, [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+      '<plist version="1.0">', "<dict>",
+      ...keys.map((key) => `  <key>${xml(key)}</key>\n  <true/>`),
+      "</dict>", "</plist>", "",
+    ].join("\n")).pipe(Effect.mapError(fileError(path)));
+  } else {
+    yield* copyRegular(entitlements as Artifact.Regular, path);
+  }
+  yield* runNative("plutil", ["-lint", path]);
+  return path;
+});
 /** Refresh core file facts after the caller has checked the retained product refinements. */
 export const inspectProduct = <P extends Product>(product: P, path: string): Effect.Effect<P, Artifact.ArtifactError, Apple | Env> => Effect.gen(function*() {
   const { tool } = yield* Apple;

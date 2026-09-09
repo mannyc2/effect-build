@@ -19,7 +19,7 @@ default, and `tested`, the exact versions real-tool CI runs.
 | uv               | `>=0.12.0 <1.0.0`            | CI: 0.12.0; direct wheel writer needs no tool.                                                                                                                              |
 | nFPM             | `>=2.47.0 <3.0.0`            | CI: 2.47.0; accepts native configuration, including lifecycle scripts.                                                                                                      |
 | Syft             | `>=1.50.0 <2.0.0`            | CI: 1.50.0; scanning a binary does not establish complete source dependencies.                                                                                              |
-| Windows SignTool | `>=10.0.26100 <11.0.0`       | Experimental; native executable CI uses a temporary certificate, MSIX uses scripted tests.                                                                                  |
+| Windows SignTool | `>=10.0.26100 <11.0.0`       | Experimental; native executable CI uses a temporary certificate, MSIX and Trusted Signing credentials use scripted tests.                                                                                  |
 | Apple xcrun      | `>=70.0.0 <71.0.0`           | Native unsigned app checked locally; credentialed operations experimental.                                                                                                  |
 
 Tested versions record concrete CI fixtures; an accepted range does not mean every

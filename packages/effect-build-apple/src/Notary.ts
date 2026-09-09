@@ -2,7 +2,7 @@ import { Effect, FileSystem, Path, Redacted, Schema } from "effect";
 import { Artifact, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
 import { copyProduct, fileError, runNative, textValid, verifySignature } from "./internal.js";
-import { SignedProduct } from "./Model.js";
+import { Signed } from "./Model.js";
 
 export const SubmissionKind = Schema.Literals(["zip", "dmg", "pkg"] as const);
 export type SubmissionKind = typeof SubmissionKind.Type;
@@ -17,14 +17,14 @@ export type Rejected = typeof Rejected.Type;
 export const Status = Schema.Union([Pending, Accepted, Rejected]);
 export type Status = typeof Status.Type;
 
-const matchingKind = Schema.makeFilter((value: { readonly kind: SubmissionKind; readonly artifact: SignedProduct }) =>
-  value.kind === (value.artifact.product === "app" ? "zip" : value.artifact.product)
-    ? undefined
-    : "submission kind does not match its artifact product");
+/** Apps and standalone executables upload as ZIP archives; disk images and installers upload as themselves. */
+export const submissionKind = (artifact: Signed): SubmissionKind => "product" in artifact && artifact.product !== "app" ? artifact.product : "zip";
+const matchingKind = Schema.makeFilter((value: { readonly kind: SubmissionKind; readonly artifact: Signed }) =>
+  value.kind === submissionKind(value.artifact) ? undefined : "submission kind does not match its artifact");
 export const SubmissionReference = Schema.Struct({
   submissionId: SubmissionId,
   kind: SubmissionKind,
-  artifact: SignedProduct,
+  artifact: Signed,
   producedBy: Artifact.Producer,
 }).check(matchingKind);
 export type SubmissionReference = typeof SubmissionReference.Type;
@@ -154,7 +154,7 @@ const status = (operation: Operation, providerStatus: string | undefined, summar
 };
 
 export interface SubmitInput {
-  readonly artifact: SignedProduct;
+  readonly artifact: Signed;
   readonly credential: Credential;
   readonly cwd?: string | undefined;
 }
@@ -162,7 +162,7 @@ export type NotarizeError = LookupError | Artifact.ArtifactError;
 /** Upload once and return the submission ID before waiting. Persist this reference to recover after interruption. */
 export const submit = (input: SubmitInput): Effect.Effect<SubmissionReference, NotarizeError, Apple | Env> =>
   Effect.scoped(Effect.gen(function*() {
-    yield* Schema.decodeUnknownEffect(SignedProduct)(input.artifact).pipe(Effect.mapError((error) => new InputInvalid({ reason: String(error) })));
+    yield* Schema.decodeUnknownEffect(Signed)(input.artifact).pipe(Effect.mapError((error) => new InputInvalid({ reason: String(error) })));
     const { tool } = yield* Apple;
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
@@ -172,8 +172,8 @@ export const submit = (input: SubmitInput): Effect.Effect<SubmissionReference, N
     yield* copyProduct(input.artifact, snapshot);
     yield* verifySignature(input.artifact, snapshot);
     let path = snapshot;
-    const kind = input.artifact.product === "app" ? "zip" : input.artifact.product;
-    if (input.artifact.product === "app") {
+    const kind = submissionKind(input.artifact);
+    if (kind === "zip") {
       path = p.join(temporary, `${p.basename(input.artifact.path)}.zip`);
       yield* runNative("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", snapshot, path]);
     }

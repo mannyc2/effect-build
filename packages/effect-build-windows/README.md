@@ -2,14 +2,18 @@
 
 **Experimental:** native Windows CI signs, timestamps, verifies, and runs an executable
 with a temporary self-signed certificate. Production certificates and native MSIX
-signing remain unverified; portable tests use a scripted SignTool process.
+signing remain unverified; portable tests use a scripted SignTool process, and the
+on-demand [signing workflow](../../.github/workflows/signing.yml) exercises Trusted Signing.
 Import `* as Windows` from `"effect-build-windows"` and
 provide platform services plus `Windows.layer({ executable?, version? })` for SignTool.
 `supported` is `>=10.0.26100 <11.0.0`. Versions come from the tool's binary resource and remain complete; string
 ranges compare three components, while predicates receive the fourth revision too.
 
-`sign` takes a Windows `Artifact.Executable` or an MSIX `Artifact.File`, `timestampUrl`, and either `kind: "store"` with
-`thumbprint` or `kind: "pfx"` with `file` and optional Effect `Redacted` password.
+`sign` takes a Windows `Artifact.Executable` or an MSIX `Artifact.File`, `timestampUrl`, and one credential:
+`kind: "store"` with `thumbprint` (hardware tokens and cloud key providers included), `kind: "pfx"` with `file`
+and an optional Effect `Redacted` password, or `kind: "trusted-signing"` with the Azure Trusted Signing client
+`library` and account `metadata` paths, which SignTool receives as `/dlib` and `/dmdf` while Azure identity
+comes from the environment.
 It verifies input bytes, signs with SHA-256, adds an RFC 3161 SHA-256 timestamp,
 and checks Authenticode before returning the same artifact kind with fresh hashes
 and `signature` fields. Executables retain their verified target and format and

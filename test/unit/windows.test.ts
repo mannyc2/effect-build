@@ -251,6 +251,17 @@ describe("Windows signing through real files and a scripted native tool", () => 
     expect(args).not.toContain("/p");
   });
 
+  it("passes the Trusted Signing library and metadata to the signer", async () => {
+    const result = await run(Windows.sign({
+      artifact, outfile: config.outfile, cwd: root, kind: "trusted-signing", library: "Azure.CodeSigning.Dlib.dll", metadata: "metadata.json", timestampUrl,
+    }));
+    expect(await readFile(result.path, "utf8")).toBe(signed);
+    const args = (await calls())[0]!.args;
+    expect(args[args.indexOf("/dlib") + 1]).toBe(join(root, "Azure.CodeSigning.Dlib.dll"));
+    expect(args[args.indexOf("/dmdf") + 1]).toBe(join(root, "metadata.json"));
+    for (const flag of ["/f", "/p", "/sha1", "/sm"]) expect(args).not.toContain(flag);
+  });
+
   it("writes directly when atomic is disabled", async () => {
     const result = await run(Windows.sign({ ...input(), atomic: false }));
     expect(await readFile(result.path, "utf8")).toBe(signed);
@@ -318,6 +329,8 @@ describe("Windows signing through real files and a scripted native tool", () => 
       { ...input(), outfile: join(root, "signed.zip") },
       { ...input(), descriptionUrl: "http://example.test/" },
       { ...input(), kind: "store", thumbprint: "not-a-certificate" },
+      { ...input(), kind: "trusted-signing", library: "", metadata: "metadata.json" },
+      { ...input(), kind: "trusted-signing", library: "Azure.CodeSigning.Dlib.dll", metadata: "meta\0data.json" },
       { ...input(), kind: "pfx", file: "" },
       { ...input(), kind: "pfx", file: "certificate.pfx", password: Redacted.make("invalid\0password") },
       { ...input(), kind: "pfx", file: "certificate.pfx", password: unavailable },

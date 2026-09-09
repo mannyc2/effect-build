@@ -1,14 +1,15 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Redacted, Schema } from "effect";
-import { Artifact, Tool } from "effect-build";
+import { Artifact, Executable, Tool } from "effect-build";
 import * as Apple from "effect-build-apple";
+import * as Bun from "effect-build-bun";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { thinMacho } from "../fixtures/native-executable.js";
+import { elf, thinMacho } from "../fixtures/native-executable.js";
 
 const local = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
@@ -22,6 +23,7 @@ interface Config {
   readonly fail?: string;
   readonly guard?: string;
   readonly mutateDuringVerify?: string;
+  readonly corruptTarget?: boolean;
   readonly submit?: unknown;
   readonly wait?: unknown;
   readonly waitForAbort?: boolean;
@@ -29,7 +31,7 @@ interface Config {
   readonly logResponse?: unknown;
   readonly rawResponse?: string;
 }
-interface Invocation { readonly tool: string; readonly args: readonly string[]; readonly guard: boolean; readonly payloadSha?: string; }
+interface Invocation { readonly tool: string; readonly args: readonly string[]; readonly guard: boolean; readonly payloadSha?: string; readonly plist?: string; }
 interface PackedEntry { readonly path: string; readonly kind: string; readonly contents?: string; readonly target?: string; readonly mode: number; }
 let root: string;
 let tool: string;
@@ -48,7 +50,7 @@ const [configPath, name, ...args] = process.argv.slice(2);
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
 if (name === '--version' && args.length === 0) { process.stdout.write('xcrun version 70.\n'); process.exit(0); }
 const sha = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
-appendFileSync(config.log, JSON.stringify({tool:name, args, guard:config.guard ? existsSync(config.guard) : false, ...(name === 'notarytool' && args[0] === 'submit' ? {payloadSha:sha(args[1])} : {})}) + '\n');
+appendFileSync(config.log, JSON.stringify({tool:name, args, guard:config.guard ? existsSync(config.guard) : false, ...(name === 'notarytool' && args[0] === 'submit' ? {payloadSha:sha(args[1])} : {}), ...(name === 'plutil' ? {plist:readFileSync(args.at(-1), 'utf8')} : {})}) + '\n');
 const fail = (phase) => { if (config.fail === phase) { process.stderr.write(phase + ' failed private-notary:$42'); process.exit(37); } };
 const write = (path, contents) => { mkdirSync(dirname(path), {recursive:true}); writeFileSync(path, contents); };
 const collect = (directory, prefix='') => readdirSync(directory).sort().flatMap((name) => {
@@ -68,13 +70,14 @@ switch (name) {
     if (args[0] !== '-lint' || !readFileSync(target, 'utf8').includes('<plist')) throw new Error('invalid plist');
     fail('plutil'); break;
   case 'ditto':
-    if (args[0] === '-c') write(target, JSON.stringify({entries:collect(args.at(-2)),bundle:basename(args.at(-2))}));
+    if (args[0] === '-c') { const src = args.at(-2); write(target, JSON.stringify({entries:lstatSync(src).isDirectory() ? collect(src) : [{path:basename(src),kind:'file',mode:lstatSync(src).mode & 0o777,contents:readFileSync(src).toString('base64')}],bundle:basename(src)})); }
     else { cpSync(args[0], args[1], {recursive:true,verbatimSymlinks:true,preserveTimestamps:true}); chmodSync(args[1], lstatSync(args[0]).mode & 0o777); }
     fail('ditto'); break;
   case 'codesign':
     if (args[0] === '--force') {
       if (!args.includes('--sign') || !args.includes('--timestamp')) throw new Error('missing signing options');
       if (lstatSync(target).isDirectory()) write(signature(target), 'signed resources'); else appendFileSync(target, ':signed');
+      if (config.corruptTarget && !lstatSync(target).isDirectory()) { const bytes = readFileSync(target); bytes.writeUInt32LE(0x01000007, 4); writeFileSync(target, bytes); }
       fail('codesign.sign');
     } else if (args[0] === '--verify') { verifySignature(target); if (config.mutateDuringVerify) write(config.mutateDuringVerify,'changed original'); fail('codesign.verify'); }
     else throw new Error('unsupported codesign command');
@@ -160,7 +163,8 @@ const signedFile = async (product: "dmg" | "pkg") => {
   return product === "dmg" ? run(Apple.sign({ artifact: { ...source, product: "dmg" }, certificateSha1, outfile }))
     : run(Apple.sign({ artifact: { ...source, product: "pkg" }, certificateSha1, outfile }));
 };
-const accepted = async (artifact: Apple.SignedProduct) => local(Apple.Notary.acceptedReference(await run(Apple.notarize({ artifact, credential }))));
+const accepted = async (artifact: Apple.Signed) => local(Apple.Notary.acceptedReference(await run(Apple.notarize({ artifact, credential }))));
+const signedExecutable = (outfile?: string) => run(Apple.sign({ artifact: executable, certificateSha1, ...(outfile === undefined ? {} : { outfile }), entitlements: Bun.entitlements }));
 
 describe("Apple products on real files", () => {
   it.each([true, false])("copies executable/resources and writes escaped plist values with atomic=%s", async (atomic) => {
@@ -284,6 +288,98 @@ describe("Apple products on real files", () => {
     expect(await readFile(result.path, "utf8")).toBe(`unsigned-${product}:signed`);
     expect(result.sha256).not.toBe(source.sha256);
     expect(await local(Artifact.verify(result))).toEqual(result);
+  });
+});
+
+describe("Standalone Darwin executables", () => {
+  it("signs a verified copy with the hardened runtime and Bun's entitlements, retaining the target", async () => {
+    const original = await readFile(executable.path);
+    const result = await signedExecutable(join(root, "signed-cli"));
+    expect(result).toMatchObject({ kind: "executable", target: "darwin-arm64", format: "mach-o", path: join(root, "signed-cli") });
+    expect(result.signature).toEqual({ certificateSha1, secureTimestamp: true, hardenedRuntime: true });
+    expect(await readFile(result.path)).toEqual(Buffer.concat([original, Buffer.from(":signed")]));
+    expect(result.sha256).not.toBe(executable.sha256);
+    expect(await readFile(executable.path)).toEqual(original);
+    expect(await local(Artifact.verify(result))).toEqual(result);
+    expect(await local(Artifact.verify(executable))).toEqual(executable);
+    if (process.platform !== "win32") expect((await stat(result.path)).mode & 0o777).toBe(0o755);
+    const plist = (await calls()).find((call) => call.tool === "plutil")!.plist!;
+    for (const key of Bun.entitlements) expect(plist).toContain(`<key>${key}</key>\n  <true/>`);
+    const commands = (await calls()).filter((call) => call.tool === "codesign");
+    expect(commands.map((call) => call.args[0])).toEqual(["--force", "--verify"]);
+    expect(commands[0]!.args.slice(0, 7)).toEqual(["--force", "--sign", certificateSha1, "--timestamp", "--options", "runtime", "--entitlements"]);
+    expect(commands[0]!.args.at(-1)).not.toBe(result.path);
+    expect(commands[1]!.args).toEqual(["--verify", "--strict", commands[0]!.args.at(-1)]);
+    expect(Schema.decodeUnknownSync(Apple.SignedExecutable)(JSON.parse(JSON.stringify(result)))).toEqual(result);
+  });
+
+  it("signs in place by default with a plist artifact", async () => {
+    await writeFile(join(root, "entitlements.plist"), '<?xml version="1.0"?><plist version="1.0"><dict/></plist>');
+    const entitlements = await local(Artifact.file(join(root, "entitlements.plist"), producer));
+    const result = await run(Apple.sign({ artifact: executable, certificateSha1, entitlements }));
+    expect(result.path).toBe(executable.path);
+    expect(await readFile(result.path)).toEqual(Buffer.concat([thinMacho(), Buffer.from(":signed")]));
+    expect(await local(Artifact.verify(result))).toEqual(result);
+    expect((await calls()).find((call) => call.tool === "plutil")!.plist).toContain("<dict/>");
+  });
+
+  it("rejects non-Darwin executables and malformed entitlement keys before signing", async () => {
+    await writeFile(join(root, "linux"), elf());
+    const linux = await local(Artifact.executable(join(root, "linux"), producer));
+    expect(await run(Apple.sign({ artifact: linux, certificateSha1, outfile: join(root, "never") }).pipe(Effect.flip))).toBeInstanceOf(Apple.InputInvalid);
+    for (const entitlements of [[], [""], ["a", "a"], [" com.apple.security.cs.allow-jit"], ["bad\0key"]]) {
+      expect(await run(Apple.sign({ artifact: executable, certificateSha1, outfile: join(root, "never"), entitlements }).pipe(Effect.flip))).toBeInstanceOf(Apple.InputInvalid);
+    }
+    expect(await readdir(root)).not.toContain("never");
+    expect(await readdir(root)).not.toContain("calls.jsonl");
+  });
+
+  it.each(["codesign.sign", "codesign.verify", "plutil"])("preserves the input and an existing output after %s fails", async (fail) => {
+    const outfile = join(root, "previous-cli");
+    await writeFile(outfile, "previous executable");
+    await configure({ fail });
+    const listing = async () => (await readdir(root)).filter((name) => name !== "calls.jsonl").sort();
+    const before = await listing();
+    expect(await run(Apple.sign({ artifact: executable, certificateSha1, outfile, entitlements: Bun.entitlements }).pipe(Effect.flip))).toBeInstanceOf(Tool.Failed);
+    expect(await readFile(outfile, "utf8")).toBe("previous executable");
+    expect(await local(Artifact.verify(executable))).toEqual(executable);
+    expect(await listing()).toEqual(before);
+  });
+
+  it("rejects a signed binary whose header no longer matches the input target", async () => {
+    await configure({ corruptTarget: true });
+    const failure = await run(Apple.sign({ artifact: executable, certificateSha1, outfile: join(root, "never") }).pipe(Effect.flip));
+    expect(failure).toBeInstanceOf(Executable.TargetMismatch);
+    expect(await local(Artifact.verify(executable))).toEqual(executable);
+    expect(await readdir(root)).not.toContain("never");
+  });
+
+  it("notarizes a signed executable as a ZIP and assesses the accepted bytes without stapling", async () => {
+    const signed = await signedExecutable(join(root, "signed-cli"));
+    const acceptance = await accepted(signed);
+    expect(acceptance.kind).toBe("zip");
+    expect(acceptance.artifact).toEqual(signed);
+    const submit = (await calls()).find((call) => call.tool === "notarytool" && call.args[0] === "submit")!;
+    expect(submit.args[1]).toMatch(/\.zip$/u);
+    expect(submit.payloadSha).not.toBe(signed.sha256);
+    await expect(stat(submit.args[1]!)).rejects.toMatchObject({ code: "ENOENT" });
+    const encoded = Schema.encodeSync(Apple.Notary.AcceptedReference)(acceptance);
+    expect(Schema.decodeUnknownSync(Apple.Notary.AcceptedReference)(JSON.parse(JSON.stringify(encoded)))).toEqual(acceptance);
+    expect(await run(Apple.assess({ artifact: signed, acceptance }))).toBe(signed);
+    const assess = (await calls()).find((call) => call.tool === "spctl")!;
+    expect(assess.args.slice(0, 4)).toEqual(["--assess", "--type", "execute", "--verbose=4"]);
+    expect((await calls()).some((call) => call.tool === "stapler")).toBe(false);
+  });
+
+  it("refuses to assess an executable whose acceptance names different bytes", async () => {
+    const signed = await signedExecutable(join(root, "signed-cli"));
+    const acceptance = await accepted(signed);
+    const before = await calls();
+    for (const artifact of [{ ...signed, bytes: signed.bytes + 1 }, { ...signed, sha256: "0".repeat(64) }]) {
+      const wrong: Apple.Notary.AcceptedReference = { ...acceptance, artifact };
+      expect(await run(Apple.assess({ artifact: signed, acceptance: wrong }).pipe(Effect.flip))).toBeInstanceOf(Apple.InputInvalid);
+    }
+    expect(await calls()).toEqual(before);
   });
 });
 

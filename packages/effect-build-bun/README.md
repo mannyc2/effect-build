@@ -9,6 +9,8 @@ Provide `Bun.layer({ executable?, version? })` and platform services. The CLI pr
 also runs from Node. `compile` returns `Artifact.Executable`, `bundle` returns
 `Artifact.Directory`, and `build` returns stdout bytes. `watch` requires an Effect scope.
 Targets accept core names and Bun variants; Windows output requires lowercase `.exe`.
+`Bun.entitlements` lists the hardened-runtime entitlements Bun documents for signing
+its compiled executables on macOS; pass it to `Apple.sign`.
 
 `supported` is `>=1.3.14 <2.0.0`; `tested` records CI fixtures 1.3.14 and 1.4.2.
 Emitted builds reject 1.4.1 for a reproduced variable-collision bug; native API

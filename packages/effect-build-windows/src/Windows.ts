@@ -69,6 +69,11 @@ export type Credential = {
   readonly thumbprint: string;
   readonly storeName?: string | undefined;
   readonly machineStore?: boolean | undefined;
+} | {
+  /** Azure Trusted Signing: SignTool loads the client library and account metadata; Azure identity comes from the environment. */
+  readonly kind: "trusted-signing";
+  readonly library: string;
+  readonly metadata: string;
 };
 export type SignInput<A extends Artifact.Regular = Artifact.Regular> = Credential & {
   readonly artifact: A;
@@ -134,13 +139,18 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
         if (password.includes("\0")) return yield* new InputInvalid({ reason: "PFX password must not contain NUL" });
         credential.push("/p", password);
       }
-    } else {
+    } else if (input.kind === "store") {
       if (!/^[0-9a-f]{40}$/iu.test(input.thumbprint) || (input.storeName !== undefined && !textValid(input.storeName))) {
         return yield* new InputInvalid({ reason: "store credentials require a 40-digit SHA-1 thumbprint and a non-empty store name without NUL" });
       }
       if (input.machineStore === true) credential.push("/sm");
       if (input.storeName !== undefined) credential.push("/s", input.storeName);
       credential.push("/sha1", input.thumbprint);
+    } else {
+      if (![input.library, input.metadata].every(textValid)) {
+        return yield* new InputInvalid({ reason: "Trusted Signing credentials require non-empty library and metadata paths without NUL" });
+      }
+      credential.push("/dlib", p.resolve(cwd, input.library), "/dmdf", p.resolve(cwd, input.metadata));
     }
     const { tool } = yield* Windows;
     const produce = (out: string) => Effect.gen(function*() {

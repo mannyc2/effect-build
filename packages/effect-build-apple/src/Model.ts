@@ -19,6 +19,11 @@ export const SignedPkg = Schema.Struct({ ...Pkg.fields, signature: Schema.Struct
 export type SignedPkg = typeof SignedPkg.Type;
 export const SignedProduct = Schema.Union([SignedApp, SignedDmg, SignedPkg]);
 export type SignedProduct = typeof SignedProduct.Type;
+/** A standalone Mach-O executable signed with the hardened runtime; ZIP-notarizable, never stapled. */
+export const SignedExecutable = Schema.Struct({ ...Artifact.Executable.fields, signature: Schema.Struct({ ...signature, hardenedRuntime: Schema.Literal(true) }) }).check(Schema.makeFilter((value) => Schema.is(Artifact.Executable)(value) ? undefined : "invalid executable artifact"));
+export type SignedExecutable = typeof SignedExecutable.Type;
+export const Signed = Schema.Union([SignedApp, SignedDmg, SignedPkg, SignedExecutable]);
+export type Signed = typeof Signed.Type;
 export type StapledApp = SignedApp & { readonly ticket: AcceptedReference };
 export type StapledDmg = SignedDmg & { readonly ticket: AcceptedReference };
 export type StapledPkg = SignedPkg & { readonly ticket: AcceptedReference };

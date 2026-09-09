@@ -76,6 +76,10 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Effect peers accept every 4.0 release candidate from rc.108.** The workspace pins the tested RC, a
   non-gating consumer observes the `rc` tag, and moving the tested version is its own change.
 - **bun-types is an optional peer of the Bun API subpath**; the package root references no Bun types.
+- **Standalone executables sign with the hardened runtime, notarize as ZIPs, and are assessed, never stapled**:
+  Apple issues tickets for them but cannot attach one. Entitlements come from the caller; the Bun provider lists its own.
+- **Trusted Signing credentials are two paths.** SignTool's client library reads Azure identity from the
+  environment, so the library holds no Azure secret.
 
 - **Core manifests project core fields only.** Provider schemas preserve richer signing/runtime/product/notary records.
 - **Release retries consume retained exact tarballs** and verify registry bytes before skipping an existing version.
