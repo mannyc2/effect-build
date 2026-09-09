@@ -34,7 +34,8 @@ consumers install no Bun declarations.
 Standalone Darwin executables sign through `Apple.sign` with the hardened runtime, a secure
 timestamp, and entitlements given as a plist artifact or as keys; `Bun.entitlements` lists what
 Bun-compiled binaries need. They notarize as ZIP archives and are assessed with their accepted
-reference, since Apple cannot staple standalone binaries. `Windows.sign` accepts Azure Trusted
+reference, since Apple cannot staple standalone binaries, and `Apple.pkg` puts one in an installer
+that lands in `/usr/local/bin`. `Windows.sign` accepts Azure Trusted
 Signing credentials. An on-demand signing workflow runs both credentialed paths on real identities.
 
 Upgrade instructions: [0.6 to 0.7 migration](docs/migration-0.7.md).

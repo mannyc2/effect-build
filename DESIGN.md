@@ -80,6 +80,8 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **bun-types is an optional peer of the Bun API subpath**; the package root references no Bun types.
 - **Standalone executables sign with the hardened runtime, notarize as ZIPs, and are assessed, never stapled**:
   Apple issues tickets for them but cannot attach one. Entitlements come from the caller; the Bun provider lists its own.
+- **PKGs carry one signed app or one signed executable.** An executable's payload root installs to
+  `/usr/local/bin` unless `installLocation` says otherwise; that is where a CLI belongs.
 - **Trusted Signing credentials are two paths.** SignTool's client library reads Azure identity from the
   environment, so the library holds no Azure secret.
 

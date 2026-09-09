@@ -3,7 +3,7 @@ import { Artifact, Commit, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
 import { validateResources, type Resource } from "./AppBundle.js";
 import { copyProduct, copyRegular, fileError, outputPath, runNative, textValid, verifySignature } from "./internal.js";
-import type { Dmg, Pkg, SignedApp } from "./Model.js";
+import type { Dmg, Pkg, SignedApp, SignedExecutable } from "./Model.js";
 
 export interface DmgInput extends Commit.ProducerOptions {
   readonly artifact: SignedApp;
@@ -14,7 +14,8 @@ export interface DmgInput extends Commit.ProducerOptions {
   readonly cwd?: string | undefined;
 }
 export interface PkgInput extends Commit.ProducerOptions {
-  readonly artifact: SignedApp;
+  /** A signed app installs under `/Applications`; a signed executable under `/usr/local/bin`, unless installLocation says otherwise. */
+  readonly artifact: SignedApp | SignedExecutable;
   readonly outfile: string;
   readonly identifier: string;
   readonly version: string;
@@ -53,21 +54,23 @@ export const dmg = (input: DmgInput): Effect.Effect<Dmg, ProductError, Apple | E
 
 export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | Env> => Effect.scoped(Effect.gen(function*() {
   const outfile = yield* outputPath(input.outfile, ".pkg", input.cwd);
-  const installLocation = input.installLocation ?? "/Applications";
+  const app = input.artifact.kind === "directory";
+  const installLocation = input.installLocation ?? (app ? "/Applications" : "/usr/local/bin");
   if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u.test(input.identifier) || !textValid(input.version) || !textValid(installLocation) || !installLocation.startsWith("/") || installLocation.split("/").includes("..")) {
     return yield* new InputInvalid({ reason: "pkg requires a reverse-DNS identifier, non-empty version, and absolute installLocation without traversal or NUL" });
   }
   const fs = yield* FileSystem.FileSystem;
   const p = yield* Path.Path;
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-pkg-" }).pipe(Effect.mapError(fileError(outfile)));
-  const appName = p.basename(input.artifact.path);
-  if (!appName.toLowerCase().endsWith(".app")) return yield* new InputInvalid({ reason: "the input app path must end in .app" });
-  const app = p.join(temporary, appName);
-  yield* copyProduct(input.artifact, app);
-  yield* verifySignature(input.artifact, app);
+  const name = p.basename(input.artifact.path);
+  if (app && !name.toLowerCase().endsWith(".app")) return yield* new InputInvalid({ reason: "the input app path must end in .app" });
+  // pkgbuild takes an app as a component; an executable ships as a payload root holding it under its own name.
+  const payload = app ? p.join(temporary, name) : p.join(temporary, "root", name);
+  yield* copyProduct(input.artifact, payload);
+  yield* verifySignature(input.artifact, payload);
   const component = p.join(temporary, "component.pkg");
   const cwd = p.resolve(input.cwd ?? "");
-  yield* runNative("pkgbuild", ["--component", app, "--identifier", input.identifier, "--version", input.version, "--install-location", installLocation, component], { cwd });
+  yield* runNative("pkgbuild", [...(app ? ["--component", payload] : ["--root", p.dirname(payload)]), "--identifier", input.identifier, "--version", input.version, "--install-location", installLocation, component], { cwd });
   const { tool } = yield* Apple;
   const produce = (out: string) => Effect.gen(function*() {
     yield* runNative("productbuild", ["--package", component, out], { cwd });

@@ -10,8 +10,9 @@ Provide platform services and `Apple.layer({ executable?, version? })` for xcrun
 Signing needs macOS and Developer ID certificates; notarization also needs credentials.
 
 `appBundle` takes a Darwin executable and bundle metadata. `sign` takes a certificate
-SHA-1 directly; apps may declare nested code and entitlements. `dmg` and
-`pkg` package signed apps. Files use `outfile`; apps use `outdir`. Signing/stapling
+SHA-1 directly; apps may declare nested code and entitlements. `dmg` packages a
+signed app; `pkg` packages a signed app or a signed executable, which installs under
+`/usr/local/bin` unless `installLocation` says otherwise. Files use `outfile`; apps use `outdir`. Signing/stapling
 default to the source path, with staged replacement unless `atomic: false`.
 `sign` also takes a standalone Darwin `Artifact.Executable`, the shape a CLI ships in:
 it applies the hardened runtime and a secure timestamp, and re-reads the header so

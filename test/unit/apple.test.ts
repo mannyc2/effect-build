@@ -88,8 +88,8 @@ switch (name) {
     else throw new Error('unsupported hdiutil command');
     break;
   case 'pkgbuild':
-    if (args[0] !== '--component') throw new Error('missing installer component');
-    write(target, JSON.stringify({entries:collect(args[1]),bundle:basename(args[1])})); fail('pkgbuild'); break;
+    if (args[0] !== '--component' && args[0] !== '--root') throw new Error('missing installer component or root');
+    write(target, JSON.stringify({entries:collect(args[1]),bundle:args[0] === '--component' ? basename(args[1]) : '',location:args[args.indexOf('--install-location') + 1]})); fail('pkgbuild'); break;
   case 'productbuild':
     if (args[0] !== '--package') throw new Error('missing component package');
     write(target, readFileSync(args[1])); fail('productbuild'); break;
@@ -97,7 +97,7 @@ switch (name) {
     write(target, readFileSync(args.at(-2), 'utf8') + ':signed'); fail('productsign'); break;
   case 'pkgutil':
     if (args[0] === '--check-signature') verifySignature(target);
-    else if (args[0] === '--payload-files') { const packed=JSON.parse(readFileSync(target,'utf8')); process.stdout.write(packed.entries.map((entry)=>packed.bundle+'/'+entry.path).join('\n')+'\n'); }
+    else if (args[0] === '--payload-files') { const packed=JSON.parse(readFileSync(target,'utf8')); process.stdout.write(packed.entries.map((entry)=>(packed.bundle ? packed.bundle+'/' : '')+entry.path).join('\n')+'\n'); }
     else throw new Error('unsupported pkgutil command');
     fail('pkgutil'); break;
   case 'notarytool': {
@@ -264,6 +264,23 @@ describe("Apple products on real files", () => {
     const pkg = JSON.parse(await readFile(installer.path, "utf8")) as { readonly entries: readonly PackedEntry[] };
     expect(pkg.entries.find((entry) => entry.path === "Contents/MacOS/fixture")?.contents).toBe(Buffer.from(await readFile(executable.path)).toString("base64"));
     expect(await local(Artifact.verify(dmg))).toEqual(dmg);
+    expect(await local(Artifact.verify(installer))).toEqual(installer);
+    expect(await local(Artifact.verify(source))).toEqual(source);
+  });
+
+  it("packages a signed executable into an installer that lands in a bin directory", async () => {
+    const source = await signedExecutable(join(root, "cli"));
+    const installer = await run(Apple.pkg({ artifact: source, outfile: join(root, "cli.pkg"), identifier: "dev.effect-build.cli", version: "1.2.3" }));
+    const packed = JSON.parse(await readFile(installer.path, "utf8")) as { readonly entries: readonly PackedEntry[]; readonly location: string };
+    expect(packed.location).toBe("/usr/local/bin");
+    expect(packed.entries.map((entry) => [entry.path, entry.kind])).toEqual([["cli", "file"]]);
+    expect(packed.entries[0]!.contents).toBe(Buffer.from(await readFile(source.path)).toString("base64"));
+    if (process.platform !== "win32") expect(packed.entries[0]!.mode).toBe(0o755);
+    const build = (await calls()).find((call) => call.tool === "pkgbuild")!;
+    expect(build.args[0]).toBe("--root");
+    expect((await calls()).filter((call) => call.tool === "codesign" && call.args[0] === "--verify").map((call) => call.args.at(-1))).toContain(join(build.args[1]!, "cli"));
+    const custom = await run(Apple.pkg({ artifact: source, outfile: join(root, "custom.pkg"), identifier: "dev.effect-build.cli", version: "1.2.3", installLocation: "/opt/cli/bin" }));
+    expect((JSON.parse(await readFile(custom.path, "utf8")) as { readonly location: string }).location).toBe("/opt/cli/bin");
     expect(await local(Artifact.verify(installer))).toEqual(installer);
     expect(await local(Artifact.verify(source))).toEqual(source);
   });
