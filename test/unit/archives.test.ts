@@ -1,9 +1,10 @@
+import { standaloneProgram } from "../fixtures/standalone-program.js";
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { Artifact } from "effect-build";
 import * as Archive from "effect-build-archives";
 import { execFile } from "node:child_process";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -16,7 +17,7 @@ const formats = ["zip", "tar.gz"] as const;
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 const runSource = <A, E>(effect: Effect.Effect<A, E, Archive.Archive | NodeServices.NodeServices>) =>
-  run(effect.pipe(Effect.provide(Archive.layer(gitExecutable === undefined ? {} : { executable: gitExecutable }))));
+  run(effect.pipe(Effect.provide(Archive.layer({ executable: gitExecutable }))));
 const pack = (format: typeof formats[number], input: Archive.ArchiveInput) =>
   format === "zip" ? Archive.zip(input) : Archive.tarGz(input);
 const extract = async (format: typeof formats[number], archive: string, directory: string) => {
@@ -38,9 +39,49 @@ beforeEach(async () => {
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
 describe("archives from real files", () => {
+  it("rejects more entries than ZIP32 can index before reading artifact contents", async () => {
+    const entries = Array.from({ length: 65_536 }, (_, index) => ({ artifact: payload, path: `file-${index}` }));
+    expect(await run(Archive.zip({ entries, outfile: join(root, "overflow.zip") }).pipe(Effect.flip))).toMatchObject({ _tag: "ArchiveFormatLimit", format: "zip", limit: "entries", maximum: 65_535 });
+    expect(await readdir(root)).toEqual(["payload"]);
+  });
+
+  it("streams an input larger than any fixed buffer into a zip", async () => {
+    const size = 600 * 1024 * 1024, large = join(root, "large.bin");
+    await writeFile(large, "");
+    await truncate(large, size);
+    const artifact = await run(Artifact.file(large, payload.producedBy));
+    const archived = await run(Archive.zip({ entries: [{ artifact, path: "large.bin" }], outfile: join(root, "large.zip") }));
+    expect(archived.bytes).toBeLessThan(4 * 1024 * 1024);
+    const directory = join(root, "extracted");
+    await extract("zip", archived.path, directory);
+    expect((await stat(join(directory, "large.bin"))).size).toBe(size);
+  }, 300_000);
+  it.each(formats)("compresses repeated input in deterministic %s output", async (format) => {
+    await writeFile(payload.path, "x".repeat(1024 * 1024));
+    const artifact = await run(Artifact.file(payload.path, payload.producedBy));
+    const input = { entries: [{ artifact, path: "large.txt" }], outfile: join(root, `compressed.${format}`) };
+    const first = await run(pack(format, input));
+    expect(first.bytes).toBeLessThan(10_000);
+    const second = await run(pack(format, { ...input, outfile: join(root, `repeat.${format}`) }));
+    expect(await readFile(first.path)).toEqual(await readFile(second.path));
+    const directory = join(root, "extracted");
+    await extract(format, first.path, directory);
+    expect(await readFile(join(directory, "large.txt"), "utf8")).toBe("x".repeat(1024 * 1024));
+  });
+
+  it.each([["zip", 0x1_0000_0000], ["tar.gz", 0o100000000000]] as const)("rejects an entry %s cannot represent before reading artifact contents", async (format, bytes) => {
+    const artifact = { ...payload, bytes };
+    const failure = await run(pack(format, { entries: [{ artifact, path: "data" }], outfile: join(root, "output") }).pipe(Effect.flip));
+    expect(failure).toBeInstanceOf(Archive.FormatLimit);
+    expect(failure).toMatchObject({ format: format === "zip" ? "zip" : "tar", limit: "entry-bytes", path: "data" });
+    expect(await readdir(root)).toEqual(["payload"]);
+  });
+
   it.each(formats)("keeps a native executable runnable after extracting %s", async (format) => {
-    const executable = await run(Artifact.executable(process.execPath, { name: "fixture", version: "0.7.0" }));
     const name = windows ? "tool.exe" : "tool";
+    const program = join(root, name);
+    await standaloneProgram(program);
+    const executable = await run(Artifact.executable(program, { name: "fixture", version: "0.7.0" }));
     const archived = await run(pack(format, {
       entries: [{ artifact: executable, path: name }], outfile: join(root, `executable.${format}`),
     }));
@@ -114,7 +155,7 @@ describe("archives from real directories", () => {
     const source = join(root, "source"), tool = windows ? "tool.exe" : "tool";
     await mkdir(join(source, "share"), { recursive: true });
     await mkdir(join(source, "empty"));
-    await copyFile(process.execPath, join(source, tool));
+    await standaloneProgram(join(source, tool));
     await writeFile(join(source, "share/data.txt"), "directory payload\n");
     if (!windows) {
       await chmod(source, 0o700);
@@ -250,8 +291,12 @@ describe("archives from a Git tree", () => {
     await writeFile(join(repository, "README.md"), "committed readme\n");
     await writeFile(join(repository, "café.txt"), "short Unicode path\n");
     await writeFile(join(repository, "secret"), "excluded by git attributes\n");
-    await writeFile(join(repository, ".gitattributes"), "secret export-ignore\n");
+    await writeFile(join(repository, ".gitattributes"), "secret export-ignore\ndist export-ignore\n");
     await writeFile(join(repository, "dist/compiled.js"), "excluded build output\n");
+    for (const directory of ["build", "target", "out"]) {
+      await mkdir(join(repository, directory));
+      await writeFile(join(repository, directory, "source.ts"), "tracked source\n");
+    }
     const lfs = `version https://git-lfs.github.com/spec/v1\noid sha256:${"a".repeat(64)}\nsize 17\n`;
     await writeFile(join(repository, "asset.lfs"), lfs);
     const longPath = `${"é".repeat(55)}/${windows ? "long-name" : "trailing-name "}`;
@@ -279,6 +324,9 @@ describe("archives from a Git tree", () => {
     expect(names).not.toContain("secret");
     expect(names).not.toContain("dist");
     expect(names).not.toContain("submodule");
+    for (const directory of ["build", "target", "out"]) {
+      expect(await readFile(join(project, directory, "source.ts"), "utf8")).toBe("tracked source\n");
+    }
     expect(await readFile(join(project, "README.md"), "utf8")).toBe("committed readme\n");
     expect(await readFile(join(project, "asset.lfs"), "utf8")).toBe(lfs);
     expect(await readFile(join(project, longPath), "utf8")).toBe("long path contents\n");

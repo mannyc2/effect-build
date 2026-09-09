@@ -25,59 +25,59 @@ export const Target = Schema.Literals(
 export type Target = typeof Target.Type;
 
 export interface Permissions {
-  readonly allowAll?: boolean;
-  readonly permissionSet?: true | string;
-  readonly noPrompt?: boolean;
-  readonly allowRead?: PermissionValue;
-  readonly allowWrite?: PermissionValue;
-  readonly allowNet?: PermissionValue;
-  readonly allowEnv?: PermissionValue;
-  readonly allowRun?: PermissionValue;
-  readonly allowFfi?: PermissionValue;
-  readonly allowSys?: PermissionValue;
-  readonly allowImport?: PermissionValue;
-  readonly denyRead?: PermissionValue;
-  readonly denyWrite?: PermissionValue;
-  readonly denyNet?: PermissionValue;
-  readonly denyEnv?: PermissionValue;
-  readonly denyRun?: PermissionValue;
-  readonly denyFfi?: PermissionValue;
-  readonly denySys?: PermissionValue;
-  readonly denyImport?: PermissionValue;
-  readonly ignoreRead?: PermissionValue;
-  readonly ignoreEnv?: PermissionValue;
+  readonly allowAll?: boolean | undefined;
+  readonly permissionSet?: true | string | undefined;
+  readonly noPrompt?: boolean | undefined;
+  readonly allowRead?: PermissionValue | undefined;
+  readonly allowWrite?: PermissionValue | undefined;
+  readonly allowNet?: PermissionValue | undefined;
+  readonly allowEnv?: PermissionValue | undefined;
+  readonly allowRun?: PermissionValue | undefined;
+  readonly allowFfi?: PermissionValue | undefined;
+  readonly allowSys?: PermissionValue | undefined;
+  readonly allowImport?: PermissionValue | undefined;
+  readonly denyRead?: PermissionValue | undefined;
+  readonly denyWrite?: PermissionValue | undefined;
+  readonly denyNet?: PermissionValue | undefined;
+  readonly denyEnv?: PermissionValue | undefined;
+  readonly denyRun?: PermissionValue | undefined;
+  readonly denyFfi?: PermissionValue | undefined;
+  readonly denySys?: PermissionValue | undefined;
+  readonly denyImport?: PermissionValue | undefined;
+  readonly ignoreRead?: PermissionValue | undefined;
+  readonly ignoreEnv?: PermissionValue | undefined;
 }
 
 export interface Options extends ProjectOptions, Permissions {
-  readonly cachedOnly?: boolean;
-  readonly check?: Check;
-  readonly quiet?: boolean;
-  readonly allowScripts?: true | readonly [string, ...string[]];
-  readonly envFile?: true | string;
-  readonly ext?: "ts" | "tsx" | "js" | "jsx" | "mts" | "mjs" | "cts" | "cjs";
-  readonly location?: string;
-  readonly preload?: readonly string[];
-  readonly require?: readonly string[];
-  readonly seed?: number;
-  readonly v8Flags?: readonly string[];
-  readonly noCodeCache?: boolean;
-  readonly appName?: string;
-  readonly bundle?: boolean;
-  readonly minify?: boolean;
-  readonly engine?: "v8" | "quickjs";
-  readonly exclude?: readonly string[];
-  readonly excludeUnusedNpm?: boolean;
-  readonly icon?: string;
-  readonly include?: readonly string[];
-  readonly noTerminal?: boolean;
-  readonly selfExtracting?: boolean;
+  readonly cachedOnly?: boolean | undefined;
+  readonly check?: Check | undefined;
+  readonly quiet?: boolean | undefined;
+  readonly allowScripts?: true | readonly [string, ...string[]] | undefined;
+  readonly envFile?: true | string | undefined;
+  readonly ext?: "ts" | "tsx" | "js" | "jsx" | "mts" | "mjs" | "cts" | "cjs" | undefined;
+  readonly location?: string | undefined;
+  readonly preload?: readonly string[] | undefined;
+  readonly require?: readonly string[] | undefined;
+  readonly seed?: number | undefined;
+  readonly v8Flags?: readonly string[] | undefined;
+  readonly noCodeCache?: boolean | undefined;
+  readonly appName?: string | undefined;
+  readonly bundle?: boolean | undefined;
+  readonly minify?: boolean | undefined;
+  readonly engine?: "v8" | "quickjs" | undefined;
+  readonly exclude?: readonly string[] | undefined;
+  readonly excludeUnusedNpm?: boolean | undefined;
+  readonly icon?: string | undefined;
+  readonly include?: readonly string[] | undefined;
+  readonly noTerminal?: boolean | undefined;
+  readonly selfExtracting?: boolean | undefined;
 }
 
 export interface Input extends Options {
   readonly entrypoint: string;
-  readonly scriptArgs?: readonly string[];
+  readonly scriptArgs?: readonly string[] | undefined;
   readonly outfile: string;
-  readonly target?: Target;
+  readonly target?: Target | undefined;
 }
 
 const systemTargets = {
@@ -151,7 +151,7 @@ const renderOptions = (input: Options): readonly string[] => [
 export const renderArgv = (
   input: Input,
   output: string,
-  watch: false | { readonly noClearScreen?: boolean; readonly watchExclude?: readonly string[] } = false,
+  watch: false | { readonly noClearScreen?: boolean | undefined; readonly watchExclude?: readonly string[] | undefined } = false,
 ): readonly string[] => [
   "compile",
   ...(watch === false ? [] : ["--watch"]),

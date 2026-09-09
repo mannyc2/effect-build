@@ -5,25 +5,27 @@ import { InputInvalid } from "./InputInvalid.js";
 
 export class Python extends Context.Service<Python, { readonly tool: Tool.Resolved }>()("effect-build-python/Python") {}
 export interface LayerOptions {
-  readonly executable?: string;
-  readonly version?: string | ((version: string) => boolean);
+  readonly executable?: string | undefined;
+  readonly version?: string | ((version: string) => boolean) | undefined;
 }
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
 type Env = Fs | ChildProcessSpawner.ChildProcessSpawner;
-/** The PEP 517 wheel and sdist workflow is tested with uv 0.12.0. */
-export const tested = ">=0.12.0 <1.0.0";
+/** uv 0.12+ builds the sdist first and the wheel from it; the flags used here are stable across 0.x. */
+export const supported = ">=0.12.0 <1.0.0";
+/** Exact version exercised by real-tool CI. */
+export const tested = "0.12.0";
 export const layer = (options: LayerOptions = {}): Layer.Layer<
   Python, Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported, Env
 > => Layer.effect(Python, Tool.resolve({
   name: "uv",
-  ...(options.executable === undefined ? {} : { executable: options.executable }),
+  executable: options.executable,
   parseVersion: (completion) => /^uv (\S+)/u.exec(new TextDecoder().decode(completion.stdout))?.[1],
-}).pipe(Tool.requireVersion(options.version ?? tested), Effect.map((tool) => ({ tool }))));
+}).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))));
 
 export interface BuildInput {
   readonly project: string;
   readonly outdir: string;
-  readonly atomic?: boolean;
+  readonly atomic?: boolean | undefined;
 }
 export interface BuildResult {
   readonly wheel: Artifact.File;
@@ -31,7 +33,7 @@ export interface BuildResult {
 }
 export type BuildError = InputInvalid | Tool.Failed | Tool.SpawnFailed | Artifact.ArtifactError | Commit.CommitError;
 
-export const build = (input: BuildInput): Effect.Effect<BuildResult, BuildError, Python | Env> =>
+export const build = Effect.fn("Python.build")((input: BuildInput): Effect.Effect<BuildResult, BuildError, Python | Env> =>
   Effect.gen(function*() {
     if ([input.project, input.outdir].some((path) => path.length === 0 || path.includes("\0"))) {
       return yield* new InputInvalid({ reason: "project and outdir must be non-empty paths without NUL" });
@@ -52,7 +54,7 @@ export const build = (input: BuildInput): Effect.Effect<BuildResult, BuildError,
       }
       return directory;
     });
-    const directory = yield* input.atomic === false ? produce(outdir) : Commit.atomic(outdir, produce);
+    const directory = yield* Commit.output(outdir, produce, { atomic: input.atomic, staging: "sibling" });
     // Re-read at the committed paths so callers receive ordinary core file artifacts.
     const wheel = directory.entries.find((entry) => entry.kind === "file" && !entry.path.includes("/") && entry.path.endsWith(".whl"))!;
     const sdist = directory.entries.find((entry) => entry.kind === "file" && !entry.path.includes("/") && entry.path.endsWith(".tar.gz"))!;
@@ -60,4 +62,4 @@ export const build = (input: BuildInput): Effect.Effect<BuildResult, BuildError,
       wheel: yield* Artifact.file(p.join(directory.path, wheel.path), producer),
       sdist: yield* Artifact.file(p.join(directory.path, sdist.path), producer),
     };
-  });
+  }));

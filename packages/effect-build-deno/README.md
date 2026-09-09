@@ -11,7 +11,7 @@ Provide `Deno.layer({ executable?, version?, runtime? })` and platform services.
 Core targets and native triples are accepted; musl compilation is unsupported.
 Windows output requires lowercase `.exe`; staging preserves the output basename.
 
-`tested` is exactly 2.9.5 because 2.9.6 removed supported flags. An explicit `runtime`
+`supported` is `>=2.9.5 <3.0.0` and `tested` is 2.9.5; flags removed in 2.9.6 are rejected by the operations that use them. An explicit `runtime`
 sets `DENORT_BIN` and records its path/hash without executing it during resolution.
 `watch` requires a scope and rebuilds directly. `effect-build-deno/api` exports
 `Bundle` and `layer` for native `Deno.bundle`; **that subpath requires Deno**.

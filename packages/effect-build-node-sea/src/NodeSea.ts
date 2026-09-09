@@ -6,25 +6,35 @@ import { inject } from "postject";
 
 export class InputInvalid extends Schema.TaggedError<InputInvalid>()("NodeSeaInputInvalid", {
   reason: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 export class Failed extends Schema.TaggedError<Failed>()("NodeSeaFailed", {
   operation: Schema.String,
   cause: Schema.Unknown,
-}) {}
+}) {
+  override get message(): string {
+    return `${this.operation} failed: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
+  }
+}
 
 export class NodeSea extends Context.Service<NodeSea, {
   readonly builder: Tool.Resolved;
   readonly base: Tool.Resolved;
 }>()("effect-build-node-sea/NodeSea") {}
 export interface LayerOptions {
-  readonly executable?: string;
-  readonly baseExecutable?: string;
-  readonly version?: string | ((version: string) => boolean);
+  readonly executable?: string | undefined;
+  readonly baseExecutable?: string | undefined;
+  readonly version?: string | ((version: string) => boolean) | undefined;
 }
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
 type Env = Fs | ChildProcessSpawner.ChildProcessSpawner;
 /** Node 22–26 share the SEA preparation blob and resource injection workflow. */
-export const tested = ">=22.0.0 <27.0.0";
+export const supported = ">=22.0.0 <27.0.0";
+/** Exact versions exercised by real-tool CI. */
+export const tested = "22.0.0 || 26.7.0";
 const resolveNode = (executable: string, version: NonNullable<LayerOptions["version"]>) => Tool.resolve({
   name: "node",
   executable,
@@ -35,8 +45,8 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
   InputInvalid | Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
   Env
 > => Layer.effect(NodeSea, Effect.gen(function*() {
-  const builder = yield* resolveNode(options.executable ?? process.execPath, options.version ?? tested);
-  const base = options.baseExecutable === undefined ? builder : yield* resolveNode(options.baseExecutable, options.version ?? tested);
+  const builder = yield* resolveNode(options.executable ?? process.execPath, options.version ?? supported);
+  const base = options.baseExecutable === undefined ? builder : yield* resolveNode(options.baseExecutable, options.version ?? supported);
   // Node's preparation blob must be consumed by the same Node version.
   if (builder.version !== base.version) {
     return yield* new InputInvalid({ reason: `builder ${builder.version} and base ${base.version} must have the same Node version` });
@@ -47,11 +57,11 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
 export interface Input {
   /** One bundled CommonJS script. Its require() can load Node built-ins. */
   readonly main: Artifact.Regular;
-  readonly assets?: Readonly<Record<string, Artifact.Regular>>;
+  readonly assets?: Readonly<Record<string, Artifact.Regular>> | undefined;
   readonly outfile: string;
-  readonly cwd?: string;
-  readonly atomic?: boolean;
-  readonly disableExperimentalSEAWarning?: boolean;
+  readonly cwd?: string | undefined;
+  readonly atomic?: boolean | undefined;
+  readonly disableExperimentalSEAWarning?: boolean | undefined;
 }
 export type AssembleError =
   | InputInvalid | Failed | Tool.NotFound | Tool.ProbeFailed | Tool.Failed | Tool.SpawnFailed
@@ -59,7 +69,7 @@ export type AssembleError =
 const fileError = (path: string) => (error: unknown) =>
   new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
 
-export const assemble = (input: Input): Effect.Effect<Artifact.Executable, AssembleError, NodeSea | Env> =>
+export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Effect<Artifact.Executable, AssembleError, NodeSea | Env> =>
   Effect.scoped(Effect.gen(function*() {
     if (input.outfile.length === 0 || input.outfile.includes("\0")) {
       return yield* new InputInvalid({ reason: "outfile must be a non-empty path without NUL" });
@@ -76,12 +86,12 @@ export const assemble = (input: Input): Effect.Effect<Artifact.Executable, Assem
     // Inputs and the blob always live separately, including when atomic output is disabled.
     const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-sea-" }).pipe(Effect.mapError(fileError(outfile)));
     const main = p.join(temporary, "main.cjs");
-    yield* fs.writeFile(main, yield* Artifact.readVerified(input.main)).pipe(Effect.mapError(fileError(main)));
+    yield* Artifact.copyVerified(input.main, main);
     yield* Tool.run(builder, ["--check", main], { cwd });
     const assets: [string, string][] = [];
     for (const [key, artifact] of Object.entries(input.assets ?? {})) {
       const path = p.join(temporary, `asset-${assets.length}`);
-      yield* fs.writeFile(path, yield* Artifact.readVerified(artifact)).pipe(Effect.mapError(fileError(path)));
+      yield* Artifact.copyVerified(artifact, path);
       assets.push([key, path]);
     }
     const blob = p.join(temporary, "sea.blob");
@@ -104,7 +114,6 @@ export const assemble = (input: Input): Effect.Effect<Artifact.Executable, Assem
       },
     }) : undefined;
     const produce = (out: string) => Effect.gen(function*() {
-      yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError(out)));
       yield* fs.copyFile(base.path, out).pipe(Effect.mapError(fileError(out)));
       if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--remove-signature", out]);
       // postject cannot cancel: finish its writes before a scope removes temporary output.
@@ -119,5 +128,5 @@ export const assemble = (input: Input): Effect.Effect<Artifact.Executable, Assem
       if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--sign", "-", out]);
       return yield* Artifact.executable(out, Tool.producer(builder), target);
     });
-    return yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
-  }));
+    return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+  })));

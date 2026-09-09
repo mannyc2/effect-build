@@ -2,6 +2,8 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { Artifact, Target } from "effect-build";
 import * as Python from "effect-build-python";
+import { thinMacho } from "../fixtures/native-executable.js";
+import { crc32, inflateRawSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -39,18 +41,26 @@ const readZip = async (path: string) => {
   for (let index = 0; index < count; index++) {
     expect(bytes.readUInt32LE(cursor)).toBe(0x02014b50);
     expect(bytes.readUInt16LE(cursor + 4) >>> 8).toBe(3);
-    expect(bytes.readUInt16LE(cursor + 8)).toBe(0x0800);
-    expect(bytes.readUInt16LE(cursor + 10)).toBe(0);
+    // UTF-8 names, with each entry's CRC and sizes in a data descriptor after its payload.
+    expect(bytes.readUInt16LE(cursor + 8)).toBe(0x0808);
+    expect(bytes.readUInt16LE(cursor + 10)).toBe(8);
     expect(bytes.readUInt16LE(cursor + 12)).toBe(0);
     expect(bytes.readUInt16LE(cursor + 14)).toBe(0x21);
+    const crc = bytes.readUInt32LE(cursor + 16), compressedSize = bytes.readUInt32LE(cursor + 20);
     const size = bytes.readUInt32LE(cursor + 24), nameLength = bytes.readUInt16LE(cursor + 28);
     const name = bytes.toString("utf8", cursor + 46, cursor + 46 + nameLength);
     const local = bytes.readUInt32LE(cursor + 42), body = local + 30 + nameLength;
     expect(bytes.readUInt32LE(local)).toBe(0x04034b50);
-    expect(bytes.readUInt32LE(local + 22)).toBe(size);
-    expect(bytes.readUInt32LE(local + 14)).toBe(bytes.readUInt32LE(cursor + 16));
+    expect(bytes.readUInt16LE(local + 6)).toBe(0x0808);
+    expect([bytes.readUInt32LE(local + 14), bytes.readUInt32LE(local + 18), bytes.readUInt32LE(local + 22)]).toEqual([0, 0, 0]);
     expect(bytes.toString("utf8", local + 30, body)).toBe(name);
-    files.set(name, { contents: bytes.subarray(body, body + size), mode: bytes.readUInt32LE(cursor + 38) >>> 16 });
+    const descriptor = body + compressedSize;
+    expect(bytes.readUInt32LE(descriptor)).toBe(0x08074b50);
+    expect([bytes.readUInt32LE(descriptor + 4), bytes.readUInt32LE(descriptor + 8), bytes.readUInt32LE(descriptor + 12)]).toEqual([crc, compressedSize, size]);
+    const contents = inflateRawSync(bytes.subarray(body, body + compressedSize));
+    expect(contents.length).toBe(size);
+    expect(crc32(contents)).toBe(crc);
+    files.set(name, { contents, mode: bytes.readUInt32LE(cursor + 38) >>> 16 });
     cursor += 46 + nameLength + bytes.readUInt16LE(cursor + 30) + bytes.readUInt16LE(cursor + 32);
   }
   expect(cursor).toBe(end);
@@ -58,6 +68,34 @@ const readZip = async (path: string) => {
 };
 
 describe("wheels from real artifacts", () => {
+  it("rejects ZIP32 entry overflow including generated wheel metadata", async () => {
+    // 65533 payload entries plus METADATA, WHEEL and RECORD exceed the ZIP32 entry count.
+    const entries = Array.from({ length: 65_533 }, (_, index) => ({ artifact: payload, path: `file-${index}` }));
+    expect(await run(Python.wheel({ ...input, entries }).pipe(Effect.flip))).toBeInstanceOf(Python.InputInvalid);
+    expect(await readdir(root)).toEqual(["payload"]);
+  });
+  it("compresses repeated input and retains valid RECORD hashes", async () => {
+    await writeFile(payload.path, "x".repeat(1024 * 1024));
+    const artifact = await run(Artifact.file(payload.path, producer));
+    const result = await run(Python.wheel({ ...input, entries: [{ artifact, path: "data.txt" }] }));
+    expect(result.bytes).toBeLessThan(10_000);
+    expect((await readZip(result.path)).get("data.txt")?.contents.toString()).toBe("x".repeat(1024 * 1024));
+  });
+
+  it.each(["any", "linux_aarch64", "win_arm64", "macosx_11_0_x86_64", "macosx_11_0_universal2"])("rejects Darwin arm64 native commands tagged %s", async (platform) => {
+    await writeFile(payload.path, thinMacho());
+    const artifact = await run(Artifact.executable(payload.path, producer));
+    const result = await run(Python.wheel({ ...input, tags: { ...input.tags, platform }, entries: [{ artifact, path: "wheel_fixture-1.2.3.data/scripts/tool" }] }).pipe(Effect.flip));
+    expect(result).toBeInstanceOf(Python.InputInvalid);
+    expect(await readdir(root)).toEqual(["payload"]);
+  });
+
+  it("rejects an entry ZIP32 cannot hold before reading artifact payloads", async () => {
+    const artifact = { ...payload, bytes: 0x1_0000_0000 };
+    expect(await run(Python.wheel({ ...input, entries: [{ artifact, path: "data" }] }).pipe(Effect.flip))).toBeInstanceOf(Python.InputInvalid);
+    expect(await readdir(root)).toEqual(["payload"]);
+  });
+
   it.each([true, false])("writes deterministic metadata, UTF-8 paths and RECORD with atomic=%s", async (atomic) => {
     const entries = [
       ...input.entries,
@@ -104,7 +142,8 @@ describe("wheels from real artifacts", () => {
 
   it("preserves executable artifact modes unless explicitly overridden", async () => {
     const executable = await run(Artifact.executable(process.execPath, producer, Target.host()));
-    const result = await run(Python.wheel({ ...input, entries: [
+    const platform = process.platform === "win32" ? `win_${process.arch === "arm64" ? "arm64" : "amd64"}` : process.platform === "darwin" ? `macosx_11_0_${process.arch === "arm64" ? "arm64" : "x86_64"}` : `linux_${process.arch === "arm64" ? "aarch64" : "x86_64"}`;
+    const result = await run(Python.wheel({ ...input, tags: { ...input.tags, platform }, entries: [
       { artifact: executable, path: "wheel_fixture/bin/tool" },
       { artifact: executable, path: "wheel_fixture/bin/data", executable: false },
     ] }));

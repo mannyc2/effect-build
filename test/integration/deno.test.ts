@@ -114,7 +114,7 @@ describe("real Deno 2.9.5", () => {
     const process = await run(Effect.scoped(Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const watcher = yield* Deno.watch({
-        entrypoint: "hello.ts", outfile: name("watched"), cwd: root, options, noClearScreen: true,
+        entrypoint: "hello.ts", outfile: name("watched"), cwd: root, options, noClearScreen: true, stdio: "pipe",
       });
       const diagnostics: string[] = [];
       yield* Effect.forkScoped(Stream.runDrain(watcher.process.stdout));

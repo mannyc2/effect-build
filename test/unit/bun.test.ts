@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
-const bunLayer = Bun.layer(process.env.EFFECT_BUILD_BUN === undefined ? {} : { executable: process.env.EFFECT_BUILD_BUN });
+const bunLayer = Bun.layer({ executable: process.env.EFFECT_BUILD_BUN });
 const run = <A, E>(effect: Effect.Effect<A, E, Bun.Bun | NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(bunLayer), Effect.provide(NodeServices.layer)));
 let root: string;
@@ -30,6 +30,16 @@ describe("Bun CLI", () => {
     expect(new TextDecoder().decode(output)).toContain("console.log(42)");
     expect(await readdir(root)).toEqual(["hello.ts"]);
   });
+
+  it("returns a complete bundle larger than the diagnostic limit", async () => {
+    const length = 9 * 1024 * 1024;
+    await writeFile(join(root, "large.ts"), `const value = "${"x".repeat(length)}"; console.log(value.length);\n`);
+    const output = await run(Bun.build({ entrypoints: ["large.ts"], cwd: root }));
+    expect(output.byteLength).toBeGreaterThan(length);
+    const outfile = join(root, "large.js");
+    await writeFile(outfile, output);
+    expect((await execute(process.execPath, [outfile])).stdout.trim()).toBe(String(length));
+  }, 30_000);
 
   it("bundles a real directory relative to cwd and verifies its files", async () => {
     const artifact = await run(Bun.bundle({ entrypoints: ["hello.ts"], outdir: "nested/bundle", cwd: root }));
@@ -65,7 +75,11 @@ describe("Bun CLI", () => {
       Bun.compile({ entrypoints: ["hello.ts"], target: "windows-x64", outfile: "hello", cwd: root }),
       Bun.compile({ entrypoints: ["hello.ts"], target: "windows-x64", outfile: "HELLO.EXE", cwd: root }),
     ];
-    for (const effect of invalid) expect(await run(effect.pipe(Effect.flip))).toBeInstanceOf(Bun.InputInvalid);
+    for (const effect of invalid) {
+      const failure = await run(effect.pipe(Effect.flip));
+      expect(failure).toBeInstanceOf(Bun.InputInvalid);
+      expect(String(failure)).toMatch(/^BunInputInvalid: \S/u);
+    }
     expect(await readdir(root)).toEqual(["hello.ts"]);
   });
 

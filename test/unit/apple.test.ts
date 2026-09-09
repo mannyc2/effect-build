@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Redacted, Schema } from "effect";
+import { Cause, Effect, Exit, Redacted, Schema } from "effect";
 import { Artifact, Tool } from "effect-build";
 import * as Apple from "effect-build-apple";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -7,6 +7,8 @@ import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, readlink, realp
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { thinMacho } from "../fixtures/native-executable.js";
 
 const local = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
@@ -21,6 +23,8 @@ interface Config {
   readonly guard?: string;
   readonly mutateDuringVerify?: string;
   readonly submit?: unknown;
+  readonly wait?: unknown;
+  readonly waitForAbort?: boolean;
   readonly info?: unknown;
   readonly logResponse?: unknown;
   readonly rawResponse?: string;
@@ -94,11 +98,12 @@ switch (name) {
     else throw new Error('unsupported pkgutil command');
     fail('pkgutil'); break;
   case 'notarytool': {
-    if (!['submit','info','log'].includes(args[0]) || !args.includes('--output-format') || !args.includes('json')) throw new Error('unsupported notary command');
-    if (args[0] === 'submit' && !args.includes('--wait')) throw new Error('submission did not wait');
+    if (!['submit','wait','info','log'].includes(args[0]) || !args.includes('--output-format') || !args.includes('json')) throw new Error('unsupported notary command');
+    if (args[0] === 'submit' && args.includes('--wait')) throw new Error('submission must return before waiting');
     fail('notarytool.' + args[0]);
+    if (args[0] === 'wait' && config.waitForAbort) { setInterval(() => {}, 1000); await new Promise(() => {}); }
     const defaults = args[0] === 'log' ? {jobId:'3f33f890-0cbf-4c1e-bb39-6fba74a594f0',status:'Accepted',issues:null} : {id:'3f33f890-0cbf-4c1e-bb39-6fba74a594f0',status:'Accepted'};
-    process.stdout.write(config.rawResponse ?? JSON.stringify(config[args[0] === 'log' ? 'logResponse' : args[0]] ?? defaults));
+    process.stdout.write(config.rawResponse ?? JSON.stringify(config[args[0] === 'log' ? 'logResponse' : args[0]] ?? (args[0] === 'wait' ? config.submit : undefined) ?? defaults));
     break;
   }
   case 'stapler':
@@ -127,11 +132,7 @@ beforeEach(async () => {
   await writeFile(tool, "xcrun fixture bytes\n");
   await writeFile(script, fixture);
   await writeFile(configPath, JSON.stringify(config));
-  const header = new Uint8Array(32);
-  header.set([0xcf, 0xfa, 0xed, 0xfe]);
-  header.set([0x0c, 0, 0, 1], 4);
-  header[12] = 2;
-  await writeFile(join(root, "native"), header);
+  await writeFile(join(root, "native"), thinMacho());
   await writeFile(join(root, "resource"), "resource bytes\n");
   executable = await local(Artifact.executable(join(root, "native"), producer, "darwin-arm64"));
   resource = await local(Artifact.file(join(root, "resource"), producer));
@@ -287,7 +288,7 @@ describe("Apple products on real files", () => {
 });
 
 describe("Apple notarization and stapling", () => {
-  it("submits once with wait and persists a reference usable after the original file is gone", async () => {
+  it("submits once, waits separately, and persists a reference usable after the original file is gone", async () => {
     const source = await signedFile("dmg");
     await configure({ submit: { id: submissionId.toUpperCase(), status: "Accepted", message: `uploaded with ${password}` } });
     const submission = await run(Apple.notarize({ artifact: source, credential, timeout: "5m" }));
@@ -303,9 +304,47 @@ describe("Apple notarization and stapling", () => {
     expect((await local(Apple.Notary.acceptedReference(info))).artifact).toEqual(source);
     const submits = (await calls()).filter((call) => call.tool === "notarytool" && call.args[0] === "submit");
     expect(submits).toHaveLength(1);
-    expect(submits[0]!.args).toContain("--wait");
-    expect(submits[0]!.args).toContain("5m");
+    expect(submits[0]!.args).not.toContain("--wait");
+    const waits = (await calls()).filter((call) => call.tool === "notarytool" && call.args[0] === "wait");
+    expect(waits).toHaveLength(1);
+    expect(waits[0]!.args).toContain("5m");
     expect(submits[0]!.payloadSha).toBe(source.sha256);
+  });
+
+  it("persists an upload reference before waiting and recovers from a failed wait without resubmitting", async () => {
+    const source = await signedFile("pkg");
+    await configure({ submit: { id: submissionId, message: "Upload complete" } });
+    const submitted = await run(Apple.Notary.submit({ artifact: source, credential }));
+    expect((await calls()).filter((call) => call.tool === "notarytool").map((call) => call.args[0])).toEqual(["submit"]);
+    const path = join(root, "submission.json");
+    await writeFile(path, JSON.stringify(Schema.encodeSync(Apple.Notary.SubmissionReference)(submitted)));
+    await rm(source.path);
+    const reference = Schema.decodeUnknownSync(Apple.Notary.SubmissionReference)(JSON.parse(await readFile(path, "utf8")));
+    await configure({ fail: "notarytool.wait" });
+    expect(await run(Apple.Notary.wait({ reference, credential, timeout: "1s" }).pipe(Effect.flip))).toBeInstanceOf(Tool.Failed);
+    await configure({ fail: "none", wait: { id: submissionId, status: "Accepted" } });
+    expect((await run(Apple.Notary.wait({ reference, credential }))).status._tag).toBe("Accepted");
+    const notaryCalls = (await calls()).filter((call) => call.tool === "notarytool");
+    expect(notaryCalls.map((call) => call.args[0])).toEqual(["submit", "wait", "wait"]);
+    expect(notaryCalls[0]!.args).not.toContain("--wait");
+  });
+
+  it("keeps an interrupted wait as interruption and resumes from the persisted ID", async () => {
+    const source = await signedFile("pkg"), reference = await run(Apple.Notary.submit({ artifact: source, credential }));
+    await configure({ waitForAbort: true });
+    const controller = new AbortController();
+    const waiting = Effect.runPromiseExit(Apple.Notary.wait({ reference, credential }).pipe(
+      Effect.provide(Apple.layer({ executable: tool })), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner), Effect.provide(NodeServices.layer),
+    ), { signal: controller.signal });
+    try {
+      await expect.poll(async () => (await calls()).filter((call) => call.tool === "notarytool").map((call) => call.args[0])).toEqual(["submit", "wait"]);
+    } finally { controller.abort(); }
+    const exit = await waiting;
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+    await configure({ waitForAbort: false });
+    expect((await run(Apple.Notary.wait({ reference, credential }))).status._tag).toBe("Accepted");
+    expect((await calls()).filter((call) => call.tool === "notarytool" && call.args[0] === "submit")).toHaveLength(1);
   });
 
   it.each(["Invalid", "Rejected", "In Progress"])("retains native status %s and refuses acceptance", async (status) => {

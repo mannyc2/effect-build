@@ -9,10 +9,10 @@ export const runNative = (name: NativeTool, args: readonly string[], options: { 
   Tool.Completion, Tool.Failed | Tool.SpawnFailed, Apple | ChildProcessSpawner.ChildProcessSpawner
 > => Apple.use(({ tool }) => Tool.run(tool, [name, ...args], options).pipe(Effect.mapError((error) => {
   const scrub = (value: string) => (options.redact ?? []).reduce((text, secret) => secret.length === 0 ? text : text.replaceAll(secret, "<redacted>"), value);
-  // Native credentials can appear in argv, stderr, or a failed process launch.
+  // Native credentials can appear in argv, stdout, stderr, or a failed process launch.
   return error instanceof Tool.Failed
-    ? new Tool.Failed({ name: error.name, args: error.args.map(scrub), exitCode: error.exitCode, stderr: scrub(error.stderr) })
-    : new Tool.SpawnFailed({ name: error.name, detail: scrub(error.detail) });
+    ? new Tool.Failed({ tool: error.tool, args: error.args.map(scrub), exitCode: error.exitCode, stdout: scrub(error.stdout), stderr: scrub(error.stderr), stdoutTruncated: error.stdoutTruncated, stderrTruncated: error.stderrTruncated })
+    : new Tool.SpawnFailed({ tool: error.tool, detail: scrub(error.detail) });
 })));
 
 export const fileError = (path: string) => (error: unknown): Artifact.ArtifactError =>
@@ -28,13 +28,13 @@ export const outputPath = (value: string, extension: ".app" | ".dmg" | ".pkg", c
 });
 
 export const copyRegular = (artifact: Artifact.Regular, destination: string, executable = artifact.kind === "executable") => Effect.gen(function*() {
-  const contents = yield* Artifact.readVerified(artifact);
   const fs = yield* FileSystem.FileSystem;
   const p = yield* Path.Path;
-  if (p.resolve(artifact.path) === p.resolve(destination)) return;
-  yield* fs.makeDirectory(p.dirname(destination), { recursive: true }).pipe(Effect.mapError(fileError(destination)));
-  yield* fs.writeFile(destination, contents).pipe(Effect.mapError(fileError(destination)));
-  yield* fs.chmod(destination, executable ? 0o755 : 0o644).pipe(Effect.mapError(fileError(destination)));
+  yield* Artifact.copyVerified(artifact, destination);
+  // An in-place destination keeps its own mode.
+  if (p.resolve(artifact.path) !== p.resolve(destination)) {
+    yield* fs.chmod(destination, executable ? 0o755 : 0o644).pipe(Effect.mapError(fileError(destination)));
+  }
 });
 export const copyProduct = (artifact: Artifact.Artifact, destination: string): Effect.Effect<
   void, InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed, Apple | Env

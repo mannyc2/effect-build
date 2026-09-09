@@ -7,16 +7,16 @@ import { AcceptedReference } from "./Notary.js";
 
 interface StapleOptions {
   readonly acceptance: AcceptedReference;
-  readonly cwd?: string;
-  readonly atomic?: boolean;
+  readonly cwd?: string | undefined;
+  readonly atomic?: boolean | undefined;
 }
 export interface StapleAppInput extends StapleOptions {
   readonly artifact: SignedApp;
-  readonly outdir?: string;
+  readonly outdir?: string | undefined;
 }
 export interface StapleFileInput<P extends SignedDmg | SignedPkg = SignedDmg | SignedPkg> extends StapleOptions {
   readonly artifact: P;
-  readonly outfile?: string;
+  readonly outfile?: string | undefined;
 }
 export type StapleInput = StapleAppInput | StapleFileInput;
 export type StapleError = InputInvalid | Artifact.ArtifactError | Commit.CommitError | Tool.Failed | Tool.SpawnFailed;
@@ -52,6 +52,6 @@ export function staple(input: StapleInput): Effect.Effect<StapledProduct, Staple
       const current = yield* inspectProduct(source, out);
       return { ...current, ticket: input.acceptance };
     });
-    return yield* input.atomic === false ? produce(destination) : Commit.atomic(destination, produce);
+    return yield* Commit.output(destination, produce, { atomic: input.atomic });
   });
 }

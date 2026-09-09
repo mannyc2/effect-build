@@ -59,13 +59,47 @@ describe("tool resolution and execution", () => {
     const failure = await run(Tool.resolve({ name }).pipe(
       withPath([root, dirname(process.execPath)].join(delimiter)), Effect.flip,
     ));
-    expect(failure).toMatchObject({ _tag: "ToolProbeFailed", path: await realpath(broken), detail: expect.stringMatching(/\S/u) });
+    expect(failure).toMatchObject({ _tag: "ToolProbeFailed", tool: name, path: await realpath(broken), detail: expect.stringMatching(/\S/u) });
+    expect(String(failure)).toMatch(/^ToolProbeFailed: .* failed its version probe: \S/u);
   });
+
+  it("locates an executable without probing it", async () => {
+    const name = basename(process.execPath);
+    expect(await run(Tool.locate({ name }).pipe(withPath(dirname(process.execPath))))).toBe(await realpath(process.execPath));
+    expect(await run(Tool.locate({ name: "fixture", executable: process.execPath }))).toBe(await realpath(process.execPath));
+    const failure = await run(Tool.locate({ name }).pipe(withPath(root), Effect.flip));
+    expect(String(failure)).toBe(`ToolNotFound: ${name} not found (searched: ${root})`);
+  });
+
+  it.skipIf(process.platform === "win32")("skips a non-executable file before a runnable PATH match", async () => {
+    const name = basename(process.execPath);
+    await writeFile(join(root, name), "not executable", { mode: 0o644 });
+    const tool = await run(Tool.resolve({ name }).pipe(withPath([root, dirname(process.execPath)].join(delimiter))));
+    expect(tool.path).toBe(await realpath(process.execPath));
+  });
+
+  it("keeps stdout on failure and explicitly reports diagnostic truncation", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const failure = await run(Tool.run(tool, ["-e", "process.stdout.write('reference-id');process.stderr.write('failure');process.exitCode=7"], { outputLimit: 4 }).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "ToolFailed", stdout: "refe", stderr: "fail", exitCode: 7, stdoutTruncated: true, stderrTruncated: true });
+  });
+
+  it("retains uncapped data and observes chunks while a child is still running", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const marker = join(root, "observed");
+    const result = await run(Tool.run(tool, ["-e", "const fs=require('node:fs');process.stdout.write('ready');const timer=setInterval(()=>{if(fs.existsSync(process.argv[1])){clearInterval(timer);process.stdout.write('x'.repeat(9*1024*1024));}},10)", marker], {
+      outputLimit: 4, stdoutLimit: null,
+      onOutput: () => Effect.promise(() => writeFile(marker, "observed")),
+    }));
+    expect(result.stdout.byteLength).toBe(5 + 9 * 1024 * 1024);
+    expect(result.stdoutTruncated).toBe(false);
+  }, 15_000);
 
   it("reports synchronous native argument rejection as a spawn failure", async () => {
     const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
     const failure = await run(Tool.run(tool, ["\0"]).pipe(Effect.flip));
-    expect(failure).toMatchObject({ _tag: "ToolSpawnFailed", name: "node", detail: expect.stringContaining("null bytes") });
+    expect(failure).toMatchObject({ _tag: "ToolSpawnFailed", tool: "node", detail: expect.stringContaining("null bytes") });
+    expect(String(failure)).toMatch(/^ToolSpawnFailed: node could not be started: /u);
   });
 
   it("keeps interruption as interruption while stopping a real process", async () => {
@@ -87,7 +121,8 @@ describe("tool resolution and execution", () => {
   it("reports a missing explicit tool even when PATH contains a matching name", async () => {
     const executable = join(root, "missing");
     const failure = await run(Tool.resolve({ name: basename(process.execPath), executable }).pipe(Effect.flip));
-    expect(failure).toMatchObject({ _tag: "ToolNotFound", searched: [executable] });
+    expect(failure).toMatchObject({ _tag: "ToolNotFound", tool: basename(process.execPath), searched: [executable] });
+    expect(String(failure)).toBe(`ToolNotFound: ${basename(process.execPath)} not found (searched: ${executable})`);
   });
 });
 
@@ -99,7 +134,6 @@ describe("tool versions", () => {
   it.each(["1.3", "01.3.14", "1.03.14", "1.3.014", "v1.3.14", "1.3.14-canary", "1.3.14+build", " 1.3.14", ""])(
     "refuses noncanonical version %s", (version) => {
       expect(Tool.parseVersion(version)).toBeUndefined();
-      expect(Tool.satisfies(">=0.0.0")(version)).toBe(false);
     },
   );
 
@@ -117,17 +151,22 @@ describe("tool versions", () => {
     expect(Tool.satisfies(">1.0.0 <=2.0.0")("2.0.0")).toBe(true);
   });
 
-  it.each(["^1.3.14", ">=1.3", "1.3.x", ">=1.3.14,<1.4.0", "", " ", ">=1.3.14 ||", "|| =1.3.14"])(
+  it.each(["^wat", ">=1.3.14,<1.4.0", "definitely not semver"])(
     "rejects malformed range %s", (range) => {
-      expect(() => Tool.satisfies(range)).toThrow("invalid version range");
+      expect(Tool.satisfies(range)("1.3.14")).toBe(false);
     },
   );
+
+  it.each(["^1.3.14", "~1.3.14", "1.3.x", ">=1.3", "1.3.0 - 1.4.2", "*"])("accepts npm range %s", (range) => {
+    expect(Tool.satisfies(range)("1.3.14")).toBe(true);
+  });
 
   it("applies a range or caller predicate to a resolved version", async () => {
     const tool: Tool.Resolved = { name: "fixture", path: "/fixture", version: "1.3.14", bytes: 0, sha256: "" };
     expect(await Effect.runPromise(Effect.succeed(tool).pipe(Tool.requireVersion("=1.3.14")))).toBe(tool);
     expect(await Effect.runPromise(Effect.succeed(tool).pipe(Tool.requireVersion((v) => v.startsWith("1."))))).toBe(tool);
     const failure = await Effect.runPromise(Effect.succeed(tool).pipe(Tool.requireVersion("=1.4.2"), Effect.flip));
-    expect(failure).toMatchObject({ _tag: "ToolVersionUnsupported", version: "1.3.14", supported: "=1.4.2" });
+    expect(failure).toMatchObject({ _tag: "ToolVersionUnsupported", tool: "fixture", version: "1.3.14", supported: "=1.4.2" });
+    expect(String(failure)).toBe("ToolVersionUnsupported: fixture 1.3.14 is not supported (=1.4.2)");
   });
 });

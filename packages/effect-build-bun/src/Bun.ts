@@ -6,13 +6,15 @@ export class Bun extends Context.Service<Bun, { readonly tool: Tool.Resolved }>(
 
 export interface LayerOptions {
   /** Use this binary instead of searching PATH. */
-  readonly executable?: string;
-  /** Accept these versions: a range string or predicate. Default: `tested`. */
-  readonly version?: string | ((version: string) => boolean);
+  readonly executable?: string | undefined;
+  /** Accept these versions: an npm semver range or predicate. Default: `supported`. */
+  readonly version?: string | ((version: string) => boolean) | undefined;
 }
 
-/** 1.4.0 is unreviewed; 1.4.1 reproduces a variable collision in emitted programs. */
-export const tested = ">=1.3.14 <1.4.0 || >=1.4.2 <1.5.0";
+/** Exact versions exercised by real-tool CI. */
+export const tested = "1.3.14 || 1.4.2";
+/** Compatible major; emitted builds separately reject the known 1.4.1 defect. */
+export const supported = ">=1.3.14 <2.0.0";
 
 export const layer = (
   options: LayerOptions = {},
@@ -23,8 +25,8 @@ export const layer = (
 > =>
   Layer.effect(
     Bun,
-    Tool.resolve({ name: "bun", ...(options.executable === undefined ? {} : { executable: options.executable }) }).pipe(
-      Tool.requireVersion(options.version ?? tested),
+    Tool.resolve({ name: "bun", executable: options.executable }).pipe(
+      Tool.requireVersion(options.version ?? supported),
       Effect.map((tool) => ({ tool })),
     ),
   );
@@ -43,49 +45,54 @@ const toTarget = (t: BunTarget): Target.Target =>
   t.replace(/^bun-/, "").replace(/-(baseline|modern)$/, "") as Target.Target;
 
 export interface MinifyOptions {
-  readonly syntax?: boolean;
-  readonly whitespace?: boolean;
-  readonly identifiers?: boolean;
-  readonly keepNames?: boolean;
+  readonly syntax?: boolean | undefined;
+  readonly whitespace?: boolean | undefined;
+  readonly identifiers?: boolean | undefined;
+  readonly keepNames?: boolean | undefined;
 }
 
 export interface CompileOptions {
-  readonly minify?: boolean | MinifyOptions;
-  readonly sourcemap?: "inline" | "none";
-  readonly bytecode?: boolean;
-  readonly packages?: "bundle" | "external";
-  readonly external?: readonly string[];
-  readonly conditions?: readonly string[];
-  readonly define?: Readonly<Record<string, string>>;
-  readonly environmentInline?: "inline" | "disable" | `${string}*`;
-  readonly execArgv?: readonly string[];
-  readonly autoloadDotenv?: boolean;
-  readonly autoloadBunfig?: boolean;
-  readonly autoloadTsconfig?: boolean;
-  readonly autoloadPackageJson?: boolean;
+  readonly minify?: boolean | MinifyOptions | undefined;
+  readonly sourcemap?: "inline" | "none" | undefined;
+  readonly bytecode?: boolean | undefined;
+  readonly packages?: "bundle" | "external" | undefined;
+  readonly external?: readonly string[] | undefined;
+  readonly conditions?: readonly string[] | undefined;
+  readonly define?: Readonly<Record<string, string>> | undefined;
+  readonly environmentInline?: "inline" | "disable" | `${string}*` | undefined;
+  readonly execArgv?: readonly string[] | undefined;
+  readonly autoloadDotenv?: boolean | undefined;
+  readonly autoloadBunfig?: boolean | undefined;
+  readonly autoloadTsconfig?: boolean | undefined;
+  readonly autoloadPackageJson?: boolean | undefined;
   readonly windows?: {
-    readonly hideConsole?: boolean;
-    readonly icon?: string;
-    readonly title?: string;
-    readonly publisher?: string;
-    readonly version?: string;
-    readonly description?: string;
-    readonly copyright?: string;
-  };
+    readonly hideConsole?: boolean | undefined;
+    readonly icon?: string | undefined;
+    readonly title?: string | undefined;
+    readonly publisher?: string | undefined;
+    readonly version?: string | undefined;
+    readonly description?: string | undefined;
+    readonly copyright?: string | undefined;
+  } | undefined;
 }
 
 export interface CompileInput {
   readonly entrypoints: readonly [string, ...string[]];
   readonly outfile: string;
   /** Default: the host. */
-  readonly target?: Target.Target | BunTarget;
-  readonly cwd?: string;
-  readonly options?: CompileOptions;
+  readonly target?: Target.Target | BunTarget | undefined;
+  readonly cwd?: string | undefined;
+  readonly options?: CompileOptions | undefined;
   /** Build into a sibling temp path and rename into place. Default true. */
-  readonly atomic?: boolean;
+  readonly atomic?: boolean | undefined;
+  readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
 }
 
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("BunInputInvalid", { reason: Schema.String }) {}
+export class InputInvalid extends Schema.TaggedError<InputInvalid>()("BunInputInvalid", { reason: Schema.String }) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 export type CompileError =
   | InputInvalid
@@ -107,10 +114,10 @@ const renderMinify = (minify: boolean | MinifyOptions | undefined): string[] => 
   ...(typeof minify === "object" && minify.keepNames === true ? ["--keep-names"] : []),
 ];
 
-const renderArgv = (input: CompileInput, out: string, target: BunTarget): string[] => {
+const renderArgv = (input: CompileInput, out: string, target?: BunTarget): string[] => {
   const o = input.options ?? {};
   return [
-    "build", "--compile", `--target=${target}`,
+    "build", "--compile", ...(target === undefined ? [] : [`--target=${target}`]),
     ...renderMinify(o.minify),
     ...(o.sourcemap ? [`--sourcemap=${o.sourcemap}`] : []),
     ...(o.bytecode ? ["--bytecode"] : []),
@@ -149,6 +156,10 @@ const validate = Effect.fnUntraced(function*(entrypoints: readonly string[], out
 const outputPath = (output: string, cwd?: string) =>
   Effect.map(Path.Path, (p) => p.resolve(cwd ?? ".", output));
 
+const checkBuildVersion = (tool: Tool.Resolved) => Tool.satisfies("1.4.1")(tool.version)
+  ? Effect.fail(new InputInvalid({ reason: "Bun 1.4.1 has a reproduced variable-collision bug in emitted builds; use another version" }))
+  : Effect.void;
+
 /**
  * `bun build --compile` as an Effect. Verifies the produced binary's header
  * against the requested target before returning it.
@@ -162,24 +173,26 @@ export const compile = Effect.fn("Bun.compile")(function*(
 > {
   yield* validate(input.entrypoints, input.outfile);
   const { tool } = yield* Bun;
-  const requested = input.target ?? Target.host();
-  if (requested === undefined) return yield* new InputInvalid({ reason: "unsupported host; pass target" });
-  const bunTarget = toBunTarget(requested);
-  if (!BunTarget.literals.includes(bunTarget)) {
+  yield* checkBuildVersion(tool);
+  const requested = input.target;
+  const bunTarget = requested === undefined ? undefined : toBunTarget(requested);
+  if (bunTarget !== undefined && !BunTarget.literals.includes(bunTarget)) {
     return yield* new InputInvalid({ reason: `unsupported Bun target: ${requested}` });
   }
-  const target = toTarget(bunTarget);
-  const suffix = Target.parts(target).executableSuffix;
+  // Omit --target for a native build: Bun knows its own host ABI, even when our
+  // orchestrator cannot establish libc (for example Bun on Alpine).
+  const target = bunTarget === undefined ? undefined : toTarget(bunTarget);
+  const suffix = target === undefined ? (process.platform === "win32" ? ".exe" : "") : Target.parts(target).executableSuffix;
   if (suffix !== "" && !input.outfile.endsWith(suffix)) {
     // Bun always names Windows outputs *.exe, so the caller's outfile must too.
-    return yield* new InputInvalid({ reason: `outfile for ${target} must end with ${suffix}` });
+    return yield* new InputInvalid({ reason: `outfile for ${target ?? "the Windows host"} must end with ${suffix}` });
   }
   const produce = (out: string) =>
-    Tool.run(tool, renderArgv(input, out, bunTarget), input.cwd === undefined ? {} : { cwd: input.cwd }).pipe(
+    Tool.run(tool, renderArgv(input, out, bunTarget), { cwd: input.cwd, onOutput: input.onOutput }).pipe(
       Effect.andThen(Artifact.executable(out, Tool.producer(tool), target)),
     );
   const outfile = yield* outputPath(input.outfile, input.cwd);
-  return input.atomic === false ? yield* produce(outfile) : yield* Commit.atomic(outfile, produce);
+  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
 });
 
 export type Loader = "js" | "jsx" | "ts" | "tsx" | "json" | "toml" | "yaml" | "text" | "file"
@@ -187,38 +200,40 @@ export type Loader = "js" | "jsx" | "ts" | "tsx" | "json" | "toml" | "yaml" | "t
 
 export interface BundleOptions extends Omit<CompileOptions,
   "sourcemap" | "execArgv" | "autoloadDotenv" | "autoloadBunfig" | "autoloadTsconfig" | "autoloadPackageJson" | "windows"> {
-  readonly target?: "browser" | "bun" | "node";
-  readonly format?: "esm" | "cjs" | "iife";
-  readonly sourcemap?: "linked" | "inline" | "external" | "none";
-  readonly splitting?: boolean;
-  readonly publicPath?: string;
-  readonly root?: string;
-  readonly loader?: Readonly<Record<string, Loader>>;
-  readonly naming?: { readonly entry?: string; readonly chunk?: string; readonly asset?: string };
-  readonly banner?: string;
-  readonly footer?: string;
-  readonly metafile?: string;
-  readonly drop?: readonly string[];
-  readonly features?: readonly string[];
-  readonly tsconfig?: string;
-  readonly reactFastRefresh?: boolean;
-  readonly bundle?: boolean;
+  readonly target?: "browser" | "bun" | "node" | undefined;
+  readonly format?: "esm" | "cjs" | "iife" | undefined;
+  readonly sourcemap?: "linked" | "inline" | "external" | "none" | undefined;
+  readonly splitting?: boolean | undefined;
+  readonly publicPath?: string | undefined;
+  readonly root?: string | undefined;
+  readonly loader?: Readonly<Record<string, Loader>> | undefined;
+  readonly naming?: { readonly entry?: string | undefined; readonly chunk?: string | undefined; readonly asset?: string | undefined } | undefined;
+  readonly banner?: string | undefined;
+  readonly footer?: string | undefined;
+  readonly metafile?: string | undefined;
+  readonly drop?: readonly string[] | undefined;
+  readonly features?: readonly string[] | undefined;
+  readonly tsconfig?: string | undefined;
+  readonly reactFastRefresh?: boolean | undefined;
+  readonly bundle?: boolean | undefined;
 }
 
 export interface BundleInput {
   readonly entrypoints: readonly [string, ...string[]];
   readonly outdir: string;
-  readonly cwd?: string;
-  readonly options?: BundleOptions;
-  readonly atomic?: boolean;
+  readonly cwd?: string | undefined;
+  readonly options?: BundleOptions | undefined;
+  readonly atomic?: boolean | undefined;
+  readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
 }
 
 export interface BuildInput {
   readonly entrypoints: readonly [string, ...string[]];
-  readonly cwd?: string;
-  readonly options?: Omit<BundleOptions, "bytecode" | "metafile" | "sourcemap" | "splitting"> & {
-    readonly sourcemap?: "inline" | "none";
-  };
+  readonly cwd?: string | undefined;
+  readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
+  readonly options?: (Omit<BundleOptions, "bytecode" | "metafile" | "sourcemap" | "splitting"> & {
+    readonly sourcemap?: "inline" | "none" | undefined;
+  }) | undefined;
 }
 
 const renderBundleOptions = (o: BundleOptions): string[] => [
@@ -252,37 +267,43 @@ const renderBundleOptions = (o: BundleOptions): string[] => [
 export const build = Effect.fn("Bun.build")(function*(input: BuildInput) {
   yield* validate(input.entrypoints);
   const { tool } = yield* Bun;
+  yield* checkBuildVersion(tool);
   const result = yield* Tool.run(tool, ["build", ...renderBundleOptions(input.options ?? {}), ...input.entrypoints],
-    input.cwd === undefined ? {} : { cwd: input.cwd });
+    { cwd: input.cwd, onOutput: input.onOutput, stdoutLimit: null });
   return result.stdout;
 });
 
 export const bundle = Effect.fn("Bun.bundle")(function*(input: BundleInput) {
   yield* validate(input.entrypoints, input.outdir);
   const { tool } = yield* Bun;
+  yield* checkBuildVersion(tool);
   const outdir = yield* outputPath(input.outdir, input.cwd);
   const produce = (out: string) => Tool.run(tool,
     ["build", ...renderBundleOptions(input.options ?? {}), `--outdir=${out}`, ...input.entrypoints],
-    input.cwd === undefined ? {} : { cwd: input.cwd }).pipe(
+    { cwd: input.cwd, onOutput: input.onOutput }).pipe(
       Effect.andThen(Artifact.directory(out, Tool.producer(tool))),
     );
-  return input.atomic === false ? yield* produce(outdir) : yield* Commit.atomic(outdir, produce);
+  return yield* Commit.output(outdir, produce, { atomic: input.atomic, staging: "sibling" });
 });
 
-export interface WatchInput extends Omit<BundleInput, "atomic"> {
-  readonly noClearScreen?: boolean;
+export interface WatchInput extends Omit<BundleInput, "atomic" | "onOutput"> {
+  readonly noClearScreen?: boolean | undefined;
+  /** Inherit live diagnostics by default; use pipe to consume process streams. */
+  readonly stdio?: "inherit" | "pipe" | undefined;
 }
 
-/** The caller owns the scope and drains the child's stdout/stderr streams. */
+/** The caller owns the scope. Live diagnostics are inherited unless stdio is pipe. */
 export const watch = Effect.fn("Bun.watch")(function*(input: WatchInput) {
   yield* validate(input.entrypoints, input.outdir);
   const { tool } = yield* Bun;
+  yield* checkBuildVersion(tool);
   const outdir = yield* outputPath(input.outdir, input.cwd);
   const process = yield* ChildProcess.make(tool.path, ["build", "--watch",
     ...(input.noClearScreen === true ? ["--no-clear-screen"] : []),
     ...renderBundleOptions(input.options ?? {}), `--outdir=${outdir}`, ...input.entrypoints], {
-    ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    cwd: input.cwd,
+    stdout: input.stdio ?? "inherit", stderr: input.stdio ?? "inherit",
     shell: false,
-  }).pipe(Effect.mapError((e) => new Tool.SpawnFailed({ name: tool.name, detail: String(e) })));
+  }).pipe(Effect.mapError((e) => new Tool.SpawnFailed({ tool: tool.name, detail: String(e) })));
   return { tool, process, outdir };
 });

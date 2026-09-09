@@ -6,18 +6,18 @@ import type { App, Dmg, Pkg, SignedApp, SignedDmg, SignedPkg, SignedProduct } fr
 
 export interface NestedCode {
   readonly path: string;
-  readonly entitlements?: Artifact.Regular;
+  readonly entitlements?: Artifact.Regular | undefined;
 }
 interface SignOptions {
   readonly certificateSha1: string;
-  readonly cwd?: string;
-  readonly atomic?: boolean;
+  readonly cwd?: string | undefined;
+  readonly atomic?: boolean | undefined;
 }
 export interface SignAppInput extends SignOptions {
   readonly artifact: App;
-  readonly outdir?: string;
-  readonly entitlements?: Artifact.Regular;
-  readonly nestedCode?: readonly NestedCode[];
+  readonly outdir?: string | undefined;
+  readonly entitlements?: Artifact.Regular | undefined;
+  readonly nestedCode?: readonly NestedCode[] | undefined;
 }
 export interface SignDmgInput extends SignOptions { readonly artifact: Dmg; readonly outfile?: string }
 export interface SignPkgInput extends SignOptions { readonly artifact: Pkg; readonly outfile?: string }
@@ -72,7 +72,6 @@ export function sign(input: SignInput): Effect.Effect<SignedProduct, SignError, 
     const { tool } = yield* Apple;
     const produce = Effect.fn("Apple.sign.produce")(function*(out: string) {
       if (input.artifact.product === "pkg") {
-        yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError(out)));
         yield* runNative("productsign", ["--sign", input.certificateSha1, "--timestamp", packageSource, out], { cwd });
       } else {
         yield* copyProduct(input.artifact, out);
@@ -88,6 +87,6 @@ export function sign(input: SignInput): Effect.Effect<SignedProduct, SignError, 
         ? { ...yield* Artifact.directory(out, Tool.producer(tool)), product: "app" as const, signature: { ...signature, hardenedRuntime: true as const } }
         : { ...yield* Artifact.file(out, Tool.producer(tool)), product: input.artifact.product, signature };
     }, Effect.tap(verifySignature));
-    return yield* input.atomic === false ? produce(destination) : Commit.atomic(destination, produce);
+    return yield* Commit.output(destination, produce, { atomic: input.atomic });
   }));
 }

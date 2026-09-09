@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Path } from "effect";
-import { Artifact, Commit, Executable, Tool } from "effect-build";
+import { Artifact, Commit, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
 import { fileError, outputPath, relativeValid, runNative, textValid } from "./internal.js";
 import type { App } from "./Model.js";
@@ -8,7 +8,7 @@ export interface Resource {
   readonly artifact: Artifact.Regular;
   /** Relative to Contents/Resources for apps, or the volume root for disk images. */
   readonly path: string;
-  readonly executable?: boolean;
+  readonly executable?: boolean | undefined;
 }
 export interface AppBundleInput {
   readonly executable: Artifact.Executable;
@@ -16,15 +16,15 @@ export interface AppBundleInput {
   readonly bundleIdentifier: string;
   readonly bundleName: string;
   readonly version: string;
-  readonly shortVersion?: string;
-  readonly displayName?: string;
-  readonly executableName?: string;
-  readonly minimumSystemVersion?: string;
-  readonly resources?: readonly Resource[];
-  readonly cwd?: string;
-  readonly atomic?: boolean;
+  readonly shortVersion?: string | undefined;
+  readonly displayName?: string | undefined;
+  readonly executableName?: string | undefined;
+  readonly minimumSystemVersion?: string | undefined;
+  readonly resources?: readonly Resource[] | undefined;
+  readonly cwd?: string | undefined;
+  readonly atomic?: boolean | undefined;
 }
-export type AppBundleError = InputInvalid | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Commit.CommitError | Tool.Failed | Tool.SpawnFailed;
+export type AppBundleError = InputInvalid | Artifact.ArtifactError | Commit.CommitError | Tool.Failed | Tool.SpawnFailed;
 const escapeXml = (value: string): string => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
 export const validateResources = (resources: readonly Resource[], reserved: readonly string[] = []) => Effect.gen(function*() {
   // HFS+ disk images and common macOS volumes fold case and Unicode normalization.
@@ -52,9 +52,7 @@ export const appBundle = (input: AppBundleInput): Effect.Effect<App, AppBundleEr
     return yield* new InputInvalid({ reason: "app executables must target Darwin and use Mach-O" });
   }
   yield* validateResources(input.resources ?? []);
-  // Capture inputs before direct output replacement, including resources located in a prior bundle.
-  const executable = yield* Artifact.readVerified(input.executable);
-  const resources = yield* Effect.forEach(input.resources ?? [], (resource) => Artifact.readVerified(resource.artifact).pipe(Effect.map((contents) => ({ ...resource, contents }))));
+  const resources = input.resources ?? [];
   const fs = yield* FileSystem.FileSystem;
   const { tool } = yield* Apple;
   const fields: Record<string, string> = {
@@ -69,18 +67,19 @@ export const appBundle = (input: AppBundleInput): Effect.Effect<App, AppBundleEr
   };
   const plist = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n${Object.entries(fields).map(([key, value]) => `<key>${key}</key><string>${escapeXml(value)}</string>`).join("\n")}\n<key>NSHighResolutionCapable</key><true/>\n</dict></plist>\n`;
   const produce = (out: string) => Effect.gen(function*() {
+    // Direct output removes the previous bundle before copying, so inputs cannot come from inside it.
+    if ([input.executable, ...resources.map((resource) => resource.artifact)].some((artifact) => p.resolve(artifact.path).startsWith(`${out}${p.sep}`))) {
+      return yield* new InputInvalid({ reason: "inputs inside the bundle being replaced require atomic output" });
+    }
     yield* fs.remove(out, { recursive: true, force: true }).pipe(Effect.mapError(fileError(out)));
     const binary = p.join(out, "Contents", "MacOS", executableName);
     const resourceRoot = p.join(out, "Contents", "Resources");
-    yield* fs.makeDirectory(p.dirname(binary), { recursive: true }).pipe(Effect.mapError(fileError(out)));
     yield* fs.makeDirectory(resourceRoot, { recursive: true }).pipe(Effect.mapError(fileError(out)));
-    yield* fs.writeFile(binary, executable).pipe(Effect.mapError(fileError(binary)));
+    yield* Artifact.copyVerified(input.executable, binary);
     yield* fs.chmod(binary, 0o755).pipe(Effect.mapError(fileError(binary)));
-    yield* Artifact.executable(binary, input.executable.producedBy, input.executable.target);
     for (const resource of resources) {
       const path = p.join(resourceRoot, resource.path);
-      yield* fs.makeDirectory(p.dirname(path), { recursive: true }).pipe(Effect.mapError(fileError(path)));
-      yield* fs.writeFile(path, resource.contents).pipe(Effect.mapError(fileError(path)));
+      yield* Artifact.copyVerified(resource.artifact, path);
       yield* fs.chmod(path, (resource.executable ?? resource.artifact.kind === "executable") ? 0o755 : 0o644).pipe(Effect.mapError(fileError(path)));
     }
     const info = p.join(out, "Contents", "Info.plist");
@@ -88,5 +87,5 @@ export const appBundle = (input: AppBundleInput): Effect.Effect<App, AppBundleEr
     yield* runNative("plutil", ["-lint", info]);
     return { ...yield* Artifact.directory(out, Tool.producer(tool)), product: "app" as const };
   });
-  return yield* input.atomic === false ? produce(outdir) : Commit.atomic(outdir, produce);
+  return yield* Commit.output(outdir, produce, { atomic: input.atomic });
 });

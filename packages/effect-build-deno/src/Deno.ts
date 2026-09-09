@@ -12,22 +12,24 @@ export type { PermissionValue } from "./internal/Options.js";
 export type CompileArtifact = Artifact.Executable & { readonly runtime?: { readonly path: string; readonly sha256: string } };
 interface Service {
   readonly tool: Tool.Resolved;
-  readonly runtime?: { readonly path: string; readonly sha256: string };
+  readonly runtime?: { readonly path: string; readonly sha256: string } | undefined;
 }
 export class Deno extends Context.Service<Deno, Service>()("effect-build-deno/Deno") {}
 export interface LayerOptions {
-  readonly executable?: string;
-  readonly version?: string | ((version: string) => boolean);
+  readonly executable?: string | undefined;
+  readonly version?: string | ((version: string) => boolean) | undefined;
   /** An explicit denort file; its bytes are recorded without executing it. */
-  readonly runtime?: string;
+  readonly runtime?: string | undefined;
 }
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
 type Env = Deno | Fs | ChildProcessSpawner.ChildProcessSpawner;
 export type BuildError = InputInvalid | Tool.Failed | Tool.SpawnFailed | Artifact.ArtifactError | Commit.CommitError;
 export type CompileError = BuildError | Executable.InspectError | Executable.TargetMismatch;
 
-/** 2.9.6 removed transpile --conditions and compile --allow-scripts. */
+/** Exact version exercised by real-tool CI. */
 export const tested = "=2.9.5";
+/** Known removed CLI flags are checked only by the operations that use them. */
+export const supported = ">=2.9.5 <3.0.0";
 export const layer = (options: LayerOptions = {}): Layer.Layer<
   Deno,
   Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported | Artifact.ArtifactError,
@@ -35,38 +37,40 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
 > => Layer.effect(Deno, Effect.gen(function*() {
   const tool = yield* Tool.resolve({
     name: "deno",
-    ...(options.executable === undefined ? {} : { executable: options.executable }),
+    executable: options.executable,
     parseVersion: (completion) => /^deno\s+(\S+)/u.exec(new TextDecoder().decode(completion.stdout))?.[1],
-  }).pipe(Tool.requireVersion(options.version ?? tested));
+  }).pipe(Tool.requireVersion(options.version ?? supported));
   if (options.runtime === undefined) return { tool };
   const runtime = yield* Artifact.file(options.runtime, { name: "denort", version: tool.version });
   return { tool, runtime: { path: runtime.path, sha256: runtime.sha256 } };
 }));
 
 interface Invocation {
-  readonly cwd?: string;
-  readonly env?: Record<string, string>;
-  readonly extendEnv?: boolean;
+  readonly cwd?: string | undefined;
+  readonly env?: Record<string, string> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
 }
 export interface CompileInput extends Invocation {
   readonly entrypoint: string;
   readonly outfile: string;
-  readonly target?: Target.Target | Native.Target;
-  readonly options?: Native.Options;
-  readonly scriptArgs?: readonly string[];
-  readonly atomic?: boolean;
+  readonly target?: Target.Target | Native.Target | undefined;
+  readonly options?: Native.Options | undefined;
+  readonly scriptArgs?: readonly string[] | undefined;
+  readonly atomic?: boolean | undefined;
 }
 const fileError = (path: string) => (error: unknown) =>
   new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
-const runOptions = (input: Invocation, runtime?: Service["runtime"]): Tool.RunOptions => {
+/** An explicit denort is selected through DENORT_BIN; the caller's environment stays inherited unless extendEnv is false. */
+const environment = (input: Invocation, runtime?: Service["runtime"]) => {
   const env = runtime === undefined ? input.env : { ...input.env, DENORT_BIN: runtime.path };
-  return {
-    ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-    ...(env === undefined ? {} : { env }),
-    ...(input.extendEnv === undefined ? {} : { extendEnv: input.extendEnv }),
-  };
+  return { cwd: input.cwd, env, extendEnv: env === undefined ? undefined : input.extendEnv ?? true };
 };
 const outputPath = (path: string, cwd?: string) => Effect.map(Path.Path, (p) => p.resolve(cwd ?? "", path));
+const checkCapability = (tool: Tool.Resolved, operation: string, flag: string, used: boolean) =>
+  used && Tool.satisfies(">=2.9.6")(tool.version)
+    ? Effect.fail(new InputInvalid({ operation, reason: `${flag} was removed in Deno 2.9.6; omit it or explicitly select 2.9.5` }))
+    : Effect.void;
 const compileInput = Effect.fnUntraced(function*(input: CompileInput, outfile: string) {
   const target = input.target === undefined ? undefined : Native.Target.literals.find((t) => t === input.target || Native.systemTarget(t) === input.target);
   if (input.target !== undefined && target === undefined) {
@@ -91,49 +95,47 @@ export const compile = Effect.fn("Deno.compile")(function*(input: CompileInput):
   const outfile = yield* outputPath(input.outfile, input.cwd);
   const { native, target } = yield* compileInput(input, outfile);
   const { tool, runtime } = yield* Deno;
-  const fs = yield* FileSystem.FileSystem;
-  const p = yield* Path.Path;
-  const produce = (out: string) => Effect.gen(function*() {
-    yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError(out)));
-    yield* Tool.run(tool, Native.renderArgv(native, out), runOptions(input, runtime));
-    const artifact = yield* Artifact.executable(out, Tool.producer(tool), target);
-    return runtime === undefined ? artifact : { ...artifact, runtime };
-  });
-  return yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
+  yield* checkCapability(tool, "compile", "--allow-scripts", input.options?.allowScripts !== undefined);
+  const produce = (out: string) =>
+    Tool.run(tool, Native.renderArgv(native, out), { ...environment(input, runtime), onOutput: input.onOutput }).pipe(
+      Effect.andThen(Artifact.executable(out, Tool.producer(tool), target)),
+      Effect.map((artifact): CompileArtifact => runtime === undefined ? artifact : { ...artifact, runtime }),
+    );
+  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
 });
 
 export interface BundleOptions extends ProjectOptions, ImportPermissions {
-  readonly platform?: "browser" | "deno";
-  readonly format?: "esm" | "cjs" | "iife";
-  readonly sourcemap?: "linked" | "inline" | "external";
-  readonly minify?: boolean;
-  readonly keepNames?: boolean;
-  readonly codeSplitting?: boolean;
-  readonly inlineImports?: boolean;
-  readonly packages?: "bundle" | "external";
-  readonly external?: readonly string[];
-  readonly check?: Check;
-  readonly quiet?: boolean;
-  readonly allowScripts?: true | readonly [string, ...string[]];
-  readonly envFile?: true | string;
-  readonly declaration?: boolean;
+  readonly platform?: "browser" | "deno" | undefined;
+  readonly format?: "esm" | "cjs" | "iife" | undefined;
+  readonly sourcemap?: "linked" | "inline" | "external" | undefined;
+  readonly minify?: boolean | undefined;
+  readonly keepNames?: boolean | undefined;
+  readonly codeSplitting?: boolean | undefined;
+  readonly inlineImports?: boolean | undefined;
+  readonly packages?: "bundle" | "external" | undefined;
+  readonly external?: readonly string[] | undefined;
+  readonly check?: Check | undefined;
+  readonly quiet?: boolean | undefined;
+  readonly allowScripts?: true | readonly [string, ...string[]] | undefined;
+  readonly envFile?: true | string | undefined;
+  readonly declaration?: boolean | undefined;
 }
 export interface BundleInput extends Invocation {
   readonly entrypoints: readonly string[];
   readonly outdir: string;
-  readonly options?: BundleOptions;
-  readonly atomic?: boolean;
+  readonly options?: BundleOptions | undefined;
+  readonly atomic?: boolean | undefined;
 }
 export interface TranspileOptions extends ProjectOptions {
-  readonly sourceMap?: "none" | "inline" | "separate";
-  readonly quiet?: boolean;
-  readonly declaration?: boolean;
+  readonly sourceMap?: "none" | "inline" | "separate" | undefined;
+  readonly quiet?: boolean | undefined;
+  readonly declaration?: boolean | undefined;
 }
 export interface TranspileInput extends Invocation {
   readonly files: readonly string[];
   readonly outdir: string;
-  readonly options?: TranspileOptions;
-  readonly atomic?: boolean;
+  readonly options?: TranspileOptions | undefined;
+  readonly atomic?: boolean | undefined;
 }
 const renderBundle = (input: BundleOptions): readonly string[] => [
   ...renderProject(input), ...renderCheck(input.check),
@@ -151,7 +153,7 @@ const renderBundle = (input: BundleOptions): readonly string[] => [
   ...(input.quiet === true ? ["--quiet"] : []), ...(input.declaration === true ? ["--declaration"] : []),
 ];
 const directory = Effect.fnUntraced(function*(
-  input: Invocation & { readonly outdir: string; readonly atomic?: boolean },
+  input: Invocation & { readonly outdir: string; readonly atomic?: boolean | undefined },
   files: readonly string[],
   args: readonly [string, ...string[]],
 ) {
@@ -160,13 +162,14 @@ const directory = Effect.fnUntraced(function*(
   yield* validatePath(args[0], "outdir", input.outdir);
   const outdir = yield* outputPath(input.outdir, input.cwd);
   const { tool } = yield* Deno;
+  yield* checkCapability(tool, args[0], "--conditions", args[0] === "transpile" && args.some((arg) => arg === "--conditions" || arg.startsWith("--conditions=")));
   const fs = yield* FileSystem.FileSystem;
   const produce = (out: string) => Effect.gen(function*() {
     yield* fs.makeDirectory(out, { recursive: true }).pipe(Effect.mapError(fileError(out)));
-    yield* Tool.run(tool, [...args, "--outdir", out, ...files], runOptions(input));
+    yield* Tool.run(tool, [...args, "--outdir", out, ...files], { ...environment(input), onOutput: input.onOutput });
     return yield* Artifact.directory(out, Tool.producer(tool));
   });
-  return yield* input.atomic === false ? produce(outdir) : Commit.atomic(outdir, produce);
+  return yield* Commit.output(outdir, produce, { atomic: input.atomic, staging: "sibling" });
 });
 export const bundle = Effect.fn("Deno.bundle")(function*(input: BundleInput): Effect.fn.Return<Artifact.Directory, BuildError, Env> {
   const options = input.options ?? {};
@@ -182,9 +185,11 @@ export const transpile = Effect.fn("Deno.transpile")((input: TranspileInput): Ef
     ...(options.quiet === true ? ["--quiet"] : []), ...(options.declaration === true ? ["--declaration"] : [])]);
 });
 
-export interface WatchInput extends Omit<CompileInput, "atomic"> {
-  readonly noClearScreen?: boolean;
-  readonly watchExclude?: readonly string[];
+export interface WatchInput extends Omit<CompileInput, "atomic" | "onOutput"> {
+  readonly noClearScreen?: boolean | undefined;
+  readonly watchExclude?: readonly string[] | undefined;
+  /** Inherit live diagnostics by default; use pipe to consume process streams. */
+  readonly stdio?: "inherit" | "pipe" | undefined;
 }
 export interface Watch {
   readonly tool: Tool.Resolved;
@@ -196,11 +201,11 @@ export const watch = Effect.fn("Deno.watch")(function*(input: WatchInput): Effec
   const outfile = yield* outputPath(input.outfile, input.cwd);
   const { native } = yield* compileInput(input, outfile);
   const { tool, runtime } = yield* Deno;
-  const process = yield* ChildProcess.make(tool.path, Native.renderArgv(native, outfile, {
-    ...(input.noClearScreen === undefined ? {} : { noClearScreen: input.noClearScreen }),
-    ...(input.watchExclude === undefined ? {} : { watchExclude: input.watchExclude }),
-  }), { ...runOptions(input, runtime), shell: false }).pipe(
-    Effect.mapError((error) => new Tool.SpawnFailed({ name: tool.name, detail: String(error) })),
-  );
+  yield* checkCapability(tool, "watch", "--allow-scripts", input.options?.allowScripts !== undefined);
+  const process = yield* ChildProcess.make(
+    tool.path,
+    Native.renderArgv(native, outfile, { noClearScreen: input.noClearScreen, watchExclude: input.watchExclude }),
+    { ...environment(input, runtime), stdout: input.stdio ?? "inherit", stderr: input.stdio ?? "inherit", shell: false },
+  ).pipe(Effect.mapError((error) => new Tool.SpawnFailed({ tool: tool.name, detail: String(error) })));
   return { tool, process, outfile };
 });

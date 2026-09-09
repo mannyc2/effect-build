@@ -2,62 +2,12 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import * as Executable from "effect-build/Executable";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const elf = (interpreter?: string, machine = 62): Uint8Array => {
-  const encoded = interpreter === undefined ? undefined : new TextEncoder().encode(`${interpreter}\0`);
-  const bytes = new Uint8Array(120 + (encoded?.byteLength ?? 0));
-  bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1]);
-  const view = new DataView(bytes.buffer);
-  view.setUint16(18, machine, true);
-  view.setBigUint64(32, 64n, true);
-  view.setUint16(54, 56, true);
-  view.setUint16(56, 1, true);
-  view.setUint32(64, encoded === undefined ? 1 : 3, true);
-  if (encoded !== undefined) {
-    view.setBigUint64(72, 120n, true);
-    view.setBigUint64(96, BigInt(encoded.byteLength), true);
-    bytes.set(encoded, 120);
-  }
-  return bytes;
-};
-
-const thinMacho = (cpu: number): Uint8Array => {
-  const bytes = new Uint8Array(8);
-  bytes.set([0xcf, 0xfa, 0xed, 0xfe]);
-  new DataView(bytes.buffer).setUint32(4, cpu, true);
-  return bytes;
-};
-
-const fatMacho = (cpus: readonly number[]): Uint8Array => {
-  const start = 8 + cpus.length * 20;
-  const bytes = new Uint8Array(start + cpus.length * 16);
-  bytes.set([0xca, 0xfe, 0xba, 0xbe]);
-  const view = new DataView(bytes.buffer);
-  view.setUint32(4, cpus.length, false);
-  cpus.forEach((cpu, i) => {
-    const entry = 8 + i * 20;
-    const offset = start + i * 16;
-    view.setUint32(entry, cpu, false);
-    view.setUint32(entry + 8, offset, false);
-    view.setUint32(entry + 12, 16, false);
-    bytes.set(thinMacho(cpu), offset);
-  });
-  return bytes;
-};
-
-const pe = (machine: number): Uint8Array => {
-  const bytes = new Uint8Array(70);
-  bytes.set([0x4d, 0x5a]);
-  const view = new DataView(bytes.buffer);
-  view.setUint32(60, 64, true);
-  bytes.set([0x50, 0x45], 64);
-  view.setUint16(68, machine, true);
-  return bytes;
-};
+import { elf, thinMacho, fatMacho, pe } from "../fixtures/native-executable.js";
 
 const changed = (source: Uint8Array, update: (view: DataView) => void): Uint8Array => {
   const bytes = Uint8Array.from(source);
@@ -108,6 +58,16 @@ describe("executable headers", () => {
     ["short header", new Uint8Array(3), "truncated-header"],
     ["non-native file", new TextEncoder().encode("#!/bin/sh"), "not-a-native-executable"],
     ["invalid ELF class", changed(elf(), (v) => v.setUint8(4, 0)), "invalid-header"],
+    ["eight-byte Mach-O", thinMacho().subarray(0, 8), "truncated-header"],
+    ["missing Mach-O load commands", thinMacho().subarray(0, 32), "truncated-header"],
+    ["missing Mach-O segment payload", thinMacho().subarray(0, 104), "truncated-header"],
+    ["missing ELF program-header table", elf().subarray(0, 64), "truncated-header"],
+    ["missing ELF interpreter", elf("/lib64/ld-linux-x86-64.so.2").subarray(0, 180), "truncated-header"],
+    ["unknown ELF interpreter", elf("/lib/custom-loader.so"), "unsupported-interpreter"],
+    ["missing ELF loadable payload", elf().subarray(0, 120), "truncated-header"],
+    ["missing PE COFF header", pe().subarray(0, 70), "truncated-header"],
+    ["missing PE section payload", pe().subarray(0, 512), "truncated-header"],
+    ["PE DLL", changed(pe(), (v) => v.setUint16(86, 0x2002, true)), "invalid-header"],
     ["unsupported ELF machine", elf(undefined, 0), "unsupported-machine"],
     ["missing ELF program headers", changed(elf(), (v) => v.setUint16(56, 0, true)), "invalid-header"],
     ["overflowing ELF offset", changed(elf(), (v) => v.setBigUint64(32, 0xffff_ffff_ffff_ffffn, true)), "invalid-header"],
@@ -137,6 +97,21 @@ describe("executable headers", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("inspects metadata near the end of a large sparse file without buffering its payload", async () => {
+    const root = await mkdtemp(join(tmpdir(), "effect-build-sparse-header-"));
+    try {
+      const path = join(root, "app"), bytes = elf("/lib64/ld-linux-x86-64.so.2");
+      const offset = 512 * 1024 * 1024, view = new DataView(bytes.buffer);
+      view.setBigUint64(128, BigInt(offset), true);
+      const handle = await open(path, "w");
+      try {
+        await handle.write(bytes.subarray(0, 176));
+        await handle.write(bytes.subarray(176), 0, bytes.length - 176, offset);
+      } finally { await handle.close(); }
+      expect(await Effect.runPromise(Executable.inspect(path).pipe(Effect.provide(NodeServices.layer)))).toEqual({ format: "elf", os: "linux", arch: "x64", abi: "gnu" });
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it("re-reads the header when an executable passes through expectTarget", async () => {

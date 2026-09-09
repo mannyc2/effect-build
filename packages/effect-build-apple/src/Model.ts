@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { Artifact } from "effect-build";
 import type { AcceptedReference } from "./Notary.js";
 
-export const App = Schema.Struct({ ...Artifact.Directory.fields, product: Schema.Literal("app") });
+export const App = Schema.Struct({ ...Artifact.Directory.fields, product: Schema.Literal("app") }).check(Schema.makeFilter((value) => Schema.is(Artifact.Directory)(value) ? undefined : "invalid directory artifact"));
 export type App = typeof App.Type;
 export const Dmg = Schema.Struct({ ...Artifact.File.fields, product: Schema.Literal("dmg") });
 export type Dmg = typeof Dmg.Type;
@@ -11,7 +11,7 @@ export type Pkg = typeof Pkg.Type;
 export const Product = Schema.Union([App, Dmg, Pkg]);
 export type Product = typeof Product.Type;
 const signature = { certificateSha1: Schema.String, secureTimestamp: Schema.Literal(true) };
-export const SignedApp = Schema.Struct({ ...App.fields, signature: Schema.Struct({ ...signature, hardenedRuntime: Schema.Literal(true) }) });
+export const SignedApp = Schema.Struct({ ...App.fields, signature: Schema.Struct({ ...signature, hardenedRuntime: Schema.Literal(true) }) }).check(Schema.makeFilter((value) => Schema.is(App)(value) ? undefined : "invalid app artifact"));
 export type SignedApp = typeof SignedApp.Type;
 export const SignedDmg = Schema.Struct({ ...Dmg.fields, signature: Schema.Struct(signature) });
 export type SignedDmg = typeof SignedDmg.Type;

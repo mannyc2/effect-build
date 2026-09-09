@@ -5,7 +5,12 @@
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
-  "keywords": ["effect", "node", "sea", "executable"],
+  "keywords": [
+    "effect",
+    "node",
+    "sea",
+    "executable"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mannyc2/effect-build.git",
@@ -15,7 +20,12 @@
     "url": "https://github.com/mannyc2/effect-build/issues"
   },
   "homepage": "https://github.com/mannyc2/effect-build#readme",
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -35,9 +45,12 @@
     "postject": "1.0.0-alpha.6"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+    "effect": "4.0.0-rc.108"
   },
   "devDependencies": {
     "effect": "4.0.0-rc.108"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

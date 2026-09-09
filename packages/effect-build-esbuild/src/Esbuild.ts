@@ -8,7 +8,11 @@ export const tested = metadata.dependencies.esbuild;
 
 export class InputInvalid extends Schema.TaggedError<InputInvalid>()("EsbuildInputInvalid", {
   reason: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 const messages = (cause: unknown, key: "errors" | "warnings"): readonly esbuild.Message[] => {
   const value: unknown = typeof cause === "object" && cause !== null ? Reflect.get(cause, key) : undefined;
@@ -59,12 +63,12 @@ export const context = <const Input extends esbuild.BuildOptions>(
 
 export type DirectoryOptions = Omit<esbuild.BuildOptions, "outdir" | "outfile" | "write"> & {
   readonly outdir: string;
-  readonly atomic?: boolean;
+  readonly atomic?: boolean | undefined;
   readonly outfile?: never;
   readonly write?: never;
 };
 
-export const buildToDirectory = (input: DirectoryOptions): Effect.Effect<
+export const buildToDirectory = Effect.fn("Esbuild.buildToDirectory")((input: DirectoryOptions): Effect.Effect<
   Artifact.Directory,
   InputInvalid | EsbuildFailed | Artifact.ArtifactError | Commit.CommitError,
   FileSystem.FileSystem | Path.Path | Crypto.Crypto
@@ -81,8 +85,8 @@ export const buildToDirectory = (input: DirectoryOptions): Effect.Effect<
     yield* builder.rebuild;
     return yield* Artifact.directory(out, { name: "esbuild", version: esbuild.version });
   }));
-  return yield* atomic === false ? produce(destination) : Commit.atomic(destination, produce);
-});
+  return yield* Commit.output(destination, produce, { atomic, staging: "sibling" });
+}));
 
 export const transform = (input: string | Uint8Array, options?: esbuild.TransformOptions): Effect.Effect<
   esbuild.TransformResult,

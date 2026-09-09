@@ -39,10 +39,28 @@ export const parts = (target: Target): Parts => {
 
 export const all: readonly Target[] = Target.literals;
 
-/** The target of the machine running this process, if it is one we support. */
+/** Host target when OS, architecture and (on Linux) libc are established.
+ * Unknown libc returns undefined; native compilers should select their own host. */
 export const host = (): Target | undefined => {
+  if (typeof process === "undefined") return undefined;
   const os = process.platform === "linux" ? "linux" : process.platform === "darwin" ? "darwin" : process.platform === "win32" ? "windows" : undefined;
   const arch = process.arch === "x64" ? "x64" : process.arch === "arm64" ? "arm64" : undefined;
   if (os === undefined || arch === undefined) return undefined;
+  if (os === "linux") {
+    try {
+      const report: unknown = process.report?.getReport();
+      if (typeof report !== "object" || report === null) return undefined;
+      const header: unknown = Reflect.get(report, "header");
+      const glibc: unknown = typeof header === "object" && header !== null ? Reflect.get(header, "glibcVersionRuntime") : undefined;
+      if (typeof glibc === "string" && glibc.length > 0) return `linux-${arch}`;
+      const shared: unknown = Reflect.get(report, "sharedObjects");
+      if (Array.isArray(shared) && shared.some((path: unknown) => typeof path === "string" && /(?:^|\/)ld-musl-[^/]+\.so\.1$/u.test(path))) {
+        return `linux-${arch}-musl`;
+      }
+    } catch {
+      // Some runtimes omit process reports. Absence of libc evidence is unknown.
+    }
+    return undefined;
+  }
   return `${os}-${arch}` as Target;
 };

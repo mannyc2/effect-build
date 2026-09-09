@@ -54,10 +54,10 @@ export const make = (input: rolldown.InputOptions): Effect.Effect<Build, Failed,
 
 export type DirectoryOptions = rolldown.InputOptions & {
   readonly outdir: string;
-  readonly output?: Omit<rolldown.OutputOptions, "dir" | "file"> & { readonly dir?: never; readonly file?: never };
-  readonly atomic?: boolean;
+  readonly output?: Omit<rolldown.OutputOptions, "dir" | "file"> & { readonly dir?: never; readonly file?: never } | undefined;
+  readonly atomic?: boolean | undefined;
 };
-export const buildToDirectory = (input: DirectoryOptions): Effect.Effect<
+export const buildToDirectory = Effect.fn("Rolldown.buildToDirectory")((input: DirectoryOptions): Effect.Effect<
   Artifact.Directory,
   Failed | InputInvalid | Artifact.ArtifactError | Commit.CommitError,
   FileSystem.FileSystem | Path.Path | Crypto.Crypto
@@ -73,8 +73,8 @@ export const buildToDirectory = (input: DirectoryOptions): Effect.Effect<
     // closeBundle hooks finish before the directory's final bytes are recorded.
     return yield* Artifact.directory(out, { name: "rolldown", version: rolldown.VERSION });
   });
-  return yield* atomic === false ? produce(destination) : Commit.atomic(destination, produce);
-});
+  return yield* Commit.output(destination, produce, { atomic, staging: "sibling" });
+}));
 
 export const transform = (
   filename: string,

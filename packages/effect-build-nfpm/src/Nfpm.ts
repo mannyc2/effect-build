@@ -1,15 +1,17 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { Artifact, Commit, Tool } from "effect-build";
+import { Artifact, Commit, Target, Tool } from "effect-build";
 
 export class Nfpm extends Context.Service<Nfpm, { readonly tool: Tool.Resolved }>()("effect-build-nfpm/Nfpm") {}
 
 export interface LayerOptions {
-  readonly executable?: string;
-  readonly version?: string | ((version: string) => boolean);
+  readonly executable?: string | undefined;
+  readonly version?: string | ((version: string) => boolean) | undefined;
 }
-/** nFPM 2.47.0 is exercised with real deb, rpm, apk, archlinux, and MSIX packages. */
-export const tested = ">=2.47.0 <3.0.0";
+/** nFPM 2.47+ accepts the JSON configuration, disable_globbing, and MSIX packager used here. */
+export const supported = ">=2.47.0 <3.0.0";
+/** Exact version exercised by real-tool CI with deb, rpm, apk, archlinux, and MSIX packages. */
+export const tested = "2.47.0";
 type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
 
 export const layer = (options: LayerOptions = {}): Layer.Layer<
@@ -18,107 +20,92 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
   Env
 > => Layer.effect(Nfpm, Tool.resolve({
   name: "nfpm",
-  ...(options.executable === undefined ? {} : { executable: options.executable }),
+  executable: options.executable,
   parseVersion: (completion) => /^GitVersion:\s+(\S+)/mu.exec(new TextDecoder().decode(completion.stdout))?.[1],
-}).pipe(Tool.requireVersion(options.version ?? tested), Effect.map((tool) => ({ tool }))));
+}).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))));
 
 export class InputInvalid extends Schema.TaggedError<InputInvalid>()("NfpmInputInvalid", {
   reason: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 export const Format = Schema.Literals(["deb", "rpm", "apk", "archlinux", "msix"] as const);
 export type Format = typeof Format.Type;
 
-// nFPM expands environment variables in metadata; literals keep builds independent of the shell environment.
 const LocalPath = Schema.NonEmptyString.check(Schema.makeFilter((value) => value.includes("\0") ? "path contains NUL" : undefined));
-const Literal = LocalPath.check(Schema.isPattern(/^[^$]+$/u));
-const packagePath = (absolute: boolean) => Literal.check(Schema.makeFilter((value) => {
-  const segments = (absolute ? value.slice(1) : value).split("/");
-  return value.startsWith("/") === absolute && !value.includes("\\")
-      && segments.every((segment) => segment !== "" && segment !== "." && segment !== "..")
-    ? undefined
-    : `expected a canonical ${absolute ? "absolute" : "relative"} package path`;
-}));
-const RelativePath = packagePath(false);
-const Timestamp = Schema.String.check(Schema.makeFilter((value) => {
-  const date = new Date(value);
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u.test(value)
-      && Number.isFinite(date.getTime()) && date.toISOString().slice(0, 19) === value.slice(0, 19)
-    ? undefined
-    : "expected a real UTC ISO-8601 timestamp with at most nanosecond precision";
-}));
+const PackagePath = LocalPath.check(Schema.makeFilter((value) =>
+  value.startsWith("/") && !value.includes("\\") && value.slice(1).split("/").every((part) => part !== "" && part !== "." && part !== "..")
+    ? undefined : "expected a canonical absolute package path"));
 
 export const Content = Schema.Struct({
   artifact: Schema.Union([Artifact.File, Artifact.Executable]),
-  dst: packagePath(true),
+  dst: PackagePath,
   /** Defaults to 0755 for executables and 0644 for files. */
-  mode: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 0o7777 }))),
+  mode: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 0o7777 }))),
 });
 export type Content = typeof Content.Type;
 
-/** nFPM's native MSIX metadata; content destinations remain absolute package paths. */
-export const MsixOptions = Schema.Struct({
-  publisher: Literal,
-  properties: Schema.Struct({
-    display_name: Literal,
-    publisher_display_name: Literal,
-    logo: RelativePath,
-  }),
-  applications: Schema.NonEmptyArray(Schema.Struct({
-    id: Literal,
-    executable: RelativePath,
-    entry_point: Literal,
-    visual_elements: Schema.Struct({
-      display_name: Literal,
-      description: Literal,
-      background_color: Literal,
-      square150x150_logo: RelativePath,
-      square44x44_logo: RelativePath,
-    }),
-  })),
-  dependencies: Schema.Struct({
-    target_device_families: Schema.NonEmptyArray(Schema.Struct({
-      name: Literal,
-      min_version: Literal,
-      max_version_tested: Literal,
-    })),
-  }),
-});
-export type MsixOptions = typeof MsixOptions.Type;
+/**
+ * Native nFPM JSON configuration. The library supplies contents and disable_globbing.
+ * The rest signature admits undefined so consumers without exactOptionalPropertyTypes can
+ * still assign objects with optional keys; JSON serialization drops undefined values.
+ */
+export const Configuration = Schema.StructWithRest(Schema.Struct({
+  name: LocalPath,
+  version: LocalPath,
+  arch: LocalPath,
+  platform: Schema.optional(LocalPath),
+}), [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))]);
+export type Configuration = typeof Configuration.Type;
 
 export const PackageInput = Schema.Struct({
   format: Format,
-  name: Literal,
-  version: Literal,
-  architecture: Literal,
-  maintainer: Literal,
-  description: Literal,
-  release: Literal,
-  mtime: Timestamp,
+  config: Configuration,
   contents: Schema.NonEmptyArray(Content),
-  platform: Schema.optionalKey(Literal),
-  homepage: Schema.optionalKey(Literal),
-  license: Schema.optionalKey(Literal),
-  vendor: Schema.optionalKey(Literal),
-  dependencies: Schema.optionalKey(Schema.Array(Literal)),
-  msix: Schema.optionalKey(MsixOptions),
   outfile: LocalPath,
-  cwd: Schema.optionalKey(LocalPath),
-  atomic: Schema.optionalKey(Schema.Boolean),
+  cwd: Schema.optional(LocalPath),
+  atomic: Schema.optional(Schema.Boolean),
 });
 export type PackageInput = typeof PackageInput.Type;
 export type PackageError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
 const fileError = (path: string) => (error: unknown) =>
   new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
 
-const packageArtifact = (candidate: PackageInput): Effect.Effect<Artifact.File, PackageError, Nfpm | Env> =>
+const packageArtifact = Effect.fn("Nfpm.package")((candidate: PackageInput): Effect.Effect<Artifact.File, PackageError, Nfpm | Env> =>
   Effect.scoped(Effect.gen(function*() {
-    // Artifacts may carry provider refinements; only nFPM's known configuration fields are serialized.
+    // Preserve native configuration keys; decoded artifact refinements are not nFPM configuration.
     const input = yield* Schema.decodeUnknownEffect(PackageInput)(candidate).pipe(
       Effect.mapError((error) => new InputInvalid({ reason: String(error) })),
     );
-    if ((input.format === "msix") !== (input.msix !== undefined)) {
+    const config = input.config;
+    if ((input.format === "msix") !== (config.msix !== undefined)) {
       return yield* new InputInvalid({ reason: "msix metadata is required only for the msix format" });
+    }
+    const reserved = ["contents", "disable_globbing"];
+    if (reserved.some((key) => key in config)) {
+      return yield* new InputInvalid({ reason: "contents and disable_globbing are supplied by the artifact package operation" });
+    }
+    if (typeof config.overrides === "object" && config.overrides !== null) {
+      for (const override of Object.values(config.overrides)) {
+        if (typeof override === "object" && override !== null && [...reserved, "arch", "platform"].some((key) => key in override)) {
+          return yield* new InputInvalid({ reason: "format overrides cannot replace artifact contents, architecture, platform, or disable_globbing" });
+        }
+      }
+    }
+    const os = input.format === "msix" ? "windows" : "linux";
+    if (config.platform !== undefined && config.platform !== os) {
+      return yield* new InputInvalid({ reason: `${input.format} requires platform ${os}` });
+    }
+    for (const { artifact } of input.contents) {
+      if (artifact.kind !== "executable") continue;
+      const target = Target.parts(artifact.target);
+      const architectures = target.arch === "x64" ? ["amd64", "x86_64", "x64"] : ["arm64", "aarch64"];
+      if (target.os !== os || !architectures.includes(config.arch)) {
+        return yield* new InputInvalid({ reason: `${artifact.target} executable contradicts ${input.format} architecture ${config.arch} / platform ${os}` });
+      }
     }
     const { tool } = yield* Nfpm;
     const fs = yield* FileSystem.FileSystem;
@@ -130,7 +117,7 @@ const packageArtifact = (candidate: PackageInput): Effect.Effect<Artifact.File, 
     const contents: Schema.Json[] = [];
     for (const content of input.contents) {
       const source = p.join(temporary, `input-${contents.length}`);
-      yield* fs.writeFile(source, yield* Artifact.readVerified(content.artifact)).pipe(Effect.mapError(fileError(source)));
+      yield* Artifact.copyVerified(content.artifact, source);
       contents.push({
         src: source,
         dst: content.dst,
@@ -139,30 +126,13 @@ const packageArtifact = (candidate: PackageInput): Effect.Effect<Artifact.File, 
         file_info: { mode: content.mode ?? (content.artifact.kind === "executable" ? 0o755 : 0o644) },
       });
     }
-    const config = p.join(temporary, "nfpm.json");
-    yield* fs.writeFileString(config, JSON.stringify({
-      disable_globbing: true,
-      name: input.name,
-      version: input.version,
-      arch: input.architecture,
-      maintainer: input.maintainer,
-      description: input.description,
-      release: input.release,
-      mtime: input.mtime,
-      contents,
-      platform: input.platform,
-      homepage: input.homepage,
-      license: input.license,
-      vendor: input.vendor,
-      depends: input.dependencies,
-      msix: input.msix,
-    })).pipe(Effect.mapError(fileError(config)));
-    const produce = (out: string) => Effect.gen(function*() {
-      yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError(out)));
-      yield* Tool.run(tool, ["package", "--config", config, "--packager", input.format, "--target", out], { cwd });
-      return yield* Artifact.file(out, Tool.producer(tool));
-    });
-    return yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
-  }));
+    const configPath = p.join(temporary, "nfpm.json");
+    yield* fs.writeFileString(configPath, JSON.stringify({ ...config, disable_globbing: true, contents })).pipe(Effect.mapError(fileError(configPath)));
+    const produce = (out: string) =>
+      Tool.run(tool, ["package", "--config", configPath, "--packager", input.format, "--target", out], { cwd }).pipe(
+        Effect.andThen(Artifact.file(out, Tool.producer(tool))),
+      );
+    return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+  })));
 
 export { packageArtifact as package };

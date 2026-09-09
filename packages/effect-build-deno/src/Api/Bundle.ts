@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect";
 import { Tool } from "effect-build";
-import { tested } from "../Deno.js";
+import { supported } from "../Deno.js";
 import { DenoBundleFailed, DenoBundleModeInvalid, DenoBundleUnavailable } from "../internal/ApiError.js";
 
 export { DenoBundleFailed, DenoBundleModeInvalid, DenoBundleUnavailable } from "../internal/ApiError.js";
@@ -71,12 +71,12 @@ const globalBundle = Effect.gen(function*() {
   const versionValue: unknown = typeof host === "object" && host !== null ? Reflect.get(host, "version") : undefined;
   const version: unknown = typeof versionValue === "object" && versionValue !== null ? Reflect.get(versionValue, "deno") : undefined;
   const native: unknown = typeof host === "object" && host !== null ? Reflect.get(host, "bundle") : undefined;
-  if (typeof version !== "string" || !Tool.satisfies(tested)(version) || typeof native !== "function") {
+  if (typeof version !== "string" || !Tool.satisfies(supported)(version) || typeof native !== "function") {
     return yield* new DenoBundleUnavailable({
-      expectedVersion: tested,
+      expectedVersion: supported,
       ...(typeof version === "string" ? { observedVersion: version } : {}),
       requiredFlag: "--unstable-bundle",
-      reason: typeof native !== "function" ? "Requires Deno with --unstable-bundle" : `Deno ${String(version)} is outside ${tested}`,
+      reason: typeof native !== "function" ? "Requires Deno with --unstable-bundle" : `Deno ${String(version)} is outside ${supported}`,
     });
   }
   return native.bind(host) as (options: Native.Options) => Promise<Native.Result>;

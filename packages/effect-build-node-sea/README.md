@@ -11,7 +11,7 @@ Provide `NodeSea.layer({ executable?, baseExecutable?, version? })` and platform
 The builder defaults to `process.execPath`; select Node explicitly when running
 under another host. Builder and base must report the same Node version.
 
-`tested` covers Node 22–26. Assembly uses a preparation blob and postject injection,
+`supported` covers Node 22–26; `tested` records 22.0.0 and 26.7.0. Assembly uses a preparation blob and postject injection,
 then checks the executable header. macOS needs `xcrun codesign` for an ad hoc signature;
 Windows output must end in `.exe`. Inputs and intermediates always use private
 temporary files, including with `atomic: false`.

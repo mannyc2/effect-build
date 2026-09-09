@@ -18,7 +18,7 @@
     "lint": "oxlint packages test examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
-    "verify": "bun run build && bun run check && bun run lint && bun run test:unit && bun run test:examples",
+    "verify": "bun run build && bun run check && bun run lint && bun run test:release && bun run test:unit && bun run test:examples",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
     "test:integration:bun": "vitest run test/integration/bun.test.ts test/integration/bun-api.test.ts",
     "test:integration:deno": "vitest run test/integration/deno.test.ts test/integration/deno-api.test.ts",
@@ -26,7 +26,9 @@
     "test:integration:nfpm": "vitest run test/integration/nfpm.test.ts",
     "test:integration:python": "vitest run test/integration/python-build.test.ts test/integration/python-wheel.test.ts",
     "test:integration:sbom": "vitest run test/integration/sbom.test.ts",
-    "test:integration:windows": "vitest run test/integration/windows.test.ts"
+    "test:integration:windows": "vitest run test/integration/windows.test.ts",
+    "test:consumer": "node scripts/consumer-acceptance.mjs",
+    "test:release": "node --test scripts/release-packages.test.mjs"
   },
   "devDependencies": {
     "@effect/platform-bun": "4.0.0-rc.108",
@@ -51,6 +53,7 @@
     "oxlint": "0.15.1",
     "rolldown": "1.2.5",
     "typescript": "6.0.3",
-    "vitest": "3.2.6"
+    "vitest": "3.2.6",
+    "@types/semver": "7.8.0"
   }
 }

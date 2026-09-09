@@ -9,19 +9,19 @@ export interface DmgInput {
   readonly artifact: SignedApp;
   readonly outfile: string;
   readonly volumeName: string;
-  readonly layout?: readonly Resource[];
-  readonly applicationsLink?: true;
-  readonly cwd?: string;
-  readonly atomic?: boolean;
+  readonly layout?: readonly Resource[] | undefined;
+  readonly applicationsLink?: true | undefined;
+  readonly cwd?: string | undefined;
+  readonly atomic?: boolean | undefined;
 }
 export interface PkgInput {
   readonly artifact: SignedApp;
   readonly outfile: string;
   readonly identifier: string;
   readonly version: string;
-  readonly installLocation?: string;
-  readonly cwd?: string;
-  readonly atomic?: boolean;
+  readonly installLocation?: string | undefined;
+  readonly cwd?: string | undefined;
+  readonly atomic?: boolean | undefined;
 }
 export type ProductError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
 
@@ -46,12 +46,11 @@ export const dmg = (input: DmgInput): Effect.Effect<Dmg, ProductError, Apple | E
   const { tool } = yield* Apple;
   const cwd = p.resolve(input.cwd ?? "");
   const produce = (out: string) => Effect.gen(function*() {
-    yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError(out)));
     yield* runNative("hdiutil", ["create", "-ov", "-volname", input.volumeName, "-srcfolder", volume, "-fs", "HFS+", "-format", "UDZO", out], { cwd });
     yield* runNative("hdiutil", ["verify", out], { cwd });
     return { ...yield* Artifact.file(out, Tool.producer(tool)), product: "dmg" as const };
   });
-  return yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
+  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
 }));
 
 export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | Env> => Effect.scoped(Effect.gen(function*() {
@@ -73,10 +72,9 @@ export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | E
   yield* runNative("pkgbuild", ["--component", app, "--identifier", input.identifier, "--version", input.version, "--install-location", installLocation, component], { cwd });
   const { tool } = yield* Apple;
   const produce = (out: string) => Effect.gen(function*() {
-    yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError(out)));
     yield* runNative("productbuild", ["--package", component, out], { cwd });
     yield* runNative("pkgutil", ["--payload-files", out], { cwd });
     return { ...yield* Artifact.file(out, Tool.producer(tool)), product: "pkg" as const };
   });
-  return yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
+  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
 }));

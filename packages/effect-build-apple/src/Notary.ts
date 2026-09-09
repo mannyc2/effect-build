@@ -65,9 +65,13 @@ export class ResultNotAccepted extends Schema.TaggedError<ResultNotAccepted>()("
   override get message(): string { return `Apple notarization ${this.submissionId} is ${this.providerStatus}`; }
 }
 export class ResponseInvalid extends Schema.TaggedError<ResponseInvalid>()("NotaryResponseInvalid", {
-  operation: Schema.Literals(["submit", "info", "log"] as const),
+  operation: Schema.Literals(["submit", "wait", "info", "log"] as const),
   reason: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return `notarytool ${this.operation}: ${this.reason}`;
+  }
+}
 
 const reference = (value: SubmissionReference) => Schema.decodeUnknownEffect(SubmissionReference)(value).pipe(
   Effect.mapError((error) => new InputInvalid({ reason: String(error) })),
@@ -112,7 +116,7 @@ const credentials = Effect.fn("Apple.Notary.credentials")(function*(credential: 
   return { args, values };
 });
 
-type Operation = "submit" | "info" | "log";
+type Operation = "submit" | "wait" | "info" | "log";
 type LookupError = InputInvalid | ResponseInvalid | Tool.Failed | Tool.SpawnFailed;
 const objectValue = (value: unknown): Readonly<Record<string, unknown>> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? value as Readonly<Record<string, unknown>> : undefined;
@@ -149,20 +153,16 @@ const status = (operation: Operation, providerStatus: string | undefined, summar
   }
 };
 
-export interface NotarizeInput {
+export interface SubmitInput {
   readonly artifact: SignedProduct;
   readonly credential: Credential;
-  /** Native notarytool duration, for example `30m`. A timeout does not cancel Apple's processing. */
-  readonly timeout?: string;
-  readonly cwd?: string;
+  readonly cwd?: string | undefined;
 }
 export type NotarizeError = LookupError | Artifact.ArtifactError;
-export const notarize = (input: NotarizeInput): Effect.Effect<Submission, NotarizeError, Apple | Env> =>
+/** Upload once and return the submission ID before waiting. Persist this reference to recover after interruption. */
+export const submit = (input: SubmitInput): Effect.Effect<SubmissionReference, NotarizeError, Apple | Env> =>
   Effect.scoped(Effect.gen(function*() {
     yield* Schema.decodeUnknownEffect(SignedProduct)(input.artifact).pipe(Effect.mapError((error) => new InputInvalid({ reason: String(error) })));
-    if (input.timeout !== undefined && !/^\d+(?:s|m|h)?$/u.test(input.timeout)) {
-      return yield* new InputInvalid({ reason: "timeout must be an integer followed by an optional s, m, or h" });
-    }
     const { tool } = yield* Apple;
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
@@ -177,21 +177,50 @@ export const notarize = (input: NotarizeInput): Effect.Effect<Submission, Notari
       path = p.join(temporary, `${p.basename(input.artifact.path)}.zip`);
       yield* runNative("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", snapshot, path]);
     }
-    const response = yield* runJson("submit", [path, "--wait", ...(input.timeout === undefined ? [] : ["--timeout", input.timeout])], input.credential, input.cwd);
+    const response = yield* runJson("submit", [path], input.credential, input.cwd);
     const id = yield* submissionId("submit", response.safeText(response.data.id));
-    const message = response.safeText(response.data.message);
-    return {
-      submissionId: id, kind, artifact: input.artifact, producedBy: Tool.producer(tool),
-      status: yield* status("submit", response.safeText(response.data.status), message),
-      ...(message === undefined ? {} : { message }),
-    };
+    return { submissionId: id, kind, artifact: input.artifact, producedBy: Tool.producer(tool) };
   }));
+
+export interface NotarizeInput extends SubmitInput {
+  /** Native notarytool duration, for example `30m`. A timeout does not cancel Apple's processing. */
+  readonly timeout?: string | undefined;
+}
+const timeoutArgs = (timeout?: string) => timeout !== undefined && !/^\d+(?:s|m|h)?$/u.test(timeout)
+  ? Effect.fail(new InputInvalid({ reason: "timeout must be an integer followed by an optional s, m, or h" }))
+  : Effect.succeed(timeout === undefined ? [] : ["--timeout", timeout]);
+/** Convenience composition. Use submit, persist its reference, then wait when interruption recovery matters. */
+export const notarize = (input: NotarizeInput): Effect.Effect<Submission, NotarizeError, Apple | Env> =>
+  Effect.gen(function*() {
+    yield* timeoutArgs(input.timeout);
+    const reference = yield* submit(input);
+    return yield* wait({ reference, credential: input.credential, ...(input.timeout === undefined ? {} : { timeout: input.timeout }), ...(input.cwd === undefined ? {} : { cwd: input.cwd }) });
+  });
 
 export interface LookupInput {
   readonly reference: SubmissionReference;
   readonly credential: Credential;
-  readonly cwd?: string;
+  readonly cwd?: string | undefined;
 }
+export interface WaitInput extends LookupInput {
+  /** Native notarytool duration. A timeout leaves the submitted job available through info/log/wait. */
+  readonly timeout?: string | undefined;
+}
+/** Wait for an already persisted submission; never re-upload or retry submission. */
+export const wait = Effect.fn("Apple.Notary.wait")(function*(input: WaitInput): Effect.fn.Return<Submission, LookupError, Apple | Env> {
+  yield* reference(input.reference);
+  const args = yield* timeoutArgs(input.timeout);
+  const { tool } = yield* Apple;
+  const response = yield* runJson("wait", [input.reference.submissionId, ...args], input.credential, input.cwd);
+  const id = yield* submissionId("wait", response.safeText(response.data.id));
+  if (id !== input.reference.submissionId) return yield* new ResponseInvalid({ operation: "wait", reason: "response submission UUID differs from the requested UUID" });
+  const message = response.safeText(response.data.message);
+  return {
+    submissionId: id, kind: input.reference.kind, artifact: input.reference.artifact, producedBy: Tool.producer(tool),
+    status: yield* status("wait", response.safeText(response.data.status), message),
+    ...(message === undefined ? {} : { message }),
+  };
+});
 export const info = Effect.fn("Apple.Notary.info")(function*(input: LookupInput): Effect.fn.Return<Info, LookupError, Apple | Env> {
   yield* reference(input.reference);
   const { tool } = yield* Apple;

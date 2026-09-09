@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, Exit, FileSystem, Path } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import * as Commit from "effect-build/Commit";
 import { mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
@@ -136,5 +136,96 @@ describe("atomic output", () => {
     expect(failure).toMatchObject({ _tag: "CommitError", destination: outfile, reason: "rename-failed" });
     expect(await readFile(outfile, "utf8")).toBe("existing");
     expect(await readdir(root)).toEqual(["cli.txt"]);
+  });
+
+  it("restores the previous directory when committing the replacement fails", async () => {
+    const outdir = join(root, "release");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "previous"), "recover me");
+    const previous = await run(Artifact.directory(outdir, producer));
+    const failure = await run(Commit.atomic(outdir, (staged) => Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      yield* fs.makeDirectory(staged);
+      const artifact = yield* Artifact.directory(staged, producer);
+      yield* fs.remove(staged, { recursive: true });
+      return artifact;
+    })).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "CommitError", reason: "rename-failed" });
+    expect(await run(Artifact.verify(previous))).toEqual(previous);
+    expect(await readdir(root)).toEqual(["release"]);
+  });
+
+  it("retains the previous directory outside scoped cleanup when rollback also fails", async () => {
+    const outdir = join(root, "release");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "previous"), "recover me");
+    const failure = await run(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      let moves = 0;
+      return yield* Commit.atomic(outdir, (staged) => Effect.gen(function*() {
+        yield* fs.makeDirectory(staged);
+        return yield* Artifact.directory(staged, producer);
+      })).pipe(Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        rename: (from, to) => ++moves === 1 ? fs.rename(from, to) : fs.rename(join(root, "missing"), to),
+      }), Effect.flip);
+    }));
+    expect(failure).toMatchObject({ _tag: "CommitError", reason: "rollback-failed", recoveryPath: expect.any(String) });
+    if (!(failure instanceof Commit.CommitError)) throw new Error("expected a commit failure");
+    expect(await readFile(join(failure.recoveryPath!, "previous"), "utf8")).toBe("recover me");
+  });
+
+  it("allows exactly one concurrent file commit with onExists fail", async () => {
+    for (let trial = 0; trial < 20; trial++) {
+      const outfile = join(root, `winner-${trial}`);
+      let ready = 0;
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      const exits = await run(Effect.all(["first", "second"].map((value) => Commit.atomic(outfile, (staged) => Effect.gen(function*() {
+        const artifact = yield* write(staged, value);
+        if (++ready === 2) release();
+        yield* Effect.promise(() => gate);
+        return artifact;
+      }), { onExists: "fail" }).pipe(Effect.exit)), { concurrency: "unbounded" }));
+      expect(exits.filter(Exit.isSuccess)).toHaveLength(1);
+      expect(["first", "second"]).toContain(await readFile(outfile, "utf8"));
+    }
+  });
+
+  it("writes at the destination itself, creating its parent, when atomic is false", async () => {
+    const outfile = join(root, "dist", "cli.txt");
+    const artifact = await run(Commit.output(outfile, (path) => Effect.gen(function*() {
+      expect(path).toBe(outfile);
+      return yield* write(path, "direct");
+    }), { atomic: false }));
+    expect(artifact.path).toBe(outfile);
+    expect(await readFile(outfile, "utf8")).toBe("direct");
+    expect(await readdir(join(root, "dist"))).toEqual(["cli.txt"]);
+  });
+
+  it("stages by default and forwards commit options", async () => {
+    const outfile = join(root, "cli.txt");
+    await writeFile(outfile, "existing");
+    const failure = await run(Commit.output(outfile, (staged) => write(staged, "replacement"), { onExists: "fail" }).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "CommitError", reason: "exists" });
+    expect(await readFile(outfile, "utf8")).toBe("existing");
+    const artifact = await run(Commit.output(outfile, (staged) => Effect.gen(function*() {
+      expect(staged).not.toBe(outfile);
+      return yield* write(staged, "replacement");
+    }), { atomic: undefined }));
+    expect(artifact.path).toBe(outfile);
+    expect(await readFile(outfile, "utf8")).toBe("replacement");
+    expect(await readdir(root)).toEqual(["cli.txt"]);
+  });
+
+  it("rejects unsupported exclusive directory commits without creating the destination", async () => {
+    const outdir = join(root, "release");
+    const failure = await run(Commit.atomic(outdir, (staged) => Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      yield* fs.makeDirectory(staged);
+      return yield* Artifact.directory(staged, producer);
+    }), { onExists: "fail" }).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "CommitError", reason: "directory-no-replace-unsupported" });
+    expect(await readdir(root)).toEqual([]);
   });
 });

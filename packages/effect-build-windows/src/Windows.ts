@@ -5,15 +5,21 @@ import { Artifact, Commit, Executable, Tool } from "effect-build";
 export class Windows extends Context.Service<Windows, { readonly tool: Tool.Resolved }>()("effect-build-windows/Windows") {}
 export class InputInvalid extends Schema.TaggedError<InputInvalid>()("WindowsInputInvalid", {
   reason: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 export interface LayerOptions {
-  readonly executable?: string;
+  readonly executable?: string | undefined;
   /** String ranges select SDK families; predicates receive the complete native version. */
-  readonly version?: string | ((version: string) => boolean);
+  readonly version?: string | ((version: string) => boolean) | undefined;
 }
 type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
-/** Windows SDK 26100 is the native CI baseline; production credentials remain experimental. */
-export const tested = ">=10.0.26100 <11.0.0";
+/** Windows SDK 26100 SignTool; production credentials remain experimental. */
+export const supported = ">=10.0.26100 <11.0.0";
+/** SDK family exercised by native CI with a temporary certificate. */
+export const tested = "10.0.26100";
 // SignTool's help has no version. Search its language-independent VS_FIXEDFILEINFO resource:
 // https://learn.microsoft.com/en-us/windows/win32/api/verrsrc/ns-verrsrc-vs_fixedfileinfo
 const productVersion = (contents: Uint8Array): string | undefined => {
@@ -36,36 +42,42 @@ const productVersion = (contents: Uint8Array): string | undefined => {
 export const layer = (options: LayerOptions = {}): Layer.Layer<
   Windows, Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported, Env
 > => {
-  const version = options.version ?? tested;
+  const version = options.version ?? supported;
   const familyMatches = typeof version === "string" ? Tool.satisfies(version) : undefined;
   // Keep the native revision in producedBy; only the range comparison uses its SDK family.
   const accepts = typeof version === "function" ? version : (native: string) => familyMatches!(native.split(".").slice(0, 3).join("."));
-  return Layer.effect(Windows, Tool.resolve({
-    name: "signtool",
-    ...(options.executable === undefined ? {} : { executable: options.executable }),
-    versionArgs: ["/?"],
-    parseVersion: (_completion, contents) => productVersion(contents),
-  }).pipe(Tool.requireVersion(accepts), Effect.map((tool) => ({ tool }))));
+  return Layer.effect(Windows, Effect.gen(function*() {
+    const path = yield* Tool.locate({ name: "signtool", executable: options.executable });
+    const contents = yield* FileSystem.FileSystem.use((fs) => fs.readFile(path)).pipe(
+      Effect.mapError((error) => new Tool.ProbeFailed({ tool: "signtool", path, detail: String(error) })),
+    );
+    const native = productVersion(contents);
+    if (native === undefined) return yield* new Tool.ProbeFailed({ tool: "signtool", path, detail: "no single VS_FIXEDFILEINFO ProductVersion resource" });
+    const tool = yield* Tool.resolve({ name: "signtool", executable: path, versionArgs: ["/?"], parseVersion: () => native }).pipe(
+      Tool.requireVersion(accepts),
+    );
+    return { tool };
+  }));
 };
 
 export type Credential = {
   readonly kind: "pfx";
   readonly file: string;
-  readonly password?: Redacted.Redacted<string>;
+  readonly password?: Redacted.Redacted<string> | undefined;
 } | {
   readonly kind: "store";
   readonly thumbprint: string;
-  readonly storeName?: string;
-  readonly machineStore?: boolean;
+  readonly storeName?: string | undefined;
+  readonly machineStore?: boolean | undefined;
 };
 export type SignInput<A extends Artifact.Regular = Artifact.Regular> = Credential & {
   readonly artifact: A;
-  readonly outfile?: string;
-  readonly cwd?: string;
-  readonly atomic?: boolean;
+  readonly outfile?: string | undefined;
+  readonly cwd?: string | undefined;
+  readonly atomic?: boolean | undefined;
   readonly timestampUrl: string;
-  readonly description?: string;
-  readonly descriptionUrl?: string;
+  readonly description?: string | undefined;
+  readonly descriptionUrl?: string | undefined;
 };
 export interface Signature {
   readonly fileDigest: "SHA256";
@@ -86,8 +98,8 @@ const scrubFailure = (password: string | undefined) => (error: Tool.Failed | Too
   const scrub = (text: string) => password === undefined || password.length === 0 ? text : text.replaceAll(password, "<redacted>");
   // Tool.Failed includes argv as well as stderr; Redacted cannot protect an unwrapped /p argument.
   return error instanceof Tool.Failed
-    ? new Tool.Failed({ name: error.name, args: error.args.map(scrub), exitCode: error.exitCode, stderr: scrub(error.stderr) })
-    : new Tool.SpawnFailed({ name: error.name, detail: scrub(error.detail) });
+    ? new Tool.Failed({ tool: error.tool, args: error.args.map(scrub), exitCode: error.exitCode, stdout: scrub(error.stdout), stderr: scrub(error.stderr), stdoutTruncated: error.stdoutTruncated, stderrTruncated: error.stderrTruncated })
+    : new Tool.SpawnFailed({ tool: error.tool, detail: scrub(error.detail) });
 };
 
 export function sign(input: SignInput<Artifact.Executable>): Effect.Effect<Signed<Artifact.Executable>, SignError, Windows | Env>;
@@ -130,18 +142,10 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
       if (input.storeName !== undefined) credential.push("/s", input.storeName);
       credential.push("/sha1", input.thumbprint);
     }
-    const contents = yield* Artifact.readVerified(input.artifact);
-    if (input.artifact.kind === "executable") {
-      // Check the captured bytes, since signing must agree with the declared target even for decoded records.
-      const facts = yield* Executable.parse(contents).pipe(Effect.mapError((error) => new Executable.InspectError({ path: input.artifact.path, reason: error.reason })));
-      yield* Executable.resolveTarget(input.artifact.path, facts, input.artifact.target);
-    }
     const { tool } = yield* Windows;
-    const fs = yield* FileSystem.FileSystem;
     const produce = (out: string) => Effect.gen(function*() {
-      const fileError = (error: unknown) => new Artifact.ArtifactError({ path: out, reason: "unreadable", detail: String(error) });
-      yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError));
-      yield* fs.writeFile(out, contents).pipe(Effect.mapError(fileError));
+      // Sign a verified copy whose header agrees with the declared target; an in-place destination is verified where it stands.
+      yield* Artifact.copyVerified(input.artifact, out);
       yield* Tool.run(tool, [
         "sign", "/fd", "SHA256", "/tr", input.timestampUrl, "/td", "SHA256",
         ...(input.description === undefined ? [] : ["/d", input.description]),
@@ -153,7 +157,7 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
         ? Artifact.executable(out, Tool.producer(tool), input.artifact.target)
         : Artifact.file(out, Tool.producer(tool));
     });
-    const artifact = yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
+    const artifact = yield* Commit.output(outfile, produce, { atomic: input.atomic });
     return { ...artifact, signature: {
       fileDigest: "SHA256", timestampProtocol: "RFC3161", timestampDigest: "SHA256",
       timestampUrl: input.timestampUrl, verification: "Authenticode",

@@ -9,6 +9,7 @@
         "@effect/platform-deno": "4.0.0-rc.108",
         "@effect/platform-node": "4.0.0-rc.108",
         "@types/node": "24.3.0",
+        "@types/semver": "7.8.0",
         "dprint": "0.49.1",
         "effect": "4.0.0-rc.108",
         "effect-build": "workspace:*",
@@ -61,12 +62,17 @@
     "packages/effect-build": {
       "name": "effect-build",
       "version": "0.7.0",
+      "dependencies": {
+        "@noble/hashes": "2.4.0",
+        "semver": "7.8.5",
+      },
       "devDependencies": {
         "@types/node": "24.3.0",
+        "@types/semver": "7.8.0",
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-apple": {
@@ -81,7 +87,7 @@
         "vitest": "3.2.6",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-archives": {
@@ -89,12 +95,13 @@
       "version": "0.7.0",
       "dependencies": {
         "effect-build": "workspace:^",
+        "fflate": "0.8.3",
       },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-bun": {
@@ -108,7 +115,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-deno": {
@@ -121,7 +128,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-esbuild": {
@@ -135,7 +142,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-nfpm": {
@@ -148,7 +155,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-node-sea": {
@@ -162,7 +169,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-python": {
@@ -170,12 +177,13 @@
       "version": "0.7.0",
       "dependencies": {
         "effect-build": "workspace:^",
+        "fflate": "0.8.3",
       },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-rolldown": {
@@ -189,7 +197,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-sbom": {
@@ -202,7 +210,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
     "packages/effect-build-windows": {
@@ -215,7 +223,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": "4.0.0-rc.108",
       },
     },
   },
@@ -340,6 +348,8 @@
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 
+    "@noble/hashes": ["@noble/hashes@2.4.0", "", {}, "sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA=="],
+
     "@oxc-project/types": ["@oxc-project/types@0.146.0", "", {}, "sha512-XC0QsnnhVe7sLIWmYmdPw7x5P0h4W8vUU3Nv1ySgWXtvCz8NizoAEpGXA0sOYoJQV2Rl13LgURAHQ5cI5ILCSA=="],
 
     "@oxlint/darwin-arm64": ["@oxlint/darwin-arm64@0.15.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-NPW7PPyOwjjwuoOMy85KKTbbwwb071veOHpG689Ta31bPg9L0dC3KCqPF/Ypa0568X/BvcNQ3WZDIN6fBogA7Q=="],
@@ -458,6 +468,8 @@
 
     "@types/node": ["@types/node@24.3.0", "", { "dependencies": { "undici-types": "~7.10.0" } }, "sha512-aPTXCrfwnDLj4VvXrm+UUCQjNEvJgNA8s5F1cvwQU+3KNltTOkBm1j30uNLyqqPNe7gE3KFzImYoZEfLhp4Yow=="],
 
+    "@types/semver": ["@types/semver@7.8.0", "", {}, "sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ=="],
+
     "@types/ws": ["@types/ws@8.18.1", "", { "dependencies": { "@types/node": "*" } }, "sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg=="],
 
     "@vitest/expect": ["@vitest/expect@3.2.6", "", { "dependencies": { "@types/chai": "^5.2.2", "@vitest/spy": "3.2.6", "@vitest/utils": "3.2.6", "chai": "^5.2.0", "tinyrainbow": "^2.0.0" } }, "sha512-1+7q9BtaKzEmO+fmNT3kYvoNn5Y71XWAx2Q5HRim4tTVRQVRv4uJFAQ5FbK0OPUeNP/WmVCpxYxoJdvuHVjzBQ=="],
@@ -536,6 +548,8 @@
 
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
 
+    "fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
+
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
     "ioredis": ["ioredis@5.11.1", "", { "dependencies": { "@ioredis/commands": "1.10.0", "cluster-key-slot": "1.1.1", "debug": "4.4.3", "denque": "2.1.0", "redis-errors": "1.2.0", "redis-parser": "3.0.0", "standard-as-callback": "2.1.0" } }, "sha512-ehuGcf94bQXhfagULNXrJdfnWO38v070jxSx/qE87Kjzmu2fU7ro5EFAb+OPituLqgfyuQaym5DlrNydW2sJ9A=="],
@@ -583,6 +597,8 @@
     "rolldown": ["rolldown@1.2.5", "", { "dependencies": { "@oxc-project/types": "=0.146.0", "@rolldown/pluginutils": "^1.0.0" }, "optionalDependencies": { "@rolldown/binding-android-arm-eabi": "1.2.5", "@rolldown/binding-android-arm64": "1.2.5", "@rolldown/binding-darwin-arm64": "1.2.5", "@rolldown/binding-darwin-x64": "1.2.5", "@rolldown/binding-freebsd-x64": "1.2.5", "@rolldown/binding-linux-arm-gnueabihf": "1.2.5", "@rolldown/binding-linux-arm64-gnu": "1.2.5", "@rolldown/binding-linux-arm64-musl": "1.2.5", "@rolldown/binding-linux-ppc64-gnu": "1.2.5", "@rolldown/binding-linux-s390x-gnu": "1.2.5", "@rolldown/binding-linux-x64-gnu": "1.2.5", "@rolldown/binding-linux-x64-musl": "1.2.5", "@rolldown/binding-openharmony-arm64": "1.2.5", "@rolldown/binding-win32-arm64-msvc": "1.2.5", "@rolldown/binding-win32-x64-msvc": "1.2.5" }, "bin": { "rolldown": "./bin/cli.mjs" } }, "sha512-VD2IE5PUG4Oj8zz2VGykiYd5wbnjdIiSsNQb8Qu5B+noEp+A78mu2iVvpp27g8es14Tk9rofNs5Tku9iQCS4fA=="],
 
     "rollup": ["rollup@4.62.4", "", { "dependencies": { "@types/estree": "1.0.9" }, "optionalDependencies": { "@napi-rs/lzma-linux-x64-gnu": "1.5.1", "@rollup/rollup-android-arm-eabi": "4.62.4", "@rollup/rollup-android-arm64": "4.62.4", "@rollup/rollup-darwin-arm64": "4.62.4", "@rollup/rollup-darwin-x64": "4.62.4", "@rollup/rollup-freebsd-arm64": "4.62.4", "@rollup/rollup-freebsd-x64": "4.62.4", "@rollup/rollup-linux-arm-gnueabihf": "4.62.4", "@rollup/rollup-linux-arm-musleabihf": "4.62.4", "@rollup/rollup-linux-arm64-gnu": "4.62.4", "@rollup/rollup-linux-arm64-musl": "4.62.4", "@rollup/rollup-linux-loong64-gnu": "4.62.4", "@rollup/rollup-linux-loong64-musl": "4.62.4", "@rollup/rollup-linux-ppc64-gnu": "4.62.4", "@rollup/rollup-linux-ppc64-musl": "4.62.4", "@rollup/rollup-linux-riscv64-gnu": "4.62.4", "@rollup/rollup-linux-riscv64-musl": "4.62.4", "@rollup/rollup-linux-s390x-gnu": "4.62.4", "@rollup/rollup-linux-x64-gnu": "4.62.4", "@rollup/rollup-linux-x64-musl": "4.62.4", "@rollup/rollup-openbsd-x64": "4.62.4", "@rollup/rollup-openharmony-arm64": "4.62.4", "@rollup/rollup-win32-arm64-msvc": "4.62.4", "@rollup/rollup-win32-ia32-msvc": "4.62.4", "@rollup/rollup-win32-x64-gnu": "4.62.4", "@rollup/rollup-win32-x64-msvc": "4.62.4", "fsevents": "~2.3.2" }, "bin": { "rollup": "dist/bin/rollup" } }, "sha512-RXOqwaPsBGjMNMa4sQjDjHieHEZDFoj/Rdr46l2MU5DfEs16wHJPC2RPTPHWhNl+M3aI472LLqFkFKut4SblOg=="],
+
+    "semver": ["semver@7.8.5", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA=="],
 
     "siginfo": ["siginfo@2.0.0", "", {}, "sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g=="],
 

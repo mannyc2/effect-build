@@ -1,11 +1,13 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path } from "effect";
+import { Context, Crypto, Effect, FileSystem, Layer, Path, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Tool } from "effect-build";
 import metadata from "../package.json" with { type: "json" };
+import { FormatLimit } from "./FormatLimit.js";
 import { InputInvalid } from "./InputInvalid.js";
-import { decodeGitTar, encodeTarGzip, encodeZip, type Entry } from "./internal/archive.js";
+import { chunkSize, encodeTarGzip, encodeZip, type Entry, readGitTar, tarLimit, zipLimit } from "./internal/archive.js";
 import { normalizeEntryPath, validateLayout } from "./internal/layout.js";
 
+export { FormatLimit } from "./FormatLimit.js";
 export { InputInvalid } from "./InputInvalid.js";
 export type Format = "zip" | "tar.gz";
 export interface ArchiveEntry {
@@ -13,12 +15,12 @@ export interface ArchiveEntry {
   /** A directory is expanded beneath this archive prefix. */
   readonly path: string;
   /** Regular files only; directory entries retain their recorded modes. */
-  readonly executable?: boolean;
+  readonly executable?: boolean | undefined;
 }
 export interface ArchiveInput {
   readonly entries: readonly ArchiveEntry[];
   readonly outfile: string;
-  readonly atomic?: boolean;
+  readonly atomic?: boolean | undefined;
 }
 export interface SourceInput {
   readonly repository: string;
@@ -28,12 +30,12 @@ export interface SourceInput {
   readonly version: string;
   readonly format: Format;
   readonly outfile: string;
-  readonly atomic?: boolean;
-  readonly cwd?: string;
-  readonly additionalExcludes?: readonly string[];
+  readonly atomic?: boolean | undefined;
+  readonly cwd?: string | undefined;
+  readonly additionalExcludes?: readonly string[] | undefined;
 }
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
-export type ArchiveError = InputInvalid | Artifact.ArtifactError | Commit.CommitError;
+export type ArchiveError = InputInvalid | FormatLimit | Artifact.ArtifactError | Commit.CommitError;
 export type SourceError = ArchiveError | Tool.Failed | Tool.SpawnFailed;
 const fileError = (path: string) => (error: unknown) =>
   new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
@@ -42,39 +44,41 @@ const writeArchive = (
   outfile: string,
   entries: readonly Entry[],
   format: Format,
-  atomic: boolean,
+  atomic: boolean | undefined,
   producer: Artifact.Producer,
 ): Effect.Effect<Artifact.File, ArchiveError, Fs> => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const p = yield* Path.Path;
   const validated = validateLayout(entries);
   if (validated instanceof InputInvalid) return yield* validated;
-  const encoded = yield* Effect.try({
-    try: () => format === "zip" ? encodeZip(validated) : encodeTarGzip(validated),
-    catch: (error) => new InputInvalid({ reason: `encode ${format}: ${String(error)}` }),
-  });
+  // Fixed-width fields are checked before anything is staged; sizes learned while compressing are checked as they appear.
+  const limit = format === "zip" ? zipLimit(validated) : tarLimit(validated);
+  if (limit !== undefined) return yield* limit;
   const produce = (out: string) => Effect.gen(function*() {
-    yield* fs.makeDirectory(p.dirname(out), { recursive: true }).pipe(Effect.mapError(fileError(out)));
-    yield* fs.writeFile(out, encoded).pipe(Effect.mapError(fileError(out)));
+    yield* Effect.scoped(Effect.gen(function*() {
+      const file = yield* fs.open(out, { flag: "w" }).pipe(Effect.mapError(fileError(out)));
+      const write = (chunk: Uint8Array) => file.writeAll(chunk).pipe(Effect.mapError(fileError(out)));
+      yield* format === "zip" ? encodeZip(validated, write) : encodeTarGzip(validated, write);
+    }));
     return yield* Artifact.file(out, producer);
   });
-  return yield* atomic ? Commit.atomic(outfile, produce) : produce(p.resolve(outfile));
+  return yield* Commit.output(outfile, produce, { atomic });
 });
 
 const archive = (format: Format, input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> =>
   Effect.gen(function*() {
     const p = yield* Path.Path;
     const entries: Entry[] = [];
-    const empty = new Uint8Array(0);
     for (const entry of input.entries) {
       const artifact = entry.artifact;
       const path = normalizeEntryPath(entry.path, artifact.kind === "directory" ? "directory" : "file");
       if (typeof path !== "string") return yield* path;
       if (artifact.kind !== "directory") {
         entries.push({
-          path, kind: "file",
+          path,
+          kind: "file",
           mode: (entry.executable ?? artifact.kind === "executable") ? 0o755 : 0o644,
-          contents: yield* Artifact.readVerified(artifact),
+          bytes: artifact.bytes,
+          contents: Artifact.streamVerified(artifact),
         });
         continue;
       }
@@ -87,46 +91,46 @@ const archive = (format: Format, input: ArchiveInput): Effect.Effect<Artifact.Fi
         return yield* new Artifact.ArtifactError({ path: tree.path, reason: "changed" });
       }
       // The artifact records descendant modes, so give the newly introduced archive root a fixed mode.
-      entries.push({ path, kind: "directory", mode: 0o755, contents: empty });
+      entries.push({ path, kind: "directory", mode: 0o755, bytes: 0, contents: Stream.empty });
       for (const child of tree.entries) {
         const childPath = normalizeEntryPath(`${path}/${child.path}`, child.kind);
         if (typeof childPath !== "string") return yield* childPath;
-        // Verify the bytes actually encoded even if a file changes after the tree was read.
-        const contents = child.kind === "file" ? yield* Artifact.readVerified({
-          kind: "file", path: p.join(tree.path, child.path), bytes: child.bytes,
-          sha256: child.sha256!, producedBy: tree.producedBy,
-        }) : empty;
+        // Each file is verified as it streams, even if it changes after the tree was read.
+        const contents = child.kind === "file"
+          ? Artifact.streamVerified({ kind: "file", path: p.join(tree.path, child.path), bytes: child.bytes, sha256: child.sha256, producedBy: tree.producedBy })
+          : Stream.empty;
         entries.push({ ...child, path: childPath, contents });
       }
     }
-    return yield* writeArchive(input.outfile, entries, format, input.atomic ?? true, {
+    return yield* writeArchive(input.outfile, entries, format, input.atomic, {
       name: metadata.name,
       version: metadata.version,
     });
   });
 
-export const zip = (input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> => archive("zip", input);
-export const tarGz = (input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> => archive("tar.gz", input);
+export const zip = Effect.fn("Archive.zip")((input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> => archive("zip", input));
+export const tarGz = Effect.fn("Archive.tarGz")((input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> => archive("tar.gz", input));
 
 export class Archive extends Context.Service<Archive, { readonly tool: Tool.Resolved }>()("effect-build-archives/Archive") {}
 export interface LayerOptions {
-  readonly executable?: string;
-  readonly version?: string | ((version: string) => boolean);
+  readonly executable?: string | undefined;
+  readonly version?: string | ((version: string) => boolean) | undefined;
 }
-/** Git 2.40+ supplies the exact tree, export-ignore, and PAX behavior exercised by the source tests. */
-export const tested = ">=2.40.0 <3.0.0";
+/** Git 2.40+ supplies the exact tree, export-ignore, and PAX behavior the source archives rely on. */
+export const supported = ">=2.40.0 <3.0.0";
+/** Exact versions exercised by real-tool CI. */
+export const tested = "2.40.0 || 2.55.0";
 export const layer = (options: LayerOptions = {}): Layer.Layer<
   Archive,
   Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
   Fs | ChildProcessSpawner.ChildProcessSpawner
 > => Layer.effect(Archive, Tool.resolve({
   name: "git",
-  ...(options.executable === undefined ? {} : { executable: options.executable }),
+  executable: options.executable,
   parseVersion: (completion) => /^git version\s+(\d+\.\d+\.\d+)(?:\.windows\.\d+)?(?:\s|$)/u
     .exec(new TextDecoder().decode(completion.stdout))?.[1],
-}).pipe(Tool.requireVersion(options.version ?? tested), Effect.map((tool) => ({ tool }))));
+}).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))));
 
-const builtOutputs = ["dist", "build", "out", "target", ".output", ".next"] as const;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const gitlinksFrom = (listing: Uint8Array): readonly string[] => {
   const gitlinks: string[] = [];
@@ -146,7 +150,7 @@ const gitlinksFrom = (listing: Uint8Array): readonly string[] => {
   return gitlinks;
 };
 
-export const source = (input: SourceInput): Effect.Effect<
+export const source = Effect.fn("Archive.source")((input: SourceInput): Effect.Effect<
   Artifact.File,
   SourceError,
   Archive | Fs | ChildProcessSpawner.ChildProcessSpawner
@@ -163,7 +167,7 @@ export const source = (input: SourceInput): Effect.Effect<
   const repository = p.resolve(input.cwd ?? "", input.repository);
   const outfile = p.resolve(input.cwd ?? "", input.outfile);
   const root = `${input.project}-${input.version}`;
-  const excludes = new Set<string>(builtOutputs);
+  const excludes = new Set<string>();
   for (const candidate of input.additionalExcludes ?? []) {
     const normalized = normalizeEntryPath(candidate, "file");
     if (typeof normalized !== "string") return yield* normalized;
@@ -173,11 +177,8 @@ export const source = (input: SourceInput): Effect.Effect<
   if (decoder.decode(type.stdout).trim() !== "tree") {
     return yield* new InputInvalid({ reason: "source requires a tree object, not a commit or blob" });
   }
-  // The listing is archive input, so retaining only a diagnostic prefix could lose gitlinks.
-  const listing = yield* Tool.run(tool, ["ls-tree", "-rz", "--full-tree", input.tree], {
-    cwd: repository,
-    outputLimit: Number.POSITIVE_INFINITY,
-  });
+  // The listing is archive input rather than a diagnostic, so it is retained in full.
+  const listing = yield* Tool.run(tool, ["ls-tree", "-rz", "--full-tree", input.tree], { cwd: repository, stdoutLimit: null });
   const gitlinks = yield* Effect.try({
     try: () => gitlinksFrom(listing.stdout),
     catch: (error) => new InputInvalid({ reason: `decode git ls-tree: ${String(error)}` }),
@@ -186,11 +187,8 @@ export const source = (input: SourceInput): Effect.Effect<
   const exported = p.join(temporary, "tree.tar");
   // Archive applies checkout conversion too; host preferences must not change bytes, but tracked attributes still apply.
   yield* Tool.run(tool, ["-c", "core.autocrlf=false", "-c", "core.eol=lf", "archive", "--format=tar", `--prefix=${root}/`, `--output=${exported}`, input.tree], { cwd: repository });
-  const tar = yield* fs.readFile(exported).pipe(Effect.mapError(fileError(exported)));
-  const projected = yield* Effect.try({
-    try: () => decodeGitTar(tar),
-    catch: (error) => new InputInvalid({ reason: `decode Git archive: ${String(error)}` }),
-  });
+  // Only headers are read here; each file's bytes stream out of the exported tar when the encoder reaches it.
+  const projected = yield* readGitTar(exported);
   const entries: Entry[] = [];
   for (const entry of projected) {
     const relative = entry.path === root ? "" : entry.path.startsWith(`${root}/`) ? entry.path.slice(root.length + 1) : undefined;
@@ -199,7 +197,16 @@ export const source = (input: SourceInput): Effect.Effect<
       if (entry.kind !== "directory") return yield* new InputInvalid({ reason: "project root is not a directory" });
     } else if (relative.split("/").includes(".git")
       || [...excludes, ...gitlinks].some((excluded) => relative === excluded || relative.startsWith(`${excluded}/`))) continue;
-    entries.push(entry);
+    entries.push({
+      path: entry.path,
+      kind: entry.kind,
+      mode: entry.mode,
+      bytes: entry.bytes,
+      linkTarget: entry.linkTarget,
+      contents: entry.kind === "file" && entry.bytes > 0
+        ? fs.stream(exported, { offset: entry.offset, bytesToRead: entry.bytes, chunkSize }).pipe(Stream.mapError(fileError(exported)))
+        : Stream.empty,
+    });
   }
-  return yield* writeArchive(outfile, entries, input.format, input.atomic ?? true, Tool.producer(tool));
-}));
+  return yield* writeArchive(outfile, entries, input.format, input.atomic, Tool.producer(tool));
+})));

@@ -24,6 +24,7 @@
   "homepage": "https://github.com/mannyc2/effect-build#readme",
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
@@ -45,11 +46,14 @@
     "effect-build": "workspace:^"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+    "effect": "4.0.0-rc.108"
   },
   "devDependencies": {
     "@effect/platform-node": "4.0.0-rc.108",
     "effect": "4.0.0-rc.108",
     "vitest": "3.2.6"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

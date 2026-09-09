@@ -1,11 +1,13 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, FileSystem, Stream } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { elf, thinMacho } from "../fixtures/native-executable.js";
 
 const producer = { name: "fixture", version: "0.7.0" };
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
@@ -28,6 +30,128 @@ describe("artifacts from real files", () => {
     const decoded = Artifact.decode(json);
     expect(decoded).toEqual([file]);
     expect(await run(Artifact.verify(decoded[0]!))).toEqual(file);
+  });
+
+  it("hashes multi-chunk files and directory members with the same SHA256 as Node", async () => {
+    const bytes = Buffer.alloc(8 * 1024 * 1024 + 31, 0x5a), path = join(root, "large");
+    await writeFile(path, bytes);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const file = await run(Artifact.file(path, producer)), directory = await run(Artifact.directory(root, producer));
+    expect(file).toMatchObject({ bytes: bytes.length, sha256: digest });
+    expect(Buffer.from(await run(Artifact.readVerified(file))).equals(bytes)).toBe(true);
+    expect(directory.entries[0]).toMatchObject({ bytes: bytes.length, sha256: digest });
+  });
+
+  it.each([
+    ["architecture", thinMacho(), "darwin-arm64", "darwin-x64"],
+    ["ABI", elf("/lib64/ld-linux-x86-64.so.2"), "linux-x64", "linux-x64-musl"],
+  ] as const)("rejects a decoded executable with authentic bytes but a forged %s", async (_label, bytes, target, forgedTarget) => {
+    const path = join(root, "executable");
+    await writeFile(path, bytes);
+    const original = await run(Artifact.executable(path, producer, target));
+    const decoded = Artifact.decode([{ ...original, target: forgedTarget }])[0]!;
+    expect(await run(Artifact.verify(original))).toBe(original);
+    expect(await run(Artifact.verify(decoded).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata" });
+    if (Artifact.isRegular(decoded)) {
+      expect(await run(Artifact.readVerified(decoded).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata" });
+      expect(await run(Artifact.copyVerified(decoded, join(root, "forged-copy")).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata" });
+      expect(await readdir(root)).not.toContain("forged-copy");
+    }
+  });
+
+  it("rejects authentic file bytes advertised as an executable when its header is incomplete", async () => {
+    const path = join(root, "incomplete");
+    await writeFile(path, thinMacho().subarray(0, 8));
+    const file = await run(Artifact.file(path, producer));
+    const decoded = Artifact.decode([{ ...file, kind: "executable", format: "mach-o", target: "darwin-arm64" }])[0]!;
+    expect(await run(Artifact.verify(decoded).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata" });
+    if (Artifact.isRegular(decoded)) {
+      expect(await run(Artifact.readVerified(decoded).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata" });
+      expect(await run(Artifact.copyVerified(decoded, join(root, "forged-copy")).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata" });
+      expect(await readdir(root)).not.toContain("forged-copy");
+    }
+  });
+
+  it("copies verified bytes into a new parent and leaves nothing behind when the source changed", async () => {
+    const source = join(root, "source.txt"), destination = join(root, "out", "copy.txt");
+    await writeFile(source, "copy me");
+    const file = await run(Artifact.file(source, producer));
+    await run(Artifact.copyVerified(file, destination));
+    expect(await readFile(destination, "utf8")).toBe("copy me");
+    await writeFile(source, "changed");
+    expect(await run(Artifact.copyVerified(file, join(root, "out", "second.txt")).pipe(Effect.flip))).toMatchObject({ reason: "changed", path: source });
+    expect(await readdir(join(root, "out"))).toEqual(["copy.txt"]);
+    // A destination equal to the source is verified in place, never copied over itself.
+    expect(await run(Artifact.copyVerified(file, source).pipe(Effect.flip))).toMatchObject({ reason: "changed" });
+    await run(Artifact.copyVerified(await run(Artifact.file(source, producer)), source));
+    expect(await readFile(source, "utf8")).toBe("changed");
+  });
+
+  it("streams verified chunks of bounded size and fails at the end when the bytes differ", async () => {
+    const path = join(root, "stream.bin"), contents = Buffer.alloc(3 * 64 * 1024 + 7, 0x41);
+    await writeFile(path, contents);
+    const file = await run(Artifact.file(path, producer));
+    const chunks = [...await run(Stream.runCollect(Artifact.streamVerified(file)))];
+    expect(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).equals(contents)).toBe(true);
+    expect(Math.max(...chunks.map((chunk) => chunk.byteLength))).toBeLessThanOrEqual(64 * 1024);
+    await writeFile(path, Buffer.alloc(contents.length, 0x42));
+    expect(await run(Stream.runCollect(Artifact.streamVerified(file)).pipe(Effect.flip))).toMatchObject({ reason: "changed", path });
+    await writeFile(path, Buffer.concat([contents, Buffer.from("+")]));
+    expect(await run(Stream.runCollect(Artifact.streamVerified(file)).pipe(Effect.flip))).toMatchObject({ reason: "changed", path });
+  });
+
+  it("rejects growth after opening without reading beyond its recorded size plus one byte", async () => {
+    const path = join(root, "growing"), contents = Buffer.alloc(64 * 1024 + 5, 0x61);
+    await writeFile(path, contents);
+    const artifact = await run(Artifact.file(path, producer)), fs = await run(FileSystem.FileSystem);
+    const reads: number[] = [];
+    const observing: FileSystem.FileSystem = {
+      ...fs,
+      open: (path, options) => fs.open(path, options).pipe(Effect.map((handle) => ({
+        ...handle,
+        stat: handle.stat.pipe(Effect.tap(() => Effect.promise(() => appendFile(path, Buffer.alloc(8 * 1024 * 1024, 0x62))))),
+        read: (buffer) => { reads.push(buffer.length); return handle.read(buffer); },
+      }))),
+    };
+    const failure = await run(Artifact.readVerified(artifact).pipe(Effect.provideService(FileSystem.FileSystem, observing), Effect.flip));
+    expect(failure).toMatchObject({ reason: "changed" });
+    expect(Math.max(...reads)).toBeLessThanOrEqual(64 * 1024);
+    expect(reads.reduce((sum, size) => sum + size, 0)).toBe(artifact.bytes + 1);
+  });
+
+  it("explicitly projects provider refinements out of the core manifest", async () => {
+    const path = join(root, "refined");
+    await writeFile(path, "signed program");
+    const core = await run(Artifact.file(path, producer));
+    const refined = { ...core, signature: { issuer: "fixture" }, runtime: { version: "1.0.0" }, product: "pkg", ticket: "accepted" };
+    expect(Artifact.encode([refined])).toEqual([core]);
+    expect(Artifact.decode([refined])).toEqual([core]);
+  });
+
+  it("rejects invalid sizes, digests, targets, and inconsistent directory entry metadata", async () => {
+    const path = join(root, "record");
+    await writeFile(path, "bytes");
+    const file = await run(Artifact.file(path, producer));
+    for (const bytes of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, Infinity]) expect(() => Artifact.decode([{ ...file, bytes }])).toThrow();
+    for (const sha256 of ["", "g".repeat(64), "A".repeat(64), "a".repeat(63)]) expect(() => Artifact.decode([{ ...file, sha256 }])).toThrow();
+    expect(() => Artifact.decode([{ ...file, kind: "executable", format: "pe", target: "linux-x64" }])).toThrow();
+    const directory = await run(Artifact.directory(root, producer));
+    const entry = directory.entries[0]!;
+    for (const invalid of [
+      { ...entry, sha256: undefined },
+      { ...entry, linkTarget: "elsewhere" },
+      { ...entry, kind: "directory", bytes: 0 },
+      { ...entry, kind: "symlink", bytes: 0, linkTarget: "elsewhere" },
+      { path: "link", kind: "symlink", mode: 0o777, bytes: 0 },
+      { ...entry, path: "../outside" },
+      { ...entry, path: "nested/file" },
+      { ...entry, mode: -1 },
+    ]) expect(() => Artifact.decode([{ ...directory, entries: [invalid] }])).toThrow();
+    expect(() => Artifact.decode([{ ...directory, entries: [entry, entry] }])).toThrow();
+    expect(() => Artifact.decode([{ ...directory, bytes: directory.bytes + 1 }])).toThrow();
+    const changedManifest = { ...directory, entries: [{ ...entry, mode: entry.mode === 0o644 ? 0o755 : 0o644 }] };
+    expect(() => Artifact.decode([changedManifest])).toThrow();
+    expect(await run(Artifact.verify(changedManifest).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata" });
   });
 
   it("rejects changed bytes even when the file length stays the same", async () => {

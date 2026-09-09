@@ -1,16 +1,16 @@
-import { Crypto, Effect, Encoding, FileSystem, Path } from "effect";
-import { Artifact, Commit } from "effect-build";
+import { Crypto, Effect, Encoding, FileSystem, Path, Stream } from "effect";
+import { Artifact, Commit, Target } from "effect-build";
 import packageMetadata from "../package.json" with { type: "json" };
 import { InputInvalid } from "./InputInvalid.js";
-import { encodeZip, type Entry, utf8Order } from "./internal/zip.js";
+import { encodeZip, type Entry, utf8Order, zipLimit } from "./internal/zip.js";
 
 export interface WheelMetadata {
   readonly name: string;
   readonly version: string;
-  readonly summary?: string;
-  readonly license?: string;
-  readonly requiresPython?: string;
-  readonly projectUrls?: Readonly<Record<string, string>>;
+  readonly summary?: string | undefined;
+  readonly license?: string | undefined;
+  readonly requiresPython?: string | undefined;
+  readonly projectUrls?: Readonly<Record<string, string>> | undefined;
 }
 export interface WheelTags { readonly python: string; readonly abi: string; readonly platform: string; }
 export interface WheelEntry { readonly artifact: Artifact.Regular; readonly path: string; readonly executable?: boolean; }
@@ -20,10 +20,10 @@ export interface WheelInput {
   readonly tags: WheelTags;
   readonly entries: readonly WheelEntry[];
   readonly outdir: string;
-  readonly cwd?: string;
-  readonly atomic?: boolean;
-  readonly rootIsPurelib?: boolean;
-  readonly entryPoints?: EntryPointGroups;
+  readonly cwd?: string | undefined;
+  readonly atomic?: boolean | undefined;
+  readonly rootIsPurelib?: boolean | undefined;
+  readonly entryPoints?: EntryPointGroups | undefined;
 }
 
 const encoder = new TextEncoder();
@@ -47,13 +47,37 @@ const singleLine = (input: string, field: string): string =>
 const tag = (input: string): string => /^[a-z0-9_]+(?:\.[a-z0-9_]+)*$/iu.test(input)
   ? [...new Set(input.toLowerCase().split("."))].sort(utf8Order).join(".") : reject("tags must contain dot-separated letters, numbers, or underscores");
 const csv = (input: string): string => /[,"\r\n]/u.test(input) ? `"${input.replaceAll('"', '""')}"` : input;
+const hexBytes = (hex: string): Uint8Array => Uint8Array.from(hex.match(/.{2}/gu) ?? [], (pair) => Number.parseInt(pair, 16));
 
+// Every advertised platform must be able to execute every embedded native artifact.
+// OS deployment/libc version floors remain the caller's responsibility.
+const matchesPlatform = (artifact: Artifact.Executable, platform: string): boolean => {
+  const { os, arch, abi } = Target.parts(artifact.target);
+  const machine = arch === "x64" ? "x86_64" : "aarch64";
+  if (os === "windows") return platform === (arch === "x64" ? "win_amd64" : "win_arm64");
+  if (os === "darwin") return new RegExp(`^macosx_[0-9]+_[0-9]+_${arch === "x64" ? "x86_64" : "arm64"}$`).test(platform);
+  if (platform === `linux_${machine}`) return true;
+  if (new RegExp(`^musllinux_[0-9]+_[0-9]+_${machine}$`).test(platform)) return abi === "musl";
+  if (new RegExp(`^manylinux(?:1|2010|2014|_[0-9]+_[0-9]+)_${machine}$`).test(platform)) return abi === "gnu";
+  return false;
+};
+
+interface Generated {
+  readonly path: string;
+  readonly contents: Uint8Array;
+}
 const metadataEntries = (input: WheelInput) => {
   const m = input.metadata;
   if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/iu.test(m.name)) reject("name must be a Python distribution name");
   if (input.outdir.length === 0 || input.entries.length === 0) reject("outdir and entries must be non-empty");
   const name = m.name.toLowerCase().replace(/[-_.]+/gu, "_"), version = normalizeVersion(m.version);
   const tags = { python: tag(input.tags.python), abi: tag(input.tags.abi), platform: tag(input.tags.platform) };
+  for (const entry of input.entries) {
+    if (entry.artifact.kind !== "executable") continue;
+    for (const platform of tags.platform.split(".")) {
+      if (!matchesPlatform(entry.artifact, platform)) reject(`wheel platform ${platform} does not support executable ${entry.path} (${entry.artifact.target})`);
+    }
+  }
   const stem = `${name}-${version}`, info = `${stem}.dist-info`;
   const metadata = [`Metadata-Version: 2.1`, `Name: ${m.name}`, `Version: ${version}`];
   for (const [key, value] of [["Summary", m.summary], ["License", m.license], ["Requires-Python", m.requiresPython]] as const) {
@@ -65,9 +89,9 @@ const metadataEntries = (input: WheelInput) => {
   }
   const triples = tags.python.split(".").flatMap((py) => tags.abi.split(".").flatMap((abi) => tags.platform.split(".").map((platform) => `${py}-${abi}-${platform}`)));
   const pure = input.rootIsPurelib ?? (tags.abi === "none" && tags.platform === "any");
-  const entries: Entry[] = [
-    { path: `${info}/METADATA`, mode: 0o644, contents: encoder.encode(`${metadata.join("\n")}\n\n`) },
-    { path: `${info}/WHEEL`, mode: 0o644, contents: encoder.encode(`Wheel-Version: 1.0\nGenerator: ${packageMetadata.name} ${packageMetadata.version}\nRoot-Is-Purelib: ${pure}\n${triples.map((value) => `Tag: ${value}\n`).join("")}\n`) },
+  const generated: Generated[] = [
+    { path: `${info}/METADATA`, contents: encoder.encode(`${metadata.join("\n")}\n\n`) },
+    { path: `${info}/WHEEL`, contents: encoder.encode(`Wheel-Version: 1.0\nGenerator: ${packageMetadata.name} ${packageMetadata.version}\nRoot-Is-Purelib: ${pure}\n${triples.map((value) => `Tag: ${value}\n`).join("")}\n`) },
   ];
   if (input.entryPoints !== undefined) {
     const groups: string[] = [];
@@ -80,7 +104,7 @@ const metadataEntries = (input: WheelInput) => {
       }
       groups.push("");
     }
-    entries.push({ path: `${info}/entry_points.txt`, mode: 0o644, contents: encoder.encode(`${groups.join("\n")}\n`) });
+    generated.push({ path: `${info}/entry_points.txt`, contents: encoder.encode(`${groups.join("\n")}\n`) });
   }
   const paths = new Set<string>();
   for (const entry of input.entries) {
@@ -94,30 +118,39 @@ const metadataEntries = (input: WheelInput) => {
     const parts = path.split("/");
     for (let length = 1; length < parts.length; length++) if (paths.has(parts.slice(0, length).join("/"))) reject(`file used as a directory: ${path}`);
   }
-  return { entries, record: `${info}/RECORD`, filename: `${stem}-${tags.python}-${tags.abi}-${tags.platform}.whl` };
+  return { metadata: generated, record: `${info}/RECORD`, filename: `${stem}-${tags.python}-${tags.abi}-${tags.platform}.whl` };
 };
 
-export const wheel = (input: WheelInput): Effect.Effect<
+export const wheel = Effect.fn("Python.wheel")((input: WheelInput): Effect.Effect<
   Artifact.File, InputInvalid | Artifact.ArtifactError | Commit.CommitError,
   FileSystem.FileSystem | Path.Path | Crypto.Crypto
 > => Effect.gen(function*() {
   const prepared = yield* Effect.try({ try: () => metadataEntries(input), catch: (error) => error instanceof InputInvalid ? error : new InputInvalid({ reason: String(error) }) });
   const fs = yield* FileSystem.FileSystem, p = yield* Path.Path, crypto = yield* Crypto.Crypto;
-  for (const entry of input.entries) prepared.entries.push({ path: entry.path, mode: (entry.executable ?? entry.artifact.kind === "executable") ? 0o755 : 0o644, contents: yield* Artifact.readVerified(entry.artifact) });
-  const records: string[] = [];
-  for (const entry of [...prepared.entries].sort((a, b) => utf8Order(a.path, b.path))) {
+  const entries: Entry[] = [];
+  const records: { readonly path: string; readonly line: string }[] = [];
+  for (const entry of prepared.metadata) {
     const digest = yield* crypto.digest("SHA-256", entry.contents).pipe(Effect.orDie);
-    records.push(`${csv(entry.path)},sha256=${Encoding.encodeBase64Url(digest)},${entry.contents.byteLength}`);
+    entries.push({ path: entry.path, mode: 0o644, bytes: entry.contents.byteLength, contents: Stream.make(entry.contents) });
+    records.push({ path: entry.path, line: `${csv(entry.path)},sha256=${Encoding.encodeBase64Url(digest)},${entry.contents.byteLength}` });
   }
-  records.push(`${csv(prepared.record)},,`);
-  prepared.entries.push({ path: prepared.record, mode: 0o644, contents: encoder.encode(`${records.join("\n")}\n`) });
-  const bytes = yield* Effect.try({ try: () => encodeZip(prepared.entries), catch: (error) => new InputInvalid({ reason: String(error) }) });
+  for (const entry of input.entries) {
+    // The verified stream fails unless the wheel receives exactly the recorded bytes, so RECORD can cite the recorded digest.
+    entries.push({ path: entry.path, mode: (entry.executable ?? entry.artifact.kind === "executable") ? 0o755 : 0o644, bytes: entry.artifact.bytes, contents: Artifact.streamVerified(entry.artifact) });
+    records.push({ path: entry.path, line: `${csv(entry.path)},sha256=${Encoding.encodeBase64Url(hexBytes(entry.artifact.sha256))},${entry.artifact.bytes}` });
+  }
+  const record = encoder.encode(`${records.sort((a, b) => utf8Order(a.path, b.path)).map((entry) => entry.line).join("\n")}\n${csv(prepared.record)},,\n`);
+  entries.push({ path: prepared.record, mode: 0o644, bytes: record.byteLength, contents: Stream.make(record) });
+  const limit = zipLimit(entries);
+  if (limit !== undefined) return yield* limit;
   const outfile = p.resolve(input.cwd ?? "", input.outdir, prepared.filename);
   const produce = (path: string) => Effect.gen(function*() {
     const failure = (error: unknown) => new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
-    yield* fs.makeDirectory(p.dirname(path), { recursive: true }).pipe(Effect.mapError(failure));
-    yield* fs.writeFile(path, bytes).pipe(Effect.mapError(failure));
+    yield* Effect.scoped(Effect.gen(function*() {
+      const file = yield* fs.open(path, { flag: "w" }).pipe(Effect.mapError(failure));
+      yield* encodeZip(entries, (chunk) => file.writeAll(chunk).pipe(Effect.mapError(failure)));
+    }));
     return yield* Artifact.file(path, { name: packageMetadata.name, version: packageMetadata.version });
   });
-  return yield* input.atomic === false ? produce(outfile) : Commit.atomic(outfile, produce);
-});
+  return yield* Commit.output(outfile, produce, { atomic: input.atomic });
+}));

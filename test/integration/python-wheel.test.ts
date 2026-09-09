@@ -1,3 +1,4 @@
+import { standaloneProgram } from "../fixtures/standalone-program.js";
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { Artifact, Target } from "effect-build";
@@ -31,7 +32,9 @@ describe("real Python wheel installation", () => {
         "def main():",
         `    subprocess.run([str(Path(sysconfig.get_path('scripts')) / '${nativeName}'), '-e', 'console.log(42)'], check=True)`, "",
       ].join("\n"));
-      const native = await run(Artifact.executable(process.execPath, { name: "fixture", version: "0.7.0" }, Target.host()));
+      const nativePath = join(root, nativeName);
+      await standaloneProgram(nativePath);
+      const native = await run(Artifact.executable(nativePath, { name: "fixture", version: "0.7.0" }, Target.host()));
       const module = await run(Artifact.file(source, { name: "fixture", version: "0.7.0" }));
       const options = {
         metadata: { name: "Native-Wheel-Fixture", version, requiresPython: ">=3.9" },
@@ -69,7 +72,7 @@ describe("real Python wheel installation", () => {
         "   assert int(size) == len(contents)",
         " for entry in wheel.infolist():",
         "  assert entry.date_time == (1980, 1, 1, 0, 0, 0)",
-        "  assert entry.compress_type == zipfile.ZIP_STORED",
+        "  assert entry.compress_type == zipfile.ZIP_DEFLATED",
         "  assert entry.create_system == 3",
         "  assert entry.external_attr >> 16 == (0o100755 if '/scripts/' in entry.filename else 0o100644)",
       ].join("\n"), wheel.path]);
@@ -78,6 +81,7 @@ describe("real Python wheel installation", () => {
       const interpreter = join(environment, windows ? "Scripts/python.exe" : "bin/python");
       await execute(uv, ["--no-cache", "pip", "install", "--python", interpreter, "--no-index", "--no-deps", wheel.path], { timeout: 60_000 });
       await rm(source);
+      await rm(nativePath);
       const command = join(environment, windows ? "Scripts/native-wheel-fixture.exe" : "bin/native-wheel-fixture");
       expect((await execute(command, ["-e", "console.log(42)"], { cwd: root })).stdout.trim()).toBe("42");
       const wrapper = join(environment, windows ? "Scripts/native-wheel-wrapper.exe" : "bin/native-wheel-wrapper");

@@ -44,6 +44,19 @@ beforeEach(async () => {
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
 describe("real Syft SBOM generation", () => {
+  it.each(formats)("uses explicit source context to discover dependencies hidden from a compiled program in %s", async (format) => {
+    const main = join(root, "main.c"), program = join(root, "program");
+    await writeFile(main, "int main(void) { return 0; }\n");
+    await execute("cc", [main, "-o", program], { timeout: 30_000 });
+    const subject = await run(Artifact.executable(program, producer));
+    const source = await run(Artifact.directory(subjectRoot, producer));
+    const artifact = await run(Sbom.generate({ subject, source, format, outfile: join(root, "source-sbom") }));
+    expectPackage(await readDocument(artifact.path), format);
+    await writeFile(lockfile, "changed source");
+    expect(await run(Sbom.generate({ subject, source, format, outfile: join(root, "source-sbom") }).pipe(Effect.flip))).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
+    expectPackage(await readDocument(artifact.path), format);
+  }, 60_000);
+
   it.each(formats)("detects package coordinates in a directory and writes %s without a required extension", async (format) => {
     const subject = await run(Artifact.directory(subjectRoot, producer));
     const artifact = await run(Sbom.generate({ subject, format, outfile: `dist/${format}`, cwd: root }));

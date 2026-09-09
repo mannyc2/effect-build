@@ -14,6 +14,10 @@ default to the source path, with staged replacement unless `atomic: false`.
 `notarize` submits a private copy with a keychain, API-key, or Apple ID credential.
 Apple ID passwords use Effect `Redacted`. Pass its result through
 `Notary.acceptedReference` before `staple`, then `assess` the stapled product.
+For recoverable waiting, call `Notary.submit` first, persist the returned
+`SubmissionReference` with its exported Effect schema, then call `Notary.wait`.
+`notarize` is the convenience composition of those operations; interruption during
+the upload itself can still occur before a submission ID is received.
 `Notary.info` and `Notary.log` retrieve later results from a saved reference.
 
 [Pipeline example](../../examples/artifact-pipeline/src/signing.ts) · [Setup](../../docs/getting-started.md) · [Errors](../../docs/errors.md)

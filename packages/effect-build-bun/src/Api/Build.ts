@@ -1,4 +1,5 @@
 /// <reference types="bun-types" preserve="true" />
+/// <reference path="../../src/Api/NativeTypes.d.ts" preserve="true" />
 
 import type * as bun from "bun";
 import { Context, Effect, Layer } from "effect";

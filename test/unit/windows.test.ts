@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { pe, thinMacho } from "../fixtures/native-executable.js";
+
 const runLocal = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 const password = "do-not-log:pfx-$42";
@@ -116,11 +118,7 @@ const input = (): Windows.SignInput => ({ artifact, outfile: config.outfile, kin
 const configure = async (changes: Partial<FixtureConfig>) => { config = { ...config, ...changes }; await writeFile(configPath, JSON.stringify(config)); };
 const calls = async (): Promise<readonly Invocation[]> => (await readFile(config.log, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Invocation);
 const executable = async (machine = 0x8664): Promise<Artifact.Executable> => {
-  const bytes = Buffer.alloc(70);
-  bytes.write("MZ");
-  bytes.writeUInt32LE(64, 60);
-  bytes.write("PE", 64);
-  bytes.writeUInt16LE(machine, 68);
+  const bytes = pe(machine);
   await configure({ source: join(root, "unsigned.exe"), outfile: join(root, "signed.exe") });
   await writeFile(config.source, bytes);
   return runLocal(Artifact.executable(config.source, { name: "fixture", version: "0.7.0" }));
@@ -215,7 +213,7 @@ describe("Windows signing through real files and a scripted native tool", () => 
 
   it("rejects a non-Windows executable even when its filename ends in .exe", async () => {
     const source = join(root, "darwin.exe");
-    await writeFile(source, Uint8Array.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]));
+    await writeFile(source, thinMacho(0x01000007));
     const native = await runLocal(Artifact.executable(source, artifact.producedBy));
     const failure = await run(Windows.sign({ ...input(), artifact: native, outfile: join(root, "signed.exe") }).pipe(Effect.flip));
     expect(failure).toBeInstanceOf(Windows.InputInvalid);
@@ -226,7 +224,7 @@ describe("Windows signing through real files and a scripted native tool", () => 
   it("rejects a declared Windows target that disagrees with the input PE header before signing", async () => {
     const native = await executable();
     const failure = await run(Windows.sign({ ...input(), artifact: { ...native, target: "windows-arm64" } }).pipe(Effect.flip));
-    expect(failure).toBeInstanceOf(Executable.TargetMismatch);
+    expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "invalid-metadata" });
     expect(await readdir(root)).not.toContain("calls.jsonl");
     expect(await readdir(root)).not.toContain("signed.exe");
     expect(await runLocal(Artifact.verify(native))).toEqual(native);

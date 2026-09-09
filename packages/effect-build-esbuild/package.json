@@ -22,6 +22,7 @@
   "homepage": "https://github.com/mannyc2/effect-build#readme",
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
@@ -44,9 +45,12 @@
     "esbuild": "0.28.2"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+    "effect": "4.0.0-rc.108"
   },
   "devDependencies": {
     "effect": "4.0.0-rc.108"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

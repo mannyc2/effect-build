@@ -8,25 +8,25 @@ export type NodeModulesLinker = "isolated" | "hoisted";
 
 export interface ProjectOptions {
   /** undefined preserves native config discovery; false renders --no-config. */
-  readonly config?: string | false;
-  readonly importMap?: string;
+  readonly config?: string | false | undefined;
+  readonly importMap?: string | undefined;
   /** undefined preserves discovery, false disables, true selects the default deno.lock. */
-  readonly lock?: string | boolean;
-  readonly frozen?: boolean;
-  readonly noNpm?: boolean;
-  readonly noRemote?: boolean;
-  readonly nodeModulesDir?: NodeModulesDir;
-  readonly nodeModulesLinker?: NodeModulesLinker;
-  readonly reload?: true | readonly [string, ...string[]];
-  readonly vendor?: boolean;
-  readonly cert?: string;
-  readonly conditions?: readonly [string, ...string[]];
-  readonly minimumDependencyAge?: string;
+  readonly lock?: string | boolean | undefined;
+  readonly frozen?: boolean | undefined;
+  readonly noNpm?: boolean | undefined;
+  readonly noRemote?: boolean | undefined;
+  readonly nodeModulesDir?: NodeModulesDir | undefined;
+  readonly nodeModulesLinker?: NodeModulesLinker | undefined;
+  readonly reload?: true | readonly [string, ...string[]] | undefined;
+  readonly vendor?: boolean | undefined;
+  readonly cert?: string | undefined;
+  readonly conditions?: readonly [string, ...string[]] | undefined;
+  readonly minimumDependencyAge?: string | undefined;
 }
 
 export interface ImportPermissions {
-  readonly allowImport?: PermissionValue;
-  readonly denyImport?: PermissionValue;
+  readonly allowImport?: PermissionValue | undefined;
+  readonly denyImport?: PermissionValue | undefined;
 }
 
 export const renderPermission = (name: string, value: PermissionValue | undefined): readonly string[] =>

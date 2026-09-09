@@ -17,10 +17,9 @@ const program = Effect.scoped(Effect.gen(function*() {
   const root = yield* fs.makeTempDirectoryScoped();
   const entrypoint = path.join(root, "hello.ts");
   yield* fs.writeFileString(entrypoint, 'console.log("hello from effect-build");\n');
-  const bun = process.env.EFFECT_BUILD_BUN;
   const executable = yield* Bun.compile({
     entrypoints: [entrypoint], outfile: path.join(root, process.platform === "win32" ? "hello.exe" : "hello"),
-  }).pipe(Effect.provide(Bun.layer(bun === undefined ? {} : { executable: bun })));
+  }).pipe(Effect.provide(Bun.layer({ executable: process.env.EFFECT_BUILD_BUN })));
   yield* Artifact.verify(executable);
   const entries = [{ artifact: executable, path: `bin/${path.basename(executable.path)}` }];
   const zip = yield* Archive.zip({ entries, outfile: path.join(root, "hello.zip") });
@@ -41,9 +40,12 @@ const program = Effect.scoped(Effect.gen(function*() {
   }
   if (process.env.EFFECT_BUILD_NFPM_BIN !== undefined) {
     artifacts.push(yield* Nfpm.package({
-      format: "deb", name: "effect-build-hello", version: "0.7.0", release: "1",
-      architecture: process.arch === "arm64" ? "arm64" : "amd64", maintainer: "effect-build",
-      description: "A compiled TypeScript CLI", mtime: "2026-01-01T00:00:00Z",
+      format: "deb",
+      config: {
+        name: "effect-build-hello", version: "0.7.0", release: "1",
+        arch: process.arch === "arm64" ? "arm64" : "amd64", maintainer: "effect-build",
+        description: "A compiled TypeScript CLI", mtime: "2026-01-01T00:00:00Z",
+      },
       contents: [{ artifact: executable, dst: "/usr/bin/effect-build-hello" }],
       outfile: path.join(root, "hello.deb"),
     }).pipe(Effect.provide(Nfpm.layer({ executable: process.env.EFFECT_BUILD_NFPM_BIN }))));
