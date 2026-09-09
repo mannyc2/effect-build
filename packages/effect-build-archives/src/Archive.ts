@@ -30,7 +30,8 @@ export interface SourceInput extends Commit.ProducerOptions {
   readonly format: Format;
   readonly outfile: string;
   readonly cwd?: string | undefined;
-  readonly additionalExcludes?: readonly string[] | undefined;
+  /** Repository-relative paths to leave out, with their descendants. Gitlinks and `.git` components are always left out. */
+  readonly excludes?: readonly string[] | undefined;
 }
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
 export type ArchiveError = InputInvalid | FormatLimit | Artifact.ArtifactError | Commit.CommitError;
@@ -166,7 +167,7 @@ export const source = Effect.fn("Archive.source")((input: SourceInput): Effect.E
   const outfile = p.resolve(input.cwd ?? "", input.outfile);
   const root = `${input.project}-${input.version}`;
   const excludes = new Set<string>();
-  for (const candidate of input.additionalExcludes ?? []) {
+  for (const candidate of input.excludes ?? []) {
     const normalized = normalizeEntryPath(candidate, "file");
     if (typeof normalized !== "string") return yield* normalized;
     excludes.add(normalized);

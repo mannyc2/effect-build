@@ -23,7 +23,7 @@ const archive = yield* Archive.tarGz({
 under `project-version/`; get `tree` with `git rev-parse HEAD^{tree}` and provide
 `Archive.layer({ executable?, version? })` for Git. Export-ignore rules apply;
 symlinks, executable modes, and LFS pointers remain. Gitlinks are omitted;
-`additionalExcludes` supplies repository-relative exclusions. Tracked directories
+`excludes` lists repository-relative paths to leave out. Tracked directories
 such as `build/`, `target/`, and `out/` are included unless the project excludes them.
 
 Inputs stream: each file is read once in 64 KiB chunks, verified against its artifact
