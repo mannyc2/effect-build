@@ -89,3 +89,19 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 
 - **Core manifests project core fields only.** Provider schemas preserve richer signing/runtime/product/notary records.
 - **Release retries consume retained exact tarballs** and verify registry bytes before skipping an existing version.
+- **SHA-256 is the only digest.** Every artifact and directory entry carries one; there is no unhashed
+  observation and no algorithm choice.
+- **Layouts reject case-insensitive and NFC collisions on every host.** Archives, wheels and app bundles ship
+  to all three OSes, so a Linux-only distinction is a defect in the layout, not a choice.
+- **Archive and wheel bytes depend only on their inputs**: DEFLATE level 6, fixed ZIP timestamps, zero tar
+  owners and times, zero gzip mtime. There are no timestamp, ownership, comment or compression options.
+- **Windows signatures always carry an RFC3161 SHA-256 timestamp, and SignTool warnings fail.** Exit 2 means
+  completed with warnings; a release signature with warnings is a failure here.
+- **Signing identities are certificate fingerprints, never names or ad hoc.** Names are ambiguous and an ad hoc
+  signature cannot be notarized; PFX files and Trusted Signing metadata name their certificate themselves.
+- **No argv passthrough.** Operations expose typed options; anything else runs through `Tool.run` with the
+  provider's resolved tool.
+- **Source archives take a tree ID, not a ref**, so the bytes are fixed before Git runs; `excludes`, gitlinks
+  and `.git` components are the only omissions.
+- **Node SEA ad-hoc signs on Darwin.** Injection invalidates the base signature and an unsigned arm64 binary
+  will not launch; `Apple.sign` replaces the ad hoc signature.
