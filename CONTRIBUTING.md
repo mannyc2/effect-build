@@ -24,6 +24,13 @@ native tools where available, and byte fixtures for executable headers.
 [CI](.github/workflows/ci.yml) installs exact fixtures and runs the real pipeline on Linux.
 Windows CI also compiles, signs, timestamps, and runs an executable with a temporary self-signed certificate. This test requires administrator elevation: it temporarily trusts the public certificate in `LocalMachine\Root` and keeps the signing key in `CurrentUser\My`, then removes those exact certificate entries and the private key afterward. Use a disposable Windows environment, as CI does.
 Apple/Windows signing examples are typechecked; portable tests use scripted processes.
+The [signing workflow](.github/workflows/signing.yml) is dispatched by hand and runs
+`examples/artifact-pipeline/src/sign.ts` with real identities: on macOS it needs the
+`APPLE_CERTIFICATE_P12` (base64), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_API_KEY_P8`,
+`APPLE_API_KEY_ID`, and `APPLE_API_ISSUER` secrets; on Windows it needs `AZURE_CLIENT_ID`,
+`AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `TRUSTED_SIGNING_ENDPOINT`,
+`TRUSTED_SIGNING_ACCOUNT`, and `TRUSTED_SIGNING_PROFILE`. Record its run in
+[compatibility](docs/compatibility.md) when it passes.
 Keep Bun's Windows extraction cache on the checkout volume. Format with `bun run format`.
 Run `bun run test:consumer` after building to pack all public packages, install
 them in a clean temporary project with strict peers, typecheck every export with

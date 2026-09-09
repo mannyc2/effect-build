@@ -1,0 +1,129 @@
+name: signing-evidence
+
+# Dispatched by hand. Signs, notarizes, and assesses a compiled CLI with real identities;
+# record a passing run in docs/compatibility.md. Secrets are listed in CONTRIBUTING.md.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apple:
+    name: Developer ID signing and notarization (macos-15)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Import the Developer ID certificate into a temporary keychain
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          printf '%s' "$APPLE_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          sha1="$(security find-identity -v -p codesigning "$keychain" | awk '/Developer ID Application/ { print $2; exit }')"
+          test -n "$sha1"
+          echo "EFFECT_BUILD_APPLE_CERTIFICATE_SHA1=$sha1" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+      - name: Write the App Store Connect API key
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey.p8"
+          echo "EFFECT_BUILD_APPLE_API_KEY_FILE=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+      - name: Sign, notarize, and assess a compiled CLI
+        working-directory: examples/artifact-pipeline
+        env:
+          EFFECT_BUILD_APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          EFFECT_BUILD_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: node src/sign.ts
+      - name: Remove the temporary keychain and key
+        if: always()
+        run: |
+          if [ -n "${EFFECT_BUILD_KEYCHAIN:-}" ]; then security delete-keychain "$EFFECT_BUILD_KEYCHAIN"; fi
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: darwin-signing-evidence
+          path: examples/artifact-pipeline/dist
+
+  windows:
+    name: Trusted Signing (windows-2025)
+    runs-on: windows-2025
+    env:
+      # Bun 1.3.14 needs its extraction cache on the checkout's volume on Windows.
+      BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.bun-install-cache
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.14.1
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Install the Trusted Signing client and locate SignTool
+        shell: pwsh
+        env:
+          TRUSTED_SIGNING_ENDPOINT: ${{ secrets.TRUSTED_SIGNING_ENDPOINT }}
+          TRUSTED_SIGNING_ACCOUNT: ${{ secrets.TRUSTED_SIGNING_ACCOUNT }}
+          TRUSTED_SIGNING_PROFILE: ${{ secrets.TRUSTED_SIGNING_PROFILE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $package = Join-Path $env:RUNNER_TEMP 'trusted-signing-client.zip'
+          Invoke-WebRequest -Uri 'https://www.nuget.org/api/v2/package/Microsoft.Trusted.Signing.Client/1.0.95' -OutFile $package
+          $digest = (Get-FileHash -Algorithm SHA256 $package).Hash.ToLowerInvariant()
+          if ($digest -ne '3bfcf1e0a3cb42af1692f0a8ed45c15de070c2de86f28a59b2795d904d8a920f') { throw "Unexpected Trusted Signing client digest $digest" }
+          $client = Join-Path $env:RUNNER_TEMP 'trusted-signing-client'
+          Expand-Archive -Path $package -DestinationPath $client
+          $library = Join-Path $client 'bin\x64\Azure.CodeSigning.Dlib.dll'
+          if (-not (Test-Path $library)) { throw "Trusted Signing library missing at $library" }
+          $metadata = Join-Path $env:RUNNER_TEMP 'trusted-signing-metadata.json'
+          @{ Endpoint = $env:TRUSTED_SIGNING_ENDPOINT; CodeSigningAccountName = $env:TRUSTED_SIGNING_ACCOUNT; CertificateProfileName = $env:TRUSTED_SIGNING_PROFILE } | ConvertTo-Json | Set-Content -Path $metadata -Encoding utf8
+          $kits = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+          $signtool = Get-ChildItem (Join-Path $kits 'Windows Kits\10\bin\*\x64\signtool.exe') |
+            Sort-Object { [version] $_.Directory.Parent.Name } -Descending | Select-Object -First 1
+          if (-not $signtool) { throw 'Install Windows SDK signing tools' }
+          "EFFECT_BUILD_TRUSTED_SIGNING_LIBRARY=$library" >> $env:GITHUB_ENV
+          "EFFECT_BUILD_TRUSTED_SIGNING_METADATA=$metadata" >> $env:GITHUB_ENV
+          "EFFECT_BUILD_SIGNTOOL=$($signtool.FullName)" >> $env:GITHUB_ENV
+      - name: Sign and verify a compiled CLI
+        working-directory: examples/artifact-pipeline
+        run: node src/sign.ts
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-signing-evidence
+          path: examples/artifact-pipeline/dist
