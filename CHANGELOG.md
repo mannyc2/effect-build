@@ -16,7 +16,8 @@ shadowing `Error.name`. Tool providers export `supported` (the range their layer
 default) and `tested` (the exact versions real-tool CI runs). `Tool.locate` finds an executable
 without probing it, `Tool.resolve` hashes every tool incrementally, and `Commit.output` is the
 provider default that honors `atomic`, `onExists`, and `prefix` (`Commit.ProducerOptions`)
-through every producer. Optional inputs accept `undefined`, so
+through every producer. Sibling-staged directory roots commit at 0755 and direct directory
+output starts from an empty destination. Optional inputs accept `undefined`, so
 `Bun.layer({ executable: process.env.EFFECT_BUILD_BUN })` needs no branch.
 
 Archives, wheels, verified copies and Git source tars stream their inputs in 64 KiB

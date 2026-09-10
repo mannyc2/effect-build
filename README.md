@@ -43,7 +43,7 @@ Native memory APIs retain their tool's result types.
 
 Checks are combinators: `Executable.expectTarget`, `Tool.requireVersion`, and
 `Artifact.verify`. Producers stage and check output before committing by default;
-`atomic: false` writes directly, `onExists: "fail"` refuses an occupied regular-file
+`atomic: false` writes directly and starts directory output empty, `onExists: "fail"` refuses an occupied regular-file
 destination, `prefix` names the staging directory, and `Commit.output` gives your own
 producers the same options. Directory no-replace is unsupported. Replacement is the
 default. Every error prints as `Tag: message`. See [errors](docs/errors.md).

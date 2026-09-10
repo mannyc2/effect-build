@@ -66,6 +66,18 @@ describe("esbuild native operations", () => {
     expect((await readdir(root)).sort()).toEqual(["dist", "hello.ts"]);
   });
 
+  it("records only the current build's files when writing directly", async () => {
+    const other = join(root, "other.ts");
+    await writeFile(other, "export const other = 1;\n");
+    const outdir = join(root, "dist");
+    const both = await run(Esbuild.buildToDirectory({ entryPoints: [source, other], outdir, atomic: false, logLevel: "silent" }));
+    expect(both.entries.map((entry) => entry.path)).toEqual(["hello.js", "other.js"]);
+    const one = await run(Esbuild.buildToDirectory({ entryPoints: [source], outdir, atomic: false, logLevel: "silent" }));
+    expect(one.entries.map((entry) => entry.path)).toEqual(["hello.js"]);
+    expect(await run(Artifact.verify(one))).toEqual(one);
+    expect(await readdir(outdir)).toEqual(["hello.js"]);
+  });
+
   it("transforms TypeScript and preserves native transform errors", async () => {
     const result = await run(Esbuild.transform(await readFile(source, "utf8"), { loader: "ts", minify: true }));
     expect(result.code).toContain("42");

@@ -23,14 +23,16 @@ export interface Options {
   readonly onExists?: "replace" | "fail" | undefined;
   /** Prefix for the staging directory created next to `outfile`. */
   readonly prefix?: string | undefined;
-  /** `sibling` stages a directory at the final depth, preserving relative imports and maps.
-   * `nested` (default) preserves the final basename for executable and Apple tools. */
+  /** `sibling` stages a directory at the final depth, preserving relative imports and maps;
+   * `produce` receives an existing 0755 directory. `nested` (default) preserves the final
+   * basename for executable and Apple tools; `produce` receives a path that does not exist yet. */
   readonly staging?: "sibling" | "nested" | undefined;
 }
 
 /** What every producing operation accepts and forwards to `output`. Staging depth is the producer's own decision. */
 export interface ProducerOptions extends Omit<Options, "staging"> {
-  /** `false` writes at the destination itself, with no staging or rename. Default: stage and commit atomically. */
+  /** `false` writes at the destination itself, with no staging or rename; a sibling-staged producer
+   * starts from an empty destination. Default: stage and commit atomically. */
   readonly atomic?: boolean | undefined;
 }
 
@@ -62,6 +64,8 @@ export const atomic = <A extends Artifact.Artifact, E, R>(
         // Sibling staging itself moves on success. Missing staging is successful cleanup.
         (path) => fs.remove(path, { recursive: true, force: true }).pipe(Effect.orDie),
       );
+      // mkdtemp creates 0700; a sibling-staged root becomes the committed directory, so give it a fresh directory's mode.
+      if (options.staging === "sibling") yield* fs.chmod(staging, 0o755).pipe(Effect.mapError((e) => fail("staging-failed", e)));
       const staged = options.staging === "sibling" ? staging : p.join(staging, p.basename(destination));
       const artifact = yield* produce(staged);
       if (artifact.path !== staged) return yield* fail("staged-path-mismatch", artifact.path);
@@ -103,7 +107,8 @@ export const atomic = <A extends Artifact.Artifact, E, R>(
  * What every producer does with its options: stage and commit through `atomic`,
  * or with `atomic: false` create the destination's parent and let `produce` write
  * the final path directly. The producer chooses `staging` from what it writes:
- * files stage nested, directories holding relative imports stage sibling.
+ * files stage nested, directories holding relative imports stage sibling. Direct
+ * sibling output starts from an empty destination.
  */
 export const output = <A extends Artifact.Artifact, E, R>(
   outfile: string,
@@ -121,6 +126,12 @@ export const output = <A extends Artifact.Artifact, E, R>(
       yield* fs.makeDirectory(p.dirname(destination), { recursive: true }).pipe(
         Effect.mapError((e) => new CommitError({ destination, reason: "staging-failed", detail: String(e) })),
       );
+      // A sibling-staged producer fills a directory it owns; start it empty so an earlier build's files cannot enter the record.
+      if (staging === "sibling") {
+        yield* fs.remove(destination, { recursive: true, force: true }).pipe(
+          Effect.mapError((e) => new CommitError({ destination, reason: "remove-failed", detail: String(e) })),
+        );
+      }
       return yield* produce(destination);
     })
     : atomic(outfile, produce, { onExists: options.onExists, prefix: options.prefix, staging });

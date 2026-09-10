@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Exit, FileSystem, Path } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import * as Commit from "effect-build/Commit";
-import { mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -260,5 +260,35 @@ describe("atomic output", () => {
       return yield* Artifact.directory(staged, producer);
     }), { prefix: ".release-" }, "sibling"));
     expect((await readdir(root)).sort()).toEqual(["bundle", "cli.txt"]);
+  });
+
+  it("commits a sibling-staged directory with a readable root", async () => {
+    const outdir = join(root, "bundle");
+    const artifact = await run(Commit.output(outdir, (staged) => Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      // Sibling staging hands the producer an existing directory; mkdtemp alone would have made it 0700.
+      expect(yield* fs.exists(staged)).toBe(true);
+      yield* fs.writeFileString(join(staged, "index.js"), "export {};\n");
+      return yield* Artifact.directory(staged, producer);
+    }), {}, "sibling"));
+    expect(artifact.path).toBe(outdir);
+    if (process.platform !== "win32") expect((await stat(outdir)).mode & 0o777).toBe(0o755);
+    expect(await readdir(outdir)).toEqual(["index.js"]);
+  });
+
+  it("empties the destination before direct sibling output", async () => {
+    const outdir = join(root, "bundle");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "stale.js"), "from an earlier build");
+    const artifact = await run(Commit.output(outdir, (out) => Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      expect(out).toBe(outdir);
+      expect(yield* fs.exists(out)).toBe(false);
+      yield* fs.makeDirectory(out);
+      yield* fs.writeFileString(join(out, "index.js"), "export {};\n");
+      return yield* Artifact.directory(out, producer);
+    }), { atomic: false }, "sibling"));
+    expect(artifact.entries.map((entry) => entry.path)).toEqual(["index.js"]);
+    expect(await readdir(outdir)).toEqual(["index.js"]);
   });
 });

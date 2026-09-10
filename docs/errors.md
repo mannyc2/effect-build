@@ -27,7 +27,8 @@ the end of the stream, which is why producers run them inside staged output. `Ex
 an executable result, and `Tool.requireVersion` checks a resolved tool's version.
 `Commit.atomic` runs production and validation in sibling staging before replacing
 the destination; `Commit.output` does the same unless `atomic: false`, which creates
-the destination's parent and lets the producer write the final path directly. File
+the destination's parent and lets the producer write the final path directly; a sibling-staged
+directory producer starts from an empty destination. File
 replacement is one rename. Directory replacement
 moves the old tree aside, then restores it if committing the new tree fails. Readers
 may see a brief absent destination between renames. If restoration fails,

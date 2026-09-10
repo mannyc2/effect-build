@@ -45,10 +45,11 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 
 - Directory replacement retains a recoverable old tree; regular-file no-replace uses exclusive hard-link creation, while directory no-replace is unsupported.
 - **Checksum paths are relative to their file's directory**, so a staged release tree can move without rewriting them.
-- **Directory archive inputs preserve descendant modes and symlinks**; the archive prefix has mode `0755` because directory artifacts do not record their root mode.
+- **Directory archive inputs preserve descendant modes and symlinks**; the archive prefix and a sibling-staged root have mode `0755` because directory artifacts do not record their root mode.
 
 - **Replace on exists by default.** Every producer takes `onExists: "fail"` and `prefix`; `staging` stays
-  the producer's, because files stage nested and import-bearing directories stage sibling.
+  the producer's, because files stage nested and import-bearing directories stage sibling. Direct sibling output
+  starts from an empty destination, so a record never holds an earlier build's files.
 - **No tool re-check before launch.** The hash at resolve time is a record, not a lock.
 - **No overwrite guard on executables' inputs.** `Artifact.verify` is opt-in.
 - **Inputs stream.** Hashing, verified copies, archives, wheels and Git source tars move 64 KiB at a
