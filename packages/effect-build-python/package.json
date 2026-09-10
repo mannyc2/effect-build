@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "effect-build": "workspace:^",
-    "fflate": "0.8.3"
+    "effect-build-archives": "workspace:^"
   },
   "peerDependencies": {
     "effect": ">=4.0.0-rc.108 <4.1.0-0"

@@ -16,6 +16,7 @@ and the complete [first build](getting-started.md). There are no compatibility a
 | Selected-command launch reauthentication                     | Resolve/hash/probe once through the provider layer; later launches use the resolved path.                                                                   |
 | Producer-owned release orchestration                         | Compose operations with `Effect.gen`, `Effect.forEach`, `Commit.atomic`, checksums and artifact records. Publishing belongs to the caller's release system. |
 | nFPM metadata fields at the top level                        | `Nfpm.package({ config: { name, version, arch, ...nativeConfig }, contents, format, outfile })`. Native lifecycle scripts/config keys are preserved.        |
+| Wheel ZIP32 limits reported as `Python.InputInvalid`         | `Python.wheel` fails with `Archive.FormatLimit` / `Archive.EntrySizeMismatch`; `effect-build-python` depends on `effect-build-archives`, whose `Zip.encode` writes both. |
 
 Core targets are `linux-x64`, `linux-x64-musl`, `linux-arm64`, `linux-arm64-musl`,
 `darwin-x64`, `darwin-arm64`, `windows-x64`, and `windows-arm64`. A Linux target

@@ -1,8 +1,8 @@
 import { Crypto, Effect, Encoding, FileSystem, Path, Stream } from "effect";
 import { Artifact, Commit, Target } from "effect-build";
+import { type EntrySizeMismatch, type FormatLimit, Zip } from "effect-build-archives";
 import packageMetadata from "../package.json" with { type: "json" };
 import { InputInvalid } from "./InputInvalid.js";
-import { encodeZip, type Entry, utf8Order, zipLimit } from "./internal/zip.js";
 
 export interface WheelMetadata {
   readonly name: string;
@@ -26,6 +26,14 @@ export interface WheelInput extends Commit.ProducerOptions {
 }
 
 const encoder = new TextEncoder();
+const utf8Order = (left: string, right: string): number => {
+  const a = encoder.encode(left), b = encoder.encode(right);
+  for (let index = 0; index < Math.min(a.byteLength, b.byteLength); index++) {
+    const delta = a[index]! - b[index]!;
+    if (delta !== 0) return delta;
+  }
+  return a.byteLength - b.byteLength;
+};
 const reject = (reason: string): never => { throw new InputInvalid({ reason }); };
 const number = (input: string | undefined): string => (input ?? "0").replace(/^0+(?=\d)/u, "");
 // PEP 440 accepts spelling/separator variants; normalize numbers as strings to preserve arbitrary precision.
@@ -120,34 +128,34 @@ const metadataEntries = (input: WheelInput) => {
   return { metadata: generated, record: `${info}/RECORD`, filename: `${stem}-${tags.python}-${tags.abi}-${tags.platform}.whl` };
 };
 
-export const wheel = Effect.fn("Python.wheel")((input: WheelInput): Effect.Effect<
-  Artifact.File, InputInvalid | Artifact.ArtifactError | Commit.CommitError,
-  FileSystem.FileSystem | Path.Path | Crypto.Crypto
-> => Effect.gen(function*() {
+type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+export type WheelError = InputInvalid | FormatLimit | EntrySizeMismatch | Artifact.ArtifactError | Commit.CommitError;
+
+export const wheel = Effect.fn("Python.wheel")((input: WheelInput): Effect.Effect<Artifact.File, WheelError, Fs> => Effect.gen(function*() {
   const prepared = yield* Effect.try({ try: () => metadataEntries(input), catch: (error) => error instanceof InputInvalid ? error : new InputInvalid({ reason: String(error) }) });
   const fs = yield* FileSystem.FileSystem, p = yield* Path.Path, crypto = yield* Crypto.Crypto;
-  const entries: Entry[] = [];
+  const entries: Zip.FileEntry<Artifact.ArtifactError, Fs>[] = [];
   const records: { readonly path: string; readonly line: string }[] = [];
   for (const entry of prepared.metadata) {
     const digest = yield* crypto.digest("SHA-256", entry.contents).pipe(Effect.orDie);
-    entries.push({ path: entry.path, mode: 0o644, bytes: entry.contents.byteLength, contents: Stream.make(entry.contents) });
+    entries.push({ kind: "file", path: entry.path, mode: 0o644, bytes: entry.contents.byteLength, contents: Stream.make(entry.contents) });
     records.push({ path: entry.path, line: `${csv(entry.path)},sha256=${Encoding.encodeBase64Url(digest)},${entry.contents.byteLength}` });
   }
   for (const entry of input.entries) {
     // The verified stream fails unless the wheel receives exactly the recorded bytes, so RECORD can cite the recorded digest.
-    entries.push({ path: entry.path, mode: (entry.executable ?? entry.artifact.kind === "executable") ? 0o755 : 0o644, bytes: entry.artifact.bytes, contents: Artifact.streamVerified(entry.artifact) });
+    entries.push({ kind: "file", path: entry.path, mode: (entry.executable ?? entry.artifact.kind === "executable") ? 0o755 : 0o644, bytes: entry.artifact.bytes, contents: Artifact.streamVerified(entry.artifact) });
     records.push({ path: entry.path, line: `${csv(entry.path)},sha256=${Encoding.encodeBase64Url(hexBytes(entry.artifact.sha256))},${entry.artifact.bytes}` });
   }
   const record = encoder.encode(`${records.sort((a, b) => utf8Order(a.path, b.path)).map((entry) => entry.line).join("\n")}\n${csv(prepared.record)},,\n`);
-  entries.push({ path: prepared.record, mode: 0o644, bytes: record.byteLength, contents: Stream.make(record) });
-  const limit = zipLimit(entries);
+  entries.push({ kind: "file", path: prepared.record, mode: 0o644, bytes: record.byteLength, contents: Stream.make(record) });
+  const limit = Zip.limit(entries);
   if (limit !== undefined) return yield* limit;
   const outfile = p.resolve(input.cwd ?? "", input.outdir, prepared.filename);
   const produce = (path: string) => Effect.gen(function*() {
     const failure = (error: unknown) => new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
     yield* Effect.scoped(Effect.gen(function*() {
       const file = yield* fs.open(path, { flag: "w" }).pipe(Effect.mapError(failure));
-      yield* encodeZip(entries, (chunk) => file.writeAll(chunk).pipe(Effect.mapError(failure)));
+      yield* Stream.runForEach(Zip.encode(entries), (chunk) => file.writeAll(chunk).pipe(Effect.mapError(failure)));
     }));
     return yield* Artifact.file(path, { name: packageMetadata.name, version: packageMetadata.version });
   });

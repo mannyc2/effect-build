@@ -27,5 +27,7 @@ libc version floors remain caller-supplied compatibility requirements.
 Wheel payloads stream from their artifacts in 64 KiB chunks, verified as they pass,
 and RECORD cites each artifact's recorded digest. Only ZIP32 limits apply: at most
 65,535 entries including generated metadata, 4 GiB per entry and per wheel, and
-entry names up to 65,535 UTF-8 bytes. These fail with `InputInvalid` before writing.
-Entries carry data descriptors; ZIP64 is not written.
+entry names up to 65,535 UTF-8 bytes. These fail with `Archive.FormatLimit` from
+`effect-build-archives`, whose `Zip.encode` writes the wheel, before writing; a payload
+that streams a different byte count than its artifact records fails with
+`Archive.EntrySizeMismatch`. Entries carry data descriptors; ZIP64 is not written.

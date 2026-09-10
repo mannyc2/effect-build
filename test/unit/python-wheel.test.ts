@@ -71,7 +71,7 @@ describe("wheels from real artifacts", () => {
   it("rejects ZIP32 entry overflow including generated wheel metadata", async () => {
     // 65533 payload entries plus METADATA, WHEEL and RECORD exceed the ZIP32 entry count.
     const entries = Array.from({ length: 65_533 }, (_, index) => ({ artifact: payload, path: `file-${index}` }));
-    expect(await run(Python.wheel({ ...input, entries }).pipe(Effect.flip))).toBeInstanceOf(Python.InputInvalid);
+    expect(await run(Python.wheel({ ...input, entries }).pipe(Effect.flip))).toMatchObject({ _tag: "ArchiveFormatLimit", format: "zip", limit: "entries", maximum: 65_535 });
     expect(await readdir(root)).toEqual(["payload"]);
   });
   it("compresses repeated input and retains valid RECORD hashes", async () => {
@@ -92,7 +92,7 @@ describe("wheels from real artifacts", () => {
 
   it("rejects an entry ZIP32 cannot hold before reading artifact payloads", async () => {
     const artifact = { ...payload, bytes: 0x1_0000_0000 };
-    expect(await run(Python.wheel({ ...input, entries: [{ artifact, path: "data" }] }).pipe(Effect.flip))).toBeInstanceOf(Python.InputInvalid);
+    expect(await run(Python.wheel({ ...input, entries: [{ artifact, path: "data" }] }).pipe(Effect.flip))).toMatchObject({ _tag: "ArchiveFormatLimit", format: "zip", limit: "entry-bytes", path: "data" });
     expect(await readdir(root)).toEqual(["payload"]);
   });
 
