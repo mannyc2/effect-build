@@ -20,9 +20,9 @@ export const normalizeEntryPath = (candidate: string, kind: Entry["kind"]): stri
 
 const canonical = (path: string): string => path.normalize("NFC").toLowerCase();
 
-export const validateLayout = (entries: readonly Entry[]): readonly Entry[] | InputInvalid => {
-  const indexed = new Map<string, Entry>();
-  const normalized: Entry[] = [];
+export const validateLayout = <E, R>(entries: ReadonlyArray<Entry<E, R>>): ReadonlyArray<Entry<E, R>> | InputInvalid => {
+  const indexed = new Map<string, Entry<E, R>>();
+  const normalized: Entry<E, R>[] = [];
   for (const entry of entries) {
     const path = normalizeEntryPath(entry.path, entry.kind);
     if (typeof path !== "string") return path;

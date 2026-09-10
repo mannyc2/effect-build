@@ -1,9 +1,10 @@
 import { standaloneProgram } from "../fixtures/standalone-program.js";
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { Artifact } from "effect-build";
 import * as Archive from "effect-build-archives";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,6 +30,10 @@ const extract = async (format: typeof formats[number], archive: string, director
 };
 const git = async (repository: string, args: readonly string[]) =>
   (await execute(gitExecutable ?? "git", [...args], { cwd: repository })).stdout.trim();
+/** 200,000 bytes that neither repeat nor compress away, so DEFLATE block boundaries matter. */
+const largePayload = Buffer.alloc(200_000, 0).map((_, index) => (index * 7919) & 0xff);
+const pinned = { zip: "3afa1bda0aec2f5c36411189bb1c4e83ed3988a273b0dc4633b19f4f577dbe2a" };
+const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 let root: string;
 let payload: Artifact.File;
 beforeEach(async () => {
@@ -81,11 +86,12 @@ describe("archives from real files", () => {
   });
 
   it.each([
-    ["zip", "3afa1bda0aec2f5c36411189bb1c4e83ed3988a273b0dc4633b19f4f577dbe2a"],
-    ["tar.gz", "19829513c071bf50c0b0c578f347dd81a0f1808609b4c2c8c778c93d001eb964"],
+    ["zip", pinned.zip],
+    // Changed once, in 0.7: gzip now sees the tar in 64 KiB pieces instead of one push per header or payload chunk.
+    ["tar.gz", "ff0200c272dcbd0f12bca15bf503c730b36de663ce9fa46ec9362df1915c6491"],
   ] as const)("writes the same %s bytes as the previous release for a fixed input", async (format, sha256) => {
     // A changed digest here is a format change: extractors still work, but persisted checksums no longer match.
-    await writeFile(join(root, "large"), Buffer.alloc(200_000, 0).map((_, index) => (index * 7919) & 0xff));
+    await writeFile(join(root, "large"), largePayload);
     const large = await run(Artifact.file(join(root, "large"), payload.producedBy));
     const entries = [
       { artifact: payload, path: "docs/café.txt" },
@@ -363,4 +369,60 @@ describe("archives from a Git tree", () => {
       expect((await readlink(join(project, "short.link"))).normalize("NFC")).toBe("café.txt");
     }
   }, 15_000);
+});
+
+describe("Zip.encode", () => {
+  const small = new TextEncoder().encode("archive payload\n");
+  const collect = (stream: Stream.Stream<Uint8Array, unknown>) =>
+    Effect.runPromise(Stream.runCollect(stream).pipe(Effect.map((chunks) => Buffer.concat(chunks))));
+  const chunked = (bytes: Uint8Array, size: number) =>
+    Stream.fromIterable(Array.from({ length: Math.ceil(bytes.byteLength / size) }, (_, index) => bytes.subarray(index * size, (index + 1) * size)));
+  const entries = (size: number): Archive.Zip.FileEntry[] => [
+    { kind: "file", path: "docs/café.txt", mode: 0o644, bytes: small.byteLength, contents: chunked(small, size) },
+    { kind: "file", path: `${"long-".repeat(28)}/payload.bin`, mode: 0o644, bytes: largePayload.byteLength, contents: chunked(largePayload, size) },
+    { kind: "file", path: "bin/tool", mode: 0o755, bytes: small.byteLength, contents: chunked(small, size) },
+  ];
+
+  it.each([1, 7, 4096, 64 * 1024, 200_000])("writes the pinned bytes when payloads arrive in %d-byte chunks", async (size) => {
+    expect(sha256(await collect(Archive.Zip.encode(entries(size))))).toBe(pinned.zip);
+  });
+
+  it("compresses afresh on every run of the same stream", async () => {
+    const stream = Archive.Zip.encode(entries(4096));
+    expect(sha256(await collect(stream))).toBe(pinned.zip);
+    expect(sha256(await collect(stream))).toBe(pinned.zip);
+  });
+
+  it.each([-1, 1])("fails with the counted bytes when a payload is off by %d", async (delta) => {
+    const [first, ...rest] = entries(4096);
+    const stream = Archive.Zip.encode([{ ...first!, bytes: small.byteLength + delta }, ...rest]);
+    expect(await Effect.runPromise(Stream.runCollect(stream).pipe(Effect.flip))).toMatchObject({
+      _tag: "ArchiveEntrySizeMismatch", path: "docs/café.txt", expected: small.byteLength + delta, actual: small.byteLength,
+    });
+  });
+
+  it("fails with the limit that Zip.limit reports before emitting anything", async () => {
+    const many: Archive.Zip.Entry[] = Array.from({ length: 65_536 }, (_, index) => ({ kind: "file", path: `file-${index}`, mode: 0o644, bytes: 0, contents: Stream.empty }));
+    const limit = { _tag: "ArchiveFormatLimit", format: "zip", limit: "entries", maximum: 65_535 };
+    expect(Archive.Zip.limit(many)).toMatchObject(limit);
+    const emitted: Uint8Array[] = [];
+    const stream = Archive.Zip.encode(many).pipe(Stream.tap((chunk) => Effect.sync(() => emitted.push(chunk))));
+    expect(await Effect.runPromise(Stream.runCollect(stream).pipe(Effect.flip))).toMatchObject(limit);
+    expect(emitted).toEqual([]);
+  });
+
+  it.skipIf(windows)("writes directories and symlinks that unzip restores", async () => {
+    const outfile = join(root, "tree.zip");
+    await writeFile(outfile, await collect(Archive.Zip.encode([
+      { kind: "directory", path: "app", mode: 0o750 },
+      { kind: "file", path: "app/data.txt", mode: 0o640, bytes: small.byteLength, contents: Stream.make(small) },
+      { kind: "symlink", path: "app/current", mode: 0o777, target: "data.txt" },
+    ])));
+    const directory = join(root, "extracted");
+    await extract("zip", outfile, directory);
+    expect(await readFile(join(directory, "app/data.txt"), "utf8")).toBe("archive payload\n");
+    expect(await readlink(join(directory, "app/current"))).toBe("data.txt");
+    expect((await stat(join(directory, "app"))).mode & 0o777).toBe(0o750);
+    expect((await stat(join(directory, "app/data.txt"))).mode & 0o777).toBe(0o640);
+  });
 });

@@ -33,6 +33,16 @@ The only size limits are the formats' own: ZIP32 holds 65,535 entries and 4 GiB 
 entry and per archive, and ustar holds 8 GiB per entry. These fail with
 `Archive.FormatLimit` before any output is staged; switch to `tarGz` when a ZIP32
 field is the problem. ZIP64 and PAX size records are not written. `source` streams
-file payloads out of the temporary Git tar rather than reading it whole.
+file payloads out of the temporary Git tar rather than reading it whole. An entry whose
+stream delivers a different byte count than its record fails with `Archive.EntrySizeMismatch`,
+and a Git export the reader cannot decode fails with `Archive.TarInvalid`.
+
+`Zip.encode(entries)` is the ZIP encoder itself as a `Stream<Uint8Array>`, for callers that
+assemble their own entries (`effect-build-python` writes wheels with it). Entries are `file`
+(with `bytes` and a `contents` stream), `directory`, or `symlink` (with `target`); the stream
+fails with the caller's stream errors, `FormatLimit`, or `EntrySizeMismatch`, and is safe to run
+more than once. `Zip.limit(entries)` returns the `FormatLimit` that `encode` would fail with
+first, for checking before any output is staged. Payloads are compressed in 64 KiB pieces
+regardless of how their streams chunk them, so the bytes depend only on the entries.
 
 [Setup and atomic output](../../docs/getting-started.md) · [Tool versions](../../docs/providers.md) · [Errors](../../docs/errors.md)

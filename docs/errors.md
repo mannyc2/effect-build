@@ -19,6 +19,8 @@ their `reason`.
 | `Executable.TargetMismatch` | `path`, `expected`, `observed`: header differs from requested target                           |
 | `Commit.CommitError`        | `destination`, `reason`, optional `recoveryPath`: staging, commit, or restoration failed       |
 | `Archive.FormatLimit`       | `format`, `limit`, `maximum`, optional `path`: valid input exceeds a ZIP32 or ustar field       |
+| `Archive.EntrySizeMismatch` | `path`, `expected`, `actual`: an entry's stream delivered a different byte count than its record |
+| `Archive.TarInvalid`        | `path`, `offset`, `detail`: the tar that `git archive` exported could not be decoded            |
 
 `Artifact.verify` checks the current file or directory against its record;
 `Artifact.readVerified` returns checked file bytes. `Artifact.streamVerified` and
