@@ -1,33 +1,76 @@
 # effect-build-python
 
-`build({ project, outdir })` returns `{ wheel: Artifact.File, sdist: Artifact.File }`.
-Provide platform services and `Python.layer({ executable?, version? })` for uv.
-`supported` is `>=0.12.0 <1.0.0`; CI tests 0.12.0. uv builds the sdist, then its wheel using the project backend.
-Exactly one wheel and one `.tar.gz` sdist must exist; clean stale distributions
-before changing versions with `atomic: false`.
+Write Python wheels directly from artifacts, or build a Python project's sdist and wheel with
+[uv](https://docs.astral.sh/uv/), as Effect programs. The wheel writer needs no Python; it is how
+a native CLI reaches `pip install`.
 
-`wheel({ metadata, tags, entries, outdir })` writes a wheel from regular artifacts
-using platform services, **without Python, uv, or a tool layer**. It verifies inputs
-and creates METADATA, WHEEL, and SHA-256 RECORD files plus optional entry points.
+```sh
+npm install --save-dev --save-exact effect-build-python@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+```
 
-Put a native executable at `<normalized-name>-<normalized-version>.data/scripts/<command>`
-to install it into the Python environment's command directory. For example,
-`effect_build_hello-0.7.0.data/scripts/hello` needs no Python wrapper; use `hello.exe`
-on Windows. Keep wheel platform tags explicit: the binary's target alone does not
-establish its minimum macOS version or manylinux compatibility.
+## Wheels from artifacts
 
-[Setup and atomic output](../../docs/getting-started.md) · [Providers](../../docs/providers.md) · [Errors](../../docs/errors.md)
+```ts
+import * as Python from "effect-build-python";
 
-Wheels use deterministic DEFLATE at level 6, with fixed timestamps and sorted
-entries. Every advertised platform tag must support each executable artifact's
-OS and architecture; `any` and universal tags cannot describe a thin native
-executable. Linux ABI tags must agree with the artifact target. Deployment OS and
-libc version floors remain caller-supplied compatibility requirements.
+const wheel = (executable: Artifact.Executable) =>
+  Python.wheel({
+    metadata: { name: "hello-cli", version: "1.0.0", summary: "Hello CLI", requiresPython: ">=3.9" },
+    tags: { python: "py3", abi: "none", platform: "manylinux_2_17_x86_64" },
+    entries: [{ artifact: executable, path: "hello_cli-1.0.0.data/scripts/hello" }],
+    outdir: "dist/wheels",
+  });
+```
 
-Wheel payloads stream from their artifacts in 64 KiB chunks, verified as they pass,
-and RECORD cites each artifact's recorded digest. Only ZIP32 limits apply: at most
-65,535 entries including generated metadata, 4 GiB per entry and per wheel, and
-entry names up to 65,535 UTF-8 bytes. These fail with `Archive.FormatLimit` from
-`effect-build-archives`, whose `Zip.encode` writes the wheel, before writing; a payload
-that streams a different byte count than its artifact records fails with
-`Archive.EntrySizeMismatch`. Entries carry data descriptors; ZIP64 is not written.
+`wheel({ metadata, tags, entries, outdir, cwd?, rootIsPurelib?, entryPoints?, atomic?, onExists?, prefix? })`
+writes `<name>-<version>-<python>-<abi>-<platform>.whl` into `outdir` and returns it as an
+`Artifact.File`. It generates `METADATA`, `WHEEL`, and a `RECORD` whose digests come from each
+artifact's record, plus `entry_points.txt` when `entryPoints` is given.
+
+- **Native commands.** An entry at `<name>-<version>.data/scripts/<command>` (name and version
+  normalized: `hello_cli-1.0.0`) is installed onto the environment's command path, so the user gets
+  `hello` with no Python wrapper. Use `hello.exe` for Windows wheels.
+- **Metadata.** `name` is normalized per PEP 503 and `version` per PEP 440; `summary`, `license`,
+  `requiresPython`, and `projectUrls` are optional.
+- **Tags.** `python`, `abi`, and `platform` may each be a dot-separated set. Every platform tag
+  must be able to run every executable entry: `win_amd64` and `win_arm64`; `macosx_<major>_<minor>_arm64`
+  and `_x86_64`; `linux_x86_64` and `linux_aarch64`; `manylinux*` for glibc binaries; `musllinux*`
+  for musl binaries. `any` cannot describe a native executable. The minimum macOS version and the
+  manylinux or musllinux floor are promises only you can make.
+- **Entries** are regular artifacts. Executables get mode `0755`, or set `executable: true`.
+  `.dist-info` entries belong to the writer, and paths that collide after case folding or NFC
+  normalization are rejected.
+- `rootIsPurelib` defaults to true only for `abi: "none"` with `platform: "any"`. `entryPoints`
+  takes groups such as `{ console_scripts: { hello: "hello_cli.cli:main" } }`.
+
+Wheel bytes depend only on the inputs: DEFLATE level 6, fixed timestamps, sorted entries.
+Payloads stream from their artifacts in 64 KiB chunks and are verified as they pass. The only
+size limits are ZIP32's (65,535 entries including generated metadata, 4 GiB per entry and per
+wheel, names up to 65,535 bytes), reported as `ArchiveFormatLimit` before writing; a payload
+that streams a different byte count than its record fails with `ArchiveEntrySizeMismatch`. Both
+come from `effect-build-archives`, whose `Zip.encode` writes the wheel.
+
+## Projects with uv
+
+```ts
+const built = Python.build({ project: "python/hello", outdir: "dist/python" }).pipe(
+  Effect.provide(Python.layer({ executable: process.env.EFFECT_BUILD_UV_BIN })),
+);
+```
+
+`build({ project, outdir, atomic?, onExists?, prefix? })` runs `uv build`, which builds the sdist
+and then the wheel from it with the project's own build backend, and returns
+`{ wheel: Artifact.File, sdist: Artifact.File }`. Exactly one wheel and one `.tar.gz` sdist must
+result. `Python.layer({ executable?, version? })` resolves uv: `Python.supported` is
+`>=0.12.0 <1.0.0` and `Python.tested` is 0.12.0. With `atomic: false`, clean stale distributions
+out of `outdir` before changing versions.
+
+## Errors
+
+`Python.WheelError` is `InputInvalid` (tag `PythonInputInvalid`), `ArchiveFormatLimit`,
+`ArchiveEntrySizeMismatch`, `Artifact.ArtifactError`, or `Commit.CommitError`. `Python.BuildError`
+is `InputInvalid`, the `Tool` errors, `Artifact.ArtifactError`, or `Commit.CommitError`.
+
+[Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
+[Tools and providers](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md) ·
+[Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)

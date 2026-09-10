@@ -25,8 +25,11 @@ Archives, wheels, verified copies and Git source tars stream their inputs in 64 
 chunks through `Artifact.streamVerified` and `Artifact.copyVerified`; nothing buffers a
 whole file except `Artifact.readVerified`. The 512 MiB input cap and the `limits` exports
 are gone. ZIP32 and ustar field widths are the only size limits, reported as
-`Archive.FormatLimit` (archives) or `InputInvalid` (wheels) before any output is staged,
-and tar.gz no longer inherits ZIP's entry count. ZIP entries carry data descriptors.
+`Archive.FormatLimit` before any output is staged, and tar.gz no longer inherits ZIP's entry
+count. One streaming ZIP encoder, `Archive.Zip.encode`, writes both archives and wheels:
+`effect-build-python` depends on `effect-build-archives`, and `Python.wheel` fails with
+`Archive.FormatLimit` or `Archive.EntrySizeMismatch` instead of its own `InputInvalid`. ZIP
+entries carry data descriptors.
 
 Effect peer ranges accept `>=4.0.0-rc.108 <4.1.0-0`, the shape Effect's platform packages use;
 4.0.0-rc.108 stays the tested version and a non-gating CI consumer observes the `rc` dist-tag.
@@ -42,7 +45,30 @@ reference, since Apple cannot staple standalone binaries, and `Apple.pkg` puts o
 that lands in `/usr/local/bin`. `Windows.sign` accepts Azure Trusted
 Signing credentials. An on-demand signing workflow runs both credentialed paths on real identities.
 
-Upgrade instructions: [0.6 to 0.7 migration](docs/migration-0.7.md).
+### Upgrading from 0.6
+
+0.7 replaces 0.6 rather than extending it: there are no compatibility aliases. Update every
+effect-build package together, install `effect`, `@effect/platform-node`, and
+`@effect/platform-node-shared` at one 4.0 release candidate (rc.108 is tested), and import from
+ESM. [Getting started](docs/getting-started.md) has the complete first build.
+
+| 0.6                                                          | 0.7                                                                                                                                                      |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bun and Deno `Command/*` and `Api/*` modules                 | Package-root `compile`, `bundle`, `watch` (Bun adds `build`, Deno adds `transpile`) with `layer({ executable?, version? })`; native APIs at `effect-build-bun/api` and `effect-build-deno/api`. |
+| esbuild `Api/*` and selected-command wrappers                | Package-root `build`, `buildToDirectory`, `transform`, and scoped `context`. CLI wrappers are gone.                                                     |
+| Private Rolldown implementation                              | Public `effect-build-rolldown` with `buildToDirectory`, scoped builders, and a watch stream.                                                             |
+| Hashed and unhashed identities, decimal byte strings         | `Artifact.File`, `Artifact.Executable`, `Artifact.Directory`; `bytes` is a number and `sha256` is always present.                                        |
+| Admission, finalization, and adoption operations; `Author/*` | `Artifact.file`, `Artifact.executable`, `Artifact.directory` record real paths; `Artifact.verify` checks them later; `Artifact.encode`/`decode` carry core records as JSON. |
+| Launch reauthentication                                      | The provider layer resolves, hashes, and probes once; later launches use the recorded path.                                                              |
+| Producer-owned release orchestration                         | Compose operations with `Effect.gen`, `Effect.forEach`, `Commit.atomic`, checksums, and artifact records. Publishing belongs to the caller's release system. |
+| nFPM metadata fields at the top level                        | `Nfpm.package({ config: { name, version, arch, ...nativeConfig }, contents, format, outfile })`.                                                           |
+| GNU/Linux descriptors and native triples                     | Eight core targets; Linux without `-musl` means glibc. Bun and Deno still accept their native names. Windows outputs must already end in lowercase `.exe`. |
+| Wheel ZIP32 limits as `Python.InputInvalid`                  | `Archive.FormatLimit` and `Archive.EntrySizeMismatch` from `effect-build-archives`.                                                                       |
+
+Every producer accepts `atomic`, `onExists`, and `prefix`; `Commit.atomic(..., { staging: "sibling" })`
+wraps a release directory that holds bundles so relative imports and source maps keep their
+depth. `Artifact.encode` intentionally drops provider refinements (Windows signatures, Deno
+runtime records, Apple products and tickets); persist those with the provider's exported schema.
 
 ## 0.6.3
 

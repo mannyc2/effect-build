@@ -57,8 +57,8 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
   output is provisional until then and only atomic staging makes that safe. The only size limits are
   ZIP32 and ustar field widths, typed as `Archive.FormatLimit`; there is no byte budget to tune.
 - **Static Linux binaries report as glibc** when no target is requested.
-- **Two zip encoders** (archives, python wheel). Cheaper than a shared package until a
-  third consumer appears.
+- **One streaming ZIP encoder.** `Archive.Zip.encode` writes archives and wheels; `effect-build-python`
+  depends on `effect-build-archives` for it, so both share the same limits and verified streams.
 - **Bun forces lowercase `.exe` on Windows outputs**, so callers' `outfile` must end in `.exe`
   for Windows targets; the provider rejects otherwise rather than renaming.
 - **Tested versions are evidence, not compatibility gates.** Bun 1.4.1 is rejected only for emitted builds; native APIs retain independent capability checks.
