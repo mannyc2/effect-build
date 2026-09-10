@@ -69,4 +69,56 @@ it.skipIf(process.platform === "win32")("escapes newlines and backslashes exactl
   expect(await readFile(checksum.path, "utf8")).toBe(native.stdout);
   const checked = await execute(command, [...args, "-c", checksum.path], options);
   expect(checked.stdout.match(/: OK/g)).toHaveLength(2);
+  await run(Checksums.verify(checksum));
+});
+
+it("verifies listed files after the tree moves and pinpoints the failing path", async () => {
+  const armPath = join(root, "dist", "arm64", "cli");
+  const x64Path = join(root, "dist", "x64", "cli");
+  await writeFile(armPath, "arm executable\n");
+  await writeFile(x64Path, "x64 executable\n");
+  const arm = await run(Artifact.file(armPath, producer));
+  const x64 = await run(Artifact.file(x64Path, producer));
+  const sums = await run(Checksums.write({ artifacts: [arm, x64], outfile: join(root, "dist", "SHA256SUMS") }));
+  await run(Checksums.verify(sums));
+  const moved = join(root, "release");
+  await rename(join(root, "dist"), moved);
+  const relocated = await run(Artifact.file(join(moved, "SHA256SUMS"), producer));
+  await run(Checksums.verify(relocated));
+  await writeFile(join(moved, "x64", "cli"), "tampered\n");
+  expect(await run(Checksums.verify(relocated).pipe(Effect.flip))).toMatchObject({ reason: "changed", path: join(moved, "x64", "cli") });
+  await rm(join(moved, "arm64", "cli"));
+  expect(await run(Checksums.verify(relocated).pipe(Effect.flip))).toMatchObject({ reason: "not-found", path: join(moved, "arm64", "cli") });
+  await writeFile(relocated.path, "0", { flag: "a" });
+  expect(await run(Checksums.verify(relocated).pipe(Effect.flip))).toMatchObject({ reason: "changed", path: relocated.path });
+});
+
+it.skipIf(process.platform === "win32")("verifies names that need escaping", async () => {
+  const paths = [join(root, "line\nbreak.txt"), join(root, "back\\slash.txt")];
+  const artifacts: Artifact.File[] = [];
+  for (const path of paths) {
+    await writeFile(path, "checksum payload\n");
+    artifacts.push(await run(Artifact.file(path, producer)));
+  }
+  const checksum = await run(Checksums.write({ artifacts, outfile: join(root, "dist", "SHA256SUMS") }));
+  await run(Checksums.verify(checksum));
+});
+
+it("rejects listings that are not exactly checksum lines", async () => {
+  const digest = createHash("sha256").update("").digest("hex");
+  await writeFile(join(root, "dist", "empty"), "");
+  for (const contents of [
+    `${digest} empty\n`,
+    `${digest}  empty\n${digest}  empty\n`,
+    `${digest}  empty`,
+    `${digest}  empty\r\n`,
+    `${"g".repeat(64)}  empty\n`,
+    `${digest}  back\\slash\n`,
+    `\\${digest}  bad\\escape\n`,
+  ]) {
+    const path = join(root, "dist", "LIST");
+    await writeFile(path, contents);
+    const listing = await run(Artifact.file(path, producer));
+    expect(await run(Checksums.verify(listing).pipe(Effect.flip))).toMatchObject({ path, reason: "invalid-metadata" });
+  }
 });
