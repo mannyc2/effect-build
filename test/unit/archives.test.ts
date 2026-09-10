@@ -80,6 +80,22 @@ describe("archives from real files", () => {
     expect(await readFile(join(directory, "large.txt"), "utf8")).toBe("x".repeat(1024 * 1024));
   });
 
+  it.each([
+    ["zip", "3afa1bda0aec2f5c36411189bb1c4e83ed3988a273b0dc4633b19f4f577dbe2a"],
+    ["tar.gz", "19829513c071bf50c0b0c578f347dd81a0f1808609b4c2c8c778c93d001eb964"],
+  ] as const)("writes the same %s bytes as the previous release for a fixed input", async (format, sha256) => {
+    // A changed digest here is a format change: extractors still work, but persisted checksums no longer match.
+    await writeFile(join(root, "large"), Buffer.alloc(200_000, 0).map((_, index) => (index * 7919) & 0xff));
+    const large = await run(Artifact.file(join(root, "large"), payload.producedBy));
+    const entries = [
+      { artifact: payload, path: "docs/café.txt" },
+      { artifact: large, path: `${"long-".repeat(28)}/payload.bin` },
+      { artifact: payload, path: "bin/tool", executable: true },
+    ];
+    const archived = await run(pack(format, { entries, outfile: join(root, `pinned.${format}`) }));
+    expect(archived.sha256).toBe(sha256);
+  });
+
   it.each([["zip", 0x1_0000_0000], ["tar.gz", 0o100000000000]] as const)("rejects an entry %s cannot represent before reading artifact contents", async (format, bytes) => {
     const artifact = { ...payload, bytes };
     const failure = await run(pack(format, { entries: [{ artifact, path: "data" }], outfile: join(root, "output") }).pipe(Effect.flip));
