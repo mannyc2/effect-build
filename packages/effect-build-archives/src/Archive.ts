@@ -96,7 +96,8 @@ const archive = (format: Format, input: ArchiveInput): Effect.Effect<Artifact.Fi
       if (tree.sha256 !== artifact.sha256 || tree.bytes !== artifact.bytes) {
         return yield* new Artifact.ArtifactError({ path: tree.path, reason: "changed" });
       }
-      // The artifact records descendant modes, so give the newly introduced archive root a fixed mode.
+      // The archive root is the archive's own object, named by the caller rather than
+      // taken from the tree, so it gets a fixed portable mode instead of the recorded rootMode.
       entries.push({ kind: "directory", path, mode: 0o755 });
       for (const child of tree.entries) {
         const childPath = normalizeEntryPath(`${path}/${child.path}`, child.kind);

@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Stream } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -149,6 +149,9 @@ describe("artifacts from real files", () => {
     ]) expect(() => Artifact.decode([{ ...directory, entries: [invalid] }])).toThrow();
     expect(() => Artifact.decode([{ ...directory, entries: [entry, entry] }])).toThrow();
     expect(() => Artifact.decode([{ ...directory, bytes: directory.bytes + 1 }])).toThrow();
+    for (const rootMode of [-1, 0.5, 0o10000]) expect(() => Artifact.decode([{ ...directory, rootMode }])).toThrow();
+    const { rootMode: _rootMode, ...missingRootMode } = directory;
+    expect(() => Artifact.decode([missingRootMode])).toThrow();
     const changedManifest = { ...directory, entries: [{ ...entry, mode: entry.mode === 0o644 ? 0o755 : 0o644 }] };
     expect(() => Artifact.decode([changedManifest])).toThrow();
     expect(await run(Artifact.verify(changedManifest).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata" });
@@ -248,5 +251,30 @@ describe("directory manifests", () => {
       path: "missing-link", kind: "symlink", bytes: 0, linkTarget: await readlink(link),
     });
     expect(artifact.bytes).toBe(0);
+  });
+
+  it("records the root's own mode and round-trips it through the manifest", async () => {
+    await writeFile(join(root, "member.txt"), "kept");
+    const artifact = await run(Artifact.directory(root, producer));
+    expect(Number.isInteger(artifact.rootMode)).toBe(true);
+    expect(artifact.rootMode).toBeGreaterThanOrEqual(0);
+    expect(artifact.rootMode).toBeLessThanOrEqual(0o7777);
+    expect(Artifact.decode(JSON.parse(JSON.stringify(Artifact.encode([artifact]))))).toEqual([artifact]);
+  });
+
+  it.skipIf(process.platform === "win32")("rejects root mode drift the entry manifest cannot see", async () => {
+    const tree = join(root, "tree");
+    await mkdir(tree);
+    await writeFile(join(tree, "member.txt"), "kept");
+    await chmod(tree, 0o750);
+    const artifact = await run(Artifact.directory(tree, producer));
+    expect(artifact.rootMode).toBe(0o750);
+    expect(await run(Artifact.verify(artifact))).toBe(artifact);
+    await chmod(tree, 0o700);
+    expect(await run(Artifact.verify(artifact).pipe(Effect.flip))).toMatchObject({ reason: "changed", path: tree });
+    const drifted = await run(Artifact.directory(tree, producer));
+    expect(drifted.rootMode).toBe(0o700);
+    // The digest still names only the entry manifest; the root's mode travels beside it.
+    expect(drifted.sha256).toBe(artifact.sha256);
   });
 });

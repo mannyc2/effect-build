@@ -5,6 +5,7 @@ import { parts, Target } from "./Target.js";
 
 const Bytes = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
 const Digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+const Mode = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(0o7777));
 
 export const Producer = Schema.Struct({
   name: Schema.NonEmptyString,
@@ -36,7 +37,7 @@ const EntryCommon = {
   path: Schema.NonEmptyString.check(Schema.makeFilter((path) =>
     !path.includes("\0") && !path.startsWith("/") && path.split("/").every((part) => part !== "" && part !== "." && part !== "..")
       ? undefined : "entry path must be a normalized relative path")),
-  mode: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(0o7777)),
+  mode: Mode,
 };
 /** Each kind has exactly the metadata that describes its filesystem object. */
 export const Entry = Schema.Union([
@@ -57,10 +58,13 @@ const manifestDigest = (entries: readonly Entry[]): string => {
   return Encoding.encodeHex(hash.update(encoder.encode("]")).digest());
 };
 
-/** `sha256` of a directory is the hash of its sorted entry manifest. */
+/** `sha256` of a directory is the hash of its sorted entry manifest. The root's
+ * own mode travels beside the digest — like an executable's target — and verify
+ * checks both. */
 export const Directory = Schema.Struct({
   kind: Schema.Literal("directory"),
   ...Common,
+  rootMode: Mode,
   entries: Schema.Array(Entry),
 }).check(Schema.makeFilter((value) => {
   let bytes = 0, previous: string | undefined;
@@ -207,6 +211,7 @@ export const directory = (root: string, producedBy: Producer): Effect.Effect<Dir
       bytes: total,
       sha256: manifestDigest(entries),
       producedBy,
+      rootMode: info.mode & 0o7777,
       entries,
     };
   });
@@ -231,7 +236,8 @@ export const verify = <A extends Artifact>(artifact: A): Effect.Effect<A, Artifa
     const current = artifact.kind === "directory"
       ? yield* directory(artifact.path, artifact.producedBy)
       : yield* file(artifact.path, artifact.producedBy);
-    if (current.sha256 !== artifact.sha256 || current.bytes !== artifact.bytes) {
+    const rootChanged = artifact.kind === "directory" && current.kind === "directory" && current.rootMode !== artifact.rootMode;
+    if (current.sha256 !== artifact.sha256 || current.bytes !== artifact.bytes || rootChanged) {
       return yield* new ArtifactError({ path: artifact.path, reason: "changed" });
     }
     if (artifact.kind === "executable") yield* checkTarget(artifact, Inspect.inspect(artifact.path));
