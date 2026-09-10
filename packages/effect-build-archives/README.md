@@ -38,9 +38,10 @@ archive.
   and symlinks, which are recorded and never followed. Each directory prefix has mode `0755`.
   Directory entries do not accept `executable`.
 - Paths use `/`, are relative, and contain no empty, `.`, or `..` segments. They must be distinct
-  after case folding and NFC normalization, because the archive ships to every OS, and no entry
-  may descend through a file. Violations fail with `ArchiveInputInvalid` before anything is
-  written.
+  after case folding and NFC normalization, including every implicit directory: `Docs/a` and
+  `docs/b` conflict too. No entry may descend through a file or symlink. Core `Layout.validate`
+  owns these shared shipping guarantees. Violations fail with `ArchiveInputInvalid` before
+  anything is written.
 
 ## Reproducibility
 

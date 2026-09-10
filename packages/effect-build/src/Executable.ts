@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, PlatformError, Schema } from "effect";
 import type * as Artifact from "./Artifact.js";
 import * as Target from "./Target.js";
 
@@ -30,9 +30,10 @@ export class ParseError extends Schema.TaggedError<ParseError>()("ExecutablePars
 export class InspectError extends Schema.TaggedError<InspectError>()("ExecutableInspectError", {
   path: Schema.String,
   reason: Schema.Literals([...Reason.literals, "not-found", "unreadable"] as const),
+  detail: Schema.optionalKey(Schema.String),
 }) {
   override get message(): string {
-    return `${this.reason}: ${this.path}`;
+    return `${this.reason}: ${this.path}${this.detail === undefined ? "" : ` (${this.detail})`}`;
   }
 }
 
@@ -81,28 +82,40 @@ function* read(offset: number, length: number, size: number): Generator<Range, U
   return yield { offset, length };
 }
 
+// ELF64 header and program-header fields; offsets are relative to each record.
+const elfHeader = { size: 64, class: 4, endian: 5, identVersion: 6, type: 16, machine: 18, version: 20, programOffset: 32, headerSize: 52, programEntrySize: 54, programCount: 56 } as const;
+const elfProgram = { size: 56, type: 0, fileOffset: 8, fileSize: 32, memorySize: 40 } as const;
+const elfMachine = { x64: 62, arm64: 183 } as const;
+const elfLoad = 1;
+const elfInterpreter = 3;
+
 function* elf(size: number): Inspection {
-  const b = yield* read(0, 64, size);
-  if (b[4] !== 2 || (b[5] !== 1 && b[5] !== 2) || b[6] !== 1) fail("invalid-header");
-  const le = b[5] === 1;
-  if (![2, 3].includes(u16(b, 16, le)) || u32(b, 20, le) !== 1 || u16(b, 52, le) !== 64) fail("invalid-header");
-  const machine = u16(b, 18, le);
-  const arch = machine === 62 ? "x64" : machine === 183 ? "arm64" : undefined;
+  const b = yield* read(0, elfHeader.size, size);
+  if (b[elfHeader.class] !== 2 || (b[elfHeader.endian] !== 1 && b[elfHeader.endian] !== 2) || b[elfHeader.identVersion] !== 1) fail("invalid-header");
+  const le = b[elfHeader.endian] === 1;
+  if (![2, 3].includes(u16(b, elfHeader.type, le)) || u32(b, elfHeader.version, le) !== 1 || u16(b, elfHeader.headerSize, le) !== elfHeader.size) fail("invalid-header");
+  const machine = u16(b, elfHeader.machine, le);
+  const arch = machine === elfMachine.x64 ? "x64" : machine === elfMachine.arm64 ? "arm64" : undefined;
   if (arch === undefined) fail("unsupported-machine");
-  const phoff = u64(b, 32, le), phentsize = u16(b, 54, le), phnum = u16(b, 56, le);
-  if (phoff < 64 || phnum === 0 || phnum > 4096 || phentsize !== 56) fail("invalid-header");
+  const phoff = u64(b, elfHeader.programOffset, le);
+  const phentsize = u16(b, elfHeader.programEntrySize, le);
+  const phnum = u16(b, elfHeader.programCount, le);
+  if (phoff < elfHeader.size || phnum === 0 || phnum > 4096 || phentsize !== elfProgram.size) fail("invalid-header");
   const table = yield* read(phoff, phentsize * phnum, size);
   let abi: Target.Abi | undefined;
-  let hasInterpreter = false, hasLoad = false;
+  let hasInterpreter = false;
+  let hasLoad = false;
   for (let i = 0; i < phnum; i++) {
-    const e = i * phentsize, type = u32(table, e, le);
-    const off = u64(table, e + 8, le), len = u64(table, e + 32, le);
+    const e = i * phentsize;
+    const type = u32(table, e + elfProgram.type, le);
+    const off = u64(table, e + elfProgram.fileOffset, le);
+    const len = u64(table, e + elfProgram.fileSize, le);
     bounds(off, len, size);
-    if (type === 1) {
-      if (u64(table, e + 40, le) < len) fail("invalid-header");
+    if (type === elfLoad) {
+      if (u64(table, e + elfProgram.memorySize, le) < len) fail("invalid-header");
       hasLoad ||= len > 0;
     }
-    if (type !== 3) continue;
+    if (type !== elfInterpreter) continue;
     if (hasInterpreter || len < 2 || len > 4096) fail("invalid-header");
     hasInterpreter = true;
     const data = yield* read(off, len, size);
@@ -168,23 +181,41 @@ function* macho(size: number, magic: number): Inspection {
   }
   return result!;
 }
+// PE32+ records include the DOS locator, COFF header, optional header and section table.
+const peDos = { size: 64, coffOffset: 60 } as const;
+const peCoff = { size: 24, signature: 0, machine: 4, sectionCount: 6, optionalSize: 20, characteristics: 22 } as const;
+const peOptional = { size: 112, magic: 0, imageSize: 56, headersSize: 60, directoryCount: 108, directorySize: 8 } as const;
+const peSection = { size: 40, fileSize: 16, fileOffset: 20 } as const;
+const peMachine = { x64: 0x8664, arm64: 0xaa64 } as const;
+const peSignature = 0x4550;
+const pe32Plus = 0x20b;
+const peExecutableImage = 0x2;
+const peDll = 0x2000;
+
 function* pe(size: number): Inspection {
-  const dos = yield* read(0, 64, size), offset = u32(dos, 60);
-  if (offset < 64) fail("invalid-header");
-  const coff = yield* read(offset, 24, size);
-  if (u32(coff, 0) !== 0x4550) fail("invalid-header");
-  const machine = u16(coff, 4), arch = machine === 0x8664 ? "x64" : machine === 0xaa64 ? "arm64" : undefined;
+  const dos = yield* read(0, peDos.size, size);
+  const offset = u32(dos, peDos.coffOffset);
+  if (offset < peDos.size) fail("invalid-header");
+  const coff = yield* read(offset, peCoff.size, size);
+  if (u32(coff, peCoff.signature) !== peSignature) fail("invalid-header");
+  const machine = u16(coff, peCoff.machine);
+  const arch = machine === peMachine.x64 ? "x64" : machine === peMachine.arm64 ? "arm64" : undefined;
   if (arch === undefined) fail("unsupported-machine");
-  const count = u16(coff, 6), optionalSize = u16(coff, 20), characteristics = u16(coff, 22);
-  if (count === 0 || count > 4096 || optionalSize < 112 || !(characteristics & 2) || (characteristics & 0x2000)) fail("invalid-header");
-  const optional = yield* read(offset + 24, optionalSize, size);
-  if (u16(optional, 0) !== 0x20b || 112 + u32(optional, 108) * 8 > optionalSize) fail("invalid-header");
-  const sectionOffset = offset + 24 + optionalSize, headersSize = u32(optional, 60);
-  if (headersSize < sectionOffset + count * 40 || headersSize > size || u32(optional, 56) === 0) fail("invalid-header");
-  const sections = yield* read(sectionOffset, count * 40, size);
+  const count = u16(coff, peCoff.sectionCount);
+  const optionalSize = u16(coff, peCoff.optionalSize);
+  const characteristics = u16(coff, peCoff.characteristics);
+  if (count === 0 || count > 4096 || optionalSize < peOptional.size || !(characteristics & peExecutableImage) || (characteristics & peDll)) fail("invalid-header");
+  const optional = yield* read(offset + peCoff.size, optionalSize, size);
+  if (u16(optional, peOptional.magic) !== pe32Plus || peOptional.size + u32(optional, peOptional.directoryCount) * peOptional.directorySize > optionalSize) fail("invalid-header");
+  const sectionOffset = offset + peCoff.size + optionalSize;
+  const headersSize = u32(optional, peOptional.headersSize);
+  if (headersSize < sectionOffset + count * peSection.size || headersSize > size || u32(optional, peOptional.imageSize) === 0) fail("invalid-header");
+  const sections = yield* read(sectionOffset, count * peSection.size, size);
   let hasSection = false;
   for (let i = 0; i < count; i++) {
-    const entry = i * 40, length = u32(sections, entry + 16), offset = u32(sections, entry + 20);
+    const entry = i * peSection.size;
+    const length = u32(sections, entry + peSection.fileSize);
+    const offset = u32(sections, entry + peSection.fileOffset);
     if (length > 0 && offset < headersSize) fail("invalid-header");
     bounds(offset, length, size);
     hasSection ||= length > 0;
@@ -219,10 +250,15 @@ export const inspect = (path: string): Effect.Effect<Facts, InspectError, FileSy
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     const absolute = p.resolve(path);
-    const unreadable = () => new InspectError({ path: absolute, reason: "unreadable" as const });
+    const unreadable = (error: unknown) => new InspectError({
+      path: absolute,
+      reason: error instanceof PlatformError.PlatformError && error.reason._tag === "NotFound" ? "not-found" : "unreadable",
+      detail: String(error),
+    });
     const handle = yield* fs.open(absolute).pipe(Effect.mapError(unreadable));
     const info = yield* handle.stat.pipe(Effect.mapError(unreadable));
-    if (info.type !== "File" || info.size > BigInt(Number.MAX_SAFE_INTEGER)) return yield* unreadable();
+    if (info.type !== "File") return yield* unreadable("not a regular file");
+    if (info.size > BigInt(Number.MAX_SAFE_INTEGER)) return yield* unreadable("file exceeds the maximum safe byte count");
     const parser = inspectRanges(Number(info.size));
     const advance = (bytes?: Uint8Array) => Effect.try({
       try: () => bytes === undefined ? parser.next() : parser.next(bytes),

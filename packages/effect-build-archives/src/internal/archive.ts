@@ -316,19 +316,20 @@ const zipEntry = <E, R>(entry: Entry<E, R>, archive: ZipState): Bytes<E | Encode
       }),
     );
     const trailer = Stream.suspend((): Bytes<FormatLimit, never> => {
-      archive.offset += header.byteLength + compressedSize;
+      // Layout is local header, compressed bytes, descriptor; only the completed entry advances the archive.
+      const descriptorOffset = localOffset + header.byteLength + compressedSize;
       if (compressedSize > zip32.bytes) {
         return Stream.fail(
           new FormatLimit({ format: "zip", limit: "entry-bytes", maximum: zip32.bytes, path: entry.path }),
         );
       }
-      if (archive.offset > zip32.bytes) {
+      if (descriptorOffset > zip32.bytes) {
         return Stream.fail(
           new FormatLimit({ format: "zip", limit: "archive-bytes", maximum: zip32.bytes, path: entry.path }),
         );
       }
       const sizes: Sizes = { crc: (crc ^ 0xffffffff) >>> 0, size: payload.bytes, compressedSize };
-      archive.offset += descriptorBytes;
+      archive.offset = descriptorOffset + descriptorBytes;
       archive.central.push(centralRecord(name, sizes, zipMode(entry), localOffset));
       return Stream.make(dataDescriptor(sizes));
     });
@@ -408,22 +409,38 @@ interface TarFields {
   readonly link: string;
 }
 
+// POSIX ustar header fields: byte offset and field width within one 512-byte record.
+const tarField = {
+  name: [0, 100],
+  mode: [100, 8],
+  uid: [108, 8],
+  gid: [116, 8],
+  size: [124, 12],
+  mtime: [136, 12],
+  checksum: [148, 8],
+  type: [156, 1],
+  link: [157, 100],
+  magic: [257, 6],
+  version: [263, 2],
+  prefix: [345, 155],
+} as const;
+
 const tarHeader = (fields: TarFields): Uint8Array => {
   const output = new Uint8Array(512);
-  writeAscii(output, 0, 100, fields.name.name);
-  writeAscii(output, 100, 8, octal(fields.mode, 8));
-  writeAscii(output, 108, 8, octal(0, 8));
-  writeAscii(output, 116, 8, octal(0, 8));
-  writeAscii(output, 124, 12, octal(fields.size, 12));
-  writeAscii(output, 136, 12, octal(0, 12));
-  output.fill(0x20, 148, 156);
-  writeAscii(output, 156, 1, fields.type);
-  writeAscii(output, 157, 100, fields.link);
-  writeAscii(output, 257, 6, "ustar\0");
-  writeAscii(output, 263, 2, "00");
-  writeAscii(output, 345, 155, fields.name.prefix);
+  writeAscii(output, ...tarField.name, fields.name.name);
+  writeAscii(output, ...tarField.mode, octal(fields.mode, tarField.mode[1]));
+  writeAscii(output, ...tarField.uid, octal(0, tarField.uid[1]));
+  writeAscii(output, ...tarField.gid, octal(0, tarField.gid[1]));
+  writeAscii(output, ...tarField.size, octal(fields.size, tarField.size[1]));
+  writeAscii(output, ...tarField.mtime, octal(0, tarField.mtime[1]));
+  writeAscii(output, ...tarField.checksum, " ".repeat(tarField.checksum[1]));
+  writeAscii(output, ...tarField.type, fields.type);
+  writeAscii(output, ...tarField.link, fields.link);
+  writeAscii(output, ...tarField.magic, "ustar\0");
+  writeAscii(output, ...tarField.version, "00");
+  writeAscii(output, ...tarField.prefix, fields.name.prefix);
   const checksum = output.reduce((total, byte) => total + byte, 0);
-  writeAscii(output, 148, 8, `${checksum.toString(8).padStart(6, "0")}\0 `);
+  writeAscii(output, ...tarField.checksum, `${checksum.toString(8).padStart(tarField.checksum[1] - 2, "0")}\0 `);
   return output;
 };
 

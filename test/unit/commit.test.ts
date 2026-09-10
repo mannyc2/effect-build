@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Exit, FileSystem, Path } from "effect";
+import { Effect, Exit, FileSystem, Path, PlatformError } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import * as Commit from "effect-build/Commit";
 import { mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
@@ -18,6 +18,117 @@ const write = (path: string, contents: string) => Effect.gen(function*() {
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "effect-build-commit-")); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+
+describe("commit failure ownership", () => {
+  it.each(["partial", "empty"])("reports only the %s remainder after destructive backup cleanup fails", async (remainder) => {
+    const outdir = join(root, "release");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "remove-first"), "old output");
+    await writeFile(join(outdir, "keep-last"), "old remainder");
+    const failure = await run(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* Commit.atomic(outdir, (staged) => Effect.gen(function*() {
+        yield* fs.makeDirectory(staged);
+        yield* fs.writeFileString(join(staged, "current"), "new output");
+        return yield* Artifact.directory(staged, producer);
+      })).pipe(Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        remove: (path, options) => basename(path).startsWith(".effect-build-recovery-")
+          ? Effect.gen(function*() {
+            const previous = join(path, "release");
+            yield* fs.remove(remainder === "empty" ? previous : join(previous, "remove-first"), { recursive: true });
+            return yield* PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "remove" });
+          })
+          : fs.remove(path, options),
+      }), Effect.flip);
+    }));
+    if (!(failure instanceof Commit.CommitError)) throw new Error("expected commit error");
+    expect(failure.reason).toBe("remove-failed");
+    expect(failure.detail).toContain("cleanup:");
+    if (remainder === "partial") {
+      expect(await readdir(failure.recoveryPath!)).toEqual(["keep-last"]);
+    } else {
+      expect(failure).not.toHaveProperty("recoveryPath");
+    }
+    expect(await readdir(outdir)).toEqual(["current"]);
+    const residual = (await readdir(root)).filter((name) => name !== "release");
+    expect(residual).toHaveLength(1);
+    expect(await readdir(join(root, residual[0]!))).toEqual(remainder === "partial" ? ["release"] : []);
+  });
+
+  it.each([1, 2])("keeps rename %i as the primary failure when empty-backup cleanup also fails", async (failedMove) => {
+    const outdir = join(root, "release");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "previous"), "old output");
+    const failure = await run(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      let moves = 0;
+      return yield* Commit.atomic(outdir, (staged) => Effect.gen(function*() {
+        yield* fs.makeDirectory(staged);
+        return yield* Artifact.directory(staged, producer);
+      })).pipe(Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        rename: (from, to) => ++moves === failedMove
+          ? Effect.fail(PlatformError.systemError({ _tag: "Busy", module: "FileSystem", method: "rename", description: "primary rename failure" }))
+          : fs.rename(from, to),
+        remove: (path, options) => basename(path).startsWith(".effect-build-recovery-")
+          ? Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "remove", description: "secondary cleanup failure" }))
+          : fs.remove(path, options),
+      }), Effect.flip);
+    }));
+    expect(failure).toMatchObject({ reason: "rename-failed", detail: expect.stringContaining("primary rename failure") });
+    expect(failure).not.toHaveProperty("recoveryPath");
+    if (!(failure instanceof Commit.CommitError)) throw new Error("expected commit error");
+    expect(failure.detail).toContain("secondary cleanup failure");
+    expect(await readFile(join(outdir, "previous"), "utf8")).toBe("old output");
+    const residual = (await readdir(root)).filter((name) => name !== "release");
+    expect(residual).toHaveLength(1);
+    expect(residual[0]).toMatch(/^\.effect-build-recovery-/u);
+    expect(await readdir(join(root, residual[0]!))).toEqual([]);
+  });
+
+  it("names the retained old tree when cleanup fails after a successful commit", async () => {
+    const outdir = join(root, "release");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "previous"), "old output");
+    const failure = await run(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* Commit.atomic(outdir, (staged) => Effect.gen(function*() {
+        yield* fs.makeDirectory(staged);
+        yield* fs.writeFileString(join(staged, "current"), "new output");
+        return yield* Artifact.directory(staged, producer);
+      })).pipe(Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        remove: (path, options) => basename(path).startsWith(".effect-build-recovery-")
+          ? Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "remove" }))
+          : fs.remove(path, options),
+      }), Effect.flip);
+    }));
+    if (!(failure instanceof Commit.CommitError)) throw new Error("expected commit error");
+    expect(failure.reason).toBe("remove-failed");
+    expect(await readFile(join(failure.recoveryPath!, "previous"), "utf8")).toBe("old output");
+    expect(await readFile(join(outdir, "current"), "utf8")).toBe("new output");
+    expect((await readdir(root)).sort()).toEqual([basename(dirname(failure.recoveryPath!)), "release"].sort());
+  });
+
+  it("stops direct production when destination inspection fails", async () => {
+    let produced = false;
+    const outfile = join(root, "result");
+    const failure = await run(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* Commit.output(outfile, (path) => {
+        produced = true;
+        return write(path, "new output");
+      }, { atomic: false, onExists: "fail" }).pipe(Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        readLink: () => Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "readLink" })),
+      }), Effect.flip);
+    }));
+    expect(failure).toMatchObject({ reason: "inspect-failed", detail: expect.stringContaining("PermissionDenied") });
+    expect(produced).toBe(false);
+    expect(await readdir(root)).toEqual([]);
+  });
+});
 
 describe("atomic output", () => {
   it("creates the parent and renames a staged file with the final basename", async () => {

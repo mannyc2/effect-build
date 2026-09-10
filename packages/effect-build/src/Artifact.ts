@@ -1,6 +1,7 @@
 import { sha256 as incrementalSha256 } from "@noble/hashes/sha2.js";
-import { Crypto, Effect, Encoding, FileSystem, Path, Schema, Stream } from "effect";
+import { Crypto, Effect, Encoding, FileSystem, Path, PlatformError, Schema, Stream } from "effect";
 import * as Inspect from "./Executable.js";
+import { readLink } from "./internal/fileSystem.js";
 import { parts, Target } from "./Target.js";
 
 const Bytes = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
@@ -48,6 +49,8 @@ export const Entry = Schema.Union([
 export type Entry = typeof Entry.Type;
 
 const encoder = new TextEncoder();
+// Persisted identity: SHA-256 of UTF-8 JSON tuples in this exact field order.
+// Missing fields become null in JSON arrays; changing that or the order changes existing identities.
 const manifestDigest = (entries: readonly Entry[]): string => {
   const hash = incrementalSha256.create().update(encoder.encode("["));
   for (let i = 0; i < entries.length; i++) {
@@ -97,6 +100,8 @@ export class ArtifactError extends Schema.TaggedError<ArtifactError>()("Artifact
     "not-a-file",
     "not-a-directory",
     "unreadable",
+    "unwritable",
+    "copy-failed",
     "changed",
     "invalid-metadata",
   ] as const),
@@ -106,6 +111,14 @@ export class ArtifactError extends Schema.TaggedError<ArtifactError>()("Artifact
     return `${this.reason}: ${this.path}${this.detail === undefined ? "" : ` (${this.detail})`}`;
   }
 }
+
+/** Translate filesystem failures at the operation boundary, retaining the native diagnosis. */
+export const ioError = (path: string, operation: "read" | "write" = "read") => (error: unknown): ArtifactError =>
+  new ArtifactError({
+    path,
+    reason: operation === "write" ? "unwritable" : error instanceof PlatformError.PlatformError && error.reason._tag === "NotFound" ? "not-found" : "unreadable",
+    detail: String(error),
+  });
 
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
 
@@ -120,10 +133,10 @@ const hashRegular = (path: string) => Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const p = yield* Path.Path;
   const absolute = p.resolve(path);
-  const info = yield* fs.stat(absolute).pipe(Effect.mapError(() => new ArtifactError({ path: absolute, reason: "not-found" })));
+  const info = yield* fs.stat(absolute).pipe(Effect.mapError(ioError(absolute)));
   if (info.type !== "File") return yield* new ArtifactError({ path: absolute, reason: "not-a-file" });
   if (info.size > BigInt(Number.MAX_SAFE_INTEGER)) return yield* new ArtifactError({ path: absolute, reason: "unreadable", detail: "file exceeds the maximum safe byte count" });
-  const unreadable = () => new ArtifactError({ path: absolute, reason: "unreadable" as const });
+  const unreadable = ioError(absolute);
   const handle = yield* fs.open(absolute).pipe(Effect.mapError(unreadable));
   const buffer = new Uint8Array(chunkSize), hash = incrementalSha256.create();
   let bytes = 0;
@@ -132,7 +145,7 @@ const hashRegular = (path: string) => Effect.scoped(Effect.gen(function*() {
     if (count === 0) break;
     hash.update(buffer.subarray(0, count));
     bytes += count;
-    if (!Number.isSafeInteger(bytes)) return yield* unreadable();
+    if (!Number.isSafeInteger(bytes)) return yield* unreadable("file exceeds the maximum safe byte count");
   }
   if (bytes !== Number(info.size)) return yield* new ArtifactError({ path: absolute, reason: "changed" });
   return { absolute, bytes, digest: Encoding.encodeHex(hash.digest()) };
@@ -170,30 +183,32 @@ export const directory = (root: string, producedBy: Producer): Effect.Effect<Dir
     const p = yield* Path.Path;
     const absolute = p.resolve(root);
     const info = yield* fs.stat(absolute).pipe(
-      Effect.mapError(() => new ArtifactError({ path: absolute, reason: "not-found" })),
+      Effect.mapError(ioError(absolute)),
     );
     if (info.type !== "Directory") return yield* new ArtifactError({ path: absolute, reason: "not-a-directory" });
     const names = yield* fs.readDirectory(absolute).pipe(
-      Effect.mapError(() => new ArtifactError({ path: absolute, reason: "unreadable" })),
+      Effect.mapError(ioError(absolute)),
     );
     const entries: Entry[] = [];
     let total = 0;
-    for (const name of names) {
+    // Breadth-first work queue: newly discovered directory children join the tail.
+    for (let index = 0; index < names.length; index++) {
+      const name = names[index]!;
       const full = p.join(absolute, name);
       const rel = name.split(p.sep).join("/");
       // stat follows links; distinguish them before reading bytes or traversing children.
-      const link = yield* fs.readLink(full).pipe(Effect.option);
-      if (link._tag === "Some") {
-        entries.push({ path: rel, kind: "symlink", bytes: 0, mode: 0o777, linkTarget: link.value });
+      const link = yield* readLink(full).pipe(Effect.mapError(ioError(full)));
+      if (link !== undefined) {
+        entries.push({ path: rel, kind: "symlink", bytes: 0, mode: 0o777, linkTarget: link });
         continue;
       }
       const stat = yield* fs.stat(full).pipe(
-        Effect.mapError(() => new ArtifactError({ path: full, reason: "unreadable" })),
+        Effect.mapError(ioError(full)),
       );
       if (stat.type === "Directory") {
         entries.push({ path: rel, kind: "directory", bytes: 0, mode: stat.mode & 0o7777 });
         const children = yield* fs.readDirectory(full).pipe(
-          Effect.mapError(() => new ArtifactError({ path: full, reason: "unreadable" })),
+          Effect.mapError(ioError(full)),
         );
         names.push(...children.map((child) => p.join(name, child)));
       } else {
@@ -254,9 +269,9 @@ export const readVerified = (artifact: Regular): Effect.Effect<Uint8Array, Artif
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     const path = p.resolve(artifact.path);
-    const unreadable = () => new ArtifactError({ path, reason: "unreadable" as const });
+    const unreadable = ioError(path);
     const changed = () => new ArtifactError({ path, reason: "changed" as const });
-    const info = yield* fs.stat(path).pipe(Effect.mapError(() => new ArtifactError({ path, reason: "not-found" })));
+    const info = yield* fs.stat(path).pipe(Effect.mapError(ioError(path)));
     if (info.type !== "File") return yield* new ArtifactError({ path, reason: "not-a-file" });
     const handle = yield* fs.open(path).pipe(Effect.mapError(unreadable));
     const opened = yield* handle.stat.pipe(Effect.mapError(unreadable));
@@ -271,7 +286,9 @@ export const readVerified = (artifact: Regular): Effect.Effect<Uint8Array, Artif
       hash.update(chunk.subarray(0, count));
       offset += count;
     }
-    if ((yield* handle.read(new Uint8Array(1)).pipe(Effect.mapError(unreadable))) !== 0n || Encoding.encodeHex(hash.digest()) !== artifact.sha256) return yield* changed();
+    const excess = yield* handle.read(new Uint8Array(1)).pipe(Effect.mapError(unreadable));
+    if (excess !== 0n) return yield* changed();
+    if (Encoding.encodeHex(hash.digest()) !== artifact.sha256) return yield* changed();
     if (artifact.kind === "executable") yield* checkTarget(artifact, Inspect.parse(contents));
     return contents;
   }));
@@ -289,7 +306,7 @@ export const streamVerified = (artifact: Regular): Stream.Stream<Uint8Array, Art
     const p = yield* Path.Path;
     const path = p.resolve(artifact.path);
     const changed = () => new ArtifactError({ path, reason: "changed" as const });
-    const info = yield* fs.stat(path).pipe(Effect.mapError(() => new ArtifactError({ path, reason: "not-found" })));
+    const info = yield* fs.stat(path).pipe(Effect.mapError(ioError(path)));
     if (info.type !== "File") return yield* new ArtifactError({ path, reason: "not-a-file" });
     if (info.size !== BigInt(artifact.bytes)) return yield* changed();
     if (artifact.kind === "executable") yield* checkTarget(artifact, Inspect.inspect(path));
@@ -297,7 +314,7 @@ export const streamVerified = (artifact: Regular): Stream.Stream<Uint8Array, Art
     let total = 0;
     // One byte past the recorded size detects growth without reading all of it.
     return fs.stream(path, { chunkSize, bytesToRead: artifact.bytes + 1 }).pipe(
-      Stream.mapError(() => new ArtifactError({ path, reason: "unreadable" })),
+      Stream.mapError(ioError(path)),
       Stream.tap((chunk) =>
         Effect.sync(() => {
           hash.update(chunk);
@@ -320,7 +337,7 @@ export const copyVerified = (artifact: Regular, destination: string): Effect.Eff
     const p = yield* Path.Path;
     const target = p.resolve(destination);
     if (target === p.resolve(artifact.path)) return yield* Effect.asVoid(verify(artifact));
-    const unwritable = (error: unknown) => new ArtifactError({ path: target, reason: "unreadable", detail: String(error) });
+    const unwritable = ioError(target, "write");
     yield* fs.makeDirectory(p.dirname(target), { recursive: true }).pipe(Effect.mapError(unwritable));
     yield* Stream.run(streamVerified(artifact), fs.sink(target)).pipe(
       Effect.mapError((error) => error instanceof ArtifactError ? error : unwritable(error)),

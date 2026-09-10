@@ -43,6 +43,7 @@ export const layer = Layer.effect(Factory, Effect.map(globalApi("Transpiler"), (
         context?: object,
       ) => invoke("transformSync", () => {
         if (context !== undefined) return native.transformSync(source, loaderOrContext as Loader, context);
+        // TypeScript selects each native overload only after this union is narrowed.
         return typeof loaderOrContext === "object"
           ? native.transformSync(source, loaderOrContext)
           : native.transformSync(source, loaderOrContext);
@@ -79,6 +80,7 @@ export const transformSync: TransformSync = (
   context?: object,
 ) => {
   if (context !== undefined) return transpiler.transformSync(source, loaderOrContext as Loader, context);
+  // TypeScript selects each wrapper overload only after this union is narrowed.
   return typeof loaderOrContext === "object"
     ? transpiler.transformSync(source, loaderOrContext)
     : transpiler.transformSync(source, loaderOrContext);

@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit, Redacted, Schema } from "effect";
+import { Cause, Effect, Exit, FileSystem, PlatformError, Redacted, Schema } from "effect";
 import { Artifact, Executable, Tool } from "effect-build";
 import * as Apple from "effect-build-apple";
 import * as Bun from "effect-build-bun";
@@ -7,8 +7,10 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import type { Config, Invocation, PackedEntry } from "../fixtures/apple-tool.js";
 import { elf, thinMacho } from "../fixtures/native-executable.js";
 
 const local = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
@@ -18,21 +20,6 @@ const certificateSha1 = "A".repeat(40);
 const password = "private-notary:$42";
 const submissionId = "3f33f890-0cbf-4c1e-bb39-6fba74a594f0";
 const credential: Apple.Notary.Credential = { kind: "apple-id", appleId: "fixture@example.test", teamId: "TEAMID1234", password: Redacted.make(password) };
-interface Config {
-  readonly log: string;
-  readonly fail?: string;
-  readonly guard?: string;
-  readonly mutateDuringVerify?: string;
-  readonly corruptTarget?: boolean;
-  readonly submit?: unknown;
-  readonly wait?: unknown;
-  readonly waitForAbort?: boolean;
-  readonly info?: unknown;
-  readonly logResponse?: unknown;
-  readonly rawResponse?: string;
-}
-interface Invocation { readonly tool: string; readonly args: readonly string[]; readonly guard: boolean; readonly payloadSha?: string; readonly plist?: string; }
-interface PackedEntry { readonly path: string; readonly kind: string; readonly contents?: string; readonly target?: string; readonly mode: number; }
 let root: string;
 let tool: string;
 let configPath: string;
@@ -42,98 +29,14 @@ let executable: Artifact.Executable;
 let resource: Artifact.File;
 
 // Credential-dependent commands mutate real staged files; real Node process handles exercise tool failures and cleanup.
-const fixture = String.raw`
-import { createHash } from 'node:crypto';
-import { appendFileSync, chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
-const [configPath, name, ...args] = process.argv.slice(2);
-const config = JSON.parse(readFileSync(configPath, 'utf8'));
-if (name === '--version' && args.length === 0) { process.stdout.write('xcrun version 70.\n'); process.exit(0); }
-const sha = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
-appendFileSync(config.log, JSON.stringify({tool:name, args, guard:config.guard ? existsSync(config.guard) : false, ...(name === 'notarytool' && args[0] === 'submit' ? {payloadSha:sha(args[1])} : {}), ...(name === 'plutil' ? {plist:readFileSync(args.at(-1), 'utf8')} : {})}) + '\n');
-const fail = (phase) => { if (config.fail === phase) { process.stderr.write(phase + ' failed private-notary:$42'); process.exit(37); } };
-const write = (path, contents) => { mkdirSync(dirname(path), {recursive:true}); writeFileSync(path, contents); };
-const collect = (directory, prefix='') => readdirSync(directory).sort().flatMap((name) => {
-  const path = join(directory, name), relative = prefix + name, info = lstatSync(path);
-  if (info.isSymbolicLink()) return [{path:relative,kind:'symlink',mode:info.mode & 0o777,target:readlinkSync(path)}];
-  if (info.isDirectory()) return [{path:relative,kind:'directory',mode:info.mode & 0o777}, ...collect(path, relative + '/')];
-  return [{path:relative,kind:'file',mode:info.mode & 0o777,contents:readFileSync(path).toString('base64')}];
-});
-const signature = (target) => join(target, target.endsWith('.app') ? 'Contents/_CodeSignature' : '_CodeSignature', 'CodeResources');
-const verifySignature = (target) => {
-  if (lstatSync(target).isDirectory()) { if (!existsSync(signature(target))) throw new Error('missing app signature'); }
-  else if (!readFileSync(target, 'utf8').includes(':signed')) throw new Error('missing file signature');
-};
-const target = args.at(-1);
-switch (name) {
-  case 'plutil':
-    if (args[0] !== '-lint' || !readFileSync(target, 'utf8').includes('<plist')) throw new Error('invalid plist');
-    fail('plutil'); break;
-  case 'ditto':
-    if (args[0] === '-c') { const src = args.at(-2); write(target, JSON.stringify({entries:lstatSync(src).isDirectory() ? collect(src) : [{path:basename(src),kind:'file',mode:lstatSync(src).mode & 0o777,contents:readFileSync(src).toString('base64')}],bundle:basename(src)})); }
-    else { cpSync(args[0], args[1], {recursive:true,verbatimSymlinks:true,preserveTimestamps:true}); chmodSync(args[1], lstatSync(args[0]).mode & 0o777); }
-    fail('ditto'); break;
-  case 'codesign':
-    if (args[0] === '--force') {
-      if (!args.includes('--sign') || !args.includes('--timestamp')) throw new Error('missing signing options');
-      if (lstatSync(target).isDirectory()) write(signature(target), 'signed resources'); else appendFileSync(target, ':signed');
-      if (config.corruptTarget && !lstatSync(target).isDirectory()) { const bytes = readFileSync(target); bytes.writeUInt32LE(0x01000007, 4); writeFileSync(target, bytes); }
-      fail('codesign.sign');
-    } else if (args[0] === '--verify') { verifySignature(target); if (config.mutateDuringVerify) write(config.mutateDuringVerify,'changed original'); fail('codesign.verify'); }
-    else throw new Error('unsupported codesign command');
-    break;
-  case 'hdiutil':
-    if (args[0] === 'create') { write(target, JSON.stringify({entries:collect(args[args.indexOf('-srcfolder') + 1])})); fail('hdiutil.create'); }
-    else if (args[0] === 'verify') { JSON.parse(readFileSync(target,'utf8')); fail('hdiutil.verify'); }
-    else throw new Error('unsupported hdiutil command');
-    break;
-  case 'pkgbuild':
-    if (args[0] !== '--component' && args[0] !== '--root') throw new Error('missing installer component or root');
-    write(target, JSON.stringify({entries:collect(args[1]),bundle:args[0] === '--component' ? basename(args[1]) : '',location:args[args.indexOf('--install-location') + 1]})); fail('pkgbuild'); break;
-  case 'productbuild':
-    if (args[0] !== '--package') throw new Error('missing component package');
-    write(target, readFileSync(args[1])); fail('productbuild'); break;
-  case 'productsign':
-    write(target, readFileSync(args.at(-2), 'utf8') + ':signed'); fail('productsign'); break;
-  case 'pkgutil':
-    if (args[0] === '--check-signature') verifySignature(target);
-    else if (args[0] === '--payload-files') { const packed=JSON.parse(readFileSync(target,'utf8')); process.stdout.write(packed.entries.map((entry)=>(packed.bundle ? packed.bundle+'/' : '')+entry.path).join('\n')+'\n'); }
-    else throw new Error('unsupported pkgutil command');
-    fail('pkgutil'); break;
-  case 'notarytool': {
-    if (!['submit','wait','info','log'].includes(args[0]) || !args.includes('--output-format') || !args.includes('json')) throw new Error('unsupported notary command');
-    if (args[0] === 'submit' && args.includes('--wait')) throw new Error('submission must return before waiting');
-    fail('notarytool.' + args[0]);
-    if (args[0] === 'wait' && config.waitForAbort) { setInterval(() => {}, 1000); await new Promise(() => {}); }
-    const defaults = args[0] === 'log' ? {jobId:'3f33f890-0cbf-4c1e-bb39-6fba74a594f0',status:'Accepted',issues:null} : {id:'3f33f890-0cbf-4c1e-bb39-6fba74a594f0',status:'Accepted'};
-    process.stdout.write(config.rawResponse ?? JSON.stringify(config[args[0] === 'log' ? 'logResponse' : args[0]] ?? (args[0] === 'wait' ? config.submit : undefined) ?? defaults));
-    break;
-  }
-  case 'stapler':
-    if (args[0] === 'staple') {
-      if (lstatSync(target).isDirectory()) write(join(target,'Contents/_CodeSignature/NotaryTicket'), 'ticket'); else appendFileSync(target, ':ticket');
-      fail('stapler.staple');
-    } else if (args[0] === 'validate') {
-      const ticket=lstatSync(target).isDirectory() ? existsSync(join(target,'Contents/_CodeSignature/NotaryTicket')) : readFileSync(target,'utf8').includes(':ticket');
-      if (!ticket) throw new Error('missing notarization ticket');
-      fail('stapler.validate');
-    } else throw new Error('unsupported stapler command');
-    break;
-  case 'spctl':
-    if (args[0] !== '--assess' || !args.includes('--type')) throw new Error('invalid assessment command');
-    fail('spctl'); break;
-  default: throw new Error('unsupported native tool ' + name);
-}
-`;
-
 beforeEach(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-apple-")));
   tool = join(root, "xcrun.fixture");
-  const script = join(root, "xcrun.mjs");
+  const script = join(root, "xcrun.ts");
   configPath = join(root, "config.json");
   config = { log: join(root, "calls.jsonl") };
   await writeFile(tool, "xcrun fixture bytes\n");
-  await writeFile(script, fixture);
+  await copyFile(fileURLToPath(new URL("../fixtures/apple-tool.ts", import.meta.url)), script);
   await writeFile(configPath, JSON.stringify(config));
   await writeFile(join(root, "native"), thinMacho());
   await writeFile(join(root, "resource"), "resource bytes\n");
@@ -160,11 +63,13 @@ const unsignedFile = async (product: "dmg" | "pkg") => {
 };
 const signedFile = async (product: "dmg" | "pkg") => {
   const source = await unsignedFile(product), outfile = join(root, `signed.${product}`);
-  return product === "dmg" ? run(Apple.sign({ artifact: { ...source, product: "dmg" }, certificateSha1, outfile }))
-    : run(Apple.sign({ artifact: { ...source, product: "pkg" }, certificateSha1, outfile }));
+  // Narrow the artifact before overload resolution so the result retains its product type.
+  return source.product === "dmg"
+    ? run(Apple.sign({ artifact: source, certificateSha1, outfile }))
+    : run(Apple.sign({ artifact: source, certificateSha1, outfile }));
 };
 const accepted = async (artifact: Apple.Signed) => local(Apple.Notary.acceptedReference(await run(Apple.notarize({ artifact, credential }))));
-const signedExecutable = (outfile?: string) => run(Apple.sign({ artifact: executable, certificateSha1, ...(outfile === undefined ? {} : { outfile }), entitlements: Bun.entitlements }));
+const signedExecutable = (outfile?: string) => run(Apple.sign({ artifact: executable, certificateSha1, outfile, entitlements: Bun.entitlements }));
 
 describe("Apple products on real files", () => {
   it.each([true, false])("copies executable/resources and writes escaped plist values with atomic=%s", async (atomic) => {
@@ -186,10 +91,50 @@ describe("Apple products on real files", () => {
     expect((await calls()).filter((call) => call.tool === "plutil")).toHaveLength(1);
   });
 
-  it.each([["../escape"], ["/absolute"], ["C:/drive"], ["back\\slash"], ["same", "same"], ["Readme", "README"], ["Guide", "guide/readme"], ["café", "cafe\u0301/file"]])("rejects resource layout %j before producing an app", async (...paths) => {
+  it.each([["../escape"], ["/absolute"], ["C:/drive"], ["back\\slash"], ["same", "same"], ["Readme", "README"], ["Docs/a", "docs/b"], ["café/a", "cafe\u0301/b"], ["Guide", "guide/readme"], ["café", "cafe\u0301/file"]])("rejects resource layout %j before producing an app", async (...paths) => {
     const failure = await run(Apple.appBundle({ ...appInput(), resources: paths.map((path) => ({ artifact: resource, path })) }).pipe(Effect.flip));
     expect(failure).toBeInstanceOf(Apple.InputInvalid);
     expect(await readdir(root)).not.toContain("Fixture.app");
+  });
+
+  it("reports a plist write failure truthfully and retains the previous app", async () => {
+    const outdir = join(root, "Fixture.app");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "previous"), "keep me");
+    const before = (await readdir(root)).sort();
+    const fs = await local(FileSystem.FileSystem);
+    const denied: FileSystem.FileSystem = {
+      ...fs,
+      writeFileString: (path, contents, options) => path.endsWith("Info.plist")
+        ? Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "writeFileString", pathOrDescriptor: path }))
+        : fs.writeFileString(path, contents, options),
+    };
+    const failure = await run(Apple.appBundle(appInput()).pipe(Effect.provideService(FileSystem.FileSystem, denied), Effect.flip));
+    expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "unwritable", path: expect.stringContaining("Info.plist") });
+    expect(await readFile(join(outdir, "previous"), "utf8")).toBe("keep me");
+    expect((await readdir(root)).sort()).toEqual(before);
+  });
+
+  it("preserves a destination when resolving it fails with permission denied", async () => {
+    const original = await app();
+    const outdir = join(root, "Result.app");
+    await mkdir(outdir);
+    await writeFile(join(outdir, "previous"), "keep me");
+    const before = (await readdir(root)).sort();
+    const fs = await local(FileSystem.FileSystem);
+    const denied: FileSystem.FileSystem = {
+      ...fs,
+      realPath: (path) => path === outdir
+        ? Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "realPath", pathOrDescriptor: path }))
+        : fs.realPath(path),
+    };
+    const failure = await run(Apple.sign({ artifact: original, certificateSha1, outdir, atomic: false }).pipe(
+      Effect.provideService(FileSystem.FileSystem, denied), Effect.flip,
+    ));
+    expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "unreadable", path: outdir });
+    expect(await readFile(join(outdir, "previous"), "utf8")).toBe("keep me");
+    expect((await calls()).some((call) => call.tool === "ditto")).toBe(false);
+    expect((await readdir(root)).sort()).toEqual(before);
   });
 
   it.each(["executable", "resource"])("rejects changed %s bytes", async (changed) => {
@@ -299,7 +244,9 @@ describe("Apple products on real files", () => {
 
   it.each(["dmg", "pkg"] as const)("signs %s copies and hashes the modified bytes", async (product) => {
     const source = await unsignedFile(product), outfile = join(root, `signed.${product}`);
-    const result = source.product === "dmg" ? await run(Apple.sign({ artifact: source, certificateSha1, outfile }))
+    // Narrow the nested discriminant so TypeScript can select a signing overload.
+    const result = source.product === "dmg"
+      ? await run(Apple.sign({ artifact: source, certificateSha1, outfile }))
       : await run(Apple.sign({ artifact: source, certificateSha1, outfile }));
     expect(await readFile(source.path, "utf8")).toBe(`unsigned-${product}`);
     expect(await readFile(result.path, "utf8")).toBe(`unsigned-${product}:signed`);
@@ -321,7 +268,7 @@ describe("Standalone Darwin executables", () => {
     expect(await local(Artifact.verify(executable))).toEqual(executable);
     if (process.platform !== "win32") expect((await stat(result.path)).mode & 0o777).toBe(0o755);
     const plist = (await calls()).find((call) => call.tool === "plutil")!.plist!;
-    for (const key of Bun.entitlements) expect(plist).toContain(`<key>${key}</key>\n  <true/>`);
+    for (const key of Bun.entitlements) expect(plist).toMatch(new RegExp(`<key>${key.replaceAll(".", "\\.")}</key>\\s*<true/>`));
     const commands = (await calls()).filter((call) => call.tool === "codesign");
     expect(commands.map((call) => call.args[0])).toEqual(["--force", "--verify"]);
     expect(commands[0]!.args.slice(0, 7)).toEqual(["--force", "--sign", certificateSha1, "--timestamp", "--options", "runtime", "--entitlements"]);

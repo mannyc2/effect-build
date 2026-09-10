@@ -70,7 +70,7 @@ release with a native checksum check, an installed consumer on Node 22.19 with T
 a non-gating consumer against Effect's `rc` tag.
 
 [signing.yml](.github/workflows/signing.yml) is dispatched by hand and runs
-`examples/artifact-pipeline/src/sign.ts` with real identities. On macOS it needs the
+`examples/artifact-pipeline/src/signing-evidence.ts` with real identities. On macOS it needs the
 `APPLE_CERTIFICATE_P12` (base64), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_API_KEY_P8`,
 `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER` secrets; on Windows it needs `AZURE_CLIENT_ID`,
 `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `TRUSTED_SIGNING_ENDPOINT`, `TRUSTED_SIGNING_ACCOUNT`,

@@ -73,9 +73,6 @@ export const PackageInput = Schema.Struct({
 });
 export type PackageInput = typeof PackageInput.Type;
 export type PackageError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
-const fileError = (path: string) => (error: unknown) =>
-  new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
-
 const packageArtifact = Effect.fn("Nfpm.package")((candidate: PackageInput): Effect.Effect<Artifact.File, PackageError, Nfpm | Env> =>
   Effect.scoped(Effect.gen(function*() {
     // Preserve native configuration keys; decoded artifact refinements are not nFPM configuration.
@@ -115,7 +112,7 @@ const packageArtifact = Effect.fn("Nfpm.package")((candidate: PackageInput): Eff
     const cwd = p.resolve(input.cwd ?? "");
     const outfile = p.resolve(cwd, input.outfile);
     // nFPM reads private copies, so it packages exactly the bytes that passed artifact verification.
-    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-nfpm-" }).pipe(Effect.mapError(fileError(outfile)));
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-nfpm-" }).pipe(Effect.mapError(Artifact.ioError(outfile, "write")));
     const contents: Schema.Json[] = [];
     for (const content of input.contents) {
       const source = p.join(temporary, `input-${contents.length}`);
@@ -129,7 +126,7 @@ const packageArtifact = Effect.fn("Nfpm.package")((candidate: PackageInput): Eff
       });
     }
     const configPath = p.join(temporary, "nfpm.json");
-    yield* fs.writeFileString(configPath, JSON.stringify({ ...config, disable_globbing: true, contents })).pipe(Effect.mapError(fileError(configPath)));
+    yield* fs.writeFileString(configPath, JSON.stringify({ ...config, disable_globbing: true, contents })).pipe(Effect.mapError(Artifact.ioError(configPath, "write")));
     const produce = (out: string) =>
       Tool.run(tool, ["package", "--config", configPath, "--packager", input.format, "--target", out], { cwd }).pipe(
         Effect.andThen(Artifact.file(out, Tool.producer(tool))),

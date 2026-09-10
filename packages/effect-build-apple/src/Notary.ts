@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path, Redacted, Schema } from "effect";
 import { Artifact, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
-import { copyProduct, fileError, runNative, textValid, verifySignature } from "./internal.js";
+import { copyProduct, runNative, textValid, verifySignature } from "./internal.js";
 import { Signed } from "./Model.js";
 
 export const SubmissionKind = Schema.Literals(["zip", "dmg", "pkg"] as const);
@@ -86,7 +86,7 @@ export const acceptedReference = Effect.fn("Apple.Notary.acceptedReference")(fun
 });
 
 export type Credential =
-  | { readonly kind: "keychain"; readonly profile: string; readonly keychain?: string }
+  | { readonly kind: "keychain"; readonly profile: string; readonly keychain?: string | undefined }
   | { readonly kind: "api-key"; readonly keyFile: string; readonly keyId: string; readonly issuer: string }
   | { readonly kind: "apple-id"; readonly appleId: string; readonly teamId: string; readonly password: Redacted.Redacted<string> };
 const credentials = Effect.fn("Apple.Notary.credentials")(function*(credential: Credential) {
@@ -124,7 +124,7 @@ const runJson = Effect.fn("Apple.Notary.runJson")(function*(operation: Operation
   if (cwd !== undefined && !textValid(cwd)) return yield* new InputInvalid({ reason: "cwd must be non-empty and contain no NUL" });
   const auth = yield* credentials(credential);
   const completion = yield* runNative("notarytool", [operation, ...args, "--output-format", "json", ...auth.args], {
-    ...(cwd === undefined ? {} : { cwd }), redact: auth.values,
+    cwd, redact: auth.values,
   });
   const value = yield* Effect.try({
     try: (): unknown => JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(completion.stdout)),
@@ -166,7 +166,7 @@ export const submit = (input: SubmitInput): Effect.Effect<SubmissionReference, N
     const { tool } = yield* Apple;
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
-    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-notary-" }).pipe(Effect.mapError(fileError(input.artifact.path)));
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-notary-" }).pipe(Effect.mapError(Artifact.ioError(input.artifact.path, "write")));
     const snapshot = p.join(temporary, p.basename(input.artifact.path));
     // Upload a verified private copy so changes to the caller's file cannot change the submitted bytes.
     yield* copyProduct(input.artifact, snapshot);
@@ -194,7 +194,7 @@ export const notarize = (input: NotarizeInput): Effect.Effect<Submission, Notari
   Effect.gen(function*() {
     yield* timeoutArgs(input.timeout);
     const reference = yield* submit(input);
-    return yield* wait({ reference, credential: input.credential, ...(input.timeout === undefined ? {} : { timeout: input.timeout }), ...(input.cwd === undefined ? {} : { cwd: input.cwd }) });
+    return yield* wait({ reference, credential: input.credential, timeout: input.timeout, cwd: input.cwd });
   });
 
 export interface LookupInput {

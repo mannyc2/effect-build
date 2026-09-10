@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, ConfigProvider, Effect, Exit, Fiber } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, Fiber, FileSystem, PlatformError } from "effect";
 import * as Tool from "effect-build/Tool";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -15,6 +15,40 @@ const withPath = (value: string, key = "PATH") => Effect.provideService(
 let root: string;
 beforeEach(async () => { root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-tool-"))); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+
+describe("truthful tool diagnostics", () => {
+  it.each(["explicit", "PATH", "realPath"])("does not report %s filesystem denial as a missing tool", async (boundary) => {
+    const failure = await run(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      const denied = Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: boundary, description: "fixture access denied" }));
+      return yield* Tool.locate({ name: basename(process.execPath), executable: boundary === "PATH" ? undefined : process.execPath }).pipe(
+        withPath(dirname(process.execPath)),
+        Effect.provideService(FileSystem.FileSystem, { ...fs, ...(boundary === "realPath" ? { realPath: () => denied } : { stat: () => denied }) }),
+        Effect.flip,
+      );
+    }));
+    expect(failure).toMatchObject({ _tag: "ToolProbeFailed", detail: expect.stringContaining("fixture access denied") });
+  });
+
+  it("scrubs overlapping secrets in failed args and both streams while preserving failure facts", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const script = "process.stdout.write(process.argv[1]);process.stderr.write(process.argv[1]);process.exitCode=7";
+    const failure = await run(Tool.run(tool, ["-e", script, "private-secret"], { redact: ["private", "private-secret", ""] }).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "ToolFailed", exitCode: 7, stdout: "<redacted>", stderr: "<redacted>", stdoutTruncated: false, stderrTruncated: false });
+    expect(JSON.stringify(failure)).not.toContain("private");
+    expect(failure).toHaveProperty("args", ["-e", script, "<redacted>"]);
+  });
+
+  it("scrubs native launch errors without modifying successful output bytes", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const secret = "private-launch-credential";
+    const failure = await run(Tool.run(tool, [`${secret}\0`], { redact: [secret] }).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "ToolSpawnFailed" });
+    expect(JSON.stringify(failure)).not.toContain(secret);
+    const completion = await run(Tool.run(tool, ["-e", "process.stdout.write(process.argv[1])", secret], { redact: [secret] }));
+    expect(new TextDecoder().decode(completion.stdout)).toBe(secret);
+  });
+});
 
 describe("tool resolution and execution", () => {
   it("uses an explicit executable, hashes its real bytes, and parses its version output", async () => {
@@ -60,7 +94,7 @@ describe("tool resolution and execution", () => {
       withPath([root, dirname(process.execPath)].join(delimiter)), Effect.flip,
     ));
     expect(failure).toMatchObject({ _tag: "ToolProbeFailed", tool: name, path: await realpath(broken), detail: expect.stringMatching(/\S/u) });
-    expect(String(failure)).toMatch(/^ToolProbeFailed: .* failed its version probe: \S/u);
+    expect(String(failure)).toMatch(/^ToolProbeFailed: .* could not be inspected: \S/u);
   });
 
   it("locates an executable without probing it", async () => {

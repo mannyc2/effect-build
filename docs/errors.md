@@ -31,12 +31,12 @@ const compile = Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }
 | Error                       | Tag                        | Fields and meaning                                                                                                               |
 | --------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `Tool.NotFound`             | `ToolNotFound`             | `tool`, `searched`: no executable at the explicit path or on `PATH`.                                                             |
-| `Tool.ProbeFailed`          | `ToolProbeFailed`          | `tool`, `path`, `detail`: the version probe failed or printed nothing parseable.                                                 |
+| `Tool.ProbeFailed`          | `ToolProbeFailed`          | `tool`, `path`, `detail`: filesystem inspection or the version probe failed; native details are retained.                                                 |
 | `Tool.VersionUnsupported`   | `ToolVersionUnsupported`   | `tool`, `version`, `supported`: the selected tool fails the requested range.                                                     |
 | `Tool.Failed`               | `ToolFailed`               | `tool`, `args`, `exitCode`, `stdout`, `stderr`, `stdoutTruncated`, `stderrTruncated`: the command exited unsuccessfully.         |
 | `Tool.SpawnFailed`          | `ToolSpawnFailed`          | `tool`, `detail`: the process could not start or finish.                                                                         |
-| `Artifact.ArtifactError`    | `ArtifactError`            | `path`, `reason` (`not-found`, `not-a-file`, `not-a-directory`, `unreadable`, `changed`, `invalid-metadata`), optional `detail`. |
-| `Executable.InspectError`   | `ExecutableInspectError`   | `path`, `reason`: the file is missing, unreadable, or not a native executable this package understands.                          |
+| `Artifact.ArtifactError`    | `ArtifactError`            | `path`, `reason` (`not-found`, `not-a-file`, `not-a-directory`, `unreadable`, `unwritable`, `copy-failed`, `changed`, `invalid-metadata`), optional `detail`. |
+| `Executable.InspectError`   | `ExecutableInspectError`   | `path`, `reason`, optional `detail`: the file is missing, unreadable, or not a native executable this package understands.                          |
 | `Executable.TargetMismatch` | `ExecutableTargetMismatch` | `path`, `expected`, `observed`: the header describes a different target than requested.                                          |
 | `Executable.ParseError`     | `ExecutableParseError`     | `reason`: `Executable.parse` was given bytes that are not a supported header.                                                    |
 | `Commit.CommitError`        | `CommitError`              | `destination`, `reason`, optional `detail` and `recoveryPath`: staging, commit, or restoration failed. Reasons are listed below. |
@@ -58,7 +58,11 @@ const compile = Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }
 | `Apple.Notary.ResponseInvalid`                                              | `NotaryResponseInvalid`             | notarytool returned JSON the package could not read.                                                              |
 
 Native diagnostics survive: `ToolFailed` keeps both streams, `EsbuildFailed` keeps esbuild's
-message arrays, and signing tools redact supplied passwords from the errors they raise.
+message arrays, and signing tools pass supplied credentials to `Tool.run`'s `redact` option.
+Redaction covers failed argv, stdout, stderr, and launch diagnostics. Successful output and
+`onOutput` chunks are raw data. Filesystem errors distinguish missing inputs, failed reads, and
+failed writes; permission errors never imply that a path is missing. An opaque native copy
+reports `copy-failed` with both paths rather than guessing which side caused the error.
 
 ## Diagnostics while a tool runs
 
@@ -117,13 +121,22 @@ destination between the renames. If the second rename fails, the old tree is res
 
 | Reason                             | Meaning                                                                                                                |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `inspect-failed`                  | The destination could not be inspected; production or replacement stops with the native detail. |
 | `staging-failed`                   | The staging or backup directory could not be created.                                                                  |
 | `staged-path-mismatch`             | The producer returned an artifact recorded at a path other than the staged one.                                        |
 | `exists`                           | `onExists: "fail"` and the destination is occupied.                                                                    |
 | `directory-no-replace-unsupported` | `onExists: "fail"` was requested for a directory; the portable filesystem has no exclusive directory rename.           |
-| `rename-failed`                    | The commit rename failed; a replaced directory was restored.                                                           |
+| `rename-failed`                    | A rename failed; the previous directory remains at the destination or was restored.                                                           |
 | `rollback-failed`                  | The commit and the restoration both failed. `recoveryPath` points to the complete old tree.                            |
-| `remove-failed`                    | The new tree is committed but the backup could not be fully removed. `recoveryPath` names it; inspect before deleting. |
+| `remove-failed`                    | Removal failed. If `recoveryPath` is present, the new tree is committed and it names the old output remaining after cleanup; it may be partial. |
+
+A failed recursive cleanup can remove part or all of the old tree. The error retains the
+backup location in `detail`; `recoveryPath` is present only if the remaining old output can
+be observed there. If that inspection also fails, its diagnosis is retained too.
+
+When a rename fails and removing the now-empty backup also fails, `rename-failed` retains
+both diagnoses in `detail`. It has no `recoveryPath`: the old output is already at the
+destination, and the leftover directory holds nothing to recover.
 
 `onExists: "fail"` for files needs a filesystem that supports hard links; when it fails, the
 existing destination is intact.

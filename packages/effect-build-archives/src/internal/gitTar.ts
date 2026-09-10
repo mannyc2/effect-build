@@ -97,8 +97,7 @@ export const readGitTar = (
 ): Effect.Effect<readonly TarEntry[], TarInvalid | Artifact.ArtifactError, FileSystem.FileSystem> =>
   Effect.scoped(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
-    const unreadable = (error: unknown) =>
-      new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
+    const unreadable = Artifact.ioError(path);
     const invalid = (offset: number, detail: unknown) =>
       new TarInvalid({ path, offset, detail: detail instanceof Error ? detail.message : String(detail) });
     const handle = yield* fs.open(path).pipe(Effect.mapError(unreadable));

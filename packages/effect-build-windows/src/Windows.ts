@@ -25,14 +25,17 @@ export const tested = "10.0.26100";
 const productVersion = (contents: Uint8Array): string | undefined => {
   const view = new DataView(contents.buffer, contents.byteOffset, contents.byteLength);
   const key = "VS_VERSION_INFO\0";
+  const header = { length: 0, valueLength: 2, type: 4, key: 6, value: 40, size: 92 } as const;
+  const fixed = { size: 52, signature: 0, version: 4, productHigh: 16, productLow: 20 } as const;
   let version: string | undefined;
-  for (let offset = 0; offset + 92 <= contents.byteLength; offset += 4) {
-    const length = view.getUint16(offset, true);
-    if (length < 92 || offset + length > contents.byteLength || view.getUint16(offset + 2, true) !== 52 || view.getUint16(offset + 4, true) !== 0) continue;
-    if (!Array.from(key).every((char, i) => view.getUint16(offset + 6 + i * 2, true) === char.charCodeAt(0))) continue;
-    if (view.getUint32(offset + 40, true) !== 0xfeef04bd || view.getUint32(offset + 44, true) !== 0x10000) continue;
-    const high = view.getUint32(offset + 56, true);
-    const low = view.getUint32(offset + 60, true);
+  for (let offset = 0; offset + header.size <= contents.byteLength; offset += 4) {
+    const length = view.getUint16(offset + header.length, true);
+    if (length < header.size || offset + length > contents.byteLength || view.getUint16(offset + header.valueLength, true) !== fixed.size || view.getUint16(offset + header.type, true) !== 0) continue;
+    if (!Array.from(key).every((char, i) => view.getUint16(offset + header.key + i * 2, true) === char.charCodeAt(0))) continue;
+    const value = offset + header.value;
+    if (view.getUint32(value + fixed.signature, true) !== 0xfeef04bd || view.getUint32(value + fixed.version, true) !== 0x10000) continue;
+    const high = view.getUint32(value + fixed.productHigh, true);
+    const low = view.getUint32(value + fixed.productLow, true);
     const native = [high >>> 16, high & 0xffff, low >>> 16, low & 0xffff].join(".");
     if (version !== undefined && version !== native) return undefined;
     version = native;
@@ -98,13 +101,6 @@ const urlValid = (value: string, httpsOnly: boolean): boolean => {
   const url = new URL(value);
   return (url.protocol === "https:" || (!httpsOnly && url.protocol === "http:")) && url.hostname.length > 0 && url.username === "" && url.password === "";
 };
-const scrubFailure = (password: string | undefined) => (error: Tool.Failed | Tool.SpawnFailed) => {
-  const scrub = (text: string) => password === undefined || password.length === 0 ? text : text.replaceAll(password, "<redacted>");
-  // Tool.Failed includes argv as well as stderr; Redacted cannot protect an unwrapped /p argument.
-  return error instanceof Tool.Failed
-    ? new Tool.Failed({ tool: error.tool, args: error.args.map(scrub), exitCode: error.exitCode, stdout: scrub(error.stdout), stderr: scrub(error.stderr), stdoutTruncated: error.stdoutTruncated, stderrTruncated: error.stderrTruncated })
-    : new Tool.SpawnFailed({ tool: error.tool, detail: scrub(error.detail) });
-};
 
 export function sign(input: SignInput<Artifact.Executable>): Effect.Effect<Signed<Artifact.Executable>, SignError, Windows | Env>;
 export function sign(input: SignInput<Artifact.File>): Effect.Effect<Signed<Artifact.File>, SignError, Windows | Env>;
@@ -160,8 +156,8 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
         ...(input.description === undefined ? [] : ["/d", input.description]),
         ...(input.descriptionUrl === undefined ? [] : ["/du", input.descriptionUrl]),
         ...credential, out,
-      ], { cwd }).pipe(Effect.mapError(scrubFailure(password)));
-      yield* Tool.run(tool, ["verify", "/pa", "/all", "/v", "/tw", out], { cwd }).pipe(Effect.mapError(scrubFailure(password)));
+      ], { cwd, redact: password === undefined ? [] : [password] });
+      yield* Tool.run(tool, ["verify", "/pa", "/all", "/v", "/tw", out], { cwd, redact: password === undefined ? [] : [password] });
       return yield* input.artifact.kind === "executable"
         ? Artifact.executable(out, Tool.producer(tool), input.artifact.target)
         : Artifact.file(out, Tool.producer(tool));

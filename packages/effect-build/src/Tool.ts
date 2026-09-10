@@ -28,7 +28,7 @@ export class ProbeFailed extends Schema.TaggedError<ProbeFailed>()("ToolProbeFai
   detail: Schema.String,
 }) {
   override get message(): string {
-    return `${this.tool} at ${this.path} failed its version probe: ${this.detail}`;
+    return `${this.tool} at ${this.path} could not be inspected: ${this.detail}`;
   }
 }
 
@@ -90,6 +90,8 @@ export interface RunOptions {
   readonly stdoutLimit?: number | null | undefined;
   /** Receive every chunk as it arrives, including bytes beyond the retention limit. */
   readonly onOutput?: ((output: Output) => Effect.Effect<void>) | undefined;
+  /** Remove these values from failed-process diagnostics. Successful bytes and onOutput remain raw data. */
+  readonly redact?: readonly string[] | undefined;
 }
 
 export interface LocateOptions {
@@ -135,6 +137,10 @@ export const run = Effect.fn("Tool.run")(function*(
   args: readonly string[],
   options: RunOptions = {},
 ): Effect.fn.Return<Completion, Failed | SpawnFailed, ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> {
+  // Replace longer secrets first so overlapping values cannot expose a suffix.
+  const secrets = [...new Set(options.redact ?? [])].filter((value) => value.length > 0).sort((a, b) => b.length - a.length);
+  const scrub = (value: string) => secrets.reduce((text, secret) => text.replaceAll(secret, "<redacted>"), value);
+  const spawnFailed = (error: unknown) => new SpawnFailed({ tool: scrub(tool.name), detail: scrub(String(error)) });
   const limit = options.outputLimit ?? 8 * 1024 * 1024;
   const stdoutLimit = options.stdoutLimit === null ? Infinity : options.stdoutLimit ?? limit;
   if (!Number.isSafeInteger(limit) || limit < 0 || (stdoutLimit !== Infinity && (!Number.isSafeInteger(stdoutLimit) || stdoutLimit < 0))) {
@@ -147,7 +153,7 @@ export const run = Effect.fn("Tool.run")(function*(
   }).pipe(
     // Native spawners can throw synchronously before reporting a typed launch error.
     Effect.catchDefect(Effect.fail),
-    Effect.mapError((e) => new SpawnFailed({ tool: tool.name, detail: String(e) })),
+    Effect.mapError(spawnFailed),
   );
   const observe = (stream: "stdout" | "stderr") => options.onOutput === undefined
     ? handle[stream]
@@ -155,10 +161,10 @@ export const run = Effect.fn("Tool.run")(function*(
   const { stdout, stderr, exitCode } = yield* Effect.all(
     { stdout: collect(observe("stdout"), stdoutLimit), stderr: collect(observe("stderr"), limit), exitCode: handle.exitCode },
     { concurrency: "unbounded" },
-  ).pipe(Effect.mapError((e) => new SpawnFailed({ tool: tool.name, detail: String(e) })));
+  ).pipe(Effect.mapError(spawnFailed));
   if (exitCode !== 0) {
-    return yield* new Failed({ tool: tool.name, args: [...args], exitCode,
-      stdout: text(stdout.bytes), stderr: text(stderr.bytes), stdoutTruncated: stdout.truncated, stderrTruncated: stderr.truncated });
+    return yield* new Failed({ tool: scrub(tool.name), args: args.map(scrub), exitCode,
+      stdout: scrub(text(stdout.bytes)), stderr: scrub(text(stderr.bytes)), stdoutTruncated: stdout.truncated, stderrTruncated: stderr.truncated });
   }
   return { exitCode, stdout: stdout.bytes, stderr: stderr.bytes, stdoutTruncated: stdout.truncated, stderrTruncated: stderr.truncated };
 }, Effect.scoped);
@@ -174,9 +180,10 @@ const findOnPath = (name: string) =>
     for (const dir of searched) {
       for (const n of names) {
         const candidate = p.join(dir, n);
-        const info = yield* fs.stat(candidate).pipe(Effect.option);
-        if (info._tag === "Some" && info.value.type === "File"
-          && (p.sep === "\\" || (info.value.mode & 0o111) !== 0)) return candidate;
+        const info = yield* fs.stat(candidate).pipe(Effect.catch((error) => error.reason._tag === "NotFound"
+          ? Effect.succeed(undefined)
+          : Effect.fail(new ProbeFailed({ tool: name, path: candidate, detail: String(error) }))));
+        if (info?.type === "File" && (p.sep === "\\" || (info.mode & 0o111) !== 0)) return candidate;
       }
     }
     return yield* new NotFound({ tool: name, searched });
@@ -185,7 +192,7 @@ const findOnPath = (name: string) =>
 /** Find the executable without probing it: an explicit path, or the first runnable PATH match, with symlinks resolved. */
 export const locate = Effect.fn("Tool.locate")(function*(
   options: LocateOptions,
-): Effect.fn.Return<string, NotFound, FileSystem.FileSystem | Path.Path> {
+): Effect.fn.Return<string, NotFound | ProbeFailed, FileSystem.FileSystem | Path.Path> {
   const fs = yield* FileSystem.FileSystem;
   const p = yield* Path.Path;
   let executable: string;
@@ -193,9 +200,11 @@ export const locate = Effect.fn("Tool.locate")(function*(
     executable = yield* findOnPath(options.name);
   } else {
     executable = p.resolve(options.executable);
-    yield* fs.stat(executable).pipe(Effect.mapError(() => new NotFound({ tool: options.name, searched: [executable] })));
+    yield* fs.stat(executable).pipe(Effect.mapError((error) => error.reason._tag === "NotFound"
+      ? new NotFound({ tool: options.name, searched: [executable] })
+      : new ProbeFailed({ tool: options.name, path: executable, detail: String(error) })));
   }
-  return yield* fs.realPath(executable).pipe(Effect.orElseSucceed(() => executable));
+  return yield* fs.realPath(executable).pipe(Effect.mapError((error) => new ProbeFailed({ tool: options.name, path: executable, detail: String(error) })));
 });
 
 const firstToken = (completion: Completion): string | undefined => text(completion.stdout).trim().split(/\s+/u)[0];

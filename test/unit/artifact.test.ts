@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Stream } from "effect";
+import { Effect, FileSystem, PlatformError, Stream } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import { createHash } from "node:crypto";
 import { appendFile, chmod, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
@@ -15,6 +15,49 @@ const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "effect-build-artifact-")); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+
+describe("filesystem diagnostics", () => {
+  it.each(["file", "directory", "readVerified", "streamVerified"] as const)("preserves a denied stat through %s", async (operation) => {
+    const path = join(root, "input");
+    await writeFile(path, "input");
+    const artifact = await run(Artifact.file(path, producer));
+    const denied = PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "stat", pathOrDescriptor: path });
+    const failure = await run(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      const read = operation === "file" ? Artifact.file(path, producer)
+        : operation === "directory" ? Artifact.directory(path, producer)
+        : operation === "readVerified" ? Artifact.readVerified(artifact)
+        : Stream.runDrain(Artifact.streamVerified(artifact));
+      return yield* read.pipe(Effect.provideService(FileSystem.FileSystem, { ...fs, stat: () => Effect.fail(denied) }), Effect.flip);
+    }));
+    expect(failure).toMatchObject({ reason: "unreadable", path, detail: expect.stringContaining("PermissionDenied") });
+  });
+
+  it("does not mistake a failed link inspection for a regular directory member", async () => {
+    const path = join(root, "input");
+    await writeFile(path, "input");
+    const failure = await run(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* Artifact.directory(root, producer).pipe(Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        readLink: () => Effect.fail(PlatformError.systemError({ _tag: "Unknown", module: "FileSystem", method: "readLink", description: "I/O failure" })),
+      }), Effect.flip);
+    }));
+    expect(failure).toMatchObject({ reason: "unreadable", path, detail: expect.stringContaining("I/O failure") });
+  });
+
+  it("distinguishes a missing read from an unwritable copy destination", async () => {
+    const missing = join(root, "missing");
+    expect(await run(Artifact.file(missing, producer).pipe(Effect.flip))).toMatchObject({ reason: "not-found", path: missing });
+    const source = join(root, "source");
+    await writeFile(source, "input");
+    const artifact = await run(Artifact.file(source, producer));
+    const destination = join(source, "cannot-be-written");
+    expect(await run(Artifact.copyVerified(artifact, destination).pipe(Effect.flip))).toMatchObject({ reason: "unwritable", path: destination, detail: expect.any(String) });
+    expect(await readFile(source, "utf8")).toBe("input");
+    expect(await readdir(root)).toEqual(["source"]);
+  });
+});
 
 describe("artifacts from real files", () => {
   it("reads verified bytes and round-trips a JSON manifest", async () => {
@@ -128,30 +171,58 @@ describe("artifacts from real files", () => {
     expect(Artifact.decode([refined])).toEqual([core]);
   });
 
-  it("rejects invalid sizes, digests, targets, and inconsistent directory entry metadata", async () => {
+  it.each([
+    ["negative size", { bytes: -1 }],
+    ["fractional size", { bytes: 0.5 }],
+    ["unsafe size", { bytes: Number.MAX_SAFE_INTEGER + 1 }],
+    ["infinite size", { bytes: Infinity }],
+    ["empty digest", { sha256: "" }],
+    ["non-hex digest", { sha256: "g".repeat(64) }],
+    ["uppercase digest", { sha256: "A".repeat(64) }],
+    ["short digest", { sha256: "a".repeat(63) }],
+    ["target/format mismatch", { kind: "executable", format: "pe", target: "linux-x64" }],
+  ])("rejects file metadata with %s", async (_name, invalid) => {
     const path = join(root, "record");
     await writeFile(path, "bytes");
     const file = await run(Artifact.file(path, producer));
-    for (const bytes of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, Infinity]) expect(() => Artifact.decode([{ ...file, bytes }])).toThrow();
-    for (const sha256 of ["", "g".repeat(64), "A".repeat(64), "a".repeat(63)]) expect(() => Artifact.decode([{ ...file, sha256 }])).toThrow();
-    expect(() => Artifact.decode([{ ...file, kind: "executable", format: "pe", target: "linux-x64" }])).toThrow();
+    expect(() => Artifact.decode([{ ...file, ...invalid }])).toThrow();
+  });
+
+  type Entry = Artifact.Directory["entries"][number];
+  const invalidEntryCases: ReadonlyArray<readonly [string, (entry: Entry) => unknown]> = [
+    ["missing file digest", (entry) => ({ ...entry, sha256: undefined })],
+    ["file with link target", (entry) => ({ ...entry, linkTarget: "elsewhere" })],
+    ["directory with file digest", (entry) => ({ ...entry, kind: "directory", bytes: 0 })],
+    ["symlink with file digest", (entry) => ({ ...entry, kind: "symlink", bytes: 0, linkTarget: "elsewhere" })],
+    ["symlink without target", () => ({ path: "link", kind: "symlink", mode: 0o777, bytes: 0 })],
+    ["parent traversal", (entry) => ({ ...entry, path: "../outside" })],
+    ["missing parent directory", (entry) => ({ ...entry, path: "nested/file" })],
+    ["negative mode", (entry) => ({ ...entry, mode: -1 })],
+  ];
+  it.each(invalidEntryCases)("rejects directory entry metadata with %s", async (_name, invalid) => {
+    await writeFile(join(root, "record"), "bytes");
+    const directory = await run(Artifact.directory(root, producer));
+    expect(() => Artifact.decode([{ ...directory, entries: [invalid(directory.entries[0]!)] }])).toThrow();
+  });
+
+  const invalidDirectoryCases: ReadonlyArray<readonly [string, (directory: Artifact.Directory) => unknown]> = [
+    ["duplicate entries", (directory) => ({ ...directory, entries: [...directory.entries, ...directory.entries] })],
+    ["inconsistent byte total", (directory) => ({ ...directory, bytes: directory.bytes + 1 })],
+    ["negative root mode", (directory) => ({ ...directory, rootMode: -1 })],
+    ["fractional root mode", (directory) => ({ ...directory, rootMode: 0.5 })],
+    ["oversized root mode", (directory) => ({ ...directory, rootMode: 0o10000 })],
+    ["missing root mode", ({ rootMode: _rootMode, ...directory }) => directory],
+  ];
+  it.each(invalidDirectoryCases)("rejects directory metadata with %s", async (_name, invalid) => {
+    await writeFile(join(root, "record"), "bytes");
+    const directory = await run(Artifact.directory(root, producer));
+    expect(() => Artifact.decode([invalid(directory)])).toThrow();
+  });
+
+  it("rejects a directory manifest whose entry mode changed without updating its digest", async () => {
+    await writeFile(join(root, "record"), "bytes");
     const directory = await run(Artifact.directory(root, producer));
     const entry = directory.entries[0]!;
-    for (const invalid of [
-      { ...entry, sha256: undefined },
-      { ...entry, linkTarget: "elsewhere" },
-      { ...entry, kind: "directory", bytes: 0 },
-      { ...entry, kind: "symlink", bytes: 0, linkTarget: "elsewhere" },
-      { path: "link", kind: "symlink", mode: 0o777, bytes: 0 },
-      { ...entry, path: "../outside" },
-      { ...entry, path: "nested/file" },
-      { ...entry, mode: -1 },
-    ]) expect(() => Artifact.decode([{ ...directory, entries: [invalid] }])).toThrow();
-    expect(() => Artifact.decode([{ ...directory, entries: [entry, entry] }])).toThrow();
-    expect(() => Artifact.decode([{ ...directory, bytes: directory.bytes + 1 }])).toThrow();
-    for (const rootMode of [-1, 0.5, 0o10000]) expect(() => Artifact.decode([{ ...directory, rootMode }])).toThrow();
-    const { rootMode: _rootMode, ...missingRootMode } = directory;
-    expect(() => Artifact.decode([missingRootMode])).toThrow();
     const changedManifest = { ...directory, entries: [{ ...entry, mode: entry.mode === 0o644 ? 0o755 : 0o644 }] };
     expect(() => Artifact.decode([changedManifest])).toThrow();
     expect(await run(Artifact.verify(changedManifest).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata" });
@@ -195,6 +266,17 @@ describe("artifacts from real files", () => {
 });
 
 describe("directory manifests", () => {
+  it("decodes the persisted directory digest format without changing tuple field order", () => {
+    // Golden SHA-256 of the existing UTF-8 JSON tuple format, including null absent fields.
+    const entries = [
+      { path: "bin", kind: "directory", mode: 0o755, bytes: 0 },
+      { path: "bin/empty", kind: "file", mode: 0o644, bytes: 0, sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+      { path: "link", kind: "symlink", mode: 0o777, bytes: 0, linkTarget: "bin/empty" },
+    ];
+    const record = { kind: "directory", path: "release", bytes: 0, sha256: "619319aa040ae99c239540dc85adf0ea8300b40e31b22e13b12d290fb9077bca", rootMode: 0o755, producedBy: producer, entries };
+    expect(Artifact.decode([record])).toEqual([record]);
+  });
+
   it.skipIf(process.platform === "win32")("distinguishes newlines in filenames from separate manifest entries", async () => {
     const first = join(root, "first"), second = join(root, "second");
     await mkdir(first);

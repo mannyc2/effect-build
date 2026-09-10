@@ -60,7 +60,7 @@ jobs:
         env:
           EFFECT_BUILD_APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           EFFECT_BUILD_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: node src/sign.ts
+        run: node src/signing-evidence.ts
       - name: Remove the temporary keychain and key
         if: always()
         run: |
@@ -122,7 +122,7 @@ jobs:
           "EFFECT_BUILD_SIGNTOOL=$($signtool.FullName)" >> $env:GITHUB_ENV
       - name: Sign and verify a compiled CLI
         working-directory: examples/artifact-pipeline
-        run: node src/sign.ts
+        run: node src/signing-evidence.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: windows-signing-evidence

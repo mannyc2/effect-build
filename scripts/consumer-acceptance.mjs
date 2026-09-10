@@ -59,7 +59,9 @@ try {
     }
   }
   const importAll = (names) =>
-    names.map((name, index) => `import * as module${index} from ${JSON.stringify(name)};\nvoid module${index};`).join("\n");
+    names.map((name, index) => `import * as module${index} from ${JSON.stringify(name)};\nvoid module${index};`).join(
+      "\n",
+    );
   const typecheck = async (name, source) => {
     await writeFile(join(directory, `${name}.ts`), source);
     await writeFile(
@@ -90,31 +92,70 @@ try {
   await npm([...installArgs, `bun-types@${bunTypes}`], { cwd: directory });
   await typecheck(
     "consumer-bun",
-    `${importAll([bunApi])}\nimport { Build, Transpiler } from ${JSON.stringify(bunApi)};\nBuild.build({ entrypoints: ["input.ts"], minify: true });\nTranspiler.make({ loader: "ts" });\n`,
+    `${importAll([bunApi])}
+import { Build, Transpiler } from "effect-build-bun/api";
+Build.build({ entrypoints: ["input.ts"], minify: true });
+Transpiler.make({ loader: "ts" });
+`,
   );
   await writeFile(
     join(directory, "consumer.mjs"),
-    `${importAll(exports)}\nimport assert from "node:assert/strict";\nimport { writeFile } from "node:fs/promises";\nimport { Effect } from "effect";\nimport { NodeServices } from "@effect/platform-node";\nimport { Artifact } from "effect-build";\nawait writeFile("input.txt", "installed consumer\\n");\nconst artifact = await Effect.runPromise(Artifact.file("input.txt", { name: "consumer", version: "1.0.0" }).pipe(Effect.provide(NodeServices.layer)));\nassert.equal(artifact.bytes, 19);\nconst [restored] = Artifact.decode(Artifact.encode([artifact]));\nassert.equal(restored.sha256, artifact.sha256);\n`,
+    String.raw`${importAll(exports)}
+import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
+import { Effect } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { Artifact, Layout, Tool } from "effect-build";
+
+await writeFile("input.txt", "installed consumer\n");
+const artifact = await Effect.runPromise(
+  Artifact.file("input.txt", { name: "consumer", version: "1.0.0" }).pipe(
+    Effect.provide(NodeServices.layer),
+  ),
+);
+assert.equal(artifact.bytes, 19);
+const [restored] = Artifact.decode(Artifact.encode([artifact]));
+assert.equal(restored.sha256, artifact.sha256);
+assert.match(Layout.validate([
+  { path: "Docs/a", kind: "file" },
+  { path: "docs/b", kind: "file" },
+]).reason, /collision/);
+assert.equal(Artifact.ioError("out", "write")(new Error("denied")).reason, "unwritable");
+const failed = await Effect.runPromise(Effect.gen(function*() {
+  const tool = yield* Tool.resolve({ name: "node", executable: process.execPath });
+  return yield* Tool.run(tool, ["-e", "process.stderr.write(process.argv[1]);process.exitCode=7", "consumer-secret"], { redact: ["consumer-secret"] }).pipe(Effect.flip);
+}).pipe(Effect.provide(NodeServices.layer)));
+assert.equal(failed.stderr, "<redacted>");
+assert.equal(failed.exitCode, 7);
+`,
   );
   execFileSync(process.execPath, [join(directory, "consumer.mjs")], { cwd: directory, stdio: "inherit" });
   const executable = join(directory, process.platform === "win32" ? "cli.exe" : "cli");
   await writeFile(join(directory, "cli.ts"), 'console.log("Hello!");\n');
+  const bunOptions = process.env.BUN_EXECUTABLE || process.env.EFFECT_BUILD_BUN
+    ? { executable: process.env.BUN_EXECUTABLE ?? process.env.EFFECT_BUILD_BUN }
+    : {};
   await writeFile(
     join(directory, "build.mjs"),
-    `import { NodeRuntime, NodeServices } from "@effect/platform-node";\nimport { Effect } from "effect";\nimport * as Bun from "effect-build-bun";\nNodeRuntime.runMain(Bun.compile({ entrypoints: ["cli.ts"], outfile: ${
-      JSON.stringify(executable)
-    } }).pipe(Effect.provide(Bun.layer(${
-      JSON.stringify(
-        process.env.BUN_EXECUTABLE || process.env.EFFECT_BUILD_BUN
-          ? { executable: process.env.BUN_EXECUTABLE ?? process.env.EFFECT_BUILD_BUN }
-          : {},
-      )
-    })), Effect.provide(NodeServices.layer)));\n`,
+    `
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Effect } from "effect";
+import * as Bun from "effect-build-bun";
+
+NodeRuntime.runMain(
+  Bun.compile({ entrypoints: ["cli.ts"], outfile: ${JSON.stringify(executable)} }).pipe(
+    Effect.provide(Bun.layer(${JSON.stringify(bunOptions)})),
+    Effect.provide(NodeServices.layer),
+  ),
+);
+`,
   );
   execFileSync(process.execPath, [join(directory, "build.mjs")], { cwd: directory, stdio: "inherit" });
   assert.equal(execFileSync(executable, { cwd: directory, encoding: "utf8" }).trim(), "Hello!");
   console.log(
-    `Installed consumer passed: ${candidate.packages.length} packages, ${exports.length} exports; Node ${process.version}, TypeScript ${typescript}, Node types ${nodeTypes}, Effect ${(await installed("effect")).version}, bun-types ${(await installed("bun-types")).version}, esbuild ${(await installed("esbuild")).version}`,
+    `Installed consumer passed: ${candidate.packages.length} packages, ${exports.length} exports; Node ${process.version}, TypeScript ${typescript}, Node types ${nodeTypes}, Effect ${
+      (await installed("effect")).version
+    }, bun-types ${(await installed("bun-types")).version}, esbuild ${(await installed("esbuild")).version}`,
   );
 } finally {
   await rm(directory, { recursive: true, force: true });

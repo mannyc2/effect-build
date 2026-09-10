@@ -1,10 +1,11 @@
 import { Effect, FileSystem, Path, Schema } from "effect";
 import type * as Artifact from "./Artifact.js";
+import { readLink } from "./internal/fileSystem.js";
 export class CommitError extends Schema.TaggedError<CommitError>()("CommitError", {
   destination: Schema.String,
-  reason: Schema.Literals(["exists", "rename-failed", "staging-failed", "remove-failed", "rollback-failed", "directory-no-replace-unsupported", "staged-path-mismatch"] as const),
+  reason: Schema.Literals(["exists", "inspect-failed", "rename-failed", "staging-failed", "remove-failed", "rollback-failed", "directory-no-replace-unsupported", "staged-path-mismatch"] as const),
   detail: Schema.optionalKey(Schema.String),
-  /** Previous output retained here when automatic recovery or cleanup fails. */
+  /** Previous output after failed rollback, or its remaining portion after failed cleanup. */
   recoveryPath: Schema.optionalKey(Schema.String),
 }) {
   override get message(): string {
@@ -37,9 +38,16 @@ export interface ProducerOptions extends Omit<Options, "staging"> {
 }
 
 // exists follows symlinks; a dangling link still occupies the destination.
-const occupied = (destination: string): Effect.Effect<boolean, never, FileSystem.FileSystem> =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) =>
-    fs.readLink(destination).pipe(Effect.map(() => true), Effect.catch(() => fs.exists(destination)), Effect.orElseSucceed(() => false)));
+const occupied = (destination: string): Effect.Effect<boolean, CommitError, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const link = yield* readLink(destination);
+    return link !== undefined || (yield* fs.exists(destination));
+  }).pipe(
+    Effect.catch((error) => error.reason._tag === "NotFound"
+      ? Effect.succeed(false)
+      : Effect.fail(new CommitError({ destination, reason: "inspect-failed", detail: String(error) }))),
+  );
 
 /**
  * Sibling staging keeps failed builds from leaving truncated output.
@@ -85,16 +93,33 @@ export const atomic = <A extends Artifact.Artifact, E, R>(
               Effect.mapError((e) => fail("staging-failed", e)),
             );
             const previous = p.join(backup, p.basename(destination));
-            const cleanup = fs.remove(backup, { recursive: true }).pipe(Effect.mapError((e) => fail("remove-failed", e, previous)));
-            yield* fs.rename(destination, previous).pipe(Effect.catch((e) => cleanup.pipe(Effect.andThen(Effect.fail(fail("rename-failed", e))))));
+            // Before the first move, and after a successful rollback, backup is empty.
+            // Failure to remove it must not replace the rename failure or claim old output lives there.
+            const failAfterEmptyCleanup = (error: unknown) => fs.remove(backup, { recursive: true }).pipe(
+              Effect.match({
+                onFailure: (cleanup) => fail("rename-failed", `${String(error)}; empty backup cleanup (${backup}): ${String(cleanup)}`),
+                onSuccess: () => fail("rename-failed", error),
+              }),
+              Effect.flatMap(Effect.fail),
+            );
+            yield* fs.rename(destination, previous).pipe(Effect.catch(failAfterEmptyCleanup));
             yield* fs.rename(staged, destination).pipe(Effect.catch((e) => Effect.gen(function*() {
               yield* fs.rename(previous, destination).pipe(
                 Effect.mapError((rollback) => fail("rollback-failed", `${String(e)}; rollback: ${String(rollback)}`, previous)),
               );
-              yield* cleanup;
-              return yield* fail("rename-failed", e);
+              return yield* failAfterEmptyCleanup(e);
             })));
-            return yield* cleanup;
+            // The replacement is installed and backup still owns the previous output.
+            return yield* fs.remove(backup, { recursive: true }).pipe(Effect.catch((error) =>
+              // Recursive removal may already have consumed some or all of the old tree.
+              occupied(previous).pipe(
+                Effect.match({
+                  onSuccess: (retained) => fail("remove-failed", `${String(error)}; cleanup: ${backup}`, retained ? previous : undefined),
+                  onFailure: (inspection) => fail("remove-failed", `${String(error)}; cleanup: ${backup}; remaining output could not be inspected: ${String(inspection)}`),
+                }),
+                Effect.flatMap(Effect.fail),
+              )
+            ));
           }
           yield* fs.rename(staged, destination).pipe(Effect.mapError((e) => fail("rename-failed", e)));
         }),

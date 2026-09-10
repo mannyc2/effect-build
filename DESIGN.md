@@ -13,14 +13,15 @@ in the README includes the runtime and layers needed to execute it. Everything d
 
 ## Core
 
-| Module       | Exports                                                                                                                                                             | Role                                                                                                                                                             |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Target`     | 8 literals (`linux-x64`, `linux-x64-musl`, `linux-arm64`, `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `windows-x64`, `windows-arm64`), `parts`, `all`, `host` | Same names ts-release uses. Linux without suffix means glibc.                                                                                                    |
-| `Artifact`   | `File`, `Executable`, `Directory`, `Regular`, `Producer`; `file`, `executable`, `directory`, `verify`, `streamVerified`, `copyVerified`, `readVerified`, `sha256`, `encode`, `decode` | Observe what's on disk into a record. `Executable.target` comes from the header. `Directory.sha256` hashes the sorted manifest; symlinks recorded, not followed. |
-| `Executable` | `parse`, `inspect`, `matches`, `resolveTarget`, `expectTarget`                                                                                                      | ELF/Mach-O/PE header facts. A static Linux binary matches gnu and musl.                                                                                          |
-| `Commit`     | `atomic(outfile, produce, { onExists, prefix, staging })`, `output(outfile, produce, ProducerOptions, staging?)`                                                    | Stage with final path depth or basename, then commit with recovery. Checks run inside `produce` run before the rename. `output` is what producers do with `atomic`, `onExists` and `prefix`; the producer picks `staging`. |
-| `Tool`       | `locate`, `resolve`, `run`, `parseVersion`, `satisfies`, `requireVersion`, `producer`                                                                               | Locate and resolve once, record path/version/hash. Nothing re-checks the binary later. Ranges use npm semver.                                                     |
-| `Checksums`  | `write`                                                                                                                                                             | `sha256sum -c` compatible.                                                                                                                                       |
+| Module       | Exports                                                                                                                                                                               | Role                                                                                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Target`     | 8 literals (`linux-x64`, `linux-x64-musl`, `linux-arm64`, `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `windows-x64`, `windows-arm64`), `parts`, `all`, `host`                   | Same names ts-release uses. Linux without suffix means glibc.                                                                                                                                                              |
+| `Artifact`   | `File`, `Executable`, `Directory`, `Regular`, `Producer`; `file`, `executable`, `directory`, `verify`, `streamVerified`, `copyVerified`, `readVerified`, `sha256`, `ioError`, `encode`, `decode` | Observe what's on disk into a record. `Executable.target` comes from the header. `Directory.sha256` hashes the sorted manifest; symlinks recorded, not followed.                                                           |
+| `Executable` | `parse`, `inspect`, `matches`, `resolveTarget`, `expectTarget`                                                                                                                        | ELF/Mach-O/PE header facts. A static Linux binary matches gnu and musl.                                                                                                                                                    |
+| `Commit`     | `atomic(outfile, produce, { onExists, prefix, staging })`, `output(outfile, produce, ProducerOptions, staging?)`                                                                      | Stage with final path depth or basename, then commit with recovery. Checks run inside `produce` run before the rename. `output` is what producers do with `atomic`, `onExists` and `prefix`; the producer picks `staging`. |
+| `Tool`       | `locate`, `resolve`, `run`, `parseVersion`, `satisfies`, `requireVersion`, `producer`                                                                                                 | Locate and resolve once, record path/version/hash. Nothing re-checks the binary later. Ranges use npm semver.                                                                                                              |
+| `Layout`     | `Entry`, `Issue`, `pathIssue`, `validate`                                                                                                                                             | Shared normalized shipping paths: every explicit or implicit prefix has one NFC/case-folded spelling and only directories have descendants.                                                                                |
+| `Checksums`  | `write`, `verify`                                                                                                                                                                               | `sha256sum -c` compatible writing and verification.                                                                                                                                                                                                 |
 
 ## Providers
 
@@ -45,7 +46,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 
 - Directory replacement retains a recoverable old tree; regular-file no-replace uses exclusive hard-link creation, while directory no-replace is unsupported.
 - **Checksum paths are relative to their file's directory**, so a staged release tree can move without rewriting them.
-- **Directory archive inputs preserve descendant modes and symlinks**; the archive prefix and a sibling-staged root have mode `0755` because directory artifacts do not record their root mode.
+- **Directory archive inputs preserve descendant modes and symlinks**; archive prefixes and sibling staging directories are newly created roots with mode `0755`, independent of the input directory artifact's recorded `rootMode`.
 
 - **Replace on exists by default.** Every producer takes `onExists: "fail"` and `prefix`; `staging` stays
   the producer's, because files stage nested and import-bearing directories stage sibling. Direct sibling output
@@ -93,8 +94,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Release retries consume retained exact tarballs** and verify registry bytes before skipping an existing version.
 - **SHA-256 is the only digest.** Every artifact and directory entry carries one; there is no unhashed
   observation and no algorithm choice.
-- **Layouts reject case-insensitive and NFC collisions on every host.** Archives, wheels and app bundles ship
-  to all three OSes, so a Linux-only distinction is a defect in the layout, not a choice.
+- **Layouts reject case-insensitive and NFC collisions at every path prefix on every host.** Core `Layout` owns this shipping guarantee for archives, wheels and app bundles, including implicit directories; local artifact observations still record host-specific names.
 - **Archive and wheel bytes depend only on their inputs**: DEFLATE level 6, fixed ZIP timestamps, zero tar
   owners and times, zero gzip mtime. There are no timestamp, ownership, comment or compression options.
 - **Windows signatures always carry an RFC3161 SHA-256 timestamp, and SignTool warnings fail.** Exit 2 means
@@ -107,3 +107,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
   and `.git` components are the only omissions.
 - **Node SEA ad-hoc signs on Darwin.** Injection invalidates the base signature and an unsigned arm64 binary
   will not launch; `Apple.sign` replaces the ad hoc signature.
+
+- **Filesystem failures name the operation**: reads distinguish absence from access/I/O failure, writes report `unwritable`, opaque native copies report both paths as `copy-failed`, and tool inspection never silently treats an inaccessible path as absent.
+- **Commit recovery paths name retained output only.** Empty-backup cleanup can add diagnostic detail but cannot replace a failed rename. Failed destructive cleanup reports only observed remnants, which may be partial.
+- **Tool owns failure redaction.** Providers supply secret values; argv and failed-process diagnostics are scrubbed together, while successful data and live output remain raw.

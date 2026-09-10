@@ -18,6 +18,7 @@ const invoke = <A>(operation: string, run: () => Promise<A>): Effect.Effect<A, F
 export function build(options: rolldown.BuildOptions): Effect.Effect<rolldown.RolldownOutput, Failed>;
 export function build(options: rolldown.BuildOptions[]): Effect.Effect<rolldown.RolldownOutput[], Failed>;
 export function build(options: rolldown.BuildOptions | rolldown.BuildOptions[]): Effect.Effect<rolldown.RolldownOutput | rolldown.RolldownOutput[], Failed> {
+  // TypeScript selects the single-build or array overload only after narrowing.
   return invoke<rolldown.RolldownOutput | rolldown.RolldownOutput[]>("build", () =>
     Array.isArray(options) ? rolldown.build(options) : rolldown.build(options));
 }

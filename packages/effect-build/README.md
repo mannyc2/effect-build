@@ -10,11 +10,11 @@ npm install --save-dev --save-exact effect-build@0.7.0 effect@4.0.0-rc.108 @effe
 ```
 
 ```ts
-import { Artifact, Checksums, Commit, Executable, Target, Tool } from "effect-build";
+import { Artifact, Checksums, Commit, Executable, Layout, Target, Tool } from "effect-build";
 ```
 
 Each module is also a subpath export (`effect-build/Artifact`, `effect-build/Tool`, and so on).
-Every operation needs platform services: `NodeServices.layer` from `@effect/platform-node` or
+Effects that access files or run tools need platform services: `NodeServices.layer` from `@effect/platform-node` or
 `BunServices.layer` from `@effect/platform-bun`.
 
 ## Artifact
@@ -62,6 +62,15 @@ const inputs = Effect.gen(function*() {
 `Artifact.File`, `Artifact.Executable`, `Artifact.Directory`, and `Artifact.Producer` are Effect
 schemas as well as types.
 
+## Layout
+
+`Layout.validate(entries)` checks relative shipping paths with `file`, `directory`, or `symlink`
+roles. It returns `{ path, reason }` on failure or `undefined` on success. Every explicit or
+implicit directory must have one spelling under NFC normalization and case folding, and only
+directories may have descendants. `Layout.pathIssue(path)` checks one normalized relative path.
+Archives, wheels and app resources use this check; `Artifact.directory` still records the names
+present on the local filesystem. Format-specific requirements stay with each provider.
+
 ## Target
 
 Eight targets, named the way Node and Bun name them: `linux-x64`, `linux-x64-musl`, `linux-arm64`,
@@ -70,6 +79,9 @@ suffix means glibc. `Target.all` lists them, `Target.Target` is their schema, an
 `Target.parts(target)` splits one into `os`, `arch`, `abi` (`gnu`, `musl`, or `undefined`),
 `format`, and `executableSuffix` (`""` or `".exe"`). `Target.host()` returns the host's target when
 the OS, architecture, and (on Linux) libc are established, and `undefined` otherwise.
+
+`Artifact.ioError(path, "read" | "write")` maps a filesystem failure while retaining its
+native detail. Reads distinguish `not-found` from `unreadable`; writes report `unwritable`.
 
 ## Executable
 
@@ -106,9 +118,9 @@ const compress = (executable: Artifact.Executable, outfile: string) =>
 
 | Function                                                      | Purpose                                                                                                                                                                                                      |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `locate({ name, executable? })`                               | Find the binary without probing it: the explicit path, or the first runnable match on `PATH`, with symlinks resolved.                                                                                        |
+| `locate({ name, executable? })`                               | Find the binary without probing it: the explicit path, or the first runnable match on `PATH`, with symlinks resolved. Inspection failures retain their native detail as `Tool.ProbeFailed`.                                                                                        |
 | `resolve({ name, executable?, versionArgs?, parseVersion? })` | Locate, hash, and probe once; returns `Tool.Resolved` with `name`, `path`, `version`, `bytes`, `sha256`. The default probe is `--version` and the default parser takes the first token of stdout.            |
-| `run(tool, args, options?)`                                   | Run it; `options` are `cwd`, `env`, `extendEnv`, `outputLimit` (8 MiB per stream by default), `stdoutLimit` (`null` to keep all stdout as data), and `onOutput` for live chunks. Failure keeps both streams. |
+| `run(tool, args, options?)`                                   | Run it; `options` are `cwd`, `env`, `extendEnv`, `outputLimit` (8 MiB per stream by default), `stdoutLimit` (`null` to keep all stdout as data), `onOutput` for live chunks, and `redact` for secrets in failure diagnostics. Failure keeps both streams. |
 | `parseVersion(text)`, `satisfies(range)`                      | Canonical `x.y.z` parsing and npm semver matching; invalid ranges never match.                                                                                                                               |
 | `requireVersion(rangeOrPredicate)`                            | A combinator for `Effect<Tool.Resolved>`; fails with `ToolVersionUnsupported`.                                                                                                                               |
 | `producer(tool)`                                              | The `producedBy` record for artifacts a tool made.                                                                                                                                                           |

@@ -52,6 +52,6 @@ The steps are numbered in `src/main.ts`:
 Authenticode and archived, an MSIX signed with a PFX, a macOS CLI signed with the hardened
 runtime, notarized as a ZIP, and assessed, and a full app bundle with a signed DMG and PKG,
 notarized and stapled. CI typechecks this module and separately signs a native Windows executable
-with a temporary certificate. [`src/sign.ts`](src/sign.ts) is the program the
+with a temporary certificate. [`src/signing-evidence.ts`](src/signing-evidence.ts) is the program the
 [signing workflow](../../.github/workflows/signing.yml) runs on macOS and Windows with real
 identities; the secrets it needs are listed in [CONTRIBUTING.md](../../CONTRIBUTING.md).

@@ -4,7 +4,7 @@ import { Artifact, Executable, Tool } from "effect-build";
 import * as NodeSea from "effect-build-node-sea";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, copyFile, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, link, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -84,10 +84,10 @@ describe("real Node SEA executables", () => {
     expect((await readdir(root)).sort()).toEqual([name("existing"), "main.cjs", "message.txt"].sort());
   }, 30_000);
 
-  it("writes directly with an explicit base executable and keeps preparation files separate", async () => {
+  it("writes directly from a read-only explicit base and keeps preparation files separate", async () => {
     const base = join(root, name("base-node"));
     await copyFile(executable, base);
-    await chmod(base, 0o755);
+    await chmod(base, 0o555);
     const main = await observe(mainPath);
     const { service, artifact } = await run(Effect.gen(function*() {
       const service = yield* NodeSea.NodeSea;
@@ -101,5 +101,21 @@ describe("real Node SEA executables", () => {
     expect((await execute(artifact.path, [], { timeout: 30_000 })).stdout).toBe("hello from SEA\n");
     expect(await run(Artifact.verify(artifact))).toEqual(artifact);
     expect((await readdir(root)).sort()).toEqual([name("base-node"), name("explicit-base"), "main.cjs", "message.txt"].sort());
+  }, 300_000);
+
+  it.each(["same path", "hardlink"] as const)("writes directly when output is the base's %s", async (alias) => {
+    // Only the disposable copy can become output; the installed builder is never modified.
+    const base = join(root, name("base-node"));
+    await copyFile(executable, base);
+    await chmod(base, 0o755);
+    const outfile = alias === "same path" ? base : join(root, name("linked-output"));
+    if (alias === "hardlink") await link(base, outfile);
+    const artifact = await run(NodeSea.assemble({ main: await observe(mainPath), outfile, cwd: root, atomic: false }), base);
+    expect(artifact.path).toBe(outfile);
+    expect((await execute(artifact.path, [], { timeout: 30_000 })).stdout).toBe("hello from SEA\n");
+    expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+    const expected = [name("base-node"), "main.cjs", "message.txt"];
+    if (alias === "hardlink") expected.push(name("linked-output"));
+    expect((await readdir(root)).sort()).toEqual(expected.sort());
   }, 300_000);
 });

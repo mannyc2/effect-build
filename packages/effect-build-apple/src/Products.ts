@@ -2,7 +2,7 @@ import { Effect, FileSystem, Path } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
 import { validateResources, type Resource } from "./AppBundle.js";
-import { copyProduct, copyRegular, fileError, outputPath, runNative, textValid, verifySignature } from "./internal.js";
+import { copyProduct, copyRegular, outputPath, runNative, textValid, verifySignature } from "./internal.js";
 import type { Dmg, Pkg, SignedApp, SignedExecutable } from "./Model.js";
 
 export interface DmgInput extends Commit.ProducerOptions {
@@ -34,14 +34,14 @@ export const dmg = (input: DmgInput): Effect.Effect<Dmg, ProductError, Apple | E
   const appName = p.basename(input.artifact.path);
   if (!appName.toLowerCase().endsWith(".app")) return yield* new InputInvalid({ reason: "the input app path must end in .app" });
   yield* validateResources(input.layout ?? [], [appName, ...(input.applicationsLink === true ? ["Applications"] : [])]);
-  const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-dmg-" }).pipe(Effect.mapError(fileError(outfile)));
+  const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-dmg-" }).pipe(Effect.mapError(Artifact.ioError(outfile, "write")));
   const volume = p.join(temporary, "volume");
-  yield* fs.makeDirectory(volume).pipe(Effect.mapError(fileError(volume)));
+  yield* fs.makeDirectory(volume).pipe(Effect.mapError(Artifact.ioError(volume, "write")));
   const app = p.join(volume, appName);
   yield* copyProduct(input.artifact, app);
   yield* verifySignature(input.artifact, app);
   for (const entry of input.layout ?? []) yield* copyRegular(entry.artifact, p.join(volume, entry.path), entry.executable ?? entry.artifact.kind === "executable");
-  if (input.applicationsLink === true) yield* fs.symlink("/Applications", p.join(volume, "Applications")).pipe(Effect.mapError(fileError(volume)));
+  if (input.applicationsLink === true) yield* fs.symlink("/Applications", p.join(volume, "Applications")).pipe(Effect.mapError(Artifact.ioError(volume, "write")));
   const { tool } = yield* Apple;
   const cwd = p.resolve(input.cwd ?? "");
   const produce = (out: string) => Effect.gen(function*() {
@@ -61,7 +61,7 @@ export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | E
   }
   const fs = yield* FileSystem.FileSystem;
   const p = yield* Path.Path;
-  const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-pkg-" }).pipe(Effect.mapError(fileError(outfile)));
+  const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-pkg-" }).pipe(Effect.mapError(Artifact.ioError(outfile, "write")));
   const name = p.basename(input.artifact.path);
   if (app && !name.toLowerCase().endsWith(".app")) return yield* new InputInvalid({ reason: "the input app path must end in .app" });
   // pkgbuild takes an app as a component; an executable ships as a payload root holding it under its own name.

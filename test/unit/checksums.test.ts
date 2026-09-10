@@ -20,6 +20,12 @@ beforeEach(async () => {
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
+it("reports an unwritable checksum destination as a write failure", async () => {
+  const outfile = join(root, "dist");
+  const failure = await run(Checksums.write({ artifacts: [], outfile }).pipe(Effect.flip));
+  expect(failure).toMatchObject({ reason: "unwritable", path: outfile, detail: expect.any(String) });
+});
+
 it("checks files with the same basename after moving the output tree", async () => {
   const armPath = join(root, "dist", "arm64", "cli");
   const x64Path = join(root, "dist", "x64", "cli");

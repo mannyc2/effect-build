@@ -52,6 +52,10 @@
       "types": "./dist/Target.d.ts",
       "import": "./dist/Target.js"
     },
+    "./Layout": {
+      "types": "./dist/Layout.d.ts",
+      "import": "./dist/Layout.js"
+    },
     "./Tool": {
       "types": "./dist/Tool.d.ts",
       "import": "./dist/Tool.js"

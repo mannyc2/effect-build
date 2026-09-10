@@ -75,14 +75,12 @@ export interface Input extends Commit.ProducerOptions {
 export type AssembleError =
   | InputInvalid | Failed | Tool.NotFound | Tool.ProbeFailed | Tool.Failed | Tool.SpawnFailed
   | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Commit.CommitError;
-const fileError = (path: string) => (error: unknown) =>
-  new Artifact.ArtifactError({ path, reason: "unreadable", detail: String(error) });
-
 export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Effect<Artifact.Executable, AssembleError, NodeSea | Env> =>
   Effect.scoped(Effect.gen(function*() {
     if (input.outfile.length === 0 || input.outfile.includes("\0")) {
       return yield* new InputInvalid({ reason: "outfile must be a non-empty path without NUL" });
     }
+    if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
     const { builder, base } = yield* NodeSea;
     // The output is the base with one resource added, so its target is the base's; the host may be running it under emulation.
     const facts = yield* Executable.inspect(base.path);
@@ -95,7 +93,7 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
     const cwd = p.resolve(input.cwd ?? "");
     const outfile = p.resolve(cwd, input.outfile);
     // Inputs and the blob always live separately, including when atomic output is disabled.
-    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-sea-" }).pipe(Effect.mapError(fileError(outfile)));
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-sea-" }).pipe(Effect.mapError(Artifact.ioError(outfile, "write")));
     const main = p.join(temporary, "main.cjs");
     yield* Artifact.copyVerified(input.main, main);
     yield* Tool.run(builder, ["--check", main], { cwd });
@@ -114,9 +112,9 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
       disableExperimentalSEAWarning: input.disableExperimentalSEAWarning ?? false,
       useSnapshot: false,
       useCodeCache: false,
-    })).pipe(Effect.mapError(fileError(config)));
+    })).pipe(Effect.mapError(Artifact.ioError(config, "write")));
     yield* Tool.run(builder, ["--experimental-sea-config", config], { cwd });
-    const contents = yield* fs.readFile(blob).pipe(Effect.mapError(fileError(blob)));
+    const contents = yield* fs.readFile(blob).pipe(Effect.mapError(Artifact.ioError(blob)));
     const signing = facts.format === "mach-o" ? yield* Tool.resolve({
       name: "xcrun",
       parseVersion: (completion) => {
@@ -125,7 +123,13 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
       },
     }) : undefined;
     const produce = (out: string) => Effect.gen(function*() {
-      yield* fs.copyFile(base.path, out).pipe(Effect.mapError(fileError(out)));
+      // Native copy preserves same-file and hardlink aliases without truncating the base.
+      yield* fs.copyFile(base.path, out).pipe(Effect.mapError((error) => new Artifact.ArtifactError({
+        path: out,
+        reason: "copy-failed",
+        detail: `copy ${base.path} -> ${out}: ${String(error)}`,
+      })));
+      yield* fs.chmod(out, 0o755).pipe(Effect.mapError(Artifact.ioError(out, "write")));
       if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--remove-signature", out]);
       // postject cannot cancel: finish its writes before a scope removes temporary output.
       yield* Effect.uninterruptible(Effect.tryPromise({
@@ -135,7 +139,6 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
         }),
         catch: (cause) => new Failed({ operation: "inject", cause }),
       }));
-      yield* fs.chmod(out, 0o755).pipe(Effect.mapError(fileError(out)));
       if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--sign", "-", out]);
       return yield* Artifact.executable(out, Tool.producer(builder), target);
     });

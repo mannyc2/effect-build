@@ -14,8 +14,14 @@ describe("version policy and operation capabilities", () => {
     expect(await Effect.runPromise(Effect.succeed(unreviewed).pipe(Tool.requireVersion(Bun.supported)))).toBe(unreviewed);
     const defective = tool("bun", "1.4.1");
     expect(await Effect.runPromise(Effect.succeed(defective).pipe(Tool.requireVersion(Bun.supported)))).toBe(defective);
-    const failure = await run(Bun.build({ entrypoints: ["input.ts"] }).pipe(Effect.provideService(Bun.Bun, { tool: defective }), Effect.flip));
-    expect(failure).toMatchObject({ _tag: "BunInputInvalid", reason: expect.stringContaining("variable-collision") });
+    const input = { entrypoints: ["input.ts"] as const, outfile: "output.exe", outdir: "output" };
+    const builds: readonly Effect.Effect<unknown, Bun.CompileError, NodeServices.NodeServices | Bun.Bun>[] = [
+      Bun.build(input), Bun.compile(input), Bun.bundle(input), Effect.scoped(Bun.watch(input)),
+    ];
+    for (const effect of builds) {
+      const failure = await run(effect.pipe(Effect.provideService(Bun.Bun, { tool: defective }), Effect.flip));
+      expect(failure).toMatchObject({ _tag: "BunInputInvalid", reason: expect.stringContaining("variable-collision") });
+    }
   });
 
   it("accepts Deno2.9.6 and reports removed flags at the operations using them", async () => {
@@ -25,6 +31,10 @@ describe("version policy and operation capabilities", () => {
       Effect.provideService(Deno.Deno, { tool: resolved }), Effect.flip,
     ));
     expect(compile).toMatchObject({ _tag: "DenoInputInvalid", reason: expect.stringContaining("--allow-scripts") });
+    const watch = await run(Effect.scoped(Deno.watch({ entrypoint: "input.ts", outfile: "output.exe", options: { allowScripts: true } })).pipe(
+      Effect.provideService(Deno.Deno, { tool: resolved }), Effect.flip,
+    ));
+    expect(watch).toMatchObject({ _tag: "DenoInputInvalid", operation: "watch", reason: expect.stringContaining("--allow-scripts") });
     const transpile = await run(Deno.transpile({ files: ["input.ts"], outdir: "output", options: { conditions: ["custom"] } }).pipe(
       Effect.provideService(Deno.Deno, { tool: resolved }), Effect.flip,
     ));

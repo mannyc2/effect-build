@@ -8,7 +8,6 @@ import {
   renderCheck,
   renderPermission,
   renderProject,
-  validatePath,
   validatePermission,
 } from "./Options.js";
 
@@ -76,7 +75,6 @@ export interface Options extends ProjectOptions, Permissions {
 export interface Input extends Options {
   readonly entrypoint: string;
   readonly scriptArgs?: readonly string[] | undefined;
-  readonly outfile: string;
   readonly target?: Target | undefined;
 }
 
@@ -165,17 +163,9 @@ export const renderArgv = (
   ...(input.scriptArgs ?? []),
 ];
 
-export const validateInput = Effect.fnUntraced(function*(input: Input): Effect.fn.Return<void, InputInvalid> {
-  yield* validatePath("compile", "entrypoint", input.entrypoint);
-  yield* validatePath("compile", "outfile", input.outfile);
+export const validateOptions = Effect.fnUntraced(function*(operation: string, input: Options): Effect.fn.Return<void, InputInvalid> {
   for (const [, field] of permissionFields) {
-    yield* validatePermission("compile", field, input[field]);
+    yield* validatePermission(operation, field, input[field]);
   }
-  yield* validatePermission("compile", "allowScripts", input.allowScripts);
-  if (input.target !== undefined && !Target.literals.includes(input.target)) {
-    return yield* new InputInvalid({
-      operation: "compile",
-      reason: `unsupported Deno 2.9.5 target: ${String(input.target)}`,
-    });
-  }
+  yield* validatePermission(operation, "allowScripts", input.allowScripts);
 });

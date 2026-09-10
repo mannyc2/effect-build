@@ -154,21 +154,26 @@ const renderArgv = (input: CompileInput, out: string, target?: BunTarget): strin
 };
 
 const validPath = (value: string): boolean => value.length > 0 && !value.includes("\0");
-const validate = Effect.fnUntraced(function*(entrypoints: readonly string[], output?: string) {
-  if (entrypoints.length === 0 || entrypoints.some((entrypoint) => !validPath(entrypoint))) {
+const prepareBuild = Effect.fnUntraced(function*(
+  input: { readonly entrypoints: readonly string[]; readonly cwd?: string | undefined },
+  output?: string,
+) {
+  if (input.entrypoints.length === 0 || input.entrypoints.some((entrypoint) => !validPath(entrypoint))) {
     return yield* new InputInvalid({ reason: "entrypoints must be non-empty paths without NUL" });
   }
   if (output !== undefined && !validPath(output)) {
     return yield* new InputInvalid({ reason: "output must be a non-empty path without NUL" });
   }
+  if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
+  const { tool } = yield* Bun;
+  if (Tool.satisfies("1.4.1")(tool.version)) {
+    return yield* new InputInvalid({ reason: "Bun 1.4.1 has a reproduced variable-collision bug in emitted builds; use another version" });
+  }
+  return tool;
 });
 
 const outputPath = (output: string, cwd?: string) =>
   Effect.map(Path.Path, (p) => p.resolve(cwd ?? ".", output));
-
-const checkBuildVersion = (tool: Tool.Resolved) => Tool.satisfies("1.4.1")(tool.version)
-  ? Effect.fail(new InputInvalid({ reason: "Bun 1.4.1 has a reproduced variable-collision bug in emitted builds; use another version" }))
-  : Effect.void;
 
 /**
  * `bun build --compile` as an Effect. Verifies the produced binary's header
@@ -181,9 +186,7 @@ export const compile = Effect.fn("Bun.compile")(function*(
   CompileError,
   Bun | FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner
 > {
-  yield* validate(input.entrypoints, input.outfile);
-  const { tool } = yield* Bun;
-  yield* checkBuildVersion(tool);
+  const tool = yield* prepareBuild(input, input.outfile);
   const requested = input.target;
   const bunTarget = requested === undefined ? undefined : toBunTarget(requested);
   if (bunTarget !== undefined && !BunTarget.literals.includes(bunTarget)) {
@@ -274,18 +277,14 @@ const renderBundleOptions = (o: BundleOptions): string[] => [
 ];
 
 export const build = Effect.fn("Bun.build")(function*(input: BuildInput) {
-  yield* validate(input.entrypoints);
-  const { tool } = yield* Bun;
-  yield* checkBuildVersion(tool);
+  const tool = yield* prepareBuild(input);
   const result = yield* Tool.run(tool, ["build", ...renderBundleOptions(input.options ?? {}), ...input.entrypoints],
     { cwd: input.cwd, onOutput: input.onOutput, stdoutLimit: null });
   return result.stdout;
 });
 
 export const bundle = Effect.fn("Bun.bundle")(function*(input: BundleInput) {
-  yield* validate(input.entrypoints, input.outdir);
-  const { tool } = yield* Bun;
-  yield* checkBuildVersion(tool);
+  const tool = yield* prepareBuild(input, input.outdir);
   const outdir = yield* outputPath(input.outdir, input.cwd);
   const produce = (out: string) => Tool.run(tool,
     ["build", ...renderBundleOptions(input.options ?? {}), `--outdir=${out}`, ...input.entrypoints],
@@ -303,9 +302,7 @@ export interface WatchInput extends Omit<BundleInput, keyof Commit.ProducerOptio
 
 /** The caller owns the scope. Live diagnostics are inherited unless stdio is pipe. */
 export const watch = Effect.fn("Bun.watch")(function*(input: WatchInput) {
-  yield* validate(input.entrypoints, input.outdir);
-  const { tool } = yield* Bun;
-  yield* checkBuildVersion(tool);
+  const tool = yield* prepareBuild(input, input.outdir);
   const outdir = yield* outputPath(input.outdir, input.cwd);
   const process = yield* ChildProcess.make(tool.path, ["build", "--watch",
     ...(input.noClearScreen === true ? ["--no-clear-screen"] : []),

@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, FileSystem, PlatformError } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import * as Executable from "effect-build/Executable";
 import { chmod, mkdtemp, open, rm, writeFile } from "node:fs/promises";
@@ -28,6 +28,17 @@ const fixtures = [
 ] as const;
 
 describe("executable headers", () => {
+  it("preserves a denied open as an unreadable executable with native details", async () => {
+    const failure = await Effect.runPromise(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* Executable.inspect("denied").pipe(Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        open: () => Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "open" })),
+      }), Effect.flip);
+    }).pipe(Effect.provide(NodeServices.layer)));
+    expect(failure).toMatchObject({ reason: "unreadable", detail: expect.stringContaining("PermissionDenied") });
+  });
+
   it.each(fixtures)("identifies %s and resolves its target", async (_name, bytes, expected, target) => {
     const facts = await Effect.runPromise(Executable.parse(bytes));
     expect(facts).toEqual(expected);
@@ -90,7 +101,7 @@ describe("executable headers", () => {
       });
       const missing = join(root, "missing");
       const unreadable = await Effect.runPromise(Executable.inspect(missing).pipe(Effect.flip, Effect.provide(NodeServices.layer)));
-      expect(unreadable).toMatchObject({ _tag: "ExecutableInspectError", path: missing, reason: "unreadable" });
+      expect(unreadable).toMatchObject({ _tag: "ExecutableInspectError", path: missing, reason: "not-found", detail: expect.any(String) });
       await writeFile(path, new Uint8Array(3));
       const malformed = await Effect.runPromise(Executable.inspect(path).pipe(Effect.flip, Effect.provide(NodeServices.layer)));
       expect(malformed).toMatchObject({ _tag: "ExecutableInspectError", path, reason: "truncated-header" });

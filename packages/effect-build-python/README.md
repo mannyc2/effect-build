@@ -40,8 +40,9 @@ artifact's record, plus `entry_points.txt` when `entryPoints` is given.
   `platformTag({ target, glibc | musl | macos })`, or `executableTags(...)` for the full
   `py3-none` triple a compiled command ships with.
 - **Entries** are regular artifacts. Executables get mode `0755`, or set `executable: true`.
-  `.dist-info` entries belong to the writer, and paths that collide after case folding or NFC
-  normalization are rejected.
+  `.dist-info` entries belong to the writer. Paths and implicit directories must each have one
+  spelling after case folding and NFC normalization: `Docs/a` and `docs/b` conflict. Entries
+  cannot descend through a file, and wheel paths cannot contain control characters.
 - `rootIsPurelib` defaults to true only for `abi: "none"` with `platform: "any"`. `entryPoints`
   takes groups such as `{ console_scripts: { hello: "hello_cli.cli:main" } }`.
 

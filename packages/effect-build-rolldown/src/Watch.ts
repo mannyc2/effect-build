@@ -2,6 +2,7 @@ import { Cause, Effect, Queue, Stream } from "effect";
 import * as rolldown from "rolldown";
 import { Failed } from "./Error.js";
 
+/** `superseded` counts pending completions replaced since the consumer last emptied the queue. */
 export type WatchEvent =
   | { readonly code: "BUNDLE_END"; readonly duration: number; readonly output: readonly string[]; readonly superseded: number }
   | { readonly code: "ERROR"; readonly error: Error; readonly superseded: number };

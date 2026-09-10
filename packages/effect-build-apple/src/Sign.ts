@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path } from "effect";
-import { Artifact, Commit, type Executable, Tool } from "effect-build";
+import { Artifact, Commit, type Executable, Layout, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
-import { copyProduct, copyRegular, type Entitlements, entitlementsFile, fileError, outputPath, relativeValid, runNative, verifySignature } from "./internal.js";
+import { copyProduct, copyRegular, type Entitlements, entitlementsFile, outputPath, runNative, verifySignature } from "./internal.js";
 import type { App, Dmg, Pkg, SignedApp, SignedDmg, SignedExecutable, SignedPkg, SignedProduct } from "./Model.js";
 
 export type { Entitlements } from "./internal.js";
@@ -19,8 +19,8 @@ export interface SignAppInput extends SignOptions {
   readonly entitlements?: Entitlements | undefined;
   readonly nestedCode?: readonly NestedCode[] | undefined;
 }
-export interface SignDmgInput extends SignOptions { readonly artifact: Dmg; readonly outfile?: string }
-export interface SignPkgInput extends SignOptions { readonly artifact: Pkg; readonly outfile?: string }
+export interface SignDmgInput extends SignOptions { readonly artifact: Dmg; readonly outfile?: string | undefined }
+export interface SignPkgInput extends SignOptions { readonly artifact: Pkg; readonly outfile?: string | undefined }
 /** A standalone Darwin executable, signed with the hardened runtime and a secure timestamp as notarization requires. */
 export interface SignExecutableInput extends SignOptions {
   readonly artifact: Artifact.Executable;
@@ -31,7 +31,7 @@ export type SignInput = SignAppInput | SignDmgInput | SignPkgInput | SignExecuta
 export type SignError = InputInvalid | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Commit.CommitError | Tool.Failed | Tool.SpawnFailed;
 
 const nestedValid = (app: App, path: string): boolean => {
-  if (!relativeValid(path)) return false;
+  if (Layout.pathIssue(path) !== undefined) return false;
   const segments = path.split("/");
   return segments.every((_, index) => {
     const entry = app.entries.find((entry) => entry.path === segments.slice(0, index + 1).join("/"));
@@ -57,7 +57,7 @@ const signProduct = (input: SignAppInput | SignDmgInput | SignPkgInput): Effect.
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");
-    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-sign-" }).pipe(Effect.mapError(fileError(destination)));
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-sign-" }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
     const topEntitlements = yield* entitlementsFile(appInput?.entitlements, p.join(temporary, "app-entitlements.plist"));
     const nestedInputs = yield* Effect.forEach(nested, (code, index) => entitlementsFile(code.entitlements, p.join(temporary, `nested-${index}.plist`)).pipe(Effect.map((entitlements) => ({ path: code.path, entitlements }))));
     // productsign requires separate input/output paths, even for a direct in-place request.
@@ -93,7 +93,7 @@ const signExecutable = (input: SignExecutableInput): Effect.Effect<SignedExecuta
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");
-    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-sign-" }).pipe(Effect.mapError(fileError(destination)));
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-sign-" }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
     const entitlements = yield* entitlementsFile(input.entitlements, p.join(temporary, "entitlements.plist"));
     const { tool } = yield* Apple;
     const signature = { certificateSha1: input.certificateSha1, secureTimestamp: true as const, hardenedRuntime: true as const };
