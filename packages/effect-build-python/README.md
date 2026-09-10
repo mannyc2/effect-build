@@ -36,7 +36,9 @@ artifact's record, plus `entry_points.txt` when `entryPoints` is given.
   must be able to run every executable entry: `win_amd64` and `win_arm64`; `macosx_<major>_<minor>_arm64`
   and `_x86_64`; `linux_x86_64` and `linux_aarch64`; `manylinux*` for glibc binaries; `musllinux*`
   for musl binaries. `any` cannot describe a native executable. The minimum macOS version and the
-  manylinux or musllinux floor are promises only you can make.
+  manylinux or musllinux floor are promises only you can make; declare them through
+  `platformTag({ target, glibc | musl | macos })`, or `executableTags(...)` for the full
+  `py3-none` triple a compiled command ships with.
 - **Entries** are regular artifacts. Executables get mode `0755`, or set `executable: true`.
   `.dist-info` entries belong to the writer, and paths that collide after case folding or NFC
   normalization are rejected.

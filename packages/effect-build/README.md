@@ -144,8 +144,10 @@ lists every `CommitError` reason.
 ## Checksums
 
 `Checksums.write({ artifacts, outfile })` writes a `sha256sum -c` compatible file for regular
-artifacts and returns it as an `Artifact.File`. Paths are relative to the checksum file's
-directory, so a release tree can move without rewriting it:
+artifacts and returns it as an `Artifact.File`. `Checksums.verify(file)` is its inverse for hosts
+without a native checker: it re-verifies the checksum file, then every listed name against its
+recorded digest. Paths are relative to the checksum file's directory, so a release tree can move
+without rewriting it:
 
 ```sh
 (cd dist && sha256sum -c SHA256SUMS)
