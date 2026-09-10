@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import { Artifact } from "effect-build";
+import { Artifact, Tool } from "effect-build";
 import * as Nfpm from "effect-build-nfpm";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -38,6 +38,6 @@ it.each([
       outfile: join(root, "output.deb"),
     }).pipe(Effect.flip),
   );
-  expect(error).toBeInstanceOf(Nfpm.InputInvalid);
+  expect(error).toBeInstanceOf(Tool.InputInvalid);
   expect(await readdir(root)).toEqual(["program"]);
 });

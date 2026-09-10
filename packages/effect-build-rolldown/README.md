@@ -31,7 +31,7 @@ const bundle = Rolldown.buildToDirectory({ input: "src/main.ts", outdir: "dist/a
 ## Errors
 
 `Rolldown.Failed` (tag `RolldownFailed`) keeps Rolldown's `errors` and the original rejection;
-`InputInvalid` (tag `RolldownInputInvalid`) rejects reserved output options. `Rolldown.tested`
+`Tool.InputInvalid` rejects reserved output options. `Rolldown.tested`
 reports the pinned version.
 
 [Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·

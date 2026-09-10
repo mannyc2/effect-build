@@ -1,11 +1,11 @@
 import { Crypto, Effect, FileSystem, Path, type Scope } from "effect";
-import { Artifact, Commit } from "effect-build";
+import { Artifact, Commit, Tool } from "effect-build";
 import * as rolldown from "rolldown";
 import { transform as nativeTransform, type TransformOptions, type TransformResult, type TsconfigCache } from "rolldown/utils";
 import metadata from "../package.json" with { type: "json" };
-import { Failed, InputInvalid, invoke } from "./Error.js";
+import { Failed, invoke } from "./Error.js";
 
-export { Failed, InputInvalid } from "./Error.js";
+export { Failed } from "./Error.js";
 export type { TransformOptions, TransformResult, TsconfigCache } from "rolldown/utils";
 export { watch, type WatchEvent } from "./Watch.js";
 
@@ -57,11 +57,14 @@ export type DirectoryOptions = rolldown.InputOptions & Commit.ProducerOptions & 
 };
 export const buildToDirectory = Effect.fn("Rolldown.buildToDirectory")((input: DirectoryOptions): Effect.Effect<
   Artifact.Directory,
-  Failed | InputInvalid | Artifact.ArtifactError | Commit.CommitError,
+  Failed | Tool.InputInvalid | Artifact.ArtifactError | Commit.CommitError,
   FileSystem.FileSystem | Path.Path | Crypto.Crypto
 > => Effect.gen(function*() {
   if (input.outdir.length === 0 || input.output?.dir !== undefined || input.output?.file !== undefined) {
-    return yield* new InputInvalid({ reason: "buildToDirectory requires outdir and does not accept output.dir or output.file" });
+    return yield* new Tool.InputInvalid({
+      operation: "Rolldown.buildToDirectory",
+      reason: "buildToDirectory requires outdir and does not accept output.dir or output.file",
+    });
   }
   const p = yield* Path.Path;
   // Rolldown validates its input keys, so the commit choices leave before the native call.

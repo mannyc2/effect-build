@@ -71,9 +71,9 @@ the result.
 
 ## Errors
 
-`Python.WheelError` is `InputInvalid` (tag `PythonInputInvalid`), `ArchiveFormatLimit`,
+`Python.WheelError` is `Tool.InputInvalid`, `ArchiveFormatLimit`,
 `ArchiveEntrySizeMismatch`, `Artifact.ArtifactError`, or `Commit.CommitError`. `Python.BuildError`
-is `InputInvalid`, the `Tool` errors, `Artifact.ArtifactError`, or `Commit.CommitError`.
+is `Tool.InputInvalid`, the `Tool` errors, `Artifact.ArtifactError`, or `Commit.CommitError`.
 
 [Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
 [Tools and providers](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md) ·

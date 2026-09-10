@@ -1,15 +1,8 @@
 import { Crypto, Effect, FileSystem, Path, Schema, type Scope } from "effect";
-import { Artifact, Commit } from "effect-build";
+import { Artifact, Commit, Tool } from "effect-build";
 import * as esbuild from "esbuild";
 import metadata from "../package.json" with { type: "json" };
 
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("EsbuildInputInvalid", {
-  reason: Schema.String,
-}) {
-  override get message(): string {
-    return this.reason;
-  }
-}
 /** The peer range: the consumer's own esbuild runs in process; nothing is selected from PATH. */
 export const supported = metadata.peerDependencies.esbuild;
 /** The version the workspace installs for tests. */
@@ -70,11 +63,14 @@ export type DirectoryOptions = Omit<esbuild.BuildOptions, "outdir" | "outfile" |
 
 export const buildToDirectory = Effect.fn("Esbuild.buildToDirectory")((input: DirectoryOptions): Effect.Effect<
   Artifact.Directory,
-  InputInvalid | EsbuildFailed | Artifact.ArtifactError | Commit.CommitError,
+  Tool.InputInvalid | EsbuildFailed | Artifact.ArtifactError | Commit.CommitError,
   FileSystem.FileSystem | Path.Path | Crypto.Crypto
 > => Effect.gen(function*() {
   if (typeof input.outdir !== "string" || input.outdir.length === 0 || input.outfile !== undefined || input.write !== undefined) {
-    return yield* new InputInvalid({ reason: "buildToDirectory requires outdir and does not accept outfile or write" });
+    return yield* new Tool.InputInvalid({
+      operation: "Esbuild.buildToDirectory",
+      reason: "buildToDirectory requires outdir and does not accept outfile or write",
+    });
   }
   const p = yield* Path.Path;
   // esbuild rejects unknown options, so the commit choices leave before the native call.

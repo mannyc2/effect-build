@@ -87,7 +87,7 @@ start once signed. Pass it to `Apple.sign({ artifact, certificateSha1, entitleme
 
 ## Errors
 
-`Bun.CompileError` is `InputInvalid` (tag `BunInputInvalid`), `Tool.Failed`, `Tool.SpawnFailed`,
+`Bun.CompileError` is `Tool.InputInvalid`, `Tool.Failed`, `Tool.SpawnFailed`,
 `Artifact.ArtifactError`, `Executable.InspectError`, `Executable.TargetMismatch`, or
 `Commit.CommitError`. The layer can fail with `Tool.NotFound`, `Tool.ProbeFailed`, or
 `Tool.VersionUnsupported`.

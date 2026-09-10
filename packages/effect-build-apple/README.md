@@ -133,7 +133,7 @@ rest) through `Schema.encodeSync`.
 
 `Apple.layer({ executable?, version? })` resolves `xcrun` once; native commands come from the
 active Xcode tools. `Apple.supported` is `>=70.0.0 <71.0.0` and `Apple.tested` is 70.0.0. Errors
-are `InputInvalid` (tag `AppleInputInvalid`), `Artifact.ArtifactError`, `Executable.InspectError`,
+are `Tool.InputInvalid`, `Artifact.ArtifactError`, `Executable.InspectError`,
 `Executable.TargetMismatch`, `Tool.Failed`, `Tool.SpawnFailed`, `Commit.CommitError`,
 `Notary.ResultNotAccepted` (a pending or rejected submission, status preserved), and
 `Notary.ResponseInvalid` (malformed notarytool JSON).

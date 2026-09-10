@@ -70,7 +70,7 @@ Deno runtime and keeps the native result type. For atomic directory output use `
 
 ## Errors
 
-`Deno.CompileError` is `InputInvalid` (tag `DenoInputInvalid`), `Tool.Failed`, `Tool.SpawnFailed`,
+`Deno.CompileError` is `Tool.InputInvalid`, `Tool.Failed`, `Tool.SpawnFailed`,
 `Artifact.ArtifactError`, `Executable.InspectError`, `Executable.TargetMismatch`, or
 `Commit.CommitError`; `bundle` and `transpile` raise `Deno.BuildError`, the same without the
 executable errors.

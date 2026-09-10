@@ -218,7 +218,7 @@ describe("archives from real files", () => {
             outfile,
           }).pipe(Effect.flip),
         );
-        expect(failure._tag).toBe("ArchiveInputInvalid");
+        expect(failure._tag).toBe("InputInvalid");
       }
       expect(await readdir(root)).toEqual(["payload"]);
     },
@@ -344,7 +344,7 @@ describe("archives from real directories", () => {
     for (const entries of invalid) {
       for (const ordered of [entries, [...entries].reverse()]) {
         const failure = await run(pack(format, { entries: ordered, outfile }).pipe(Effect.flip));
-        expect(failure._tag).toBe("ArchiveInputInvalid");
+        expect(failure._tag).toBe("InputInvalid");
       }
     }
     expect((await readdir(root)).sort()).toEqual(["payload", "source"]);

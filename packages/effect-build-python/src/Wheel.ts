@@ -2,7 +2,6 @@ import { Crypto, Effect, Encoding, FileSystem, Path, Stream } from "effect";
 import { Artifact, Commit, Layout, Target, Tool } from "effect-build";
 import { type EntrySizeMismatch, type FormatLimit, Zip } from "effect-build-archives";
 import packageMetadata from "../package.json" with { type: "json" };
-import { InputInvalid } from "./InputInvalid.js";
 
 export interface WheelMetadata {
   readonly name: string;
@@ -44,13 +43,14 @@ const utf8Order = (left: string, right: string): number => {
   return a.byteLength - b.byteLength;
 };
 const number = (input: string | undefined): string => (input ?? "0").replace(/^0+(?=\d)/u, "");
+const invalid = (reason: string) => new Tool.InputInvalid({ operation: "Python.wheel", reason });
 // PEP 440 accepts spelling/separator variants; normalize numbers as strings to preserve arbitrary precision.
 const versionPattern =
   /^v?(?:(?<epoch>[0-9]+)!)?(?<release>[0-9]+(?:\.[0-9]+)*)(?:[-_.]?(?<pre>alpha|beta|preview|pre|rc|a|b|c)[-_.]?(?<preN>[0-9]+)?)?(?:-(?<postShort>[0-9]+)|[-_.]?(?<post>post|rev|r)[-_.]?(?<postN>[0-9]+)?)?(?:[-_.]?(?<dev>dev)[-_.]?(?<devN>[0-9]+)?)?(?:\+(?<local>[a-z0-9]+(?:[-_.][a-z0-9]+)*))?$/iu;
 const normalizeVersion = (input: string) =>
   Effect.gen(function*() {
     const g = versionPattern.exec(input.trim())?.groups;
-    if (g?.release === undefined) return yield* new InputInvalid({ reason: "version must follow PEP 440" });
+    if (g?.release === undefined) return yield* invalid("version must follow PEP 440");
     const pre = g.pre?.toLowerCase();
     const label = pre === "alpha"
       ? "a"
@@ -66,15 +66,15 @@ const normalizeVersion = (input: string) =>
       + (g.post === undefined && g.postShort === undefined ? "" : `.post${number(g.postN ?? g.postShort)}`)
       + (g.dev === undefined ? "" : `.dev${number(g.devN)}`) + (local === undefined ? "" : `+${local}`);
   });
-const singleLine = (input: string, field: string): Effect.Effect<string, InputInvalid> =>
+const singleLine = (input: string, field: string): Effect.Effect<string, Tool.InputInvalid> =>
   input.trim().length === 0 || input.includes("\0") || /[\r\n]/u.test(input)
-    ? Effect.fail(new InputInvalid({ reason: `${field} must be a non-empty single line` }))
+    ? Effect.fail(invalid(`${field} must be a non-empty single line`))
     : Effect.succeed(input);
 // PEP 425 compressed tag sets: lowercase, deduplicated, byte-sorted.
-const tag = (input: string): Effect.Effect<string, InputInvalid> =>
+const tag = (input: string): Effect.Effect<string, Tool.InputInvalid> =>
   /^[a-z0-9_]+(?:\.[a-z0-9_]+)*$/iu.test(input)
     ? Effect.succeed([...new Set(input.toLowerCase().split("."))].sort(utf8Order).join("."))
-    : Effect.fail(new InputInvalid({ reason: "tags must contain dot-separated letters, numbers, or underscores" }));
+    : Effect.fail(invalid("tags must contain dot-separated letters, numbers, or underscores"));
 const csv = (input: string): string => /[,"\r\n]/u.test(input) ? `"${input.replaceAll('"', '""')}"` : input;
 const hexBytes = (hex: string): Uint8Array =>
   Uint8Array.from(hex.match(/.{2}/gu) ?? [], (pair) => Number.parseInt(pair, 16));
@@ -150,12 +150,12 @@ const prepareWheel = (input: WheelInput) =>
   Effect.gen(function*() {
     const m = input.metadata;
     if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/iu.test(m.name)) {
-      return yield* new InputInvalid({ reason: "name must be a Python distribution name" });
+      return yield* invalid("name must be a Python distribution name");
     }
     const outdir = Tool.argumentIssue(input.outdir);
-    if (outdir !== undefined) return yield* new InputInvalid({ reason: `outdir ${outdir}` });
-    if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
-    if (input.entries.length === 0) return yield* new InputInvalid({ reason: "entries are empty" });
+    if (outdir !== undefined) return yield* invalid(`outdir ${outdir}`);
+    if (input.cwd?.includes("\0")) return yield* invalid("cwd must contain no NUL");
+    if (input.entries.length === 0) return yield* invalid("entries are empty");
     const name = m.name.toLowerCase().replace(/[-_.]+/gu, "_");
     const version = yield* normalizeVersion(m.version);
     const tags = {
@@ -167,9 +167,9 @@ const prepareWheel = (input: WheelInput) =>
       if (entry.artifact.kind !== "executable") continue;
       for (const platform of tags.platform.split(".")) {
         if (!matchesPlatform(entry.artifact, platform)) {
-          return yield* new InputInvalid({
-            reason: `wheel platform ${platform} does not support executable ${entry.path} (${entry.artifact.target})`,
-          });
+          return yield* invalid(
+            `wheel platform ${platform} does not support executable ${entry.path} (${entry.artifact.target})`,
+          );
         }
       }
     }
@@ -187,7 +187,7 @@ const prepareWheel = (input: WheelInput) =>
     }
     for (const [label, url] of Object.entries(m.projectUrls ?? {}).sort(([a], [b]) => utf8Order(a, b))) {
       if ([...label].length > 32 || label.includes(",") || !URL.canParse(url)) {
-        return yield* new InputInvalid({ reason: "projectUrls require labels up to 32 characters and absolute URLs" });
+        return yield* invalid("projectUrls require labels up to 32 characters and absolute URLs");
       }
       metadata.push(
         `Project-URL: ${yield* singleLine(label, "project URL label")}, ${yield* singleLine(url, "project URL")}`,
@@ -212,7 +212,7 @@ const prepareWheel = (input: WheelInput) =>
       const groups: string[] = [];
       for (const [group, points] of Object.entries(input.entryPoints).sort(([a], [b]) => utf8Order(a, b))) {
         if (!/^\w+(?:\.\w+)*$/u.test(group)) {
-          return yield* new InputInvalid({ reason: "entry-point groups must be dotted identifiers" });
+          return yield* invalid("entry-point groups must be dotted identifiers");
         }
         groups.push(`[${group}]`);
         for (const [key, value] of Object.entries(points).sort(([a], [b]) => utf8Order(a, b))) {
@@ -220,7 +220,7 @@ const prepareWheel = (input: WheelInput) =>
             !/^[\w.-]+$/u.test(key)
             || !/^[_\p{ID_Start}][\p{ID_Continue}]*(?:\.[_\p{ID_Start}][\p{ID_Continue}]*)*(?::[_\p{ID_Start}][\p{ID_Continue}]*(?:\.[_\p{ID_Start}][\p{ID_Continue}]*)*)?$/u
               .test(value)
-          ) return yield* new InputInvalid({ reason: "entry points require a name and Python object reference" });
+          ) return yield* invalid("entry points require a name and Python object reference");
           groups.push(`${key} = ${value}`);
         }
         groups.push("");
@@ -229,16 +229,14 @@ const prepareWheel = (input: WheelInput) =>
     }
     for (const entry of input.entries) {
       if (/\p{Cc}/u.test(entry.path)) {
-        return yield* new InputInvalid({
-          reason: `control characters are forbidden in wheel entry paths: ${entry.path}`,
-        });
+        return yield* invalid(`control characters are forbidden in wheel entry paths: ${entry.path}`);
       }
       if (entry.path.split("/")[0]!.toLowerCase().endsWith(".dist-info")) {
-        return yield* new InputInvalid({ reason: "the wheel writer owns .dist-info entries" });
+        return yield* invalid("the wheel writer owns .dist-info entries");
       }
     }
     const issue = Layout.validate(input.entries.map((entry) => ({ path: entry.path, kind: "file" })));
-    if (issue !== undefined) return yield* new InputInvalid(issue);
+    if (issue !== undefined) return yield* new Tool.InputInvalid({ operation: "Python.wheel", ...issue });
     return {
       metadata: generated,
       record: `${info}/RECORD`,
@@ -247,7 +245,12 @@ const prepareWheel = (input: WheelInput) =>
   });
 
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
-export type WheelError = InputInvalid | FormatLimit | EntrySizeMismatch | Artifact.ArtifactError | Commit.CommitError;
+export type WheelError =
+  | Tool.InputInvalid
+  | FormatLimit
+  | EntrySizeMismatch
+  | Artifact.ArtifactError
+  | Commit.CommitError;
 
 export const wheel = Effect.fn("Python.wheel")((input: WheelInput): Effect.Effect<Artifact.File, WheelError, Fs> =>
   Effect.gen(function*() {

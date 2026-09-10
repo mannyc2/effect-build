@@ -72,7 +72,7 @@ describe("real Deno 2.9.5", () => {
       const failure = await run(Deno.compile({
         entrypoint: "hello.ts", outfile, target: "windows-x64", cwd: root, options,
       }).pipe(Effect.flip));
-      expect(failure).toBeInstanceOf(Deno.InputInvalid);
+      expect(failure).toBeInstanceOf(Tool.InputInvalid);
     }
     expect(await readdir(root)).toEqual(["hello.ts"]);
   });

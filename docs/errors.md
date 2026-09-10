@@ -13,8 +13,9 @@ happens when a commit fails.
   never in `name`, so `Error.name` stays the tag.
 - An operation's error type lists exactly the errors it can raise. `Bun.compile` can fail with
   `Bun.CompileError`, a union of the input, tool, artifact, executable, and commit errors below.
-- Invalid input to a provider fails with that package's `InputInvalid`. Its tag is prefixed with the
-  package (`BunInputInvalid`, `NfpmInputInvalid`) and it carries a `reason`.
+- Invalid input to any operation fails with `Tool.InputInvalid`, whose `operation` names the
+  operation (`Bun.compile`, `Archive.zip`) and whose `reason` says what was wrong, so one
+  `Effect.catchTag("InputInvalid", ...)` handles bad input from every provider.
 
 ```ts
 const compile = Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }).pipe(
@@ -35,6 +36,7 @@ const compile = Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }
 | `Tool.VersionUnsupported`   | `ToolVersionUnsupported`   | `tool`, `version`, `supported`: the selected tool fails the requested range.                                                     |
 | `Tool.Failed`               | `ToolFailed`               | `tool`, `args`, `exitCode`, `stdout`, `stderr`, `stdoutTruncated`, `stderrTruncated`: the command exited unsuccessfully.         |
 | `Tool.SpawnFailed`          | `ToolSpawnFailed`          | `tool`, `detail`: the process could not start or finish.                                                                         |
+| `Tool.InputInvalid`         | `InputInvalid`             | `operation`, `reason`, optional `path`: the operation rejected its input; `path` names the entry at fault.                       |
 | `Artifact.ArtifactError`    | `ArtifactError`            | `path`, `reason` (`not-found`, `not-a-file`, `not-a-directory`, `unreadable`, `unwritable`, `copy-failed`, `changed`, `invalid-metadata`), optional `detail`. |
 | `Executable.InspectError`   | `ExecutableInspectError`   | `path`, `reason`, optional `detail`: the file is missing, unreadable, or not a native executable this package understands.                          |
 | `Executable.TargetMismatch` | `ExecutableTargetMismatch` | `path`, `expected`, `observed`: the header describes a different target than requested.                                          |
@@ -45,7 +47,6 @@ const compile = Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }
 
 | Error                                                                       | Tag                                 | Meaning                                                                                                           |
 | --------------------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `Archive.InputInvalid`                                                      | `ArchiveInputInvalid`               | `reason`, optional `path`: an unsafe, duplicate, or colliding entry path, or an entry beneath a file.             |
 | `Archive.FormatLimit`                                                       | `ArchiveFormatLimit`                | `format`, `limit`, `maximum`, optional `path`: valid input exceeds a ZIP32 or ustar field. Raised before staging. |
 | `Archive.EntrySizeMismatch`                                                 | `ArchiveEntrySizeMismatch`          | `path`, `expected`, `actual`: an entry's stream delivered a different byte count than its record.                 |
 | `Archive.TarInvalid`                                                        | `ArchiveTarInvalid`                 | `path`, `offset`, `detail`: the tar that `git archive` exported could not be decoded.                             |

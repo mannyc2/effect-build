@@ -47,7 +47,7 @@ scanned and the artifact you shipped in your release records.
 ## Versions and errors
 
 `Sbom.layer({ executable?, version? })` resolves Syft once; `Sbom.supported` is `>=1.50.0 <2.0.0`
-and `Sbom.tested` is 1.50.0. `Sbom.GenerateError` is `InputInvalid` (tag `SbomInputInvalid`),
+and `Sbom.tested` is 1.50.0. `Sbom.GenerateError` is `Tool.InputInvalid`,
 `Artifact.ArtifactError`, `Tool.Failed`, `Tool.SpawnFailed`, or `Commit.CommitError`.
 
 [Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·

@@ -1,11 +1,9 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
-import { InputInvalid } from "./InputInvalid.js";
 import * as CompileCommand from "./internal/CompileCommand.js";
 import { type Check, type ImportPermissions, type ProjectOptions, renderCheck, renderPermission, renderProject, validatePath, validatePermission } from "./internal/Options.js";
 
-export { InputInvalid } from "./InputInvalid.js";
 export type { Options as CompileOptions, Permissions } from "./internal/CompileCommand.js";
 export type { PermissionValue } from "./internal/Options.js";
 
@@ -23,7 +21,12 @@ export interface LayerOptions {
 }
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
 type Env = Deno | Fs | ChildProcessSpawner.ChildProcessSpawner;
-export type BuildError = InputInvalid | Tool.Failed | Tool.SpawnFailed | Artifact.ArtifactError | Commit.CommitError;
+export type BuildError =
+  | Tool.InputInvalid
+  | Tool.Failed
+  | Tool.SpawnFailed
+  | Artifact.ArtifactError
+  | Commit.CommitError;
 export type CompileError = BuildError | Executable.InspectError | Executable.TargetMismatch;
 
 /** Known removed CLI flags are checked only by the operations that use them. */
@@ -65,27 +68,30 @@ const environment = (input: Invocation, runtime?: Service["runtime"]) => {
 };
 const prepareOutput = Effect.fnUntraced(function*(operation: string, field: string, value: string, cwd?: string) {
   yield* validatePath(operation, field, value);
-  if (cwd?.includes("\0")) return yield* new InputInvalid({ operation, reason: "cwd must contain no NUL" });
+  if (cwd?.includes("\0")) return yield* new Tool.InputInvalid({ operation, reason: "cwd must contain no NUL" });
   const p = yield* Path.Path;
   return p.resolve(cwd ?? "", value);
 });
 const checkCapability = (tool: Tool.Resolved, operation: string, flag: string, used: boolean) =>
   used && Tool.satisfies(">=2.9.6")(tool.version)
-    ? Effect.fail(new InputInvalid({ operation, reason: `${flag} was removed in Deno 2.9.6; omit it or explicitly select 2.9.5` }))
+    ? Effect.fail(new Tool.InputInvalid({
+      operation,
+      reason: `${flag} was removed in Deno 2.9.6; omit it or explicitly select 2.9.5`,
+    }))
     : Effect.void;
-const prepareCompile = Effect.fnUntraced(function*(operation: "compile" | "watch", input: CompileInput) {
+const prepareCompile = Effect.fnUntraced(function*(operation: "Deno.compile" | "Deno.watch", input: CompileInput) {
   yield* validatePath(operation, "entrypoint", input.entrypoint);
   const outfile = yield* prepareOutput(operation, "outfile", input.outfile, input.cwd);
   const target = input.target === undefined
     ? undefined
     : CompileCommand.Target.literals.find((t) => t === input.target || CompileCommand.systemTarget(t) === input.target);
   if (input.target !== undefined && target === undefined) {
-    return yield* new InputInvalid({ operation, reason: `Deno does not compile target ${input.target}` });
+    return yield* new Tool.InputInvalid({ operation, reason: `Deno does not compile target ${input.target}` });
   }
   const expected = target === undefined ? Target.host() : CompileCommand.systemTarget(target);
   // Deno embeds the output basename; a lowercase .exe keeps the staged and committed names identical.
   if (expected?.startsWith("windows") === true && !outfile.endsWith(".exe")) {
-    return yield* new InputInvalid({ operation, reason: "Windows outfile must end in .exe" });
+    return yield* new Tool.InputInvalid({ operation, reason: "Windows outfile must end in .exe" });
   }
   const command: CompileCommand.Input = {
     ...input.options,
@@ -100,7 +106,7 @@ const prepareCompile = Effect.fnUntraced(function*(operation: "compile" | "watch
 });
 
 export const compile = Effect.fn("Deno.compile")(function*(input: CompileInput): Effect.fn.Return<CompileArtifact, CompileError, Env> {
-  const { command, outfile, target, tool, runtime } = yield* prepareCompile("compile", input);
+  const { command, outfile, target, tool, runtime } = yield* prepareCompile("Deno.compile", input);
   const produce = (out: string) =>
     Tool.run(tool, CompileCommand.renderArgv(command, out), { ...environment(input, runtime), onOutput: input.onOutput }).pipe(
       Effect.andThen(Artifact.executable(out, Tool.producer(tool), target)),
@@ -156,41 +162,47 @@ const renderBundle = (input: BundleOptions): readonly string[] => [
   ...(input.quiet === true ? ["--quiet"] : []), ...(input.declaration === true ? ["--declaration"] : []),
 ];
 const prepareDirectory = Effect.fnUntraced(function*(
+  command: "bundle" | "transpile",
   input: Invocation & Commit.ProducerOptions & { readonly outdir: string },
   files: readonly string[],
-  operation: "bundle" | "transpile",
 ) {
-  if (files.length === 0) return yield* new InputInvalid({ operation, reason: `${operation === "bundle" ? "entrypoints" : "files"} are empty` });
+  const operation = `Deno.${command}`;
+  if (files.length === 0) {
+    return yield* new Tool.InputInvalid({
+      operation,
+      reason: `${command === "bundle" ? "entrypoints" : "files"} are empty`,
+    });
+  }
   for (const file of files) yield* validatePath(operation, "input", file);
   const outdir = yield* prepareOutput(operation, "outdir", input.outdir, input.cwd);
   const { tool } = yield* Deno;
-  return { input, files, operation, outdir, tool };
+  return { input, files, command, outdir, tool };
 });
 const directory = Effect.fnUntraced(function*(
   prepared: Effect.Success<ReturnType<typeof prepareDirectory>>,
   options: readonly string[],
 ) {
-  const { input, files, operation, outdir, tool } = prepared;
+  const { input, files, command, outdir, tool } = prepared;
   const fs = yield* FileSystem.FileSystem;
   const produce = (out: string) => Effect.gen(function*() {
     yield* fs.makeDirectory(out, { recursive: true }).pipe(Effect.mapError(Artifact.ioError(out, "write")));
-    yield* Tool.run(tool, [operation, ...options, "--outdir", out, ...files], { ...environment(input), onOutput: input.onOutput });
+    yield* Tool.run(tool, [command, ...options, "--outdir", out, ...files], { ...environment(input), onOutput: input.onOutput });
     return yield* Artifact.directory(out, Tool.producer(tool));
   });
   return yield* Commit.output(outdir, produce, input, "sibling");
 });
 export const bundle = Effect.fn("Deno.bundle")(function*(input: BundleInput): Effect.fn.Return<Artifact.Directory, BuildError, Env> {
   const options = input.options ?? {};
-  yield* validatePermission("bundle", "allowImport", options.allowImport);
-  yield* validatePermission("bundle", "denyImport", options.denyImport);
-  yield* validatePermission("bundle", "allowScripts", options.allowScripts);
-  const prepared = yield* prepareDirectory(input, input.entrypoints, "bundle");
+  yield* validatePermission("Deno.bundle", "allowImport", options.allowImport);
+  yield* validatePermission("Deno.bundle", "denyImport", options.denyImport);
+  yield* validatePermission("Deno.bundle", "allowScripts", options.allowScripts);
+  const prepared = yield* prepareDirectory("bundle", input, input.entrypoints);
   return yield* directory(prepared, renderBundle(options));
 });
 export const transpile = Effect.fn("Deno.transpile")(function*(input: TranspileInput): Effect.fn.Return<Artifact.Directory, BuildError, Env> {
   const options = input.options ?? {};
-  const prepared = yield* prepareDirectory(input, input.files, "transpile");
-  yield* checkCapability(prepared.tool, "transpile", "--conditions", (options.conditions?.length ?? 0) > 0);
+  const prepared = yield* prepareDirectory("transpile", input, input.files);
+  yield* checkCapability(prepared.tool, "Deno.transpile", "--conditions", (options.conditions?.length ?? 0) > 0);
   return yield* directory(prepared, [...renderProject(options),
     ...(options.sourceMap === undefined ? [] : ["--source-map", options.sourceMap]),
     ...(options.quiet === true ? ["--quiet"] : []), ...(options.declaration === true ? ["--declaration"] : [])]);
@@ -208,8 +220,8 @@ export interface Watch {
   readonly outfile: string;
 }
 /** Rebuilds directly into outfile while its scope is open. */
-export const watch = Effect.fn("Deno.watch")(function*(input: WatchInput): Effect.fn.Return<Watch, InputInvalid | Tool.SpawnFailed, Deno | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> {
-  const { command, outfile, tool, runtime } = yield* prepareCompile("watch", input);
+export const watch = Effect.fn("Deno.watch")(function*(input: WatchInput): Effect.fn.Return<Watch, Tool.InputInvalid | Tool.SpawnFailed, Deno | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> {
+  const { command, outfile, tool, runtime } = yield* prepareCompile("Deno.watch", input);
   const process = yield* ChildProcess.make(
     tool.path,
     CompileCommand.renderArgv(command, outfile, { noClearScreen: input.noClearScreen, watchExclude: input.watchExclude }),

@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
+import { Tool } from "effect-build";
 import type { Target as CoreTarget } from "effect-build/Target";
-import { InputInvalid } from "../InputInvalid.js";
 import {
   type Check,
   type PermissionValue,
@@ -163,7 +163,7 @@ export const renderArgv = (
   ...(input.scriptArgs ?? []),
 ];
 
-export const validateOptions = Effect.fnUntraced(function*(operation: string, input: Options): Effect.fn.Return<void, InputInvalid> {
+export const validateOptions = Effect.fnUntraced(function*(operation: string, input: Options): Effect.fn.Return<void, Tool.InputInvalid> {
   for (const [, field] of permissionFields) {
     yield* validatePermission(operation, field, input[field]);
   }

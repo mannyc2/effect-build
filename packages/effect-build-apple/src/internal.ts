@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Tool } from "effect-build";
-import { Apple, InputInvalid, type Env } from "./Apple.js";
+import { Apple, type Env } from "./Apple.js";
 import type { Product, Signed } from "./Model.js";
 import { plist } from "./plist.js";
 
@@ -10,13 +10,13 @@ export const runNative = (name: NativeTool, args: readonly string[], options: { 
   Tool.Completion, Tool.Failed | Tool.SpawnFailed, Apple | ChildProcessSpawner.ChildProcessSpawner
 > => Apple.use(({ tool }) => Tool.run(tool, [name, ...args], options));
 
-export const outputPath = (value: string, extension: ".app" | ".dmg" | ".pkg" | undefined, cwd?: string) => Effect.gen(function*() {
+export const outputPath = (operation: string, value: string, extension: ".app" | ".dmg" | ".pkg" | undefined, cwd?: string) => Effect.gen(function*() {
   const issue = Tool.argumentIssue(value);
-  if (issue !== undefined) return yield* new InputInvalid({ reason: `output ${issue}` });
+  if (issue !== undefined) return yield* new Tool.InputInvalid({ operation, reason: `output ${issue}` });
   const cwdIssue = cwd === undefined ? undefined : Tool.argumentIssue(cwd);
-  if (cwdIssue !== undefined) return yield* new InputInvalid({ reason: `cwd ${cwdIssue}` });
+  if (cwdIssue !== undefined) return yield* new Tool.InputInvalid({ operation, reason: `cwd ${cwdIssue}` });
   if (extension !== undefined && !value.toLowerCase().endsWith(extension)) {
-    return yield* new InputInvalid({ reason: `output must end in ${extension}` });
+    return yield* new Tool.InputInvalid({ operation, reason: `output must end in ${extension}` });
   }
   const p = yield* Path.Path;
   return p.resolve(cwd ?? "", value);
@@ -31,8 +31,8 @@ export const copyRegular = (artifact: Artifact.Regular, destination: string, exe
     yield* fs.chmod(destination, executable ? 0o755 : 0o644).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
   }
 });
-export const copyProduct = (artifact: Artifact.Artifact, destination: string): Effect.Effect<
-  void, InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed, Apple | Env
+export const copyProduct = (operation: string, artifact: Artifact.Artifact, destination: string): Effect.Effect<
+  void, Tool.InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed, Apple | Env
 > => Effect.gen(function*() {
   if (artifact.kind !== "directory") return yield* copyRegular(artifact, destination);
   yield* Artifact.verify(artifact);
@@ -58,7 +58,7 @@ export const copyProduct = (artifact: Artifact.Artifact, destination: string): E
   }
   if (source === destinationRoot) return;
   if (source.startsWith(`${destinationRoot}${p.sep}`) || destinationRoot.startsWith(`${source}${p.sep}`)) {
-    return yield* new InputInvalid({ reason: "app copy source and destination must not contain one another" });
+    return yield* new Tool.InputInvalid({ operation, reason: "app copy source and destination must not contain one another" });
   }
   yield* fs.makeDirectory(p.dirname(destination), { recursive: true }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
   yield* fs.remove(destination, { recursive: true, force: true }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
@@ -73,14 +73,14 @@ export const verifySignature = (signed: Signed, path = signed.path): Effect.Effe
   : runNative("codesign", ["--verify", ...("product" in signed && signed.product === "app" ? ["--deep"] : []), "--strict", path])).pipe(Effect.asVoid);
 /** Entitlements arrive as a plist artifact or as keys; both are linted as the file codesign receives. */
 export type Entitlements = Artifact.Regular | readonly string[];
-export const entitlementsFile = (entitlements: Entitlements | undefined, path: string): Effect.Effect<
-  string | undefined, InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed, Apple | Env
+export const entitlementsFile = (operation: string, entitlements: Entitlements | undefined, path: string): Effect.Effect<
+  string | undefined, Tool.InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed, Apple | Env
 > => Effect.gen(function*() {
   if (entitlements === undefined) return undefined;
   if (Array.isArray(entitlements)) {
     const keys = entitlements as readonly string[];
     if (keys.length === 0 || keys.some((key) => Tool.argumentIssue(key) !== undefined || key.trim() !== key) || new Set(keys).size !== keys.length) {
-      return yield* new InputInvalid({ reason: "entitlement keys must be distinct, trimmed, non-empty, and contain no NUL" });
+      return yield* new Tool.InputInvalid({ operation, reason: "entitlement keys must be distinct, trimmed, non-empty, and contain no NUL" });
     }
     const fs = yield* FileSystem.FileSystem;
     yield* fs.writeFileString(path, plist(Object.fromEntries(keys.map((key) => [key, true as const])))).pipe(Effect.mapError(Artifact.ioError(path, "write")));

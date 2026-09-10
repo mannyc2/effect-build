@@ -68,7 +68,7 @@ receives all four. See [tools and providers](https://github.com/mannyc2/effect-b
 
 ## Errors
 
-`Windows.SignError` is `InputInvalid` (tag `WindowsInputInvalid`), `Artifact.ArtifactError`,
+`Windows.SignError` is `Tool.InputInvalid`, `Artifact.ArtifactError`,
 `Executable.InspectError`, `Executable.TargetMismatch`, `Tool.Failed`, `Tool.SpawnFailed`, or
 `Commit.CommitError`.
 

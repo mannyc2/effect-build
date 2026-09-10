@@ -69,6 +69,18 @@ export class SpawnFailed extends Schema.TaggedError<SpawnFailed>()("ToolSpawnFai
   }
 }
 
+/** An operation rejected its input. `operation` names it the way its span does, such as `Bun.compile`. */
+export class InputInvalid extends Schema.TaggedError<InputInvalid>()("InputInvalid", {
+  operation: Schema.String,
+  reason: Schema.String,
+  /** The offending shipping path, when one entry is at fault. */
+  path: Schema.optionalKey(Schema.String),
+}) {
+  override get message(): string {
+    return `${this.operation}: ${this.reason}${this.path === undefined ? "" : `: ${this.path}`}`;
+  }
+}
+
 export interface Completion {
   readonly exitCode: number;
   readonly stdout: Uint8Array;

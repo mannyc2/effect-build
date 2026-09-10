@@ -1,15 +1,10 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Redacted, Schema } from "effect";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { Context, Crypto, Effect, FileSystem, Layer, Path, Redacted } from "effect";
 import { Artifact, Commit, Executable, Tool } from "effect-build";
+import { ChildProcessSpawner } from "effect/unstable/process";
 
-export class Windows extends Context.Service<Windows, { readonly tool: Tool.Resolved }>()("effect-build-windows/Windows") {}
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("WindowsInputInvalid", {
-  reason: Schema.String,
-}) {
-  override get message(): string {
-    return this.reason;
-  }
-}
+export class Windows
+  extends Context.Service<Windows, { readonly tool: Tool.Resolved }>()("effect-build-windows/Windows")
+{}
 export interface LayerOptions {
   readonly executable?: string | undefined;
   /** String ranges select SDK families; predicates receive the complete native version. */
@@ -31,10 +26,19 @@ const productVersion = (contents: Uint8Array): string | undefined => {
   // Resource data is DWORD-aligned, so the block can only start on a multiple of four.
   for (let offset = 0; offset + header.size <= contents.byteLength; offset += 4) {
     const length = view.getUint16(offset + header.length, true);
-    if (length < header.size || offset + length > contents.byteLength || view.getUint16(offset + header.valueLength, true) !== fixed.size || view.getUint16(offset + header.type, true) !== 0) continue;
-    if (!Array.from(key).every((char, i) => view.getUint16(offset + header.key + i * 2, true) === char.charCodeAt(0))) continue;
+    if (
+      length < header.size || offset + length > contents.byteLength
+      || view.getUint16(offset + header.valueLength, true) !== fixed.size
+      || view.getUint16(offset + header.type, true) !== 0
+    ) continue;
+    if (!Array.from(key).every((char, i) => view.getUint16(offset + header.key + i * 2, true) === char.charCodeAt(0))) {
+      continue;
+    }
     const value = offset + header.value;
-    if (view.getUint32(value + fixed.signature, true) !== 0xfeef04bd || view.getUint32(value + fixed.version, true) !== 0x10000) continue;
+    if (
+      view.getUint32(value + fixed.signature, true) !== 0xfeef04bd
+      || view.getUint32(value + fixed.version, true) !== 0x10000
+    ) continue;
     const high = view.getUint32(value + fixed.productHigh, true);
     const low = view.getUint32(value + fixed.productLow, true);
     const native = [high >>> 16, high & 0xffff, low >>> 16, low & 0xffff].join(".");
@@ -45,24 +49,42 @@ const productVersion = (contents: Uint8Array): string | undefined => {
   return version;
 };
 export const layer = (options: LayerOptions = {}): Layer.Layer<
-  Windows, Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported, Env
+  Windows,
+  Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
+  Env
 > => {
   const version = options.version ?? supported;
   const familyMatches = typeof version === "string" ? Tool.satisfies(version) : undefined;
   // Keep the native revision in producedBy; only the range comparison uses its SDK family.
-  const accepts = typeof version === "function" ? version : (native: string) => familyMatches!(native.split(".").slice(0, 3).join("."));
-  return Layer.effect(Windows, Effect.gen(function*() {
-    const path = yield* Tool.locate({ name: "signtool", executable: options.executable });
-    const contents = yield* FileSystem.FileSystem.use((fs) => fs.readFile(path)).pipe(
-      Effect.mapError((error) => new Tool.ProbeFailed({ tool: "signtool", path, detail: String(error) })),
-    );
-    const native = productVersion(contents);
-    if (native === undefined) return yield* new Tool.ProbeFailed({ tool: "signtool", path, detail: "no single VS_FIXEDFILEINFO ProductVersion resource" });
-    const tool = yield* Tool.resolve({ name: "signtool", executable: path, versionArgs: ["/?"], parseVersion: () => native }).pipe(
-      Tool.requireVersion(accepts),
-    );
-    return { tool };
-  }));
+  const accepts = typeof version === "function"
+    ? version
+    : (native: string) => familyMatches!(native.split(".").slice(0, 3).join("."));
+  return Layer.effect(
+    Windows,
+    Effect.gen(function*() {
+      const path = yield* Tool.locate({ name: "signtool", executable: options.executable });
+      const contents = yield* FileSystem.FileSystem.use((fs) => fs.readFile(path)).pipe(
+        Effect.mapError((error) => new Tool.ProbeFailed({ tool: "signtool", path, detail: String(error) })),
+      );
+      const native = productVersion(contents);
+      if (native === undefined) {
+        return yield* new Tool.ProbeFailed({
+          tool: "signtool",
+          path,
+          detail: "no single VS_FIXEDFILEINFO ProductVersion resource",
+        });
+      }
+      const tool = yield* Tool.resolve({
+        name: "signtool",
+        executable: path,
+        versionArgs: ["/?"],
+        parseVersion: () => native,
+      }).pipe(
+        Tool.requireVersion(accepts),
+      );
+      return { tool };
+    }),
+  );
 };
 
 export type Credential = {
@@ -96,31 +118,59 @@ export interface Signature {
   readonly verification: "Authenticode";
 }
 export type Signed<A extends Artifact.Regular = Artifact.Regular> = A & { readonly signature: Signature };
-export type SignError = InputInvalid | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
+export type SignError =
+  | Tool.InputInvalid
+  | Artifact.ArtifactError
+  | Executable.InspectError
+  | Executable.TargetMismatch
+  | Tool.Failed
+  | Tool.SpawnFailed
+  | Commit.CommitError;
 const urlValid = (value: string, httpsOnly: boolean): boolean => {
-  if (Tool.argumentIssue(value) !== undefined || /\s/u.test(value) || value.includes("?") || value.includes("#") || !URL.canParse(value)) return false;
+  if (
+    Tool.argumentIssue(value) !== undefined || /\s/u.test(value) || value.includes("?") || value.includes("#")
+    || !URL.canParse(value)
+  ) return false;
   const url = new URL(value);
-  return (url.protocol === "https:" || (!httpsOnly && url.protocol === "http:")) && url.hostname.length > 0 && url.username === "" && url.password === "";
+  return (url.protocol === "https:" || (!httpsOnly && url.protocol === "http:")) && url.hostname.length > 0
+    && url.username === "" && url.password === "";
 };
+const invalid = (reason: string) => new Tool.InputInvalid({ operation: "Windows.sign", reason });
 
-export function sign(input: SignInput<Artifact.Executable>): Effect.Effect<Signed<Artifact.Executable>, SignError, Windows | Env>;
+export function sign(
+  input: SignInput<Artifact.Executable>,
+): Effect.Effect<Signed<Artifact.Executable>, SignError, Windows | Env>;
 export function sign(input: SignInput<Artifact.File>): Effect.Effect<Signed<Artifact.File>, SignError, Windows | Env>;
 export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows | Env>;
 export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows | Env> {
   return Effect.gen(function*() {
     const output = input.outfile ?? input.artifact.path;
     const extension = input.artifact.kind === "executable" ? ".exe" : ".msix";
-    if (input.artifact.kind === "executable" && (input.artifact.format !== "pe" || !input.artifact.target.startsWith("windows-"))) {
-      return yield* new InputInvalid({ reason: "executable artifacts must use PE and target Windows" });
+    if (
+      input.artifact.kind === "executable"
+      && (input.artifact.format !== "pe" || !input.artifact.target.startsWith("windows-"))
+    ) {
+      return yield* invalid("executable artifacts must use PE and target Windows");
     }
-    if (![input.artifact.path, output].every((path) => Tool.argumentIssue(path) === undefined && path.toLowerCase().endsWith(extension))) {
-      return yield* new InputInvalid({ reason: `artifact and outfile must be non-empty ${extension} paths without NUL` });
+    if (
+      ![input.artifact.path, output].every((path) =>
+        Tool.argumentIssue(path) === undefined && path.toLowerCase().endsWith(extension)
+      )
+    ) {
+      return yield* invalid(`artifact and outfile must be non-empty ${extension} paths without NUL`);
     }
-    if (!urlValid(input.timestampUrl, false) || (input.descriptionUrl !== undefined && !urlValid(input.descriptionUrl, true))) {
-      return yield* new InputInvalid({ reason: "timestampUrl must be HTTP(S) and descriptionUrl HTTPS, without credentials, whitespace, query, or fragment" });
+    if (
+      !urlValid(input.timestampUrl, false)
+      || (input.descriptionUrl !== undefined && !urlValid(input.descriptionUrl, true))
+    ) {
+      return yield* invalid(
+        "timestampUrl must be HTTP(S) and descriptionUrl HTTPS, without credentials, whitespace, query, or fragment",
+      );
     }
-    if ([input.cwd, input.description].some((value) => value !== undefined && Tool.argumentIssue(value) !== undefined)) {
-      return yield* new InputInvalid({ reason: "cwd and description must be non-empty strings without NUL" });
+    if (
+      [input.cwd, input.description].some((value) => value !== undefined && Tool.argumentIssue(value) !== undefined)
+    ) {
+      return yield* invalid("cwd and description must be non-empty strings without NUL");
     }
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");
@@ -128,45 +178,72 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
     const credential: string[] = [];
     let password: string | undefined;
     if (input.kind === "pfx") {
-      if (Tool.argumentIssue(input.file) !== undefined) return yield* new InputInvalid({ reason: "PFX file must be a non-empty path without NUL" });
+      if (Tool.argumentIssue(input.file) !== undefined) {
+        return yield* invalid("PFX file must be a non-empty path without NUL");
+      }
       credential.push("/f", p.resolve(cwd, input.file));
       if (input.password !== undefined) {
-        password = yield* Effect.try({ try: () => Redacted.value(input.password!), catch: () => new InputInvalid({ reason: "PFX password is unavailable" }) });
-        if (password.includes("\0")) return yield* new InputInvalid({ reason: "PFX password must not contain NUL" });
+        password = yield* Effect.try({
+          try: () => Redacted.value(input.password!),
+          catch: () => invalid("PFX password is unavailable"),
+        });
+        if (password.includes("\0")) return yield* invalid("PFX password must not contain NUL");
         credential.push("/p", password);
       }
     } else if (input.kind === "store") {
-      if (!/^[0-9a-f]{40}$/iu.test(input.thumbprint) || (input.storeName !== undefined && Tool.argumentIssue(input.storeName) !== undefined)) {
-        return yield* new InputInvalid({ reason: "store credentials require a 40-digit SHA-1 thumbprint and a non-empty store name without NUL" });
+      if (
+        !/^[0-9a-f]{40}$/iu.test(input.thumbprint)
+        || (input.storeName !== undefined && Tool.argumentIssue(input.storeName) !== undefined)
+      ) {
+        return yield* invalid(
+          "store credentials require a 40-digit SHA-1 thumbprint and a non-empty store name without NUL",
+        );
       }
       if (input.machineStore === true) credential.push("/sm");
       if (input.storeName !== undefined) credential.push("/s", input.storeName);
       credential.push("/sha1", input.thumbprint);
     } else {
       if ([input.library, input.metadata].some((path) => Tool.argumentIssue(path) !== undefined)) {
-        return yield* new InputInvalid({ reason: "Trusted Signing credentials require non-empty library and metadata paths without NUL" });
+        return yield* invalid("Trusted Signing credentials require non-empty library and metadata paths without NUL");
       }
       credential.push("/dlib", p.resolve(cwd, input.library), "/dmdf", p.resolve(cwd, input.metadata));
     }
     const { tool } = yield* Windows;
-    const produce = (out: string) => Effect.gen(function*() {
-      // Sign a verified copy whose header agrees with the declared target; an in-place destination is verified where it stands.
-      yield* Artifact.copyVerified(input.artifact, out);
-      yield* Tool.run(tool, [
-        "sign", "/fd", "SHA256", "/tr", input.timestampUrl, "/td", "SHA256",
-        ...(input.description === undefined ? [] : ["/d", input.description]),
-        ...(input.descriptionUrl === undefined ? [] : ["/du", input.descriptionUrl]),
-        ...credential, out,
-      ], { cwd, redact: password === undefined ? [] : [password] });
-      yield* Tool.run(tool, ["verify", "/pa", "/all", "/v", "/tw", out], { cwd, redact: password === undefined ? [] : [password] });
-      return yield* input.artifact.kind === "executable"
-        ? Artifact.executable(out, Tool.producer(tool), input.artifact.target)
-        : Artifact.file(out, Tool.producer(tool));
-    });
+    const produce = (out: string) =>
+      Effect.gen(function*() {
+        // Sign a verified copy whose header agrees with the declared target; an in-place destination is verified where it stands.
+        yield* Artifact.copyVerified(input.artifact, out);
+        yield* Tool.run(tool, [
+          "sign",
+          "/fd",
+          "SHA256",
+          "/tr",
+          input.timestampUrl,
+          "/td",
+          "SHA256",
+          ...(input.description === undefined ? [] : ["/d", input.description]),
+          ...(input.descriptionUrl === undefined ? [] : ["/du", input.descriptionUrl]),
+          ...credential,
+          out,
+        ], { cwd, redact: password === undefined ? [] : [password] });
+        yield* Tool.run(tool, ["verify", "/pa", "/all", "/v", "/tw", out], {
+          cwd,
+          redact: password === undefined ? [] : [password],
+        });
+        return yield* input.artifact.kind === "executable"
+          ? Artifact.executable(out, Tool.producer(tool), input.artifact.target)
+          : Artifact.file(out, Tool.producer(tool));
+      });
     const artifact = yield* Commit.output(outfile, produce, input);
-    return { ...artifact, signature: {
-      fileDigest: "SHA256", timestampProtocol: "RFC3161", timestampDigest: "SHA256",
-      timestampUrl: input.timestampUrl, verification: "Authenticode",
-    } };
+    return {
+      ...artifact,
+      signature: {
+        fileDigest: "SHA256",
+        timestampProtocol: "RFC3161",
+        timestampDigest: "SHA256",
+        timestampUrl: input.timestampUrl,
+        verification: "Authenticode",
+      },
+    };
   });
 }

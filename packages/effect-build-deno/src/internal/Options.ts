@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { InputInvalid } from "../InputInvalid.js";
 import { Tool } from "effect-build";
 
 export type PermissionValue = true | readonly [string, ...string[]];
@@ -37,14 +36,9 @@ export const validatePermission = (
   operation: string,
   field: string,
   value: PermissionValue | undefined,
-): Effect.Effect<void, InputInvalid> =>
+): Effect.Effect<void, Tool.InputInvalid> =>
   Array.isArray(value) && value.length === 0
-    ? Effect.fail(
-      new InputInvalid({
-        operation,
-        reason: `${field} must be true or a non-empty list`,
-      }),
-    )
+    ? Effect.fail(new Tool.InputInvalid({ operation, reason: `${field} must be true or a non-empty list` }))
     : Effect.void;
 
 export const renderProject = (input: ProjectOptions): readonly string[] => [
@@ -88,7 +82,9 @@ export const validatePath = (
   operation: string,
   field: string,
   value: string,
-): Effect.Effect<void, InputInvalid> => {
+): Effect.Effect<void, Tool.InputInvalid> => {
   const issue = Tool.argumentIssue(value);
-  return issue === undefined ? Effect.void : Effect.fail(new InputInvalid({ operation, reason: `${field} ${issue}` }));
+  return issue === undefined
+    ? Effect.void
+    : Effect.fail(new Tool.InputInvalid({ operation, reason: `${field} ${issue}` }));
 };

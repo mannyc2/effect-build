@@ -1,17 +1,9 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { Artifact, Tool } from "effect-build";
-import * as Apple from "effect-build-apple";
-import * as Archive from "effect-build-archives";
 import * as Bun from "effect-build-bun";
 import * as Deno from "effect-build-deno";
-import * as Esbuild from "effect-build-esbuild";
-import * as Nfpm from "effect-build-nfpm";
 import * as NodeSea from "effect-build-node-sea";
-import * as Python from "effect-build-python";
-import * as Rolldown from "effect-build-rolldown";
-import * as Sbom from "effect-build-sbom";
-import * as Windows from "effect-build-windows";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,25 +33,6 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-describe("provider input errors", () => {
-  it.each([
-    ["Apple", new Apple.InputInvalid({ reason: "outfile is empty" })],
-    ["Archive", new Archive.InputInvalid({ reason: "outfile is empty" })],
-    ["Bun", new Bun.InputInvalid({ reason: "outfile is empty" })],
-    ["Deno", new Deno.InputInvalid({ reason: "outfile is empty" })],
-    ["Esbuild", new Esbuild.InputInvalid({ reason: "outfile is empty" })],
-    ["Nfpm", new Nfpm.InputInvalid({ reason: "outfile is empty" })],
-    ["NodeSea", new NodeSea.InputInvalid({ reason: "outfile is empty" })],
-    ["Python", new Python.InputInvalid({ reason: "outfile is empty" })],
-    ["Rolldown", new Rolldown.InputInvalid({ reason: "outfile is empty" })],
-    ["Sbom", new Sbom.InputInvalid({ reason: "outfile is empty" })],
-    ["Windows", new Windows.InputInvalid({ reason: "outfile is empty" })],
-  ])("%s prints an unhandled InputInvalid as its tag and reason", (name, failure) => {
-    expect(failure._tag).toBe(`${name}InputInvalid`);
-    expect(String(failure)).toBe(`${name}InputInvalid: outfile is empty`);
-  });
-});
-
 describe("provider input preparation", () => {
   it.each(["compile", "watch"] as const)(
     "rejects a raw empty Deno %s outfile before it can resolve to cwd",
@@ -70,8 +43,8 @@ describe("provider input preparation", () => {
         : Effect.scoped(Deno.watch(input));
       const failure = await run(effect.pipe(Effect.flip));
       expect(failure).toMatchObject({
-        _tag: "DenoInputInvalid",
-        operation,
+        _tag: "InputInvalid",
+        operation: `Deno.${operation}`,
         reason: expect.stringContaining("outfile"),
       });
       expect(await readdir(root)).toEqual(["keep.txt"]);
@@ -88,8 +61,8 @@ describe("provider input preparation", () => {
         : Effect.scoped(Deno.watch(input));
       const failure = await run(effect.pipe(Effect.flip));
       expect(failure).toMatchObject({
-        _tag: "DenoInputInvalid",
-        operation,
+        _tag: "InputInvalid",
+        operation: `Deno.${operation}`,
         reason: "Windows outfile must end in .exe",
       });
       expect(await readdir(root)).toEqual(["keep.txt"]);
@@ -108,7 +81,7 @@ describe("provider input preparation", () => {
         ? Bun.bundle(input)
         : Effect.scoped(Bun.watch(input));
       const failure = await run(effect.pipe(Effect.flip));
-      expect(failure).toMatchObject({ _tag: "BunInputInvalid", reason: "cwd must contain no NUL" });
+      expect(failure).toMatchObject({ _tag: "InputInvalid", operation: `Bun.${operation}`, reason: "cwd must contain no NUL" });
       expect(await readdir(root)).toEqual(["keep.txt"]);
     },
   );
@@ -132,7 +105,7 @@ describe("provider input preparation", () => {
         ? Deno.transpile(input)
         : Effect.scoped(Deno.watch(input));
       const failure = await run(effect.pipe(Effect.flip));
-      expect(failure).toMatchObject({ _tag: "DenoInputInvalid", operation, reason: "cwd must contain no NUL" });
+      expect(failure).toMatchObject({ _tag: "InputInvalid", operation: `Deno.${operation}`, reason: "cwd must contain no NUL" });
       expect(await readdir(root)).toEqual(["keep.txt"]);
     },
   );
@@ -140,7 +113,7 @@ describe("provider input preparation", () => {
   it("rejects NUL in Node SEA cwd before inspecting the base or preparing inputs", async () => {
     const main = await run(Artifact.file(join(root, "keep.txt"), { name: "fixture", version: "1" }));
     const failure = await run(NodeSea.assemble({ main, outfile: "output.exe", cwd: `${root}\0` }).pipe(Effect.flip));
-    expect(failure).toMatchObject({ _tag: "NodeSeaInputInvalid", reason: "cwd must contain no NUL" });
+    expect(failure).toMatchObject({ _tag: "InputInvalid", operation: "NodeSea.assemble", reason: "cwd must contain no NUL" });
     expect(await readdir(root)).toEqual(["keep.txt"]);
   });
 

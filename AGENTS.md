@@ -44,5 +44,5 @@ or one domain and depends on core only. Providers share a shape: a `Context.Serv
 holding a `Tool.Resolved`, a `layer({ executable?, version? })`, and operations that
 take `outfile`/`outdir` and return an `Artifact`. In-process bundlers (esbuild, rolldown)
 have no service or layer, and a provider that runs two binaries names each (Node SEA:
-`{ builder, base }`). Sections read in one order: service, `InputInvalid`, `supported`,
-`tested`, `layer`, then operations.
+`{ builder, base }`). Rejected input is core's `Tool.InputInvalid`, naming the operation.
+Sections read in one order: service, `supported`, `tested`, `layer`, then operations.

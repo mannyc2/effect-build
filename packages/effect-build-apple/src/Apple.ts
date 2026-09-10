@@ -1,16 +1,8 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Crypto, Effect, FileSystem, Layer, Path } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { Tool } from "effect-build";
 
 export class Apple extends Context.Service<Apple, { readonly tool: Tool.Resolved }>()("effect-build-apple/Apple") {}
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("AppleInputInvalid", {
-  reason: Schema.String,
-  path: Schema.optionalKey(Schema.String),
-}) {
-  override get message(): string {
-    return `${this.reason}${this.path === undefined ? "" : `: ${this.path}`}`;
-  }
-}
 export interface LayerOptions {
   readonly executable?: string | undefined;
   readonly version?: string | ((version: string) => boolean) | undefined;

@@ -3,7 +3,7 @@
 
 import type * as bun from "bun";
 import { Context, Effect, Layer } from "effect";
-import { InputInvalid } from "../Bun.js";
+import { Tool } from "effect-build";
 import { BunApiFailed, globalApi } from "../internal/ApiError.js";
 
 export { BunApiFailed, BunApiUnavailable } from "../internal/ApiError.js";
@@ -19,18 +19,21 @@ export type BuildToDirectoryOptions = Omit<bun.BuildConfig, "compile"> & {
 export type Output = bun.BuildOutput;
 
 interface Service {
-  readonly build: (input: BuildOptions) => Effect.Effect<Output, BunApiFailed | InputInvalid>;
-  readonly buildToDirectory: (input: BuildToDirectoryOptions) => Effect.Effect<Output, BunApiFailed | InputInvalid>;
+  readonly build: (input: BuildOptions) => Effect.Effect<Output, BunApiFailed | Tool.InputInvalid>;
+  readonly buildToDirectory: (
+    input: BuildToDirectoryOptions,
+  ) => Effect.Effect<Output, BunApiFailed | Tool.InputInvalid>;
 }
 export class Build extends Context.Service<Build, Service>()("effect-build-bun/Api/Build") {}
 
-export const build = (input: BuildOptions): Effect.Effect<Output, BunApiFailed | InputInvalid, Build> =>
+export const build = (input: BuildOptions): Effect.Effect<Output, BunApiFailed | Tool.InputInvalid, Build> =>
   Build.use((service) => service.build(input));
 
 /** Native directory output has Bun's own write behavior; use Bun.bundle for atomic output. */
 export const buildToDirectory = (
   input: BuildToDirectoryOptions,
-): Effect.Effect<Output, BunApiFailed | InputInvalid, Build> => Build.use((service) => service.buildToDirectory(input));
+): Effect.Effect<Output, BunApiFailed | Tool.InputInvalid, Build> =>
+  Build.use((service) => service.buildToDirectory(input));
 
 export const layer = Layer.effect(Build, Effect.map(globalApi("build"), (native) => {
   const invoke = (input: bun.BuildConfig) =>
@@ -42,13 +45,19 @@ export const layer = Layer.effect(Build, Effect.map(globalApi("build"), (native)
   return {
     build: Effect.fn("Bun.Api.Build.build")(function*(input: BuildOptions) {
       if (input.outdir !== undefined || input.compile !== undefined) {
-        return yield* new InputInvalid({ reason: "Use buildToDirectory for outdir or Bun.compile for an executable" });
+        return yield* new Tool.InputInvalid({
+          operation: "Bun.Api.Build.build",
+          reason: "Use buildToDirectory for outdir or Bun.compile for an executable",
+        });
       }
       return yield* invoke(input);
     }),
     buildToDirectory: Effect.fn("Bun.Api.Build.buildToDirectory")(function*(input: BuildToDirectoryOptions) {
       if (typeof input.outdir !== "string" || input.outdir.length === 0 || input.compile !== undefined) {
-        return yield* new InputInvalid({ reason: "buildToDirectory requires outdir and does not accept compile" });
+        return yield* new Tool.InputInvalid({
+          operation: "Bun.Api.Build.buildToDirectory",
+          reason: "buildToDirectory requires outdir and does not accept compile",
+        });
       }
       return yield* invoke(input);
     }),

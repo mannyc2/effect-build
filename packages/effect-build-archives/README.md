@@ -40,7 +40,7 @@ archive.
 - Paths use `/`, are relative, and contain no empty, `.`, or `..` segments. They must be distinct
   after case folding and NFC normalization, including every implicit directory: `Docs/a` and
   `docs/b` conflict too. No entry may descend through a file or symlink. Core `Layout.validate`
-  owns these shared shipping guarantees. Violations fail with `ArchiveInputInvalid` before
+  owns these shared shipping guarantees. Violations fail with `Tool.InputInvalid` before
   anything is written.
 
 ## Reproducibility
@@ -101,7 +101,7 @@ first, for checking before any output is staged.
 
 ## Errors
 
-`Archive.ArchiveError` is `InputInvalid`, `FormatLimit`, `EntrySizeMismatch`,
+`Archive.ArchiveError` is `Tool.InputInvalid`, `FormatLimit`, `EntrySizeMismatch`,
 `Artifact.ArtifactError`, or `Commit.CommitError`; `source` adds `TarInvalid`, `Tool.Failed`, and
 `Tool.SpawnFailed`. Tags are prefixed `Archive`.
 

@@ -141,6 +141,6 @@ Failures are typed errors with a `_tag` and useful fields, and an unhandled one 
   `Bun.layer({ executable: "/absolute/path/to/bun" })`.
 - `ToolVersionUnsupported: bun 1.2.0 is not supported (>=1.3.14 <2.0.0)`: upgrade, or pass a
   `version` range you accept.
-- `BunInputInvalid: outfile for windows-x64 must end with .exe`: name Windows outputs `.exe`.
+- `InputInvalid: Bun.compile: outfile for windows-x64 must end with .exe`: name Windows outputs `.exe`.
 - `ToolFailed`: the compiler exited unsuccessfully. The error carries `exitCode`, `stdout`, and
   `stderr`; `onOutput` on the operation streams both while the tool runs.

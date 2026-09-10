@@ -1,15 +1,8 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
-import { ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Tool } from "effect-build";
+import { ChildProcessSpawner } from "effect/unstable/process";
 
 export class Sbom extends Context.Service<Sbom, { readonly tool: Tool.Resolved }>()("effect-build-sbom/Sbom") {}
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("SbomInputInvalid", {
-  reason: Schema.String,
-}) {
-  override get message(): string {
-    return this.reason;
-  }
-}
 
 export interface LayerOptions {
   readonly executable?: string | undefined;
@@ -25,11 +18,15 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
   Sbom,
   Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
   Env
-> => Layer.effect(Sbom, Tool.resolve({
-  name: "syft",
-  executable: options.executable,
-  parseVersion: (completion) => /^syft (\S+)/u.exec(new TextDecoder().decode(completion.stdout))?.[1],
-}).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))));
+> =>
+  Layer.effect(
+    Sbom,
+    Tool.resolve({
+      name: "syft",
+      executable: options.executable,
+      parseVersion: (completion) => /^syft (\S+)/u.exec(new TextDecoder().decode(completion.stdout))?.[1],
+    }).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))),
+  );
 export const Format = Schema.Literals(["spdx-json", "cyclonedx-json"] as const);
 export type Format = typeof Format.Type;
 const nativeFormat = { "spdx-json": "spdx-json@2.3", "cyclonedx-json": "cyclonedx-json@1.6" } as const;
@@ -43,17 +40,25 @@ export interface GenerateInput extends Commit.ProducerOptions {
   readonly outfile: string;
   readonly cwd?: string | undefined;
 }
-export type GenerateError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
+export type GenerateError =
+  | Tool.InputInvalid
+  | Artifact.ArtifactError
+  | Tool.Failed
+  | Tool.SpawnFailed
+  | Commit.CommitError;
+const invalid = (reason: string) => new Tool.InputInvalid({ operation: "Sbom.generate", reason });
 
 /** Inventories packages discoverable by Syft in source ?? subject. Success does not establish dependency completeness. */
-export const generate = Effect.fn("Sbom.generate")((input: GenerateInput): Effect.Effect<Artifact.File, GenerateError, Sbom | Env> =>
+export const generate = Effect.fn("Sbom.generate")((
+  input: GenerateInput,
+): Effect.Effect<Artifact.File, GenerateError, Sbom | Env> =>
   Effect.gen(function*() {
     const format = yield* Schema.decodeUnknownEffect(Format)(input.format).pipe(
-      Effect.mapError((error) => new InputInvalid({ reason: String(error) })),
+      Effect.mapError((error) => invalid(String(error))),
     );
     const issue = Tool.argumentIssue(input.outfile);
-    if (issue !== undefined) return yield* new InputInvalid({ reason: `outfile ${issue}` });
-    if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
+    if (issue !== undefined) return yield* invalid(`outfile ${issue}`);
+    if (input.cwd?.includes("\0")) return yield* invalid("cwd must contain no NUL");
     const { tool } = yield* Sbom;
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");
@@ -63,8 +68,14 @@ export const generate = Effect.fn("Sbom.generate")((input: GenerateInput): Effec
     const source = input.source === undefined ? subject : yield* Artifact.verify(input.source);
     const produce = (out: string) =>
       Tool.run(tool, [
-        "scan", source.path, "--from", source.kind === "directory" ? "dir" : "file",
-        "--output", `${nativeFormat[format]}=${out}`, "--quiet",
+        "scan",
+        source.path,
+        "--from",
+        source.kind === "directory" ? "dir" : "file",
+        "--output",
+        `${nativeFormat[format]}=${out}`,
+        "--quiet",
       ], { cwd }).pipe(Effect.andThen(Artifact.file(out, Tool.producer(tool))));
     return yield* Commit.output(outfile, produce, input);
-  }));
+  })
+);

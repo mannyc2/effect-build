@@ -182,7 +182,7 @@ describe("real nFPM packages", () => {
     { reason: "parent traversal", change: (config: Nfpm.PackageInput): Nfpm.PackageInput => ({ ...config, contents: [{ artifact: binary, dst: "/usr/../escape" }] }) },
   ])("rejects $reason before writing a package", async (change) => {
     const error = await run(Nfpm.package(change.change(input("deb"))).pipe(Effect.flip));
-    expect(error).toBeInstanceOf(Nfpm.InputInvalid);
+    expect(error).toBeInstanceOf(Tool.InputInvalid);
     expect((await readdir(root)).sort()).toEqual(["echo", "message.txt"]);
   });
 

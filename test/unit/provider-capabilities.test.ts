@@ -15,12 +15,15 @@ describe("version policy and operation capabilities", () => {
     const defective = tool("bun", "1.4.1");
     expect(await Effect.runPromise(Effect.succeed(defective).pipe(Tool.requireVersion(Bun.supported)))).toBe(defective);
     const input = { entrypoints: ["input.ts"] as const, outfile: "output.exe", outdir: "output" };
-    const builds: readonly Effect.Effect<unknown, Bun.CompileError, NodeServices.NodeServices | Bun.Bun>[] = [
-      Bun.build(input), Bun.compile(input), Bun.bundle(input), Effect.scoped(Bun.watch(input)),
+    const builds: readonly [string, Effect.Effect<unknown, Bun.CompileError, NodeServices.NodeServices | Bun.Bun>][] = [
+      ["Bun.build", Bun.build(input)],
+      ["Bun.compile", Bun.compile(input)],
+      ["Bun.bundle", Bun.bundle(input)],
+      ["Bun.watch", Effect.scoped(Bun.watch(input))],
     ];
-    for (const effect of builds) {
+    for (const [operation, effect] of builds) {
       const failure = await run(effect.pipe(Effect.provideService(Bun.Bun, { tool: defective }), Effect.flip));
-      expect(failure).toMatchObject({ _tag: "BunInputInvalid", reason: expect.stringContaining("variable-collision") });
+      expect(failure).toMatchObject({ _tag: "InputInvalid", operation, reason: expect.stringContaining("variable-collision") });
     }
   });
 
@@ -30,14 +33,14 @@ describe("version policy and operation capabilities", () => {
     const compile = await run(Deno.compile({ entrypoint: "input.ts", outfile: "output.exe", options: { allowScripts: true } }).pipe(
       Effect.provideService(Deno.Deno, { tool: resolved }), Effect.flip,
     ));
-    expect(compile).toMatchObject({ _tag: "DenoInputInvalid", reason: expect.stringContaining("--allow-scripts") });
+    expect(compile).toMatchObject({ _tag: "InputInvalid", operation: "Deno.compile", reason: expect.stringContaining("--allow-scripts") });
     const watch = await run(Effect.scoped(Deno.watch({ entrypoint: "input.ts", outfile: "output.exe", options: { allowScripts: true } })).pipe(
       Effect.provideService(Deno.Deno, { tool: resolved }), Effect.flip,
     ));
-    expect(watch).toMatchObject({ _tag: "DenoInputInvalid", operation: "watch", reason: expect.stringContaining("--allow-scripts") });
+    expect(watch).toMatchObject({ _tag: "InputInvalid", operation: "Deno.watch", reason: expect.stringContaining("--allow-scripts") });
     const transpile = await run(Deno.transpile({ files: ["input.ts"], outdir: "output", options: { conditions: ["custom"] } }).pipe(
       Effect.provideService(Deno.Deno, { tool: resolved }), Effect.flip,
     ));
-    expect(transpile).toMatchObject({ _tag: "DenoInputInvalid", reason: expect.stringContaining("--conditions") });
+    expect(transpile).toMatchObject({ _tag: "InputInvalid", operation: "Deno.transpile", reason: expect.stringContaining("--conditions") });
   });
 });

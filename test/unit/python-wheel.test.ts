@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import { Artifact, Target } from "effect-build";
+import { Artifact, Target, Tool } from "effect-build";
 import * as Python from "effect-build-python";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
@@ -121,7 +121,7 @@ describe("wheels from real artifacts", () => {
           entries: [{ artifact, path: "wheel_fixture-1.2.3.data/scripts/tool" }],
         }).pipe(Effect.flip),
       );
-      expect(result).toBeInstanceOf(Python.InputInvalid);
+      expect(result).toBeInstanceOf(Tool.InputInvalid);
       expect(await readdir(root)).toEqual(["payload"]);
     },
   );
@@ -308,7 +308,7 @@ describe("wheels from real artifacts", () => {
     "1.0\nInjected: yes",
   ])("rejects invalid PEP 440 version %j before writing", async (version) => {
     expect(await run(Python.wheel({ ...input, metadata: { ...input.metadata, version } }).pipe(Effect.flip)))
-      .toBeInstanceOf(Python.InputInvalid);
+      .toBeInstanceOf(Tool.InputInvalid);
     expect(await readdir(root)).toEqual(["payload"]);
   });
 
@@ -338,7 +338,7 @@ describe("wheels from real artifacts", () => {
       const failure = await run(
         Python.wheel({ ...input, entries: ordered.map((path) => ({ path, artifact: payload })) }).pipe(Effect.flip),
       );
-      expect(failure).toBeInstanceOf(Python.InputInvalid);
+      expect(failure).toBeInstanceOf(Tool.InputInvalid);
     }
     expect(await readdir(root)).toEqual(["payload"]);
   });
@@ -361,8 +361,8 @@ describe("wheels from real artifacts", () => {
     ] satisfies readonly Partial<Python.WheelInput>[],
   )("rejects malformed metadata and options %j", async (invalid) => {
     const failure = await run(Python.wheel({ ...input, ...invalid }).pipe(Effect.flip));
-    expect(failure).toBeInstanceOf(Python.InputInvalid);
-    expect(String(failure)).toBe(`PythonInputInvalid: ${failure.message}`);
+    expect(failure).toBeInstanceOf(Tool.InputInvalid);
+    expect(String(failure)).toBe(`InputInvalid: ${failure.message}`);
     expect(await readdir(root)).toEqual(["payload"]);
   });
 

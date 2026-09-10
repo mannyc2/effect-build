@@ -37,7 +37,7 @@ const bundle = Esbuild.buildToDirectory({
 ## Errors
 
 `EsbuildFailed` keeps esbuild's `errors` and `warnings` arrays and the original exception;
-`InputInvalid` (tag `EsbuildInputInvalid`) rejects `outfile` or `write` in directory builds.
+`Tool.InputInvalid` rejects `outfile` or `write` in directory builds.
 `Esbuild.supported` and `Esbuild.tested` report the peer range and the tested version.
 
 [Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·

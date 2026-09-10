@@ -92,7 +92,7 @@ describe("Apple products on real files", () => {
 
   it.each([["../escape"], ["/absolute"], ["C:/drive"], ["back\\slash"], ["same", "same"], ["Readme", "README"], ["Docs/a", "docs/b"], ["café/a", "cafe\u0301/b"], ["Guide", "guide/readme"], ["café", "cafe\u0301/file"]])("rejects resource layout %j before producing an app", async (...paths) => {
     const failure = await run(Apple.appBundle({ ...appInput(), resources: paths.map((path) => ({ artifact: resource, path })) }).pipe(Effect.flip));
-    expect(failure).toBeInstanceOf(Apple.InputInvalid);
+    expect(failure).toBeInstanceOf(Tool.InputInvalid);
     expect(await readdir(root)).not.toContain("Fixture.app");
   });
 
@@ -286,9 +286,9 @@ describe("Standalone Darwin executables", () => {
   it("rejects non-Darwin executables and malformed entitlement keys before signing", async () => {
     await writeFile(join(root, "linux"), elf());
     const linux = await local(Artifact.executable(join(root, "linux"), producer));
-    expect(await run(Apple.sign({ artifact: linux, certificateSha1, outfile: join(root, "never") }).pipe(Effect.flip))).toBeInstanceOf(Apple.InputInvalid);
+    expect(await run(Apple.sign({ artifact: linux, certificateSha1, outfile: join(root, "never") }).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     for (const entitlements of [[], [""], ["a", "a"], [" com.apple.security.cs.allow-jit"], ["bad\0key"]]) {
-      expect(await run(Apple.sign({ artifact: executable, certificateSha1, outfile: join(root, "never"), entitlements }).pipe(Effect.flip))).toBeInstanceOf(Apple.InputInvalid);
+      expect(await run(Apple.sign({ artifact: executable, certificateSha1, outfile: join(root, "never"), entitlements }).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     }
     expect(await readdir(root)).not.toContain("never");
     expect(await readdir(root)).not.toContain("calls.jsonl");
@@ -337,7 +337,7 @@ describe("Standalone Darwin executables", () => {
     const before = await calls();
     for (const artifact of [{ ...signed, bytes: signed.bytes + 1 }, { ...signed, sha256: "0".repeat(64) }]) {
       const wrong: Apple.Notary.AcceptedReference = { ...acceptance, artifact };
-      expect(await run(Apple.assess({ artifact: signed, acceptance: wrong }).pipe(Effect.flip))).toBeInstanceOf(Apple.InputInvalid);
+      expect(await run(Apple.assess({ artifact: signed, acceptance: wrong }).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     }
     expect(await calls()).toEqual(before);
   });
@@ -487,7 +487,7 @@ describe("Apple notarization and stapling", () => {
     const source = await signedFile("dmg"), acceptance = await accepted(source), before = await calls();
     for (const artifact of [{ ...source, product: "pkg" as const }, { ...source, bytes: source.bytes + 1 }, { ...source, sha256: "0".repeat(64) }]) {
       const wrong: Apple.Notary.AcceptedReference = { ...acceptance, artifact };
-      expect(await run(Apple.staple({ artifact: source, acceptance: wrong, outfile: join(root, "never.dmg") }).pipe(Effect.flip))).toBeInstanceOf(Apple.InputInvalid);
+      expect(await run(Apple.staple({ artifact: source, acceptance: wrong, outfile: join(root, "never.dmg") }).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     }
     expect(await calls()).toEqual(before);
     expect(await readdir(root)).not.toContain("never.dmg");

@@ -216,7 +216,7 @@ describe("Windows signing through real files and a scripted native tool", () => 
     await writeFile(source, thinMacho(0x01000007));
     const native = await runLocal(Artifact.executable(source, artifact.producedBy));
     const failure = await run(Windows.sign({ ...input(), artifact: native, outfile: join(root, "signed.exe") }).pipe(Effect.flip));
-    expect(failure).toBeInstanceOf(Windows.InputInvalid);
+    expect(failure).toBeInstanceOf(Tool.InputInvalid);
     expect(await readdir(root)).not.toContain("calls.jsonl");
     expect(await runLocal(Artifact.verify(native))).toEqual(native);
   });
@@ -233,7 +233,7 @@ describe("Windows signing through real files and a scripted native tool", () => 
   it("requires executable inspection for .exe files", async () => {
     const native = await executable();
     const file = await runLocal(Artifact.file(native.path, native.producedBy));
-    expect(await run(Windows.sign({ ...input(), artifact: file }).pipe(Effect.flip))).toBeInstanceOf(Windows.InputInvalid);
+    expect(await run(Windows.sign({ ...input(), artifact: file }).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     expect(await readdir(root)).not.toContain("calls.jsonl");
     expect(await runLocal(Artifact.verify(file))).toEqual(file);
   });
@@ -317,7 +317,7 @@ describe("Windows signing through real files and a scripted native tool", () => 
   });
 
   it.each(["file:///timestamp", "https://user:password@example.test/", "https://example.test/?token=secret", "https://example.test/#fragment", "https://example.test/white space"])("rejects timestamp URL %s before signing", async (url) => {
-    expect(await run(Windows.sign({ ...input(), timestampUrl: url }).pipe(Effect.flip))).toBeInstanceOf(Windows.InputInvalid);
+    expect(await run(Windows.sign({ ...input(), timestampUrl: url }).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     expect(await readdir(root)).not.toContain("calls.jsonl");
     expect(await readdir(root)).not.toContain("signed.msix");
   });
@@ -336,7 +336,7 @@ describe("Windows signing through real files and a scripted native tool", () => 
       { ...input(), kind: "pfx", file: "certificate.pfx", password: unavailable },
     ];
     for (const options of invalid) {
-      expect(await run(Windows.sign(options).pipe(Effect.flip))).toBeInstanceOf(Windows.InputInvalid);
+      expect(await run(Windows.sign(options).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     }
     expect(await readdir(root)).not.toContain("calls.jsonl");
     expect(await readdir(root)).not.toContain("signed.msix");

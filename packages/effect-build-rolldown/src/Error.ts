@@ -1,14 +1,6 @@
 import { Effect, Schema } from "effect";
 import type * as rolldown from "rolldown";
 
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("RolldownInputInvalid", {
-  reason: Schema.String,
-}) {
-  override get message(): string {
-    return this.reason;
-  }
-}
-
 /** Preserve native diagnostics and the original rejection object. */
 export class Failed extends Schema.TaggedError<Failed>()("RolldownFailed", {
   operation: Schema.String,

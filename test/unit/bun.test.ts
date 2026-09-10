@@ -78,8 +78,8 @@ describe("Bun CLI", () => {
     ];
     for (const effect of invalid) {
       const failure = await run(effect.pipe(Effect.flip));
-      expect(failure).toBeInstanceOf(Bun.InputInvalid);
-      expect(String(failure)).toMatch(/^BunInputInvalid: \S/u);
+      expect(failure).toBeInstanceOf(Tool.InputInvalid);
+      expect(String(failure)).toMatch(/^InputInvalid: Bun\.compile: \S/u);
     }
     expect(await readdir(root)).toEqual(["hello.ts"]);
   });

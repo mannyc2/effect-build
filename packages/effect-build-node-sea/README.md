@@ -54,7 +54,7 @@ executable's header, so a base running under emulation is recorded as itself.
 
 ## Errors
 
-`NodeSea.AssembleError` is `InputInvalid` (tag `NodeSeaInputInvalid`), `Failed` (tag `NodeSeaFailed`,
+`NodeSea.AssembleError` is `Tool.InputInvalid`, `Failed` (tag `NodeSeaFailed`,
 with the failing `operation` and its `cause`), the `Tool` errors, `Artifact.ArtifactError`,
 `Executable.InspectError`, `Executable.TargetMismatch`, or `Commit.CommitError`.
 

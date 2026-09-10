@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Path } from "effect";
 import { Artifact, Commit, type Executable, Layout, Tool } from "effect-build";
-import { Apple, InputInvalid, type Env } from "./Apple.js";
+import { Apple, type Env } from "./Apple.js";
 import { copyProduct, copyRegular, type Entitlements, entitlementsFile, outputPath, runNative, verifySignature } from "./internal.js";
 import type { App, Dmg, Pkg, SignedApp, SignedDmg, SignedExecutable, SignedPkg, SignedProduct } from "./Model.js";
 
@@ -28,8 +28,10 @@ export interface SignExecutableInput extends SignOptions {
   readonly entitlements?: Entitlements | undefined;
 }
 export type SignInput = SignAppInput | SignDmgInput | SignPkgInput | SignExecutableInput;
-export type SignError = InputInvalid | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Commit.CommitError | Tool.Failed | Tool.SpawnFailed;
+export type SignError = Tool.InputInvalid | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Commit.CommitError | Tool.Failed | Tool.SpawnFailed;
 
+const operation = "Apple.sign";
+const invalid = (reason: string) => new Tool.InputInvalid({ operation, reason });
 const nestedValid = (app: App, path: string): boolean => {
   if (Layout.pathIssue(path) !== undefined) return false;
   const segments = path.split("/");
@@ -42,16 +44,17 @@ const nestedValid = (app: App, path: string): boolean => {
 const signProduct = (input: SignAppInput | SignDmgInput): Effect.Effect<SignedApp | SignedDmg, SignError, Apple | Env> =>
   Effect.scoped(Effect.gen(function*() {
     if (input.artifact.product === "app" ? "outfile" in input : "outdir" in input) {
-      return yield* new InputInvalid({ reason: "app signing takes outdir; file signing takes outfile" });
+      return yield* invalid("app signing takes outdir; file signing takes outfile");
     }
     const appInput = input.artifact.product === "app" ? input as SignAppInput : undefined;
     const destination = yield* outputPath(
+      operation,
       appInput === undefined ? (input as SignDmgInput).outfile ?? input.artifact.path : appInput.outdir ?? input.artifact.path,
       `.${input.artifact.product}`, input.cwd,
     );
     const nested = [...appInput?.nestedCode ?? []];
     if (appInput !== undefined && (new Set(nested.map((code) => code.path)).size !== nested.length || nested.some((code) => !nestedValid(appInput.artifact, code.path)))) {
-      return yield* new InputInvalid({ reason: "nested code paths must be distinct existing app entries without symlink traversal" });
+      return yield* invalid("nested code paths must be distinct existing app entries without symlink traversal");
     }
     // The caller declares nested code explicitly; sign children before their containing bundles.
     nested.sort((left, right) => right.path.split("/").length - left.path.split("/").length || left.path.localeCompare(right.path));
@@ -59,11 +62,11 @@ const signProduct = (input: SignAppInput | SignDmgInput): Effect.Effect<SignedAp
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");
     const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-sign-" }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
-    const topEntitlements = yield* entitlementsFile(appInput?.entitlements, p.join(temporary, "app-entitlements.plist"));
-    const nestedInputs = yield* Effect.forEach(nested, (code, index) => entitlementsFile(code.entitlements, p.join(temporary, `nested-${index}.plist`)).pipe(Effect.map((entitlements) => ({ path: code.path, entitlements }))));
+    const topEntitlements = yield* entitlementsFile(operation, appInput?.entitlements, p.join(temporary, "app-entitlements.plist"));
+    const nestedInputs = yield* Effect.forEach(nested, (code, index) => entitlementsFile(operation, code.entitlements, p.join(temporary, `nested-${index}.plist`)).pipe(Effect.map((entitlements) => ({ path: code.path, entitlements }))));
     const { tool } = yield* Apple;
     const produce = Effect.fn("Apple.sign.produce")(function*(out: string) {
-      yield* copyProduct(input.artifact, out);
+      yield* copyProduct(operation, input.artifact, out);
       const signCode = (path: string, entitlements: string | undefined, runtime: boolean) => runNative("codesign", [
         "--force", "--sign", input.certificateSha1, "--timestamp", ...(runtime ? ["--options", "runtime"] : []),
         ...(entitlements === undefined ? [] : ["--entitlements", entitlements]), path,
@@ -79,8 +82,8 @@ const signProduct = (input: SignAppInput | SignDmgInput): Effect.Effect<SignedAp
   }));
 const signPkg = (input: SignPkgInput): Effect.Effect<SignedPkg, SignError, Apple | Env> =>
   Effect.scoped(Effect.gen(function*() {
-    if ("outdir" in input) return yield* new InputInvalid({ reason: "app signing takes outdir; file signing takes outfile" });
-    const destination = yield* outputPath(input.outfile ?? input.artifact.path, ".pkg", input.cwd);
+    if ("outdir" in input) return yield* invalid("app signing takes outdir; file signing takes outfile");
+    const destination = yield* outputPath(operation, input.outfile ?? input.artifact.path, ".pkg", input.cwd);
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");
@@ -99,15 +102,15 @@ const signPkg = (input: SignPkgInput): Effect.Effect<SignedPkg, SignError, Apple
 const signExecutable = (input: SignExecutableInput): Effect.Effect<SignedExecutable, SignError, Apple | Env> =>
   Effect.scoped(Effect.gen(function*() {
     if (input.artifact.format !== "mach-o" || !input.artifact.target.startsWith("darwin-")) {
-      return yield* new InputInvalid({ reason: "executables must target Darwin and use Mach-O" });
+      return yield* invalid("executables must target Darwin and use Mach-O");
     }
-    if ("outdir" in input) return yield* new InputInvalid({ reason: "executable signing takes outfile" });
-    const destination = yield* outputPath(input.outfile ?? input.artifact.path, undefined, input.cwd);
+    if ("outdir" in input) return yield* invalid("executable signing takes outfile");
+    const destination = yield* outputPath(operation, input.outfile ?? input.artifact.path, undefined, input.cwd);
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");
     const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-sign-" }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
-    const entitlements = yield* entitlementsFile(input.entitlements, p.join(temporary, "entitlements.plist"));
+    const entitlements = yield* entitlementsFile(operation, input.entitlements, p.join(temporary, "entitlements.plist"));
     const { tool } = yield* Apple;
     const signature = { certificateSha1: input.certificateSha1, secureTimestamp: true as const, hardenedRuntime: true as const };
     const produce = Effect.fn("Apple.sign.produce")(function*(out: string) {
@@ -128,7 +131,7 @@ export function sign(input: SignPkgInput): Effect.Effect<SignedPkg, SignError, A
 export function sign(input: SignExecutableInput): Effect.Effect<SignedExecutable, SignError, Apple | Env>;
 export function sign(input: SignInput): Effect.Effect<SignedProduct | SignedExecutable, SignError, Apple | Env>;
 export function sign(input: SignInput): Effect.Effect<SignedProduct | SignedExecutable, SignError, Apple | Env> {
-  if (!/^[0-9a-f]{40}$/iu.test(input.certificateSha1)) return Effect.fail(new InputInvalid({ reason: "certificateSha1 must be a 40-digit SHA-1 certificate fingerprint" }));
+  if (!/^[0-9a-f]{40}$/iu.test(input.certificateSha1)) return Effect.fail(invalid("certificateSha1 must be a 40-digit SHA-1 certificate fingerprint"));
   if (input.artifact.kind === "executable") return signExecutable(input as SignExecutableInput);
   if (input.artifact.product === "pkg") return signPkg(input as SignPkgInput);
   return signProduct(input as SignAppInput | SignDmgInput);

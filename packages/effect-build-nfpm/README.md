@@ -60,7 +60,7 @@ here; `Nfpm.tested` is 2.47.0, exercised with every format. See
 
 ## Errors
 
-`Nfpm.PackageError` is `InputInvalid` (tag `NfpmInputInvalid`), `Artifact.ArtifactError`,
+`Nfpm.PackageError` is `Tool.InputInvalid`, `Artifact.ArtifactError`,
 `Tool.Failed`, `Tool.SpawnFailed`, or `Commit.CommitError`. `Nfpm.Format`, `Nfpm.Content`,
 `Nfpm.Configuration`, and `Nfpm.PackageInput` are exported as schemas.
 

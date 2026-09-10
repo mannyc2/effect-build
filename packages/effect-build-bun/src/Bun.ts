@@ -3,11 +3,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
 
 export class Bun extends Context.Service<Bun, { readonly tool: Tool.Resolved }>()("effect-build-bun/Bun") {}
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("BunInputInvalid", { reason: Schema.String }) {
-  override get message(): string {
-    return this.reason;
-  }
-}
 
 export interface LayerOptions {
   /** Use this binary instead of searching PATH. */
@@ -104,7 +99,7 @@ export interface CompileInput extends Commit.ProducerOptions {
 }
 
 export type CompileError =
-  | InputInvalid
+  | Tool.InputInvalid
   | Tool.Failed
   | Tool.SpawnFailed
   | Artifact.ArtifactError
@@ -153,20 +148,26 @@ const renderArgv = (input: CompileInput, out: string, target?: BunTarget): strin
 };
 
 const prepareBuild = Effect.fnUntraced(function*(
+  operation: string,
   input: { readonly entrypoints: readonly string[]; readonly cwd?: string | undefined },
   output?: string,
 ) {
-  if (input.entrypoints.length === 0) return yield* new InputInvalid({ reason: "entrypoints are empty" });
+  if (input.entrypoints.length === 0) {
+    return yield* new Tool.InputInvalid({ operation, reason: "entrypoints are empty" });
+  }
   for (const entrypoint of input.entrypoints) {
     const issue = Tool.argumentIssue(entrypoint);
-    if (issue !== undefined) return yield* new InputInvalid({ reason: `entrypoint ${issue}` });
+    if (issue !== undefined) return yield* new Tool.InputInvalid({ operation, reason: `entrypoint ${issue}` });
   }
   const outputIssue = output === undefined ? undefined : Tool.argumentIssue(output);
-  if (outputIssue !== undefined) return yield* new InputInvalid({ reason: `output ${outputIssue}` });
-  if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
+  if (outputIssue !== undefined) return yield* new Tool.InputInvalid({ operation, reason: `output ${outputIssue}` });
+  if (input.cwd?.includes("\0")) return yield* new Tool.InputInvalid({ operation, reason: "cwd must contain no NUL" });
   const { tool } = yield* Bun;
   if (Tool.satisfies("1.4.1")(tool.version)) {
-    return yield* new InputInvalid({ reason: "Bun 1.4.1 has a reproduced variable-collision bug in emitted builds; use another version" });
+    return yield* new Tool.InputInvalid({
+      operation,
+      reason: "Bun 1.4.1 has a reproduced variable-collision bug in emitted builds; use another version",
+    });
   }
   return tool;
 });
@@ -185,11 +186,11 @@ export const compile = Effect.fn("Bun.compile")(function*(
   CompileError,
   Bun | FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner
 > {
-  const tool = yield* prepareBuild(input, input.outfile);
+  const tool = yield* prepareBuild("Bun.compile", input, input.outfile);
   const requested = input.target;
   const bunTarget = requested === undefined ? undefined : toBunTarget(requested);
   if (bunTarget !== undefined && !BunTarget.literals.includes(bunTarget)) {
-    return yield* new InputInvalid({ reason: `unsupported Bun target: ${requested}` });
+    return yield* new Tool.InputInvalid({ operation: "Bun.compile", reason: `unsupported Bun target: ${requested}` });
   }
   // Omit --target for a native build: Bun knows its own host ABI, even when our
   // orchestrator cannot establish libc (for example Bun on Alpine).
@@ -197,7 +198,10 @@ export const compile = Effect.fn("Bun.compile")(function*(
   const suffix = target === undefined ? (process.platform === "win32" ? ".exe" : "") : Target.parts(target).executableSuffix;
   if (suffix !== "" && !input.outfile.endsWith(suffix)) {
     // Bun always names Windows outputs *.exe, so the caller's outfile must too.
-    return yield* new InputInvalid({ reason: `outfile for ${target ?? "the Windows host"} must end with ${suffix}` });
+    return yield* new Tool.InputInvalid({
+      operation: "Bun.compile",
+      reason: `outfile for ${target ?? "the Windows host"} must end with ${suffix}`,
+    });
   }
   const produce = (out: string) =>
     Tool.run(tool, renderArgv(input, out, bunTarget), { cwd: input.cwd, onOutput: input.onOutput }).pipe(
@@ -276,14 +280,14 @@ const renderBundleOptions = (o: BundleOptions): string[] => [
 ];
 
 export const build = Effect.fn("Bun.build")(function*(input: BuildInput) {
-  const tool = yield* prepareBuild(input);
+  const tool = yield* prepareBuild("Bun.build", input);
   const result = yield* Tool.run(tool, ["build", ...renderBundleOptions(input.options ?? {}), ...input.entrypoints],
     { cwd: input.cwd, onOutput: input.onOutput, stdoutLimit: null });
   return result.stdout;
 });
 
 export const bundle = Effect.fn("Bun.bundle")(function*(input: BundleInput) {
-  const tool = yield* prepareBuild(input, input.outdir);
+  const tool = yield* prepareBuild("Bun.bundle", input, input.outdir);
   const outdir = yield* outputPath(input.outdir, input.cwd);
   const produce = (out: string) => Tool.run(tool,
     ["build", ...renderBundleOptions(input.options ?? {}), `--outdir=${out}`, ...input.entrypoints],
@@ -301,7 +305,7 @@ export interface WatchInput extends Omit<BundleInput, keyof Commit.ProducerOptio
 
 /** The caller owns the scope. Live diagnostics are inherited unless stdio is pipe. */
 export const watch = Effect.fn("Bun.watch")(function*(input: WatchInput) {
-  const tool = yield* prepareBuild(input, input.outdir);
+  const tool = yield* prepareBuild("Bun.watch", input, input.outdir);
   const outdir = yield* outputPath(input.outdir, input.cwd);
   const process = yield* ChildProcess.make(tool.path, ["build", "--watch",
     ...(input.noClearScreen === true ? ["--no-clear-screen"] : []),

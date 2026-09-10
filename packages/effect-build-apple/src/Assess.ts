@@ -1,15 +1,15 @@
 import { Effect, Schema } from "effect";
 import { Artifact, Tool } from "effect-build";
-import { Apple, InputInvalid, type Env } from "./Apple.js";
+import { Apple, type Env } from "./Apple.js";
 import { runNative, verifySignature } from "./internal.js";
 import { SignedExecutable, type StapledProduct } from "./Model.js";
 import { AcceptedReference } from "./Notary.js";
 
-export type AssessError = InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed;
+export type AssessError = Tool.InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed;
 export interface AssessProductInput<A extends StapledProduct = StapledProduct> { readonly artifact: A }
 /** Standalone executables cannot be stapled: Gatekeeper fetches their ticket online, so acceptance must name these exact bytes. */
 export interface AssessExecutableInput { readonly artifact: SignedExecutable; readonly acceptance: AcceptedReference }
-const invalid = (error: unknown) => new InputInvalid({ reason: String(error) });
+const invalid = (reason: unknown) => new Tool.InputInvalid({ operation: "Apple.assess", reason: String(reason) });
 
 export function assess<A extends StapledProduct>(input: AssessProductInput<A>): Effect.Effect<A, AssessError, Apple | Env>;
 export function assess(input: AssessExecutableInput): Effect.Effect<SignedExecutable, AssessError, Apple | Env>;
@@ -19,11 +19,11 @@ export function assess(input: AssessProductInput | AssessExecutableInput): Effec
     if (artifact.kind === "executable") {
       yield* Schema.decodeUnknownEffect(SignedExecutable)(artifact).pipe(Effect.mapError(invalid));
       const acceptance = "acceptance" in input ? input.acceptance : undefined;
-      if (acceptance === undefined) return yield* new InputInvalid({ reason: "executable assessment requires the notarization acceptance" });
+      if (acceptance === undefined) return yield* invalid("executable assessment requires the notarization acceptance");
       yield* Schema.decodeUnknownEffect(AcceptedReference)(acceptance).pipe(Effect.mapError(invalid));
       const accepted = acceptance.artifact;
       if (accepted.kind !== "executable" || accepted.bytes !== artifact.bytes || accepted.sha256 !== artifact.sha256) {
-        return yield* new InputInvalid({ reason: "notarization acceptance does not match the executable" });
+        return yield* invalid("notarization acceptance does not match the executable");
       }
       yield* Artifact.verify(artifact);
       yield* verifySignature(artifact);
@@ -32,7 +32,7 @@ export function assess(input: AssessProductInput | AssessExecutableInput): Effec
     }
     yield* Schema.decodeUnknownEffect(AcceptedReference)(artifact.ticket).pipe(Effect.mapError(invalid));
     if (artifact.ticket.artifact.kind !== artifact.kind || !("product" in artifact.ticket.artifact) || artifact.ticket.artifact.product !== artifact.product) {
-      return yield* new InputInvalid({ reason: "the notarization ticket describes a different product kind" });
+      return yield* invalid("the notarization ticket describes a different product kind");
     }
     // Stapling changes the accepted bytes, so validate the current artifact and its native ticket independently.
     yield* Artifact.verify(artifact);

@@ -8,13 +8,6 @@ export class NodeSea extends Context.Service<NodeSea, {
   readonly builder: Tool.Resolved;
   readonly base: Tool.Resolved;
 }>()("effect-build-node-sea/NodeSea") {}
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("NodeSeaInputInvalid", {
-  reason: Schema.String,
-}) {
-  override get message(): string {
-    return this.reason;
-  }
-}
 /** postject rejections are not always Error instances; a message getter must still render them. */
 const describe = (cause: unknown): string => {
   const message: unknown = typeof cause === "object" && cause !== null ? Reflect.get(cause, "message") : undefined;
@@ -51,14 +44,17 @@ const resolveNode = (executable: string, version: NonNullable<LayerOptions["vers
 }).pipe(Tool.requireVersion(version));
 export const layer = (options: LayerOptions = {}): Layer.Layer<
   NodeSea,
-  InputInvalid | Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
+  Tool.InputInvalid | Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
   Env
 > => Layer.effect(NodeSea, Effect.gen(function*() {
   const builder = yield* resolveNode(options.executable ?? process.execPath, options.version ?? supported);
   const base = options.baseExecutable === undefined ? builder : yield* resolveNode(options.baseExecutable, options.version ?? supported);
   // Node's preparation blob must be consumed by the same Node version.
   if (builder.version !== base.version) {
-    return yield* new InputInvalid({ reason: `builder ${builder.version} and base ${base.version} must have the same Node version` });
+    return yield* new Tool.InputInvalid({
+      operation: "NodeSea.layer",
+      reason: `builder ${builder.version} and base ${base.version} must have the same Node version`,
+    });
   }
   return { builder, base };
 }));
@@ -72,20 +68,21 @@ export interface Input extends Commit.ProducerOptions {
   readonly disableExperimentalSEAWarning?: boolean | undefined;
 }
 export type AssembleError =
-  | InputInvalid | Failed | Tool.NotFound | Tool.ProbeFailed | Tool.Failed | Tool.SpawnFailed
+  | Tool.InputInvalid | Failed | Tool.NotFound | Tool.ProbeFailed | Tool.Failed | Tool.SpawnFailed
   | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Commit.CommitError;
+const invalid = (reason: string) => new Tool.InputInvalid({ operation: "NodeSea.assemble", reason });
 export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Effect<Artifact.Executable, AssembleError, NodeSea | Env> =>
   Effect.scoped(Effect.gen(function*() {
     const issue = Tool.argumentIssue(input.outfile);
-    if (issue !== undefined) return yield* new InputInvalid({ reason: `outfile ${issue}` });
-    if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
+    if (issue !== undefined) return yield* invalid(`outfile ${issue}`);
+    if (input.cwd?.includes("\0")) return yield* invalid("cwd must contain no NUL");
     const { builder, base } = yield* NodeSea;
     // The output is the base with one resource added, so its target is the base's; the host may be running it under emulation.
     const facts = yield* Executable.inspect(base.path);
     const target = yield* Executable.resolveTarget(base.path, facts);
     // Windows launches .EXE and .exe alike, and the base is copied under the caller's exact name.
     if (facts.os === "windows" && !input.outfile.toLowerCase().endsWith(".exe")) {
-      return yield* new InputInvalid({ reason: "Windows outfile must end in .exe" });
+      return yield* invalid("Windows outfile must end in .exe");
     }
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
