@@ -56,8 +56,34 @@ const tag = (input: string): string => /^[a-z0-9_]+(?:\.[a-z0-9_]+)*$/iu.test(in
 const csv = (input: string): string => /[,"\r\n]/u.test(input) ? `"${input.replaceAll('"', '""')}"` : input;
 const hexBytes = (hex: string): Uint8Array => Uint8Array.from(hex.match(/.{2}/gu) ?? [], (pair) => Number.parseInt(pair, 16));
 
+/** Support a compiled executable promises: Windows tags carry no version floor;
+ * Linux and macOS floors are the caller's declaration, never inferred. */
+export type PlatformSupport =
+  | { readonly target: Extract<Target.Target, `windows-${string}`> }
+  | { readonly target: Extract<Target.Target, `darwin-${string}`>; readonly macos: readonly [major: number, minor: number] }
+  | { readonly target: Exclude<Extract<Target.Target, `linux-${string}`>, `${string}-musl`>; readonly glibc: readonly [major: number, minor: number] }
+  | { readonly target: Extract<Target.Target, `${string}-musl`>; readonly musl: readonly [major: number, minor: number] };
+
+/** The PEP 425/600/656 platform tag naming exactly the declared support. */
+export const platformTag = (support: PlatformSupport): string => {
+  switch (support.target) {
+    case "windows-x64": return "win_amd64";
+    case "windows-arm64": return "win_arm64";
+    case "darwin-x64": return `macosx_${support.macos[0]}_${support.macos[1]}_x86_64`;
+    case "darwin-arm64": return `macosx_${support.macos[0]}_${support.macos[1]}_arm64`;
+    case "linux-x64": return `manylinux_${support.glibc[0]}_${support.glibc[1]}_x86_64`;
+    case "linux-arm64": return `manylinux_${support.glibc[0]}_${support.glibc[1]}_aarch64`;
+    case "linux-x64-musl": return `musllinux_${support.musl[0]}_${support.musl[1]}_x86_64`;
+    case "linux-arm64-musl": return `musllinux_${support.musl[0]}_${support.musl[1]}_aarch64`;
+  }
+};
+
+/** Tags for a wheel that ships a compiled command: any Python 3, no Python ABI, one platform. */
+export const executableTags = (support: PlatformSupport): WheelTags => ({ python: "py3", abi: "none", platform: platformTag(support) });
+
 // Every advertised platform must be able to execute every embedded native artifact.
-// OS deployment/libc version floors remain the caller's responsibility.
+// OS deployment/libc version floors remain the caller's responsibility, declared
+// through platformTag or spelled out by hand.
 const matchesPlatform = (artifact: Artifact.Executable, platform: string): boolean => {
   const { os, arch, abi } = Target.parts(artifact.target);
   const machine = arch === "x64" ? "x86_64" : "aarch64";

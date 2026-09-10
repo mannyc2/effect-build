@@ -153,6 +153,24 @@ describe("wheels from real artifacts", () => {
     expect(files.get("wheel_fixture/bin/tool")?.contents.equals(await readFile(executable.path))).toBe(true);
   }, 30_000);
 
+  it("derives platform tags whose wheels admit their own executables", async () => {
+    expect(Python.platformTag({ target: "windows-x64" })).toBe("win_amd64");
+    expect(Python.platformTag({ target: "windows-arm64" })).toBe("win_arm64");
+    expect(Python.platformTag({ target: "darwin-x64", macos: [11, 0] })).toBe("macosx_11_0_x86_64");
+    expect(Python.platformTag({ target: "linux-x64", glibc: [2, 17] })).toBe("manylinux_2_17_x86_64");
+    expect(Python.platformTag({ target: "linux-arm64", glibc: [2, 28] })).toBe("manylinux_2_28_aarch64");
+    expect(Python.platformTag({ target: "linux-x64-musl", musl: [1, 2] })).toBe("musllinux_1_2_x86_64");
+    expect(Python.platformTag({ target: "linux-arm64-musl", musl: [1, 2] })).toBe("musllinux_1_2_aarch64");
+    const tags = Python.executableTags({ target: "darwin-arm64", macos: [11, 0] });
+    expect(tags).toEqual({ python: "py3", abi: "none", platform: "macosx_11_0_arm64" });
+    await writeFile(payload.path, thinMacho());
+    const artifact = await run(Artifact.executable(payload.path, producer));
+    expect(artifact.target).toBe("darwin-arm64");
+    const result = await run(Python.wheel({ ...input, tags, entries: [{ artifact, path: "wheel_fixture-1.2.3.data/scripts/tool" }] }));
+    expect(basename(result.path)).toBe("wheel_fixture-1.2.3-py3-none-macosx_11_0_arm64.whl");
+    expect((await readZip(result.path)).get("wheel_fixture-1.2.3.data/scripts/tool")?.mode).toBe(0o100755);
+  });
+
   it("expands compressed compatibility tags and accepts explicit purelib placement", async () => {
     const result = await run(Python.wheel({
       ...input, tags: { python: "PY3.py2.py3", abi: "none.abi3", platform: "manylinux_2_17_x86_64.linux_x86_64" }, rootIsPurelib: true,
