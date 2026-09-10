@@ -10,6 +10,9 @@
       "path": "../../packages/effect-build"
     },
     {
+      "path": "../../packages/effect-build-archives"
+    },
+    {
       "path": "../../packages/effect-build-bun"
     }
   ]

@@ -1,17 +1,57 @@
 # Artifact pipeline
 
-Run `bun run test` here after the workspace build, with Node 24 and Bun 1.3.14 or 1.4.2 installed. The program compiles with Bun and puts that executable into ZIP, tar.gz, and a Python wheel. The wheel places it in `.data/scripts`, so installation adds `hello` (`hello.exe` on Windows) to the Python environment's command directory without a Python wrapper.
-Esbuild and Rolldown add bundles, and the complete esbuild directory goes directly into a tar.gz. The program prints an artifact manifest, writes checksums, and removes its temporary outputs on completion.
+Every producer in one program. `src/main.ts` compiles an executable with Bun, then feeds that one
+artifact into a ZIP, a tar.gz, a Python wheel, a deb package, and an SBOM, bundles with esbuild
+and Rolldown, archives a whole bundle directory, assembles a Node single executable, compiles with
+Deno, writes checksums, and prints the manifest. Output goes to a temporary directory that is
+removed when the program finishes.
 
-Wheel platform tags are explicit compatibility promises; choose minimum OS and libc versions for the binary you actually build. The Python integration tests install wheels with uv and run their native commands; ordinary example verification needs no Python installation.
+## Run it
 
-Select tools and optional operations with executable paths:
+From the repository root, `bun install --frozen-lockfile` and `bun run build` once. Then, with
+Node 24 and Bun 1.3.14 or newer on `PATH`:
 
-- `EFFECT_BUILD_BUN`: select Bun instead of the first PATH match.
-- `EFFECT_BUILD_DENO`: add Deno 2.9.5 compilation.
-- `EFFECT_BUILD_NODE`: add Node 22–26 SEA assembly of the esbuild bundle.
-- `EFFECT_BUILD_UV_BIN`: build a Python project into a wheel and sdist; uv needs Python and access to its build backend.
-- `EFFECT_BUILD_NFPM_BIN`: package the same Bun executable as a deb.
-- `EFFECT_BUILD_SYFT_BIN`: scan the wheel into an SPDX JSON SBOM.
+```sh
+cd examples/artifact-pipeline
+node src/main.ts
+```
 
-[`src/signing.ts`](src/signing.ts) signs a compiled Windows executable and archives it directly, signs MSIX packages, and builds signed Apple products. CI typechecks these examples and separately tests native Windows executable signing with a temporary certificate. Running the examples requires native tools and the caller's credentials.
+Bun, esbuild, Rolldown, the archive writers, and the wheel writer always run. A step that needs
+another tool runs when its variable names one:
+
+| Variable                | Adds                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| `EFFECT_BUILD_BUN`      | Selects a Bun executable instead of the first `PATH` match.                          |
+| `EFFECT_BUILD_NODE`     | A Node 22 to 26 single executable assembled from the esbuild bundle.                 |
+| `EFFECT_BUILD_DENO`     | A Deno 2.9.5 compiled executable.                                                    |
+| `EFFECT_BUILD_NFPM_BIN` | A deb package of the Bun executable.                                                 |
+| `EFFECT_BUILD_UV_BIN`   | An sdist and wheel of a small Python project; uv needs Python and its build backend. |
+| `EFFECT_BUILD_SYFT_BIN` | An SPDX JSON SBOM of the executable.                                                 |
+
+CI runs the program with every tool on Linux. The Python integration tests install the wheel with
+uv and run its native command; ordinary example verification needs no Python.
+
+## What to look at
+
+The steps are numbered in `src/main.ts`:
+
+1. **Compile** with Bun and `Artifact.verify` the result: the record matches the file.
+2. **Archive and wheel** from the same executable. The wheel entry under `.data/scripts` puts
+   `hello` (`hello.exe` on Windows) on the installing environment's command path with no Python
+   wrapper. The platform tag describes the build host here; a real release picks the minimum
+   macOS version and the manylinux or musllinux floor it supports.
+3. **Bundle** with esbuild and Rolldown. Bundles are directory artifacts, and the whole esbuild
+   directory goes into a tar.gz the same way a single file does.
+4. **Optional tools**: Node SEA from the esbuild bundle, Deno, nFPM, uv, and Syft.
+5. **Checksums and manifest**: `Checksums.write` covers every regular file, and
+   `Artifact.encode` produces the JSON handoff, which `Artifact.decode` validates.
+
+## Signing
+
+[`src/signing.ts`](src/signing.ts) has the credentialed flows: a Windows executable signed with
+Authenticode and archived, an MSIX signed with a PFX, a macOS CLI signed with the hardened
+runtime, notarized as a ZIP, and assessed, and a full app bundle with a signed DMG and PKG,
+notarized and stapled. CI typechecks this module and separately signs a native Windows executable
+with a temporary certificate. [`src/sign.ts`](src/sign.ts) is the program the
+[signing workflow](../../.github/workflows/signing.yml) runs on macOS and Windows with real
+identities; the secrets it needs are listed in [CONTRIBUTING.md](../../CONTRIBUTING.md).
