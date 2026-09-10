@@ -68,7 +68,8 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Explicit `denort` is hashed and recorded, not executed** to establish identity.
 - **Git source archives fix host newline defaults to LF**; committed `.gitattributes` still controls file conversion.
 - **Node SEA uses a CommonJS preparation blob and resource injection** across Node
-  22–26; the builder and base executable must have matching Node versions.
+  22–26; the builder and base executable must have matching Node versions. The target is read from the base's
+  header, so a base running under emulation is recorded as itself.
 - **SignTool reads its full SDK version from its binary resource**; string ranges select the first three
   components, while a caller predicate can pin the full four-component version. The Windows layer reads
   those bytes itself; `Tool.resolve` hashes incrementally and parses probe output only.

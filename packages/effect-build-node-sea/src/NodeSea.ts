@@ -1,6 +1,6 @@
 import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
+import { Artifact, Commit, Executable, Tool } from "effect-build";
 import { Buffer } from "node:buffer";
 import { inject } from "postject";
 
@@ -73,11 +73,13 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
     if (input.outfile.length === 0 || input.outfile.includes("\0")) {
       return yield* new InputInvalid({ reason: "outfile must be a non-empty path without NUL" });
     }
-    const target = Target.host();
-    if (target?.startsWith("windows") === true && !input.outfile.toLowerCase().endsWith(".exe")) {
+    const { builder, base } = yield* NodeSea;
+    // The output is the base with one resource added, so its target is the base's; the host may be running it under emulation.
+    const facts = yield* Executable.inspect(base.path);
+    const target = yield* Executable.resolveTarget(base.path, facts);
+    if (facts.os === "windows" && !input.outfile.toLowerCase().endsWith(".exe")) {
       return yield* new InputInvalid({ reason: "Windows outfile must end in .exe" });
     }
-    const { builder, base } = yield* NodeSea;
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");
@@ -105,7 +107,7 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
     })).pipe(Effect.mapError(fileError(config)));
     yield* Tool.run(builder, ["--experimental-sea-config", config], { cwd });
     const contents = yield* fs.readFile(blob).pipe(Effect.mapError(fileError(blob)));
-    const signing = target?.startsWith("darwin") === true ? yield* Tool.resolve({
+    const signing = facts.format === "mach-o" ? yield* Tool.resolve({
       name: "xcrun",
       parseVersion: (completion) => {
         const major = /^xcrun version (\d+)\./u.exec(new TextDecoder().decode(completion.stdout))?.[1];

@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import { Artifact, Executable, Target, Tool } from "effect-build";
+import { Artifact, Executable, Tool } from "effect-build";
 import * as NodeSea from "effect-build-node-sea";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -51,7 +51,8 @@ describe("real Node SEA executables", () => {
       outfile: `dist/${name("hello")}`, cwd: root,
     }));
     expect(artifact.path).toBe(join(root, "dist", name("hello")));
-    expect(artifact.target).toBe(Target.host());
+    const base = await run(Executable.inspect(executable).pipe(Effect.flatMap((facts) => Executable.resolveTarget(executable, facts))));
+    expect(artifact.target).toBe(base);
     expect(Executable.matches(await run(Executable.inspect(artifact.path)), artifact.target)).toBe(true);
     expect(await run(Artifact.verify(artifact))).toEqual(artifact);
     await Promise.all([rm(mainPath), rm(assetPath), rm(binaryPath)]);
