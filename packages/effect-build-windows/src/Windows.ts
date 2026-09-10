@@ -28,6 +28,7 @@ const productVersion = (contents: Uint8Array): string | undefined => {
   const header = { length: 0, valueLength: 2, type: 4, key: 6, value: 40, size: 92 } as const;
   const fixed = { size: 52, signature: 0, version: 4, productHigh: 16, productLow: 20 } as const;
   let version: string | undefined;
+  // Resource data is DWORD-aligned, so the block can only start on a multiple of four.
   for (let offset = 0; offset + header.size <= contents.byteLength; offset += 4) {
     const length = view.getUint16(offset + header.length, true);
     if (length < header.size || offset + length > contents.byteLength || view.getUint16(offset + header.valueLength, true) !== fixed.size || view.getUint16(offset + header.type, true) !== 0) continue;
@@ -37,6 +38,7 @@ const productVersion = (contents: Uint8Array): string | undefined => {
     const high = view.getUint32(value + fixed.productHigh, true);
     const low = view.getUint32(value + fixed.productLow, true);
     const native = [high >>> 16, high & 0xffff, low >>> 16, low & 0xffff].join(".");
+    // Two resources that disagree cannot name the SDK; the layer reports that no single version exists.
     if (version !== undefined && version !== native) return undefined;
     version = native;
   }
@@ -95,9 +97,8 @@ export interface Signature {
 }
 export type Signed<A extends Artifact.Regular = Artifact.Regular> = A & { readonly signature: Signature };
 export type SignError = InputInvalid | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Tool.Failed | Tool.SpawnFailed | Commit.CommitError;
-const textValid = (value: string): boolean => value.length > 0 && !value.includes("\0");
 const urlValid = (value: string, httpsOnly: boolean): boolean => {
-  if (!textValid(value) || /\s/u.test(value) || value.includes("?") || value.includes("#") || !URL.canParse(value)) return false;
+  if (Tool.argumentIssue(value) !== undefined || /\s/u.test(value) || value.includes("?") || value.includes("#") || !URL.canParse(value)) return false;
   const url = new URL(value);
   return (url.protocol === "https:" || (!httpsOnly && url.protocol === "http:")) && url.hostname.length > 0 && url.username === "" && url.password === "";
 };
@@ -112,13 +113,13 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
     if (input.artifact.kind === "executable" && (input.artifact.format !== "pe" || !input.artifact.target.startsWith("windows-"))) {
       return yield* new InputInvalid({ reason: "executable artifacts must use PE and target Windows" });
     }
-    if (![input.artifact.path, output].every((path) => textValid(path) && path.toLowerCase().endsWith(extension))) {
+    if (![input.artifact.path, output].every((path) => Tool.argumentIssue(path) === undefined && path.toLowerCase().endsWith(extension))) {
       return yield* new InputInvalid({ reason: `artifact and outfile must be non-empty ${extension} paths without NUL` });
     }
     if (!urlValid(input.timestampUrl, false) || (input.descriptionUrl !== undefined && !urlValid(input.descriptionUrl, true))) {
       return yield* new InputInvalid({ reason: "timestampUrl must be HTTP(S) and descriptionUrl HTTPS, without credentials, whitespace, query, or fragment" });
     }
-    if ([input.cwd, input.description].some((value) => value !== undefined && !textValid(value))) {
+    if ([input.cwd, input.description].some((value) => value !== undefined && Tool.argumentIssue(value) !== undefined)) {
       return yield* new InputInvalid({ reason: "cwd and description must be non-empty strings without NUL" });
     }
     const p = yield* Path.Path;
@@ -127,7 +128,7 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
     const credential: string[] = [];
     let password: string | undefined;
     if (input.kind === "pfx") {
-      if (!textValid(input.file)) return yield* new InputInvalid({ reason: "PFX file must be a non-empty path without NUL" });
+      if (Tool.argumentIssue(input.file) !== undefined) return yield* new InputInvalid({ reason: "PFX file must be a non-empty path without NUL" });
       credential.push("/f", p.resolve(cwd, input.file));
       if (input.password !== undefined) {
         password = yield* Effect.try({ try: () => Redacted.value(input.password!), catch: () => new InputInvalid({ reason: "PFX password is unavailable" }) });
@@ -135,14 +136,14 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
         credential.push("/p", password);
       }
     } else if (input.kind === "store") {
-      if (!/^[0-9a-f]{40}$/iu.test(input.thumbprint) || (input.storeName !== undefined && !textValid(input.storeName))) {
+      if (!/^[0-9a-f]{40}$/iu.test(input.thumbprint) || (input.storeName !== undefined && Tool.argumentIssue(input.storeName) !== undefined)) {
         return yield* new InputInvalid({ reason: "store credentials require a 40-digit SHA-1 thumbprint and a non-empty store name without NUL" });
       }
       if (input.machineStore === true) credential.push("/sm");
       if (input.storeName !== undefined) credential.push("/s", input.storeName);
       credential.push("/sha1", input.thumbprint);
     } else {
-      if (![input.library, input.metadata].every(textValid)) {
+      if ([input.library, input.metadata].some((path) => Tool.argumentIssue(path) !== undefined)) {
         return yield* new InputInvalid({ reason: "Trusted Signing credentials require non-empty library and metadata paths without NUL" });
       }
       credential.push("/dlib", p.resolve(cwd, input.library), "/dmdf", p.resolve(cwd, input.metadata));

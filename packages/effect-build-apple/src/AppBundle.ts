@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path } from "effect";
 import { Artifact, Commit, Layout, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
-import { outputPath, runNative, textValid } from "./internal.js";
+import { outputPath, runNative } from "./internal.js";
 import type { App } from "./Model.js";
 import { plist } from "./plist.js";
 
@@ -28,14 +28,14 @@ export type AppBundleError = InputInvalid | Artifact.ArtifactError | Commit.Comm
 export const validateResources = (resources: readonly Resource[], reserved: readonly string[] = []) => Effect.gen(function*() {
   // Reserved product roots are opaque: resource entries cannot add descendants inside them.
   const issue = Layout.validate([...reserved, ...resources.map((resource) => resource.path)].map((path) => ({ path, kind: "file" })));
-  if (issue !== undefined) return yield* new InputInvalid({ reason: `${issue.reason}: ${issue.path}` });
+  if (issue !== undefined) return yield* new InputInvalid(issue);
 });
 export const appBundle = (input: AppBundleInput): Effect.Effect<App, AppBundleError, Apple | Env> => Effect.gen(function*() {
   const outdir = yield* outputPath(input.outdir, ".app", input.cwd);
   const p = yield* Path.Path;
   const executableName = input.executableName ?? p.basename(input.executable.path);
   const strings = [input.bundleName, input.version, input.shortVersion ?? input.version, input.displayName ?? input.bundleName, executableName, ...(input.minimumSystemVersion === undefined ? [] : [input.minimumSystemVersion])];
-  if (!strings.every((value) => textValid(value) && Array.from(value).every((character) => character.charCodeAt(0) >= 32 || "\t\n\r".includes(character))) || Layout.pathIssue(executableName) !== undefined || executableName.includes("/")) {
+  if (!strings.every((value) => Tool.argumentIssue(value) === undefined && Array.from(value).every((character) => character.charCodeAt(0) >= 32 || "\t\n\r".includes(character))) || Layout.pathIssue(executableName) !== undefined || executableName.includes("/")) {
     return yield* new InputInvalid({ reason: "bundle strings must be non-empty XML text; executableName must be one filename" });
   }
   if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u.test(input.bundleIdentifier)) {

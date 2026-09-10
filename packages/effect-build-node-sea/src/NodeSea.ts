@@ -4,6 +4,10 @@ import { Artifact, Commit, Executable, Tool } from "effect-build";
 import { Buffer } from "node:buffer";
 import { inject } from "postject";
 
+export class NodeSea extends Context.Service<NodeSea, {
+  readonly builder: Tool.Resolved;
+  readonly base: Tool.Resolved;
+}>()("effect-build-node-sea/NodeSea") {}
 export class InputInvalid extends Schema.TaggedError<InputInvalid>()("NodeSeaInputInvalid", {
   reason: Schema.String,
 }) {
@@ -29,11 +33,6 @@ export class Failed extends Schema.TaggedError<Failed>()("NodeSeaFailed", {
     return `${this.operation} failed: ${describe(this.cause)}`;
   }
 }
-
-export class NodeSea extends Context.Service<NodeSea, {
-  readonly builder: Tool.Resolved;
-  readonly base: Tool.Resolved;
-}>()("effect-build-node-sea/NodeSea") {}
 export interface LayerOptions {
   readonly executable?: string | undefined;
   readonly baseExecutable?: string | undefined;
@@ -77,14 +76,14 @@ export type AssembleError =
   | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Commit.CommitError;
 export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Effect<Artifact.Executable, AssembleError, NodeSea | Env> =>
   Effect.scoped(Effect.gen(function*() {
-    if (input.outfile.length === 0 || input.outfile.includes("\0")) {
-      return yield* new InputInvalid({ reason: "outfile must be a non-empty path without NUL" });
-    }
+    const issue = Tool.argumentIssue(input.outfile);
+    if (issue !== undefined) return yield* new InputInvalid({ reason: `outfile ${issue}` });
     if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
     const { builder, base } = yield* NodeSea;
     // The output is the base with one resource added, so its target is the base's; the host may be running it under emulation.
     const facts = yield* Executable.inspect(base.path);
     const target = yield* Executable.resolveTarget(base.path, facts);
+    // Windows launches .EXE and .exe alike, and the base is copied under the caller's exact name.
     if (facts.os === "windows" && !input.outfile.toLowerCase().endsWith(".exe")) {
       return yield* new InputInvalid({ reason: "Windows outfile must end in .exe" });
     }

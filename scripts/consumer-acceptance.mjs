@@ -48,13 +48,14 @@ try {
     for (const name of Object.keys(installedManifest.exports)) {
       exports.push(name === "." ? item.name : `${item.name}${name.slice(1)}`);
     }
+    // Published source maps must not point at sources missing from the tarball.
     for (const entry of await readdir(join(packageRoot, "dist"), { recursive: true })) {
       if (!entry.endsWith(".map")) continue;
       const mapPath = join(packageRoot, "dist", entry);
       const map = JSON.parse(await readFile(mapPath, "utf8"));
       for (const [index, source] of map.sources.entries()) {
         if (map.sourcesContent?.[index] != null) continue;
-        await readFile(resolve(mapPath, "..", map.sourceRoot ?? "", source));
+        await assert.doesNotReject(readFile(resolve(mapPath, "..", map.sourceRoot ?? "", source)), `${entry} references missing source ${source}`);
       }
     }
   }
@@ -107,13 +108,14 @@ import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { Artifact, Layout, Tool } from "effect-build";
 
-await writeFile("input.txt", "installed consumer\n");
+const text = "installed consumer\n";
+await writeFile("input.txt", text);
 const artifact = await Effect.runPromise(
   Artifact.file("input.txt", { name: "consumer", version: "1.0.0" }).pipe(
     Effect.provide(NodeServices.layer),
   ),
 );
-assert.equal(artifact.bytes, 19);
+assert.equal(artifact.bytes, new TextEncoder().encode(text).byteLength);
 const [restored] = Artifact.decode(Artifact.encode([artifact]));
 assert.equal(restored.sha256, artifact.sha256);
 assert.match(Layout.validate([

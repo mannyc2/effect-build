@@ -3,7 +3,7 @@ import { Artifact, Commit } from "effect-build";
 import * as rolldown from "rolldown";
 import { transform as nativeTransform, type TransformOptions, type TransformResult, type TsconfigCache } from "rolldown/utils";
 import metadata from "../package.json" with { type: "json" };
-import { Failed, InputInvalid } from "./Error.js";
+import { Failed, InputInvalid, invoke } from "./Error.js";
 
 export { Failed, InputInvalid } from "./Error.js";
 export type { TransformOptions, TransformResult, TsconfigCache } from "rolldown/utils";
@@ -11,8 +11,6 @@ export { watch, type WatchEvent } from "./Watch.js";
 
 /** Tests exercise the pinned npm dependency; Rolldown is not selected from PATH. */
 export const tested = metadata.dependencies.rolldown;
-const invoke = <A>(operation: string, run: () => Promise<A>): Effect.Effect<A, Failed> =>
-  Effect.tryPromise({ try: run, catch: (cause) => new Failed({ operation, cause }) });
 
 /** Native build options retain their write behavior; use write: false for memory output. */
 export function build(options: rolldown.BuildOptions): Effect.Effect<rolldown.RolldownOutput, Failed>;

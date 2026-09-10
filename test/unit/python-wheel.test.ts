@@ -35,26 +35,27 @@ afterEach(async () => {
 // Read the central directory independently: local-header-only readers miss broken offsets and attributes.
 const readZip = async (path: string) => {
   const bytes = await readFile(path), end = bytes.length - 22;
-  expect(bytes.readUInt32LE(end)).toBe(0x06054b50);
-  expect(bytes.readUInt16LE(end + 20)).toBe(0);
+  expect(bytes.readUInt32LE(end)).toBe(0x06054b50); // end of central directory
+  expect(bytes.readUInt16LE(end + 20)).toBe(0); // no archive comment
   const count = bytes.readUInt16LE(end + 10), start = bytes.readUInt32LE(end + 16);
   expect(start + bytes.readUInt32LE(end + 12)).toBe(end);
   const files = new Map<string, { contents: Buffer; mode: number }>();
   let cursor = start;
   for (let index = 0; index < count; index++) {
-    expect(bytes.readUInt32LE(cursor)).toBe(0x02014b50);
-    expect(bytes.readUInt16LE(cursor + 4) >>> 8).toBe(3);
+    expect(bytes.readUInt32LE(cursor)).toBe(0x02014b50); // central directory record
+    expect(bytes.readUInt16LE(cursor + 4) >>> 8).toBe(3); // made by Unix, so external attributes carry a mode
     // UTF-8 names, with each entry's CRC and sizes in a data descriptor after its payload.
     expect(bytes.readUInt16LE(cursor + 8)).toBe(0x0808);
-    expect(bytes.readUInt16LE(cursor + 10)).toBe(8);
-    expect(bytes.readUInt16LE(cursor + 12)).toBe(0);
-    expect(bytes.readUInt16LE(cursor + 14)).toBe(0x21);
+    expect(bytes.readUInt16LE(cursor + 10)).toBe(8); // deflate
+    expect(bytes.readUInt16LE(cursor + 12)).toBe(0); // time 00:00:00
+    expect(bytes.readUInt16LE(cursor + 14)).toBe(0x21); // date 1980-01-01: the fixed timestamp
     const crc = bytes.readUInt32LE(cursor + 16), compressedSize = bytes.readUInt32LE(cursor + 20);
     const size = bytes.readUInt32LE(cursor + 24), nameLength = bytes.readUInt16LE(cursor + 28);
     const name = bytes.toString("utf8", cursor + 46, cursor + 46 + nameLength);
     const local = bytes.readUInt32LE(cursor + 42), body = local + 30 + nameLength;
-    expect(bytes.readUInt32LE(local)).toBe(0x04034b50);
+    expect(bytes.readUInt32LE(local)).toBe(0x04034b50); // local file header
     expect(bytes.readUInt16LE(local + 6)).toBe(0x0808);
+    // The local header carries no CRC or sizes; the descriptor after the payload does.
     expect([bytes.readUInt32LE(local + 14), bytes.readUInt32LE(local + 18), bytes.readUInt32LE(local + 22)]).toEqual([
       0,
       0,
@@ -62,7 +63,7 @@ const readZip = async (path: string) => {
     ]);
     expect(bytes.toString("utf8", local + 30, body)).toBe(name);
     const descriptor = body + compressedSize;
-    expect(bytes.readUInt32LE(descriptor)).toBe(0x08074b50);
+    expect(bytes.readUInt32LE(descriptor)).toBe(0x08074b50); // data descriptor
     expect([
       bytes.readUInt32LE(descriptor + 4),
       bytes.readUInt32LE(descriptor + 8),
@@ -71,7 +72,7 @@ const readZip = async (path: string) => {
     const contents = inflateRawSync(bytes.subarray(body, body + compressedSize));
     expect(contents.length).toBe(size);
     expect(crc32(contents)).toBe(crc);
-    files.set(name, { contents, mode: bytes.readUInt32LE(cursor + 38) >>> 16 });
+    files.set(name, { contents, mode: bytes.readUInt32LE(cursor + 38) >>> 16 }); // Unix mode: the high half of the external attributes
     cursor += 46 + nameLength + bytes.readUInt16LE(cursor + 30) + bytes.readUInt16LE(cursor + 32);
   }
   expect(cursor).toBe(end);

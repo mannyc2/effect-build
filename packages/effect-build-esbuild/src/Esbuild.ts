@@ -3,11 +3,6 @@ import { Artifact, Commit } from "effect-build";
 import * as esbuild from "esbuild";
 import metadata from "../package.json" with { type: "json" };
 
-/** The peer range: the consumer's own esbuild runs in process; nothing is selected from PATH. */
-export const supported = metadata.peerDependencies.esbuild;
-/** The version the workspace installs for tests. */
-export const tested = metadata.devDependencies.esbuild;
-
 export class InputInvalid extends Schema.TaggedError<InputInvalid>()("EsbuildInputInvalid", {
   reason: Schema.String,
 }) {
@@ -15,6 +10,10 @@ export class InputInvalid extends Schema.TaggedError<InputInvalid>()("EsbuildInp
     return this.reason;
   }
 }
+/** The peer range: the consumer's own esbuild runs in process; nothing is selected from PATH. */
+export const supported = metadata.peerDependencies.esbuild;
+/** The version the workspace installs for tests. */
+export const tested = metadata.devDependencies.esbuild;
 
 const messages = (cause: unknown, key: "errors" | "warnings"): readonly esbuild.Message[] => {
   const value: unknown = typeof cause === "object" && cause !== null ? Reflect.get(cause, key) : undefined;

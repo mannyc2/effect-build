@@ -2,7 +2,7 @@ import { Effect, FileSystem, Path } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
 import { validateResources, type Resource } from "./AppBundle.js";
-import { copyProduct, copyRegular, outputPath, runNative, textValid, verifySignature } from "./internal.js";
+import { copyProduct, copyRegular, outputPath, runNative, verifySignature } from "./internal.js";
 import type { Dmg, Pkg, SignedApp, SignedExecutable } from "./Model.js";
 
 export interface DmgInput extends Commit.ProducerOptions {
@@ -26,7 +26,7 @@ export type ProductError = InputInvalid | Artifact.ArtifactError | Tool.Failed |
 
 export const dmg = (input: DmgInput): Effect.Effect<Dmg, ProductError, Apple | Env> => Effect.scoped(Effect.gen(function*() {
   const outfile = yield* outputPath(input.outfile, ".dmg", input.cwd);
-  if (!textValid(input.volumeName) || /[/:]/u.test(input.volumeName) || Array.from(input.volumeName).some((character) => character.charCodeAt(0) < 32)) {
+  if (Tool.argumentIssue(input.volumeName) !== undefined || /[/:]/u.test(input.volumeName) || Array.from(input.volumeName).some((character) => character.charCodeAt(0) < 32)) {
     return yield* new InputInvalid({ reason: "volumeName must be non-empty and contain no slash, colon, or control characters" });
   }
   const fs = yield* FileSystem.FileSystem;
@@ -56,7 +56,7 @@ export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | E
   const outfile = yield* outputPath(input.outfile, ".pkg", input.cwd);
   const app = input.artifact.kind === "directory";
   const installLocation = input.installLocation ?? (app ? "/Applications" : "/usr/local/bin");
-  if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u.test(input.identifier) || !textValid(input.version) || !textValid(installLocation) || !installLocation.startsWith("/") || installLocation.split("/").includes("..")) {
+  if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u.test(input.identifier) || Tool.argumentIssue(input.version) !== undefined || Tool.argumentIssue(installLocation) !== undefined || !installLocation.startsWith("/") || installLocation.split("/").includes("..")) {
     return yield* new InputInvalid({ reason: "pkg requires a reverse-DNS identifier, non-empty version, and absolute installLocation without traversal or NUL" });
   }
   const fs = yield* FileSystem.FileSystem;

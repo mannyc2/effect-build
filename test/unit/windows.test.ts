@@ -377,15 +377,16 @@ describe("Windows signing through real files and a scripted native tool", () => 
     expect(await readdir(root)).not.toContain("calls.jsonl");
   });
 
-  it.each([false, true])("handles multiple version resources with conflict=%s", async (conflict) => {
-    await writeFile(tool, Buffer.concat([versionResource(), versionResource(conflict ? "10.0.26100.8249" : "10.0.26100.4188")]));
-    if (conflict) {
-      await expect(run(Windows.sign(input()))).rejects.toBeInstanceOf(Tool.ProbeFailed);
-      expect(await readdir(root)).not.toContain("calls.jsonl");
-    } else {
-      const result = await run(Windows.sign(input()));
-      expect(result.producedBy.version).toBe("10.0.26100.4188");
-      expect(await readFile(result.path, "utf8")).toBe(signed);
-    }
+  it("rejects two version resources that disagree before signing", async () => {
+    await writeFile(tool, Buffer.concat([versionResource(), versionResource("10.0.26100.8249")]));
+    await expect(run(Windows.sign(input()))).rejects.toBeInstanceOf(Tool.ProbeFailed);
+    expect(await readdir(root)).not.toContain("calls.jsonl");
+  });
+
+  it("accepts two version resources that agree", async () => {
+    await writeFile(tool, Buffer.concat([versionResource(), versionResource("10.0.26100.4188")]));
+    const result = await run(Windows.sign(input()));
+    expect(result.producedBy.version).toBe("10.0.26100.4188");
+    expect(await readFile(result.path, "utf8")).toBe(signed);
   });
 });

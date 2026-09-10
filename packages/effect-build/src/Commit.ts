@@ -50,7 +50,7 @@ const occupied = (destination: string): Effect.Effect<boolean, CommitError, File
   );
 
 /**
- * Sibling staging keeps failed builds from leaving truncated output.
+ * Staging beside the destination keeps failed builds from leaving truncated output.
  * Checks inside produce finish before the rename; return its staged artifact.
  */
 export const atomic = <A extends Artifact.Artifact, E, R>(
@@ -67,6 +67,7 @@ export const atomic = <A extends Artifact.Artifact, E, R>(
       const fail = (reason: CommitError["reason"], detail: unknown, recoveryPath?: string) =>
         new CommitError({ destination, reason, detail: String(detail), ...(recoveryPath === undefined ? {} : { recoveryPath }) });
       yield* fs.makeDirectory(parent, { recursive: true }).pipe(Effect.mapError((e) => fail("staging-failed", e)));
+      // The same directory means the same filesystem, so the final rename is one atomic operation.
       const staging = yield* Effect.acquireRelease(
         fs.makeTempDirectory({ directory: parent, prefix: options.prefix ?? ".effect-build-" }).pipe(Effect.mapError((e) => fail("staging-failed", e))),
         // Sibling staging itself moves on success. Missing staging is successful cleanup.

@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path, Redacted, Schema } from "effect";
 import { Artifact, Tool } from "effect-build";
 import { Apple, InputInvalid, type Env } from "./Apple.js";
-import { copyProduct, runNative, textValid, verifySignature } from "./internal.js";
+import { copyProduct, runNative, verifySignature } from "./internal.js";
 import { Signed } from "./Model.js";
 
 export const SubmissionKind = Schema.Literals(["zip", "dmg", "pkg"] as const);
@@ -110,7 +110,7 @@ const credentials = Effect.fn("Apple.Notary.credentials")(function*(credential: 
     }
     default: return yield* new InputInvalid({ reason: "unknown notarization credential kind" });
   }
-  if (values.some((value) => typeof value !== "string" || !textValid(value))) {
+  if (values.some((value) => typeof value !== "string" || Tool.argumentIssue(value) !== undefined)) {
     return yield* new InputInvalid({ reason: "notarization credential fields must be non-empty and contain no NUL" });
   }
   return { args, values };
@@ -121,7 +121,8 @@ type LookupError = InputInvalid | ResponseInvalid | Tool.Failed | Tool.SpawnFail
 const objectValue = (value: unknown): Readonly<Record<string, unknown>> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? value as Readonly<Record<string, unknown>> : undefined;
 const runJson = Effect.fn("Apple.Notary.runJson")(function*(operation: Operation, args: readonly string[], credential: Credential, cwd?: string) {
-  if (cwd !== undefined && !textValid(cwd)) return yield* new InputInvalid({ reason: "cwd must be non-empty and contain no NUL" });
+  const cwdIssue = cwd === undefined ? undefined : Tool.argumentIssue(cwd);
+  if (cwdIssue !== undefined) return yield* new InputInvalid({ reason: `cwd ${cwdIssue}` });
   const auth = yield* credentials(credential);
   const completion = yield* runNative("notarytool", [operation, ...args, "--output-format", "json", ...auth.args], {
     cwd, redact: auth.values,
@@ -133,11 +134,14 @@ const runJson = Effect.fn("Apple.Notary.runJson")(function*(operation: Operation
   });
   const data = objectValue(value);
   if (data === undefined) return yield* new ResponseInvalid({ operation, reason: "expected one JSON object" });
-  const safeText = (value: unknown): string | undefined => typeof value === "string" && value.length > 0
-    ? auth.values.reduce((text, secret) => text.replaceAll(secret, "<redacted>"), value)
-    : undefined;
+  // Successful responses are data, which Tool.run leaves raw; credentials echoed in them are scrubbed here.
+  const scrub = Tool.redact(auth.values);
+  const safeText = (value: unknown): string | undefined => typeof value === "string" && value.length > 0 ? scrub(value) : undefined;
   return { data, safeText };
 });
+/** Drop absent optional fields, so a record matches a schema that declares them as optional keys. */
+const present = <T extends Record<string, unknown>>(fields: T): { readonly [K in keyof T]?: Exclude<T[K], undefined> } =>
+  Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as { readonly [K in keyof T]?: Exclude<T[K], undefined> };
 const submissionId = (operation: Operation, value: string | undefined) => {
   const canonical = value?.toLowerCase();
   return Schema.is(SubmissionId)(canonical)
@@ -206,43 +210,41 @@ export interface WaitInput extends LookupInput {
   /** Native notarytool duration. A timeout leaves the submitted job available through info/log/wait. */
   readonly timeout?: string | undefined;
 }
+/**
+ * Every lookup checks the persisted reference, asks notarytool about its ID, and confirms the
+ * response names that ID. The local artifact is never touched: a persisted ID stays useful
+ * after the file has moved or been removed.
+ */
+const lookup = Effect.fn("Apple.Notary.lookup")(function*(operation: "wait" | "info" | "log", input: LookupInput, args: readonly string[] = []) {
+  yield* reference(input.reference);
+  const { tool } = yield* Apple;
+  const response = yield* runJson(operation, [input.reference.submissionId, ...args], input.credential, input.cwd);
+  // The log response names the submission `jobId`; the others name it `id`.
+  const id = yield* submissionId(operation, response.safeText(operation === "log" ? response.data.jobId : response.data.id));
+  if (id !== input.reference.submissionId) {
+    return yield* new ResponseInvalid({ operation, reason: "response submission UUID differs from the requested UUID" });
+  }
+  const { kind, artifact } = input.reference;
+  return { response, base: { submissionId: id, kind, artifact, producedBy: Tool.producer(tool) } };
+});
 /** Wait for an already persisted submission; never re-upload or retry submission. */
 export const wait = Effect.fn("Apple.Notary.wait")(function*(input: WaitInput): Effect.fn.Return<Submission, LookupError, Apple | Env> {
-  yield* reference(input.reference);
   const args = yield* timeoutArgs(input.timeout);
-  const { tool } = yield* Apple;
-  const response = yield* runJson("wait", [input.reference.submissionId, ...args], input.credential, input.cwd);
-  const id = yield* submissionId("wait", response.safeText(response.data.id));
-  if (id !== input.reference.submissionId) return yield* new ResponseInvalid({ operation: "wait", reason: "response submission UUID differs from the requested UUID" });
+  const { response, base } = yield* lookup("wait", input, args);
   const message = response.safeText(response.data.message);
-  return {
-    submissionId: id, kind: input.reference.kind, artifact: input.reference.artifact, producedBy: Tool.producer(tool),
-    status: yield* status("wait", response.safeText(response.data.status), message),
-    ...(message === undefined ? {} : { message }),
-  };
+  return { ...base, status: yield* status("wait", response.safeText(response.data.status), message), ...present({ message }) };
 });
 export const info = Effect.fn("Apple.Notary.info")(function*(input: LookupInput): Effect.fn.Return<Info, LookupError, Apple | Env> {
-  yield* reference(input.reference);
-  const { tool } = yield* Apple;
-  // A persisted ID remains useful after the local artifact has moved or been removed.
-  const response = yield* runJson("info", [input.reference.submissionId], input.credential, input.cwd);
-  const id = yield* submissionId("info", response.safeText(response.data.id));
-  if (id !== input.reference.submissionId) return yield* new ResponseInvalid({ operation: "info", reason: "response submission UUID differs from the requested UUID" });
+  const { response, base } = yield* lookup("info", input);
   const message = response.safeText(response.data.message);
-  const name = response.safeText(response.data.name);
-  const createdDate = response.safeText(response.data.createdDate);
   return {
-    submissionId: id, kind: input.reference.kind, artifact: input.reference.artifact, producedBy: Tool.producer(tool),
+    ...base,
     status: yield* status("info", response.safeText(response.data.status), message),
-    ...(message === undefined ? {} : { message }), ...(name === undefined ? {} : { name }), ...(createdDate === undefined ? {} : { createdDate }),
+    ...present({ message, name: response.safeText(response.data.name), createdDate: response.safeText(response.data.createdDate) }),
   };
 });
 export const log = Effect.fn("Apple.Notary.log")(function*(input: LookupInput): Effect.fn.Return<Log, LookupError, Apple | Env> {
-  yield* reference(input.reference);
-  const { tool } = yield* Apple;
-  const response = yield* runJson("log", [input.reference.submissionId], input.credential, input.cwd);
-  const id = yield* submissionId("log", response.safeText(response.data.jobId));
-  if (id !== input.reference.submissionId) return yield* new ResponseInvalid({ operation: "log", reason: "response submission UUID differs from the requested UUID" });
+  const { response, base } = yield* lookup("log", input);
   const nativeIssues = response.data.issues ?? [];
   if (!Array.isArray(nativeIssues)) return yield* new ResponseInvalid({ operation: "log", reason: "issues must be an array or null" });
   const issues = yield* Effect.forEach(nativeIssues, (value: unknown, index) => Effect.gen(function*() {
@@ -250,18 +252,26 @@ export const log = Effect.fn("Apple.Notary.log")(function*(input: LookupInput): 
     const severity = response.safeText(issue?.severity);
     const message = response.safeText(issue?.message);
     if (severity === undefined || message === undefined) return yield* new ResponseInvalid({ operation: "log", reason: `issues[${index}] lacks severity or message` });
-    const path = response.safeText(issue?.path);
-    const code = response.safeText(typeof issue?.code === "number" ? String(issue.code) : issue?.code);
-    const docUrl = response.safeText(issue?.docUrl);
-    const architecture = response.safeText(issue?.architecture);
-    return { severity, message, ...(path === undefined ? {} : { path }), ...(code === undefined ? {} : { code }), ...(docUrl === undefined ? {} : { docUrl }), ...(architecture === undefined ? {} : { architecture }) };
+    return {
+      severity,
+      message,
+      ...present({
+        path: response.safeText(issue?.path),
+        code: response.safeText(typeof issue?.code === "number" ? String(issue.code) : issue?.code),
+        docUrl: response.safeText(issue?.docUrl),
+        architecture: response.safeText(issue?.architecture),
+      }),
+    };
   }));
   const statusSummary = response.safeText(response.data.statusSummary);
-  const archiveFilename = response.safeText(response.data.archiveFilename);
-  const statusCode = typeof response.data.statusCode === "number" ? response.data.statusCode : undefined;
   return {
-    submissionId: id, kind: input.reference.kind, artifact: input.reference.artifact, producedBy: Tool.producer(tool),
-    status: yield* status("log", response.safeText(response.data.status), statusSummary), issues,
-    ...(statusSummary === undefined ? {} : { statusSummary }), ...(statusCode === undefined ? {} : { statusCode }), ...(archiveFilename === undefined ? {} : { archiveFilename }),
+    ...base,
+    status: yield* status("log", response.safeText(response.data.status), statusSummary),
+    issues,
+    ...present({
+      statusSummary,
+      statusCode: typeof response.data.statusCode === "number" ? response.data.statusCode : undefined,
+      archiveFilename: response.safeText(response.data.archiveFilename),
+    }),
   };
 });

@@ -1,5 +1,5 @@
 import { Crypto, Effect, Encoding, FileSystem, Path, Stream } from "effect";
-import { Artifact, Commit, Layout, Target } from "effect-build";
+import { Artifact, Commit, Layout, Target, Tool } from "effect-build";
 import { type EntrySizeMismatch, type FormatLimit, Zip } from "effect-build-archives";
 import packageMetadata from "../package.json" with { type: "json" };
 import { InputInvalid } from "./InputInvalid.js";
@@ -70,6 +70,7 @@ const singleLine = (input: string, field: string): Effect.Effect<string, InputIn
   input.trim().length === 0 || input.includes("\0") || /[\r\n]/u.test(input)
     ? Effect.fail(new InputInvalid({ reason: `${field} must be a non-empty single line` }))
     : Effect.succeed(input);
+// PEP 425 compressed tag sets: lowercase, deduplicated, byte-sorted.
 const tag = (input: string): Effect.Effect<string, InputInvalid> =>
   /^[a-z0-9_]+(?:\.[a-z0-9_]+)*$/iu.test(input)
     ? Effect.succeed([...new Set(input.toLowerCase().split("."))].sort(utf8Order).join("."))
@@ -151,12 +152,10 @@ const prepareWheel = (input: WheelInput) =>
     if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/iu.test(m.name)) {
       return yield* new InputInvalid({ reason: "name must be a Python distribution name" });
     }
-    if (
-      input.outdir.length === 0 || input.outdir.includes("\0") || (input.cwd !== undefined && input.cwd.includes("\0"))
-      || input.entries.length === 0
-    ) {
-      return yield* new InputInvalid({ reason: "outdir and entries must be non-empty; paths must contain no NUL" });
-    }
+    const outdir = Tool.argumentIssue(input.outdir);
+    if (outdir !== undefined) return yield* new InputInvalid({ reason: `outdir ${outdir}` });
+    if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
+    if (input.entries.length === 0) return yield* new InputInvalid({ reason: "entries are empty" });
     const name = m.name.toLowerCase().replace(/[-_.]+/gu, "_");
     const version = yield* normalizeVersion(m.version);
     const tags = {
@@ -176,6 +175,7 @@ const prepareWheel = (input: WheelInput) =>
     }
     const stem = `${name}-${version}`;
     const info = `${stem}.dist-info`;
+    // PEP 566 core metadata 2.1, the version every installer reads.
     const metadata = [`Metadata-Version: 2.1`, `Name: ${m.name}`, `Version: ${version}`];
     for (
       const [key, value] of [["Summary", m.summary], ["License", m.license], [
@@ -238,7 +238,7 @@ const prepareWheel = (input: WheelInput) =>
       }
     }
     const issue = Layout.validate(input.entries.map((entry) => ({ path: entry.path, kind: "file" })));
-    if (issue !== undefined) return yield* new InputInvalid({ reason: `${issue.reason}: ${issue.path}` });
+    if (issue !== undefined) return yield* new InputInvalid(issue);
     return {
       metadata: generated,
       record: `${info}/RECORD`,
@@ -257,6 +257,7 @@ export const wheel = Effect.fn("Python.wheel")((input: WheelInput): Effect.Effec
     const crypto = yield* Crypto.Crypto;
     const entries: Zip.FileEntry<Artifact.ArtifactError, Fs>[] = [];
     const records: { readonly path: string; readonly line: string }[] = [];
+    // PEP 427: RECORD digests are urlsafe base64 without padding, and RECORD lists itself with no hash or size.
     for (const entry of prepared.metadata) {
       const digest = yield* crypto.digest("SHA-256", entry.contents).pipe(Effect.orDie);
       entries.push({

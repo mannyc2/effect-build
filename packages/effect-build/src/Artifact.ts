@@ -40,7 +40,8 @@ const EntryCommon = {
       ? undefined : "entry path must be a normalized relative path")),
   mode: Mode,
 };
-/** Each kind has exactly the metadata that describes its filesystem object. */
+/** Each kind has exactly the metadata that describes its filesystem object; absent fields are
+ * declared so `manifestDigest` reads every kind through the same keys. */
 export const Entry = Schema.Union([
   Schema.Struct({ ...EntryCommon, kind: Schema.Literal("file"), bytes: Bytes, sha256: Digest, linkTarget: Schema.optionalKey(Schema.Never) }),
   Schema.Struct({ ...EntryCommon, kind: Schema.Literal("directory"), bytes: Schema.Literal(0), sha256: Schema.optionalKey(Schema.Never), linkTarget: Schema.optionalKey(Schema.Never) }),
@@ -49,8 +50,9 @@ export const Entry = Schema.Union([
 export type Entry = typeof Entry.Type;
 
 const encoder = new TextEncoder();
-// Persisted identity: SHA-256 of UTF-8 JSON tuples in this exact field order.
-// Missing fields become null in JSON arrays; changing that or the order changes existing identities.
+// Persisted identity: SHA-256 of UTF-8 JSON tuples in this exact field order. JSON keeps the
+// fields apart even when a name or link target contains newlines, and absent fields become null;
+// changing either or the order changes every existing directory identity.
 const manifestDigest = (entries: readonly Entry[]): string => {
   const hash = incrementalSha256.create().update(encoder.encode("["));
   for (let i = 0; i < entries.length; i++) {
@@ -71,14 +73,15 @@ export const Directory = Schema.Struct({
   entries: Schema.Array(Entry),
 }).check(Schema.makeFilter((value) => {
   let bytes = 0, previous: string | undefined;
-  const entries = new Map<string, Entry>();
+  const seen = new Map<string, Entry>();
   for (const entry of value.entries) {
     if (previous !== undefined && previous >= entry.path) return "directory entries must be sorted and unique";
-    const parent = entry.path.slice(0, entry.path.lastIndexOf("/"));
-    if (entry.path.includes("/") && entries.get(parent)?.kind !== "directory") return "directory entries must include their parent directory";
+    if (entry.path.includes("/") && seen.get(entry.path.slice(0, entry.path.lastIndexOf("/")))?.kind !== "directory") {
+      return "directory entries must include their parent directory";
+    }
     bytes += entry.bytes;
     previous = entry.path;
-    entries.set(entry.path, entry);
+    seen.set(entry.path, entry);
   }
   if (!Number.isSafeInteger(bytes) || bytes !== value.bytes) return "directory bytes must equal its file entries";
   return manifestDigest(value.entries) === value.sha256 ? undefined : "directory digest must match its entry manifest";
@@ -219,7 +222,6 @@ export const directory = (root: string, producedBy: Producer): Effect.Effect<Dir
       }
     }
     entries.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-    // JSON separates entry fields even when a filename or symlink target contains newlines.
     return {
       kind: "directory" as const,
       path: absolute,
@@ -286,6 +288,7 @@ export const readVerified = (artifact: Regular): Effect.Effect<Uint8Array, Artif
       hash.update(chunk.subarray(0, count));
       offset += count;
     }
+    // One byte past the recorded size detects growth since the stat without reading the excess.
     const excess = yield* handle.read(new Uint8Array(1)).pipe(Effect.mapError(unreadable));
     if (excess !== 0n) return yield* changed();
     if (Encoding.encodeHex(hash.digest()) !== artifact.sha256) return yield* changed();

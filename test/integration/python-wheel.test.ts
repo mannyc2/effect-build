@@ -30,7 +30,7 @@ describe("real Python wheel installation", () => {
       await writeFile(source, [
         "from pathlib import Path", "import subprocess, sysconfig", "",
         "def main():",
-        `    subprocess.run([str(Path(sysconfig.get_path('scripts')) / '${nativeName}'), '-e', 'console.log(42)'], check=True)`, "",
+        `    subprocess.run([str(Path(sysconfig.get_path('scripts')) / '${nativeName}')], check=True)`, "",
       ].join("\n"));
       const nativePath = join(root, nativeName);
       await standaloneProgram(nativePath);
@@ -42,6 +42,7 @@ describe("real Python wheel installation", () => {
         entries: [
           { artifact: module, path: "native_wheel_fixture/__init__.py" },
           { artifact: native, path: `native_wheel_fixture-${normalized}.data/scripts/${nativeName}` },
+          // The comma, quote, and non-ASCII name exercise RECORD's CSV quoting and byte-order sorting.
           { artifact: module, path: 'native_wheel_fixture/data,"é".txt' },
         ],
         entryPoints: { console_scripts: { "native-wheel-wrapper": "native_wheel_fixture:main" } },
@@ -83,7 +84,7 @@ describe("real Python wheel installation", () => {
       await rm(source);
       await rm(nativePath);
       const command = join(environment, windows ? "Scripts/native-wheel-fixture.exe" : "bin/native-wheel-fixture");
-      expect((await execute(command, ["-e", "console.log(42)"], { cwd: root })).stdout.trim()).toBe("42");
+      expect((await execute(command, [], { cwd: root })).stdout.trim()).toBe("42");
       const wrapper = join(environment, windows ? "Scripts/native-wheel-wrapper.exe" : "bin/native-wheel-wrapper");
       expect((await execute(wrapper, [], { cwd: root })).stdout.trim()).toBe("42");
       expect((await execute(interpreter, ["-c", "from importlib.metadata import version; print(version('native-wheel-fixture'))"], { cwd: root })).stdout.trim()).toBe(normalized);

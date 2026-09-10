@@ -10,10 +10,13 @@ export const runNative = (name: NativeTool, args: readonly string[], options: { 
   Tool.Completion, Tool.Failed | Tool.SpawnFailed, Apple | ChildProcessSpawner.ChildProcessSpawner
 > => Apple.use(({ tool }) => Tool.run(tool, [name, ...args], options));
 
-export const textValid = (value: string): boolean => value.length > 0 && !value.includes("\0");
 export const outputPath = (value: string, extension: ".app" | ".dmg" | ".pkg" | undefined, cwd?: string) => Effect.gen(function*() {
-  if (!textValid(value) || (extension !== undefined && !value.toLowerCase().endsWith(extension)) || (cwd !== undefined && !textValid(cwd))) {
-    return yield* new InputInvalid({ reason: `${extension === undefined ? "output" : `output must end in ${extension};`} paths must be non-empty and contain no NUL` });
+  const issue = Tool.argumentIssue(value);
+  if (issue !== undefined) return yield* new InputInvalid({ reason: `output ${issue}` });
+  const cwdIssue = cwd === undefined ? undefined : Tool.argumentIssue(cwd);
+  if (cwdIssue !== undefined) return yield* new InputInvalid({ reason: `cwd ${cwdIssue}` });
+  if (extension !== undefined && !value.toLowerCase().endsWith(extension)) {
+    return yield* new InputInvalid({ reason: `output must end in ${extension}` });
   }
   const p = yield* Path.Path;
   return p.resolve(cwd ?? "", value);
@@ -76,7 +79,7 @@ export const entitlementsFile = (entitlements: Entitlements | undefined, path: s
   if (entitlements === undefined) return undefined;
   if (Array.isArray(entitlements)) {
     const keys = entitlements as readonly string[];
-    if (keys.length === 0 || keys.some((key) => !textValid(key) || key.trim() !== key) || new Set(keys).size !== keys.length) {
+    if (keys.length === 0 || keys.some((key) => Tool.argumentIssue(key) !== undefined || key.trim() !== key) || new Set(keys).size !== keys.length) {
       return yield* new InputInvalid({ reason: "entitlement keys must be distinct, trimmed, non-empty, and contain no NUL" });
     }
     const fs = yield* FileSystem.FileSystem;

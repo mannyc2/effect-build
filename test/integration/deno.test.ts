@@ -111,7 +111,7 @@ describe("real Deno 2.9.5", () => {
   }, 300_000);
 
   it("recompiles changed files and stops watching when its scope closes", async () => {
-    const process = await run(Effect.scoped(Effect.gen(function*() {
+    const watched = await run(Effect.scoped(Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const watcher = yield* Deno.watch({
         entrypoint: "hello.ts", outfile: name("watched"), cwd: root, options, noClearScreen: true, stdio: "pipe",
@@ -132,15 +132,15 @@ describe("real Deno 2.9.5", () => {
         return yield* Effect.fail(new Error(`Deno watch did not compile ${expected}\n${diagnostics.join("")}`));
       });
       yield* waitFor("hello from Deno");
-      for (let attempt = 0; !diagnostics.join("").includes("Restarting on file change"); attempt++) {
-        if (attempt === 300) return yield* Effect.fail(new Error("Deno watcher did not become ready"));
-        yield* Effect.sleep("100 millis");
-      }
+      // Deno misses writes made before its watcher is registered; its restart banner says it is.
+      const ready = () => diagnostics.join("").includes("Restarting on file change");
+      for (let attempt = 0; attempt < 300 && !ready(); attempt++) yield* Effect.sleep("100 millis");
+      if (!ready()) return yield* Effect.fail(new Error("Deno watcher did not become ready"));
       yield* fs.writeFileString(join(root, "hello.ts"), "console.log('changed');\n");
       yield* waitFor("changed");
       expect(yield* watcher.process.isRunning).toBe(true);
       return watcher.process;
     })));
-    expect(await run(process.isRunning)).toBe(false);
+    expect(await run(watched.isRunning)).toBe(false);
   }, 120_000);
 });

@@ -78,13 +78,13 @@ export const transformSync: TransformSync = (
   source: Source,
   loaderOrContext?: Loader | object,
   context?: object,
-) => {
-  if (context !== undefined) return transpiler.transformSync(source, loaderOrContext as Loader, context);
-  // TypeScript selects each wrapper overload only after this union is narrowed.
-  return typeof loaderOrContext === "object"
-    ? transpiler.transformSync(source, loaderOrContext)
-    : transpiler.transformSync(source, loaderOrContext);
-};
+) =>
+  // The wrapper's implementation accepts the union; only its public overloads insist on a narrowed argument.
+  (transpiler.transformSync as (source: Source, loaderOrContext?: Loader | object, context?: object) => Effect.Effect<string, BunApiFailed>)(
+    source,
+    loaderOrContext,
+    context,
+  );
 export const scan = (transpiler: Transpiler, source: Source): Effect.Effect<ScanResult, BunApiFailed> =>
   transpiler.scan(source);
 export const scanImports = (transpiler: Transpiler, source: Source): Effect.Effect<Import[], BunApiFailed> =>

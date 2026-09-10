@@ -189,7 +189,7 @@ fingerprints; credentials are a keychain profile, an App Store Connect API key, 
 const darwin = (executable: Artifact.Executable, certificateSha1: string, credential: Apple.Notary.Credential) =>
   Effect.gen(function*() {
     const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements });
-    const submission = yield* Apple.notarize({ artifact: signed, credential, timeout: "30m" });
+    const submission = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
     const acceptance = yield* Apple.Notary.acceptedReference(submission);
     const assessed = yield* Apple.assess({ artifact: signed, acceptance });
     return yield* Archive.tarGz({
@@ -199,7 +199,7 @@ const darwin = (executable: Artifact.Executable, certificateSha1: string, creden
   }).pipe(Effect.provide(Apple.layer()));
 ```
 
-`Apple.notarize` uploads and waits. When a build might be interrupted, call `Apple.Notary.submit`,
+`Apple.Notary.notarize` uploads and waits. When a build might be interrupted, call `Apple.Notary.submit`,
 persist the returned reference with its schema, and `Apple.Notary.wait` for it later. App bundles,
 DMGs, and PKGs follow the same path and are stapled instead of assessed with a reference; the
 [signing module](../examples/artifact-pipeline/src/signing.ts) has both flows.

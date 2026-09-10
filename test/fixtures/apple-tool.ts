@@ -1,7 +1,8 @@
 export interface Config {
   readonly log: string;
   readonly fail?: string;
-  readonly guard?: string;
+  /** Each invocation records whether this path existed when the tool ran: signing happens in staging, never at an existing destination. */
+  readonly watchPath?: string;
   readonly mutateDuringVerify?: string;
   readonly corruptTarget?: boolean;
   readonly submit?: unknown;
@@ -14,7 +15,7 @@ export interface Config {
 export interface Invocation {
   readonly tool: string;
   readonly args: readonly string[];
-  readonly guard: boolean;
+  readonly watchPathExisted: boolean;
   readonly payloadSha?: string;
   readonly plist?: string;
 }
@@ -53,7 +54,7 @@ appendFileSync(
   JSON.stringify({
     tool: name,
     args,
-    guard: config.guard ? existsSync(config.guard) : false,
+    watchPathExisted: config.watchPath ? existsSync(config.watchPath) : false,
     ...(name === "notarytool" && args[0] === "submit" ? { payloadSha: sha(args[1]!) } : {}),
     ...(name === "plutil" ? { plist: readFileSync(args.at(-1)!, "utf8") } : {}),
   }) + "\n",

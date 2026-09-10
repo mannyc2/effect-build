@@ -42,4 +42,7 @@ not its job; see `DESIGN.md` for the boundary and the reasoning.
 `packages/effect-build` is core. Every other package wraps one external toolchain
 or one domain and depends on core only. Providers share a shape: a `Context.Service`
 holding a `Tool.Resolved`, a `layer({ executable?, version? })`, and operations that
-take `outfile`/`outdir` and return an `Artifact`.
+take `outfile`/`outdir` and return an `Artifact`. In-process bundlers (esbuild, rolldown)
+have no service or layer, and a provider that runs two binaries names each (Node SEA:
+`{ builder, base }`). Sections read in one order: service, `InputInvalid`, `supported`,
+`tested`, `layer`, then operations.

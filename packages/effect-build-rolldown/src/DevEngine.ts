@@ -1,7 +1,7 @@
 import { Effect, type Scope } from "effect";
 import type { InputOptions, OutputOptions } from "rolldown";
 import { DevEngine as NativeDevEngine, type DevOptions } from "rolldown/experimental";
-import { Failed } from "./Error.js";
+import { Failed, invoke } from "./Error.js";
 
 export type { DevOptions } from "rolldown/experimental";
 
@@ -19,9 +19,6 @@ export interface DevEngine {
     clientId: string,
   ) => Effect.Effect<Awaited<ReturnType<NativeDevEngine["compileEntry"]>>, Failed>;
 }
-
-const invoke = <A>(operation: string, run: () => Promise<A>): Effect.Effect<A, Failed> =>
-  Effect.tryPromise({ try: run, catch: (cause) => new Failed({ operation, cause }) });
 
 /** Native watch.skipWrite selects callback-only output; Scope owns the engine's close. */
 export const make = (

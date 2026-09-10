@@ -26,10 +26,10 @@ type Env = Deno | Fs | ChildProcessSpawner.ChildProcessSpawner;
 export type BuildError = InputInvalid | Tool.Failed | Tool.SpawnFailed | Artifact.ArtifactError | Commit.CommitError;
 export type CompileError = BuildError | Executable.InspectError | Executable.TargetMismatch;
 
-/** Exact version exercised by real-tool CI. */
-export const tested = "=2.9.5";
 /** Known removed CLI flags are checked only by the operations that use them. */
 export const supported = ">=2.9.5 <3.0.0";
+/** Exact version exercised by real-tool CI. */
+export const tested = "=2.9.5";
 export const layer = (options: LayerOptions = {}): Layer.Layer<
   Deno,
   Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported | Artifact.ArtifactError,
@@ -83,6 +83,7 @@ const prepareCompile = Effect.fnUntraced(function*(operation: "compile" | "watch
     return yield* new InputInvalid({ operation, reason: `Deno does not compile target ${input.target}` });
   }
   const expected = target === undefined ? Target.host() : CompileCommand.systemTarget(target);
+  // Deno embeds the output basename; a lowercase .exe keeps the staged and committed names identical.
   if (expected?.startsWith("windows") === true && !outfile.endsWith(".exe")) {
     return yield* new InputInvalid({ operation, reason: "Windows outfile must end in .exe" });
   }
@@ -159,7 +160,7 @@ const prepareDirectory = Effect.fnUntraced(function*(
   files: readonly string[],
   operation: "bundle" | "transpile",
 ) {
-  if (files.length === 0) return yield* new InputInvalid({ operation, reason: "At least one input file is required" });
+  if (files.length === 0) return yield* new InputInvalid({ operation, reason: `${operation === "bundle" ? "entrypoints" : "files"} are empty` });
   for (const file of files) yield* validatePath(operation, "input", file);
   const outdir = yield* prepareOutput(operation, "outdir", input.outdir, input.cwd);
   const { tool } = yield* Deno;

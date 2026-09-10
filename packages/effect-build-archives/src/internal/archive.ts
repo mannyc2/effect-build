@@ -317,19 +317,20 @@ const zipEntry = <E, R>(entry: Entry<E, R>, archive: ZipState): Bytes<E | Encode
     );
     const trailer = Stream.suspend((): Bytes<FormatLimit, never> => {
       // Layout is local header, compressed bytes, descriptor; only the completed entry advances the archive.
-      const descriptorOffset = localOffset + header.byteLength + compressedSize;
+      // The next local offset and the central directory offset are uint32 fields, so the entry's end must fit.
+      const end = localOffset + header.byteLength + compressedSize + descriptorBytes;
       if (compressedSize > zip32.bytes) {
         return Stream.fail(
           new FormatLimit({ format: "zip", limit: "entry-bytes", maximum: zip32.bytes, path: entry.path }),
         );
       }
-      if (descriptorOffset > zip32.bytes) {
+      if (end > zip32.bytes) {
         return Stream.fail(
           new FormatLimit({ format: "zip", limit: "archive-bytes", maximum: zip32.bytes, path: entry.path }),
         );
       }
       const sizes: Sizes = { crc: (crc ^ 0xffffffff) >>> 0, size: payload.bytes, compressedSize };
-      archive.offset = descriptorOffset + descriptorBytes;
+      archive.offset = end;
       archive.central.push(centralRecord(name, sizes, zipMode(entry), localOffset));
       return Stream.make(dataDescriptor(sizes));
     });
@@ -409,8 +410,8 @@ interface TarFields {
   readonly link: string;
 }
 
-// POSIX ustar header fields: byte offset and field width within one 512-byte record.
-const tarField = {
+/** POSIX ustar header fields: byte offset and width within one 512-byte record; the git tar reader uses the same table. */
+export const tarField = {
   name: [0, 100],
   mode: [100, 8],
   uid: [108, 8],
@@ -446,6 +447,7 @@ const tarHeader = (fields: TarFields): Uint8Array => {
 
 const paxRecord = (key: string, value: string): Uint8Array => {
   const body = encoder.encode(`${key}=${value}\n`);
+  // The length field counts its own decimal digits and the separating space; iterate to the fixed point.
   let length = body.byteLength + 2;
   while (true) {
     const next = String(length).length + 1 + body.byteLength;

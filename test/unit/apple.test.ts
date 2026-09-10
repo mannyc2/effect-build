@@ -61,14 +61,13 @@ const unsignedFile = async (product: "dmg" | "pkg") => {
   const file = await local(Artifact.file(path, producer));
   return product === "dmg" ? { ...file, product: "dmg" as const } : { ...file, product: "pkg" as const };
 };
-const signedFile = async (product: "dmg" | "pkg") => {
-  const source = await unsignedFile(product), outfile = join(root, `signed.${product}`);
-  // Narrow the artifact before overload resolution so the result retains its product type.
-  return source.product === "dmg"
+// A dmg | pkg union matches no sign overload; narrowing the product first keeps the result's product type.
+const signFile = (source: Apple.Dmg | Apple.Pkg, outfile: string) =>
+  source.product === "dmg"
     ? run(Apple.sign({ artifact: source, certificateSha1, outfile }))
     : run(Apple.sign({ artifact: source, certificateSha1, outfile }));
-};
-const accepted = async (artifact: Apple.Signed) => local(Apple.Notary.acceptedReference(await run(Apple.notarize({ artifact, credential }))));
+const signedFile = async (product: "dmg" | "pkg") => signFile(await unsignedFile(product), join(root, `signed.${product}`));
+const accepted = async (artifact: Apple.Signed) => local(Apple.Notary.acceptedReference(await run(Apple.Notary.notarize({ artifact, credential }))));
 const signedExecutable = (outfile?: string) => run(Apple.sign({ artifact: executable, certificateSha1, outfile, entitlements: Bun.entitlements }));
 
 describe("Apple products on real files", () => {
@@ -156,13 +155,13 @@ describe("Apple products on real files", () => {
     await writeFile(join(root, "entitlements.plist"), '<?xml version="1.0"?><plist version="1.0"><dict/></plist>');
     const entitlements = await local(Artifact.file(join(root, "entitlements.plist"), producer));
     const outdir = join(root, "Signed.app");
-    await configure({ guard: outdir });
+    await configure({ watchPath: outdir });
     const result = await run(Apple.sign({ artifact: source, certificateSha1, outdir, entitlements, nestedCode: [{ path: "Contents/Frameworks/Fixture.framework", entitlements }] }));
     const commands = (await calls()).filter((call) => call.tool === "codesign");
     expect(commands.map((call) => call.args[0])).toEqual(["--force", "--force", "--verify"]);
     expect(commands[0]!.args.at(-1)).toContain("Fixture.framework");
     expect(basename(commands[1]!.args.at(-1)!)).toBe("Signed.app");
-    expect(commands.every((call) => !call.guard)).toBe(true);
+    expect(commands.every((call) => !call.watchPathExisted)).toBe(true);
     expect(commands[0]!.args).toContain("runtime");
     expect(commands[1]!.args).toContain("--entitlements");
     expect(await local(Artifact.verify(source))).toEqual(source);
@@ -243,11 +242,8 @@ describe("Apple products on real files", () => {
   });
 
   it.each(["dmg", "pkg"] as const)("signs %s copies and hashes the modified bytes", async (product) => {
-    const source = await unsignedFile(product), outfile = join(root, `signed.${product}`);
-    // Narrow the nested discriminant so TypeScript can select a signing overload.
-    const result = source.product === "dmg"
-      ? await run(Apple.sign({ artifact: source, certificateSha1, outfile }))
-      : await run(Apple.sign({ artifact: source, certificateSha1, outfile }));
+    const source = await unsignedFile(product);
+    const result = await signFile(source, join(root, `signed.${product}`));
     expect(await readFile(source.path, "utf8")).toBe(`unsigned-${product}`);
     expect(await readFile(result.path, "utf8")).toBe(`unsigned-${product}:signed`);
     expect(result.sha256).not.toBe(source.sha256);
@@ -351,7 +347,7 @@ describe("Apple notarization and stapling", () => {
   it("submits once, waits separately, and persists a reference usable after the original file is gone", async () => {
     const source = await signedFile("dmg");
     await configure({ submit: { id: submissionId.toUpperCase(), status: "Accepted", message: `uploaded with ${password}` } });
-    const submission = await run(Apple.notarize({ artifact: source, credential, timeout: "5m" }));
+    const submission = await run(Apple.Notary.notarize({ artifact: source, credential, timeout: "5m" }));
     expect(submission.submissionId).toBe(submissionId);
     expect(JSON.stringify(submission)).not.toContain(password);
     const encoded = Schema.encodeSync(Apple.Notary.SubmissionReference)(submission);
@@ -409,7 +405,7 @@ describe("Apple notarization and stapling", () => {
 
   it.each(["Invalid", "Rejected", "In Progress"])("retains native status %s and refuses acceptance", async (status) => {
     const source = await signedFile("dmg"); await configure({ submit: { id: submissionId, status } });
-    const submission = await run(Apple.notarize({ artifact: source, credential }));
+    const submission = await run(Apple.Notary.notarize({ artifact: source, credential }));
     expect(submission.status.providerStatus).toBe(status);
     expect(await local(Apple.Notary.acceptedReference(submission).pipe(Effect.flip))).toBeInstanceOf(Apple.Notary.ResultNotAccepted);
   });
@@ -417,7 +413,7 @@ describe("Apple notarization and stapling", () => {
   it("uploads the verified private snapshot when the original changes during native verification", async () => {
     const source = await signedFile("dmg");
     await configure({ mutateDuringVerify: source.path });
-    const submission = await run(Apple.notarize({ artifact: source, credential }));
+    const submission = await run(Apple.Notary.notarize({ artifact: source, credential }));
     const uploaded = (await calls()).find((call) => call.tool === "notarytool" && call.args[0] === "submit")!;
     expect(uploaded.args[1]).not.toBe(source.path);
     expect(uploaded.payloadSha).toBe(source.sha256);
@@ -429,17 +425,17 @@ describe("Apple notarization and stapling", () => {
   it("rejects malformed responses, mismatched UUIDs and transport failure without retrying submit", async () => {
     const source = await signedFile("dmg");
     await configure({ rawResponse: "{not JSON" });
-    expect(await run(Apple.notarize({ artifact: source, credential }).pipe(Effect.flip))).toBeInstanceOf(Apple.Notary.ResponseInvalid);
+    expect(await run(Apple.Notary.notarize({ artifact: source, credential }).pipe(Effect.flip))).toBeInstanceOf(Apple.Notary.ResponseInvalid);
     expect((await calls()).filter((call) => call.tool === "notarytool" && call.args[0] === "submit")).toHaveLength(1);
     await configure({ rawResponse: JSON.stringify({ id: "not-a-uuid", status: "Accepted" }) });
-    expect(await run(Apple.notarize({ artifact: source, credential }).pipe(Effect.flip))).toBeInstanceOf(Apple.Notary.ResponseInvalid);
+    expect(await run(Apple.Notary.notarize({ artifact: source, credential }).pipe(Effect.flip))).toBeInstanceOf(Apple.Notary.ResponseInvalid);
     await configure({ rawResponse: JSON.stringify({ id: submissionId, status: "Accepted" }) });
     const reference = await accepted(source);
     await configure({ rawResponse: JSON.stringify({ id: "d53e8e0e-1ca7-4fc4-a587-17347c6023af", status: "Accepted" }) });
     expect(await run(Apple.Notary.info({ reference, credential }).pipe(Effect.flip))).toBeInstanceOf(Apple.Notary.ResponseInvalid);
     await configure({ fail: "notarytool.submit" });
     const count = (await calls()).filter((call) => call.tool === "notarytool" && call.args[0] === "submit").length;
-    const failure = await run(Apple.notarize({ artifact: source, credential }).pipe(Effect.flip));
+    const failure = await run(Apple.Notary.notarize({ artifact: source, credential }).pipe(Effect.flip));
     expect(failure).toBeInstanceOf(Tool.Failed);
     expect(JSON.stringify(failure)).not.toContain(password);
     if (failure instanceof Tool.Failed) { expect(failure.args).toContain("<redacted>"); expect(failure.stderr).toContain("<redacted>"); }

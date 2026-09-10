@@ -3,6 +3,13 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Tool } from "effect-build";
 
 export class Sbom extends Context.Service<Sbom, { readonly tool: Tool.Resolved }>()("effect-build-sbom/Sbom") {}
+export class InputInvalid extends Schema.TaggedError<InputInvalid>()("SbomInputInvalid", {
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 export interface LayerOptions {
   readonly executable?: string | undefined;
@@ -23,14 +30,6 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
   executable: options.executable,
   parseVersion: (completion) => /^syft (\S+)/u.exec(new TextDecoder().decode(completion.stdout))?.[1],
 }).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))));
-
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("SbomInputInvalid", {
-  reason: Schema.String,
-}) {
-  override get message(): string {
-    return this.reason;
-  }
-}
 export const Format = Schema.Literals(["spdx-json", "cyclonedx-json"] as const);
 export type Format = typeof Format.Type;
 const nativeFormat = { "spdx-json": "spdx-json@2.3", "cyclonedx-json": "cyclonedx-json@1.6" } as const;
@@ -52,9 +51,9 @@ export const generate = Effect.fn("Sbom.generate")((input: GenerateInput): Effec
     const format = yield* Schema.decodeUnknownEffect(Format)(input.format).pipe(
       Effect.mapError((error) => new InputInvalid({ reason: String(error) })),
     );
-    if (input.outfile.length === 0 || input.outfile.includes("\0") || input.cwd?.includes("\0")) {
-      return yield* new InputInvalid({ reason: "outfile must be non-empty and paths must not contain NUL" });
-    }
+    const issue = Tool.argumentIssue(input.outfile);
+    if (issue !== undefined) return yield* new InputInvalid({ reason: `outfile ${issue}` });
+    if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
     const { tool } = yield* Sbom;
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");

@@ -7,6 +7,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const integrity = (bytes) => `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
 
+// npm.cmd cannot be execFile'd without a shell on Windows, and running npm-cli.js under
+// process.execPath pins the npm/node pair that --provenance records.
 export const npm = async (args, options = {}) => {
   const executable = process.platform === "win32"
     ? join(dirname(process.execPath), "node_modules/npm/bin/npm-cli.js")
@@ -52,17 +54,18 @@ export const readCandidate = async (directory) => {
     candidate.schema !== 1 || !/^[a-f0-9]{40}$/u.test(candidate.commit) || !Array.isArray(candidate.packages)
     || candidate.packages.length === 0
   ) {
-    throw new Error("Invalid candidate manifest");
+    throw new Error("Invalid candidate manifest: expected schema 1, a 40-hex commit, and a non-empty packages list");
   }
   if (process.env.GITHUB_SHA && candidate.commit !== process.env.GITHUB_SHA) {
     throw new Error("Candidate commit differs from release commit");
   }
   const seen = new Set();
   for (const item of candidate.packages) {
+    if (seen.has(item.name)) throw new Error(`Duplicate package in candidate: ${item.name}`);
     if (
       !/^effect-build(?:-[a-z-]+)?$/u.test(item.name) || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/u.test(item.version)
-      || item.filename !== `${item.name}-${item.version}.tgz` || seen.has(item.name)
-    ) throw new Error("Invalid package coordinates");
+      || item.filename !== `${item.name}-${item.version}.tgz`
+    ) throw new Error(`Invalid package coordinates: ${item.name}@${item.version} as ${item.filename}`);
     seen.add(item.name);
     if (process.env.GITHUB_REF_TYPE === "tag" && process.env.GITHUB_REF_NAME !== `v${item.version}`) {
       throw new Error("Candidate version differs from release tag");

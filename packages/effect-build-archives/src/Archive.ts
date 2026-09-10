@@ -6,7 +6,7 @@ import { EntrySizeMismatch } from "./EntrySizeMismatch.js";
 import { FormatLimit } from "./FormatLimit.js";
 import { InputInvalid } from "./InputInvalid.js";
 import { chunkSize, encodeTarGzip, encodeZip, type Entry, tarLimit, zipLimit } from "./internal/archive.js";
-import { readGitTar } from "./internal/gitTar.js";
+import { gitlinksFrom, readGitTar } from "./internal/gitTar.js";
 import { TarInvalid } from "./TarInvalid.js";
 
 export { EntrySizeMismatch } from "./EntrySizeMismatch.js";
@@ -42,6 +42,33 @@ type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
 type ArchiveEntries = ReadonlyArray<Entry<Artifact.ArtifactError, Fs>>;
 export type ArchiveError = InputInvalid | FormatLimit | EntrySizeMismatch | Artifact.ArtifactError | Commit.CommitError;
 export type SourceError = ArchiveError | TarInvalid | Tool.Failed | Tool.SpawnFailed;
+
+export class Archive
+  extends Context.Service<Archive, { readonly tool: Tool.Resolved }>()("effect-build-archives/Archive")
+{}
+export interface LayerOptions {
+  readonly executable?: string | undefined;
+  readonly version?: string | ((version: string) => boolean) | undefined;
+}
+/** Git 2.40+ supplies the exact tree, export-ignore, and PAX behavior the source archives rely on. */
+export const supported = ">=2.40.0 <3.0.0";
+/** Exact versions exercised by real-tool CI. */
+export const tested = "2.40.0 || 2.55.0";
+export const layer = (options: LayerOptions = {}): Layer.Layer<
+  Archive,
+  Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
+  Fs | ChildProcessSpawner.ChildProcessSpawner
+> =>
+  Layer.effect(
+    Archive,
+    Tool.resolve({
+      name: "git",
+      executable: options.executable,
+      parseVersion: (completion) =>
+        /^git version\s+(\d+\.\d+\.\d+)(?:\.windows\.\d+)?(?:\s|$)/u
+          .exec(new TextDecoder().decode(completion.stdout))?.[1],
+    }).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))),
+  );
 
 const writeArchive = (
   outfile: string,
@@ -135,51 +162,7 @@ export const tarGz = Effect.fn("Archive.tarGz")((input: ArchiveInput): Effect.Ef
   archive("tar.gz", input)
 );
 
-export class Archive
-  extends Context.Service<Archive, { readonly tool: Tool.Resolved }>()("effect-build-archives/Archive")
-{}
-export interface LayerOptions {
-  readonly executable?: string | undefined;
-  readonly version?: string | ((version: string) => boolean) | undefined;
-}
-/** Git 2.40+ supplies the exact tree, export-ignore, and PAX behavior the source archives rely on. */
-export const supported = ">=2.40.0 <3.0.0";
-/** Exact versions exercised by real-tool CI. */
-export const tested = "2.40.0 || 2.55.0";
-export const layer = (options: LayerOptions = {}): Layer.Layer<
-  Archive,
-  Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
-  Fs | ChildProcessSpawner.ChildProcessSpawner
-> =>
-  Layer.effect(
-    Archive,
-    Tool.resolve({
-      name: "git",
-      executable: options.executable,
-      parseVersion: (completion) =>
-        /^git version\s+(\d+\.\d+\.\d+)(?:\.windows\.\d+)?(?:\s|$)/u
-          .exec(new TextDecoder().decode(completion.stdout))?.[1],
-    }).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))),
-  );
-
 const decoder = new TextDecoder("utf-8", { fatal: true });
-const gitlinksFrom = (listing: Uint8Array): readonly string[] => {
-  const gitlinks: string[] = [];
-  let offset = 0;
-  while (offset < listing.byteLength) {
-    const nul = listing.indexOf(0, offset);
-    if (nul === -1) throw new RangeError("git ls-tree output lacks a terminal NUL record separator");
-    const record = listing.subarray(offset, nul);
-    const tab = record.indexOf(0x09);
-    if (tab <= 0) throw new RangeError("git ls-tree record lacks a metadata/path separator");
-    const metadata = decoder.decode(record.subarray(0, tab));
-    const path = decoder.decode(record.subarray(tab + 1));
-    if (path.length === 0) throw new RangeError("git ls-tree record has an empty path");
-    if (/^160000\s+commit\s+[0-9a-f]+$/.test(metadata)) gitlinks.push(path);
-    offset = nul + 1;
-  }
-  return gitlinks;
-};
 
 export const source = Effect.fn("Archive.source")((input: SourceInput): Effect.Effect<
   Artifact.File,
@@ -218,6 +201,7 @@ export const source = Effect.fn("Archive.source")((input: SourceInput): Effect.E
       try: () => gitlinksFrom(listing.stdout),
       catch: (error) => new InputInvalid({ reason: `decode git ls-tree: ${String(error)}` }),
     });
+    for (const gitlink of gitlinks) excludes.add(gitlink);
     const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-git-" }).pipe(
       Effect.mapError(Artifact.ioError(outfile, "write")),
     );
@@ -238,22 +222,18 @@ export const source = Effect.fn("Archive.source")((input: SourceInput): Effect.E
     const projected = yield* readGitTar(exported);
     const entries: Entry<Artifact.ArtifactError, Fs>[] = [];
     for (const entry of projected) {
-      const relative = entry.path === root
-        ? ""
-        : entry.path.startsWith(`${root}/`)
-        ? entry.path.slice(root.length + 1)
-        : undefined;
-      if (relative === undefined) {
+      if (entry.path === root) {
+        if (entry.kind !== "directory") return yield* new InputInvalid({ reason: "project root is not a directory" });
+        entries.push(entry);
+        continue;
+      }
+      if (!entry.path.startsWith(`${root}/`)) {
         return yield* new InputInvalid({ path: entry.path, reason: "Git archive escaped its root" });
       }
-      if (relative === "") {
-        if (entry.kind !== "directory") {
-          return yield* new InputInvalid({ reason: "project root is not a directory" });
-        }
-      } else if (
-        relative.split("/").includes(".git")
-        || [...excludes, ...gitlinks].some((excluded) => relative === excluded || relative.startsWith(`${excluded}/`))
-      ) continue;
+      const relative = entry.path.slice(root.length + 1);
+      const excluded = relative.split("/").includes(".git")
+        || [...excludes].some((prefix) => relative === prefix || relative.startsWith(`${prefix}/`));
+      if (excluded) continue;
       if (entry.kind !== "file") {
         entries.push(entry);
         continue;

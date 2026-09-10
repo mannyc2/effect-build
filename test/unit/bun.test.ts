@@ -32,7 +32,8 @@ describe("Bun CLI", () => {
   });
 
   it("returns a complete bundle larger than the diagnostic limit", async () => {
-    const length = 9 * 1024 * 1024;
+    const diagnosticLimit = 8 * 1024 * 1024; // Tool.run's default retained bytes per stream
+    const length = diagnosticLimit + 1024 * 1024;
     await writeFile(join(root, "large.ts"), `const value = "${"x".repeat(length)}"; console.log(value.length);\n`);
     const output = await run(Bun.build({ entrypoints: ["large.ts"], cwd: root }));
     expect(output.byteLength).toBeGreaterThan(length);
@@ -84,7 +85,7 @@ describe("Bun CLI", () => {
   });
 
   it("rebuilds changed files and stops watching when its scope closes", async () => {
-    const process = await run(Effect.scoped(Effect.gen(function*() {
+    const watched = await run(Effect.scoped(Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const watcher = yield* Bun.watch({ entrypoints: ["hello.ts"], outdir: "watch", cwd: root, noClearScreen: true });
       yield* Effect.forkScoped(Stream.runDrain(watcher.process.stdout));
@@ -104,6 +105,6 @@ describe("Bun CLI", () => {
       expect(yield* watcher.process.isRunning).toBe(true);
       return watcher.process;
     })));
-    expect(await run(process.isRunning)).toBe(false);
+    expect(await run(watched.isRunning)).toBe(false);
   }, 15_000);
 });

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type * as rolldown from "rolldown";
 
 export class InputInvalid extends Schema.TaggedError<InputInvalid>()("RolldownInputInvalid", {
@@ -22,3 +22,6 @@ export class Failed extends Schema.TaggedError<Failed>()("RolldownFailed", {
     return `rolldown ${this.operation} failed${this.cause instanceof Error ? `: ${this.cause.message.split("\n")[0]}` : ""}`;
   }
 }
+
+export const invoke = <A>(operation: string, run: () => Promise<A>): Effect.Effect<A, Failed> =>
+  Effect.tryPromise({ try: run, catch: (cause) => new Failed({ operation, cause }) });

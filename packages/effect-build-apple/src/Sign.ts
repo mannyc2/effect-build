@@ -38,14 +38,15 @@ const nestedValid = (app: App, path: string): boolean => {
     return entry !== undefined && (index === segments.length - 1 ? entry.kind !== "symlink" : entry.kind === "directory");
   });
 };
-const signProduct = (input: SignAppInput | SignDmgInput | SignPkgInput): Effect.Effect<SignedProduct, SignError, Apple | Env> =>
+/** codesign handles apps and disk images in place; a pkg is re-signed by productsign from a copy. */
+const signProduct = (input: SignAppInput | SignDmgInput): Effect.Effect<SignedApp | SignedDmg, SignError, Apple | Env> =>
   Effect.scoped(Effect.gen(function*() {
     if (input.artifact.product === "app" ? "outfile" in input : "outdir" in input) {
       return yield* new InputInvalid({ reason: "app signing takes outdir; file signing takes outfile" });
     }
     const appInput = input.artifact.product === "app" ? input as SignAppInput : undefined;
     const destination = yield* outputPath(
-      appInput === undefined ? (input as SignDmgInput | SignPkgInput).outfile ?? input.artifact.path : appInput.outdir ?? input.artifact.path,
+      appInput === undefined ? (input as SignDmgInput).outfile ?? input.artifact.path : appInput.outdir ?? input.artifact.path,
       `.${input.artifact.product}`, input.cwd,
     );
     const nested = [...appInput?.nestedCode ?? []];
@@ -60,26 +61,38 @@ const signProduct = (input: SignAppInput | SignDmgInput | SignPkgInput): Effect.
     const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-sign-" }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
     const topEntitlements = yield* entitlementsFile(appInput?.entitlements, p.join(temporary, "app-entitlements.plist"));
     const nestedInputs = yield* Effect.forEach(nested, (code, index) => entitlementsFile(code.entitlements, p.join(temporary, `nested-${index}.plist`)).pipe(Effect.map((entitlements) => ({ path: code.path, entitlements }))));
-    // productsign requires separate input/output paths, even for a direct in-place request.
-    const packageSource = p.join(temporary, "unsigned.pkg");
-    if (input.artifact.product === "pkg") yield* copyRegular(input.artifact, packageSource);
     const { tool } = yield* Apple;
     const produce = Effect.fn("Apple.sign.produce")(function*(out: string) {
-      if (input.artifact.product === "pkg") {
-        yield* runNative("productsign", ["--sign", input.certificateSha1, "--timestamp", packageSource, out], { cwd });
-      } else {
-        yield* copyProduct(input.artifact, out);
-        const signCode = (path: string, entitlements: string | undefined, runtime: boolean) => runNative("codesign", [
-          "--force", "--sign", input.certificateSha1, "--timestamp", ...(runtime ? ["--options", "runtime"] : []),
-          ...(entitlements === undefined ? [] : ["--entitlements", entitlements]), path,
-        ], { cwd });
-        for (const code of nestedInputs) yield* signCode(p.join(out, code.path), code.entitlements, true);
-        yield* signCode(out, topEntitlements, input.artifact.product === "app");
-      }
+      yield* copyProduct(input.artifact, out);
+      const signCode = (path: string, entitlements: string | undefined, runtime: boolean) => runNative("codesign", [
+        "--force", "--sign", input.certificateSha1, "--timestamp", ...(runtime ? ["--options", "runtime"] : []),
+        ...(entitlements === undefined ? [] : ["--entitlements", entitlements]), path,
+      ], { cwd });
+      for (const code of nestedInputs) yield* signCode(p.join(out, code.path), code.entitlements, true);
+      yield* signCode(out, topEntitlements, input.artifact.product === "app");
       const signature = { certificateSha1: input.certificateSha1, secureTimestamp: true as const };
       return input.artifact.product === "app"
         ? { ...yield* Artifact.directory(out, Tool.producer(tool)), product: "app" as const, signature: { ...signature, hardenedRuntime: true as const } }
-        : { ...yield* Artifact.file(out, Tool.producer(tool)), product: input.artifact.product, signature };
+        : { ...yield* Artifact.file(out, Tool.producer(tool)), product: "dmg" as const, signature };
+    }, Effect.tap(verifySignature));
+    return yield* Commit.output(destination, produce, input);
+  }));
+const signPkg = (input: SignPkgInput): Effect.Effect<SignedPkg, SignError, Apple | Env> =>
+  Effect.scoped(Effect.gen(function*() {
+    if ("outdir" in input) return yield* new InputInvalid({ reason: "app signing takes outdir; file signing takes outfile" });
+    const destination = yield* outputPath(input.outfile ?? input.artifact.path, ".pkg", input.cwd);
+    const fs = yield* FileSystem.FileSystem;
+    const p = yield* Path.Path;
+    const cwd = p.resolve(input.cwd ?? "");
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-apple-sign-" }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
+    // productsign requires separate input/output paths, even for a direct in-place request.
+    const source = p.join(temporary, "unsigned.pkg");
+    yield* copyRegular(input.artifact, source);
+    const { tool } = yield* Apple;
+    const signature = { certificateSha1: input.certificateSha1, secureTimestamp: true as const };
+    const produce = Effect.fn("Apple.sign.produce")(function*(out: string) {
+      yield* runNative("productsign", ["--sign", input.certificateSha1, "--timestamp", source, out], { cwd });
+      return { ...yield* Artifact.file(out, Tool.producer(tool)), product: "pkg" as const, signature };
     }, Effect.tap(verifySignature));
     return yield* Commit.output(destination, produce, input);
   }));
@@ -116,5 +129,7 @@ export function sign(input: SignExecutableInput): Effect.Effect<SignedExecutable
 export function sign(input: SignInput): Effect.Effect<SignedProduct | SignedExecutable, SignError, Apple | Env>;
 export function sign(input: SignInput): Effect.Effect<SignedProduct | SignedExecutable, SignError, Apple | Env> {
   if (!/^[0-9a-f]{40}$/iu.test(input.certificateSha1)) return Effect.fail(new InputInvalid({ reason: "certificateSha1 must be a 40-digit SHA-1 certificate fingerprint" }));
-  return input.artifact.kind === "executable" ? signExecutable(input as SignExecutableInput) : signProduct(input as SignAppInput | SignDmgInput | SignPkgInput);
+  if (input.artifact.kind === "executable") return signExecutable(input as SignExecutableInput);
+  if (input.artifact.product === "pkg") return signPkg(input as SignPkgInput);
+  return signProduct(input as SignAppInput | SignDmgInput);
 }

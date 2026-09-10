@@ -1,9 +1,17 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { Artifact, Tool } from "effect-build";
+import * as Apple from "effect-build-apple";
+import * as Archive from "effect-build-archives";
 import * as Bun from "effect-build-bun";
 import * as Deno from "effect-build-deno";
+import * as Esbuild from "effect-build-esbuild";
+import * as Nfpm from "effect-build-nfpm";
 import * as NodeSea from "effect-build-node-sea";
+import * as Python from "effect-build-python";
+import * as Rolldown from "effect-build-rolldown";
+import * as Sbom from "effect-build-sbom";
+import * as Windows from "effect-build-windows";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,6 +39,25 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
+});
+
+describe("provider input errors", () => {
+  it.each([
+    ["Apple", new Apple.InputInvalid({ reason: "outfile is empty" })],
+    ["Archive", new Archive.InputInvalid({ reason: "outfile is empty" })],
+    ["Bun", new Bun.InputInvalid({ reason: "outfile is empty" })],
+    ["Deno", new Deno.InputInvalid({ reason: "outfile is empty" })],
+    ["Esbuild", new Esbuild.InputInvalid({ reason: "outfile is empty" })],
+    ["Nfpm", new Nfpm.InputInvalid({ reason: "outfile is empty" })],
+    ["NodeSea", new NodeSea.InputInvalid({ reason: "outfile is empty" })],
+    ["Python", new Python.InputInvalid({ reason: "outfile is empty" })],
+    ["Rolldown", new Rolldown.InputInvalid({ reason: "outfile is empty" })],
+    ["Sbom", new Sbom.InputInvalid({ reason: "outfile is empty" })],
+    ["Windows", new Windows.InputInvalid({ reason: "outfile is empty" })],
+  ])("%s prints an unhandled InputInvalid as its tag and reason", (name, failure) => {
+    expect(failure._tag).toBe(`${name}InputInvalid`);
+    expect(String(failure)).toBe(`${name}InputInvalid: outfile is empty`);
+  });
 });
 
 describe("provider input preparation", () => {

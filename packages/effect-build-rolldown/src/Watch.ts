@@ -21,6 +21,7 @@ export const watch = (options: rolldown.WatchOptions | rolldown.WatchOptions[]):
           chain = chain.then(async () => {
             try {
               await event.result.close();
+              // The queue holds one event and slides, so a non-empty queue means this offer displaces the pending one.
               superseded = Queue.sizeUnsafe(queue) === 0 ? 0 : superseded + 1;
               Queue.offerUnsafe(queue, event.code === "BUNDLE_END"
                 ? { code: "BUNDLE_END", duration: event.duration, output: event.output, superseded }

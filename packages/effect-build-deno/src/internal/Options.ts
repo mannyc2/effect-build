@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { InputInvalid } from "../InputInvalid.js";
+import { Tool } from "effect-build";
 
 export type PermissionValue = true | readonly [string, ...string[]];
 export type Check = false | true | "all" | "remote";
@@ -87,9 +88,7 @@ export const validatePath = (
   operation: string,
   field: string,
   value: string,
-): Effect.Effect<void, InputInvalid> =>
-  value.length > 0 && !value.includes("\0")
-    ? Effect.void
-    : Effect.fail(
-      new InputInvalid({ operation, reason: `${field} must be non-empty and contain no NUL` }),
-    );
+): Effect.Effect<void, InputInvalid> => {
+  const issue = Tool.argumentIssue(value);
+  return issue === undefined ? Effect.void : Effect.fail(new InputInvalid({ operation, reason: `${field} ${issue}` }));
+};

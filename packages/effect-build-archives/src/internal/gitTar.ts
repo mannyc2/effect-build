@@ -1,6 +1,7 @@
 import { Effect, FileSystem } from "effect";
 import { Artifact } from "effect-build";
 import { TarInvalid } from "../TarInvalid.js";
+import { tarField } from "./archive.js";
 
 /** A tar entry located by its header; a file's `offset` is where its payload begins in the tar. */
 export type TarEntry =
@@ -63,21 +64,41 @@ interface TarHeader {
 }
 
 const parseHeader = (header: Uint8Array): TarHeader => {
-  const expected = parseOctal(field(header, 148, 8));
+  const expected = parseOctal(field(header, ...tarField.checksum));
+  // The checksum sums the record with its own field read as spaces.
   const checksumHeader = header.slice();
-  checksumHeader.fill(0x20, 148, 156);
+  checksumHeader.fill(0x20, tarField.checksum[0], tarField.checksum[0] + tarField.checksum[1]);
   const actual = checksumHeader.reduce((total, byte) => total + byte, 0);
   if (expected !== actual) throw new RangeError("invalid tar header checksum");
-  const prefix = field(header, 345, 155);
-  const headerPath = field(header, 0, 100);
+  const prefix = field(header, ...tarField.prefix);
+  const headerPath = field(header, ...tarField.name);
   return {
     rawPath: prefix === "" ? headerPath : `${prefix}/${headerPath}`,
-    size: parseOctal(field(header, 124, 12)),
+    size: parseOctal(field(header, ...tarField.size)),
     // An empty type field is the pre-ustar spelling of a regular file.
-    type: field(header, 156, 1) || "0",
-    mode: parseOctal(field(header, 100, 8)),
-    linkField: field(header, 157, 100),
+    type: field(header, ...tarField.type) || "0",
+    mode: parseOctal(field(header, ...tarField.mode)),
+    linkField: field(header, ...tarField.link),
   };
+};
+
+/** Paths of submodule commits in a `git ls-tree -rz` listing; they have no content in the tree. */
+export const gitlinksFrom = (listing: Uint8Array): readonly string[] => {
+  const gitlinks: string[] = [];
+  let offset = 0;
+  while (offset < listing.byteLength) {
+    const nul = listing.indexOf(0, offset);
+    if (nul === -1) throw new RangeError("git ls-tree output lacks a terminal NUL record separator");
+    const record = listing.subarray(offset, nul);
+    const tab = record.indexOf(0x09);
+    if (tab <= 0) throw new RangeError("git ls-tree record lacks a metadata/path separator");
+    const attributes = decoder.decode(record.subarray(0, tab));
+    const path = decoder.decode(record.subarray(tab + 1));
+    if (path.length === 0) throw new RangeError("git ls-tree record has an empty path");
+    if (/^160000\s+commit\s+[0-9a-f]+$/.test(attributes)) gitlinks.push(path);
+    offset = nul + 1;
+  }
+  return gitlinks;
 };
 
 /** Extended records apply to the next regular entry only; a global PAX header persists. */
@@ -139,6 +160,7 @@ export const readGitTar = (
       const entryPath = pending.pax.path ?? global.path ?? pending.longPath ?? parsed.rawPath;
       const target = pending.pax.linkpath ?? global.linkpath ?? pending.longLink ?? parsed.linkField;
       pending = nothingPending;
+      // git records only the executable bit (100644, 100755, 120000, 40000); collapse to the modes it can mean.
       if (parsed.type === "0") {
         entries.push({
           kind: "file",

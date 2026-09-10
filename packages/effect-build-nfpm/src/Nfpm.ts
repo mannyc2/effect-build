@@ -3,6 +3,13 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Target, Tool } from "effect-build";
 
 export class Nfpm extends Context.Service<Nfpm, { readonly tool: Tool.Resolved }>()("effect-build-nfpm/Nfpm") {}
+export class InputInvalid extends Schema.TaggedError<InputInvalid>()("NfpmInputInvalid", {
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 export interface LayerOptions {
   readonly executable?: string | undefined;
@@ -24,18 +31,13 @@ export const layer = (options: LayerOptions = {}): Layer.Layer<
   parseVersion: (completion) => /^GitVersion:\s+(\S+)/mu.exec(new TextDecoder().decode(completion.stdout))?.[1],
 }).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))));
 
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("NfpmInputInvalid", {
-  reason: Schema.String,
-}) {
-  override get message(): string {
-    return this.reason;
-  }
-}
-
 export const Format = Schema.Literals(["deb", "rpm", "apk", "archlinux", "msix"] as const);
 export type Format = typeof Format.Type;
 
-const LocalPath = Schema.NonEmptyString.check(Schema.makeFilter((value) => value.includes("\0") ? "path contains NUL" : undefined));
+const LocalPath = Schema.String.check(Schema.makeFilter((value) => {
+  const issue = Tool.argumentIssue(value);
+  return issue === undefined ? undefined : `path ${issue}`;
+}));
 const PackagePath = LocalPath.check(Schema.makeFilter((value) =>
   value.startsWith("/") && !value.includes("\\") && value.slice(1).split("/").every((part) => part !== "" && part !== "." && part !== "..")
     ? undefined : "expected a canonical absolute package path"));
@@ -101,6 +103,7 @@ const packageArtifact = Effect.fn("Nfpm.package")((candidate: PackageInput): Eff
     for (const { artifact } of input.contents) {
       if (artifact.kind !== "executable") continue;
       const target = Target.parts(artifact.target);
+      // nFPM passes arch through in each packager's vocabulary (deb amd64, rpm x86_64, msix x64); accept any spelling of this CPU.
       const architectures = target.arch === "x64" ? ["amd64", "x86_64", "x64"] : ["arm64", "aarch64"];
       if (target.os !== os || !architectures.includes(config.arch)) {
         return yield* new InputInvalid({ reason: `${artifact.target} executable contradicts ${input.format} architecture ${config.arch} / platform ${os}` });

@@ -3,7 +3,8 @@ import { Effect } from "effect";
 import { Artifact, Checksums } from "effect-build";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -14,7 +15,7 @@ const execute = promisify(execFile);
 const producer = { name: "fixture", version: "0.7.0" };
 let root: string;
 beforeEach(async () => {
-  root = await mkdtemp(join(process.cwd(), ".effect-build-checksums-"));
+  root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-checksums-")));
   await mkdir(join(root, "dist", "arm64"), { recursive: true });
   await mkdir(join(root, "dist", "x64"), { recursive: true });
 });

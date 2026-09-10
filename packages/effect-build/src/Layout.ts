@@ -1,3 +1,5 @@
+import { argumentIssue } from "./Tool.js";
+
 /** A shipping path's filesystem role; payloads and provider metadata stay with their owner. */
 export interface Entry {
   readonly path: string;
@@ -11,8 +13,8 @@ export interface Issue {
 
 /** Normalized relative shipping paths use '/', without traversal or a trailing separator. */
 export const pathIssue = (path: string): string | undefined => {
-  if (path.length === 0) return "path is empty";
-  if (path.includes("\0")) return "NUL is forbidden";
+  const argument = argumentIssue(path);
+  if (argument !== undefined) return `path ${argument}`;
   if (path.includes("\\")) return "backslashes are forbidden; shipping paths use '/'";
   if (path.startsWith("/") || /^[a-z]:/iu.test(path)) return "absolute paths are forbidden";
   const segments = path.split("/");

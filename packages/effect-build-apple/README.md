@@ -32,7 +32,7 @@ import * as Bun from "effect-build-bun";
 const darwin = (executable: Artifact.Executable, certificateSha1: string, credential: Apple.Notary.Credential) =>
   Effect.gen(function*() {
     const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements });
-    const submission = yield* Apple.notarize({ artifact: signed, credential, timeout: "30m" });
+    const submission = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
     const acceptance = yield* Apple.Notary.acceptedReference(submission);
     const assessed = yield* Apple.assess({ artifact: signed, acceptance });
     const installer = yield* Apple.pkg({
@@ -79,7 +79,7 @@ const app = (executable: Artifact.Executable, certificateSha1: string, credentia
       applicationsLink: true,
     });
     const signedDmg = yield* Apple.sign({ artifact: dmg, certificateSha1 });
-    const submission = yield* Apple.notarize({ artifact: signedDmg, credential });
+    const submission = yield* Apple.Notary.notarize({ artifact: signedDmg, credential });
     const acceptance = yield* Apple.Notary.acceptedReference(submission);
     const stapled = yield* Apple.staple({ artifact: signedDmg, acceptance, outfile: "dist/notarized/example.dmg" });
     return yield* Apple.assess({ artifact: stapled });
@@ -96,8 +96,8 @@ const app = (executable: Artifact.Executable, certificateSha1: string, credentia
 | `sign({ artifact: Artifact.Executable, certificateSha1, outfile?, entitlements? })`                                                                               | `SignedExecutable`                                |
 | `dmg({ artifact: SignedApp, outfile, volumeName, layout?, applicationsLink?, cwd? })`                                                                             | `Dmg`, a file artifact with `product: "dmg"`      |
 | `pkg({ artifact: SignedApp \| SignedExecutable, outfile, identifier, version, installLocation?, cwd? })`                                                          | `Pkg`, a file artifact with `product: "pkg"`      |
-| `notarize({ artifact, credential, timeout?, cwd? })`                                                                                                              | `Notary.Submission` with its status               |
-| `Notary.submit`, `Notary.wait`, `Notary.info`, `Notary.log`                                                                                                       | The steps `notarize` composes, individually       |
+| `Notary.notarize({ artifact, credential, timeout?, cwd? })`                                                                                                              | `Notary.Submission` with its status               |
+| `Notary.submit`, `Notary.wait`, `Notary.info`, `Notary.log`                                                                                                       | The steps `Notary.notarize` composes, individually       |
 | `Notary.acceptedReference(result)`                                                                                                                                | `AcceptedReference`, or `NotaryResultNotAccepted` |
 | `staple({ artifact: SignedApp \| SignedDmg \| SignedPkg, acceptance, outdir? \| outfile? })`                                                                      | `StapledApp`, `StapledDmg`, `StapledPkg`          |
 | `assess({ artifact: Stapled })`, `assess({ artifact: SignedExecutable, acceptance })`                                                                             | The same artifact, after Gatekeeper accepts it    |
@@ -113,7 +113,7 @@ preserve framework symlinks. Universal (fat) Mach-O inputs are unsupported.
 Products and signatures are refinements of the core artifacts: `SignedApp` is an
 `Artifact.Directory` plus `product` and `signature: { certificateSha1, secureTimestamp, hardenedRuntime }`,
 and stapled products add `ticket`. `Artifact.encode` drops these fields on purpose; persist them
-with the exported schemas (`Apple.Model.SignedExecutable`, `Apple.Notary.Submission`, and the
+with the exported schemas (`Apple.SignedExecutable`, `Apple.Notary.Submission`, and the
 rest) through `Schema.encodeSync`.
 
 ## Identities and credentials

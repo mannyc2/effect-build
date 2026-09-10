@@ -3,6 +3,11 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
 
 export class Bun extends Context.Service<Bun, { readonly tool: Tool.Resolved }>()("effect-build-bun/Bun") {}
+export class InputInvalid extends Schema.TaggedError<InputInvalid>()("BunInputInvalid", { reason: Schema.String }) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 export interface LayerOptions {
   /** Use this binary instead of searching PATH. */
@@ -11,10 +16,10 @@ export interface LayerOptions {
   readonly version?: string | ((version: string) => boolean) | undefined;
 }
 
-/** Exact versions exercised by real-tool CI. */
-export const tested = "1.3.14 || 1.4.2";
 /** Compatible major; emitted builds separately reject the known 1.4.1 defect. */
 export const supported = ">=1.3.14 <2.0.0";
+/** Exact versions exercised by real-tool CI. */
+export const tested = "1.3.14 || 1.4.2";
 /**
  * Hardened-runtime entitlements Bun documents for its compiled executables: the
  * JavaScript engine needs JIT and dynamic-library allowances to start once signed.
@@ -98,12 +103,6 @@ export interface CompileInput extends Commit.ProducerOptions {
   readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
 }
 
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("BunInputInvalid", { reason: Schema.String }) {
-  override get message(): string {
-    return this.reason;
-  }
-}
-
 export type CompileError =
   | InputInvalid
   | Tool.Failed
@@ -153,17 +152,17 @@ const renderArgv = (input: CompileInput, out: string, target?: BunTarget): strin
   ];
 };
 
-const validPath = (value: string): boolean => value.length > 0 && !value.includes("\0");
 const prepareBuild = Effect.fnUntraced(function*(
   input: { readonly entrypoints: readonly string[]; readonly cwd?: string | undefined },
   output?: string,
 ) {
-  if (input.entrypoints.length === 0 || input.entrypoints.some((entrypoint) => !validPath(entrypoint))) {
-    return yield* new InputInvalid({ reason: "entrypoints must be non-empty paths without NUL" });
+  if (input.entrypoints.length === 0) return yield* new InputInvalid({ reason: "entrypoints are empty" });
+  for (const entrypoint of input.entrypoints) {
+    const issue = Tool.argumentIssue(entrypoint);
+    if (issue !== undefined) return yield* new InputInvalid({ reason: `entrypoint ${issue}` });
   }
-  if (output !== undefined && !validPath(output)) {
-    return yield* new InputInvalid({ reason: "output must be a non-empty path without NUL" });
-  }
+  const outputIssue = output === undefined ? undefined : Tool.argumentIssue(output);
+  if (outputIssue !== undefined) return yield* new InputInvalid({ reason: `output ${outputIssue}` });
   if (input.cwd?.includes("\0")) return yield* new InputInvalid({ reason: "cwd must contain no NUL" });
   const { tool } = yield* Bun;
   if (Tool.satisfies("1.4.1")(tool.version)) {
@@ -173,7 +172,7 @@ const prepareBuild = Effect.fnUntraced(function*(
 });
 
 const outputPath = (output: string, cwd?: string) =>
-  Effect.map(Path.Path, (p) => p.resolve(cwd ?? ".", output));
+  Effect.map(Path.Path, (p) => p.resolve(cwd ?? "", output));
 
 /**
  * `bun build --compile` as an Effect. Verifies the produced binary's header

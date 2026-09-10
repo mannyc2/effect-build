@@ -47,7 +47,7 @@ export class TargetMismatch extends Schema.TaggedError<TargetMismatch>()("Execut
   }
 }
 
-const fail = (reason: typeof Reason.Type): never => {
+const fail: (reason: typeof Reason.Type) => never = (reason) => {
   throw new ParseError({ reason });
 };
 
@@ -126,10 +126,11 @@ function* elf(size: number): Inspection {
     if (abi === undefined) fail("unsupported-interpreter");
   }
   if (!hasLoad) fail("invalid-header");
-  return { format: "elf", os: "linux", arch: arch!, ...(abi === undefined ? {} : { abi }) };
+  return { format: "elf", os: "linux", arch, ...(abi === undefined ? {} : { abi }) };
 }
 
 const machoArch = (cpu: number): Target.Arch | undefined => cpu === 0x01000007 ? "x64" : cpu === 0x0100000c ? "arm64" : undefined;
+// base and size delimit this slice of the file: header reads are file-absolute, segment file offsets are slice-relative.
 function* thinMacho(base: number, size: number): Inspection {
   const b = yield* read(base, 32, base + size);
   const magic = u32(b, 0, false);
@@ -155,7 +156,7 @@ function* thinMacho(base: number, size: number): Inspection {
     offset += commandSize;
   }
   if (offset !== length || !hasSegment) fail("invalid-header");
-  return { format: "mach-o", os: "darwin", arch: arch! };
+  return { format: "mach-o", os: "darwin", arch };
 }
 function* macho(size: number, magic: number): Inspection {
   if (magic === 0xfeedfacf || magic === 0xcffaedfe) return yield* thinMacho(0, size);
@@ -168,7 +169,7 @@ function* macho(size: number, magic: number): Inspection {
   for (let i = 0; i < count; i++) {
     const entry = i * 20, arch = machoArch(u32(table, entry, le));
     if (arch === undefined) fail("unsupported-machine");
-    architectures.add(arch!);
+    architectures.add(arch);
   }
   if (architectures.size !== 1) fail("ambiguous-fat-binary");
   let result: Facts | undefined;
@@ -221,7 +222,7 @@ function* pe(size: number): Inspection {
     hasSection ||= length > 0;
   }
   if (!hasSection) fail("invalid-header");
-  return { format: "pe", os: "windows", arch: arch! };
+  return { format: "pe", os: "windows", arch };
 }
 function* inspectRanges(size: number): Inspection {
   const b = yield* read(0, 4, size);
@@ -307,6 +308,7 @@ export const resolveTarget = (
   const chosen = candidates.length === 1
     ? candidates[0]
     : candidates.find((t) => Target.parts(t).abi !== "musl");
+  // Unreachable for parsed facts, since every os/arch/abi the parsers yield matches a target; kept for hand-built Facts.
   return chosen === undefined
     ? Effect.fail(new TargetMismatch({ path, expected: Target.all[0]!, observed: describe(facts) }))
     : Effect.succeed(chosen);

@@ -4,6 +4,10 @@ import { Range, satisfies as semverSatisfies } from "semver";
 import type * as Artifact from "./Artifact.js";
 import { file } from "./Artifact.js";
 
+/** Anything handed to a tool or the filesystem: NUL cannot cross the exec boundary, and empty text names nothing. */
+export const argumentIssue = (value: string): string | undefined =>
+  value.length === 0 ? "is empty" : value.includes("\0") ? "contains NUL" : undefined;
+
 /** An external executable we resolved once and will keep using. */
 export interface Resolved {
   readonly name: string;
@@ -131,15 +135,19 @@ const collect = (stream: Stream.Stream<Uint8Array, unknown>, limit: number) =>
 
 const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
+/** Replace each secret with `<redacted>`, longer secrets first so an overlapping value cannot expose a suffix. */
+export const redact = (secrets: readonly string[]): ((text: string) => string) => {
+  const ordered = [...new Set(secrets)].filter((value) => value.length > 0).sort((a, b) => b.length - a.length);
+  return (text) => ordered.reduce((scrubbed, secret) => scrubbed.replaceAll(secret, "<redacted>"), text);
+};
+
 /** Run a resolved tool; failures retain both diagnostic streams and truncation flags. */
 export const run = Effect.fn("Tool.run")(function*(
   tool: Resolved,
   args: readonly string[],
   options: RunOptions = {},
 ): Effect.fn.Return<Completion, Failed | SpawnFailed, ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> {
-  // Replace longer secrets first so overlapping values cannot expose a suffix.
-  const secrets = [...new Set(options.redact ?? [])].filter((value) => value.length > 0).sort((a, b) => b.length - a.length);
-  const scrub = (value: string) => secrets.reduce((text, secret) => text.replaceAll(secret, "<redacted>"), value);
+  const scrub = redact(options.redact ?? []);
   const spawnFailed = (error: unknown) => new SpawnFailed({ tool: scrub(tool.name), detail: scrub(String(error)) });
   const limit = options.outputLimit ?? 8 * 1024 * 1024;
   const stdoutLimit = options.stdoutLimit === null ? Infinity : options.stdoutLimit ?? limit;
