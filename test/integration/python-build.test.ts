@@ -74,13 +74,12 @@ describe("real uv Python builds", () => {
     expect(await readdir(outdir)).toEqual(["previous-output"]);
   }, 30_000);
 
-  it("rejects ambiguous distributions left in a direct output directory", async () => {
+  it("starts a direct output directory empty, so a stale distribution never enters the result", async () => {
     const outdir = join(root, "dist");
     await mkdir(outdir);
     await writeFile(join(outdir, "old-0.1.0-py3-none-any.whl"), "stale wheel");
-    const failure = await run(Python.build({ project, outdir, atomic: false }).pipe(Effect.flip));
-    expect(failure).toBeInstanceOf(Python.InputInvalid);
-    expect(await readdir(outdir)).toHaveLength(3);
+    const result = await run(Python.build({ project, outdir, atomic: false }));
+    expect((await readdir(outdir)).sort()).toEqual([basename(result.wheel.path), basename(result.sdist.path)].sort());
     expect((await readdir(root)).sort()).toEqual(["dist", "project"]);
   }, 180_000);
 });

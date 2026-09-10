@@ -62,8 +62,9 @@ const built = Python.build({ project: "python/hello", outdir: "dist/python" }).p
 and then the wheel from it with the project's own build backend, and returns
 `{ wheel: Artifact.File, sdist: Artifact.File }`. Exactly one wheel and one `.tar.gz` sdist must
 result. `Python.layer({ executable?, version? })` resolves uv: `Python.supported` is
-`>=0.12.0 <1.0.0` and `Python.tested` is 0.12.0. With `atomic: false`, clean stale distributions
-out of `outdir` before changing versions.
+`>=0.12.0 <1.0.0` and `Python.tested` is 0.12.0. `outdir` is replaced as a whole, and with
+`atomic: false` it is emptied before uv writes, so an earlier build's distributions never enter
+the result.
 
 ## Errors
 
