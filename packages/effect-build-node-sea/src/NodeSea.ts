@@ -11,12 +11,22 @@ export class InputInvalid extends Schema.TaggedError<InputInvalid>()("NodeSeaInp
     return this.reason;
   }
 }
+/** postject rejections are not always Error instances; a message getter must still render them. */
+const describe = (cause: unknown): string => {
+  const message: unknown = typeof cause === "object" && cause !== null ? Reflect.get(cause, "message") : undefined;
+  if (typeof message === "string" && message.length > 0) return message;
+  try {
+    return String(cause);
+  } catch {
+    return Object.prototype.toString.call(cause);
+  }
+};
 export class Failed extends Schema.TaggedError<Failed>()("NodeSeaFailed", {
   operation: Schema.String,
   cause: Schema.Unknown,
 }) {
   override get message(): string {
-    return `${this.operation} failed: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
+    return `${this.operation} failed: ${describe(this.cause)}`;
   }
 }
 
