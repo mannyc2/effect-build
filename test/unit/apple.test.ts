@@ -7,8 +7,8 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import ts from "typescript";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { Config, Invocation, PackedEntry } from "../fixtures/apple-tool.js";
 import { elf, thinMacho } from "../fixtures/native-executable.js";
@@ -27,16 +27,24 @@ let config: Config;
 let spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
 let executable: Artifact.Executable;
 let resource: Artifact.File;
+let toolSource: string;
+
+beforeAll(async () => {
+  // Compile once so short-lived fixture children only execute JavaScript.
+  toolSource = ts.transpileModule(await readFile(new URL("../fixtures/apple-tool.ts", import.meta.url), "utf8"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+});
 
 // Credential-dependent commands mutate real staged files; real Node process handles exercise tool failures and cleanup.
 beforeEach(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-apple-")));
   tool = join(root, "xcrun.fixture");
-  const script = join(root, "xcrun.ts");
+  const script = join(root, "xcrun.mjs");
   configPath = join(root, "config.json");
   config = { log: join(root, "calls.jsonl") };
   await writeFile(tool, "xcrun fixture bytes\n");
-  await copyFile(fileURLToPath(new URL("../fixtures/apple-tool.ts", import.meta.url)), script);
+  await writeFile(script, toolSource);
   await writeFile(configPath, JSON.stringify(config));
   await writeFile(join(root, "native"), thinMacho());
   await writeFile(join(root, "resource"), "resource bytes\n");

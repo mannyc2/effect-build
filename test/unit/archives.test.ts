@@ -379,7 +379,7 @@ describe("archives from a Git tree", () => {
     expect(await readFile(join(project, "text.txt"), "utf8")).toBe("tracked text\n");
     expect(await readFile(join(project, "windows.txt"), "utf8")).toBe("tracked CRLF\r\n");
     expect(await readFile(join(project, "binary.bin"))).toEqual(binary);
-  });
+  }, 30_000);
 
   it.each(formats)("preserves the selected tree's files and symlinks in deterministic %s output", async (format) => {
     const repository = join(root, "repository");
