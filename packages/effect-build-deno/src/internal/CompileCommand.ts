@@ -1,7 +1,6 @@
 import { Effect, Schema } from "effect";
-import type * as CoreArtifact from "effect-build/Artifact";
-import type { SystemTarget } from "effect-build/SystemTarget";
-import { DenoCommandInputInvalid } from "./CommandError.js";
+import { Tool } from "effect-build";
+import type { Target as CoreTarget } from "effect-build/Target";
 import {
   type Check,
   type PermissionValue,
@@ -9,7 +8,6 @@ import {
   renderCheck,
   renderPermission,
   renderProject,
-  validatePath,
   validatePermission,
 } from "./Options.js";
 
@@ -26,85 +24,70 @@ export const Target = Schema.Literals(
 export type Target = typeof Target.Type;
 
 export interface Permissions {
-  readonly allowAll?: boolean;
-  readonly permissionSet?: true | string;
-  readonly noPrompt?: boolean;
-  readonly allowRead?: PermissionValue;
-  readonly allowWrite?: PermissionValue;
-  readonly allowNet?: PermissionValue;
-  readonly allowEnv?: PermissionValue;
-  readonly allowRun?: PermissionValue;
-  readonly allowFfi?: PermissionValue;
-  readonly allowSys?: PermissionValue;
-  readonly allowImport?: PermissionValue;
-  readonly denyRead?: PermissionValue;
-  readonly denyWrite?: PermissionValue;
-  readonly denyNet?: PermissionValue;
-  readonly denyEnv?: PermissionValue;
-  readonly denyRun?: PermissionValue;
-  readonly denyFfi?: PermissionValue;
-  readonly denySys?: PermissionValue;
-  readonly denyImport?: PermissionValue;
-  readonly ignoreRead?: PermissionValue;
-  readonly ignoreEnv?: PermissionValue;
+  readonly allowAll?: boolean | undefined;
+  readonly permissionSet?: true | string | undefined;
+  readonly noPrompt?: boolean | undefined;
+  readonly allowRead?: PermissionValue | undefined;
+  readonly allowWrite?: PermissionValue | undefined;
+  readonly allowNet?: PermissionValue | undefined;
+  readonly allowEnv?: PermissionValue | undefined;
+  readonly allowRun?: PermissionValue | undefined;
+  readonly allowFfi?: PermissionValue | undefined;
+  readonly allowSys?: PermissionValue | undefined;
+  readonly allowImport?: PermissionValue | undefined;
+  readonly denyRead?: PermissionValue | undefined;
+  readonly denyWrite?: PermissionValue | undefined;
+  readonly denyNet?: PermissionValue | undefined;
+  readonly denyEnv?: PermissionValue | undefined;
+  readonly denyRun?: PermissionValue | undefined;
+  readonly denyFfi?: PermissionValue | undefined;
+  readonly denySys?: PermissionValue | undefined;
+  readonly denyImport?: PermissionValue | undefined;
+  readonly ignoreRead?: PermissionValue | undefined;
+  readonly ignoreEnv?: PermissionValue | undefined;
 }
 
 export interface Options extends ProjectOptions, Permissions {
-  readonly cachedOnly?: boolean;
-  readonly check?: Check;
-  readonly quiet?: boolean;
-  readonly allowScripts?: true | readonly [string, ...string[]];
-  readonly envFile?: true | string;
-  readonly ext?: "ts" | "tsx" | "js" | "jsx" | "mts" | "mjs" | "cts" | "cjs";
-  readonly location?: string;
-  readonly preload?: readonly string[];
-  readonly require?: readonly string[];
-  readonly seed?: number;
-  readonly v8Flags?: readonly string[];
-  readonly noCodeCache?: boolean;
-  readonly appName?: string;
-  readonly bundle?: boolean;
-  readonly minify?: boolean;
-  readonly engine?: "v8" | "quickjs";
-  readonly exclude?: readonly string[];
-  readonly excludeUnusedNpm?: boolean;
-  readonly icon?: string;
-  readonly include?: readonly string[];
-  readonly noTerminal?: boolean;
-  readonly selfExtracting?: boolean;
+  readonly cachedOnly?: boolean | undefined;
+  readonly check?: Check | undefined;
+  readonly quiet?: boolean | undefined;
+  readonly allowScripts?: true | readonly [string, ...string[]] | undefined;
+  readonly envFile?: true | string | undefined;
+  readonly ext?: "ts" | "tsx" | "js" | "jsx" | "mts" | "mjs" | "cts" | "cjs" | undefined;
+  readonly location?: string | undefined;
+  readonly preload?: readonly string[] | undefined;
+  readonly require?: readonly string[] | undefined;
+  readonly seed?: number | undefined;
+  readonly v8Flags?: readonly string[] | undefined;
+  readonly noCodeCache?: boolean | undefined;
+  readonly appName?: string | undefined;
+  readonly bundle?: boolean | undefined;
+  readonly minify?: boolean | undefined;
+  readonly engine?: "v8" | "quickjs" | undefined;
+  readonly exclude?: readonly string[] | undefined;
+  readonly excludeUnusedNpm?: boolean | undefined;
+  readonly icon?: string | undefined;
+  readonly include?: readonly string[] | undefined;
+  readonly noTerminal?: boolean | undefined;
+  readonly selfExtracting?: boolean | undefined;
 }
 
-export interface Input<Mode extends CoreArtifact.ObservationMode = CoreArtifact.ObservationMode> extends Options {
+export interface Input extends Options {
   readonly entrypoint: string;
-  readonly scriptArgs?: readonly string[];
-  readonly outfile: string;
-  readonly target?: Target;
-  readonly observation: Mode;
+  readonly scriptArgs?: readonly string[] | undefined;
+  readonly target?: Target | undefined;
 }
 
-export interface WatchInput extends Omit<Input<"unhashed">, "observation"> {
-  readonly noClearScreen?: boolean;
-  readonly watchExclude?: readonly string[];
-}
+const systemTargets = {
+  "x86_64-unknown-linux-gnu": "linux-x64",
+  "aarch64-unknown-linux-gnu": "linux-arm64",
+  "x86_64-pc-windows-msvc": "windows-x64",
+  "aarch64-pc-windows-msvc": "windows-arm64",
+  "x86_64-apple-darwin": "darwin-x64",
+  "aarch64-apple-darwin": "darwin-arm64",
+} satisfies Record<Target, CoreTarget>;
 
-const targetSet = new Set<string>(Target.literals);
-
-export const systemTarget = (target: Target): SystemTarget => {
-  switch (target) {
-    case "x86_64-unknown-linux-gnu":
-      return "linux-x64-gnu";
-    case "aarch64-unknown-linux-gnu":
-      return "linux-aarch64-gnu";
-    case "x86_64-pc-windows-msvc":
-      return "windows-x64";
-    case "aarch64-pc-windows-msvc":
-      return "windows-aarch64";
-    case "x86_64-apple-darwin":
-      return "macos-x64";
-    case "aarch64-apple-darwin":
-      return "macos-aarch64";
-  }
-};
+export const systemTarget = (target: Target): CoreTarget => systemTargets[target];
 
 const permissionFields = [
   ["allow-read", "allowRead"],
@@ -164,9 +147,9 @@ const renderOptions = (input: Options): readonly string[] => [
 ];
 
 export const renderArgv = (
-  input: Omit<Input<CoreArtifact.ObservationMode>, "observation">,
+  input: Input,
   output: string,
-  watch: false | { readonly noClearScreen?: boolean; readonly watchExclude?: readonly string[] } = false,
+  watch: false | { readonly noClearScreen?: boolean | undefined; readonly watchExclude?: readonly string[] | undefined } = false,
 ): readonly string[] => [
   "compile",
   ...(watch === false ? [] : ["--watch"]),
@@ -180,47 +163,9 @@ export const renderArgv = (
   ...(input.scriptArgs ?? []),
 ];
 
-const validatePermissionLists = (
-  operation: "compileExecutable" | "compileWatch",
-  input: Options,
-): Effect.Effect<void, DenoCommandInputInvalid> =>
-  Effect.gen(function*() {
-    for (const [, field] of permissionFields) {
-      yield* validatePermission(operation, field, input[field]);
-    }
-    yield* validatePermission(operation, "allowScripts", input.allowScripts);
-  });
-
-const validateCommon = (
-  operation: "compileExecutable" | "compileWatch",
-  input: Omit<Input<CoreArtifact.ObservationMode>, "observation">,
-): Effect.Effect<void, DenoCommandInputInvalid> =>
-  Effect.gen(function*() {
-    yield* validatePath(operation, "entrypoint", input.entrypoint);
-    yield* validatePath(operation, "outfile", input.outfile);
-    yield* validatePermissionLists(operation, input);
-    if (input.target !== undefined && !targetSet.has(input.target)) {
-      return yield* new DenoCommandInputInvalid({
-        operation,
-        reason: `unsupported Deno 2.9.5 target: ${String(input.target)}`,
-      });
-    }
-  });
-
-export const validateInput = <Mode extends CoreArtifact.ObservationMode>(
-  input: Input<Mode>,
-): Effect.Effect<void, DenoCommandInputInvalid> =>
-  Effect.gen(function*() {
-    yield* validateCommon("compileExecutable", input);
-    if (input.observation !== "hashed" && input.observation !== "unhashed") {
-      return yield* new DenoCommandInputInvalid({
-        operation: "compileExecutable",
-        reason: "observation must be hashed or unhashed",
-      });
-    }
-  });
-
-export const validateWatch = (input: WatchInput): Effect.Effect<void, DenoCommandInputInvalid> =>
-  validateCommon("compileWatch", input);
-
-export const needsExeSuffix = (target: Target | undefined): boolean => target?.includes("windows") === true;
+export const validateOptions = Effect.fnUntraced(function*(operation: string, input: Options): Effect.fn.Return<void, Tool.InputInvalid> {
+  for (const [, field] of permissionFields) {
+    yield* validatePermission(operation, field, input[field]);
+  }
+  yield* validatePermission(operation, "allowScripts", input.allowScripts);
+});

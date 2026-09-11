@@ -1,44 +1,43 @@
-import { Schema } from "effect";
+/// <reference types="bun-types" preserve="true" />
+/// <reference path="../../src/Api/NativeTypes.d.ts" preserve="true" />
 
-export type ApiOperation =
-  | "makeTranspiler"
-  | "transform"
-  | "transformSync"
-  | "scan"
-  | "scanImports"
-  | "build"
-  | "compileExecutableDirect";
+import type * as bun from "bun";
+import { Effect, Schema } from "effect";
+import { Tool } from "effect-build";
+import { supported } from "../Bun.js";
 
-/** The exact Bun 1.3.14 host API is absent from the current JavaScript realm. */
 export class BunApiUnavailable extends Schema.TaggedError<BunApiUnavailable>()("BunApiUnavailable", {
-  capability: Schema.Literals(["Bun.Transpiler", "Bun.build", "Bun.build compile"] as const),
-  expectedVersion: Schema.Literal("1.3.14"),
-  observedVersion: Schema.optionalKey(Schema.String),
+  capability: Schema.String,
   reason: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return `Bun.${this.capability}: ${this.reason}`;
+  }
+}
 
-/**
- * Wraps a native Bun exception without translating it. `cause` is the exact
- * thrown or rejected provider value, so AggregateError diagnostics remain
- * available by identity.
- */
+/** Preserve the original exception, including Bun's AggregateError diagnostics. */
 export class BunApiFailed extends Schema.TaggedError<BunApiFailed>()("BunApiFailed", {
-  operation: Schema.Literals(
-    [
-      "makeTranspiler",
-      "transform",
-      "transformSync",
-      "scan",
-      "scanImports",
-      "build",
-      "compileExecutableDirect",
-    ] as const,
-  ),
+  operation: Schema.String,
   cause: Schema.Unknown,
-}) {}
+}) {
+  override get message(): string {
+    return `Bun ${this.operation} failed: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
+  }
+}
 
-/** Refuses a request whose durable-output fields contradict the selected mode. */
-export class BunBuildModeInvalid extends Schema.TaggedError<BunBuildModeInvalid>()("BunBuildModeInvalid", {
-  mode: Schema.Literals(["memory", "direct", "compileExecutableDirect"] as const),
-  reason: Schema.String,
-}) {}
+export const globalApi = <K extends "build" | "Transpiler">(capability: K) =>
+  Effect.gen(function*(): Effect.fn.Return<typeof bun[K], BunApiUnavailable> {
+    const host: unknown = Reflect.get(globalThis, "Bun");
+    if (typeof host !== "object" || host === null) {
+      return yield* new BunApiUnavailable({ capability, reason: "Requires the Bun runtime" });
+    }
+    const version: unknown = Reflect.get(host, "version");
+    const native: unknown = Reflect.get(host, capability);
+    if (typeof version !== "string" || !Tool.satisfies(supported)(version)) {
+      return yield* new BunApiUnavailable({ capability, reason: `Bun ${String(version)} is outside ${supported}` });
+    }
+    if (typeof native !== "function") {
+      return yield* new BunApiUnavailable({ capability, reason: `Bun.${capability} is absent` });
+    }
+    return native.bind(host) as typeof bun[K];
+  });

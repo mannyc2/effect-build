@@ -1,37 +1,113 @@
-# effect-build 0.7 design
+# effect-build design
 
-## 0. What the library is
+## What it is
 
-**effect-build compiles TypeScript into things you can ship** (native executables,
+effect-build compiles TypeScript into things you can ship (native executables,
 bundles, archives, OS packages, wheels, signed Apple/Windows products, SBOMs) as
 composable Effect programs, and returns a plain record of what it made. Publishing is
-ts-release's job; ts-release consumes files by path and re-hashes them, so the handoff
-is "files on disk plus an optional JSON manifest."
+ts-release's job; it consumes files by path and re-hashes them, so the handoff is
+files on disk plus an optional JSON manifest (`Artifact.encode`).
 
-The user is someone shipping a TS CLI to end users on three OSes. The first example in
-the README is two lines. Everything defensive is a combinator they can add.
+The user is someone shipping a TS CLI to end users on three OSes. The first example
+in the README includes the runtime and layers needed to execute it. Everything defensive is a combinator they can add.
 
-## 2. Core (`packages/effect-build`)
+## Core
 
-Start from `prototype/core/`. Six modules, ~600 lines. Signatures are final unless a
-provider PR demonstrates a concrete need.
+| Module       | Exports                                                                                                                                                                               | Role                                                                                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Target`     | 8 literals (`linux-x64`, `linux-x64-musl`, `linux-arm64`, `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `windows-x64`, `windows-arm64`), `parts`, `all`, `host`                   | Same names ts-release uses. Linux without suffix means glibc.                                                                                                                                                              |
+| `Artifact`   | `File`, `Executable`, `Directory`, `Regular`, `Producer`; `file`, `executable`, `directory`, `verify`, `streamVerified`, `copyVerified`, `readVerified`, `sha256`, `ioError`, `encode`, `decode` | Observe what's on disk into a record. `Executable.target` comes from the header. `Directory.sha256` hashes the sorted manifest; symlinks recorded, not followed.                                                           |
+| `Executable` | `parse`, `inspect`, `matches`, `resolveTarget`, `expectTarget`                                                                                                                        | ELF/Mach-O/PE header facts. A static Linux binary matches gnu and musl.                                                                                                                                                    |
+| `Commit`     | `atomic(outfile, produce, { onExists, prefix, staging })`, `output(outfile, produce, ProducerOptions, staging?)`                                                                      | Stage with final path depth or basename, then commit with recovery. Checks run inside `produce` run before the rename. `output` is what producers do with `atomic`, `onExists` and `prefix`; the producer picks `staging`. |
+| `Tool`       | `InputInvalid`, `argumentIssue`, `locate`, `resolve`, `run`, `redact`, `parseVersion`, `satisfies`, `requireVersion`, `producer`                                                                                                 | Locate and resolve once, record path/version/hash. Nothing re-checks the binary later. Ranges use npm semver.                                                                                                              |
+| `Layout`     | `Entry`, `Issue`, `pathIssue`, `validate`                                                                                                                                             | Shared normalized shipping paths: every explicit or implicit prefix has one NFC/case-folded spelling and only directories have descendants.                                                                                |
+| `Checksums`  | `write`, `verify`                                                                                                                                                                               | `sha256sum -c` compatible writing and verification.                                                                                                                                                                                                 |
 
-| Module | Exports | Notes |
-|---|---|---|
-| `Target` | `Target` schema (8 literals: `linux-x64`, `linux-x64-musl`, `linux-arm64`, `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `windows-x64`, `windows-arm64`), `parts`, `all`, `host` | Same names ts-release uses. Replaces `SystemTarget` (`macos`→`darwin`, `aarch64`→`arm64`, `-gnu` dropped). |
-| `Artifact` | `File`, `Executable`, `Directory`, `Artifact` (union), `Regular` (= File \| Executable), `Producer`, `ArtifactError`; `file`, `executable`, `directory` (observe what's on disk), `verify`, `readVerified`, `sha256`, `encode`, `decode` | `Executable.target` is established from the header, optionally checked against an expected target. `Directory.sha256` hashes the sorted entry manifest; symlinks recorded, not followed. |
-| `Executable` | `Facts`, `parse`, `inspect`, `matches`, `resolveTarget`, `expectTarget` (combinator), `ParseError`, `InspectError`, `TargetMismatch` | The existing ELF/Mach-O/PE parser, simplified. A static Linux binary (no `PT_INTERP`) matches both gnu and musl and is reported as glibc when unconstrained. |
-| `Commit` | `atomic(outfile, produce, { onExists?: "replace" \| "fail" })`, `CommitError` | Stages in a sibling temp dir, `mkdir -p` on the parent, rename into place, uninterruptible around the rename only. Works for files and directories. `produce` must return an artifact at the staged path. |
-| `Tool` | `Resolved`, `resolve`, `run`, `parseVersion`, `satisfies`, `requireVersion` (combinator), `producer`, errors | Resolve once: explicit path or first PATH hit, realpath, hash, probe version. Nothing re-checks the binary later. `run` captures stdout/stderr with an 8 MiB cap and puts stderr in `ToolFailed`. `satisfies` is a 30-line range grammar (`>=1.3.14 <1.4.0 \|\| >=1.4.2 <1.5.0`); only canonical `x.y.z` versions ever match, so canaries and prereleases are refused without a special case. |
-| `Checksums` | `write({ artifacts, outfile })` | `sha256sum -c` compatible. |
+## Providers
 
-Package exports: `.` (namespace re-exports) and `./Artifact`, `./Commit`, `./Executable`,
-`./Target`, `./Tool`, `./Checksums`. Nothing else.
+Each wraps one external toolchain or domain:
 
-Deleted from core: `Author/*` (all of it), `BorrowedOutput`, `DurableFile`, `Claims`,
-`Matrix` (it was `Effect.forEach` + `Effect.result`), `SystemTarget`, `DecimalBytes`,
-`Sha256Value`, `AbsolutePath`/`PortableRelativePath` schemas, `FileMode`,
-`ObservationMode`, `Publication`, `Provenance`/`IntrinsicProvenance`, `adoptFile`/`adoptTree`
-and the adoption protocol, `Tree`, `File.withVerifiedBytes` (→ `Artifact.readVerified`),
-`Tree.withVerifiedSnapshot`, `Tree.projectFile`, every `*Observation` type, every
-`Hashed*`/`Unhashed*` pair.
+```ts
+class X extends Context.Service<X, { tool: Tool.Resolved }>()("effect-build-x/X") {}
+const supported: string                                   // accepted range; the layer's default policy
+const tested: string                                      // exact versions real-tool CI runs
+const layer: (o?: { executable?; version?: string | ((v) => boolean) }) => Layer<X, ...>
+const compile/build/package/...: (input & { outfile } & Commit.ProducerOptions) => Effect<Artifact, ...>
+```
+
+Operations verify their own output before the rename (executables: header vs
+requested target) and commit through `Commit.output`, so `atomic: false` writes
+directly and `onExists`/`prefix` reach the commit; staging depth is the operation's
+own choice. Optional inputs accept `undefined`; callers forward `process.env` values
+and their own optionals without spreading. Domain packages may refine core
+types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
+
+## Decided
+
+- Directory replacement retains a recoverable old tree; regular-file no-replace uses exclusive hard-link creation, while directory no-replace is unsupported.
+- **Checksum paths are relative to their file's directory**, so a staged release tree can move without rewriting them.
+- **Directory archive inputs preserve descendant modes and symlinks**; archive prefixes and sibling staging directories are newly created roots with mode `0755`, independent of the input directory artifact's recorded `rootMode`.
+
+- **Replace on exists by default.** Every producer takes `onExists: "fail"` and `prefix`; `staging` stays
+  the producer's, because files stage nested and import-bearing directories stage sibling. Direct sibling output
+  starts from an empty destination, so a record never holds an earlier build's files.
+- **No tool re-check before launch.** The hash at resolve time is a record, not a lock.
+- **No overwrite guard on executables' inputs.** `Artifact.verify` is opt-in.
+- **Inputs stream.** Hashing, verified copies, archives, wheels and Git source tars move 64 KiB at a
+  time; `readVerified` is the explicit whole-buffer exception. A verified stream fails at EOF, so its
+  output is provisional until then and only atomic staging makes that safe. The only size limits are
+  ZIP32 and ustar field widths, typed as `Archive.FormatLimit`; there is no byte budget to tune.
+- **Static Linux binaries report as glibc** when no target is requested.
+- **One streaming ZIP encoder.** `Archive.Zip.encode` writes archives and wheels; `effect-build-python`
+  depends on `effect-build-archives` for it, so both share the same limits and verified streams.
+- **Bun forces lowercase `.exe` on Windows outputs**, so callers' `outfile` must end in `.exe`
+  for Windows targets; the provider rejects otherwise rather than renaming.
+- **Tested versions are evidence, not compatibility gates.** Bun 1.4.1 is rejected only for emitted builds; native APIs retain independent capability checks.
+- **Deno 2.9.6 removed flags are checked per operation**; unrelated operations remain available.
+- **Deno embeds the output basename**; Windows outputs require lowercase `.exe`
+  so staging and the committed executable have the same name.
+- **Explicit `denort` is hashed and recorded, not executed** to establish identity.
+- **Git source archives fix host newline defaults to LF**; committed `.gitattributes` still controls file conversion.
+- **Node SEA uses a CommonJS preparation blob and resource injection** across Node
+  22–26; the builder and base executable must have matching Node versions. The target is read from the base's
+  header, so a base running under emulation is recorded as itself.
+- **SignTool reads its full SDK version from its binary resource**; string ranges select the first three
+  components, while a caller predicate can pin the full four-component version. The Windows layer reads
+  those bytes itself; `Tool.resolve` hashes incrementally and parses probe output only.
+- **Errors name their tool in `tool`, never `name`**, so `Error.name` stays the `_tag` and every error
+  prints as `Tag: message`.
+- **Windows signing accepts MSIX files and PE executables**; signed executables must retain their input target before commit.
+- **Apple resolves xcrun once**; active Xcode tools select its native commands, and copied app trees preserve framework symlinks.
+- **Effect peers accept every 4.0 release candidate from rc.108.** The workspace pins the tested RC, a
+  non-gating consumer observes the `rc` tag, and moving the tested version is its own change.
+- **bun-types is an optional peer of the Bun API subpath**; the package root references no Bun types.
+- **esbuild is a peer, Rolldown a dependency.** esbuild's API is stable within a minor, so the consumer's
+  install runs in process; the Rolldown wrapper uses `rolldown/experimental`, whose types move outside semver.
+- **Standalone executables sign with the hardened runtime, notarize as ZIPs, and are assessed, never stapled**:
+  Apple issues tickets for them but cannot attach one. Entitlements come from the caller; the Bun provider lists its own.
+- **PKGs carry one signed app or one signed executable.** An executable's payload root installs to
+  `/usr/local/bin` unless `installLocation` says otherwise; that is where a CLI belongs.
+- **Trusted Signing credentials are two paths.** SignTool's client library reads Azure identity from the
+  environment, so the library holds no Azure secret.
+
+- **Core manifests project core fields only.** Provider schemas preserve richer signing/runtime/product/notary records.
+- **Release retries consume retained exact tarballs** and verify registry bytes before skipping an existing version.
+- **SHA-256 is the only digest.** Every artifact and directory entry carries one; there is no unhashed
+  observation and no algorithm choice.
+- **Layouts reject case-insensitive and NFC collisions at every path prefix on every host.** Core `Layout` owns this shipping guarantee for archives, wheels and app bundles, including implicit directories; local artifact observations still record host-specific names.
+- **Archive and wheel bytes depend only on their inputs**: DEFLATE level 6, fixed ZIP timestamps, zero tar
+  owners and times, zero gzip mtime. There are no timestamp, ownership, comment or compression options.
+- **Windows signatures always carry an RFC3161 SHA-256 timestamp, and SignTool warnings fail.** Exit 2 means
+  completed with warnings; a release signature with warnings is a failure here.
+- **Signing identities are certificate fingerprints, never names or ad hoc.** Names are ambiguous and an ad hoc
+  signature cannot be notarized; PFX files and Trusted Signing metadata name their certificate themselves.
+- **No argv passthrough.** Operations expose typed options; anything else runs through `Tool.run` with the
+  provider's resolved tool.
+- **Source archives take a tree ID, not a ref**, so the bytes are fixed before Git runs; `excludes`, gitlinks
+  and `.git` components are the only omissions.
+- **Node SEA ad-hoc signs on Darwin.** Injection invalidates the base signature and an unsigned arm64 binary
+  will not launch; `Apple.sign` replaces the ad hoc signature.
+
+- **Filesystem failures name the operation**: reads distinguish absence from access/I/O failure, writes report `unwritable`, opaque native copies report both paths as `copy-failed`, and tool inspection never silently treats an inaccessible path as absent.
+- **Commit recovery paths name retained output only.** Empty-backup cleanup can add diagnostic detail but cannot replace a failed rename. Failed destructive cleanup reports only observed remnants, which may be partial.
+- **Tool owns failure redaction.** Providers supply secret values; argv and failed-process diagnostics are scrubbed together, while successful data and live output remain raw.

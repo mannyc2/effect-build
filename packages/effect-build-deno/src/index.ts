@@ -1,1 +1,1 @@
-export * as Command from "./Command/index.js";
+export * from "./Deno.js";

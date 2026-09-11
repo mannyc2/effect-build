@@ -1,5 +1,0 @@
-{
-  "assets": [
-    { "name": "app.js", "bytes": "large", "budgetBytes": 50000 }
-  ]
-}

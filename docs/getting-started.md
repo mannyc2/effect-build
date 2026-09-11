@@ -1,139 +1,146 @@
 # Getting started
 
-The [README quick start](../README.md#compile-your-first-executable) creates a complete Bun executable from a Node.js build script. This guide explains how to adapt it and when to choose another operation.
+This guide compiles one TypeScript file into a native executable, explains every line of the
+program that did it, and points at what to do next. It takes about five minutes.
 
-## Install and run
+## Prerequisites
 
-The examples use `effect-build` packages at `0.7.0` and matching Effect/platform packages at `4.0.0-rc.108`. Pin the Effect release explicitly: an unqualified `effect` install can select a different major or prerelease. The supported peer range is recorded in each package's `package.json`; the examples use the workspace's exact development pins.
+- **Node 22.19 or newer** runs the build program. Node 24 can also run a `build.ts` directly,
+  using its built-in type stripping.
+- **Bun 1.3.14 or newer** is the compiler in this guide. Install it from [bun.sh](https://bun.sh).
+  It has to be on `PATH`, or at a path you pass to the provider layer.
+- **An ESM project**: a `.mjs` file, `"type": "module"` in `package.json`, or a TypeScript
+  project with `NodeNext` or `Bundler` module resolution. The packages are ESM-only.
 
-```sh
-npm install --save-exact effect-build-bun@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
-```
-
-There is no `effect-build` CLI. Write a build program and execute it with your chosen runtime. The quick start uses `build.mts`, which [Node runs as a TypeScript ES module](https://nodejs.org/dist/latest-v24.x/docs/api/typescript.html); Node 24.14.1 is the workspace's Node host pin. Running TypeScript this way does not typecheck it.
-
-The compiler is a separate installation. Bun's command adapter admits **Bun 1.3.14**, Deno's admits **Deno 2.9.5**, and esbuild's command adapter admits **esbuild 0.28.2**. A newer executable is not automatically admitted. See the [provider guide](providers.md) for the full requirements, including Node SEA's Linux host restriction.
-
-For a TypeScript editor or CI check of a standalone `build.mts`, add the toolchain and check without emitting JavaScript:
+## Install
 
 ```sh
-npm install --save-dev --save-exact typescript@6.0.3 @types/node@24.3.0
-npx tsc --noEmit --strict --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext build.mts
+npm install --save-dev --save-exact effect-build-bun@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
-`skipLibCheck` applies to dependency declaration files; the build program is still checked. The repository's [verification gate](../CONTRIBUTING.md) also checks all example source against the built workspace packages.
+`effect-build-bun` depends on the core `effect-build` package, so that comes along. Effect 4 is
+a release candidate: pin `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` to
+the same version, because the platform packages use caret ranges and can otherwise select a
+newer shared candidate with a newer Effect peer. 4.0.0-rc.108 is the tested version; see
+[compatibility](compatibility.md) for the accepted range.
 
-## Compose the build once
+## The first build
 
-In the quick start, three lines have distinct jobs:
-
-| Expression                                           | Responsibility                                                                   |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `Command.CompileExecutable.compileExecutable(input)` | Describes one build; it does not run until the Effect is executed.               |
-| `Effect.provide(Command.layer())`                    | Selects and observes Bun, then provides it to the program.                       |
-| `Effect.provide(NodeServices.layer)`                 | Supplies filesystem, path, crypto, and child-process services for the Node host. |
-
-`NodeRuntime.runMain` starts the program, reports failures, and handles process signals. Use it at a script's entry point. Inside an existing Effect application, compose the build into the application's Effect instead of starting a nested runtime.
-
-For several operations with the same compiler, provide the compiler layer around the whole program. They then share that selected tool. The provider reauthenticates its bytes before every launch; replacing the compiler halfway through a build causes a typed failure.
-
-## Choose an exact compiler path
-
-By default, `Command.layer()` searches `PATH`. If distinct canonical executables make selection ambiguous, choose one explicitly. Add these imports and replace the quick start's layer provision with a stored layer:
+Create `src/cli.ts`:
 
 ```ts
-import { Schema } from "effect";
-import { Command } from "effect-build-bun";
-import * as Artifact from "effect-build/Artifact";
-
-const compiler = Command.layer({
-  executable: Schema.decodeUnknownSync(Artifact.AbsolutePath)("/opt/bun-1.3.14/bin/bun"),
-});
+console.log("Hello!");
 ```
 
-Use `Effect.provide(compiler)` where the quick start uses `Effect.provide(Command.layer())`. Replace the example path with your installation's normalized absolute path. On Windows, use a normalized absolute Windows path with escaped backslashes. Decoding `Artifact.AbsolutePath` validates the path's form; selection checks whether a usable executable exists there.
+Save this as `build.mjs`. It is complete: no TypeScript runner, no wrapper script.
 
-Install `effect-build@0.7.0` directly when importing its modules in your application. Provider packages depend on core, but a direct dependency makes your own imports explicit.
-
-## Customize a Bun executable
-
-Replace the compile call's input with:
-
-```ts
-import { Command } from "effect-build-bun";
-
-const input = {
-  entrypoints: ["hello.ts"],
-  outfile: "dist/hello-minified.exe",
-  observation: "hashed",
-  options: {
-    minify: true,
-    sourcemap: "inline",
-  },
-} satisfies Command.CompileExecutable.Input<"hashed">;
-```
-
-Then call `Command.CompileExecutable.compileExecutable(input)`. Paths are relative to the process's working directory, or to `cwd` when you provide one. Inline source maps stay inside the one executable; this finalizer does not publish sidecar map files.
-
-Omit `target` for the compiler's native default. Set a provider target such as `"bun-linux-x64"` only when you intend to target that platform. The accepted target vocabulary, compiler runtime downloads, and the ability to run the result are separate concerns. Cross-target compilation may require provider-managed downloads; it does not make the result runnable on your build host.
-
-## Understand the result
-
-With `observation: "hashed"`, the Bun compiler returns a durable executable with these useful fields:
-
-| Field              | Meaning                                                               |
-| ------------------ | --------------------------------------------------------------------- |
-| `path`             | Absolute location of the committed executable.                        |
-| `bytes`            | Exact byte count as a decimal string.                                 |
-| `digest.value`     | SHA-256 digest as 64 lowercase hexadecimal characters.                |
-| `digest.algorithm` | `"sha256"`.                                                           |
-| `target`           | Core system target established by executable inspection.              |
-| `nativeFormat`     | Inspected `"elf"`, `"mach-o"`, or `"pe"` format.                      |
-| `tool`             | Observation of the selected compiler, including its content identity. |
-
-Use `observation: "unhashed"` if your returned value does not need a digest. This changes the result type; it does not bypass validation or the finalizer's internal content checks. Adoption and verified-byte continuations require the hashed form.
-
-The destination must be unused. Finalizers create parent directories as needed, work in private staging beside the destination, and commit only after validating the candidate. An existing output yields a destination error. For repeated production builds, give each build a unique destination; for the demo, remove only the previous demo output deliberately before rerunning.
-
-## Bundle in memory with esbuild
-
-If you want JavaScript bytes to consume in your application, start with the in-process API:
-
-```sh
-npm install --save-exact effect-build-esbuild@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
-```
-
-Save as `bundle.mts` and run `node bundle.mts`:
-
-```ts
-import { NodeRuntime } from "@effect/platform-node";
+```js
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import { Api } from "effect-build-esbuild";
+import * as Bun from "effect-build-bun";
 
-const program = Effect.gen(function*() {
-  const result = yield* Api.Build.build({
-    stdin: {
-      contents: "export const greeting: string = 'Hello from esbuild';",
-      loader: "ts",
-    },
-    bundle: true,
-    format: "esm",
-    write: false,
-  });
-
-  for (const file of result.outputFiles) {
-    yield* Effect.log(file.text);
-  }
-});
-
-NodeRuntime.runMain(program);
+NodeRuntime.runMain(
+  Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }).pipe(
+    Effect.tap((artifact) => Effect.log(artifact)),
+    Effect.provide(Bun.layer()),
+    Effect.provide(NodeServices.layer),
+  ),
+);
 ```
 
-This prints bundled JavaScript. The package supplies esbuild as a dependency, so this example needs neither compiler discovery nor a platform services layer. `outputFiles` is the native esbuild result; nothing has been committed to a destination. For a long-running rebuild/watch loop, use the [scoped context example](../examples/README.md#esbuild).
+Run it, then run what it built:
+
+```sh
+node build.mjs
+./dist/cli
+```
+
+On Windows, use `outfile: "dist/cli.exe"` and run `.\dist\cli.exe`: Bun always names Windows
+executables `.exe`, and the provider refuses an `outfile` that does not. Running the build again
+replaces `dist/cli`.
+
+The build logs the artifact record:
+
+```
+[08:07:05.920] INFO (#2): {
+  kind: 'executable',
+  path: '/home/you/app/dist/cli',
+  bytes: 63446114,
+  sha256: 'd6f24411b71792aa84488e109dccc74ba6816b03af0647b1f065f0117ff7a73c',
+  producedBy: { name: 'bun', version: '1.3.14', path: '/usr/local/bin/bun', sha256: 'e0c90ec1…' },
+  target: 'darwin-arm64',
+  format: 'mach-o'
+}
+```
+
+## What each line does
+
+- `Bun.compile({ entrypoints, outfile })` describes a `bun build --compile` run and returns an
+  Effect. Nothing happens until the Effect runs. The operation stages the executable next to
+  `outfile`, reads its header to confirm the target, records the file, and renames it into place.
+- `Effect.tap((artifact) => Effect.log(artifact))` logs the record and passes it through.
+- `Effect.provide(Bun.layer())` supplies the compiler. The layer finds `bun` on `PATH`, resolves
+  symlinks, hashes the binary, probes its version once, and checks the version against
+  `Bun.supported` (`>=1.3.14 <2.0.0`). Every later operation uses that resolved tool; nothing
+  re-checks it. `Bun.layer({ executable: "/opt/bun/bin/bun" })` selects a specific binary, and
+  `Bun.layer({ version: "^1.4.2" })` changes the accepted range. An `undefined` executable, such
+  as an unset environment variable, means `PATH`, so `Bun.layer({ executable: process.env.MY_BUN })`
+  needs no branch.
+- `Effect.provide(NodeServices.layer)` supplies the filesystem, path, crypto, and child-process
+  services from Node. On Bun, `BunServices.layer` from `@effect/platform-bun` does the same.
+- `NodeRuntime.runMain` runs the program, and on failure prints the error and exits with a
+  failing status.
+
+## The record
+
+Every artifact has the same core fields. Executables and directories add a few more.
+
+| Field        | Meaning                                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| `kind`       | `file`, `executable`, or `directory`.                                                                   |
+| `path`       | Absolute path of the output.                                                                            |
+| `bytes`      | Size as a number. A directory's `bytes` is the total of its files.                                      |
+| `sha256`     | Hex digest of the file. A directory's digest hashes its sorted entry manifest.                          |
+| `producedBy` | The tool or package that made it: `name`, `version`, and for external tools their `path` and `sha256`.  |
+| `target`     | Executables only: one of the eight [targets](../packages/effect-build#target), read from the header.    |
+| `format`     | Executables only: `elf`, `mach-o`, or `pe`.                                                             |
+| `entries`    | Directories only: every file, directory, and symlink with its `path`, `mode`, and for files its digest. |
+
+The record is data. `Artifact.encode([artifact])` turns a list of them into plain JSON for a
+manifest, `Artifact.decode` validates one back, and `Artifact.verify(artifact)` re-reads the
+file and fails if a byte changed. Those live in the core package:
+
+```sh
+npm install --save-dev --save-exact effect-build@0.7.0
+```
 
 ## Next steps
 
-- Run [Bun, Deno, esbuild, and Node SEA examples](../examples/README.md), including a bounded matrix.
-- Use [typed errors](errors.md) to handle expected failures without parsing compiler messages.
-- Read the [core package guide](../packages/effect-build/README.md) before handing results to another system.
-- Consult [provider options and support](providers.md) before changing compiler versions or targets.
+**Cross-compile.** Add `target: "linux-arm64"` (or any other [target](../packages/effect-build#target))
+to `Bun.compile`. Bun downloads the runtime for that target on first use. The provider checks the
+header of what came out against what you asked for.
+
+**Pass compiler options.** `options: { minify: true, sourcemap: "inline", bytecode: true }` and the
+rest of `Bun.CompileOptions` map to `bun build --compile` flags.
+
+**Build a matrix.** Share the layer across operations by providing it once around an
+`Effect.gen` program, and fan out with `Effect.forEach(targets, compile, { concurrency: 2 })`. The
+[recipes](recipes.md) show this, along with archives, checksums, packages, wheels, signing, and
+SBOMs, and the [CLI example](../examples/cli) is a complete release.
+
+**Keep the records.** Write `Artifact.encode(artifacts)` to a manifest file at the end of a build
+and hand it to whatever publishes. Verify with `Artifact.verify` before trusting a file that was
+written in an earlier step or an earlier process.
+
+## When something goes wrong
+
+Failures are typed errors with a `_tag` and useful fields, and an unhandled one prints as
+`Tag: message`. The [errors reference](errors.md) lists all of them. The ones you meet first:
+
+- `ToolNotFound: bun not found (searched: PATH)`: install Bun, or pass
+  `Bun.layer({ executable: "/absolute/path/to/bun" })`.
+- `ToolVersionUnsupported: bun 1.2.0 is not supported (>=1.3.14 <2.0.0)`: upgrade, or pass a
+  `version` range you accept.
+- `InputInvalid: Bun.compile: outfile for windows-x64 must end with .exe`: name Windows outputs `.exe`.
+- `ToolFailed`: the compiler exited unsuccessfully. The error carries `exitCode`, `stdout`, and
+  `stderr`; `onOutput` on the operation streams both while the tool runs.

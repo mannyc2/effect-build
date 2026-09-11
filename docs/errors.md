@@ -1,112 +1,143 @@
-# Errors and troubleshooting
+# Errors and checks
 
-Each operation declares its own Effect error channel. Core errors describe tool identity and artifact lifecycle failures;
-provider errors retain native input, exit, and diagnostic details. There is no shared `BuildError` or generic `ToolFailed`
-wrapper.
+Every failure in effect-build is a typed error in the Effect error channel. This page lists them,
+shows how to handle them, and explains the atomic output behind every producer, including what
+happens when a commit fails.
 
-## Read the error tag and stage
+## The shape of an error
 
-Command layer acquisition can fail while resolving or probing a tool. A later operation can fail admission,
-reauthentication, production, inspection, or finalization. Handle errors after providing the layer when you want one
-boundary covering both acquisition and execution.
-
-| Error tag                                                                      | Meaning                                                               | What to check                                                                                 |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `ToolNotFound`                                                                 | No usable executable was selected                                     | Install the required tool yourself and pass its absolute path                                 |
-| `ToolSelectionInvalid`                                                         | Explicit selection or provider observation is invalid                 | Path normalization, executable identity, and `reason`                                         |
-| `ToolSelectionAmbiguous`                                                       | Multiple canonical executables match `PATH`                           | Inspect `candidates`; pass the intended absolute path                                         |
-| `SelectedToolChanged`                                                          | Selected tool bytes changed after selection                           | `path`, `expected`, and `observed`; intentionally reacquire a layer for a changed tool        |
-| `ArtifactInvalid`                                                              | A core observation could not establish a valid artifact/tool file     | The recorded `path` and `reason`                                                              |
-| `BunCommandUnsupported`, `DenoCommandUnsupported`, `EsbuildCommandUnsupported` | Selected version does not meet that operation's policy                | Exact versions in [provider drivers](providers.md#tool-versions-and-runtime-requirements)       |
-| `NodeSeaUnsupported`, `NodeSeaRelationRejected`                                | SEA version, capability, target, or builder/base relation was refused | Node version, `--build-sea`, Linux x64 GNU target, matching builder/base versions             |
-| Provider `*InputInvalid` or API mode error                                     | The request does not fit that operation                               | Exported input type and error `reason`; memory/direct/finalized output selection              |
-| Provider `*TransportFailed`                                                    | Launch or stream transport failed                                     | Underlying `cause`, executable access, working directory, platform services                   |
-| Provider `*CommandFailed`                                                      | The process exited unsuccessfully                                     | `exitCode`, raw `stdout`/`stderr`, and truncation flags                                       |
-| Provider `*CommandOutputTruncated`                                             | A successful stdout operation exceeded its capture bound              | Raise `outputLimitBytes` deliberately; never consume the captured prefix as a complete bundle |
-
-Error classes need not be imported to match their `_tag`. Some provider errors are exposed through public operation/layer
-types without a public constructor export. Avoid importing package-private `internal` modules.
-
-## Keep native diagnostics
-
-For example, log a failed Bun command's native stderr and preserve the original error:
+- Each error is a tagged class with a `_tag`, so `Effect.catchTag` and `Effect.catchTags` select
+  it, and structured fields, so you inspect data instead of parsing tool output.
+- Each error has a `message`, and an unhandled failure prints as `Tag: message`, for example
+  `ToolNotFound: bun not found (searched: PATH)`. Tool errors name their tool in a `tool` field,
+  never in `name`, so `Error.name` stays the tag.
+- An operation's error type lists exactly the errors it can raise. `Bun.compile` can fail with
+  `Bun.CompileError`, a union of the input, tool, artifact, executable, and commit errors below.
+- Invalid input to any operation fails with `Tool.InputInvalid`, whose `operation` names the
+  operation (`Bun.compile`, `Archive.zip`) and whose `reason` says what was wrong, so one
+  `Effect.catchTag("InputInvalid", ...)` handles bad input from every provider.
 
 ```ts
-import { Effect } from "effect";
-import { Command } from "effect-build-bun";
-
-const compile = Command.CompileExecutable.compileExecutable({
-  entrypoints: ["./src/cli.ts"],
-  outfile: "./dist/cli.exe",
-  observation: "hashed",
-}).pipe(
-  Effect.catchTag("BunCommandFailed", (error) =>
-    Effect.gen(function*() {
-      yield* Effect.logError({
-        operation: error.operation,
-        exitCode: error.exitCode,
-        stderr: new TextDecoder().decode(error.stderr),
-        stderrTruncated: error.stderrTruncated,
-      });
-      return yield* Effect.fail(error);
-    })),
+const compile = Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }).pipe(
+  Effect.catchTag(
+    "ToolFailed",
+    (failure) =>
+      Effect.logError(`bun exited ${failure.exitCode}\n${failure.stderr}`).pipe(Effect.andThen(Effect.fail(failure))),
+  ),
 );
 ```
 
-The enclosing application still provides the command and platform layers. This handler observes command failure only;
-other typed failures propagate unchanged.
+## Core errors
 
-For command failures, streams are retained as bounded `Uint8Array` prefixes. Read `stdoutTruncated` and `stderrTruncated`
-before treating diagnostics as complete. `publication: "provider-direct-durable"` means partial output can remain after a
-failed direct build. It does not claim that a directory was finalized successfully.
+| Error                       | Tag                        | Fields and meaning                                                                                                               |
+| --------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `Tool.NotFound`             | `ToolNotFound`             | `tool`, `searched`: no executable at the explicit path or on `PATH`.                                                             |
+| `Tool.ProbeFailed`          | `ToolProbeFailed`          | `tool`, `path`, `detail`: filesystem inspection or the version probe failed; native details are retained.                                                 |
+| `Tool.VersionUnsupported`   | `ToolVersionUnsupported`   | `tool`, `version`, `supported`: the selected tool fails the requested range.                                                     |
+| `Tool.Failed`               | `ToolFailed`               | `tool`, `args`, `exitCode`, `stdout`, `stderr`, `stdoutTruncated`, `stderrTruncated`: the command exited unsuccessfully.         |
+| `Tool.SpawnFailed`          | `ToolSpawnFailed`          | `tool`, `detail`: the process could not start or finish.                                                                         |
+| `Tool.InputInvalid`         | `InputInvalid`             | `operation`, `reason`, optional `path`: the operation rejected its input; `path` names the entry at fault.                       |
+| `Artifact.ArtifactError`    | `ArtifactError`            | `path`, `reason` (`not-found`, `not-a-file`, `not-a-directory`, `unreadable`, `unwritable`, `copy-failed`, `changed`, `invalid-metadata`), optional `detail`. |
+| `Executable.InspectError`   | `ExecutableInspectError`   | `path`, `reason`, optional `detail`: the file is missing, unreadable, or not a native executable this package understands.                          |
+| `Executable.TargetMismatch` | `ExecutableTargetMismatch` | `path`, `expected`, `observed`: the header describes a different target than requested.                                          |
+| `Executable.ParseError`     | `ExecutableParseError`     | `reason`: `Executable.parse` was given bytes that are not a supported header.                                                    |
+| `Commit.CommitError`        | `CommitError`              | `destination`, `reason`, optional `detail` and `recoveryPath`: staging, commit, or restoration failed. Reasons are listed below. |
 
-For esbuild API rejection, `EsbuildFailed.cause` preserves the native rejection and `.errors`/`.warnings` expose its native
-diagnostic arrays. Bun API calls preserve native `BuildOutput`, including its `success` and `logs` fields; inspect that
-result as well as handling `BunApiFailed` when a call rejects. A successful Effect containing a native result is not a
-new interpretation of that provider's success semantics.
+## Provider errors
 
-## Finalization failures
+| Error                                                                       | Tag                                 | Meaning                                                                                                           |
+| --------------------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `Archive.FormatLimit`                                                       | `ArchiveFormatLimit`                | `format`, `limit`, `maximum`, optional `path`: valid input exceeds a ZIP32 or ustar field. Raised before staging. |
+| `Archive.EntrySizeMismatch`                                                 | `ArchiveEntrySizeMismatch`          | `path`, `expected`, `actual`: an entry's stream delivered a different byte count than its record.                 |
+| `Archive.TarInvalid`                                                        | `ArchiveTarInvalid`                 | `path`, `offset`, `detail`: the tar that `git archive` exported could not be decoded.                             |
+| `Esbuild.EsbuildFailed`                                                     | `EsbuildFailed`                     | `operation`, `cause`, with `errors` and `warnings` from esbuild's own diagnostics.                                |
+| `Rolldown.Failed`                                                           | `RolldownFailed`                    | `operation`, `cause`, with `errors` from Rolldown's diagnostics.                                                  |
+| `NodeSea.Failed`                                                            | `NodeSeaFailed`                     | `operation`, `cause`: blob generation, injection, or signing failed.                                              |
+| `Build.BunApiFailed`, `BunApiUnavailable`                                   | `BunApiFailed`, `BunApiUnavailable` | The native Bun API failed, or the program is not running on Bun.                                                  |
+| `Bundle.DenoBundleFailed`, `DenoBundleUnavailable`, `DenoBundleModeInvalid` | same names                          | The native Deno bundle API failed, is absent, or was called with mismatched `write` options.                      |
+| `Apple.Notary.ResultNotAccepted`                                            | `NotaryResultNotAccepted`           | A submission is still pending or was rejected; the status is preserved.                                           |
+| `Apple.Notary.ResponseInvalid`                                              | `NotaryResponseInvalid`             | notarytool returned JSON the package could not read.                                                              |
 
-File, tree, and executable finalizers use parallel error families, such as `FileDestinationLocked`,
-`TreeDestinationLocked`, and `ExecutableDestinationLocked`.
+Native diagnostics survive: `ToolFailed` keeps both streams, `EsbuildFailed` keeps esbuild's
+message arrays, and signing tools pass supplied credentials to `Tool.run`'s `redact` option.
+Redaction covers failed argv, stdout, stderr, and launch diagnostics. Successful output and
+`onOutput` chunks are raw data. Filesystem errors distinguish missing inputs, failed reads, and
+failed writes; permission errors never imply that a path is missing. An opaque native copy
+reports `copy-failed` with both paths rather than guessing which side caused the error.
 
-| Suffix               | Meaning and response                                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `DestinationInvalid` | Destination resolution or setup failed; check the path and parent directory access                                  |
-| `DestinationLocked`  | Destination exists or conflicts with another in-process claim; choose a fresh destination or coordinate the writers |
-| `CandidateMissing`   | Production did not leave the expected candidate                                                                     |
-| `CandidateChanged`   | Candidate changed while it was being observed or inspected; find the competing writer                               |
-| `InspectionFailed`   | Executable inspection did not establish consistent runtime/format/target facts                                      |
-| `CommitFailed`       | Filesystem commit failed; inspect `reason` and destination state                                                    |
+## Diagnostics while a tool runs
 
-Provider-specific inspectors may also return their own failure, such as `NativeExecutableInspectionFailed` or
-`NodeSeaCandidateInvalid`. The finalizer preserves producer and inspector failures in its declared error union.
+`Tool.run` and every operation that spawns a tool accept `onOutput`, which receives each stdout
+and stderr chunk as it arrives, including bytes beyond the retained limit. Retained buffers are
+8 MiB per stream by default and report truncation explicitly; Bun's in-memory `build` uses an
+uncapped stdout channel because its output is the result. Bun and Deno `watch` inherit stdout
+and stderr by default; pass `stdio: "pipe"` when your program consumes the child's streams.
 
-Finalized outputs never overlay an existing destination. Repeating a successful build with the same `outfile` can therefore
-produce `ExecutableDestinationLocked`; this is expected. Do not delete an output in a generic error handler, because it
-may belong to an earlier build or another writer.
+## Checks
 
-`FileVerificationFailed` and `TreeVerificationFailed` mean the durable path no longer proves the identity you received.
-It may be missing, aliased, changed during observation, or have different content. Stop that handoff and inspect the
-mismatch; retrying the upload or trusting only the saved digest would not repair it.
+Checks are combinators and functions you add where you need them; nothing runs them for you
+except where a producer verifies its own output before committing.
 
-## Scope and interruption
+| Check                     | What it does                                                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Artifact.verify`         | Re-reads a file or directory and fails with `changed` if any byte, mode, or entry differs from the record.                                   |
+| `Artifact.readVerified`   | Returns a file's bytes, bounded to the recorded size, or fails.                                                                              |
+| `Artifact.streamVerified` | Streams a file's bytes while hashing them; the stream fails at the end if they changed, so output written from it is provisional until then. |
+| `Artifact.copyVerified`   | Copies through `streamVerified`, so the destination holds exactly the recorded bytes or nothing.                                             |
+| `Executable.expectTarget` | Re-reads an executable's header after a step that rewrote it (signing, stripping) and fails on a mismatch.                                   |
+| `Tool.requireVersion`     | Applies a range or predicate to a resolved tool; the layers use it for `supported`.                                                          |
 
-Command interruption closes its process scope. esbuild context closure cancels and disposes the native context. Bun's
-in-process `Bun.build` has no cancel handle, so interrupting its Effect stops awaiting without guaranteeing native work
-has stopped. Direct output and cache changes can survive interruption.
+Because a verified stream fails only at EOF, producers run it inside staged output: a wheel or
+archive whose input changed mid-stream is discarded with its staging directory.
 
-Interruption and defects remain in Effect's `Cause`; they are not converted into ordinary build failures. In particular,
-a matrix reports typed cell failures but returns no report when interrupted. Outputs already finalized by successful cells
-are not rolled back.
+## Atomic output
 
-Borrowed-output errors describe a temporary lifetime:
+Every producer accepts the same three options, `Commit.ProducerOptions`, and forwards them to
+`Commit.output`:
 
-- `BorrowedOutputExpired`: `observe` was used after the continuation ended.
-- `BorrowedOutputChanged`, `Missing`, or `Escaped`: the candidate changed, disappeared, or escaped its owned root.
-- `BorrowedOutputObservationFailed`: observation could not establish identity.
-- `CleanupFailedAfterSuccessfulUse`: the continuation succeeded but its temporary output could not be removed.
+| Option     | Default            | Effect                                                                                                                                                                |
+| ---------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atomic`   | `true`             | Stage in a temporary directory next to the destination, verify, then rename. `false` writes the destination directly, with no staging or rename.                      |
+| `onExists` | `"replace"`        | `"replace"` renames over an existing destination. `"fail"` refuses to replace a regular file, using exclusive hard-link creation, and is unsupported for directories. |
+| `prefix`   | `".effect-build-"` | Name prefix of the staging directory.                                                                                                                                 |
 
-Provide `BorrowedOutput.CleanupReporter.layer` for the default cleanup warning logger, or supply a custom reporter. When
-cleanup also fails after the main use has failed, the reporter retains that diagnostic without replacing the primary
-failure.
+Staging depth is the producer's own choice. Files stage nested, under `<staging>/<basename>`, so
+tools that embed the output name (Bun, Deno, Apple's packagers) see the final basename.
+Directories that contain relative imports or source maps stage as siblings, at the final depth,
+so those paths stay valid. `Commit.atomic(outfile, produce, { onExists, prefix, staging })` gives
+your own producers the same machinery, and `Commit.output` is what the built-in producers call.
+
+With `atomic: false`, the destination's parent is created and the producer writes the final
+path. A directory producer starts from an empty destination, so an earlier build's files never
+enter the record. `onExists: "fail"` is checked before production and is not exclusive: a
+concurrent writer can still win.
+
+### Replacement and recovery
+
+File replacement is one rename, atomic on every supported OS. Directory replacement moves the old
+tree aside, renames the new tree in, then removes the old one; readers can see a brief absent
+destination between the renames. If the second rename fails, the old tree is restored.
+
+`CommitError.reason` says which step failed:
+
+| Reason                             | Meaning                                                                                                                |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `inspect-failed`                  | The destination could not be inspected; production or replacement stops with the native detail. |
+| `staging-failed`                   | The staging or backup directory could not be created.                                                                  |
+| `staged-path-mismatch`             | The producer returned an artifact recorded at a path other than the staged one.                                        |
+| `exists`                           | `onExists: "fail"` and the destination is occupied.                                                                    |
+| `directory-no-replace-unsupported` | `onExists: "fail"` was requested for a directory; the portable filesystem has no exclusive directory rename.           |
+| `rename-failed`                    | A rename failed; the previous directory remains at the destination or was restored.                                                           |
+| `rollback-failed`                  | The commit and the restoration both failed. `recoveryPath` points to the complete old tree.                            |
+| `remove-failed`                    | Removal failed. If `recoveryPath` is present, the new tree is committed and it names the old output remaining after cleanup; it may be partial. |
+
+A failed recursive cleanup can remove part or all of the old tree. The error retains the
+backup location in `detail`; `recoveryPath` is present only if the remaining old output can
+be observed there. If that inspection also fails, its diagnosis is retained too.
+
+When a rename fails and removing the now-empty backup also fails, `rename-failed` retains
+both diagnoses in `detail`. It has no `recoveryPath`: the old output is already at the
+destination, and the leftover directory holds nothing to recover.
+
+`onExists: "fail"` for files needs a filesystem that supports hard links; when it fails, the
+existing destination is intact.

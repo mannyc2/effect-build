@@ -1,9 +1,19 @@
 {
   "extends": "../../tsconfig.examples.json",
   "compilerOptions": {},
-  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "include": [
+    "index.ts",
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../../packages/effect-build" },
-    { "path": "../../packages/effect-build-bun" }
+    {
+      "path": "../../packages/effect-build"
+    },
+    {
+      "path": "../../packages/effect-build-archives"
+    },
+    {
+      "path": "../../packages/effect-build-bun"
+    }
   ]
 }

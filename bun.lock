@@ -9,6 +9,7 @@
         "@effect/platform-deno": "4.0.0-rc.108",
         "@effect/platform-node": "4.0.0-rc.108",
         "@types/node": "24.3.0",
+        "@types/semver": "7.8.0",
         "dprint": "0.49.1",
         "effect": "4.0.0-rc.108",
         "effect-build": "workspace:*",
@@ -36,19 +37,17 @@
         "@effect/platform-node": "4.0.0-rc.108",
         "effect": "4.0.0-rc.108",
         "effect-build": "workspace:^",
+        "effect-build-apple": "workspace:^",
         "effect-build-archives": "workspace:^",
-        "effect-build-esbuild": "workspace:^",
-      },
-      "devDependencies": {
-        "fflate": "0.8.3",
-      },
-    },
-    "examples/bun": {
-      "name": "@effect-build/example-bun",
-      "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
         "effect-build-bun": "workspace:^",
+        "effect-build-deno": "workspace:^",
+        "effect-build-esbuild": "workspace:^",
+        "effect-build-nfpm": "workspace:^",
+        "effect-build-node-sea": "workspace:^",
+        "effect-build-python": "workspace:^",
+        "effect-build-rolldown": "workspace:^",
+        "effect-build-sbom": "workspace:^",
+        "effect-build-windows": "workspace:^",
       },
     },
     "examples/cli": {
@@ -57,44 +56,24 @@
         "@effect/platform-node": "4.0.0-rc.108",
         "effect": "4.0.0-rc.108",
         "effect-build": "workspace:^",
+        "effect-build-archives": "workspace:^",
         "effect-build-bun": "workspace:^",
-      },
-    },
-    "examples/deno": {
-      "name": "@effect-build/example-deno",
-      "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
-        "effect-build-deno": "workspace:^",
-      },
-    },
-    "examples/esbuild": {
-      "name": "effect-build-example-esbuild",
-      "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
-        "effect-build-esbuild": "workspace:^",
-      },
-      "devDependencies": {
-        "esbuild": "0.28.2",
-      },
-    },
-    "examples/node-sea": {
-      "name": "effect-build-example-node-sea",
-      "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.108",
-        "effect": "4.0.0-rc.108",
-        "effect-build-node-sea": "workspace:^",
       },
     },
     "packages/effect-build": {
       "name": "effect-build",
       "version": "0.7.0",
+      "dependencies": {
+        "@noble/hashes": "2.4.0",
+        "semver": "7.8.5",
+      },
       "devDependencies": {
+        "@types/node": "24.3.0",
+        "@types/semver": "7.8.0",
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-apple": {
@@ -109,7 +88,7 @@
         "vitest": "3.2.6",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-archives": {
@@ -117,27 +96,32 @@
       "version": "0.7.0",
       "dependencies": {
         "effect-build": "workspace:^",
+        "fflate": "0.8.3",
       },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-bun": {
       "name": "effect-build-bun",
       "version": "0.7.0",
       "dependencies": {
-        "bun-types": "1.3.14",
         "effect-build": "workspace:^",
       },
       "devDependencies": {
+        "bun-types": "1.3.14",
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "bun-types": ">=1.3.14 <2.0.0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
+      "optionalPeers": [
+        "bun-types",
+      ],
     },
     "packages/effect-build-deno": {
       "name": "effect-build-deno",
@@ -149,7 +133,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-esbuild": {
@@ -157,13 +141,14 @@
       "version": "0.7.0",
       "dependencies": {
         "effect-build": "workspace:^",
-        "esbuild": "0.28.2",
       },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
+        "esbuild": "0.28.2",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
+        "esbuild": ">=0.28.2 <0.29.0",
       },
     },
     "packages/effect-build-nfpm": {
@@ -176,7 +161,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-node-sea": {
@@ -184,12 +169,13 @@
       "version": "0.7.0",
       "dependencies": {
         "effect-build": "workspace:^",
+        "postject": "1.0.0-alpha.6",
       },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-python": {
@@ -197,12 +183,13 @@
       "version": "0.7.0",
       "dependencies": {
         "effect-build": "workspace:^",
+        "effect-build-archives": "workspace:^",
       },
       "devDependencies": {
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-rolldown": {
@@ -216,7 +203,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-sbom": {
@@ -229,7 +216,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
     "packages/effect-build-windows": {
@@ -242,7 +229,7 @@
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-beta.104 <4.1.0-0",
+        "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
     },
   },
@@ -269,11 +256,7 @@
 
     "@effect-build/example-artifact-pipeline": ["@effect-build/example-artifact-pipeline@workspace:examples/artifact-pipeline"],
 
-    "@effect-build/example-bun": ["@effect-build/example-bun@workspace:examples/bun"],
-
     "@effect-build/example-cli": ["@effect-build/example-cli@workspace:examples/cli"],
-
-    "@effect-build/example-deno": ["@effect-build/example-deno@workspace:examples/deno"],
 
     "@effect/platform-bun": ["@effect/platform-bun@4.0.0-rc.108", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.108" }, "peerDependencies": { "effect": "^4.0.0-rc.108" } }, "sha512-27RoALzmzx6Qp4LrPIE8bYJfHe+8ZaAO3xLhJMEE6mVA8fxcPh4HAGwBv09Nk2qTFVh578SlSCY5ojUlqeSJ4A=="],
 
@@ -370,6 +353,8 @@
     "@msgpackr-extract/msgpackr-extract-win32-x64": ["@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4", "", { "os": "win32", "cpu": "x64" }, "sha512-CmCXPQrkbwExx3j946/PtHWHbYJiCRBRDl4BlkRQcJB/YOwQxJRTpoo7aTsortjgoJ1x7opzTSxn7C+ASSLVjQ=="],
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
+
+    "@noble/hashes": ["@noble/hashes@2.4.0", "", {}, "sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.146.0", "", {}, "sha512-XC0QsnnhVe7sLIWmYmdPw7x5P0h4W8vUU3Nv1ySgWXtvCz8NizoAEpGXA0sOYoJQV2Rl13LgURAHQ5cI5ILCSA=="],
 
@@ -489,6 +474,8 @@
 
     "@types/node": ["@types/node@24.3.0", "", { "dependencies": { "undici-types": "~7.10.0" } }, "sha512-aPTXCrfwnDLj4VvXrm+UUCQjNEvJgNA8s5F1cvwQU+3KNltTOkBm1j30uNLyqqPNe7gE3KFzImYoZEfLhp4Yow=="],
 
+    "@types/semver": ["@types/semver@7.8.0", "", {}, "sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ=="],
+
     "@types/ws": ["@types/ws@8.18.1", "", { "dependencies": { "@types/node": "*" } }, "sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg=="],
 
     "@vitest/expect": ["@vitest/expect@3.2.6", "", { "dependencies": { "@types/chai": "^5.2.2", "@vitest/spy": "3.2.6", "@vitest/utils": "3.2.6", "chai": "^5.2.0", "tinyrainbow": "^2.0.0" } }, "sha512-1+7q9BtaKzEmO+fmNT3kYvoNn5Y71XWAx2Q5HRim4tTVRQVRv4uJFAQ5FbK0OPUeNP/WmVCpxYxoJdvuHVjzBQ=="],
@@ -517,6 +504,8 @@
 
     "cluster-key-slot": ["cluster-key-slot@1.1.0", "", {}, "sha512-2Nii8p3RwAPiFwsnZvukotvow2rIHM+yQ6ZcBXGHdniadkYGZYiGmkHJIbZPIV9nfv7m/U1IPMVVcAhoWFeklw=="],
 
+    "commander": ["commander@9.5.0", "", {}, "sha512-KRs7WVDKg86PWiuAqhDrAQnTXZKraVcCc6vFdL14qrZ/DcWwuRo7VoiYXalXO7S5GKpqYiVEwCbgFDfxNHKJBQ=="],
+
     "debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" }, "peerDependencies": { "supports-color": "*" }, "optionalPeers": ["supports-color"] }, "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA=="],
 
     "deep-eql": ["deep-eql@5.0.2", "", {}, "sha512-h5k/5U50IJJFpzfL6nO9jaaumfjO/f2NjK/oYB2Djzm4p9L+3T9qWpZqZ2hAbLPuuYq9wrU08WQyBTL5GbPk5Q=="],
@@ -540,10 +529,6 @@
     "effect-build-deno": ["effect-build-deno@workspace:packages/effect-build-deno"],
 
     "effect-build-esbuild": ["effect-build-esbuild@workspace:packages/effect-build-esbuild"],
-
-    "effect-build-example-esbuild": ["effect-build-example-esbuild@workspace:examples/esbuild"],
-
-    "effect-build-example-node-sea": ["effect-build-example-node-sea@workspace:examples/node-sea"],
 
     "effect-build-nfpm": ["effect-build-nfpm@workspace:packages/effect-build-nfpm"],
 
@@ -607,6 +592,8 @@
 
     "postcss": ["postcss@8.5.26", "", { "dependencies": { "nanoid": "^3.3.17", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ=="],
 
+    "postject": ["postject@1.0.0-alpha.6", "", { "dependencies": { "commander": "^9.4.0" }, "bin": { "postject": "dist/cli.js" } }, "sha512-b9Eb8h2eVqNE8edvKdwqkrY6O7kAwmI8kcnBv1NScolYJbo59XUF0noFq+lxbC1yN20bmC0WBEbDC5H/7ASb0A=="],
+
     "pure-rand": ["pure-rand@8.4.2", "", {}, "sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng=="],
 
     "redis-errors": ["redis-errors@1.2.0", "", {}, "sha512-1qny3OExCf0UvUV/5wpYKf2YwPcOqXzkwKKSmKHiE6ZMQs5heeE/c8eXK+PNllPvmjgAbfnsbpkGZWy8cBpn9w=="],
@@ -616,6 +603,8 @@
     "rolldown": ["rolldown@1.2.5", "", { "dependencies": { "@oxc-project/types": "=0.146.0", "@rolldown/pluginutils": "^1.0.0" }, "optionalDependencies": { "@rolldown/binding-android-arm-eabi": "1.2.5", "@rolldown/binding-android-arm64": "1.2.5", "@rolldown/binding-darwin-arm64": "1.2.5", "@rolldown/binding-darwin-x64": "1.2.5", "@rolldown/binding-freebsd-x64": "1.2.5", "@rolldown/binding-linux-arm-gnueabihf": "1.2.5", "@rolldown/binding-linux-arm64-gnu": "1.2.5", "@rolldown/binding-linux-arm64-musl": "1.2.5", "@rolldown/binding-linux-ppc64-gnu": "1.2.5", "@rolldown/binding-linux-s390x-gnu": "1.2.5", "@rolldown/binding-linux-x64-gnu": "1.2.5", "@rolldown/binding-linux-x64-musl": "1.2.5", "@rolldown/binding-openharmony-arm64": "1.2.5", "@rolldown/binding-win32-arm64-msvc": "1.2.5", "@rolldown/binding-win32-x64-msvc": "1.2.5" }, "bin": { "rolldown": "./bin/cli.mjs" } }, "sha512-VD2IE5PUG4Oj8zz2VGykiYd5wbnjdIiSsNQb8Qu5B+noEp+A78mu2iVvpp27g8es14Tk9rofNs5Tku9iQCS4fA=="],
 
     "rollup": ["rollup@4.62.4", "", { "dependencies": { "@types/estree": "1.0.9" }, "optionalDependencies": { "@napi-rs/lzma-linux-x64-gnu": "1.5.1", "@rollup/rollup-android-arm-eabi": "4.62.4", "@rollup/rollup-android-arm64": "4.62.4", "@rollup/rollup-darwin-arm64": "4.62.4", "@rollup/rollup-darwin-x64": "4.62.4", "@rollup/rollup-freebsd-arm64": "4.62.4", "@rollup/rollup-freebsd-x64": "4.62.4", "@rollup/rollup-linux-arm-gnueabihf": "4.62.4", "@rollup/rollup-linux-arm-musleabihf": "4.62.4", "@rollup/rollup-linux-arm64-gnu": "4.62.4", "@rollup/rollup-linux-arm64-musl": "4.62.4", "@rollup/rollup-linux-loong64-gnu": "4.62.4", "@rollup/rollup-linux-loong64-musl": "4.62.4", "@rollup/rollup-linux-ppc64-gnu": "4.62.4", "@rollup/rollup-linux-ppc64-musl": "4.62.4", "@rollup/rollup-linux-riscv64-gnu": "4.62.4", "@rollup/rollup-linux-riscv64-musl": "4.62.4", "@rollup/rollup-linux-s390x-gnu": "4.62.4", "@rollup/rollup-linux-x64-gnu": "4.62.4", "@rollup/rollup-linux-x64-musl": "4.62.4", "@rollup/rollup-openbsd-x64": "4.62.4", "@rollup/rollup-openharmony-arm64": "4.62.4", "@rollup/rollup-win32-arm64-msvc": "4.62.4", "@rollup/rollup-win32-ia32-msvc": "4.62.4", "@rollup/rollup-win32-x64-gnu": "4.62.4", "@rollup/rollup-win32-x64-msvc": "4.62.4", "fsevents": "~2.3.2" }, "bin": { "rollup": "dist/bin/rollup" } }, "sha512-RXOqwaPsBGjMNMa4sQjDjHieHEZDFoj/Rdr46l2MU5DfEs16wHJPC2RPTPHWhNl+M3aI472LLqFkFKut4SblOg=="],
+
+    "semver": ["semver@7.8.5", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA=="],
 
     "siginfo": ["siginfo@2.0.0", "", {}, "sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g=="],
 

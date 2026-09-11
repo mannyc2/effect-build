@@ -1,74 +1,69 @@
 # effect-build-nfpm
 
-Produce Debian, RPM, Alpine, Arch Linux, and unsigned MSIX packages from finalized payload files with a selected nFPM
-executable. Each operation returns one atomically finalized `Artifact.HashedFile`.
-
-## Install
+Build Debian, RPM, Alpine, Arch Linux, and MSIX packages from artifacts with
+[nFPM](https://nfpm.goreleaser.com), as Effect programs. Each package comes back as an
+`Artifact.File`.
 
 ```sh
-npm install --save-exact effect-build-nfpm@0.7.0 effect-build@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-nfpm@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
-These examples use Effect v4 and its matching Node platform package.
+nFPM 2.47 or newer must be installed.
 
-Install **nFPM 2.47.x** separately and make it available on PATH, or pass its path to `Package.layer({ executable })`.
-Supply metadata and payloads explicitly; effect-build renders the native configuration for you.
-
-## Build a Debian package
-
-This helper accepts a previously finalized data file. Choose metadata appropriate to your application and
-a fresh output path, then run the returned Effect at your application's entry point.
+## Usage
 
 ```ts
-import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as Package from "effect-build-nfpm/Package";
-import * as Artifact from "effect-build/Artifact";
+import * as Nfpm from "effect-build-nfpm";
 
-const packager = Package.layer();
-
-export const buildDebianPackage = (file: Artifact.HashedFile) =>
-  Package.buildDeb(
-    new Package.PackageInput({
-      metadata: new Package.PackageMetadata({
-        name: "hello-data",
-        version: "1.0.0",
-        architecture: "all",
-        maintainer: "Example Maintainer <maintainer@example.com>",
-        description: "An example data package",
-        contents: [
-          new Package.PackageContent({
-            artifact: file,
-            dst: "/usr/share/hello-data/greeting.txt",
-            mode: Artifact.fileMode(0o644),
-          }),
-        ],
-      }),
-      release: "1",
-      mtime: "2026-01-01T00:00:00Z",
-      outfile: "dist/hello-data.deb",
-    }),
-  ).pipe(
-    Effect.provide(packager),
-    Effect.provide(NodeServices.layer),
-  );
+const deb = (executable: Artifact.Executable) =>
+  Nfpm.package({
+    format: "deb",
+    config: {
+      name: "hello",
+      version: "1.0.0",
+      arch: "amd64",
+      maintainer: "Release Team <release@example.com>",
+      description: "Hello CLI",
+      depends: ["ca-certificates"],
+      scripts: { postinstall: "packaging/postinstall.sh" },
+    },
+    contents: [{ artifact: executable, dst: "/usr/bin/hello" }],
+    outfile: "dist/hello_1.0.0_amd64.deb",
+  }).pipe(Effect.provide(Nfpm.layer()));
 ```
 
-## Formats and boundaries
+`package({ format, config, contents, outfile, cwd?, atomic?, onExists?, prefix? })` takes:
 
-The `Package` module exposes `buildDeb`, `buildRpm`, `buildApk`, `buildArchLinux`, and `buildMsix`, plus
-`buildPackage(format, input)`. `formatProjection` supplies each format's extension and media type. MSIX additionally
-requires the closed `MsixOptions` configuration; it produces unsigned output for a separate signing step.
+- `format`: `deb`, `rpm`, `apk`, `archlinux`, or `msix`.
+- `config`: [nFPM's native configuration](https://nfpm.goreleaser.com/configuration/) as JSON,
+  with `name`, `version`, and `arch` required. `depends`, `platform`, format-specific sections,
+  lifecycle `scripts`, `overrides`, and environment expansion pass through, and nFPM validates
+  them. Relative paths in the configuration resolve against `cwd`. MSIX needs its native
+  `config.msix` metadata.
+- `contents`: `{ artifact, dst, mode? }` for each regular artifact and its absolute destination.
+  Verified bytes are copied privately before nFPM runs. Modes default to `0755` for executables
+  and `0644` for files.
 
-Payloads accept `File.VerifiedInput`: a `HashedFile` from `File.publish` or a finalized tree's file projection, or a
-compiler's `HashedExecutable`. Pass the original artifact directly. Core verifies its bytes before private
-materialization, preserving the original identity and provenance. The selected nFPM bytes are checked before launch.
-Schemas constrain metadata, absolute destinations, modes, timestamps, format fields, and output extensions. Raw native
-configuration, scripts, globs, environment expansion, and signing options are not accepted.
+The operation owns `contents` and `disable_globbing`, which cannot appear in `config` or in
+format overrides, and overrides cannot change `arch` or `platform`. Every executable's OS and
+architecture must match the format and `config.arch`: MSIX requires Windows executables, and an
+`all` or `noarch` package cannot contain an executable. ABI and minimum OS policy stay with the
+project.
 
-An existing destination is rejected. Package architecture metadata is supplied by the caller; choose it to match the
-payload you compiled.
+## Versions
 
-## More
+`Nfpm.layer({ executable?, version? })` resolves nFPM once. `Nfpm.supported` is `>=2.47.0 <3.0.0`,
+the versions accepting the JSON configuration, `disable_globbing`, and the MSIX packager used
+here; `Nfpm.tested` is 2.47.0, exercised with every format. See
+[tools and providers](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md).
 
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)
+## Errors
+
+`Nfpm.PackageError` is `Tool.InputInvalid`, `Artifact.ArtifactError`,
+`Tool.Failed`, `Tool.SpawnFailed`, or `Commit.CommitError`. `Nfpm.Format`, `Nfpm.Content`,
+`Nfpm.Configuration`, and `Nfpm.PackageInput` are exported as schemas.
+
+[Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
+[Artifact pipeline example](https://github.com/mannyc2/effect-build/tree/main/examples/artifact-pipeline) ·
+[Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)

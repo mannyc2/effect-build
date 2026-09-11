@@ -1,1 +1,1 @@
-export * as Generate from "./Generate.js";
+export * from "./Sbom.js";

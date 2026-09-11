@@ -1,578 +1,281 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
-import * as Artifact from "effect-build/Artifact";
-import * as File from "effect-build/Author/File";
-import type * as Tool from "effect-build/Author/Tool";
-import * as Tree from "effect-build/Author/Tree";
-import { ChildProcessSpawner } from "effect/unstable/process";
-import {
-  AppleOperationInvalid,
-  AppleToolChanged,
-  AppleToolFailed,
-  AppleToolUnavailable,
-  capturePlatformServices,
-  selectAppleTool,
-} from "./internal.js";
-import {
-  type CredentialArguments,
-  type JsonObject,
-  makeSubmissionEngine,
-  nonEmpty,
-  normalizeStatus,
-  parseObject,
-  requireSubmissionId,
-  scrub,
-  type SubmissionModel,
-} from "./internal/NotarySubmission.js";
-import {
-  Architecture,
-  hasDeveloperIdApplicationSignature,
-  hasDeveloperIdDiskImageSignature,
-  hasDeveloperIdInstallerSignature,
-  ProductKind,
-  ProductStateInvalid,
-} from "./Model.js";
-import type {
-  AppleToolOptions,
-  DeveloperIdApplicationBundle,
-  DeveloperIdDiskImage,
-  DeveloperIdInstallerPackage,
-} from "./Model.js";
+import { Effect, FileSystem, Path, Redacted, Schema } from "effect";
+import { Artifact, Tool } from "effect-build";
+import { Apple, type Env } from "./Apple.js";
+import { copyProduct, runNative, verifySignature } from "./internal.js";
+import { Signed } from "./Model.js";
 
-export { AppleOperationInvalid, AppleToolChanged, AppleToolFailed, AppleToolUnavailable } from "./internal.js";
-
-export const SubmissionKind = Schema.Literals(["dmg", "pkg", "zip"] as const);
+export const SubmissionKind = Schema.Literals(["zip", "dmg", "pkg"] as const);
 export type SubmissionKind = typeof SubmissionKind.Type;
-
-export const SubmissionId = Schema.String.check(
-  Schema.isPattern(
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
-    { expected: "a lowercase UUID submission identifier" },
-  ),
-);
+export const SubmissionId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u));
 export type SubmissionId = typeof SubmissionId.Type;
-
-export class Pending extends Schema.TaggedClass<Pending>()("Pending", { providerStatus: Schema.NonEmptyString }) {}
-export class Accepted
-  extends Schema.TaggedClass<Accepted>()("Accepted", { providerStatus: Schema.Literal("Accepted") })
-{}
-export class Rejected extends Schema.TaggedClass<Rejected>()("Rejected", {
-  providerStatus: Schema.NonEmptyString,
-  summary: Schema.optionalKey(Schema.NonEmptyString),
-}) {}
+export const Pending = Schema.TaggedStruct("Pending", { providerStatus: Schema.NonEmptyString });
+export type Pending = typeof Pending.Type;
+export const Accepted = Schema.TaggedStruct("Accepted", { providerStatus: Schema.Literal("Accepted") });
+export type Accepted = typeof Accepted.Type;
+export const Rejected = Schema.TaggedStruct("Rejected", { providerStatus: Schema.NonEmptyString, summary: Schema.optionalKey(Schema.NonEmptyString) });
+export type Rejected = typeof Rejected.Type;
 export const Status = Schema.Union([Pending, Accepted, Rejected]);
 export type Status = typeof Status.Type;
 
-export interface SubmitDiskImageInput {
-  readonly kind: "dmg";
-  readonly artifact: DeveloperIdDiskImage;
-}
-
-export interface SubmitInstallerPackageInput {
-  readonly kind: "pkg";
-  readonly artifact: DeveloperIdInstallerPackage;
-}
-
-export type SubmitInput = SubmitDiskImageInput | SubmitInstallerPackageInput;
-
-export interface SubmitAppInput {
-  readonly bundle: DeveloperIdApplicationBundle;
-}
-
-const NotarytoolObservation = Schema.declare<Tool.Observation<"notarytool">>(
-  (value): value is Tool.Observation<"notarytool"> =>
-    Artifact.isProvenance(value) && "name" in value && value.name === "notarytool",
-  { title: "NotarytoolObservation" },
-);
-const DittoObservation = Schema.declare<Tool.Observation<"ditto">>(
-  (value): value is Tool.Observation<"ditto"> =>
-    Artifact.isProvenance(value) && "name" in value && value.name === "ditto",
-  { title: "DittoObservation" },
-);
-
-export class StapleTarget extends Schema.Class<StapleTarget>("effect-build-apple/StapleTarget")({
-  kind: ProductKind,
-  identityKind: Schema.Literals(["file-bytes", "tree-manifest"] as const),
-  artifactBytes: Artifact.DecimalBytesSchema,
-  artifactDigest: Artifact.DigestSchema,
-  bundleName: Schema.optionalKey(Schema.NonEmptyString),
-}) {}
-
-export class SubmissionReference extends Schema.Class<SubmissionReference>(
-  "effect-build-apple/SubmissionReference",
-)({
+/** Apps and standalone executables upload as ZIP archives; disk images and installers upload as themselves. */
+export const submissionKind = (artifact: Signed): SubmissionKind => "product" in artifact && artifact.product !== "app" ? artifact.product : "zip";
+const matchingKind = Schema.makeFilter((value: { readonly kind: SubmissionKind; readonly artifact: Signed }) =>
+  value.kind === submissionKind(value.artifact) ? undefined : "submission kind does not match its artifact");
+export const SubmissionReference = Schema.Struct({
   submissionId: SubmissionId,
   kind: SubmissionKind,
-  architecture: Architecture,
-  artifactBytes: Artifact.DecimalBytesSchema,
-  artifactDigest: Artifact.DigestSchema,
-  submissionTool: NotarytoolObservation,
-  stapleTarget: Schema.optionalKey(StapleTarget),
-  transportTool: Schema.optionalKey(DittoObservation),
-}) {}
-
-export class Submission extends Schema.Class<Submission>("effect-build-apple/Submission")({
-  submissionId: SubmissionId,
-  kind: SubmissionKind,
-  architecture: Architecture,
-  artifactBytes: Artifact.DecimalBytesSchema,
-  artifactDigest: Artifact.DigestSchema,
-  status: Status,
-  message: Schema.optionalKey(Schema.NonEmptyString),
-  submissionTool: NotarytoolObservation,
-  tool: NotarytoolObservation,
-  stapleTarget: Schema.optionalKey(StapleTarget),
-  transportTool: Schema.optionalKey(DittoObservation),
-}) {}
-
-export class Observation extends Schema.Class<Observation>("effect-build-apple/Observation")({
-  submissionId: SubmissionId,
-  kind: SubmissionKind,
-  architecture: Architecture,
-  artifactBytes: Artifact.DecimalBytesSchema,
-  artifactDigest: Artifact.DigestSchema,
-  status: Status,
-  message: Schema.optionalKey(Schema.NonEmptyString),
+  artifact: Signed,
+  producedBy: Artifact.Producer,
+}).check(matchingKind);
+export type SubmissionReference = typeof SubmissionReference.Type;
+export const Submission = Schema.Struct({ ...SubmissionReference.fields, status: Status, message: Schema.optionalKey(Schema.NonEmptyString) }).check(matchingKind);
+export type Submission = typeof Submission.Type;
+export const Info = Schema.Struct({
+  ...Submission.fields,
   name: Schema.optionalKey(Schema.NonEmptyString),
   createdDate: Schema.optionalKey(Schema.NonEmptyString),
-  submissionTool: NotarytoolObservation,
-  tool: NotarytoolObservation,
-  stapleTarget: Schema.optionalKey(StapleTarget),
-  transportTool: Schema.optionalKey(DittoObservation),
-}) {}
-
-export class LogIssue extends Schema.Class<LogIssue>("effect-build-apple/LogIssue")({
+}).check(matchingKind);
+export type Info = typeof Info.Type;
+export const LogIssue = Schema.Struct({
   severity: Schema.NonEmptyString,
   message: Schema.NonEmptyString,
   path: Schema.optionalKey(Schema.NonEmptyString),
   code: Schema.optionalKey(Schema.String),
   docUrl: Schema.optionalKey(Schema.NonEmptyString),
-}) {}
-
-export class Log extends Schema.Class<Log>("effect-build-apple/Log")({
-  submissionId: SubmissionId,
-  kind: SubmissionKind,
-  architecture: Architecture,
-  artifactBytes: Artifact.DecimalBytesSchema,
-  artifactDigest: Artifact.DigestSchema,
+  architecture: Schema.optionalKey(Schema.NonEmptyString),
+});
+export type LogIssue = typeof LogIssue.Type;
+export const Log = Schema.Struct({
+  ...SubmissionReference.fields,
   status: Status,
   statusSummary: Schema.optionalKey(Schema.NonEmptyString),
   statusCode: Schema.optionalKey(Schema.Number),
   archiveFilename: Schema.optionalKey(Schema.NonEmptyString),
   issues: Schema.Array(LogIssue),
-  submissionTool: NotarytoolObservation,
-  tool: NotarytoolObservation,
-  stapleTarget: Schema.optionalKey(StapleTarget),
-  transportTool: Schema.optionalKey(DittoObservation),
-}) {}
-
-export type Result = Submission | Observation | Log;
-
-export class AcceptedReference extends Schema.Class<AcceptedReference>(
-  "effect-build-apple/AcceptedReference",
-)({
-  submissionId: SubmissionId,
-  kind: SubmissionKind,
-  architecture: Architecture,
-  artifactBytes: Artifact.DecimalBytesSchema,
-  artifactDigest: Artifact.DigestSchema,
-  providerStatus: Schema.Literal("Accepted"),
-  submissionTool: NotarytoolObservation,
-  tool: NotarytoolObservation,
-  stapleTarget: StapleTarget,
-  transportTool: Schema.optionalKey(DittoObservation),
-}) {}
+}).check(matchingKind);
+export type Log = typeof Log.Type;
+export type Result = Submission | Info | Log;
+export const AcceptedReference = Schema.Struct({ ...SubmissionReference.fields, providerStatus: Schema.Literal("Accepted") }).check(matchingKind);
+export type AcceptedReference = typeof AcceptedReference.Type;
 
 export class ResultNotAccepted extends Schema.TaggedError<ResultNotAccepted>()("NotaryResultNotAccepted", {
   submissionId: SubmissionId,
-  providerStatus: Schema.NonEmptyString,
+  providerStatus: Schema.String,
+}) {
+  override get message(): string { return `Apple notarization ${this.submissionId} is ${this.providerStatus}`; }
+}
+export class ResponseInvalid extends Schema.TaggedError<ResponseInvalid>()("NotaryResponseInvalid", {
+  operation: Schema.Literals(["submit", "wait", "info", "log"] as const),
+  reason: Schema.String,
 }) {
   override get message(): string {
-    return `Apple notarization ${this.submissionId} is ${this.providerStatus}, not Accepted`;
+    return `notarytool ${this.operation}: ${this.reason}`;
   }
 }
 
-export class ResultHasNoStapleTarget extends Schema.TaggedError<ResultHasNoStapleTarget>()(
-  "NotaryResultHasNoStapleTarget",
-  { submissionId: SubmissionId },
-) {}
-
-export const acceptedReference = (
-  result: Result,
-): Effect.Effect<AcceptedReference, ResultNotAccepted | ResultHasNoStapleTarget> => {
-  if (result.status._tag !== "Accepted") {
-    return Effect.fail(
-      new ResultNotAccepted({
-        submissionId: result.submissionId,
-        providerStatus: result.status.providerStatus,
-      }),
-    );
-  }
-  if (result.stapleTarget === undefined) {
-    return Effect.fail(new ResultHasNoStapleTarget({ submissionId: result.submissionId }));
-  }
-  return Effect.succeed(
-    new AcceptedReference({
-      submissionId: result.submissionId,
-      kind: result.kind,
-      architecture: result.architecture,
-      artifactBytes: result.artifactBytes,
-      artifactDigest: result.artifactDigest,
-      providerStatus: "Accepted",
-      submissionTool: result.submissionTool,
-      tool: result.tool,
-      stapleTarget: result.stapleTarget,
-      ...(result.transportTool === undefined ? {} : { transportTool: result.transportTool }),
-    }),
+const reference = (operation: string, value: SubmissionReference) => Schema.decodeUnknownEffect(SubmissionReference)(value).pipe(
+  Effect.mapError((error) => new Tool.InputInvalid({ operation, reason: String(error) })),
+  // A persisted reference may include additional artifact refinements; retain the original record.
+  Effect.as(value),
+);
+export const acceptedReference = Effect.fn("Apple.Notary.acceptedReference")(function*(result: Result): Effect.fn.Return<AcceptedReference, ResultNotAccepted | Tool.InputInvalid> {
+  yield* reference("Apple.Notary.acceptedReference", result);
+  const status = yield* Schema.decodeUnknownEffect(Status)(result.status).pipe(
+    Effect.mapError((error) => new Tool.InputInvalid({ operation: "Apple.Notary.acceptedReference", reason: String(error) })),
   );
-};
+  if (status._tag !== "Accepted") return yield* new ResultNotAccepted({ submissionId: result.submissionId, providerStatus: status.providerStatus });
+  return { submissionId: result.submissionId, kind: result.kind, artifact: result.artifact, producedBy: result.producedBy, providerStatus: "Accepted" };
+});
 
-export class SubmissionOutcomeUnknown extends Schema.TaggedError<SubmissionOutcomeUnknown>()(
-  "SubmissionOutcomeUnknown",
-  { artifactDigest: Schema.String, reason: Schema.NonEmptyString },
-) {
-  override get message(): string {
-    return `Apple submission outcome is unknown for ${this.artifactDigest}: ${this.reason}`;
+export type Credential =
+  | { readonly kind: "keychain"; readonly profile: string; readonly keychain?: string | undefined }
+  | { readonly kind: "api-key"; readonly keyFile: string; readonly keyId: string; readonly issuer: string }
+  | { readonly kind: "apple-id"; readonly appleId: string; readonly teamId: string; readonly password: Redacted.Redacted<string> };
+const credentials = Effect.fn("Apple.Notary.credentials")(function*(operation: string, credential: Credential) {
+  const invalid = (reason: string) => new Tool.InputInvalid({ operation, reason });
+  let args: string[];
+  let values: string[];
+  switch (credential.kind) {
+    case "keychain":
+      values = [credential.profile, ...(credential.keychain === undefined ? [] : [credential.keychain])];
+      args = ["--keychain-profile", credential.profile, ...(credential.keychain === undefined ? [] : ["--keychain", credential.keychain])];
+      break;
+    case "api-key":
+      values = [credential.keyFile, credential.keyId, credential.issuer];
+      args = ["--key", credential.keyFile, "--key-id", credential.keyId, "--issuer", credential.issuer];
+      break;
+    case "apple-id": {
+      if (!Redacted.isRedacted(credential.password)) return yield* invalid("Apple ID password must be Redacted");
+      const password = yield* Effect.try({ try: () => Redacted.value(credential.password), catch: () => invalid("Apple ID password is unavailable") });
+      values = [credential.appleId, credential.teamId, password];
+      args = ["--apple-id", credential.appleId, "--team-id", credential.teamId, "--password", password];
+      break;
+    }
+    default: return yield* invalid("unknown notarization credential kind");
   }
-}
+  if (values.some((value) => typeof value !== "string" || Tool.argumentIssue(value) !== undefined)) {
+    return yield* invalid("notarization credential fields must be non-empty and contain no NUL");
+  }
+  return { args, values };
+});
 
-export class SubmissionPreparationFailed extends Schema.TaggedError<SubmissionPreparationFailed>()(
-  "SubmissionPreparationFailed",
-  { path: Schema.NonEmptyString, reason: Schema.NonEmptyString },
-) {}
-
-export class ResponseInvalid extends Schema.TaggedError<ResponseInvalid>()("NotaryResponseInvalid", {
-  operation: Schema.Literals(["submit", "info", "log"] as const),
-  reason: Schema.NonEmptyString,
-}) {}
-
-export class CorrelationFailed extends Schema.TaggedError<CorrelationFailed>()("NotaryCorrelationFailed", {
-  operation: Schema.Literals(["info", "log"] as const),
-  expectedSubmissionId: Schema.NonEmptyString,
-  observedSubmissionId: Schema.NonEmptyString,
-}) {}
-
-interface CredentialService {
-  readonly arguments: Effect.Effect<CredentialArguments>;
-}
-
-export class Credential extends Context.Service<Credential, CredentialService>()(
-  "effect-build-apple/Notary/Credential",
-) {}
-
-export interface KeychainProfileOptions {
-  readonly profile: string;
-  readonly keychain?: string | undefined;
-}
-
-export const keychainProfileCredentialLayer = (options: KeychainProfileOptions): Layer.Layer<Credential> =>
-  Layer.succeed(Credential, {
-    arguments: Effect.succeed({
-      args: [
-        "--keychain-profile",
-        options.profile,
-        ...(options.keychain === undefined ? [] : ["--keychain", options.keychain]),
-      ],
-      sensitiveValues: [options.profile, ...(options.keychain === undefined ? [] : [options.keychain])],
-    }),
+/** notarytool subcommands; each is also the tail of its span name. */
+type Operation = "submit" | "wait" | "info" | "log";
+type LookupError = Tool.InputInvalid | ResponseInvalid | Tool.Failed | Tool.SpawnFailed;
+const objectValue = (value: unknown): Readonly<Record<string, unknown>> | undefined =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? value as Readonly<Record<string, unknown>> : undefined;
+const runJson = Effect.fn("Apple.Notary.runJson")(function*(operation: Operation, args: readonly string[], credential: Credential, cwd?: string) {
+  const cwdIssue = cwd === undefined ? undefined : Tool.argumentIssue(cwd);
+  if (cwdIssue !== undefined) return yield* new Tool.InputInvalid({ operation: `Apple.Notary.${operation}`, reason: `cwd ${cwdIssue}` });
+  const auth = yield* credentials(`Apple.Notary.${operation}`, credential);
+  const completion = yield* runNative("notarytool", [operation, ...args, "--output-format", "json", ...auth.args], {
+    cwd, redact: auth.values,
   });
-
-export interface ApiKeyOptions {
-  readonly keyFile: string;
-  readonly keyId: string;
-  readonly issuer: string;
-}
-
-export const apiKeyCredentialLayer = (options: ApiKeyOptions): Layer.Layer<Credential> =>
-  Layer.succeed(Credential, {
-    arguments: Effect.succeed({
-      args: ["--key", options.keyFile, "--key-id", options.keyId, "--issuer", options.issuer],
-      sensitiveValues: [options.keyFile, options.keyId, options.issuer],
-    }),
+  const value = yield* Effect.try({
+    try: (): unknown => JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(completion.stdout)),
+    // JSON parse errors can contain source excerpts, so do not retain a native response in the error.
+    catch: () => new ResponseInvalid({ operation, reason: "notarytool returned invalid UTF-8 JSON" }),
   });
-
-export interface LayerOptions {
-  readonly notarytool: AppleToolOptions;
-  readonly ditto: AppleToolOptions;
-  readonly codesign: AppleToolOptions;
-  readonly pkgutil: AppleToolOptions;
-}
-
-export type SubmitError =
-  | AppleOperationInvalid
-  | AppleToolChanged
-  | AppleToolFailed
-  | File.FileVerificationFailed
-  | SubmissionPreparationFailed
-  | SubmissionOutcomeUnknown
-  | ProductStateInvalid;
-export type SubmitAppError = SubmitError | Tree.TreeVerificationFailed;
-export type ObserveError = AppleToolChanged | AppleToolFailed | ResponseInvalid | CorrelationFailed;
-
-interface Service {
-  readonly submit: (input: SubmitInput) => Effect.Effect<Submission, SubmitError>;
-  readonly submitApp: (input: SubmitAppInput) => Effect.Effect<Submission, SubmitAppError>;
-  readonly info: (reference: SubmissionReference) => Effect.Effect<Observation, ObserveError>;
-  readonly log: (reference: SubmissionReference) => Effect.Effect<Log, ObserveError>;
-}
-
-export class Client extends Context.Service<Client, Service>()("effect-build-apple/Notary/Client") {}
-
-const submissionModel: SubmissionModel<
-  Submission,
-  Status,
-  StapleTarget,
-  ResponseInvalid,
-  SubmissionPreparationFailed,
-  SubmissionOutcomeUnknown
-> = {
-  responseInvalid: (fields) => new ResponseInvalid(fields),
-  preparationFailed: (fields) => new SubmissionPreparationFailed(fields),
-  isPreparationFailed: (value): value is SubmissionPreparationFailed => value instanceof SubmissionPreparationFailed,
-  outcomeUnknown: (fields) => new SubmissionOutcomeUnknown(fields),
-  accepted: () => new Accepted({ providerStatus: "Accepted" }),
-  pending: (providerStatus) => new Pending({ providerStatus }),
-  rejected: (providerStatus, summary) =>
-    new Rejected({ providerStatus, ...(summary === undefined ? {} : { summary }) }),
-  submission: (fields) => new Submission(fields),
+  const data = objectValue(value);
+  if (data === undefined) return yield* new ResponseInvalid({ operation, reason: "expected one JSON object" });
+  // Successful responses are data, which Tool.run leaves raw; credentials echoed in them are scrubbed here.
+  const scrub = Tool.redact(auth.values);
+  const safeText = (value: unknown): string | undefined => typeof value === "string" && value.length > 0 ? scrub(value) : undefined;
+  return { data, safeText };
+});
+/** Drop absent optional fields, so a record matches a schema that declares them as optional keys. */
+const present = <T extends Record<string, unknown>>(fields: T): { readonly [K in keyof T]?: Exclude<T[K], undefined> } =>
+  Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as { readonly [K in keyof T]?: Exclude<T[K], undefined> };
+const submissionId = (operation: Operation, value: string | undefined) => {
+  const canonical = value?.toLowerCase();
+  return Schema.is(SubmissionId)(canonical)
+    ? Effect.succeed(canonical)
+    : Effect.fail(new ResponseInvalid({ operation, reason: "response is missing a valid submission UUID" }));
+};
+const status = (operation: Operation, providerStatus: string | undefined, summary?: string): Effect.Effect<Status, ResponseInvalid> => {
+  switch (providerStatus?.trim().toLowerCase()) {
+    case "accepted": return Effect.succeed({ _tag: "Accepted", providerStatus: "Accepted" });
+    case "in progress": case "in-progress": case "submitted": return Effect.succeed({ _tag: "Pending", providerStatus: providerStatus! });
+    case "invalid": case "rejected": return Effect.succeed({ _tag: "Rejected", providerStatus: providerStatus!, ...(summary === undefined ? {} : { summary }) });
+    default: return Effect.fail(new ResponseInvalid({ operation, reason: "response has a missing or unrecognized status" }));
+  }
 };
 
-const issue = (value: unknown, sensitiveValues: readonly string[]): LogIssue | undefined => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  const object = value as JsonObject;
-  const severity = nonEmpty(object.severity);
-  const message = nonEmpty(object.message);
-  if (severity === undefined || message === undefined) return undefined;
-  const path = nonEmpty(object.path);
-  const codeValue = object.code;
-  const code = typeof codeValue === "string" || typeof codeValue === "number" ? String(codeValue) : undefined;
-  const docUrl = nonEmpty(object.docUrl);
-  return new LogIssue({
-    severity: scrub(severity, sensitiveValues),
-    message: scrub(message, sensitiveValues),
-    ...(path === undefined ? {} : { path: scrub(path, sensitiveValues) }),
-    ...(code === undefined ? {} : { code: scrub(code, sensitiveValues) }),
-    ...(docUrl === undefined ? {} : { docUrl: scrub(docUrl, sensitiveValues) }),
-  });
-};
+export interface SubmitInput {
+  readonly artifact: Signed;
+  readonly credential: Credential;
+  readonly cwd?: string | undefined;
+}
+export type NotarizeError = LookupError | Artifact.ArtifactError;
+/** Upload once and return the submission ID before waiting. Persist this reference to recover after interruption. */
+export const submit = (input: SubmitInput): Effect.Effect<SubmissionReference, NotarizeError, Apple | Env> =>
+  Effect.scoped(Effect.gen(function*() {
+    yield* Schema.decodeUnknownEffect(Signed)(input.artifact).pipe(Effect.mapError((error) => new Tool.InputInvalid({ operation: "Apple.Notary.submit", reason: String(error) })));
+    const { tool } = yield* Apple;
+    const fs = yield* FileSystem.FileSystem;
+    const p = yield* Path.Path;
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-notary-" }).pipe(Effect.mapError(Artifact.ioError(input.artifact.path, "write")));
+    const snapshot = p.join(temporary, p.basename(input.artifact.path));
+    // Upload a verified private copy so changes to the caller's file cannot change the submitted bytes.
+    yield* copyProduct("Apple.Notary.submit", input.artifact, snapshot);
+    yield* verifySignature(input.artifact, snapshot);
+    let path = snapshot;
+    const kind = submissionKind(input.artifact);
+    if (kind === "zip") {
+      path = p.join(temporary, `${p.basename(input.artifact.path)}.zip`);
+      yield* runNative("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", snapshot, path]);
+    }
+    const response = yield* runJson("submit", [path], input.credential, input.cwd);
+    const id = yield* submissionId("submit", response.safeText(response.data.id));
+    return { submissionId: id, kind, artifact: input.artifact, producedBy: Tool.producer(tool) };
+  }));
 
-type LayerError = AppleToolUnavailable | AppleToolFailed;
-
-const makeService = (
-  options: LayerOptions,
-): Effect.Effect<
-  Service,
-  LayerError,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Credential
-> =>
+export interface NotarizeInput extends SubmitInput {
+  /** Native notarytool duration, for example `30m`. A timeout does not cancel Apple's processing. */
+  readonly timeout?: string | undefined;
+}
+const timeoutArgs = (operation: string, timeout?: string) => timeout !== undefined && !/^\d+(?:s|m|h)?$/u.test(timeout)
+  ? Effect.fail(new Tool.InputInvalid({ operation, reason: "timeout must be an integer followed by an optional s, m, or h" }))
+  : Effect.succeed(timeout === undefined ? [] : ["--timeout", timeout]);
+/** Convenience composition. Use submit, persist its reference, then wait when interruption recovery matters. */
+export const notarize = (input: NotarizeInput): Effect.Effect<Submission, NotarizeError, Apple | Env> =>
   Effect.gen(function*() {
-    const { path, services } = yield* capturePlatformServices;
-    const credentialService = yield* Credential;
-    const notarytool = yield* selectAppleTool("notarytool", options.notarytool, "notarization");
-    const ditto = yield* selectAppleTool("ditto", options.ditto, "archive-transport");
-    const codesign = yield* selectAppleTool("codesign", options.codesign, "signature-verification");
-    const pkgutil = yield* selectAppleTool("pkgutil", options.pkgutil, "package-signature-verification");
-    const submissionEngine = yield* makeSubmissionEngine({
-      notarytool,
-      ditto,
-      codesign,
-      pkgutil,
-      credentialArguments: credentialService.arguments,
-      model: submissionModel,
-    });
-
-    const submit = Effect.fn("effect-build-apple.notarySubmit")(function*(input: SubmitInput) {
-      const expectedSuffix = input.kind === "dmg" ? ".dmg" : ".pkg";
-      if (!path.basename(input.artifact.path).endsWith(expectedSuffix)) {
-        return yield* new ProductStateInvalid({
-          operation: `submit ${input.kind} for notarization`,
-          path: input.artifact.path,
-          expected: `a ${expectedSuffix} product path`,
-        });
-      }
-      if (
-        input.kind === "dmg"
-          ? !hasDeveloperIdDiskImageSignature(input.artifact)
-          : !hasDeveloperIdInstallerSignature(input.artifact)
-      ) {
-        return yield* new ProductStateInvalid({
-          operation: `submit ${input.kind} for notarization`,
-          path: input.artifact.path,
-          expected: "a native-verified Developer ID product",
-        });
-      }
-      return yield* File.withVerifiedBytes(input.artifact, (bytes) =>
-        submissionEngine.submitBytes(
-          input.kind,
-          input.artifact.architecture,
-          path.basename(input.artifact.path),
-          bytes,
-          input.artifact.digest,
-          new StapleTarget({
-            kind: input.kind,
-            identityKind: "file-bytes",
-            artifactBytes: input.artifact.bytes,
-            artifactDigest: input.artifact.digest,
-          }),
-        ));
-    });
-
-    const submitApp = Effect.fn("effect-build-apple.notarySubmitApp")(function*(input: SubmitAppInput) {
-      if (!hasDeveloperIdApplicationSignature(input.bundle) || !path.basename(input.bundle.root).endsWith(".app")) {
-        return yield* new ProductStateInvalid({
-          operation: "submit app for notarization",
-          path: input.bundle.root,
-          expected: "a native-verified Developer ID Application .app bundle",
-        });
-      }
-      return yield* Tree.withVerifiedSnapshot(input.bundle, (snapshot) => {
-        const bundleName = path.basename(input.bundle.root);
-        return submissionEngine.submitAppSnapshot({
-          sourcePath: input.bundle.root,
-          snapshotRoot: snapshot,
-          identity: {
-            architecture: input.bundle.architecture,
-            bundleName,
-            rootMode: input.bundle.rootMode,
-            entries: input.bundle.entries,
-            totalBytes: input.bundle.totalBytes,
-            manifestDigest: input.bundle.manifestDigest,
-          },
-          stapleTarget: new StapleTarget({
-            kind: "app",
-            identityKind: "tree-manifest",
-            artifactBytes: input.bundle.totalBytes,
-            artifactDigest: input.bundle.manifestDigest,
-            bundleName,
-          }),
-        });
-      });
-    });
-
-    const info = Effect.fn("effect-build-apple.notaryInfo")(function*(reference: SubmissionReference) {
-      const response = yield* submissionEngine.run("info", [reference.submissionId]);
-      const object = yield* parseObject(submissionModel.responseInvalid, "info", response.text);
-      const submissionId = yield* requireSubmissionId(
-        submissionModel.responseInvalid,
-        "info",
-        object,
-        "id",
-        response.sensitiveValues,
-      );
-      if (submissionId !== reference.submissionId) {
-        return yield* new CorrelationFailed({
-          operation: "info",
-          expectedSubmissionId: reference.submissionId,
-          observedSubmissionId: submissionId,
-        });
-      }
-      const safeText = (value: unknown) => {
-        const text = nonEmpty(value);
-        return text === undefined ? undefined : scrub(text, response.sensitiveValues);
-      };
-      const providerStatus = safeText(object.status);
-      if (providerStatus === undefined) {
-        return yield* new ResponseInvalid({ operation: "info", reason: "missing status" });
-      }
-      const message = safeText(object.message);
-      const status = yield* normalizeStatus(submissionModel, "info", providerStatus, message);
-      const name = safeText(object.name);
-      const createdDate = safeText(object.createdDate);
-      return new Observation({
-        submissionId,
-        kind: reference.kind,
-        architecture: reference.architecture,
-        artifactBytes: reference.artifactBytes,
-        artifactDigest: reference.artifactDigest,
-        status,
-        ...(message === undefined ? {} : { message }),
-        ...(name === undefined ? {} : { name }),
-        ...(createdDate === undefined ? {} : { createdDate }),
-        submissionTool: reference.submissionTool,
-        tool: notarytool.observation,
-        ...(reference.stapleTarget === undefined ? {} : { stapleTarget: reference.stapleTarget }),
-        ...(reference.transportTool === undefined ? {} : { transportTool: reference.transportTool }),
-      });
-    });
-
-    const log = Effect.fn("effect-build-apple.notaryLog")(function*(reference: SubmissionReference) {
-      const response = yield* submissionEngine.run("log", [reference.submissionId]);
-      const object = yield* parseObject(submissionModel.responseInvalid, "log", response.text);
-      const submissionId = yield* requireSubmissionId(
-        submissionModel.responseInvalid,
-        "log",
-        object,
-        "jobId",
-        response.sensitiveValues,
-      );
-      if (submissionId !== reference.submissionId) {
-        return yield* new CorrelationFailed({
-          operation: "log",
-          expectedSubmissionId: reference.submissionId,
-          observedSubmissionId: submissionId,
-        });
-      }
-      const safeText = (value: unknown) => {
-        const text = nonEmpty(value);
-        return text === undefined ? undefined : scrub(text, response.sensitiveValues);
-      };
-      const providerStatus = safeText(object.status);
-      if (providerStatus === undefined) {
-        return yield* new ResponseInvalid({ operation: "log", reason: "missing status" });
-      }
-      const statusSummary = safeText(object.statusSummary);
-      const status = yield* normalizeStatus(submissionModel, "log", providerStatus, statusSummary);
-      if (object.issues !== undefined && !Array.isArray(object.issues)) {
-        return yield* new ResponseInvalid({ operation: "log", reason: "issues must be an array" });
-      }
-      const issues: LogIssue[] = [];
-      for (const [index, value] of (object.issues ?? []).entries()) {
-        const parsed = issue(value, response.sensitiveValues);
-        if (parsed === undefined) {
-          return yield* new ResponseInvalid({ operation: "log", reason: `issues[${index}] is incomplete` });
-        }
-        issues.push(parsed);
-      }
-      const statusCode = typeof object.statusCode === "number" ? object.statusCode : undefined;
-      const archiveFilename = safeText(object.archiveFilename);
-      return new Log({
-        submissionId,
-        kind: reference.kind,
-        architecture: reference.architecture,
-        artifactBytes: reference.artifactBytes,
-        artifactDigest: reference.artifactDigest,
-        status,
-        ...(statusSummary === undefined ? {} : { statusSummary }),
-        ...(statusCode === undefined ? {} : { statusCode }),
-        ...(archiveFilename === undefined ? {} : { archiveFilename }),
-        issues,
-        submissionTool: reference.submissionTool,
-        tool: notarytool.observation,
-        ...(reference.stapleTarget === undefined ? {} : { stapleTarget: reference.stapleTarget }),
-        ...(reference.transportTool === undefined ? {} : { transportTool: reference.transportTool }),
-      });
-    });
-
-    return {
-      submit: (input) => submit(input).pipe(Effect.provide(services)),
-      submitApp: (input) => submitApp(input).pipe(Effect.provide(services)),
-      info: (reference) => info(reference).pipe(Effect.provide(services)),
-      log: (reference) => log(reference).pipe(Effect.provide(services)),
-    };
+    yield* timeoutArgs("Apple.Notary.notarize", input.timeout);
+    const reference = yield* submit(input);
+    return yield* wait({ reference, credential: input.credential, timeout: input.timeout, cwd: input.cwd });
   });
 
-export const submit = (input: SubmitInput): Effect.Effect<Submission, SubmitError, Client> =>
-  Client.use((service) => service.submit(input));
-export const submitApp = (input: SubmitAppInput): Effect.Effect<Submission, SubmitAppError, Client> =>
-  Client.use((service) => service.submitApp(input));
-export const info = (reference: SubmissionReference): Effect.Effect<Observation, ObserveError, Client> =>
-  Client.use((service) => service.info(reference));
-export const log = (reference: SubmissionReference): Effect.Effect<Log, ObserveError, Client> =>
-  Client.use((service) => service.log(reference));
-
-export const layer = (
-  options: LayerOptions,
-): Layer.Layer<
-  Client,
-  LayerError,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Credential
-> => Layer.effect(Client, makeService(options));
+export interface LookupInput {
+  readonly reference: SubmissionReference;
+  readonly credential: Credential;
+  readonly cwd?: string | undefined;
+}
+export interface WaitInput extends LookupInput {
+  /** Native notarytool duration. A timeout leaves the submitted job available through info/log/wait. */
+  readonly timeout?: string | undefined;
+}
+/**
+ * Every lookup checks the persisted reference, asks notarytool about its ID, and confirms the
+ * response names that ID. The local artifact is never touched: a persisted ID stays useful
+ * after the file has moved or been removed.
+ */
+const lookup = Effect.fn("Apple.Notary.lookup")(function*(operation: "wait" | "info" | "log", input: LookupInput, args: readonly string[] = []) {
+  yield* reference(`Apple.Notary.${operation}`, input.reference);
+  const { tool } = yield* Apple;
+  const response = yield* runJson(operation, [input.reference.submissionId, ...args], input.credential, input.cwd);
+  // The log response names the submission `jobId`; the others name it `id`.
+  const id = yield* submissionId(operation, response.safeText(operation === "log" ? response.data.jobId : response.data.id));
+  if (id !== input.reference.submissionId) {
+    return yield* new ResponseInvalid({ operation, reason: "response submission UUID differs from the requested UUID" });
+  }
+  const { kind, artifact } = input.reference;
+  return { response, base: { submissionId: id, kind, artifact, producedBy: Tool.producer(tool) } };
+});
+/** Wait for an already persisted submission; never re-upload or retry submission. */
+export const wait = Effect.fn("Apple.Notary.wait")(function*(input: WaitInput): Effect.fn.Return<Submission, LookupError, Apple | Env> {
+  const args = yield* timeoutArgs("Apple.Notary.wait", input.timeout);
+  const { response, base } = yield* lookup("wait", input, args);
+  const message = response.safeText(response.data.message);
+  return { ...base, status: yield* status("wait", response.safeText(response.data.status), message), ...present({ message }) };
+});
+export const info = Effect.fn("Apple.Notary.info")(function*(input: LookupInput): Effect.fn.Return<Info, LookupError, Apple | Env> {
+  const { response, base } = yield* lookup("info", input);
+  const message = response.safeText(response.data.message);
+  return {
+    ...base,
+    status: yield* status("info", response.safeText(response.data.status), message),
+    ...present({ message, name: response.safeText(response.data.name), createdDate: response.safeText(response.data.createdDate) }),
+  };
+});
+export const log = Effect.fn("Apple.Notary.log")(function*(input: LookupInput): Effect.fn.Return<Log, LookupError, Apple | Env> {
+  const { response, base } = yield* lookup("log", input);
+  const nativeIssues = response.data.issues ?? [];
+  if (!Array.isArray(nativeIssues)) return yield* new ResponseInvalid({ operation: "log", reason: "issues must be an array or null" });
+  const issues = yield* Effect.forEach(nativeIssues, (value: unknown, index) => Effect.gen(function*() {
+    const issue = objectValue(value);
+    const severity = response.safeText(issue?.severity);
+    const message = response.safeText(issue?.message);
+    if (severity === undefined || message === undefined) return yield* new ResponseInvalid({ operation: "log", reason: `issues[${index}] lacks severity or message` });
+    return {
+      severity,
+      message,
+      ...present({
+        path: response.safeText(issue?.path),
+        code: response.safeText(typeof issue?.code === "number" ? String(issue.code) : issue?.code),
+        docUrl: response.safeText(issue?.docUrl),
+        architecture: response.safeText(issue?.architecture),
+      }),
+    };
+  }));
+  const statusSummary = response.safeText(response.data.statusSummary);
+  return {
+    ...base,
+    status: yield* status("log", response.safeText(response.data.status), statusSummary),
+    issues,
+    ...present({
+      statusSummary,
+      statusCode: typeof response.data.statusCode === "number" ? response.data.statusCode : undefined,
+      archiveFilename: response.safeText(response.data.archiveFilename),
+    }),
+  };
+});

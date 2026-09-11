@@ -3,16 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "report": "node src/main.ts",
-    "compile": "node src/build.ts",
-    "test": "node --test test/report.test.ts",
-    "test:compile": "node --test test/compile.test.ts",
-    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
+    "test": "node index.ts",
+    "build": "node index.ts"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.108",
     "effect": "4.0.0-rc.108",
     "effect-build": "workspace:^",
+    "effect-build-archives": "workspace:^",
     "effect-build-bun": "workspace:^"
   }
 }

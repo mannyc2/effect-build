@@ -1,1 +1,1 @@
-export * as SignMsix from "./SignMsix.js";
+export * from "./Windows.js";

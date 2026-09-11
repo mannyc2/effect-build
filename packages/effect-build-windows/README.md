@@ -1,59 +1,77 @@
 # effect-build-windows
 
-Experimental; CI does not verify signing with real credentials.
+Sign Windows executables and MSIX packages with the Windows SDK SignTool, as Effect programs. A
+signed executable keeps its verified target and flows straight into an archive or an installer.
 
-Sign one finalized unsigned MSIX package with Windows SignTool. The operation stages verified input bytes, signs and
-verifies the candidate, and returns a new atomically finalized `Artifact.HashedFile`.
-
-## Install
+**Experimental.** Native CI compiles, signs, timestamps, verifies, and runs a PE executable with a
+temporary self-signed certificate on a disposable runner. Production certificates and native MSIX
+signing are unverified: PFX, store, and Trusted Signing credentials pass scripted tests, and the
+on-demand [signing workflow](https://github.com/mannyc2/effect-build/blob/main/.github/workflows/signing.yml)
+exercises Trusted Signing with real identities but has not yet been run.
 
 ```sh
-npm install --save-exact effect-build-windows@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-windows@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
-These examples use Effect v4 and its matching Node platform package.
+Signing runs on Windows with the Windows SDK's `signtool.exe`.
 
-Run on Windows with SignTool installed, an accessible signing certificate, and a reachable RFC 3161 timestamp
-service. The source must already be a canonical hashed MSIX artifact, for example from `effect-build-nfpm`.
-
-## Compose signing with certificate-store credentials
-
-This helper accepts your explicit input, certificate-store selection, and SignTool options. Construct them in your
-application from its configuration and run the returned Effect at the entry point.
+## Usage
 
 ```ts
-import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as SignMsix from "effect-build-windows/SignMsix";
+import * as Archive from "effect-build-archives";
+import * as Windows from "effect-build-windows";
 
-export const signPackage = (
-  input: SignMsix.SignMsixInput,
-  certificate: SignMsix.CertificateStoreOptions,
-  tools: SignMsix.LayerOptions,
-) => {
-  const signer = SignMsix.layer(tools);
-  const credentials = SignMsix.certificateStoreCredentialLayer(certificate);
-  return SignMsix.signMsix(input).pipe(
-    Effect.provide(signer),
-    Effect.provide(credentials),
-    Effect.provide(NodeServices.layer),
-  );
-};
+const windows = (executable: Artifact.Executable) =>
+  Effect.gen(function*() {
+    const signed = yield* Windows.sign({
+      artifact: executable,
+      kind: "store",
+      thumbprint: process.env.SIGNING_THUMBPRINT ?? "",
+      timestampUrl: "http://timestamp.digicert.com",
+    });
+    return yield* Archive.zip({
+      entries: [{ artifact: signed, path: "hello.exe" }],
+      outfile: "dist/hello_windows-x64.zip",
+    });
+  }).pipe(Effect.provide(Windows.layer({ executable: process.env.EFFECT_BUILD_SIGNTOOL })));
 ```
 
-`new SignMsix.SignMsixInput({...})` requires `source`, a fresh `outfile` ending in `.msix`, and `timestampUrl`.
-`new SignMsix.CertificateStoreOptions({...})` selects an exact certificate `thumbprint`, with optional `storeName`
-and `machineStore`. `SignMsix.layer({ executable, version })` allows explicit tool selection and a version fact when
-the executable's help output cannot supply one.
+`sign({ artifact, timestampUrl, outfile?, cwd?, description?, descriptionUrl?, atomic?, onExists?, prefix?, ...credential })`
+takes a Windows `Artifact.Executable` or an MSIX `Artifact.File` and one credential:
 
-Alternatively, `pfxCredentialLayer({ file, password })` uses a PFX file and an optional Effect `Redacted` password.
-Credential material is process-local and scrubbed from provider-owned typed diagnostics. It is never returned as
-artifact provenance or persisted by this package.
+| Credential                                                 | SignTool                                                                                                                                        |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ kind: "store", thumbprint, storeName?, machineStore? }` | A certificate in the Windows store, including hardware tokens and cloud key providers.                                                          |
+| `{ kind: "pfx", file, password? }`                         | A PFX file; the password is an Effect `Redacted` and is scrubbed from any error.                                                                |
+| `{ kind: "trusted-signing", library, metadata }`           | Azure Trusted Signing: the client library and account metadata paths, passed as `/dlib` and `/dmdf`. Azure identity comes from the environment. |
 
-The signing policy is SHA-256, with an RFC 3161 SHA-256 timestamp and Authenticode verification. The selected SignTool
-bytes are checked before signing and verification. Existing output is rejected. No operation installs a tool, retries
-a signing attempt, or owns release continuation or publication.
+The operation verifies the input bytes, signs with SHA-256, adds an RFC 3161 SHA-256 timestamp
+from `timestampUrl`, verifies the Authenticode signature, and returns the same artifact kind with
+fresh `bytes` and `sha256` plus a `signature` record (`fileDigest`, `timestampProtocol`,
+`timestampDigest`, `timestampUrl`, `verification`). Executables re-read their header, so `target`
+and `format` survive. SignTool warnings (exit code 2) fail the operation: a release signature with
+warnings is a failure.
 
-## More
+- Executables must end in `.exe` and MSIX files in `.msix`, on both input and output. `outfile`
+  defaults to the input path, replaced through staging unless `atomic: false`.
+- `timestampUrl` is required and must be HTTP(S); `descriptionUrl` must be HTTPS. Neither may
+  carry credentials, a query, or a fragment.
+- `cwd` resolves relative output and PFX paths.
 
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)
+## Versions
+
+`Windows.layer({ executable?, version? })` resolves SignTool once, reading its full four-component
+version from the binary's resource. `Windows.supported` is `>=10.0.26100 <11.0.0` and
+`Windows.tested` is 10.0.26100. String ranges compare the first three components; a predicate
+receives all four. See [tools and providers](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md).
+
+## Errors
+
+`Windows.SignError` is `Tool.InputInvalid`, `Artifact.ArtifactError`,
+`Executable.InspectError`, `Executable.TargetMismatch`, `Tool.Failed`, `Tool.SpawnFailed`, or
+`Commit.CommitError`.
+
+[Signing module of the pipeline example](https://github.com/mannyc2/effect-build/blob/main/examples/artifact-pipeline/src/signing.ts) ·
+[Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
+[Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)

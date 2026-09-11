@@ -1,55 +1,80 @@
 # effect-build-python
 
-Build exactly one Python wheel and one source distribution through a selected uv frontend. Both files come from one
-atomically committed output generation and keep their native backend filenames.
-
-## Install
+Write Python wheels directly from artifacts, or build a Python project's sdist and wheel with
+[uv](https://docs.astral.sh/uv/), as Effect programs. The wheel writer needs no Python; it is how
+a native CLI reaches `pip install`.
 
 ```sh
-npm install --save-exact effect-build-python@0.7.0 effect-build@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-python@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
-These examples use Effect v4 and its matching Node platform package.
-
-Install **uv 0.12.x** and the Python interpreter required by your project separately. The finalized source tree must
-contain `pyproject.toml` and `uv.lock`. The operation checks the lock and disables Python downloads; your backend's
-build dependencies still need to be available to uv.
-
-## Build a finalized source snapshot
-
-Use a `HashedTree` returned by core's tree finalizer. This helper returns an Effect; compose it with your snapshot
-producer and run the combined program at the application entry point.
+## Wheels from artifacts
 
 ```ts
-import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import * as Build from "effect-build-python/Build";
-import type * as Artifact from "effect-build/Artifact";
+import * as Python from "effect-build-python";
 
-const builder = Build.layer();
-
-export const buildDistributions = (source: Artifact.HashedTree) =>
-  Build.build(
-    new Build.BuildInput({
-      source,
-      outdir: "dist/python",
-    }),
-  ).pipe(
-    Effect.provide(builder),
-    Effect.provide(NodeServices.layer),
-  );
+const wheel = (executable: Artifact.Executable) =>
+  Python.wheel({
+    metadata: { name: "hello-cli", version: "1.0.0", summary: "Hello CLI", requiresPython: ">=3.9" },
+    tags: { python: "py3", abi: "none", platform: "manylinux_2_17_x86_64" },
+    entries: [{ artifact: executable, path: "hello_cli-1.0.0.data/scripts/hello" }],
+    outdir: "dist/wheels",
+  });
 ```
 
-The result has `wheel` and `sdist` fields, each an `Artifact.HashedFile`. Their publication records identify the
-same committed tree. `outdir` must not already exist; existing files are never overlaid.
+`wheel({ metadata, tags, entries, outdir, cwd?, rootIsPurelib?, entryPoints?, atomic?, onExists?, prefix? })`
+writes `<name>-<version>-<python>-<abi>-<platform>.whl` into `outdir` and returns it as an
+`Artifact.File`. It generates `METADATA`, `WHEEL`, and a `RECORD` whose digests come from each
+artifact's record, plus `entry_points.txt` when `entryPoints` is given.
 
-`Build.layer({ executable })` can select an explicit uv path. Otherwise selection uses one deterministic PATH walk.
-The selected bytes are checked before `uv lock --check` and `uv build`. The source is revalidated and lent as a private
-snapshot, and only exactly two regular distribution outputs are admitted before finalization.
+- **Native commands.** An entry at `<name>-<version>.data/scripts/<command>` (name and version
+  normalized: `hello_cli-1.0.0`) is installed onto the environment's command path, so the user gets
+  `hello` with no Python wrapper. Use `hello.exe` for Windows wheels.
+- **Metadata.** `name` is normalized per PEP 503 and `version` per PEP 440; `summary`, `license`,
+  `requiresPython`, and `projectUrls` are optional.
+- **Tags.** `python`, `abi`, and `platform` may each be a dot-separated set. Every platform tag
+  must be able to run every executable entry: `win_amd64` and `win_arm64`; `macosx_<major>_<minor>_arm64`
+  and `_x86_64`; `linux_x86_64` and `linux_aarch64`; `manylinux*` for glibc binaries; `musllinux*`
+  for musl binaries. `any` cannot describe a native executable. The minimum macOS version and the
+  manylinux or musllinux floor are promises only you can make; declare them through
+  `platformTag({ target, glibc | musl | macos })`, or `executableTags(...)` for the full
+  `py3-none` triple a compiled command ships with.
+- **Entries** are regular artifacts. Executables get mode `0755`, or set `executable: true`.
+  `.dist-info` entries belong to the writer. Paths and implicit directories must each have one
+  spelling after case folding and NFC normalization: `Docs/a` and `docs/b` conflict. Entries
+  cannot descend through a file, and wheel paths cannot contain control characters.
+- `rootIsPurelib` defaults to true only for `abi: "none"` with `platform: "any"`. `entryPoints`
+  takes groups such as `{ console_scripts: { hello: "hello_cli.cli:main" } }`.
 
-Import `effect-build-python/PythonBuildError` for the exported build and uv error classes. The package does not own
-Python package upload or a release workflow.
+Wheel bytes depend only on the inputs: DEFLATE level 6, fixed timestamps, sorted entries.
+Payloads stream from their artifacts in 64 KiB chunks and are verified as they pass. The only
+size limits are ZIP32's (65,535 entries including generated metadata, 4 GiB per entry and per
+wheel, names up to 65,535 bytes), reported as `ArchiveFormatLimit` before writing; a payload
+that streams a different byte count than its record fails with `ArchiveEntrySizeMismatch`. Both
+come from `effect-build-archives`, whose `Zip.encode` writes the wheel.
 
-## More
+## Projects with uv
 
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)
+```ts
+const built = Python.build({ project: "python/hello", outdir: "dist/python" }).pipe(
+  Effect.provide(Python.layer({ executable: process.env.EFFECT_BUILD_UV_BIN })),
+);
+```
+
+`build({ project, outdir, atomic?, onExists?, prefix? })` runs `uv build`, which builds the sdist
+and then the wheel from it with the project's own build backend, and returns
+`{ wheel: Artifact.File, sdist: Artifact.File }`. Exactly one wheel and one `.tar.gz` sdist must
+result. `Python.layer({ executable?, version? })` resolves uv: `Python.supported` is
+`>=0.12.0 <1.0.0` and `Python.tested` is 0.12.0. `outdir` is replaced as a whole, and with
+`atomic: false` it is emptied before uv writes, so an earlier build's distributions never enter
+the result.
+
+## Errors
+
+`Python.WheelError` is `Tool.InputInvalid`, `ArchiveFormatLimit`,
+`ArchiveEntrySizeMismatch`, `Artifact.ArtifactError`, or `Commit.CommitError`. `Python.BuildError`
+is `Tool.InputInvalid`, the `Tool` errors, `Artifact.ArtifactError`, or `Commit.CommitError`.
+
+[Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
+[Tools and providers](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md) ·
+[Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)

@@ -1,16 +1,41 @@
-export type EntryKind = "file" | "directory" | "symlink";
+import { Option, Stream } from "effect";
+import { Deflate, Gzip } from "fflate/browser";
+import { EntrySizeMismatch } from "../EntrySizeMismatch.js";
+import { FormatLimit } from "../FormatLimit.js";
 
-export interface Entry {
+export type EntryKind = "file" | "directory" | "symlink";
+/** Inputs stay on disk: `contents` streams exactly `bytes` bytes when the encoder reaches the entry. */
+export interface FileEntry<E = never, R = never> {
+  readonly kind: "file";
   readonly path: string;
-  readonly kind: EntryKind;
   readonly mode: number;
-  readonly contents: Uint8Array;
-  readonly linkTarget?: string;
+  readonly bytes: number;
+  readonly contents: Stream.Stream<Uint8Array, E, R>;
 }
+export interface DirectoryEntry {
+  readonly kind: "directory";
+  readonly path: string;
+  readonly mode: number;
+}
+export interface SymlinkEntry {
+  readonly kind: "symlink";
+  readonly path: string;
+  readonly mode: number;
+  readonly target: string;
+}
+export type Entry<E = never, R = never> = FileEntry<E, R> | DirectoryEntry | SymlinkEntry;
+type AnyEntry = Entry<unknown, unknown>;
+type Bytes<E, R> = Stream.Stream<Uint8Array, E, R>;
+export type EncodeError = FormatLimit | EntrySizeMismatch;
+
+/** Payloads are compressed in pieces of this size, so output depends only on the input bytes. */
+export const chunkSize = 64 * 1024;
+/** ZIP32 field widths; ZIP64 records are never written. */
+export const zip32 = { entries: 0xffff, bytes: 0xffffffff, nameBytes: 0xffff } as const;
+/** The ustar size field holds eleven octal digits; PAX size records are not written. */
+export const ustar = { bytes: 0o77777777777 } as const;
 
 const encoder = new TextEncoder();
-
-const paxLongSymlinkPlaceholder = "././@LongSymLink";
 
 const bytes = (...values: readonly number[]): Uint8Array => Uint8Array.from(values);
 
@@ -39,15 +64,14 @@ const crcTable = (() => {
   return table;
 })();
 
-export const crc32 = (input: Uint8Array): number => {
-  let value = 0xffffffff;
+/** Incremental CRC-32: start from 0xffffffff, feed chunks, finish with `(crc ^ 0xffffffff) >>> 0`. */
+export const crc32 = (crc: number, input: Uint8Array): number => {
+  let value = crc;
   for (const byte of input) value = (value >>> 8) ^ (crcTable[(value ^ byte) & 0xff] ?? 0);
-  return (value ^ 0xffffffff) >>> 0;
+  return value;
 };
 
-const utf8Order = (left: string, right: string): number => {
-  const a = encoder.encode(left);
-  const b = encoder.encode(right);
+const compareBytes = (a: Uint8Array, b: Uint8Array): number => {
   const length = Math.min(a.byteLength, b.byteLength);
   for (let index = 0; index < length; index++) {
     const delta = (a[index] ?? 0) - (b[index] ?? 0);
@@ -56,10 +80,166 @@ const utf8Order = (left: string, right: string): number => {
   return a.byteLength - b.byteLength;
 };
 
-export const sortEntries = (entries: readonly Entry[]): readonly Entry[] =>
-  [...entries].sort((a, b) => utf8Order(a.path, b.path));
+/** Entries ordered by the UTF-8 bytes of their paths, each path encoded once. */
+export const sortEntries = <A extends { readonly path: string }>(entries: readonly A[]): readonly A[] =>
+  entries
+    .map((entry) => ({ entry, key: encoder.encode(entry.path) }))
+    .sort((a, b) => compareBytes(a.key, b.key))
+    .map(({ entry }) => entry);
 
-const zipMode = (entry: Entry): number => {
+/** A stream that delivered a different byte count than its record cannot be encoded consistently. */
+const sized = (expected: number, path: string) => <E, R>(input: Bytes<E, R>): Bytes<E | EntrySizeMismatch, R> =>
+  Stream.suspend((): Bytes<E | EntrySizeMismatch, R> => {
+    let actual = 0;
+    return input.pipe(
+      Stream.map((chunk) => {
+        actual += chunk.byteLength;
+        return chunk;
+      }),
+      Stream.concat(
+        Stream.suspend((): Bytes<EntrySizeMismatch, never> =>
+          actual === expected ? Stream.empty : Stream.fail(new EntrySizeMismatch({ path, expected, actual }))
+        ),
+      ),
+    );
+  });
+
+/** Bytes held back until a full piece is available; one per run, so it is mutated in place. */
+interface Buffered {
+  readonly pieces: Uint8Array[];
+  length: number;
+}
+
+/** Re-cut a byte stream into `chunkSize` pieces (the last one shorter), so what follows sees the same boundaries for the same bytes. */
+const rechunk = <E, R>(input: Bytes<E, R>): Bytes<E, R> =>
+  input.pipe(Stream.mapAccum(
+    (): Buffered => ({ pieces: [], length: 0 }),
+    (state, chunk) => {
+      state.pieces.push(chunk);
+      state.length += chunk.byteLength;
+      if (state.length < chunkSize) return [state, []] as const;
+      const joined = concat(state.pieces.splice(0));
+      const pieces: Uint8Array[] = [];
+      let offset = 0;
+      for (; offset + chunkSize <= joined.byteLength; offset += chunkSize) {
+        pieces.push(joined.subarray(offset, offset + chunkSize));
+      }
+      const rest = joined.subarray(offset);
+      if (rest.byteLength > 0) state.pieces.push(rest);
+      state.length = rest.byteLength;
+      return [state, pieces] as const;
+    },
+    { onHalt: (state) => state.length === 0 ? [] : [concat(state.pieces)] },
+  ));
+
+interface Codec {
+  push(chunk: Uint8Array, final?: boolean): void;
+}
+interface Compressing {
+  readonly codec: Codec;
+  readonly pending: Uint8Array[];
+}
+const drain = (pending: Uint8Array[]): Uint8Array[] => pending.length === 0 ? [] : [concat(pending.splice(0))];
+
+/** Push `chunkSize` pieces through a codec created for each run, so the stream is safe to run more than once. */
+const compress = (make: (ondata: (chunk: Uint8Array) => void) => Codec) => <E, R>(input: Bytes<E, R>): Bytes<E, R> =>
+  rechunk(input).pipe(Stream.mapAccum(
+    (): Compressing => {
+      const pending: Uint8Array[] = [];
+      return {
+        codec: make((chunk) => {
+          pending.push(chunk);
+        }),
+        pending,
+      };
+    },
+    (state, chunk) => {
+      state.codec.push(chunk);
+      return [state, drain(state.pending)] as const;
+    },
+    {
+      onHalt: (state) => {
+        state.codec.push(new Uint8Array(0), true);
+        return drain(state.pending);
+      },
+    },
+  ));
+
+const deflate = compress((ondata) => new Deflate({ level: 6 }, ondata));
+/** Fixed compression level and zero mtime keep gzip output reproducible for the same input bytes. */
+const gzip = compress((ondata) => new Gzip({ level: 6, mtime: 0 }, ondata));
+
+// ZIP
+
+/** Local file header, central directory record, data descriptor, and end of central directory. */
+const zipSignature = { local: 0x04034b50, central: 0x02014b50, descriptor: 0x08074b50, end: 0x06054b50 } as const;
+/** Spec 2.0 introduced DEFLATE and data descriptors. */
+const zipVersion = 20;
+/** Made by a Unix host (3) at spec 2.0, so external attributes carry a POSIX mode. */
+const zipMadeBy = (3 << 8) | zipVersion;
+/** Bit 3: CRC and sizes follow the data in a descriptor. Bit 11: names are UTF-8. */
+const zipFlags = (1 << 3) | (1 << 11);
+const deflateMethod = 8;
+/** MS-DOS time 00:00:00 and date 1980-01-01, the earliest timestamp the format can hold. */
+const dosTime = 0;
+const dosDate = (1 << 5) | 1;
+const descriptorBytes = 16;
+
+interface Sizes {
+  readonly crc: number;
+  readonly size: number;
+  readonly compressedSize: number;
+}
+/** The local header carries zeros; the descriptor and central record carry the real values. */
+const unknownSizes: Sizes = { crc: 0, size: 0, compressedSize: 0 };
+
+/** The field run both headers share: flags, method, timestamp, sizes, name length, and an empty extra field. */
+const zipFields = (name: Uint8Array, sizes: Sizes): Uint8Array =>
+  concat([
+    uint16(zipFlags),
+    uint16(deflateMethod),
+    uint16(dosTime),
+    uint16(dosDate),
+    uint32(sizes.crc),
+    uint32(sizes.compressedSize),
+    uint32(sizes.size),
+    uint16(name.byteLength),
+    uint16(0),
+  ]);
+
+const localHeader = (name: Uint8Array): Uint8Array =>
+  concat([uint32(zipSignature.local), uint16(zipVersion), zipFields(name, unknownSizes), name]);
+
+const centralRecord = (name: Uint8Array, sizes: Sizes, mode: number, localOffset: number): Uint8Array =>
+  concat([
+    uint32(zipSignature.central),
+    uint16(zipMadeBy),
+    uint16(zipVersion),
+    zipFields(name, sizes),
+    uint16(0), // comment length
+    uint16(0), // disk number
+    uint16(0), // internal attributes
+    uint32((mode << 16) >>> 0),
+    uint32(localOffset),
+    name,
+  ]);
+
+const dataDescriptor = (sizes: Sizes): Uint8Array =>
+  concat([uint32(zipSignature.descriptor), uint32(sizes.crc), uint32(sizes.compressedSize), uint32(sizes.size)]);
+
+const endOfCentralDirectory = (count: number, centralSize: number, centralOffset: number): Uint8Array =>
+  concat([
+    uint32(zipSignature.end),
+    uint16(0),
+    uint16(0),
+    uint16(count),
+    uint16(count),
+    uint32(centralSize),
+    uint32(centralOffset),
+    uint16(0),
+  ]);
+
+const zipMode = (entry: AnyEntry): number => {
   switch (entry.kind) {
     case "directory":
       return 0o040000 | entry.mode;
@@ -70,79 +250,124 @@ const zipMode = (entry: Entry): number => {
   }
 };
 
-const zipContents = (entry: Entry): Uint8Array =>
-  entry.kind === "symlink" ? encoder.encode(entry.linkTarget ?? "") : entry.contents;
+const zipName = (entry: AnyEntry): string =>
+  entry.kind === "directory" && !entry.path.endsWith("/") ? `${entry.path}/` : entry.path;
 
-export const encodeZip = (unsorted: readonly Entry[]): Uint8Array => {
-  const entries = sortEntries(unsorted);
-  const local: Uint8Array[] = [];
-  const central: Uint8Array[] = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const name = encoder.encode(
-      entry.kind === "directory" && !entry.path.endsWith("/") ? `${entry.path}/` : entry.path,
-    );
-    const contents = zipContents(entry);
-    if (name.byteLength > 0xffff) throw new RangeError(`ZIP entry name is too long: ${entry.path}`);
-    if (contents.byteLength > 0xffffffff) throw new RangeError(`ZIP entry is larger than ZIP32 permits: ${entry.path}`);
-    const digest = crc32(contents);
-    const header = concat([
-      uint32(0x04034b50),
-      uint16(20),
-      uint16(0x0800),
-      uint16(0),
-      uint16(0),
-      uint16(0x0021),
-      uint32(digest),
-      uint32(contents.byteLength),
-      uint32(contents.byteLength),
-      uint16(name.byteLength),
-      uint16(0),
-      name,
-    ]);
-    local.push(header, contents);
-    central.push(
-      concat([
-        uint32(0x02014b50),
-        uint16(0x0314),
-        uint16(20),
-        uint16(0x0800),
-        uint16(0),
-        uint16(0),
-        uint16(0x0021),
-        uint32(digest),
-        uint32(contents.byteLength),
-        uint32(contents.byteLength),
-        uint16(name.byteLength),
-        uint16(0),
-        uint16(0),
-        uint16(0),
-        uint16(0),
-        uint32((zipMode(entry) << 16) >>> 0),
-        uint32(offset),
-        name,
-      ]),
-    );
-    offset += header.byteLength + contents.byteLength;
+/** A symlink's ZIP payload is its target; a directory has none. */
+const zipPayload = <E, R>(entry: Entry<E, R>): { readonly bytes: number; readonly contents: Bytes<E, R> } => {
+  switch (entry.kind) {
+    case "file":
+      return { bytes: entry.bytes, contents: entry.contents };
+    case "symlink": {
+      const target = encoder.encode(entry.target);
+      return { bytes: target.byteLength, contents: Stream.make(target) };
+    }
+    case "directory":
+      return { bytes: 0, contents: Stream.empty };
   }
-  if (entries.length > 0xffff) throw new RangeError("ZIP32 permits at most 65535 entries");
-  const centralBytes = concat(central);
-  if (offset > 0xffffffff || centralBytes.byteLength > 0xffffffff) {
-    throw new RangeError("archive is larger than ZIP32 permits");
-  }
-  const end = concat([
-    uint32(0x06054b50),
-    uint16(0),
-    uint16(0),
-    uint16(entries.length),
-    uint16(entries.length),
-    uint32(centralBytes.byteLength),
-    uint32(offset),
-    uint16(0),
-  ]);
-  return concat([...local, centralBytes, end]);
 };
 
+/** Format limits knowable before any payload is read; sizes learned while compressing are checked as they appear. */
+export const zipLimit = (entries: readonly AnyEntry[]): FormatLimit | undefined => {
+  if (entries.length > zip32.entries) {
+    return new FormatLimit({ format: "zip", limit: "entries", maximum: zip32.entries });
+  }
+  for (const entry of entries) {
+    if (encoder.encode(zipName(entry)).byteLength > zip32.nameBytes) {
+      return new FormatLimit({ format: "zip", limit: "name-bytes", maximum: zip32.nameBytes, path: entry.path });
+    }
+    if (zipPayload(entry).bytes > zip32.bytes) {
+      return new FormatLimit({ format: "zip", limit: "entry-bytes", maximum: zip32.bytes, path: entry.path });
+    }
+  }
+  return undefined;
+};
+
+export const tarLimit = (entries: readonly AnyEntry[]): FormatLimit | undefined => {
+  const oversized = entries.find((entry) => entry.kind === "file" && entry.bytes > ustar.bytes);
+  return oversized === undefined
+    ? undefined
+    : new FormatLimit({ format: "tar", limit: "entry-bytes", maximum: ustar.bytes, path: oversized.path });
+};
+
+interface ZipState {
+  offset: number;
+  readonly central: Uint8Array[];
+}
+
+/** Header, measured and deflated payload, then the descriptor; the central record is kept for the end. */
+const zipEntry = <E, R>(entry: Entry<E, R>, archive: ZipState): Bytes<E | EncodeError, R> =>
+  Stream.suspend((): Bytes<E | EncodeError, R> => {
+    const name = encoder.encode(zipName(entry));
+    const localOffset = archive.offset;
+    const header = localHeader(name);
+    const payload = zipPayload(entry);
+    let crc = 0xffffffff, compressedSize = 0;
+    const data = payload.contents.pipe(
+      sized(payload.bytes, entry.path),
+      Stream.map((chunk) => {
+        crc = crc32(crc, chunk);
+        return chunk;
+      }),
+      deflate,
+      Stream.map((chunk) => {
+        compressedSize += chunk.byteLength;
+        return chunk;
+      }),
+    );
+    const trailer = Stream.suspend((): Bytes<FormatLimit, never> => {
+      // Layout is local header, compressed bytes, descriptor; only the completed entry advances the archive.
+      // The next local offset and the central directory offset are uint32 fields, so the entry's end must fit.
+      const end = localOffset + header.byteLength + compressedSize + descriptorBytes;
+      if (compressedSize > zip32.bytes) {
+        return Stream.fail(
+          new FormatLimit({ format: "zip", limit: "entry-bytes", maximum: zip32.bytes, path: entry.path }),
+        );
+      }
+      if (end > zip32.bytes) {
+        return Stream.fail(
+          new FormatLimit({ format: "zip", limit: "archive-bytes", maximum: zip32.bytes, path: entry.path }),
+        );
+      }
+      const sizes: Sizes = { crc: (crc ^ 0xffffffff) >>> 0, size: payload.bytes, compressedSize };
+      archive.offset = end;
+      archive.central.push(centralRecord(name, sizes, zipMode(entry), localOffset));
+      return Stream.make(dataDescriptor(sizes));
+    });
+    return Stream.make(header).pipe(Stream.concat(data), Stream.concat(trailer));
+  });
+
+/**
+ * ZIP32 with fixed DEFLATE level and zero timestamps. Each entry's CRC and sizes follow its
+ * data in a descriptor (flag bit 3), so no payload is buffered to fill in its header.
+ */
+export const encodeZip = <E, R>(unsorted: ReadonlyArray<Entry<E, R>>): Bytes<E | EncodeError, R> =>
+  Stream.suspend((): Bytes<E | EncodeError, R> => {
+    const limit = zipLimit(unsorted);
+    if (limit !== undefined) return Stream.fail(limit);
+    const entries = sortEntries(unsorted);
+    const archive: ZipState = { offset: 0, central: [] };
+    return Stream.fromIterable(entries).pipe(
+      // Sequential by default, which the offsets need.
+      Stream.flatMap((entry) => zipEntry(entry, archive)),
+      Stream.concat(Stream.suspend((): Bytes<FormatLimit, never> => {
+        const centralSize = archive.central.reduce((total, record) => total + record.byteLength, 0);
+        if (archive.offset > zip32.bytes || centralSize > zip32.bytes) {
+          return Stream.fail(new FormatLimit({ format: "zip", limit: "archive-bytes", maximum: zip32.bytes }));
+        }
+        return Stream.fromIterable([
+          ...archive.central,
+          endOfCentralDirectory(entries.length, centralSize, archive.offset),
+        ]);
+      })),
+    );
+  });
+
+// tar
+
+const paxLongSymlinkPlaceholder = "././@LongSymLink";
+
+/** Fields are sized by the pre-flight checks and placeholders, so overflow here is a defect, not a failure. */
 const writeAscii = (target: Uint8Array, offset: number, length: number, value: string): void => {
   const encoded = encoder.encode(value);
   if (encoded.byteLength > length) throw new RangeError(`tar field is too long: ${value}`);
@@ -155,47 +380,74 @@ const octal = (value: number, width: number): string => {
   return `${encoded.padStart(width - 1, "0")}\0`;
 };
 
-const tarPath = (path: string): { readonly name: string; readonly prefix: string } => {
-  if (encoder.encode(path).byteLength <= 100) return { name: path, prefix: "" };
+interface UstarName {
+  readonly name: string;
+  readonly prefix: string;
+}
+
+/** ustar has no charset declaration and 100 + 155 byte name fields; anything else needs a PAX path record. */
+const ustarName = (path: string): Option.Option<UstarName> => {
+  if (/\P{ASCII}/u.test(path)) return Option.none();
+  if (path.length <= 100) return Option.some({ name: path, prefix: "" });
   for (let index = path.lastIndexOf("/"); index > 0; index = path.lastIndexOf("/", index - 1)) {
     const prefix = path.slice(0, index);
     const name = path.slice(index + 1);
-    if (encoder.encode(prefix).byteLength <= 155 && encoder.encode(name).byteLength <= 100) return { name, prefix };
+    if (prefix.length <= 155 && name.length <= 100) return Option.some({ name, prefix });
   }
-  throw new RangeError(`path does not fit the portable ustar name fields: ${path}`);
+  return Option.none();
 };
 
-interface TarHeaderOptions {
-  readonly path?: string;
-  readonly linkTarget?: string;
-  readonly type?: "0" | "2" | "5" | "x";
-  readonly size?: number;
+const paxPlaceholder = (kind: "PaxHeaders" | "PaxEntries", index: number): UstarName => ({
+  name: `${kind}/${index.toString().padStart(12, "0")}`,
+  prefix: "",
+});
+
+interface TarFields {
+  readonly name: UstarName;
+  readonly mode: number;
+  readonly size: number;
+  readonly type: "0" | "2" | "5" | "x";
+  readonly link: string;
 }
 
-const tarHeader = (entry: Entry, options: TarHeaderOptions = {}): Uint8Array => {
+/** POSIX ustar header fields: byte offset and width within one 512-byte record; the git tar reader uses the same table. */
+export const tarField = {
+  name: [0, 100],
+  mode: [100, 8],
+  uid: [108, 8],
+  gid: [116, 8],
+  size: [124, 12],
+  mtime: [136, 12],
+  checksum: [148, 8],
+  type: [156, 1],
+  link: [157, 100],
+  magic: [257, 6],
+  version: [263, 2],
+  prefix: [345, 155],
+} as const;
+
+const tarHeader = (fields: TarFields): Uint8Array => {
   const output = new Uint8Array(512);
-  const path = tarPath(options.path ?? entry.path);
-  const size = options.size ?? (entry.kind === "file" ? entry.contents.byteLength : 0);
-  const type = options.type ?? (entry.kind === "directory" ? "5" : entry.kind === "symlink" ? "2" : "0");
-  writeAscii(output, 0, 100, path.name);
-  writeAscii(output, 100, 8, octal(entry.mode, 8));
-  writeAscii(output, 108, 8, octal(0, 8));
-  writeAscii(output, 116, 8, octal(0, 8));
-  writeAscii(output, 124, 12, octal(size, 12));
-  writeAscii(output, 136, 12, octal(0, 12));
-  output.fill(0x20, 148, 156);
-  writeAscii(output, 156, 1, type);
-  if (type === "2") writeAscii(output, 157, 100, options.linkTarget ?? entry.linkTarget ?? "");
-  writeAscii(output, 257, 6, "ustar\0");
-  writeAscii(output, 263, 2, "00");
-  writeAscii(output, 345, 155, path.prefix);
+  writeAscii(output, ...tarField.name, fields.name.name);
+  writeAscii(output, ...tarField.mode, octal(fields.mode, tarField.mode[1]));
+  writeAscii(output, ...tarField.uid, octal(0, tarField.uid[1]));
+  writeAscii(output, ...tarField.gid, octal(0, tarField.gid[1]));
+  writeAscii(output, ...tarField.size, octal(fields.size, tarField.size[1]));
+  writeAscii(output, ...tarField.mtime, octal(0, tarField.mtime[1]));
+  writeAscii(output, ...tarField.checksum, " ".repeat(tarField.checksum[1]));
+  writeAscii(output, ...tarField.type, fields.type);
+  writeAscii(output, ...tarField.link, fields.link);
+  writeAscii(output, ...tarField.magic, "ustar\0");
+  writeAscii(output, ...tarField.version, "00");
+  writeAscii(output, ...tarField.prefix, fields.name.prefix);
   const checksum = output.reduce((total, byte) => total + byte, 0);
-  writeAscii(output, 148, 8, `${checksum.toString(8).padStart(6, "0")}\0 `);
+  writeAscii(output, ...tarField.checksum, `${checksum.toString(8).padStart(tarField.checksum[1] - 2, "0")}\0 `);
   return output;
 };
 
 const paxRecord = (key: string, value: string): Uint8Array => {
   const body = encoder.encode(`${key}=${value}\n`);
+  // The length field counts its own decimal digits and the separating space; iterate to the fixed point.
   let length = body.byteLength + 2;
   while (true) {
     const next = String(length).length + 1 + body.byteLength;
@@ -204,175 +456,61 @@ const paxRecord = (key: string, value: string): Uint8Array => {
   }
 };
 
-const appendTarEntry = (
-  chunks: Uint8Array[],
-  header: Uint8Array,
-  contents: Uint8Array,
-): void => {
-  chunks.push(header);
-  if (contents.byteLength === 0) return;
-  chunks.push(contents);
-  const padding = (512 - (contents.byteLength % 512)) % 512;
-  if (padding > 0) chunks.push(new Uint8Array(padding));
-};
+const padding = (size: number): Uint8Array => new Uint8Array((512 - (size % 512)) % 512);
 
-export const encodeTar = (unsorted: readonly Entry[]): Uint8Array => {
-  const chunks: Uint8Array[] = [];
-  for (const [index, entry] of sortEntries(unsorted).entries()) {
-    const contents = entry.kind === "file" ? entry.contents : new Uint8Array();
-    let headerPath = entry.path;
-    let headerLink = entry.linkTarget;
+/** PAX records for what ustar cannot name, the header, then a file's measured payload and padding. */
+const tarEntry = <E, R>(entry: Entry<E, R>, index: number): Bytes<E | EntrySizeMismatch, R> =>
+  Stream.suspend((): Bytes<E | EntrySizeMismatch, R> => {
     const records: Uint8Array[] = [];
-    try {
-      tarPath(entry.path);
-    } catch {
-      records.push(paxRecord("path", entry.path));
-      headerPath = `PaxEntries/${index.toString().padStart(12, "0")}`;
+    const name = Option.match(ustarName(entry.path), {
+      onSome: (name) => name,
+      onNone: () => {
+        records.push(paxRecord("path", entry.path));
+        return paxPlaceholder("PaxEntries", index);
+      },
+    });
+    let link = "";
+    if (entry.kind === "symlink") {
+      const fits = encoder.encode(entry.target).byteLength <= 100 && !/\P{ASCII}/u.test(entry.target);
+      if (!fits) records.push(paxRecord("linkpath", entry.target));
+      link = fits ? entry.target : paxLongSymlinkPlaceholder;
     }
-    if (entry.kind === "symlink" && encoder.encode(entry.linkTarget ?? "").byteLength > 100) {
-      records.push(paxRecord("linkpath", entry.linkTarget ?? ""));
-      headerLink = paxLongSymlinkPlaceholder;
-    }
+    const blocks: Uint8Array[] = [];
     if (records.length > 0) {
       const pax = concat(records);
-      const paxEntry: Entry = {
-        path: `PaxHeaders/${index.toString().padStart(12, "0")}`,
-        kind: "file",
-        mode: 0o644,
-        contents: pax,
-      };
-      appendTarEntry(chunks, tarHeader(paxEntry, { type: "x", size: pax.byteLength }), pax);
+      blocks.push(
+        tarHeader({
+          name: paxPlaceholder("PaxHeaders", index),
+          mode: 0o644,
+          size: pax.byteLength,
+          type: "x",
+          link: "",
+        }),
+        pax,
+        padding(pax.byteLength),
+      );
     }
-    appendTarEntry(chunks, tarHeader(entry, { path: headerPath, linkTarget: headerLink ?? "" }), contents);
-  }
-  chunks.push(new Uint8Array(1024));
-  return concat(chunks);
-};
-
-const deflateStored = (input: Uint8Array): Uint8Array => {
-  const chunks: Uint8Array[] = [];
-  if (input.byteLength === 0) return bytes(1, 0, 0, 0xff, 0xff);
-  for (let offset = 0; offset < input.byteLength;) {
-    const length = Math.min(0xffff, input.byteLength - offset);
-    const final = offset + length === input.byteLength;
-    chunks.push(
-      bytes(final ? 1 : 0, length, length >>> 8, (~length) & 0xff, ((~length) >>> 8) & 0xff),
-      input.subarray(offset, offset + length),
+    const size = entry.kind === "file" ? entry.bytes : 0;
+    const type = entry.kind === "directory" ? "5" : entry.kind === "symlink" ? "2" : "0";
+    blocks.push(tarHeader({ name, mode: entry.mode, size, type, link }));
+    const header = Stream.make(concat(blocks));
+    if (entry.kind !== "file") return header;
+    return header.pipe(
+      Stream.concat(entry.contents.pipe(sized(entry.bytes, entry.path))),
+      Stream.concat(entry.bytes % 512 === 0 ? Stream.empty : Stream.make(padding(entry.bytes))),
     );
-    offset += length;
-  }
-  return concat(chunks);
-};
+  });
 
-export const encodeTarGzip = (entries: readonly Entry[]): Uint8Array => {
-  const tar = encodeTar(entries);
-  return concat([
-    bytes(0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff),
-    deflateStored(tar),
-    uint32(crc32(tar)),
-    uint32(tar.byteLength),
-  ]);
-};
+/** ustar with PAX records for long or non-ASCII names; file payloads pass through untouched. */
+export const encodeTar = <E, R>(unsorted: ReadonlyArray<Entry<E, R>>): Bytes<E | EncodeError, R> =>
+  Stream.suspend((): Bytes<E | EncodeError, R> => {
+    const limit = tarLimit(unsorted);
+    if (limit !== undefined) return Stream.fail(limit);
+    return Stream.fromIterable(sortEntries(unsorted).entries()).pipe(
+      Stream.flatMap(([index, entry]) => tarEntry(entry, index)),
+      Stream.concat(Stream.make(new Uint8Array(1024))),
+    );
+  });
 
-const decoder = new TextDecoder("utf-8", { fatal: true });
-
-const beforeNul = (value: string): string => {
-  const index = value.indexOf("\0");
-  return index === -1 ? value : value.slice(0, index);
-};
-
-const field = (header: Uint8Array, offset: number, length: number): string =>
-  beforeNul(decoder.decode(header.subarray(offset, offset + length)));
-
-const parseOctal = (value: string): number => {
-  const normalized = value.trim().replace(/^0+/, "");
-  if (normalized === "") return 0;
-  if (!/^[0-7]+$/.test(normalized)) throw new RangeError(`invalid tar octal field: ${value}`);
-  return Number.parseInt(normalized, 8);
-};
-
-const parsePax = (contents: Uint8Array): Readonly<Record<string, string>> => {
-  const result: Record<string, string> = {};
-  let offset = 0;
-  while (offset < contents.byteLength) {
-    const space = contents.indexOf(0x20, offset);
-    if (space === -1) throw new RangeError("invalid PAX record length");
-    const encodedLength = decoder.decode(contents.subarray(offset, space));
-    if (!/^[1-9][0-9]*$/.test(encodedLength)) throw new RangeError("invalid PAX record length");
-    const length = Number.parseInt(encodedLength, 10);
-    if (!Number.isSafeInteger(length) || length <= 0 || offset + length > contents.byteLength) {
-      throw new RangeError("invalid PAX record");
-    }
-    const end = offset + length;
-    if (contents[end - 1] !== 0x0a) throw new RangeError("PAX record does not end in newline");
-    const record = contents.subarray(space + 1, end - 1);
-    const equals = record.indexOf(0x3d);
-    if (equals <= 0) throw new RangeError("PAX record lacks a key/value separator");
-    const key = decoder.decode(record.subarray(0, equals));
-    const value = decoder.decode(record.subarray(equals + 1));
-    result[key] = value;
-    offset += length;
-  }
-  return result;
-};
-
-/** Strictly decodes the ustar/PAX subset emitted by `git archive --format=tar`. */
-export const decodeGitTar = (input: Uint8Array): readonly Entry[] => {
-  const entries: Entry[] = [];
-  let offset = 0;
-  let globalPax: Readonly<Record<string, string>> = {};
-  let pax: Readonly<Record<string, string>> = {};
-  let longPath: string | undefined;
-  let longLink: string | undefined;
-  while (offset + 512 <= input.byteLength) {
-    const header = input.subarray(offset, offset + 512);
-    if (header.every((byte) => byte === 0)) break;
-    const expected = parseOctal(field(header, 148, 8));
-    const checksumHeader = header.slice();
-    checksumHeader.fill(0x20, 148, 156);
-    const actual = checksumHeader.reduce((total, byte) => total + byte, 0);
-    if (expected !== actual) throw new RangeError(`invalid tar header checksum at byte ${offset}`);
-    const prefix = field(header, 345, 155);
-    const headerPath = field(header, 0, 100);
-    const rawPath = prefix === "" ? headerPath : `${prefix}/${headerPath}`;
-    const size = parseOctal(field(header, 124, 12));
-    const type = field(header, 156, 1) || "0";
-    const dataStart = offset + 512;
-    const dataEnd = dataStart + size;
-    if (dataEnd > input.byteLength) throw new RangeError(`truncated tar entry: ${rawPath}`);
-    const contents = input.slice(dataStart, dataEnd);
-    offset = dataStart + Math.ceil(size / 512) * 512;
-    if (type === "g") {
-      globalPax = { ...globalPax, ...parsePax(contents) };
-      continue;
-    }
-    if (type === "x") {
-      pax = parsePax(contents);
-      continue;
-    }
-    if (type === "L") {
-      longPath = beforeNul(decoder.decode(contents));
-      continue;
-    }
-    if (type === "K") {
-      longLink = beforeNul(decoder.decode(contents));
-      continue;
-    }
-    const path = pax.path ?? globalPax.path ?? longPath ?? rawPath;
-    const linkTarget = pax.linkpath ?? globalPax.linkpath ?? longLink ?? field(header, 157, 100);
-    const rawMode = parseOctal(field(header, 100, 8));
-    pax = {};
-    longPath = undefined;
-    longLink = undefined;
-    if (type === "0" || type === "\0") {
-      entries.push({ path, kind: "file", mode: (rawMode & 0o111) === 0 ? 0o644 : 0o755, contents });
-    } else if (type === "2") {
-      entries.push({ path, kind: "symlink", mode: 0o777, contents: new Uint8Array(), linkTarget });
-    } else if (type === "5") {
-      entries.push({ path: path.replace(/\/$/, ""), kind: "directory", mode: 0o755, contents: new Uint8Array() });
-    } else {
-      throw new RangeError(`unsupported tar entry type ${JSON.stringify(type)} at ${path}`);
-    }
-  }
-  return entries;
-};
+export const encodeTarGzip = <E, R>(entries: ReadonlyArray<Entry<E, R>>): Bytes<E | EncodeError, R> =>
+  encodeTar(entries).pipe(gzip);

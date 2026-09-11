@@ -1,33 +1,32 @@
 import { Effect } from "effect";
-import { DenoCommandInputInvalid } from "./CommandError.js";
-import type { InvocationOptions } from "./Runtime.js";
+import { Tool } from "effect-build";
 
 export type PermissionValue = true | readonly [string, ...string[]];
 export type Check = false | true | "all" | "remote";
 export type NodeModulesDir = "auto" | "manual" | "none";
 export type NodeModulesLinker = "isolated" | "hoisted";
 
-export interface ProjectOptions extends InvocationOptions {
+export interface ProjectOptions {
   /** undefined preserves native config discovery; false renders --no-config. */
-  readonly config?: string | false;
-  readonly importMap?: string;
+  readonly config?: string | false | undefined;
+  readonly importMap?: string | undefined;
   /** undefined preserves discovery, false disables, true selects the default deno.lock. */
-  readonly lock?: string | boolean;
-  readonly frozen?: boolean;
-  readonly noNpm?: boolean;
-  readonly noRemote?: boolean;
-  readonly nodeModulesDir?: NodeModulesDir;
-  readonly nodeModulesLinker?: NodeModulesLinker;
-  readonly reload?: true | readonly [string, ...string[]];
-  readonly vendor?: boolean;
-  readonly cert?: string;
-  readonly conditions?: readonly [string, ...string[]];
-  readonly minimumDependencyAge?: string;
+  readonly lock?: string | boolean | undefined;
+  readonly frozen?: boolean | undefined;
+  readonly noNpm?: boolean | undefined;
+  readonly noRemote?: boolean | undefined;
+  readonly nodeModulesDir?: NodeModulesDir | undefined;
+  readonly nodeModulesLinker?: NodeModulesLinker | undefined;
+  readonly reload?: true | readonly [string, ...string[]] | undefined;
+  readonly vendor?: boolean | undefined;
+  readonly cert?: string | undefined;
+  readonly conditions?: readonly [string, ...string[]] | undefined;
+  readonly minimumDependencyAge?: string | undefined;
 }
 
 export interface ImportPermissions {
-  readonly allowImport?: PermissionValue;
-  readonly denyImport?: PermissionValue;
+  readonly allowImport?: PermissionValue | undefined;
+  readonly denyImport?: PermissionValue | undefined;
 }
 
 export const renderPermission = (name: string, value: PermissionValue | undefined): readonly string[] =>
@@ -37,14 +36,9 @@ export const validatePermission = (
   operation: string,
   field: string,
   value: PermissionValue | undefined,
-): Effect.Effect<void, DenoCommandInputInvalid> =>
+): Effect.Effect<void, Tool.InputInvalid> =>
   Array.isArray(value) && value.length === 0
-    ? Effect.fail(
-      new DenoCommandInputInvalid({
-        operation,
-        reason: `${field} must be true or a non-empty list`,
-      }),
-    )
+    ? Effect.fail(new Tool.InputInvalid({ operation, reason: `${field} must be true or a non-empty list` }))
     : Effect.void;
 
 export const renderProject = (input: ProjectOptions): readonly string[] => [
@@ -88,9 +82,9 @@ export const validatePath = (
   operation: string,
   field: string,
   value: string,
-): Effect.Effect<void, DenoCommandInputInvalid> =>
-  value.length > 0 && !value.includes("\0")
+): Effect.Effect<void, Tool.InputInvalid> => {
+  const issue = Tool.argumentIssue(value);
+  return issue === undefined
     ? Effect.void
-    : Effect.fail(
-      new DenoCommandInputInvalid({ operation, reason: `${field} must be non-empty and contain no NUL` }),
-    );
+    : Effect.fail(new Tool.InputInvalid({ operation, reason: `${field} ${issue}` }));
+};

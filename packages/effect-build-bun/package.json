@@ -1,7 +1,7 @@
 {
   "name": "effect-build-bun",
   "version": "0.7.0",
-  "description": "Provider-native Bun API and selected-command operations for effect-build.",
+  "description": "Compile executables and bundle TypeScript with Bun as Effect programs.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -23,6 +23,7 @@
   "homepage": "https://github.com/mannyc2/effect-build#readme",
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
@@ -35,13 +36,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./Api": {
+    "./api": {
       "types": "./dist/Api/index.d.ts",
       "import": "./dist/Api/index.js"
-    },
-    "./Command": {
-      "types": "./dist/Command/index.d.ts",
-      "import": "./dist/Command/index.js"
     }
   },
   "scripts": {
@@ -49,13 +46,22 @@
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "bun-types": "1.3.14",
     "effect-build": "workspace:^"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+    "bun-types": ">=1.3.14 <2.0.0",
+    "effect": ">=4.0.0-rc.108 <4.1.0-0"
   },
   "devDependencies": {
+    "bun-types": "1.3.14",
     "effect": "4.0.0-rc.108"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "peerDependenciesMeta": {
+    "bun-types": {
+      "optional": true
+    }
   }
 }

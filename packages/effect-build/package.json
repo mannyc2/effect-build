@@ -1,7 +1,7 @@
 {
   "name": "effect-build",
   "version": "0.7.0",
-  "description": "Portable Effect-native artifact, ownership, matrix, and provider-authoring contracts.",
+  "description": "Effect programs for artifacts, tools, targets, atomic commits, and checksums.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -23,6 +23,7 @@
   "homepage": "https://github.com/mannyc2/effect-build#readme",
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
@@ -31,31 +32,56 @@
     "provenance": true
   },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./Artifact": { "types": "./dist/Artifact.d.ts", "import": "./dist/Artifact.js" },
-    "./Author/BorrowedOutput": {
-      "types": "./dist/Author/BorrowedOutput.d.ts",
-      "import": "./dist/Author/BorrowedOutput.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
-    "./Author/Executable": { "types": "./dist/Author/Executable.d.ts", "import": "./dist/Author/Executable.js" },
-    "./Author/File": { "types": "./dist/Author/File.d.ts", "import": "./dist/Author/File.js" },
-    "./Author/NativeExecutable": {
-      "types": "./dist/Author/NativeExecutable.d.ts",
-      "import": "./dist/Author/NativeExecutable.js"
+    "./Artifact": {
+      "types": "./dist/Artifact.d.ts",
+      "import": "./dist/Artifact.js"
     },
-    "./Author/Tool": { "types": "./dist/Author/Tool.d.ts", "import": "./dist/Author/Tool.js" },
-    "./Author/Tree": { "types": "./dist/Author/Tree.d.ts", "import": "./dist/Author/Tree.js" },
-    "./Matrix": { "types": "./dist/Matrix.d.ts", "import": "./dist/Matrix.js" },
-    "./SystemTarget": { "types": "./dist/SystemTarget.d.ts", "import": "./dist/SystemTarget.js" }
+    "./Commit": {
+      "types": "./dist/Commit.d.ts",
+      "import": "./dist/Commit.js"
+    },
+    "./Executable": {
+      "types": "./dist/Executable.d.ts",
+      "import": "./dist/Executable.js"
+    },
+    "./Target": {
+      "types": "./dist/Target.d.ts",
+      "import": "./dist/Target.js"
+    },
+    "./Layout": {
+      "types": "./dist/Layout.d.ts",
+      "import": "./dist/Layout.js"
+    },
+    "./Tool": {
+      "types": "./dist/Tool.d.ts",
+      "import": "./dist/Tool.js"
+    },
+    "./Checksums": {
+      "types": "./dist/Checksums.d.ts",
+      "import": "./dist/Checksums.js"
+    }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+    "effect": ">=4.0.0-rc.108 <4.1.0-0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.108"
+    "effect": "4.0.0-rc.108",
+    "@types/node": "24.3.0",
+    "@types/semver": "7.8.0"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0",
+    "semver": "7.8.5"
   }
 }

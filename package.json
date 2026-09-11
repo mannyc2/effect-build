@@ -6,33 +6,29 @@
   "packageManager": "bun@1.3.14",
   "workspaces": [
     "packages/*",
-    "examples/bun",
-    "examples/deno",
-    "examples/esbuild",
-    "examples/node-sea",
-    "examples/cli",
-    "examples/artifact-pipeline"
+    "examples/artifact-pipeline",
+    "examples/cli"
   ],
   "scripts": {
     "clean": "node scripts/clean-dist.mjs",
-    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
+    "check": "bun run typecheck",
     "build": "bun run clean && tsc -b tsconfig.packages.json --force",
-    "test:unit": "vitest run test/unit && bun run --cwd packages/effect-build-apple test",
-    "test:examples": "bun run --cwd examples/cli test && bun run --cwd examples/esbuild test && bun run --cwd examples/artifact-pipeline test",
-    "test:integration:bun": "bun scripts/run-real-bun-integration.mjs",
-    "test:integration:deno": "vitest run test/integration/deno-compile-executable.test.ts test/integration/deno-bundle.test.ts",
-    "test:integration:node-sea": "vitest run test/integration/node-sea-assemble-executable.test.ts",
-    "test:integration:target": "vitest run test/integration/target-support.test.ts",
-    "acceptance:archives": "vitest run test/integration/archives-real.test.ts",
-    "acceptance:python": "vitest run test/integration/python-build-real.test.ts",
-    "acceptance:nfpm:linux": "vitest run test/integration/nfpm-real.test.ts",
-    "acceptance:sbom": "vitest run test/integration/sbom-real.test.ts",
-    "acceptance:apple": "vitest run test/integration/apple-native-real.test.ts",
-    "acceptance:windows": "vitest run test/integration/windows-msix-real.test.ts",
+    "test:unit": "vitest run test/unit",
+    "test:examples": "bun run --cwd examples/artifact-pipeline test && bun run --cwd examples/cli test",
     "lint": "oxlint packages test examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
-    "verify": "bun run build && bun run check && bun run lint && bun run test:unit && bun run test:examples"
+    "verify": "bun run build && bun run check && bun run lint && bun run test:release && bun run test:unit && bun run test:examples",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
+    "test:integration:bun": "vitest run test/integration/bun.test.ts test/integration/bun-api.test.ts",
+    "test:integration:deno": "vitest run test/integration/deno.test.ts test/integration/deno-api.test.ts",
+    "test:integration:node-sea": "vitest run test/integration/node-sea.test.ts",
+    "test:integration:nfpm": "vitest run test/integration/nfpm.test.ts",
+    "test:integration:python": "vitest run test/integration/python-build.test.ts test/integration/python-wheel.test.ts",
+    "test:integration:sbom": "vitest run test/integration/sbom.test.ts",
+    "test:integration:windows": "vitest run test/integration/windows.test.ts",
+    "test:consumer": "node scripts/consumer-acceptance.mjs",
+    "test:release": "node --test scripts/release-packages.test.mjs"
   },
   "devDependencies": {
     "@effect/platform-bun": "4.0.0-rc.108",
@@ -57,6 +53,7 @@
     "oxlint": "0.15.1",
     "rolldown": "1.2.5",
     "typescript": "6.0.3",
-    "vitest": "3.2.6"
+    "vitest": "3.2.6",
+    "@types/semver": "7.8.0"
   }
 }

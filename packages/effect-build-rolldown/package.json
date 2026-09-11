@@ -1,8 +1,7 @@
 {
   "name": "effect-build-rolldown",
   "version": "0.7.0",
-  "private": true,
-  "description": "Effect-native provider API and command candidates for Rolldown.",
+  "description": "Bundle TypeScript with Rolldown as scoped Effect programs.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -23,11 +22,19 @@
   "homepage": "https://github.com/mannyc2/effect-build#readme",
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json --force",
@@ -38,9 +45,12 @@
     "rolldown": "1.2.5"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-beta.104 <4.1.0-0"
+    "effect": ">=4.0.0-rc.108 <4.1.0-0"
   },
   "devDependencies": {
     "effect": "4.0.0-rc.108"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

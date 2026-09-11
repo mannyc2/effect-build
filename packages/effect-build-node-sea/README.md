@@ -1,95 +1,63 @@
 # effect-build-node-sea
 
-Assemble a Node single executable with the selected command's native `node --build-sea` operation, then inspect and
-finalize the resulting executable through effect-build core.
-
-## Install
-
-```sh
-npm install --save-exact effect-build-node-sea@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
-```
-
-These examples use Effect v4 and its matching Node platform package.
-
-The reviewed command is **Node 26.7.0 on Linux x64 with glibc**. The selected binary must expose `--build-sea`.
-Other operating systems and architectures are rejected. `allowUntestedVersion` only relaxes the exact Node version
-check; it does not widen platform support.
-
-## Assemble an executable
-
-Create `src/main.cjs` containing `console.log("Hello from SEA!")`, then save the following as `build.mts`.
-Run it from your application directory on the admitted Linux host, with Node **26.7.0** available on PATH.
-The output path must not already exist.
-
-```ts
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect } from "effect";
-import * as Command from "effect-build-node-sea/Command";
-
-const compiler = Command.layer();
-const program = Command.AssembleExecutable.assembleDirect({
-  main: { _tag: "File", path: "src/main.cjs", format: "commonjs" },
-  outfile: "dist/app",
-  observation: "hashed",
-}).pipe(
-  Effect.tap((artifact) => Console.log(artifact.path, artifact.target, artifact.digest.value)),
-  Effect.provide(compiler),
-  Effect.provide(NodeServices.layer),
-);
-
-NodeRuntime.runMain(program);
-```
+Package a bundled CommonJS script and its assets as a Node
+[single executable application](https://nodejs.org/api/single-executable-applications.html), as an
+Effect program. The result is an `Artifact.Executable` whose target is read from the base Node
+binary's header, ready for an archive, an installer, or a signer.
 
 ```sh
-node build.mts
+npm install --save-dev --save-exact effect-build-node-sea@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
-`NodeRuntime.runMain` handles Ctrl+C so the scoped compiler process can close.
-
-`Command.AssembleExecutable` is the public operation module. Prepare the JavaScript entrypoint before assembly;
-this package is not a TypeScript bundler. Its main input makes file versus in-memory acquisition explicit.
-
-## Embed file or byte assets
-
-Each asset uses one explicit input form:
+## Usage
 
 ```ts
-const assets = [
-  { _tag: "File", key: "message", path: "assets/message.txt" },
-  { _tag: "Bytes", key: "binary", contents: new Uint8Array([0, 128, 255]) },
-] as const;
+import { Effect, Path } from "effect";
+import { Artifact } from "effect-build";
+import * as Esbuild from "effect-build-esbuild";
+import * as NodeSea from "effect-build-node-sea";
+
+const sea = Effect.gen(function*() {
+  const path = yield* Path.Path;
+  const bundle = yield* Esbuild.buildToDirectory({
+    entryPoints: ["src/main.ts"],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    outdir: "dist/sea",
+  });
+  const main = yield* Artifact.file(path.join(bundle.path, "main.js"), bundle.producedBy);
+  const license = yield* Artifact.file("LICENSE", bundle.producedBy);
+  return yield* NodeSea.assemble({ main, assets: { "LICENSE": license }, outfile: "dist/cli" });
+}).pipe(Effect.provide(NodeSea.layer()));
 ```
 
-File paths resolve against `cwd`. Byte contents are defensively copied during preparation. Both forms are written
-to the operation's private staging directory for Node to embed; callers need no temporary asset file. Keys must
-be unique and non-empty. Untagged assets and records mixing `path` with `contents` are rejected.
+`assemble({ main, assets?, outfile, cwd?, disableExperimentalSEAWarning?, atomic?, onExists?, prefix? })`
+returns the executable. `main` must be bundled CommonJS: a SEA's `require()` loads only Node's
+built-ins, so bundle every dependency into the script. `assets` are regular artifacts keyed by
+the name the program reads them with (`require("node:sea").getAsset(name)`).
 
-To embed an existing finalized file or executable, lend its verified bytes directly:
+Assembly writes the SEA preparation blob, copies the base executable, injects the blob with
+postject, ad hoc signs it on macOS with `xcrun codesign` (injection invalidates the base
+signature, and an unsigned arm64 binary will not launch), and checks the header. Inputs and
+intermediates use private temporary files, even with `atomic: false`. Windows outputs must end in
+`.exe`. Replace the ad hoc signature with `Apple.sign` before shipping.
 
-```ts
-import * as Command from "effect-build-node-sea/Command";
-import * as File from "effect-build/Author/File";
+## Layer and versions
 
-const assembleWithPayload = (artifact: File.VerifiedInput) =>
-  File.withVerifiedBytes(artifact, (contents) =>
-    Command.AssembleExecutable.assembleDirect({
-      main: { _tag: "File", path: "src/main.cjs", format: "commonjs" },
-      assets: [{ _tag: "Bytes", key: "payload", contents }],
-      outfile: "dist/app-with-payload",
-      observation: "hashed",
-    }));
-```
+`NodeSea.layer({ executable?, baseExecutable?, version? })` resolves two Node binaries: the
+builder that runs the SEA tooling (default: the current process) and the base that is copied and
+injected (default: the builder). Both must report the same version. `NodeSea.supported` is
+`>=22.0.0 <27.0.0`, the versions sharing the preparation blob and injection workflow, and
+`NodeSea.tested` records the CI fixtures, 22.0.0 and 26.7.0. The target comes from the base
+executable's header, so a base running under emulation is recorded as itself.
 
-Provide the same command and platform layers as above. The main can retrieve the exact embedded bytes with
-`require("node:sea").getAsset("payload")`. Changes to the source artifact before verified consumption fail with
-`FileVerificationFailed` before assembly starts. This handoff reuses the held bytes without reopening the original
-path or creating another finalized file.
+## Errors
 
-`Command.layer()` selects the builder and optional base executable once. Set `builderExecutable` and
-`baseExecutable` to explicit absolute paths when needed; distinct builder and base selections must report the same
-version. Selected bytes are reauthenticated before launch. There is no postject fallback, automatic installation,
-or target inference from the build script's host.
+`NodeSea.AssembleError` is `Tool.InputInvalid`, `Failed` (tag `NodeSeaFailed`,
+with the failing `operation` and its `cause`), the `Tool` errors, `Artifact.ArtifactError`,
+`Executable.InspectError`, `Executable.TargetMismatch`, or `Commit.CommitError`.
 
-## More
-
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md) · [Runnable SEA example](https://github.com/mannyc2/effect-build/blob/main/examples/README.md) · [Provider guide](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md)
+[Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
+[Tools and providers](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md) ·
+[Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)

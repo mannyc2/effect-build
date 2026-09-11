@@ -1,56 +1,44 @@
 # effect-build-esbuild
 
-esbuild builds, transforms, analysis, and scoped contexts as Effect v4 programs. Choose the native API for in-memory
-results or the command lane when your build must select and authenticate a specific executable.
-
-## Install
+Bundle and transform with [esbuild](https://esbuild.github.io) as Effect programs. esbuild is a
+peer dependency (`>=0.28.2 <0.29.0`, tested with 0.28.2): your install's esbuild runs in process,
+and no tool layer is needed.
 
 ```sh
-npm install --save-exact effect-build-esbuild@0.7.0 effect@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-esbuild@0.7.0 esbuild@0.28.2 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
-This example uses Effect v4. The package includes esbuild **0.28.2** as a dependency.
-
-## Build in memory
-
-This example needs no input files and writes no output files. Save it as `build.ts` and run it with a
-TypeScript-capable Node runtime.
+## Usage
 
 ```ts
 import { Effect } from "effect";
-import { Build } from "effect-build-esbuild/Api";
+import * as Esbuild from "effect-build-esbuild";
 
-const result = await Effect.runPromise(
-  Build.build({
-    stdin: { contents: 'export const greeting = "Hello!";', loader: "ts" },
-    bundle: true,
-    format: "esm",
-    write: false,
-  }),
-);
-
-console.log(result.outputFiles[0]?.text);
+const bundle = Esbuild.buildToDirectory({
+  entryPoints: ["src/main.ts"],
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  sourcemap: true,
+  outdir: "dist/app",
+});
 ```
 
-`Build.build` requires `write: false` and returns the native esbuild result. It needs no effect-build service layer.
+## Operations
 
-## Choose an operation
+| Operation                                  | Returns                             | Notes                                                                                                                   |
+| ------------------------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `buildToDirectory({ ...options, outdir })` | `Artifact.Directory`                | Native build options plus `atomic`, `onExists`, `prefix`. Staged as a sibling, so relative imports and maps stay valid. |
+| `build(options)`                           | esbuild's `BuildResult`             | The native call, with native write behavior and result types.                                                           |
+| `transform(input, options?)`               | esbuild's `TransformResult`         |                                                                                                                         |
+| `analyzeMetafile(metafile, options?)`      | `string`                            |                                                                                                                         |
+| `context(options)`                         | `{ rebuild, watch, serve, cancel }` | Requires a scope; closing it cancels and disposes the context.                                                          |
 
-| Import                         | Public modules                                                                                                 |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `effect-build-esbuild/Api`     | `Build`, `BuildToDirectory`, `Transform`, `AnalyzeMetafile`, `FormatMessages`, `Context`, `ContextToDirectory` |
-| `effect-build-esbuild/Command` | `Build`, `BuildToDirectory`, `Watch`, and `layer()`                                                            |
+## Errors
 
-API contexts and command watches require an Effect scope; keep rebuild, watch, and serve work inside that scope.
-The standalone command `Serve` candidate is not publicly exported.
+`EsbuildFailed` keeps esbuild's `errors` and `warnings` arrays and the original exception;
+`Tool.InputInvalid` rejects `outfile` or `write` in directory builds.
+`Esbuild.supported` and `Esbuild.tested` report the peer range and the tested version.
 
-For the command lane, install a matching Effect platform adapter, provide its services, and provide
-`Command.layer()`. It selects esbuild **0.28.2** from PATH or an explicit absolute `executable` and reauthenticates
-those bytes before launch. The API dependency alone does not put its executable on your shell's PATH.
-
-Directory operations preserve esbuild's direct writes. They may leave partial output after failure or interruption
-and do not return a core atomically finalized tree.
-
-## More
-
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md) · [Runnable build and watch examples](https://github.com/mannyc2/effect-build/blob/main/examples/README.md) · [Provider guide](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md)
+[Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
+[Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)

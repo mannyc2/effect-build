@@ -1,2 +1,2 @@
-export * as Build from "./Build.js";
-export * as PythonBuildError from "./PythonBuildError.js";
+export * from "./Python.js";
+export * from "./Wheel.js";

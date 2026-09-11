@@ -1,55 +1,55 @@
 # effect-build-sbom
 
-Generate SPDX JSON 2.3 or CycloneDX JSON 1.6 from an exact finalized file or directory with a selected Syft executable.
-The validated SBOM is returned as an atomically finalized `Artifact.HashedFile`.
-
-## Install
+Generate SPDX 2.3 or CycloneDX 1.6 JSON software bills of materials for release artifacts with
+[Syft](https://github.com/anchore/syft), as Effect programs.
 
 ```sh
-npm install --save-exact effect-build-sbom@0.7.0 effect-build@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-sbom@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
-These examples use Effect v4 and its matching Node platform package.
+Syft 1.50 or newer must be installed.
 
-Install **Syft 1.50.x** separately. `Generate.layer()` selects it from PATH; use `Generate.layer({ executable })` for
-an explicit path. Selection is observed once and the same bytes are checked again before launch.
-
-## Scan a finalized directory
-
-Pass the `HashedTree` returned by your tree producer. The helper returns an Effect that you can compose with the
-producer and run at the application's entry point.
+## Usage
 
 ```ts
-import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import * as Generate from "effect-build-sbom/Generate";
-import type * as Artifact from "effect-build/Artifact";
+import { Artifact } from "effect-build";
+import * as Sbom from "effect-build-sbom";
 
-const generator = Generate.layer();
-
-export const createSbom = (snapshot: Artifact.HashedTree) =>
-  Generate.generateSpdxJson(
-    new Generate.GenerateInput({
-      subject: new Generate.DirectorySubject({ snapshot }),
-      outfile: "dist/app.spdx.json",
-    }),
-  ).pipe(
-    Effect.provide(generator),
-    Effect.provide(NodeServices.layer),
-  );
+const sbom = (executable: Artifact.Executable) =>
+  Effect.gen(function*() {
+    const lockfile = yield* Artifact.file("package-lock.json", { name: "hello", version: "1.0.0" });
+    return yield* Sbom.generate({
+      subject: executable,
+      source: lockfile,
+      format: "cyclonedx-json",
+      outfile: "dist/hello.cdx.json",
+    });
+  }).pipe(Effect.provide(Sbom.layer()));
 ```
 
-Use `new Generate.FileSubject({ artifact })` to scan a finalized file instead. Directory inputs are lent as
-verified private snapshots; file inputs are lent as verified bytes. Syft is explicitly told which subject kind to use;
-this API does not select images, contact container daemons, or pull registry references.
+`generate({ subject, source?, format, outfile, cwd?, atomic?, onExists?, prefix? })` returns the
+SBOM as an `Artifact.File`. `format` is `spdx-json` or `cyclonedx-json`.
 
-For CycloneDX, call `generateCycloneDxJson` and use a `.cdx.json` destination. `generate(format, input)` exposes the
-same two formats, and `formatProjection` supplies the extension, media type, and specification name.
+- `subject` is the release artifact the inventory describes: any core artifact, always verified.
+  Without `source`, Syft scans the subject at its original path, so filename-based detection
+  still works.
+- `source` is a verified source directory or a named lockfile. When given, Syft scans it instead
+  of the subject, which is how a compiled TypeScript executable gets an inventory of the
+  dependencies that were bundled into it. Include the manifests and lockfiles Syft supports.
 
-The output path must not exist. Exact held output bytes must decode as UTF-8 and satisfy the selected versioned
-document schema before atomic finalization. Schema validation establishes document structure, not proof that every
-dependency was discovered by the scanner.
+A successful scan means Syft wrote an inventory of the packages it could discover. It does not
+establish completeness: a compiled executable can yield zero packages even when it embeds Effect,
+and a source scan can list dependencies the bundler dropped or miss lockfile formats Syft does
+not read. Empty package lists are valid output. Keep the relationship between the source you
+scanned and the artifact you shipped in your release records.
 
-## More
+## Versions and errors
 
-[Getting started](https://github.com/mannyc2/effect-build/blob/main/docs/getting-started.md) · [Error handling](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)
+`Sbom.layer({ executable?, version? })` resolves Syft once; `Sbom.supported` is `>=1.50.0 <2.0.0`
+and `Sbom.tested` is 1.50.0. `Sbom.GenerateError` is `Tool.InputInvalid`,
+`Artifact.ArtifactError`, `Tool.Failed`, `Tool.SpawnFailed`, or `Commit.CommitError`.
+
+[Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
+[Tools and providers](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md) ·
+[Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)

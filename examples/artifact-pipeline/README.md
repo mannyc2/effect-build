@@ -1,76 +1,57 @@
-# Bundle an application and package its verified bytes
+# Artifact pipeline
 
-Build a small inventory report, finalize the JavaScript bundle, and put it in a ZIP with usage instructions. This is a
-complete composition of **esbuild's native API**, **core file finalization**, and **the archive producer**.
-
-You will learn where native bytes become a durable artifact, how another producer checks that identity, and what a
-downstream release system receives. Node runs the build program; esbuild comes from the installed workspace dependency.
-No separate compiler or archive CLI is required.
+Every producer in one program. `src/main.ts` compiles an executable with Bun, then feeds that one
+artifact into a ZIP, a tar.gz, a Python wheel, a deb package, and an SBOM, bundles with esbuild
+and Rolldown, archives a whole bundle directory, assembles a Node single executable, compiles with
+Deno, writes checksums, and prints the manifest. Output goes to a temporary directory that is
+removed when the program finishes.
 
 ## Run it
 
-First follow the [workspace setup](../README.md#set-up-the-checkout). From the repository root:
+From the repository root, `bun install --frozen-lockfile` and `bun run build` once. Then, with
+Node 24 and Bun 1.3.14 or newer on `PATH`:
 
 ```sh
-bun run --cwd examples/artifact-pipeline build
-node examples/artifact-pipeline/dist/report.mjs
+cd examples/artifact-pipeline
+node src/main.ts
 ```
 
-The app prints:
+Bun, esbuild, Rolldown, the archive writers, and the wheel writer always run. A step that needs
+another tool runs when its variable names one:
 
-```json
-{ "products": 3, "units": 19, "outOfStock": ["pen"] }
-```
+| Variable                | Adds                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| `EFFECT_BUILD_BUN`      | Selects a Bun executable instead of the first `PATH` match.                          |
+| `EFFECT_BUILD_NODE`     | A Node 22 to 26 single executable assembled from the esbuild bundle.                 |
+| `EFFECT_BUILD_DENO`     | A Deno 2.9.5 compiled executable.                                                    |
+| `EFFECT_BUILD_NFPM_BIN` | A deb package of the Bun executable.                                                 |
+| `EFFECT_BUILD_UV_BIN`   | An sdist and wheel of a small Python project; uv needs Python and its build backend. |
+| `EFFECT_BUILD_SYFT_BIN` | An SPDX JSON SBOM of the executable.                                                 |
 
-The build prints bundle/archive paths and a JSON adoption record containing a logical name, byte count, and SHA-256
-digest. It also creates:
+CI runs the program with every tool on Linux. The Python integration tests install the wheel with
+uv and run its native command; ordinary example verification needs no Python.
 
-```text
-dist/
-  report.mjs
-  USAGE.txt
-  inventory.zip
-```
+## What to look at
 
-Unzip `inventory.zip` with your normal archive tool. It contains `inventory/report.mjs` and `inventory/USAGE.txt`.
-Run `node inventory/report.mjs` from the extracted directory: all application imports have been bundled.
+The steps are numbered in `src/main.ts`:
 
-## Read the code
+1. **Compile** with Bun and `Artifact.verify` the result: the record matches the file.
+2. **Archive and wheel** from the same executable. The wheel entry under `.data/scripts` puts
+   `hello` (`hello.exe` on Windows) on the installing environment's command path with no Python
+   wrapper. The platform tag describes the build host here; a real release picks the minimum
+   macOS version and the manylinux or musllinux floor it supports.
+3. **Bundle** with esbuild and Rolldown. Bundles are directory artifacts, and the whole esbuild
+   directory goes into a tar.gz the same way a single file does.
+4. **Optional tools**: Node SEA from the esbuild bundle, Deno, nFPM, uv, and Syft.
+5. **Checksums and manifest**: `Checksums.write` covers every regular file, and
+   `Artifact.encode` produces the JSON handoff, which `Artifact.decode` validates.
 
-1. [app/report.ts](app/report.ts) imports the small [catalog](app/catalog.ts) and calculates an inventory summary.
-2. [src/Pipeline.ts](src/Pipeline.ts) bundles in memory with `write: false`. It writes those bytes through `File.publish`,
-   whose result is the `HashedFile` that `ArchiveEntry` accepts.
-3. The same module creates the ZIP from verified files, verifies the archive before handoff, and creates a path-free
-   adoption record. [src/main.ts](src/main.ts) supplies layers, prints the result, and handles signals.
+## Signing
 
-The file producer uses an intrinsic identity for this example. It does not claim an authenticated compiler executable:
-the in-process esbuild API returns native output, not a selected `Command` tool observation.
-
-Each finalizer commits separately. If archiving fails, files finalized earlier remain available. The example does not
-claim a transaction over the whole output directory. The build sends no bytes to a registry or release service.
-
-## Try a change and a failure
-
-Change the stock counts in `app/catalog.ts`, clear this example's output, and rebuild:
-
-```sh
-bun run --cwd examples/artifact-pipeline clean
-bun run --cwd examples/artifact-pipeline build
-```
-
-Every finalizer requires an unused destination. A second build without cleaning fails with `FileDestinationLocked` and
-preserves the previous output. `clean` deletes this example's entire `dist` directory; production builds can instead
-choose a unique destination for each run.
-
-## Check the behavior
-
-```sh
-bun run --cwd examples/artifact-pipeline test
-```
-
-Tests use temporary directories. They extract the ZIP with the independent `fflate` reader, execute the extracted app,
-and verify its output and SHA-256. They also check repeat-build preservation and change a finalized input to prove the
-archive step rejects it before committing output. `fflate` is only a test dependency.
-
-For a compiled command-line application, see [the typed CLI example](../cli/README.md). For plugins and incremental
-builds, see [the esbuild recipes](../esbuild/README.md).
+[`src/signing.ts`](src/signing.ts) has the credentialed flows: a Windows executable signed with
+Authenticode and archived, an MSIX signed with a PFX, a macOS CLI signed with the hardened
+runtime, notarized as a ZIP, and assessed, and a full app bundle with a signed DMG and PKG,
+notarized and stapled. CI typechecks this module and separately signs a native Windows executable
+with a temporary certificate. [`src/signing-evidence.ts`](src/signing-evidence.ts) is the program the
+[signing workflow](../../.github/workflows/signing.yml) runs on macOS and Windows with real
+identities; the secrets it needs are listed in [CONTRIBUTING.md](../../CONTRIBUTING.md).

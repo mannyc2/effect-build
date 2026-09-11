@@ -1,109 +1,269 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
-import type * as Artifact from "effect-build/Artifact";
-import * as ArtifactAuthor from "effect-build/Artifact";
-import * as FileAuthor from "effect-build/Author/File";
-import { ArchiveFailed, type UnsafeArchiveLayout } from "./ArchiveError.js";
-import { encodeTarGzip, encodeZip, type Entry } from "./internal/archive.js";
-import { validateLayout } from "./internal/layout.js";
-import { ArchiveInput } from "./Model.js";
+import { Context, Crypto, Effect, FileSystem, Layer, Path, Stream } from "effect";
+import { Artifact, Commit, Layout as PortableLayout, Tool } from "effect-build";
+import { ChildProcessSpawner } from "effect/unstable/process";
+import metadata from "../package.json" with { type: "json" };
+import { EntrySizeMismatch } from "./EntrySizeMismatch.js";
+import { FormatLimit } from "./FormatLimit.js";
+import { chunkSize, encodeTarGzip, encodeZip, type Entry, tarLimit, zipLimit } from "./internal/archive.js";
+import { gitlinksFrom, readGitTar } from "./internal/gitTar.js";
+import { TarInvalid } from "./TarInvalid.js";
 
-export { ArchiveEntry, ArchiveInput, Format } from "./Model.js";
-export type { Format as FormatType } from "./Model.js";
-
-export type ArchiveError =
-  | UnsafeArchiveLayout
-  | ArchiveFailed
-  | FileAuthor.FileVerificationFailed
-  | FileAuthor.PublicationFailure;
-
-interface Service {
-  readonly archive: (input: ArchiveInput) => Effect.Effect<Artifact.HashedFile, ArchiveError>;
+export { EntrySizeMismatch } from "./EntrySizeMismatch.js";
+export { FormatLimit } from "./FormatLimit.js";
+export { TarInvalid } from "./TarInvalid.js";
+export type Format = "zip" | "tar.gz";
+export interface ArchiveEntry {
+  readonly artifact: Artifact.Artifact;
+  /** A directory is expanded beneath this archive prefix. */
+  readonly path: string;
+  /** Regular files only; directory entries retain their recorded modes. */
+  readonly executable?: boolean | undefined;
 }
+export interface ArchiveInput extends Commit.ProducerOptions {
+  readonly entries: readonly ArchiveEntry[];
+  readonly outfile: string;
+}
+export interface SourceInput extends Commit.ProducerOptions {
+  readonly repository: string;
+  /** A Git tree object ID, from `git rev-parse HEAD^{tree}`. */
+  readonly tree: string;
+  readonly project: string;
+  readonly version: string;
+  readonly format: Format;
+  readonly outfile: string;
+  readonly cwd?: string | undefined;
+  /** Repository-relative paths to leave out, with their descendants. Gitlinks and `.git` components are always left out. */
+  readonly excludes?: readonly string[] | undefined;
+}
+type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+/** Entries carry verified artifact streams, so their failures are artifact failures. */
+type ArchiveEntries = ReadonlyArray<Entry<Artifact.ArtifactError, Fs>>;
+export type ArchiveError =
+  | Tool.InputInvalid
+  | FormatLimit
+  | EntrySizeMismatch
+  | Artifact.ArtifactError
+  | Commit.CommitError;
+export type SourceError = ArchiveError | TarInvalid | Tool.Failed | Tool.SpawnFailed;
 
-export class Archiver extends Context.Service<Archiver, Service>()(
-  "effect-build-archives/Archive/Archiver",
-) {}
-
-const describe = (error: unknown): string => error instanceof Error ? error.message : String(error);
-
-const makeService: Effect.Effect<
-  Service,
-  never,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path
-> = Effect.gen(function*() {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const crypto = yield* Crypto.Crypto;
-  const services = Context.make(FileSystem.FileSystem, fileSystem).pipe(
-    Context.add(Path.Path, path),
-    Context.add(Crypto.Crypto, crypto),
+export class Archive
+  extends Context.Service<Archive, { readonly tool: Tool.Resolved }>()("effect-build-archives/Archive")
+{}
+export interface LayerOptions {
+  readonly executable?: string | undefined;
+  readonly version?: string | ((version: string) => boolean) | undefined;
+}
+/** Git 2.40+ supplies the exact tree, export-ignore, and PAX behavior the source archives rely on. */
+export const supported = ">=2.40.0 <3.0.0";
+/** Exact versions exercised by real-tool CI. */
+export const tested = "2.40.0 || 2.55.0";
+export const layer = (options: LayerOptions = {}): Layer.Layer<
+  Archive,
+  Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
+  Fs | ChildProcessSpawner.ChildProcessSpawner
+> =>
+  Layer.effect(
+    Archive,
+    Tool.resolve({
+      name: "git",
+      executable: options.executable,
+      parseVersion: (completion) =>
+        /^git version\s+(\d+\.\d+\.\d+)(?:\.windows\.\d+)?(?:\s|$)/u
+          .exec(new TextDecoder().decode(completion.stdout))?.[1],
+    }).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))),
   );
 
-  const archive = Effect.fn("effect-build-archives.archive")(function*(candidate: ArchiveInput) {
-    const input = yield* Schema.decodeUnknownEffect(ArchiveInput, { onExcessProperty: "error" })(candidate).pipe(
-      Effect.mapError((error) => new ArchiveFailed({ operation: "decode input", reason: String(error) })),
-    );
-    const extension = input.format === "zip" ? ".zip" : ".tar.gz";
-    if (!input.outfile.endsWith(extension)) {
-      return yield* Effect.fail(
-        new ArchiveFailed({
-          operation: "validate input",
-          reason: `${input.format} output must end with ${extension}`,
-        }),
-      );
-    }
-    const finalize = (entries: readonly Entry[]) =>
+const writeArchive = (
+  operation: string,
+  outfile: string,
+  entries: ArchiveEntries,
+  format: Format,
+  options: Commit.ProducerOptions,
+  producer: Artifact.Producer,
+): Effect.Effect<Artifact.File, ArchiveError, Fs> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const issue = PortableLayout.validate(entries);
+    if (issue !== undefined) return yield* new Tool.InputInvalid({ operation, ...issue });
+    // Fixed-width fields are checked before anything is staged; sizes learned while compressing are checked as they appear.
+    const limit = format === "zip" ? zipLimit(entries) : tarLimit(entries);
+    if (limit !== undefined) return yield* limit;
+    const produce = (out: string) =>
       Effect.gen(function*() {
-        const validated = validateLayout(entries);
-        if (validated._tag === "Invalid") return yield* Effect.fail(validated.error);
-        const encoded = yield* Effect.try({
-          try: () => input.format === "zip" ? encodeZip(validated.entries) : encodeTarGzip(validated.entries),
-          catch: (error) => new ArchiveFailed({ operation: `encode ${input.format}`, reason: describe(error) }),
-        });
-        return yield* FileAuthor.publish(
-          {
-            destination: input.outfile,
-            cwd: input.cwd,
-            observation: "hashed",
-            provenance: ArtifactAuthor.intrinsicProvenance("effect-build-archives"),
-          },
-          (stagedPath) =>
-            fileSystem.writeFile(stagedPath, encoded).pipe(
-              Effect.mapError((error) =>
-                new ArchiveFailed({ operation: `write ${stagedPath}`, reason: describe(error) })
-              ),
-            ),
-        );
+        yield* Effect.scoped(Effect.gen(function*() {
+          const file = yield* fs.open(out, { flag: "w" }).pipe(Effect.mapError(Artifact.ioError(out, "write")));
+          const encoded = format === "zip" ? encodeZip(entries) : encodeTarGzip(entries);
+          yield* Stream.runForEach(
+            encoded,
+            (chunk) => file.writeAll(chunk).pipe(Effect.mapError(Artifact.ioError(out, "write"))),
+          );
+        }));
+        return yield* Artifact.file(out, producer);
       });
-    const collect = (
-      index: number,
-      entries: readonly Entry[],
-    ): Effect.Effect<Artifact.HashedFile, ArchiveError, Crypto.Crypto | FileSystem.FileSystem | Path.Path> => {
-      const candidate = input.entries[index];
-      if (candidate === undefined) return finalize(entries);
-      return FileAuthor.withVerifiedBytes(candidate.artifact, (contents) =>
-        collect(index + 1, [
-          ...entries,
-          {
-            path: candidate.path,
-            kind: "file" as const,
-            mode: candidate.executable === true ? 0o755 : 0o644,
-            contents,
-          },
-        ]));
-    };
-    return yield* collect(0, []);
+    return yield* Commit.output(outfile, produce, options);
   });
 
-  return { archive: (input) => archive(input).pipe(Effect.provide(services)) };
-});
-
-export const archive = (
+const archive = (
+  operation: string,
+  format: Format,
   input: ArchiveInput,
-): Effect.Effect<Artifact.HashedFile, ArchiveError, Archiver> => Archiver.use((service) => service.archive(input));
+): Effect.Effect<Artifact.File, ArchiveError, Fs> =>
+  Effect.gen(function*() {
+    const p = yield* Path.Path;
+    const entries: Entry<Artifact.ArtifactError, Fs>[] = [];
+    for (const entry of input.entries) {
+      const artifact = entry.artifact;
+      // Archive directory prefixes accept one trailing separator; shipping paths are normalized thereafter.
+      const path = artifact.kind === "directory" ? entry.path.replace(/\/$/u, "") : entry.path;
+      const reason = PortableLayout.pathIssue(path);
+      if (reason !== undefined) return yield* new Tool.InputInvalid({ operation, path: entry.path, reason });
+      if (artifact.kind !== "directory") {
+        entries.push({
+          kind: "file",
+          path,
+          mode: (entry.executable ?? artifact.kind === "executable") ? 0o755 : 0o644,
+          bytes: artifact.bytes,
+          contents: Artifact.streamVerified(artifact),
+        });
+        continue;
+      }
+      if (entry.executable !== undefined) {
+        return yield* new Tool.InputInvalid({
+          operation,
+          path,
+          reason: "executable overrides apply only to regular files",
+        });
+      }
+      // Rebuild the manifest from disk: decoded records can contain entries inconsistent with their digest.
+      const tree = yield* Artifact.directory(artifact.path, artifact.producedBy);
+      if (tree.sha256 !== artifact.sha256 || tree.bytes !== artifact.bytes) {
+        return yield* new Artifact.ArtifactError({ path: tree.path, reason: "changed" });
+      }
+      // The archive root is the archive's own object, named by the caller rather than
+      // taken from the tree, so it gets a fixed portable mode instead of the recorded rootMode.
+      entries.push({ kind: "directory", path, mode: 0o755 });
+      for (const child of tree.entries) {
+        const childPath = `${path}/${child.path}`;
+        if (child.kind === "file") {
+          // Each file is verified as it streams, even if it changes after the tree was read.
+          const contents = Artifact.streamVerified({
+            kind: "file",
+            path: p.join(tree.path, child.path),
+            bytes: child.bytes,
+            sha256: child.sha256,
+            producedBy: tree.producedBy,
+          });
+          entries.push({ kind: "file", path: childPath, mode: child.mode, bytes: child.bytes, contents });
+        } else if (child.kind === "symlink") {
+          entries.push({ kind: "symlink", path: childPath, mode: child.mode, target: child.linkTarget });
+        } else {
+          entries.push({ kind: "directory", path: childPath, mode: child.mode });
+        }
+      }
+    }
+    return yield* writeArchive(operation, input.outfile, entries, format, input, {
+      name: metadata.name,
+      version: metadata.version,
+    });
+  });
 
-export const layer: Layer.Layer<
-  Archiver,
-  never,
-  Crypto.Crypto | FileSystem.FileSystem | Path.Path
-> = Layer.effect(Archiver, makeService);
+export const zip = Effect.fn("Archive.zip")((input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> =>
+  archive("Archive.zip", "zip", input)
+);
+export const tarGz = Effect.fn("Archive.tarGz")((input: ArchiveInput): Effect.Effect<Artifact.File, ArchiveError, Fs> =>
+  archive("Archive.tarGz", "tar.gz", input)
+);
+
+const decoder = new TextDecoder("utf-8", { fatal: true });
+const invalid = (reason: string) => new Tool.InputInvalid({ operation: "Archive.source", reason });
+
+export const source = Effect.fn("Archive.source")((input: SourceInput): Effect.Effect<
+  Artifact.File,
+  SourceError,
+  Archive | Fs | ChildProcessSpawner.ChildProcessSpawner
+> =>
+  Effect.scoped(Effect.gen(function*() {
+    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(input.tree)) {
+      return yield* invalid("tree must be a Git tree object ID");
+    }
+    if (![input.project, input.version].every((part) => /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(part))) {
+      return yield* invalid("project and version must be portable root components");
+    }
+    const fs = yield* FileSystem.FileSystem;
+    const p = yield* Path.Path;
+    const { tool } = yield* Archive;
+    const repository = p.resolve(input.cwd ?? "", input.repository);
+    const outfile = p.resolve(input.cwd ?? "", input.outfile);
+    const root = `${input.project}-${input.version}`;
+    const excludes = new Set<string>();
+    for (const candidate of input.excludes ?? []) {
+      const reason = PortableLayout.pathIssue(candidate);
+      if (reason !== undefined) {
+        return yield* new Tool.InputInvalid({ operation: "Archive.source", path: candidate, reason });
+      }
+      excludes.add(candidate);
+    }
+    const type = yield* Tool.run(tool, ["cat-file", "-t", input.tree], { cwd: repository });
+    if (decoder.decode(type.stdout).trim() !== "tree") {
+      return yield* invalid("source requires a tree object, not a commit or blob");
+    }
+    // The listing is archive input rather than a diagnostic, so it is retained in full.
+    const listing = yield* Tool.run(tool, ["ls-tree", "-rz", "--full-tree", input.tree], {
+      cwd: repository,
+      stdoutLimit: null,
+    });
+    const gitlinks = yield* Effect.try({
+      try: () => gitlinksFrom(listing.stdout),
+      catch: (error) => invalid(`decode git ls-tree: ${String(error)}`),
+    });
+    for (const gitlink of gitlinks) excludes.add(gitlink);
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-git-" }).pipe(
+      Effect.mapError(Artifact.ioError(outfile, "write")),
+    );
+    const exported = p.join(temporary, "tree.tar");
+    // Archive applies checkout conversion too; host preferences must not change bytes, but tracked attributes still apply.
+    yield* Tool.run(tool, [
+      "-c",
+      "core.autocrlf=false",
+      "-c",
+      "core.eol=lf",
+      "archive",
+      "--format=tar",
+      `--prefix=${root}/`,
+      `--output=${exported}`,
+      input.tree,
+    ], { cwd: repository });
+    // Only headers are read here; each file's bytes stream out of the exported tar when the encoder reaches it.
+    const projected = yield* readGitTar(exported);
+    const entries: Entry<Artifact.ArtifactError, Fs>[] = [];
+    for (const entry of projected) {
+      if (entry.path === root) {
+        if (entry.kind !== "directory") return yield* invalid("project root is not a directory");
+        entries.push(entry);
+        continue;
+      }
+      if (!entry.path.startsWith(`${root}/`)) {
+        return yield* new Tool.InputInvalid({
+          operation: "Archive.source",
+          path: entry.path,
+          reason: "Git archive escaped its root",
+        });
+      }
+      const relative = entry.path.slice(root.length + 1);
+      const excluded = relative.split("/").includes(".git")
+        || [...excludes].some((prefix) => relative === prefix || relative.startsWith(`${prefix}/`));
+      if (excluded) continue;
+      if (entry.kind !== "file") {
+        entries.push(entry);
+        continue;
+      }
+      const contents = entry.bytes > 0
+        ? fs.stream(exported, { offset: entry.offset, bytesToRead: entry.bytes, chunkSize }).pipe(
+          Stream.mapError(Artifact.ioError(exported)),
+        )
+        : Stream.empty;
+      entries.push({ kind: "file", path: entry.path, mode: entry.mode, bytes: entry.bytes, contents });
+    }
+    return yield* writeArchive("Archive.source", outfile, entries, input.format, input, Tool.producer(tool));
+  }))
+);

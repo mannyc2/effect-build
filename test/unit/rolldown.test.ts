@@ -1,263 +1,188 @@
+import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Stream } from "effect";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { Artifact } from "effect-build";
+import * as Rolldown from "effect-build-rolldown";
+import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import * as Build from "../../packages/effect-build-rolldown/src/Api/Build.js";
-import * as Watch from "../../packages/effect-build-rolldown/src/Api/Watch.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-let root = "";
-
-beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "effect-build-rolldown-"));
-  await writeFile(join(root, "lib.js"), "export const shared = () => 40 + 2;\n");
-  await writeFile(join(root, "main.js"), 'import { shared } from "./lib.js";\nexport const answer = shared();\n');
+const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+const waitFor = async (predicate: () => boolean) => {
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Rolldown did not finish the expected build");
+};
+let root: string;
+let source: string;
+beforeEach(async () => {
+  root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-rolldown-")));
+  source = join(root, "main.ts");
+  await writeFile(join(root, "lib.ts"), "export const shared = () => 40 + 2;\n");
+  await writeFile(source, 'import { shared } from "./lib.ts"; export const answer: number = shared();\n');
 });
+afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
-afterAll(async () => {
-  await rm(root, { recursive: true, force: true });
-});
-
-describe("rolldown Build", () => {
-  it("bundles the import graph in memory through the scoped owner", async () => {
-    const exit = await Effect.runPromiseExit(Build.generate({ input: join(root, "main.js") }, { format: "esm" }));
-    expect(Exit.isSuccess(exit)).toBe(true);
-    if (Exit.isSuccess(exit)) {
-      const [chunk] = exit.value.output;
-      expect(chunk.type).toBe("chunk");
-      expect(chunk.code).toContain("shared()");
-    }
+describe("Rolldown builds", () => {
+  it("bundles a real import graph and preserves native multiple-build results", async () => {
+    const result = await run(Rolldown.build({ input: source, write: false, output: { format: "esm" } }));
+    expect(result.output[0].code).toContain("shared()");
+    const outputs = await run(Rolldown.build([
+      { input: source, write: false, output: { format: "esm" } },
+      { input: source, write: false, output: { format: "cjs" } },
+    ]));
+    expect(outputs[0]!.output[0].code).toContain("export");
+    expect(outputs[1]!.output[0].code).toContain("exports");
+    expect((await readdir(root)).sort()).toEqual(["lib.ts", "main.ts"]);
   });
 
-  it("writes bundles onto disk with rolldown's own file naming", async () => {
-    const outdir = join(root, "dist");
-    const exit = await Effect.runPromiseExit(
-      Build.write({ input: join(root, "main.js") }, { dir: outdir, format: "esm" }),
-    );
-    expect(Exit.isSuccess(exit)).toBe(true);
-    if (Exit.isSuccess(exit)) {
-      expect(await readdir(outdir)).toContain("main.js");
-      expect(await readFile(join(outdir, "main.js"), "utf8")).toContain("shared()");
-    }
+  it("commits a verified directory relative to cwd and preserves it on build failure", async () => {
+    const input = { input: "main.ts", cwd: root, outdir: "dist", output: { format: "esm" }, logLevel: "silent" } as const;
+    const artifact = await run(Rolldown.buildToDirectory(input));
+    expect(artifact.path).toBe(join(root, "dist"));
+    expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+    const previous = await readFile(join(artifact.path, "main.js"), "utf8");
+    await writeFile(source, "const = ;\n");
+    const failure = await run(Rolldown.buildToDirectory(input).pipe(Effect.flip));
+    expect(failure).toBeInstanceOf(Rolldown.Failed);
+    expect(await readFile(join(artifact.path, "main.js"), "utf8")).toBe(previous);
+    expect((await readdir(root)).sort()).toEqual(["dist", "lib.ts", "main.ts"]);
   });
 
-  it("reuses one graph for several outputs inside a single scope", async () => {
+  it("transforms TypeScript and preserves native build diagnostics", async () => {
+    const output = await run(Rolldown.transform("main.ts", await readFile(source, "utf8"), { lang: "ts" }));
+    expect(output.code).not.toContain(": number");
+    const failure = await run(Rolldown.build({ input: join(root, "missing.ts"), write: false, logLevel: "silent" }).pipe(Effect.flip));
+    expect(failure).toBeInstanceOf(Rolldown.Failed);
+    expect(failure.message).toContain("rolldown");
+    expect(String(failure.cause)).toContain("missing.ts");
+  });
+
+  it("includes files written by closeBundle in the returned directory", async () => {
+    let directory = "";
+    const artifact = await run(Rolldown.buildToDirectory({
+      input: source, outdir: join(root, "dist"),
+      plugins: [{
+        name: "license-on-close",
+        writeBundle(output) { directory = output.dir!; },
+        async closeBundle() { await writeFile(join(directory, "LICENSE"), "license text\n"); },
+      }],
+    }));
+    expect(await readFile(join(artifact.path, "LICENSE"), "utf8")).toBe("license text\n");
+    expect(artifact.entries.some((entry) => entry.path === "LICENSE")).toBe(true);
+    expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+  });
+
+  it("reuses a scoped graph for different formats and a disk write, then closes it once", async () => {
     let closes = 0;
-    const exit = await Effect.runPromiseExit(
-      Effect.scoped(
-        Effect.gen(function*() {
-          const build = yield* Build.make({
-            input: join(root, "main.js"),
-            plugins: [{
-              name: "build-close-observer",
-              closeBundle() {
-                closes += 1;
-              },
-            }],
-          });
-          const esm = yield* Build.generateScoped(build, { format: "esm" });
-          const cjs = yield* Build.generateScoped(build, { format: "cjs" });
-          const written = yield* Build.writeScoped(build, {
-            dir: join(root, "scoped-dist"),
-            format: "esm",
-          });
-          return { cjs, esm, written };
-        }),
-      ),
-    );
-    expect(Exit.isSuccess(exit)).toBe(true);
-    if (Exit.isSuccess(exit)) {
-      expect(exit.value.esm.output[0].code).toContain("export");
-      expect(exit.value.cjs.output[0].code).toContain("exports");
-      expect(exit.value.written.output[0].type).toBe("chunk");
-      expect(await readFile(join(root, "scoped-dist", "main.js"), "utf8")).toContain("shared()");
-    }
+    const owner = await run(Effect.scoped(Effect.gen(function*() {
+      const build = yield* Rolldown.make({
+        input: source,
+        plugins: [{ name: "count-close", closeBundle() { closes += 1; } }],
+      });
+      expect((yield* build.generate({ format: "esm" })).output[0].code).toContain("export");
+      expect((yield* build.generate({ format: "cjs" })).output[0].code).toContain("exports");
+      yield* build.write({ dir: join(root, "scoped"), format: "esm" });
+      return build;
+    })));
+    expect(await readFile(join(root, "scoped/main.js"), "utf8")).toContain("shared()");
     expect(closes).toBe(1);
+    expect(await run(owner.generate().pipe(Effect.flip))).toBeInstanceOf(Rolldown.Failed);
   });
 
-  it("preserves scoped build cleanup failure in Cause", async () => {
-    const exit = await Effect.runPromiseExit(
-      Effect.scoped(
-        Effect.gen(function*() {
-          const build = yield* Build.make({
-            input: join(root, "main.js"),
-            plugins: [{
-              name: "build-cleanup-failure",
-              closeBundle() {
-                throw new Error("deliberate build cleanup failure");
-              },
-            }],
-          });
-          yield* build.generate({ format: "esm" });
-        }),
-      ),
-    );
+  it("preserves an error from scoped build cleanup in the Effect cause", async () => {
+    const exit = await run(Effect.exit(Effect.scoped(Effect.gen(function*() {
+      const build = yield* Rolldown.make({
+        input: source, logLevel: "silent",
+        plugins: [{ name: "failing-cleanup", closeBundle() { throw new Error("deliberate cleanup failure"); } }],
+      });
+      yield* build.generate();
+    }))));
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("deliberate build cleanup failure");
+    if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("deliberate cleanup failure");
   });
 
-  it("closes admission and drains an admitted generate before native close", async () => {
+  it("finishes an already running generate before closing the scoped build", async () => {
     let started = false;
-    let finished = false;
-    let closes = 0;
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function*() {
-          const build = yield* Build.make({
-            input: join(root, "main.js"),
-            plugins: [{
-              name: "drain-before-close",
-              async generateBundle() {
-                started = true;
-                await new Promise((resolve) => setTimeout(resolve, 40));
-                finished = true;
-              },
-              closeBundle() {
-                closes += 1;
-              },
-            }],
-          });
-          yield* Effect.forkChild(build.generate({ format: "esm" }));
-          while (!started) yield* Effect.sleep("1 millis");
-        }),
-      ),
-    );
-    expect(finished).toBe(true);
-    expect(closes).toBe(1);
-  });
-
-  it("surfaces native diagnostics as RolldownFailed by reference", async () => {
-    const exit = await Effect.runPromiseExit(
-      Build.generate({ input: join(root, "absent.js"), logLevel: "silent" }),
-    );
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      const failure = Cause.findErrorOption(exit.cause);
-      expect(failure._tag).toBe("Some");
-      if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("RolldownFailed");
-        expect(["make", "generate"]).toContain(failure.value.operation);
-        expect(failure.value.message).toContain("rolldown");
-      }
-    }
+    const lifecycle: string[] = [];
+    await run(Effect.scoped(Effect.gen(function*() {
+      const build = yield* Rolldown.make({
+        input: source,
+        plugins: [{
+          name: "slow-output",
+          async generateBundle() {
+            started = true;
+            await new Promise((resolve) => setTimeout(resolve, 40));
+            lifecycle.push("generated");
+          },
+          closeBundle() { lifecycle.push("closed"); },
+        }],
+      });
+      yield* Effect.forkChild(build.generate());
+      yield* Effect.promise(() => waitFor(() => started));
+    })));
+    expect(lifecycle).toEqual(["generated", "closed"]);
   });
 });
 
-describe("rolldown Watch", () => {
-  it("emits completed builds and rebuilds after closing their native results", async () => {
-    const project = join(root, "watched");
-    await mkdir(project, { recursive: true });
-    const entry = join(project, "entry.js");
-    await writeFile(entry, 'export const generation = "gen-one";\n');
-    let resultCloses = 0;
-    let watcherCloses = 0;
-    let rebuildRequested = false;
-    const events = await Effect.runPromise(
-      Watch.direct({
-        input: entry,
-        cwd: project,
-        output: { dir: join(project, "dist") },
-        plugins: [{
-          name: "watch-close-observer",
-          closeBundle() {
-            resultCloses += 1;
-          },
-          closeWatcher() {
-            watcherCloses += 1;
-          },
-        }],
-      }).pipe(
-        Stream.tap((event) =>
-          Effect.suspend(() => {
-            if (event.code !== "BUNDLE_END" || rebuildRequested) return Effect.void;
-            rebuildRequested = true;
-            return Effect.promise(() => writeFile(entry, 'export const generation = "gen-two";\n'));
-          })
-        ),
-        Stream.take(2),
-        Stream.runCollect,
-      ) as Effect.Effect<Watch.DirectEvent[]>,
-    );
-    const codes = events.map((event) => event.code);
-    expect(codes.filter((code) => code === "BUNDLE_END")).toHaveLength(2);
-    expect(codes).not.toContain("ERROR");
-    const bundleEnd = events.find((event) => event.code === "BUNDLE_END");
-    if (bundleEnd !== undefined && bundleEnd.code === "BUNDLE_END") {
-      expect(bundleEnd.output.length).toBeGreaterThan(0);
-    }
-    for (const event of events) expect(event.superseded).toBeGreaterThanOrEqual(0);
-    expect(resultCloses).toBe(2);
-    expect(watcherCloses).toBe(1);
-  }, 60_000);
+describe("Rolldown watches", () => {
+  it("rebuilds changed files and closes each result before its watcher", async () => {
+    await writeFile(source, 'export const generation = "one";\n');
+    const lifecycle: string[] = [];
+    let changed = false;
+    const events = await run(Rolldown.watch({
+      input: source, cwd: root, output: { dir: join(root, "watch") },
+      plugins: [{ name: "watch-cleanup", closeBundle() { lifecycle.push("result"); }, closeWatcher() { lifecycle.push("watcher"); } }],
+    }).pipe(
+      Stream.tap((event) => Effect.suspend(() => {
+        if (changed || event.code !== "BUNDLE_END") return Effect.void;
+        changed = true;
+        return Effect.promise(() => writeFile(source, 'export const generation = "two";\n'));
+      })),
+      Stream.take(2), Stream.runCollect,
+    ));
+    expect(events.map((event) => event.code)).toEqual(["BUNDLE_END", "BUNDLE_END"]);
+    expect(await readFile(join(root, "watch/main.js"), "utf8")).toContain("two");
+    expect(lifecycle).toEqual(["result", "result", "watcher"]);
+  }, 30_000);
 
-  it("keeps only the latest pending completion and reports superseded completions", async () => {
-    const project = join(root, "coalesced-watch");
-    await mkdir(project, { recursive: true });
-    const entry = join(project, "entry.js");
-    await writeFile(entry, 'export const generation = "gen-0";\n');
+  it("keeps the latest completed build while a slow consumer is busy", async () => {
+    await writeFile(source, 'export const generation = "gen-0";\n');
     let closes = 0;
-    let firstDelivery = true;
-    const events = await Effect.runPromise(
-      Watch.direct({
-        input: entry,
-        cwd: project,
-        output: { dir: join(project, "dist") },
-        plugins: [{
-          name: "drive-coalesced-watch",
-          async closeBundle() {
-            closes += 1;
-            if (closes < 5) {
-              await writeFile(entry, `export const generation = "gen-${closes}";\n`);
-            }
-          },
-        }],
-      }).pipe(
-        Stream.mapEffect((event) =>
-          Effect.promise(async () => {
-            if (!firstDelivery) return event;
-            firstDelivery = false;
-            const deadline = Date.now() + 10_000;
-            while (closes < 5) {
-              if (Date.now() > deadline) throw new Error("timed out establishing a pending watch completion");
-              await new Promise((resolveTick) => setTimeout(resolveTick, 10));
-            }
-            return event;
-          })
-        ),
-        Stream.take(2),
-        Stream.runCollect,
-      ) as Effect.Effect<Watch.DirectEvent[]>,
-    );
-    expect(events).toHaveLength(2);
-    expect(events.every((event) => event.code === "BUNDLE_END")).toBe(true);
+    let first = true;
+    const events = await run(Rolldown.watch({
+      input: source, cwd: root, output: { dir: join(root, "watch") },
+      plugins: [{ name: "successive-builds", async closeBundle() {
+        closes += 1;
+        if (closes < 5) await writeFile(source, `export const generation = "gen-${closes}";\n`);
+      } }],
+    }).pipe(
+      Stream.mapEffect((event) => Effect.promise(async () => {
+        if (first) { first = false; await waitFor(() => closes >= 5); }
+        return event;
+      })),
+      Stream.take(2), Stream.runCollect,
+    ));
+    expect(events.map((event) => event.code)).toEqual(["BUNDLE_END", "BUNDLE_END"]);
     expect(events[1]!.superseded).toBeGreaterThan(0);
-  }, 60_000);
+    expect(await readFile(join(root, "watch/main.js"), "utf8")).toContain("gen-4");
+  }, 30_000);
 
-  it("preserves result cleanup failure in Cause and still closes the watcher", async () => {
-    const project = join(root, "cleanup-failure-watch");
-    await mkdir(project, { recursive: true });
-    const entry = join(project, "entry.js");
-    await writeFile(entry, 'export const cleanup = "failure";\n');
-    let watcherCloses = 0;
-    const cleanupFailure = new Error("deliberate result cleanup failure");
-    const exit = await Effect.runPromiseExit(
-      Watch.direct({
-        input: entry,
-        cwd: project,
-        output: { dir: join(project, "dist") },
-        plugins: [{
-          name: "watch-cleanup-failure",
-          closeBundle() {
-            throw cleanupFailure;
-          },
-          closeWatcher() {
-            watcherCloses += 1;
-          },
-        }],
-      }).pipe(Stream.runCollect),
-    );
+  it("keeps a result cleanup failure and still closes the watcher", async () => {
+    let closes = 0;
+    const exit = await run(Effect.exit(Rolldown.watch({
+      input: source, cwd: root, output: { dir: join(root, "watch") }, logLevel: "silent",
+      plugins: [{
+        name: "watch-cleanup-failure",
+        closeBundle() { throw new Error("deliberate result cleanup failure"); },
+        closeWatcher() { closes += 1; },
+      }],
+    }).pipe(Stream.runCollect)));
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("watch-cleanup-failure");
-    expect(watcherCloses).toBe(1);
-  }, 60_000);
+    expect(closes).toBe(1);
+  }, 30_000);
 });
