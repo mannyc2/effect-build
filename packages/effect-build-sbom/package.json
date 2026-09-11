@@ -48,7 +48,7 @@
     "effect": ">=4.0.0-rc.108 <4.1.0-0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.108"
+    "effect": "4.0.0-rc.112"
   },
   "engines": {
     "node": ">=22.19.0"

@@ -48,7 +48,7 @@
     "esbuild": ">=0.28.2 <0.29.0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.108",
+    "effect": "4.0.0-rc.112",
     "esbuild": "0.28.2"
   },
   "engines": {
