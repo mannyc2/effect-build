@@ -124,12 +124,13 @@ type Operation = "submit" | "wait" | "info" | "log";
 type LookupError = Tool.InputInvalid | ResponseInvalid | Tool.Failed | Tool.SpawnFailed;
 const objectValue = (value: unknown): Readonly<Record<string, unknown>> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? value as Readonly<Record<string, unknown>> : undefined;
-const runJson = Effect.fn("Apple.Notary.runJson")(function*(operation: Operation, args: readonly string[], credential: Credential, cwd?: string) {
+const runJson = Effect.fn("Apple.Notary.runJson")(function*(operation: Operation, args: readonly string[], credential: Credential, options: Tool.EnvironmentOptions & { readonly cwd?: string | undefined } = {}) {
+  const cwd = options.cwd;
   const cwdIssue = cwd === undefined ? undefined : Tool.argumentIssue(cwd);
   if (cwdIssue !== undefined) return yield* new Tool.InputInvalid({ operation: `Apple.Notary.${operation}`, reason: `cwd ${cwdIssue}` });
   const auth = yield* credentials(`Apple.Notary.${operation}`, credential);
   const completion = yield* runNative("notarytool", [operation, ...args, "--output-format", "json", ...auth.args], {
-    cwd, redact: auth.values,
+    ...options, cwd, redact: auth.values,
   });
   const value = yield* Effect.try({
     try: (): unknown => JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(completion.stdout)),
@@ -161,7 +162,7 @@ const status = (operation: Operation, providerStatus: string | undefined, summar
   }
 };
 
-export interface SubmitInput {
+export interface SubmitInput extends Tool.EnvironmentOptions {
   readonly artifact: Signed;
   readonly credential: Credential;
   readonly cwd?: string | undefined;
@@ -177,17 +178,17 @@ export const submit = (input: SubmitInput): Effect.Effect<SubmissionReference, N
     const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-notary-" }).pipe(Effect.mapError(Artifact.ioError(input.artifact.path, "write")));
     const snapshot = p.join(temporary, p.basename(input.artifact.path));
     // Upload a verified private copy so changes to the caller's file cannot change the submitted bytes.
-    yield* copyProduct("Apple.Notary.submit", input.artifact, snapshot);
-    yield* verifySignature(input.artifact, snapshot);
+    yield* copyProduct("Apple.Notary.submit", input.artifact, snapshot, input);
+    yield* verifySignature(input.artifact, snapshot, input);
     let path = snapshot;
     const kind = submissionKind(input.artifact);
     if (kind === "zip") {
       path = p.join(temporary, `${p.basename(input.artifact.path)}.zip`);
-      yield* runNative("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", snapshot, path]);
+      yield* runNative("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", snapshot, path], input);
     }
-    const response = yield* runJson("submit", [path], input.credential, input.cwd);
+    const response = yield* runJson("submit", [path], input.credential, input);
     const id = yield* submissionId("submit", response.safeText(response.data.id));
-    return { submissionId: id, kind, artifact: input.artifact, producedBy: Tool.producer(tool) };
+    return { submissionId: id, kind, artifact: input.artifact, producedBy: Tool.producedBy(tool) };
   }));
 
 export interface NotarizeInput extends SubmitInput {
@@ -202,10 +203,10 @@ export const notarize = (input: NotarizeInput): Effect.Effect<Submission, Notari
   Effect.gen(function*() {
     yield* timeoutArgs("Apple.Notary.notarize", input.timeout);
     const reference = yield* submit(input);
-    return yield* wait({ reference, credential: input.credential, timeout: input.timeout, cwd: input.cwd });
+    return yield* wait({ ...input, reference });
   });
 
-export interface LookupInput {
+export interface LookupInput extends Tool.EnvironmentOptions {
   readonly reference: SubmissionReference;
   readonly credential: Credential;
   readonly cwd?: string | undefined;
@@ -222,14 +223,14 @@ export interface WaitInput extends LookupInput {
 const lookup = Effect.fn("Apple.Notary.lookup")(function*(operation: "wait" | "info" | "log", input: LookupInput, args: readonly string[] = []) {
   yield* reference(`Apple.Notary.${operation}`, input.reference);
   const { tool } = yield* Apple;
-  const response = yield* runJson(operation, [input.reference.submissionId, ...args], input.credential, input.cwd);
+  const response = yield* runJson(operation, [input.reference.submissionId, ...args], input.credential, input);
   // The log response names the submission `jobId`; the others name it `id`.
   const id = yield* submissionId(operation, response.safeText(operation === "log" ? response.data.jobId : response.data.id));
   if (id !== input.reference.submissionId) {
     return yield* new ResponseInvalid({ operation, reason: "response submission UUID differs from the requested UUID" });
   }
   const { kind, artifact } = input.reference;
-  return { response, base: { submissionId: id, kind, artifact, producedBy: Tool.producer(tool) } };
+  return { response, base: { submissionId: id, kind, artifact, producedBy: Tool.producedBy(tool) } };
 });
 /** Wait for an already persisted submission; never re-upload or retry submission. */
 export const wait = Effect.fn("Apple.Notary.wait")(function*(input: WaitInput): Effect.fn.Return<Submission, LookupError, Apple | Env> {

@@ -1,4 +1,4 @@
-import { Config, Crypto, Effect, FileSystem, Path, Schema, Scope, Stream } from "effect";
+import { Config, Context, Crypto, Effect, FileSystem, Layer, Path, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { Range, satisfies as semverSatisfies } from "semver";
 import type * as Artifact from "./Artifact.js";
@@ -97,11 +97,16 @@ export interface Output {
 }
 
 /** Every option accepts `undefined`, so callers can forward their own optional inputs directly. */
-export interface RunOptions {
-  readonly cwd?: string | undefined;
+export interface EnvironmentOptions {
   /** Merged into the inherited environment unless `extendEnv` is false. */
   readonly env?: Record<string, string> | undefined;
   readonly extendEnv?: boolean | undefined;
+  /** Start with only the tool's directory on PATH and a scoped temporary home; explicit env overrides these defaults. */
+  readonly scrubEnv?: boolean | undefined;
+}
+
+export interface RunOptions extends EnvironmentOptions {
+  readonly cwd?: string | undefined;
   /** Bytes retained per stream. Default 8 MiB. */
   readonly outputLimit?: number | undefined;
   /** Retain stdout as data; null removes the diagnostic limit. */
@@ -118,13 +123,14 @@ export interface LocateOptions {
   readonly executable?: string | undefined;
 }
 
-export interface ResolveOptions extends LocateOptions {
+export interface ResolveOptions extends LocateOptions, EnvironmentOptions {
   /** Arguments that print the version. Default `["--version"]`. */
   readonly versionArgs?: readonly string[] | undefined;
   /** Extract the version from probe output. Default: first token of stdout. */
-  readonly parseVersion?: ((completion: Completion) => string | undefined) | undefined;
+  readonly parseVersion?: ((completion: Completion, path: string) => VersionResult) | undefined;
 }
 
+export type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
 export interface Probe { readonly completion: Completion; readonly path: string }
 /** An extractor may inspect native binary resources through FileSystem, as SignTool requires. */
 export type VersionResult = string | undefined | Effect.Effect<string | undefined, ProbeFailed, FileSystem.FileSystem | Path.Path>;
@@ -146,8 +152,73 @@ export interface Constraint {
   readonly reason: string;
 }
 
+export interface Service { readonly tool: Resolved }
+export interface LayerOptions {
+  readonly executable?: string | undefined;
+  readonly version?: string | ((version: string) => boolean) | undefined;
+}
+/** Documented host inputs, not an exhaustive closure or a sandbox policy. */
+export interface Requirements {
+  readonly env: readonly string[];
+  readonly network: boolean;
+  readonly services: readonly string[];
+  readonly detail?: string | undefined;
+}
+export type LayerError = NotFound | ProbeFailed | VersionUnsupported | Artifact.ArtifactError;
+interface BaseSpec {
+  readonly name: string;
+  readonly versionArgs?: readonly string[] | undefined;
+  readonly version: {
+    readonly parse?: ((probe: Probe) => VersionResult) | undefined;
+    readonly supported: string;
+    readonly tested: readonly string[];
+  };
+  readonly constraints?: Readonly<Record<string, readonly Constraint[]>> | undefined;
+  readonly requirements?: Requirements | undefined;
+}
+type Extend<Extra, Options> = (tool: Resolved, options: LayerOptions & Options) => Effect.Effect<Extra, LayerError, Env>;
+/** A service with extra fields must declare how resolution constructs them. */
+export type Spec<Extra = {}, Options = {}> = BaseSpec & (keyof Extra extends never
+  ? { readonly extend?: Extend<Extra, Options> | undefined }
+  : { readonly extend: Extend<Extra, Options> });
+type LayerArguments<Options> = {} extends Options
+  ? [options?: LayerOptions & Options]
+  : [options: LayerOptions & Options];
+export interface Provider<Self, Extra = {}, Options = {}> {
+  readonly name: string;
+  readonly layer: (...args: LayerArguments<Options>) => Layer.Layer<Self, LayerError, Env>;
+  readonly supported: string;
+  readonly tested: readonly string[];
+  readonly constraints: Readonly<Record<string, readonly Constraint[]>>;
+  readonly requirements: Requirements;
+  readonly resolved: Effect.Effect<Resolved, never, Self>;
+  readonly testLayer: (service: Service & Extra) => Layer.Layer<Self>;
+}
 
-type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
+/** Keep the named service at the provider edge; share resolution, policy, and test construction. */
+export const provider = <Self, Extra = {}, Options = {}>(
+  service: Context.Service<Self, Service & Extra>,
+  spec: Spec<Extra, Options>,
+): Provider<Self, Extra, Options> => ({
+  name: spec.name,
+  supported: spec.version.supported,
+  tested: spec.version.tested,
+  constraints: spec.constraints ?? {},
+  requirements: spec.requirements ?? { env: [], network: false, services: [] },
+  resolved: Effect.map(service, ({ tool }) => tool),
+  testLayer: (value) => Layer.succeed(service, value),
+  layer: (...args) => {
+    // The optional tuple branch permits omission only when Options has no required fields.
+    const options = args[0] ?? {} as LayerOptions & Options;
+    return Layer.effect(service, Effect.gen(function*() {
+      const tool = yield* resolve({ name: spec.name, executable: options.executable, versionArgs: spec.versionArgs,
+        parseVersion: spec.version.parse === undefined ? undefined : (completion, path) => spec.version.parse!({ completion, path }),
+      }).pipe(requireVersion(options.version ?? spec.version.supported));
+      const extra = spec.extend === undefined ? undefined : yield* spec.extend(tool, options);
+      return Object.assign({}, extra, { tool });
+    }));
+  },
+});
 
 const collect = (stream: Stream.Stream<Uint8Array, unknown>, limit: number) =>
   Stream.runFold(stream, () => ({ chunks: [] as Uint8Array[], size: 0, truncated: false }), (acc, chunk) => {
@@ -177,12 +248,25 @@ export const redact = (secrets: readonly string[]): ((text: string) => string) =
   return (text) => ordered.reduce((scrubbed, secret) => scrubbed.replaceAll(secret, "<redacted>"), text);
 };
 
+/** Scoped environment for both one-shot runs and caller-scoped watch processes. Explicit env always wins. */
+export const environment = Effect.fn("Tool.environment")(function*(tool: Resolved, options: EnvironmentOptions = {}) {
+  if (options.scrubEnv !== true) {
+    return { env: options.env ?? (options.extendEnv === false ? {} : undefined), extendEnv: options.extendEnv ?? true };
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const p = yield* Path.Path;
+  const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-env-" }).pipe(
+    Effect.mapError((error) => new SpawnFailed({ tool: tool.name, detail: String(error) })),
+  );
+  return { env: { PATH: p.dirname(tool.path), HOME: temporary, TMPDIR: temporary, TEMP: temporary, TMP: temporary, USERPROFILE: temporary, ...options.env }, extendEnv: false };
+});
+
 /** Run a resolved tool; failures retain both diagnostic streams and truncation flags. */
 export const run = Effect.fn("Tool.run")(function*(
   tool: Resolved,
   args: readonly string[],
   options: RunOptions = {},
-): Effect.fn.Return<Completion, Failed | SpawnFailed, ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> {
+): Effect.fn.Return<Completion, Failed | SpawnFailed, ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Scope.Scope> {
   const scrub = redact(options.redact ?? []);
   const spawnFailed = (error: unknown) => new SpawnFailed({ tool: scrub(tool.name), detail: scrub(String(error)) });
   const limit = options.outputLimit ?? 8 * 1024 * 1024;
@@ -192,7 +276,7 @@ export const run = Effect.fn("Tool.run")(function*(
   }
   const handle = yield* ChildProcess.make(tool.path, [...args], {
     cwd: options.cwd,
-    ...(options.env === undefined ? {} : { env: options.env, extendEnv: options.extendEnv ?? true }),
+    ...yield* environment(tool, options),
     shell: false,
   }).pipe(
     // Native spawners can throw synchronously before reporting a typed launch error.
@@ -260,10 +344,11 @@ export const resolve = Effect.fn("Tool.resolve")(function*(options: ResolveOptio
   // Compilers can be hundreds of megabytes; hash them in bounded chunks.
   const identity = yield* file(path, { name: options.name, version: "unprobed" }).pipe(Effect.mapError((e) => probeFailed(e.message)));
   const provisional: Resolved = { name: options.name, path, version: "", bytes: identity.bytes, sha256: identity.sha256 };
-  const completion = yield* run(provisional, options.versionArgs ?? ["--version"]).pipe(
+  const completion = yield* run(provisional, options.versionArgs ?? ["--version"], options).pipe(
     Effect.mapError((e) => probeFailed(e instanceof SpawnFailed ? e.detail : e.message)),
   );
-  const version = (options.parseVersion ?? firstToken)(completion);
+  const result = (options.parseVersion ?? firstToken)(completion, path);
+  const version = Effect.isEffect(result) ? yield* result : result;
   if (version === undefined || version.length === 0) return yield* probeFailed("could not read version");
   return { ...provisional, version };
 });
@@ -306,7 +391,7 @@ export const check = (tool: Resolved, operation: string, constraint: Constraint)
     ? Effect.fail(new VersionUnsupported({ tool: tool.name, version: tool.version, supported: constraint.range, operation, reason: constraint.reason }))
     : Effect.void;
 
-export const producer = (tool: Resolved): Artifact.Producer => ({
+export const producedBy = (tool: Resolved): Artifact.Producer => ({
   name: tool.name,
   version: tool.version,
   path: tool.path,

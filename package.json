@@ -18,7 +18,7 @@
     "lint": "oxlint packages test examples",
     "format": "dprint fmt",
     "format:check": "dprint check",
-    "verify": "bun run build && bun run check && bun run lint && bun run test:release && bun run test:unit && bun run test:examples",
+    "verify": "bun run build && bun run check:providers && bun run check && bun run lint && bun run test:release && bun run test:unit && bun run test:examples",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.examples.json --noEmit",
     "test:integration:bun": "vitest run test/integration/bun.test.ts test/integration/bun-api.test.ts",
     "test:integration:deno": "vitest run test/integration/deno.test.ts test/integration/deno-api.test.ts",
@@ -28,7 +28,9 @@
     "test:integration:sbom": "vitest run test/integration/sbom.test.ts",
     "test:integration:windows": "vitest run test/integration/windows.test.ts",
     "test:consumer": "node scripts/consumer-acceptance.mjs",
-    "test:release": "node --test scripts/release-packages.test.mjs"
+    "test:release": "node --test scripts/release-packages.test.mjs",
+    "generate:providers": "bun scripts/providers-table.mjs",
+    "check:providers": "bun scripts/providers-table.mjs --check"
   },
   "devDependencies": {
     "@effect/platform-bun": "4.0.0-rc.108",

@@ -23,7 +23,7 @@ describe("version policy and operation capabilities", () => {
     ];
     for (const [operation, effect] of builds) {
       const failure = await run(effect.pipe(Effect.provideService(Bun.Bun, { tool: defective }), Effect.flip));
-      expect(failure).toMatchObject({ _tag: "InputInvalid", operation, reason: expect.stringContaining("variable-collision") });
+      expect(failure).toMatchObject({ _tag: "ToolVersionUnsupported", operation, reason: expect.stringContaining("variable-collision") });
     }
   });
 
@@ -33,14 +33,14 @@ describe("version policy and operation capabilities", () => {
     const compile = await run(Deno.compile({ entrypoint: "input.ts", outfile: "output.exe", options: { allowScripts: true } }).pipe(
       Effect.provideService(Deno.Deno, { tool: resolved }), Effect.flip,
     ));
-    expect(compile).toMatchObject({ _tag: "InputInvalid", operation: "Deno.compile", reason: expect.stringContaining("--allow-scripts") });
+    expect(compile).toMatchObject({ _tag: "ToolVersionUnsupported", operation: "Deno.compile", reason: expect.stringContaining("--allow-scripts") });
     const watch = await run(Effect.scoped(Deno.watch({ entrypoint: "input.ts", outfile: "output.exe", options: { allowScripts: true } })).pipe(
       Effect.provideService(Deno.Deno, { tool: resolved }), Effect.flip,
     ));
-    expect(watch).toMatchObject({ _tag: "InputInvalid", operation: "Deno.watch", reason: expect.stringContaining("--allow-scripts") });
+    expect(watch).toMatchObject({ _tag: "ToolVersionUnsupported", operation: "Deno.watch", reason: expect.stringContaining("--allow-scripts") });
     const transpile = await run(Deno.transpile({ files: ["input.ts"], outdir: "output", options: { conditions: ["custom"] } }).pipe(
       Effect.provideService(Deno.Deno, { tool: resolved }), Effect.flip,
     ));
-    expect(transpile).toMatchObject({ _tag: "InputInvalid", operation: "Deno.transpile", reason: expect.stringContaining("--conditions") });
+    expect(transpile).toMatchObject({ _tag: "ToolVersionUnsupported", operation: "Deno.transpile", reason: expect.stringContaining("--conditions") });
   });
 });

@@ -36,7 +36,7 @@ it.skipIf(process.platform === "win32")(
       const artifact = await run(Artifact.file(main, { name: "fixture", version: "1" }));
       const failure = await run(
         NodeSea.assemble({ main: artifact, outfile, cwd: root }).pipe(
-          Effect.provideService(NodeSea.NodeSea, { builder: tool(builder), base: tool(base) }),
+          Effect.provideService(NodeSea.NodeSea, { tool: tool(builder), base: tool(base) }),
           Effect.flip,
         ),
       );

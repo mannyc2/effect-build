@@ -1,13 +1,12 @@
 import { Effect, FileSystem, Path } from "effect";
-import { ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
 import type { Product, Signed } from "./Model.js";
 import { plist } from "./plist.js";
 
 export type NativeTool = "codesign" | "hdiutil" | "plutil" | "pkgbuild" | "productbuild" | "productsign" | "pkgutil" | "notarytool" | "stapler" | "spctl" | "ditto";
-export const runNative = (name: NativeTool, args: readonly string[], options: { readonly cwd?: string | undefined; readonly redact?: readonly string[] | undefined } = {}): Effect.Effect<
-  Tool.Completion, Tool.Failed | Tool.SpawnFailed, Apple | ChildProcessSpawner.ChildProcessSpawner
+export const runNative = (name: NativeTool, args: readonly string[], options: Tool.RunOptions = {}): Effect.Effect<
+  Tool.Completion, Tool.Failed | Tool.SpawnFailed, Apple | Env
 > => Apple.use(({ tool }) => Tool.run(tool, [name, ...args], options));
 
 export const outputPath = (operation: string, value: string, extension: ".app" | ".dmg" | ".pkg" | undefined, cwd?: string) => Effect.gen(function*() {
@@ -31,7 +30,7 @@ export const copyRegular = (artifact: Artifact.Regular, destination: string, exe
     yield* fs.chmod(destination, executable ? 0o755 : 0o644).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
   }
 });
-export const copyProduct = (operation: string, artifact: Artifact.Artifact, destination: string): Effect.Effect<
+export const copyProduct = (operation: string, artifact: Artifact.Artifact, destination: string, options: Tool.EnvironmentOptions = {}): Effect.Effect<
   void, Tool.InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed, Apple | Env
 > => Effect.gen(function*() {
   if (artifact.kind !== "directory") return yield* copyRegular(artifact, destination);
@@ -63,17 +62,17 @@ export const copyProduct = (operation: string, artifact: Artifact.Artifact, dest
   yield* fs.makeDirectory(p.dirname(destination), { recursive: true }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
   yield* fs.remove(destination, { recursive: true, force: true }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
   // ditto preserves framework symlinks verbatim; Node's recursive copy can rewrite them toward the source tree.
-  yield* runNative("ditto", [artifact.path, destination]);
+  yield* runNative("ditto", [artifact.path, destination], options);
   yield* Artifact.verify({ ...artifact, path: destination });
 });
-export const verifySignature = (signed: Signed, path = signed.path): Effect.Effect<
-  void, Tool.Failed | Tool.SpawnFailed, Apple | ChildProcessSpawner.ChildProcessSpawner
+export const verifySignature = (signed: Signed, path = signed.path, options: Tool.EnvironmentOptions = {}): Effect.Effect<
+  void, Tool.Failed | Tool.SpawnFailed, Apple | Env
 > => ("product" in signed && signed.product === "pkg"
-  ? runNative("pkgutil", ["--check-signature", path])
-  : runNative("codesign", ["--verify", ...("product" in signed && signed.product === "app" ? ["--deep"] : []), "--strict", path])).pipe(Effect.asVoid);
+  ? runNative("pkgutil", ["--check-signature", path], options)
+  : runNative("codesign", ["--verify", ...("product" in signed && signed.product === "app" ? ["--deep"] : []), "--strict", path], options)).pipe(Effect.asVoid);
 /** Entitlements arrive as a plist artifact or as keys; both are linted as the file codesign receives. */
 export type Entitlements = Artifact.Regular | readonly string[];
-export const entitlementsFile = (operation: string, entitlements: Entitlements | undefined, path: string): Effect.Effect<
+export const entitlementsFile = (operation: string, entitlements: Entitlements | undefined, path: string, options: Tool.EnvironmentOptions = {}): Effect.Effect<
   string | undefined, Tool.InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed, Apple | Env
 > => Effect.gen(function*() {
   if (entitlements === undefined) return undefined;
@@ -87,12 +86,12 @@ export const entitlementsFile = (operation: string, entitlements: Entitlements |
   } else {
     yield* copyRegular(entitlements as Artifact.Regular, path);
   }
-  yield* runNative("plutil", ["-lint", path]);
+  yield* runNative("plutil", ["-lint", path], options);
   return path;
 });
 /** Refresh core file facts after the caller has checked the retained product refinements. */
 export const inspectProduct = <P extends Product>(product: P, path: string): Effect.Effect<P, Artifact.ArtifactError, Apple | Env> => Effect.gen(function*() {
   const { tool } = yield* Apple;
-  const current = product.kind === "directory" ? yield* Artifact.directory(path, Tool.producer(tool)) : yield* Artifact.file(path, Tool.producer(tool));
+  const current = product.kind === "directory" ? yield* Artifact.directory(path, Tool.producedBy(tool)) : yield* Artifact.file(path, Tool.producedBy(tool));
   return { ...product, ...current };
 });

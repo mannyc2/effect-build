@@ -5,7 +5,7 @@ import { copyProduct, inspectProduct, outputPath, runNative, verifySignature } f
 import { SignedProduct, type SignedApp, type SignedDmg, type SignedPkg, type StapledApp, type StapledDmg, type StapledPkg, type StapledProduct } from "./Model.js";
 import { AcceptedReference } from "./Notary.js";
 
-interface StapleOptions extends Commit.ProducerOptions {
+interface StapleOptions extends Commit.ProducerOptions, Tool.EnvironmentOptions {
   readonly acceptance: AcceptedReference;
   readonly cwd?: string | undefined;
 }
@@ -44,11 +44,11 @@ export function staple(input: StapleInput): Effect.Effect<StapledProduct, Staple
     yield* Artifact.verify(source);
     const produce = (out: string) => Effect.gen(function*() {
       // Direct output can intentionally staple in place; copying a file over itself would truncate it.
-      if (out !== p.resolve(source.path)) yield* copyProduct("Apple.staple", source, out);
-      yield* verifySignature(source, out);
-      yield* runNative("stapler", ["staple", out]);
-      yield* runNative("stapler", ["validate", out]);
-      yield* verifySignature(source, out);
+      if (out !== p.resolve(source.path)) yield* copyProduct("Apple.staple", source, out, input);
+      yield* verifySignature(source, out, input);
+      yield* runNative("stapler", ["staple", out], input);
+      yield* runNative("stapler", ["validate", out], input);
+      yield* verifySignature(source, out, input);
       const current = yield* inspectProduct(source, out);
       return { ...current, ticket: input.acceptance };
     });

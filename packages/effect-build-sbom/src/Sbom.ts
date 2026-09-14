@@ -1,37 +1,23 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Crypto, Effect, FileSystem, Path, Schema } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
-export class Sbom extends Context.Service<Sbom, { readonly tool: Tool.Resolved }>()("effect-build-sbom/Sbom") {}
+export class Sbom extends Context.Service<Sbom, Tool.Service>()("effect-build-sbom/Sbom") {}
 
-export interface LayerOptions {
-  readonly executable?: string | undefined;
-  readonly version?: string | ((version: string) => boolean) | undefined;
-}
-/** Syft majors share the scan and output-format flags used here. */
-export const supported = ">=1.50.0 <2.0.0";
-/** Exact version exercised by real-tool CI against directories, lockfiles, and executables. */
-export const tested = "1.50.0";
+export const { name, layer, supported, tested, constraints, requirements, resolved, testLayer } = Tool.provider(Sbom, {
+  name: "syft",
+  version: { parse: Tool.versionPattern(/^syft (\S+)/u), supported: ">=1.50.0 <2.0.0", tested: ["1.50.0"] },
+  requirements: { env: ["HOME", "SYFT_CONFIG", "SYFT_CHECK_FOR_APP_UPDATE"], network: true, services: [],
+    detail: "Syft configuration and catalogers may enable network access; filesystem scans need the source closure." },
+});
+
 type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
 
-export const layer = (options: LayerOptions = {}): Layer.Layer<
-  Sbom,
-  Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
-  Env
-> =>
-  Layer.effect(
-    Sbom,
-    Tool.resolve({
-      name: "syft",
-      executable: options.executable,
-      parseVersion: (completion) => /^syft (\S+)/u.exec(new TextDecoder().decode(completion.stdout))?.[1],
-    }).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))),
-  );
 export const Format = Schema.Literals(["spdx-json", "cyclonedx-json"] as const);
 export type Format = typeof Format.Type;
 const nativeFormat = { "spdx-json": "spdx-json@2.3", "cyclonedx-json": "cyclonedx-json@1.6" } as const;
 
-export interface GenerateInput extends Commit.ProducerOptions {
+export interface GenerateInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
   /** Release artifact associated with the inventory; always verified. */
   readonly subject: Artifact.Artifact;
   /** Source tree or named lockfile to scan for bundled dependencies. Without this, only the subject is scanned. */
@@ -75,7 +61,7 @@ export const generate = Effect.fn("Sbom.generate")((
         "--output",
         `${nativeFormat[format]}=${out}`,
         "--quiet",
-      ], { cwd }).pipe(Effect.andThen(Artifact.file(out, Tool.producer(tool))));
+      ], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd }).pipe(Effect.andThen(Artifact.file(out, Tool.producedBy(tool))));
     return yield* Commit.output(outfile, produce, input);
   })
 );

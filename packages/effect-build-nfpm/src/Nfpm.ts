@@ -1,32 +1,17 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Crypto, Effect, FileSystem, Path, Schema } from "effect";
 import { Artifact, Commit, Target, Tool } from "effect-build";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
-export class Nfpm extends Context.Service<Nfpm, { readonly tool: Tool.Resolved }>()("effect-build-nfpm/Nfpm") {}
+export class Nfpm extends Context.Service<Nfpm, Tool.Service>()("effect-build-nfpm/Nfpm") {}
 
-export interface LayerOptions {
-  readonly executable?: string | undefined;
-  readonly version?: string | ((version: string) => boolean) | undefined;
-}
-/** nFPM 2.47+ accepts the JSON configuration, disable_globbing, and MSIX packager used here. */
-export const supported = ">=2.47.0 <3.0.0";
-/** Exact version exercised by real-tool CI with deb, rpm, apk, archlinux, and MSIX packages. */
-export const tested = "2.47.0";
+export const { name, layer, supported, tested, constraints, requirements, resolved, testLayer } = Tool.provider(Nfpm, {
+  name: "nfpm",
+  version: { parse: Tool.versionPattern(/^GitVersion:\s+(\S+)/mu), supported: ">=2.47.0 <3.0.0", tested: ["2.47.0"] },
+  requirements: { env: ["HOME", "SOURCE_DATE_EPOCH"], network: false, services: [],
+    detail: "Configuration may expand environment variables; package scripts name additional host inputs." },
+});
+
 type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
-
-export const layer = (options: LayerOptions = {}): Layer.Layer<
-  Nfpm,
-  Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
-  Env
-> =>
-  Layer.effect(
-    Nfpm,
-    Tool.resolve({
-      name: "nfpm",
-      executable: options.executable,
-      parseVersion: (completion) => /^GitVersion:\s+(\S+)/mu.exec(new TextDecoder().decode(completion.stdout))?.[1],
-    }).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))),
-  );
 
 export const Format = Schema.Literals(["deb", "rpm", "apk", "archlinux", "msix"] as const);
 export type Format = typeof Format.Type;
@@ -69,6 +54,9 @@ export const Configuration = Schema.StructWithRest(
 export type Configuration = typeof Configuration.Type;
 
 export const PackageInput = Schema.Struct({
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  extendEnv: Schema.optional(Schema.Boolean),
+  scrubEnv: Schema.optional(Schema.Boolean),
   format: Format,
   config: Configuration,
   contents: Schema.NonEmptyArray(Content),
@@ -155,8 +143,8 @@ const packageArtifact = Effect.fn("Nfpm.package")((
       Effect.mapError(Artifact.ioError(configPath, "write")),
     );
     const produce = (out: string) =>
-      Tool.run(tool, ["package", "--config", configPath, "--packager", input.format, "--target", out], { cwd }).pipe(
-        Effect.andThen(Artifact.file(out, Tool.producer(tool))),
+      Tool.run(tool, ["package", "--config", configPath, "--packager", input.format, "--target", out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd }).pipe(
+        Effect.andThen(Artifact.file(out, Tool.producedBy(tool))),
       );
     return yield* Commit.output(outfile, produce, input);
   }))

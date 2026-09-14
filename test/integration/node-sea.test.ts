@@ -94,10 +94,10 @@ describe("real Node SEA executables", () => {
       const artifact = yield* NodeSea.assemble({ main, outfile: name("explicit-base"), cwd: root, atomic: false });
       return { service, artifact };
     }), base);
-    expect(service.builder.path).toBe(await realpath(executable));
+    expect(service.tool.path).toBe(await realpath(executable));
     expect(service.base.path).toBe(await realpath(base));
     expect(service.base.sha256).toBe(createHash("sha256").update(await readFile(base)).digest("hex"));
-    expect(service.builder.sha256).toBe(service.base.sha256);
+    expect(service.tool.sha256).toBe(service.base.sha256);
     expect((await execute(artifact.path, [], { timeout: 30_000 })).stdout).toBe("hello from SEA\n");
     expect(await run(Artifact.verify(artifact))).toEqual(artifact);
     expect((await readdir(root)).sort()).toEqual([name("base-node"), name("explicit-base"), "main.cjs", "message.txt"].sort());

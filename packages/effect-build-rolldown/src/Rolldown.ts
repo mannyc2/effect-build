@@ -10,7 +10,10 @@ export type { TransformOptions, TransformResult, TsconfigCache } from "rolldown/
 export { watch, type WatchEvent } from "./Watch.js";
 
 /** Tests exercise the pinned npm dependency; Rolldown is not selected from PATH. */
-export const tested = metadata.dependencies.rolldown;
+export const name = "rolldown";
+export const supported = metadata.dependencies.rolldown;
+export const tested: readonly string[] = [metadata.dependencies.rolldown];
+export const constraints: Readonly<Record<string, readonly Tool.Constraint[]>> = {};
 
 /** Native build options retain their write behavior; use write: false for memory output. */
 export function build(options: rolldown.BuildOptions): Effect.Effect<rolldown.RolldownOutput, Failed>;
@@ -60,7 +63,7 @@ export const buildToDirectory = Effect.fn("Rolldown.buildToDirectory")((input: D
   Failed | Tool.InputInvalid | Artifact.ArtifactError | Commit.CommitError,
   FileSystem.FileSystem | Path.Path | Crypto.Crypto
 > => Effect.gen(function*() {
-  if (input.outdir.length === 0 || input.output?.dir !== undefined || input.output?.file !== undefined) {
+  if (Tool.argumentIssue(input.outdir) !== undefined || input.output?.dir !== undefined || input.output?.file !== undefined) {
     return yield* new Tool.InputInvalid({
       operation: "Rolldown.buildToDirectory",
       reason: "buildToDirectory requires outdir and does not accept output.dir or output.file",

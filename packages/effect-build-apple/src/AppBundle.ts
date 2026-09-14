@@ -11,7 +11,7 @@ export interface Resource {
   readonly path: string;
   readonly executable?: boolean | undefined;
 }
-export interface AppBundleInput extends Commit.ProducerOptions {
+export interface AppBundleInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
   readonly executable: Artifact.Executable;
   readonly outdir: string;
   readonly bundleIdentifier: string;
@@ -78,8 +78,8 @@ export const appBundle = (input: AppBundleInput): Effect.Effect<App, AppBundleEr
     }
     const info = p.join(out, "Contents", "Info.plist");
     yield* fs.writeFileString(info, plist(fields)).pipe(Effect.mapError(Artifact.ioError(info, "write")));
-    yield* runNative("plutil", ["-lint", info]);
-    return { ...yield* Artifact.directory(out, Tool.producer(tool)), product: "app" as const };
+    yield* runNative("plutil", ["-lint", info], input);
+    return { ...yield* Artifact.directory(out, Tool.producedBy(tool)), product: "app" as const };
   });
   return yield* Commit.output(outdir, produce, input);
 });

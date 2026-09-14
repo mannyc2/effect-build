@@ -21,7 +21,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, Env>) =>
   Effect.runPromise(effect.pipe(
     Effect.provideService(Bun.Bun, { tool: tool("bun", "1.3.14") }),
     Effect.provideService(Deno.Deno, { tool: tool("deno", "2.9.5") }),
-    Effect.provideService(NodeSea.NodeSea, { builder: tool("node", "22.0.0"), base: tool("node", "22.0.0") }),
+    Effect.provideService(NodeSea.NodeSea, { tool: tool("node", "22.0.0"), base: tool("node", "22.0.0") }),
     Effect.provide(NodeServices.layer),
   ));
 let root: string;

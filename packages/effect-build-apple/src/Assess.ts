@@ -6,9 +6,9 @@ import { SignedExecutable, type StapledProduct } from "./Model.js";
 import { AcceptedReference } from "./Notary.js";
 
 export type AssessError = Tool.InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed;
-export interface AssessProductInput<A extends StapledProduct = StapledProduct> { readonly artifact: A }
+export interface AssessProductInput<A extends StapledProduct = StapledProduct> extends Tool.EnvironmentOptions { readonly artifact: A }
 /** Standalone executables cannot be stapled: Gatekeeper fetches their ticket online, so acceptance must name these exact bytes. */
-export interface AssessExecutableInput { readonly artifact: SignedExecutable; readonly acceptance: AcceptedReference }
+export interface AssessExecutableInput extends Tool.EnvironmentOptions { readonly artifact: SignedExecutable; readonly acceptance: AcceptedReference }
 const invalid = (reason: unknown) => new Tool.InputInvalid({ operation: "Apple.assess", reason: String(reason) });
 
 export function assess<A extends StapledProduct>(input: AssessProductInput<A>): Effect.Effect<A, AssessError, Apple | Env>;
@@ -26,8 +26,8 @@ export function assess(input: AssessProductInput | AssessExecutableInput): Effec
         return yield* invalid("notarization acceptance does not match the executable");
       }
       yield* Artifact.verify(artifact);
-      yield* verifySignature(artifact);
-      yield* runNative("spctl", ["--assess", "--type", "execute", "--verbose=4", artifact.path]);
+      yield* verifySignature(artifact, artifact.path, input);
+      yield* runNative("spctl", ["--assess", "--type", "execute", "--verbose=4", artifact.path], input);
       return artifact;
     }
     yield* Schema.decodeUnknownEffect(AcceptedReference)(artifact.ticket).pipe(Effect.mapError(invalid));
@@ -36,12 +36,12 @@ export function assess(input: AssessProductInput | AssessExecutableInput): Effec
     }
     // Stapling changes the accepted bytes, so validate the current artifact and its native ticket independently.
     yield* Artifact.verify(artifact);
-    yield* verifySignature(artifact);
-    yield* runNative("stapler", ["validate", artifact.path]);
+    yield* verifySignature(artifact, artifact.path, input);
+    yield* runNative("stapler", ["validate", artifact.path], input);
     const mode = artifact.product === "app" ? ["execute"]
       : artifact.product === "pkg" ? ["install"]
       : ["open", "--context", "context:primary-signature"];
-    yield* runNative("spctl", ["--assess", "--type", ...mode, "--verbose=4", artifact.path]);
+    yield* runNative("spctl", ["--assess", "--type", ...mode, "--verbose=4", artifact.path], input);
     return artifact;
   });
 }
