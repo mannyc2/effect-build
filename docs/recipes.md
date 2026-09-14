@@ -378,6 +378,9 @@ for (const c of cases) it(c.name, () => Effect.runPromise(c.run.pipe(Effect.prov
 
 A conditional version restriction needs a witness with activating input and a rejected
 version. The suite rejects missing witnesses instead of claiming the declaration is tested.
+Directory records are verified against disk on every host. Exact POSIX root permissions
+(0755 by default) are checked where supported; Windows still checks recorded modes, sorted
+entries, and stable manifest hashes without requiring POSIX permission bits.
 `TestFileSystem.failing` injects failures on named filesystem calls, `TestPlatform` exposes
 POSIX/Windows paths, and `expectReproducible` compares independent real outputs. Platform
 path fixtures use the optional `@effect/platform-node` peer. OS process launching, argv

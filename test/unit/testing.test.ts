@@ -130,7 +130,7 @@ describe("scripted processes", () => {
         const calls = yield* TestSpawner.Calls;
         const snapshot = yield* calls.all;
         expect(snapshot).toHaveLength(1);
-        expect(snapshot[0]).toMatchObject({ args: ["file with spaces"], cwd: root, env: { ONLY: "value" } });
+        expect(snapshot[0]).toMatchObject({ args: ["file with spaces"], cwd: path.resolve(root), env: { ONLY: "value" } });
         yield* Tool.run(TestTool.resolved("fixture", "1.0.0"), ["next"], { cwd: root });
         expect(snapshot).toHaveLength(1);
         expect(yield* calls.all).toHaveLength(2);

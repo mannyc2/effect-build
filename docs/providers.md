@@ -105,10 +105,19 @@ runtime does.
 
 Binary operations and watch sessions accept `env`, `extendEnv`, and `scrubEnv`. The default
 inherits the process environment. `env` merges into it unless `extendEnv: false`; that option
-also produces an empty environment when `env` is omitted. `scrubEnv: true` starts with only
+submits only `env` to the platform spawner, or an empty map when `env` is omitted.
+`scrubEnv: true` submits
 `PATH` pointing to the resolved tool's directory, and `HOME`, `USERPROFILE`, `TMPDIR`, `TEMP`,
 and `TMP` pointing to a scoped temporary directory. Explicit `env` overrides those defaults.
 The temporary directory is removed when the process or watch scope closes.
+
+Native process APIs may supplement that map. On Windows, Node's libuv restores missing
+system variables such as `SYSTEMROOT`, `TEMP`, and `PATH` from the parent. Application
+variables are still removed, and an explicit `env.PATH` replaces the native fallback.
+Use the uppercase keys shown above when overriding scrubbed defaults; Windows treats
+environment names case-insensitively. This is environment replacement through the selected
+platform, not a guarantee that the child's entire environment is empty.
+See [Node 24.14.1's Windows environment construction](https://github.com/nodejs/node/blob/v24.14.1/deps/uv/src/win/process.c#L597-L607).
 
 ```ts
 const executable = yield* Bun.compile({

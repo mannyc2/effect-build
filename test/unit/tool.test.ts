@@ -51,10 +51,30 @@ describe("truthful tool diagnostics", () => {
 });
 
 describe("tool resolution and execution", () => {
-  it("replaces the environment even when extendEnv:false is given without env", async () => {
+  it("removes inherited application variables with extendEnv:false, with or without env", async () => {
     const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
-    const completion = await run(Tool.run(tool, ["-e", "process.stdout.write(JSON.stringify({path:process.env.PATH,custom:process.env.EFFECT_BUILD_TEST}))"], { extendEnv: false }));
-    expect(JSON.parse(new TextDecoder().decode(completion.stdout))).toEqual({});
+    const previous = process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST;
+    process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST = "inherited sentinel";
+    const args = ["-e", "process.stdout.write(JSON.stringify({custom:process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST}))"];
+    try {
+      const inherited = await run(Tool.run(tool, args));
+      expect(JSON.parse(new TextDecoder().decode(inherited.stdout))).toEqual({ custom: "inherited sentinel" });
+      for (const env of [undefined, {}]) {
+        const replaced = await run(Tool.run(tool, args, { extendEnv: false, env }));
+        expect(JSON.parse(new TextDecoder().decode(replaced.stdout))).toEqual({});
+      }
+    } finally {
+      if (previous === undefined) delete process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST;
+      else process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST = previous;
+    }
+  });
+
+  it("honors explicit PATH and application variables in a replacement environment", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const completion = await run(Tool.run(tool, ["-e", "process.stdout.write(JSON.stringify({path:process.env.PATH,custom:process.env.EFFECT_BUILD_TEST}))"], {
+      extendEnv: false, env: { PATH: root, EFFECT_BUILD_TEST: "explicit" },
+    }));
+    expect(JSON.parse(new TextDecoder().decode(completion.stdout))).toEqual({ path: root, custom: "explicit" });
   });
 
   it("scrubs inherited environment and removes its temporary home after the tool exits", async () => {

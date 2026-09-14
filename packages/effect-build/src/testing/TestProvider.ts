@@ -49,7 +49,8 @@ export interface Subject<A extends Artifact.Artifact, R, E, R0> {
   readonly kind: A["kind"];
   /** Include a suffix required by the operation, such as output.exe or output.whl. */
   readonly outputName?: string | undefined;
-  /** Fresh directory roots are 0755; operations preserving an input root can name its mode. */
+  /** Expected POSIX root mode (default 0755). Windows has no equivalent POSIX permission bits;
+   * every host still verifies the recorded root mode against the actual filesystem. */
   readonly rootMode?: number | undefined;
   readonly make: (control: Control) => Effect.Effect<Fixture<A, R>, E, R0>;
 }
@@ -304,11 +305,15 @@ export const conformance = <A extends Artifact.Artifact, R, E, R0>(
         );
       }
       if (artifact.kind === "directory") {
-        yield* check(
-          artifact.rootMode === (subject.rootMode ?? 0o755),
-          name,
-          `root mode was ${artifact.rootMode.toString(8)}`,
-        );
+        // Windows stat reports native permission approximations; chmod cannot establish POSIX 0755.
+        // Artifact.verify above still checks the recorded rootMode against disk on every host.
+        if (typeof process === "undefined" || process.platform !== "win32") {
+          yield* check(
+            artifact.rootMode === (subject.rootMode ?? 0o755),
+            name,
+            `root mode was ${artifact.rootMode.toString(8)}`,
+          );
+        }
         const paths = artifact.entries.map((entry) => entry.path);
         yield* check(
           JSON.stringify(paths) === JSON.stringify([...paths].sort()),

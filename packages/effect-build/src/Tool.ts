@@ -100,8 +100,9 @@ export interface Output {
 export interface EnvironmentOptions {
   /** Merged into the inherited environment unless `extendEnv` is false. */
   readonly env?: Record<string, string> | undefined;
+  /** False submits only env (or an empty map) to the platform spawner; native APIs may add required variables. */
   readonly extendEnv?: boolean | undefined;
-  /** Start with only the tool's directory on PATH and a scoped temporary home; explicit env overrides these defaults. */
+  /** Submit the tool's directory on PATH and a scoped temporary home; env overrides these defaults. Native-required variables may remain. */
   readonly scrubEnv?: boolean | undefined;
 }
 
