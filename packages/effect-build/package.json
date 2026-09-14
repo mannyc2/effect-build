@@ -86,10 +86,10 @@
     "@effect/platform-node": ">=4.0.0-rc.113 <4.1.0-0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.113",
+    "effect": "4.0.0-rc.115",
     "@types/node": "24.3.0",
     "@types/semver": "7.8.0",
-    "@effect/platform-node": "4.0.0-rc.113"
+    "@effect/platform-node": "4.0.0-rc.115"
   },
   "engines": {
     "node": ">=22.19.0"

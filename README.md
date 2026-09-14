@@ -13,7 +13,7 @@ You need Node 22.19 or newer and [Bun](https://bun.sh) 1.3.14 or newer on `PATH`
 Bun provider with Effect and its Node platform, pinned to one release candidate:
 
 ```sh
-npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
+npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 Save this as `build.mjs` next to a `src/cli.ts`:
@@ -224,8 +224,8 @@ Every package is ESM, depends on `effect-build` for its types, and accepts Effec
 ## Requirements
 
 Node 22.19 or newer runs the build program (Node 24 also runs `build.ts` directly). Packages are
-ESM-only and typecheck from TypeScript 5.9. Effect 4.0.0-rc.113 is the tested version; every
-release candidate from it installs. Compilers and packagers are separate installs, resolved from
+ESM-only and typecheck from TypeScript 5.9. The workspace tests Effect 4.0.0-rc.115, with a separate
+rc.113 consumer for The Show. The Effect peer range starts at rc.113. Compilers and packagers are separate installs, resolved from
 `PATH` or an explicit path. Details are in [compatibility](docs/compatibility.md).
 
 ## Contributing

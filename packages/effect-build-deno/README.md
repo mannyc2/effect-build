@@ -5,7 +5,7 @@ programs. Executables come back as `Artifact.Executable` records with their targ
 header; bundles and transpiled trees as `Artifact.Directory`.
 
 ```sh
-npm install --save-dev --save-exact effect-build-deno@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
+npm install --save-dev --save-exact effect-build-deno@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 Deno 2.9.5 or newer must be installed. The provider drives the `deno` CLI from Node or Bun.

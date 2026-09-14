@@ -172,6 +172,7 @@ jobs:
           CONSUMER_NODE_TYPES: 22.20.2
           CONSUMER_BUN_TYPES: 1.4.2
           CONSUMER_BUN_PLATFORM: 'true'
+          CONSUMER_SKIP_LIB_CHECK: 'true'
 
   consumer-effect-declarations:
     name: Advisory dependency declarations (Effect ${{ matrix.effect }})

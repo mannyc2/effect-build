@@ -11,7 +11,7 @@ signs, notarizes, and assesses a compiled CLI with Developer ID credentials but 
 run.
 
 ```sh
-npm install --save-dev --save-exact effect-build-apple@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
+npm install --save-dev --save-exact effect-build-apple@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 Everything runs on macOS through `xcrun` from the Xcode command-line tools. Signing needs a

@@ -103,8 +103,9 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
   prints as `Tag: message`.
 - **Windows signing accepts MSIX files and PE executables**; signed executables must retain their input target before commit.
 - **Apple resolves xcrun once**; active Xcode tools select its native commands, and copied app trees preserve framework symlinks.
-- **Effect peers accept every 4.0 release candidate from rc.113.** The workspace pins the tested RC, a
-  non-gating consumer observes the `rc` tag, and moving the tested version is its own change.
+- **Effect peers accept every 4.0 release candidate from rc.113.** The workspace tests rc.115,
+  including Windows' fixed stat conversion; a required Show consumer keeps rc.113 compatibility.
+  A non-gating consumer observes the `rc` tag.
 - **bun-types is an optional peer of the Bun API subpath**; the package root references no Bun types.
 - **esbuild is a peer, Rolldown a dependency.** esbuild's API is stable within a minor, so the consumer's
   install runs in process; the Rolldown wrapper uses `rolldown/experimental`, whose types move outside semver.

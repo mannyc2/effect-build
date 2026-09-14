@@ -49,8 +49,8 @@
     "effect": ">=4.0.0-rc.113 <4.1.0-0"
   },
   "devDependencies": {
-    "@effect/platform-node": "4.0.0-rc.113",
-    "effect": "4.0.0-rc.113",
+    "@effect/platform-node": "4.0.0-rc.115",
+    "effect": "4.0.0-rc.115",
     "vitest": "3.2.6"
   },
   "engines": {

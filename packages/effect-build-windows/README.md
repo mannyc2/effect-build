@@ -10,7 +10,7 @@ on-demand [signing workflow](https://github.com/mannyc2/effect-build/blob/main/.
 exercises Trusted Signing with real identities but has not yet been run.
 
 ```sh
-npm install --save-dev --save-exact effect-build-windows@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
+npm install --save-dev --save-exact effect-build-windows@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 Signing runs on Windows with the Windows SDK's `signtool.exe`.

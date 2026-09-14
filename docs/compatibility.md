@@ -16,7 +16,7 @@ repository actually exercises for each operation.
 ## TypeScript
 
 **TypeScript 5.9.3** is the declaration floor. Installed tarballs are checked with `strict: true`
-and `skipLibCheck: true` using TypeScript 5.9.3 with Node types 24.3.0, and TypeScript 6.0.3 with
+and `skipLibCheck: false` using TypeScript 5.9.3 with Node types 24.3.0, and TypeScript 6.0.3 with
 Node types 24.13.3, the pairing that accounts for the `URLPattern` declarations TypeScript 6
 changed. Every public export, including `effect-build-bun/api`, is imported and typechecked.
 JavaScript source maps embed their sources; declaration maps resolve to the `src` files shipped
@@ -25,17 +25,23 @@ in each package.
 ## Effect
 
 Effect 4 is a prerelease. Every package accepts `>=4.0.0-rc.113 <4.1.0-0` as its Effect peer
-range, the shape Effect's own platform packages use, and **4.0.0-rc.113** is the tested version:
-the workspace pins it and every installed-consumer check installs it. A newer release candidate
-installs, and a non-gating CI consumer tracks the `rc` dist-tag to observe it, but nothing newer
-is promised until it becomes the tested version. Effect 3 is unsupported.
+range, the shape Effect's own platform packages use. The workspace and cross-platform checks
+pin **4.0.0-rc.115**. A required Ubuntu 22.04 consumer installs **4.0.0-rc.113** with The Show's
+exact toolchain. A non-gating consumer tracks the `rc` dist-tag; nothing newer is promised
+until tested. Effect 3 is unsupported.
 
 Install `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` at one version.
 The platform packages' caret dependency can otherwise select a newer shared candidate with a
 newer Effect peer. Stable Effect 4 support follows its release and verification.
 
-Required installed consumers use `strict: true` and `skipLibCheck: true`, matching this
-workspace and The Show. Effect rc.113's published declarations reference omitted internal
+Use the tested rc.115 platform on Windows. The rc.113 Node filesystem rejects valid NTFS
+inode numbers above JavaScript's safe integer range; the official platform
+[fixed optional stat fields in rc.114](https://github.com/Effect-TS/effect/pull/8164).
+The library does not replace the platform layer or round those identifiers.
+
+The Show consumer uses `strict: true` and `skipLibCheck: true`, matching that application.
+Other required installed consumers check dependency declarations with `skipLibCheck: false`.
+Effect rc.113's published declarations reference omitted internal
 types (`EffectTypeId`, `Contextual`, and `AnnotationSchemaConstraint`). Advisory CI checks
 both rc.113 and the floating RC with `skipLibCheck: false`; those upstream declaration
 failures remain visible. The required Show consumer pins Node 24.14.1, Bun 1.4.2,

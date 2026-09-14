@@ -4,7 +4,7 @@ Generate SPDX 2.3 or CycloneDX 1.6 JSON software bills of materials for release 
 [Syft](https://github.com/anchore/syft), as Effect programs.
 
 ```sh
-npm install --save-dev --save-exact effect-build-sbom@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
+npm install --save-dev --save-exact effect-build-sbom@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 Syft 1.50 or newer must be installed.

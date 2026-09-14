@@ -19,9 +19,9 @@ try {
   const candidate = await readCandidate(packed);
   const typescript = process.env.CONSUMER_TYPESCRIPT ?? "5.9.3";
   const nodeTypes = process.env.CONSUMER_NODE_TYPES ?? "24.3.0";
-  // Match our workspace and Show. rc.113's published declarations reference omitted
-  // internal types; the separate advisory lane keeps strict dependency checking visible.
-  const skipLibCheck = process.env.CONSUMER_SKIP_LIB_CHECK !== "false";
+  // Show uses skipLibCheck with rc.113's incomplete upstream declarations.
+  // Other required consumers check dependency declarations with the corrected RC.
+  const skipLibCheck = process.env.CONSUMER_SKIP_LIB_CHECK === "true";
   // The workspace pins the tested release candidate; `CONSUMER_EFFECT=rc` observes the newest one.
   const effect = process.env.CONSUMER_EFFECT ?? workspace.devDependencies.effect;
   const bunTypes = process.env.CONSUMER_BUN_TYPES ?? bunPackage.devDependencies["bun-types"];

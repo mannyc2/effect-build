@@ -5,13 +5,13 @@
     "": {
       "name": "effect-build-workspace",
       "devDependencies": {
-        "@effect/platform-bun": "4.0.0-rc.113",
-        "@effect/platform-deno": "4.0.0-rc.113",
-        "@effect/platform-node": "4.0.0-rc.113",
+        "@effect/platform-bun": "4.0.0-rc.115",
+        "@effect/platform-deno": "4.0.0-rc.115",
+        "@effect/platform-node": "4.0.0-rc.115",
         "@types/node": "24.3.0",
         "@types/semver": "7.8.0",
         "dprint": "0.49.1",
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
         "effect-build": "workspace:*",
         "effect-build-apple": "workspace:*",
         "effect-build-archives": "workspace:*",
@@ -34,8 +34,8 @@
     "examples/artifact-pipeline": {
       "name": "@effect-build/example-artifact-pipeline",
       "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.113",
-        "effect": "4.0.0-rc.113",
+        "@effect/platform-node": "4.0.0-rc.115",
+        "effect": "4.0.0-rc.115",
         "effect-build": "workspace:^",
         "effect-build-apple": "workspace:^",
         "effect-build-archives": "workspace:^",
@@ -53,8 +53,8 @@
     "examples/cli": {
       "name": "@effect-build/example-cli",
       "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.113",
-        "effect": "4.0.0-rc.113",
+        "@effect/platform-node": "4.0.0-rc.115",
+        "effect": "4.0.0-rc.115",
         "effect-build": "workspace:^",
         "effect-build-archives": "workspace:^",
         "effect-build-bun": "workspace:^",
@@ -68,10 +68,10 @@
         "semver": "7.8.5",
       },
       "devDependencies": {
-        "@effect/platform-node": "4.0.0-rc.113",
+        "@effect/platform-node": "4.0.0-rc.115",
         "@types/node": "24.3.0",
         "@types/semver": "7.8.0",
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "@effect/platform-node": ">=4.0.0-rc.113 <4.1.0-0",
@@ -88,8 +88,8 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "@effect/platform-node": "4.0.0-rc.113",
-        "effect": "4.0.0-rc.113",
+        "@effect/platform-node": "4.0.0-rc.115",
+        "effect": "4.0.0-rc.115",
         "vitest": "3.2.6",
       },
       "peerDependencies": {
@@ -104,7 +104,7 @@
         "fflate": "0.8.3",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-rc.113 <4.1.0-0",
@@ -118,7 +118,7 @@
       },
       "devDependencies": {
         "bun-types": "1.3.14",
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "bun-types": ">=1.3.14 <2.0.0",
@@ -135,7 +135,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-rc.113 <4.1.0-0",
@@ -148,7 +148,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
         "esbuild": "0.28.2",
       },
       "peerDependencies": {
@@ -163,7 +163,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-rc.113 <4.1.0-0",
@@ -177,7 +177,7 @@
         "postject": "1.0.0-alpha.6",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-rc.113 <4.1.0-0",
@@ -191,7 +191,7 @@
         "effect-build-archives": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-rc.113 <4.1.0-0",
@@ -205,7 +205,7 @@
         "rolldown": "1.2.5",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-rc.113 <4.1.0-0",
@@ -218,7 +218,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-rc.113 <4.1.0-0",
@@ -231,7 +231,7 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.113",
+        "effect": "4.0.0-rc.115",
       },
       "peerDependencies": {
         "effect": ">=4.0.0-rc.113 <4.1.0-0",
@@ -239,7 +239,7 @@
     },
   },
   "overrides": {
-    "@effect/platform-node-shared": "4.0.0-rc.113",
+    "@effect/platform-node-shared": "4.0.0-rc.115",
   },
   "packages": {
     "@db/redis": ["@jsr/db__redis@0.41.2", "https://npm.jsr.io/~/11/@jsr/db__redis/0.41.2.tgz", { "dependencies": { "@jsr/std__async": "^1", "@jsr/std__bytes": "^1", "@jsr/std__collections": "^1", "@jsr/std__io": "0.224.5", "@jsr/std__random": "0.1.0", "cluster-key-slot": "1.1.0" } }, "sha512-pDHlF3sQaU5+VDwDH3jRkETBSD9gAIqdoaC3j0B4nrffr+H/Kh0Pbw7i/p5eD+9W5j38l8yRqZGbo4xgohYttg=="],
@@ -266,13 +266,13 @@
 
     "@effect-build/example-cli": ["@effect-build/example-cli@workspace:examples/cli"],
 
-    "@effect/platform-bun": ["@effect/platform-bun@4.0.0-rc.113", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.113" }, "peerDependencies": { "effect": "^4.0.0-rc.113" } }, "sha512-EOn8doDVaiizfTpdmtRS0SZLAAt19yyHFKg+aV8YXJreNDYqXQLEt+/ThiEOurDimApVYhn2NZW52OJrZlybQw=="],
+    "@effect/platform-bun": ["@effect/platform-bun@4.0.0-rc.115", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.115" }, "peerDependencies": { "effect": "^4.0.0-rc.115" } }, "sha512-ilTFcs66ghInP8WHCJYa4bx/yzohYM9dRR//qjmVBBpSKu1hrCTiRWpEcc1N6zrnOEPk2kyVaKg5ykSMgiBMqQ=="],
 
-    "@effect/platform-deno": ["@effect/platform-deno@4.0.0-rc.113", "", { "dependencies": { "@db/redis": "npm:@jsr/db__redis@^0.41.2", "@effect/platform-node-shared": "^4.0.0-rc.113", "@std/fs": "npm:@jsr/std__fs@^1.0.24", "@std/media-types": "npm:@jsr/std__media-types@^1.1.0", "@std/path": "npm:@jsr/std__path@^1.1.6", "@std/streams": "npm:@jsr/std__streams@^1.1.2" }, "peerDependencies": { "effect": "^4.0.0-rc.113" } }, "sha512-vMtxR8HA9q8Y8Gfyer0fciTtRPPxkGLM0lHbXfxSU6wMt4+skb+ObcIyS8qDZkjHdSzcYNkwHfURk+HzsQ//AA=="],
+    "@effect/platform-deno": ["@effect/platform-deno@4.0.0-rc.115", "", { "dependencies": { "@db/redis": "npm:@jsr/db__redis@^0.41.2", "@effect/platform-node-shared": "^4.0.0-rc.115", "@std/fs": "npm:@jsr/std__fs@^1.0.24", "@std/media-types": "npm:@jsr/std__media-types@^1.1.0", "@std/path": "npm:@jsr/std__path@^1.1.6", "@std/streams": "npm:@jsr/std__streams@^1.1.2" }, "peerDependencies": { "effect": "^4.0.0-rc.115" } }, "sha512-/SNpH2qdVi7Kmh8uYF2IPsy+dkAoWrBoCb3HsCCNJ6ANBikSNwXLrLRxysWG5VoeycQ7SpJSxAwaUJFO3UZbHg=="],
 
-    "@effect/platform-node": ["@effect/platform-node@4.0.0-rc.113", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.113", "undici": "^8.10.2" }, "peerDependencies": { "effect": "^4.0.0-rc.113", "redis": ">=5.0.0 <7.0.0" } }, "sha512-8luSE2JcGVsALQ6cZOWh5jdZu+VgcUKIKPfhN/MjX+ZzIuK/krm3jZBHYZdhqkXjM9s8aYGBxNMHGF0WzF+Gpg=="],
+    "@effect/platform-node": ["@effect/platform-node@4.0.0-rc.115", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.115", "undici": "^8.10.2" }, "peerDependencies": { "effect": "^4.0.0-rc.115", "redis": ">=5.0.0 <7.0.0" } }, "sha512-mW03Wjq2FiTL5oi9yOkaKpCyUNBaduKgTk7qMHNELvC21Jq2qOAfdsfH+p+s2zmpB9w2RSa+ApODv4WjO9wQfw=="],
 
-    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-rc.113", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.21.3" }, "peerDependencies": { "effect": "^4.0.0-rc.113" } }, "sha512-EPCfjvKlHmNDgqIlT85P1OcgNUNvRxNtBpTFOz1UGHwNJe6Ap7rP93Rue7kzFUeplQMy6EfoZEH4CJR4N0nJ1g=="],
+    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-rc.115", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.21.3" }, "peerDependencies": { "effect": "^4.0.0-rc.115" } }, "sha512-rcBwhDIfb82akJoTv7Vwh8K5x9vC/XfuePS7JjOr+z+dORXzsmKqI1BUQF27ARCN9fTAbDh7I6YvBlWhLjnqNg=="],
 
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.28.2", "", { "os": "aix", "cpu": "ppc64" }, "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ=="],
 
@@ -514,7 +514,7 @@
 
     "dprint": ["dprint@0.49.1", "", { "optionalDependencies": { "@dprint/darwin-arm64": "0.49.1", "@dprint/darwin-x64": "0.49.1", "@dprint/linux-arm64-glibc": "0.49.1", "@dprint/linux-arm64-musl": "0.49.1", "@dprint/linux-riscv64-glibc": "0.49.1", "@dprint/linux-x64-glibc": "0.49.1", "@dprint/linux-x64-musl": "0.49.1", "@dprint/win32-arm64": "0.49.1", "@dprint/win32-x64": "0.49.1" }, "bin": { "dprint": "bin.js" } }, "sha512-pO9XH79SyXybj2Vhc9ITZMEI8cJkdlQQRoD8oEfPH6Jjpp/7WX5kIgECVd3DBOjjAdCSiW6R47v3gJBx/qZVkw=="],
 
-    "effect": ["effect@4.0.0-rc.113", "", {}, "sha512-uZ4Bh7KSlw2sdVdNDHPLSNjLGH+MWap7cheIHZoB/1T/ZJ3pvI4KiN3kUp50MpFKXhygOMmReJJOwWMQPwpPAg=="],
+    "effect": ["effect@4.0.0-rc.115", "", {}, "sha512-ogYulZ5ffeOzrJqQrG0XOkDO5lKn2s9KNHhoxJy/6wKUkF0i12dlVXWA9TgsgQ+zV/JzizyG0+XMPepZEQX6vw=="],
 
     "effect-build": ["effect-build@workspace:packages/effect-build"],
 

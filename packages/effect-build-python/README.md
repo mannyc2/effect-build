@@ -5,7 +5,7 @@ Write Python wheels directly from artifacts, or build a Python project's sdist a
 a native CLI reaches `pip install`.
 
 ```sh
-npm install --save-dev --save-exact effect-build-python@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
+npm install --save-dev --save-exact effect-build-python@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 ## Wheels from artifacts

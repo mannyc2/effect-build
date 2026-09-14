@@ -6,7 +6,7 @@ Effect program. The result is an `Artifact.Executable` whose target is read from
 binary's header, ready for an archive, an installer, or a signer.
 
 ```sh
-npm install --save-dev --save-exact effect-build-node-sea@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
+npm install --save-dev --save-exact effect-build-node-sea@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 ## Usage

@@ -4,7 +4,7 @@ Reproducible ZIP and tar.gz archives from artifacts, and exact source archives f
 as Effect programs. `zip` and `tarGz` are pure TypeScript: no external archiver, no tool layer.
 
 ```sh
-npm install --save-dev --save-exact effect-build-archives@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
+npm install --save-dev --save-exact effect-build-archives@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 ## Usage
