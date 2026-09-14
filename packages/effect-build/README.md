@@ -6,7 +6,7 @@ wrap a tool of your own. The [repository README](https://github.com/mannyc2/effe
 shows how the providers fit together.
 
 ```sh
-npm install --save-dev --save-exact effect-build@0.8.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
 ```
 
 ```ts

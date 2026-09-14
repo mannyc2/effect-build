@@ -13,7 +13,7 @@ You need Node 22.19 or newer and [Bun](https://bun.sh) 1.3.14 or newer on `PATH`
 Bun provider with Effect and its Node platform, pinned to one release candidate:
 
 ```sh
-npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
 ```
 
 Save this as `build.mjs` next to a `src/cli.ts`:
@@ -170,7 +170,7 @@ assets, dependencies and environment values whenever the program uses them.
 | [effect-build-apple](packages/effect-build-apple)       | App bundles, DMGs, PKGs, signing, notarization, and assessment (experimental)         | macOS, Xcode command-line tools |
 
 Every package is ESM, depends on `effect-build` for its types, and accepts Effect
-`>=4.0.0-rc.108 <4.1.0-0` as a peer. The exact versions each tool is tested with are in
+`>=4.0.0-rc.113 <4.1.0-0` as a peer. The exact versions each tool is tested with are in
 [tools and providers](docs/providers.md).
 
 ## How it fits together
@@ -215,7 +215,7 @@ Every package is ESM, depends on `effect-build` for its types, and accepts Effec
 ## Requirements
 
 Node 22.19 or newer runs the build program (Node 24 also runs `build.ts` directly). Packages are
-ESM-only and typecheck from TypeScript 5.9. Effect 4.0.0-rc.108 is the tested version; every
+ESM-only and typecheck from TypeScript 5.9. Effect 4.0.0-rc.113 is the tested version; every
 release candidate from it installs. Compilers and packagers are separate installs, resolved from
 `PATH` or an explicit path. Details are in [compatibility](docs/compatibility.md).
 

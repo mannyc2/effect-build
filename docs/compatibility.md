@@ -24,8 +24,8 @@ in each package.
 
 ## Effect
 
-Effect 4 is a prerelease. Every package accepts `>=4.0.0-rc.108 <4.1.0-0` as its Effect peer
-range, the shape Effect's own platform packages use, and **4.0.0-rc.108** is the tested version:
+Effect 4 is a prerelease. Every package accepts `>=4.0.0-rc.113 <4.1.0-0` as its Effect peer
+range, the shape Effect's own platform packages use, and **4.0.0-rc.113** is the tested version:
 the workspace pins it and every installed-consumer check installs it. A newer release candidate
 installs, and a non-gating CI consumer tracks the `rc` dist-tag to observe it, but nothing newer
 is promised until it becomes the tested version. Effect 3 is unsupported.
@@ -33,6 +33,13 @@ is promised until it becomes the tested version. Effect 3 is unsupported.
 Install `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` at one version.
 The platform packages' caret dependency can otherwise select a newer shared candidate with a
 newer Effect peer. Stable Effect 4 support follows its release and verification.
+
+Required installed consumers use `strict: true` and `skipLibCheck: true`, matching this
+workspace and The Show. Effect rc.113's published declarations reference omitted internal
+types (`EffectTypeId`, `Contextual`, and `AnnotationSchemaConstraint`). Advisory CI checks
+both rc.113 and the floating RC with `skipLibCheck: false`; those upstream declaration
+failures remain visible. The required Show consumer pins Node 24.14.1, Bun 1.4.2,
+TypeScript 7.0.2 and Node types 22.20.2, and exercises both Node and Bun platform layers.
 
 ## Support matrix
 

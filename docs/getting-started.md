@@ -15,13 +15,13 @@ program that did it, and points at what to do next. It takes about five minutes.
 ## Install
 
 ```sh
-npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
 ```
 
 `effect-build-bun` depends on the core `effect-build` package, so that comes along. Effect 4 is
 a release candidate: pin `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` to
 the same version, because the platform packages use caret ranges and can otherwise select a
-newer shared candidate with a newer Effect peer. 4.0.0-rc.108 is the tested version; see
+newer shared candidate with a newer Effect peer. 4.0.0-rc.113 is the tested version; see
 [compatibility](compatibility.md) for the accepted range.
 
 ## The first build

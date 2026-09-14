@@ -303,7 +303,7 @@ const findOnPath = (name: string) =>
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
     // Windows commonly names this key Path; both reads must honor the caller's ConfigProvider.
-    const path = yield* Config.string("PATH").pipe(Config.orElse(() => Config.string("Path")), Effect.orElseSucceed(() => ""));
+    const path = yield* Config.String("PATH").pipe(Config.orElse(() => Config.String("Path")), Effect.orElseSucceed(() => ""));
     const names = p.sep === "\\" ? [name, `${name}.exe`, `${name}.cmd`] : [name];
     const searched = path.split(p.sep === "\\" ? ";" : ":").filter((dir) => dir.length > 0);
     for (const dir of searched) {

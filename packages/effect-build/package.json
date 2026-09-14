@@ -78,14 +78,14 @@
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.108 <4.1.0-0",
-    "@effect/platform-node": ">=4.0.0-rc.108 <4.1.0-0"
+    "effect": ">=4.0.0-rc.113 <4.1.0-0",
+    "@effect/platform-node": ">=4.0.0-rc.113 <4.1.0-0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.108",
+    "effect": "4.0.0-rc.113",
     "@types/node": "24.3.0",
     "@types/semver": "7.8.0",
-    "@effect/platform-node": "4.0.0-rc.108"
+    "@effect/platform-node": "4.0.0-rc.113"
   },
   "engines": {
     "node": ">=22.19.0"

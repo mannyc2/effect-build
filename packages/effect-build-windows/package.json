@@ -46,10 +46,10 @@
     "effect-build": "workspace:^"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.108 <4.1.0-0"
+    "effect": ">=4.0.0-rc.113 <4.1.0-0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.108"
+    "effect": "4.0.0-rc.113"
   },
   "engines": {
     "node": ">=22.19.0"

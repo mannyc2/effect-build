@@ -268,7 +268,7 @@ export const inspect = (path: string): Effect.Effect<Facts, InspectError, FileSy
     let step = yield* advance();
     while (!step.done) {
       const { offset, length } = step.value;
-      yield* handle.seek(offset, "start");
+      yield* handle.seek(BigInt(offset), "start").pipe(Effect.mapError(unreadable));
       const bytes = new Uint8Array(length);
       let read = 0;
       while (read < length) {

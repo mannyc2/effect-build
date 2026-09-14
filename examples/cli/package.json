@@ -7,8 +7,8 @@
     "build": "node index.ts"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-rc.108",
-    "effect": "4.0.0-rc.108",
+    "@effect/platform-node": "4.0.0-rc.113",
+    "effect": "4.0.0-rc.113",
     "effect-build": "workspace:^",
     "effect-build-archives": "workspace:^",
     "effect-build-bun": "workspace:^"

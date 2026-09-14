@@ -290,7 +290,7 @@ export const readVerified = (artifact: Regular): Effect.Effect<Uint8Array, Artif
     }
     // One byte past the recorded size detects growth since the stat without reading the excess.
     const excess = yield* handle.read(new Uint8Array(1)).pipe(Effect.mapError(unreadable));
-    if (excess !== 0n) return yield* changed();
+    if (excess !== 0) return yield* changed();
     if (Encoding.encodeHex(hash.digest()) !== artifact.sha256) return yield* changed();
     if (artifact.kind === "executable") yield* checkTarget(artifact, Inspect.parse(contents));
     return contents;

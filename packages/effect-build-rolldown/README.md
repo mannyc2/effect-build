@@ -5,7 +5,7 @@ Bundle and transform with [Rolldown](https://rolldown.rs) as scoped Effect progr
 semver. No tool layer is needed.
 
 ```sh
-npm install --save-dev --save-exact effect-build-rolldown@0.8.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-rolldown@0.8.0 effect@4.0.0-rc.113 @effect/platform-node@4.0.0-rc.113 @effect/platform-node-shared@4.0.0-rc.113
 ```
 
 ## Usage

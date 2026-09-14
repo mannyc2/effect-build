@@ -19,6 +19,9 @@ try {
   const candidate = await readCandidate(packed);
   const typescript = process.env.CONSUMER_TYPESCRIPT ?? "5.9.3";
   const nodeTypes = process.env.CONSUMER_NODE_TYPES ?? "24.3.0";
+  // Match our workspace and Show. rc.113's published declarations reference omitted
+  // internal types; the separate advisory lane keeps strict dependency checking visible.
+  const skipLibCheck = process.env.CONSUMER_SKIP_LIB_CHECK !== "false";
   // The workspace pins the tested release candidate; `CONSUMER_EFFECT=rc` observes the newest one.
   const effect = process.env.CONSUMER_EFFECT ?? workspace.devDependencies.effect;
   const bunTypes = process.env.CONSUMER_BUN_TYPES ?? bunPackage.devDependencies["bun-types"];
@@ -73,7 +76,7 @@ try {
           module: "NodeNext",
           moduleResolution: "NodeNext",
           strict: true,
-          skipLibCheck: false,
+          skipLibCheck,
           noEmit: true,
           types: ["node"],
           lib: ["ES2022", "DOM", "DOM.Iterable"],
@@ -99,6 +102,9 @@ Build.build({ entrypoints: ["input.ts"], minify: true });
 Transpiler.make({ loader: "ts" });
 `,
   );
+  if (process.env.CONSUMER_BUN_PLATFORM === "true") {
+    await npm([...installArgs, `@effect/platform-bun@${effect}`], { cwd: directory });
+  }
   await writeFile(
     join(directory, "consumer.mjs"),
     String.raw`${importAll(exports)}
@@ -168,10 +174,32 @@ NodeRuntime.runMain(
   );
   execFileSync(process.execPath, [join(directory, "build.mjs")], { cwd: directory, stdio: "inherit" });
   assert.equal(execFileSync(executable, { cwd: directory, encoding: "utf8" }).trim(), "Hello!");
+  if (process.env.CONSUMER_BUN_PLATFORM === "true") {
+    const runtime = bunOptions.executable ?? "bun";
+    await typecheck("consumer-bun-platform", `
+import assert from "node:assert/strict";
+import { BunServices } from "@effect/platform-bun";
+import { ConfigProvider, Effect } from "effect";
+import { Artifact, Tool } from "effect-build";
+import { dirname } from "node:path";
+await Effect.runPromise(Effect.gen(function*() {
+  const tool = yield* Tool.resolve({ name: "bun" });
+  assert.equal(tool.version, ${JSON.stringify(bunTypes)});
+  const completion = yield* Tool.run(tool, ["--version"]);
+  assert.equal(new TextDecoder().decode(completion.stdout).trim(), tool.version);
+  const artifact = yield* Artifact.file(tool.path, tool);
+  assert.equal(artifact.sha256, tool.sha256);
+}).pipe(
+  Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ PATH: dirname(process.execPath) })),
+  Effect.provide(BunServices.layer),
+));
+`);
+    execFileSync(runtime, ["--no-env-file", join(directory, "consumer-bun-platform.ts")], { cwd: directory, stdio: "inherit" });
+  }
   console.log(
     `Installed consumer passed: ${candidate.packages.length} packages, ${exports.length} exports; Node ${process.version}, TypeScript ${typescript}, Node types ${nodeTypes}, Effect ${
       (await installed("effect")).version
-    }, bun-types ${(await installed("bun-types")).version}, esbuild ${(await installed("esbuild")).version}`,
+    }, bun-types ${(await installed("bun-types")).version}, esbuild ${(await installed("esbuild")).version}; skipLibCheck=${skipLibCheck}`,
   );
 } finally {
   await rm(directory, { recursive: true, force: true });

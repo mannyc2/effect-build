@@ -126,7 +126,7 @@ export const readGitTar = (
     const read = (at: number, length: number) =>
       Effect.gen(function*() {
         if (length > metadataBytes) return yield* invalid(at, "metadata record exceeds 16 MiB");
-        yield* handle.seek(at, "start");
+        yield* handle.seek(BigInt(at), "start").pipe(Effect.mapError(unreadable));
         const buffer = new Uint8Array(length);
         let filled = 0;
         while (filled < length) {
