@@ -106,7 +106,8 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { Artifact, Layout, Tool } from "effect-build";
+import { Artifact, Cache, Layout, Tool } from "effect-build";
+import { TestCache, TestArtifact } from "effect-build/testing";
 
 const text = "installed consumer\n";
 await writeFile("input.txt", text);
@@ -129,6 +130,19 @@ const failed = await Effect.runPromise(Effect.gen(function*() {
 }).pipe(Effect.provide(NodeServices.layer)));
 assert.equal(failed.stderr, "<redacted>");
 assert.equal(failed.exitCode, 7);
+await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const cache = yield* TestCache.layer;
+  const original = yield* TestArtifact.file("packed cache consumer");
+  const key = { operation: "Consumer.file", tool: original.producedBy, inputs: [] };
+  yield* Effect.gen(function*() {
+    yield* Effect.succeed(original).pipe(Cache.cached({ key, outfile: original.path, schema: Artifact.File }));
+    const hit = yield* Effect.die("installed cache producer unexpectedly ran").pipe(
+      Cache.cached({ key, outfile: "restored.txt", schema: Artifact.File }),
+    );
+    yield* Artifact.verify(hit);
+    assert.equal(hit.sha256, original.sha256);
+  }).pipe(Effect.provide(cache));
+})).pipe(Effect.provide(NodeServices.layer)));
 `,
   );
   execFileSync(process.execPath, [join(directory, "consumer.mjs")], { cwd: directory, stdio: "inherit" });

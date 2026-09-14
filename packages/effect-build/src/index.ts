@@ -1,4 +1,5 @@
 export * as Artifact from "./Artifact.js";
+export * as Cache from "./Cache.js";
 export * as Checksums from "./Checksums.js";
 export * as Commit from "./Commit.js";
 export * as Executable from "./Executable.js";

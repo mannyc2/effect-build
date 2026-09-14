@@ -64,6 +64,10 @@
       "types": "./dist/Checksums.d.ts",
       "import": "./dist/Checksums.js"
     },
+    "./Cache": {
+      "types": "./dist/Cache.d.ts",
+      "import": "./dist/Cache.js"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"

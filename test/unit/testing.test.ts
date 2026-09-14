@@ -1,15 +1,17 @@
 import { NodeServices } from "@effect/platform-node";
 import { ConfigProvider, Context, Deferred, Effect, Fiber, FileSystem, Path, PlatformError } from "effect";
-import { Artifact, Target, Tool } from "effect-build";
+import { Artifact, Cache, Target, Tool } from "effect-build";
 import {
   expectNoStagingLeft,
   expectReproducible,
   TestArtifact,
+  TestCache,
   TestFileSystem,
   TestPlatform,
   TestSpawner,
   TestTool,
 } from "effect-build/testing";
+import { KeyValueStore } from "effect/unstable/persistence";
 import { ChildProcess } from "effect/unstable/process";
 import { describe, expect, it } from "vitest";
 
@@ -244,6 +246,23 @@ describe("filesystem faults and assertions", () => {
         _tag: "ReproducibilityFailure",
       });
     }))));
+
+  it("supplies a fresh cache index and removes the object directory with its scope", async () =>
+    run(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* Effect.scoped(Effect.gen(function*() {
+        const layer = yield* TestCache.layer;
+        return yield* Effect.gen(function*() {
+          const index = yield* KeyValueStore.KeyValueStore;
+          const objects = yield* Cache.Objects;
+          yield* index.set("key", "value");
+          expect(yield* index.get("key")).toBe("value");
+          expect(yield* fs.exists(objects.directory)).toBe(true);
+          return objects.directory;
+        }).pipe(Effect.provide(layer));
+      }));
+      expect(yield* fs.exists(directory)).toBe(false);
+    })));
 
   it.each([[TestPlatform.win32, "C:\\tools\\build.exe", "\\"], [TestPlatform.posix, "/tools/build.exe", "/"]] as const)(
     "supplies independent path semantics %#",
