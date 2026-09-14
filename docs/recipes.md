@@ -6,7 +6,7 @@ run the same patterns end to end. The recipes assume these imports:
 
 ```ts
 import { Context, Effect, FileSystem, Path, Schema } from "effect";
-import { Artifact, Checksums, Commit, Target, Tool } from "effect-build";
+import { Artifact, Checksums, Commit, Directory, Target, Tool } from "effect-build";
 import * as Apple from "effect-build-apple";
 import * as Archive from "effect-build-archives";
 import * as Bun from "effect-build-bun";
@@ -33,6 +33,47 @@ const build = Effect.gen(function*() {
   return [cli, worker];
 }).pipe(Effect.provide(Bun.layer({ executable: process.env.EFFECT_BUILD_BUN })));
 ```
+
+## Assemble Node and Bun applications with runtime assets
+
+Each `Bun.bundle` owns and replaces its output directory. Build different targets into
+separate directories, then assemble their artifacts once. This also keeps a later bundle
+from deleting an earlier signer, native library, or worker.
+
+```ts
+const runtime = Effect.gen(function*() {
+  const node = yield* Bun.bundle({
+    entrypoints: ["src/show.ts"], outdir: "work/node",
+    options: { target: "node", packages: "external", sourcemap: "linked" },
+  });
+  const worker = yield* Bun.bundle({
+    entrypoints: ["src/worker.ts"], outdir: "work/bun",
+    options: { target: "bun", packages: "external", sourcemap: "linked" },
+  });
+  const assets = yield* Artifact.directory("runtime-assets", { name: "app", version: "1" });
+  return yield* Directory.assemble({
+    outdir: "dist/runtime",
+    entries: [{ artifact: node }, { artifact: worker }, { artifact: assets }],
+  });
+}).pipe(Effect.provide(Bun.layer()));
+```
+
+Omitting a directory entry's `path` merges its contents at the root; providing `path`
+mounts it below that shipping path. Files require a path. Exact shared directories merge
+when their modes agree; duplicate files, conflicting modes and case/Unicode collisions fail.
+File inputs use 0644 and executable inputs use 0755; directory members retain their modes,
+empty directories and symlinks. Inputs must remain unchanged while assembly reads them.
+
+Keep the application's file allowlist and frozen production dependency installation in its
+own build script. External packages must be included in that tree with their workspace links.
+After installation or other writes, record the complete tree again with `Artifact.directory`.
+Its artifact can be passed to `Archive.tarGz({ directory, outfile })` or `Archive.zip` to
+archive the contents at root, with no extra directory prefix. Stage the archive and its
+checksum together using the release-directory pattern below.
+
+The [runtime integration test](../test/integration/runtime-directory.test.ts) builds both
+targets, restores the assembled directory from cache, removes the source/build trees, and
+runs the extracted programs with a shared workspace dependency.
 
 ## Cross-compile a target matrix
 

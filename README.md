@@ -126,6 +126,15 @@ If any target fails, `dist/` is left exactly as it was. The [recipes](docs/recip
 rest of a release: OS packages, wheels that install a native command, signing and notarization,
 SBOMs, and handing the manifest to whatever publishes.
 
+## Compose application directories
+
+`Directory.assemble` combines separately built programs, dependency trees and runtime assets
+into one verified `Artifact.Directory`. It preserves directory members' modes and symlinks,
+rejects conflicting shipping paths, and commits the complete output once. Omit a directory
+entry's path to merge its contents at root; file entries require a shipping path.
+`Archive.tarGz({ directory, outfile })` archives that tree without an extra directory prefix.
+See the [Node and Bun application recipe](docs/recipes.md#assemble-node-and-bun-applications-with-runtime-assets).
+
 ## Cache
 
 Declare every input that affects the output, then wrap a producer with `Cache.cached`.

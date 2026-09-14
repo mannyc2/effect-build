@@ -92,7 +92,14 @@ try {
   };
   const bunApi = "effect-build-bun/api";
   // A Node consumer never installs bun-types, so no other export may depend on them.
-  await typecheck("consumer-node", importAll(exports.filter((name) => name !== bunApi)));
+  await typecheck("consumer-node", `${importAll(exports.filter((name) => name !== bunApi))}
+import { Artifact, Directory } from "effect-build";
+import * as Archive from "effect-build-archives";
+declare const file: Artifact.File;
+declare const directory: Artifact.Directory;
+Directory.assemble({ entries: [{ artifact: directory }, { artifact: file, path: "assets/input.txt" }], outdir: "runtime" });
+Archive.tarGz({ directory, outfile: "runtime.tar.gz" });
+`);
   await npm([...installArgs, `bun-types@${bunTypes}`], { cwd: directory });
   await typecheck(
     "consumer-bun",
@@ -112,7 +119,8 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { Artifact, Cache, Layout, Tool } from "effect-build";
+import { Artifact, Cache, Directory, Layout, Tool } from "effect-build";
+import * as Archive from "effect-build-archives";
 import { TestCache, TestArtifact } from "effect-build/testing";
 
 const text = "installed consumer\n";
@@ -125,6 +133,13 @@ const artifact = await Effect.runPromise(
 assert.equal(artifact.bytes, new TextEncoder().encode(text).byteLength);
 const [restored] = Artifact.decode(Artifact.encode([artifact]));
 assert.equal(restored.sha256, artifact.sha256);
+await Effect.runPromise(Effect.gen(function*() {
+  const first = yield* Directory.assemble({ entries: [{ artifact, path: "assets/input.txt" }], outdir: "first" });
+  const merged = yield* Directory.assemble({ entries: [{ artifact: first }], outdir: "merged" });
+  assert.equal(merged.sha256, first.sha256);
+  const archive = yield* Archive.tarGz({ directory: merged, outfile: "runtime.tar.gz" });
+  yield* Artifact.verify(archive);
+}).pipe(Effect.provide(NodeServices.layer)));
 assert.match(Layout.validate([
   { path: "Docs/a", kind: "file" },
   { path: "docs/b", kind: "file" },

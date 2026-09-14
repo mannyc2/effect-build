@@ -26,7 +26,17 @@ const archives = Effect.gen(function*() {
 ```
 
 Both operations take `{ entries, outfile, atomic?, onExists?, prefix? }` and return an
-`Artifact.File`.
+`Artifact.File`. To archive a complete directory's contents at the archive root, use
+`{ directory, outfile, atomic?, onExists?, prefix? }` instead:
+
+```ts
+const archive = Archive.tarGz({ directory: release, outfile: "dist/release.tar.gz" });
+```
+
+`directory` is an `Artifact.Directory`. Its files, executable modes, symlinks and empty
+subdirectories retain their paths without an extra wrapper directory. An empty source creates
+an empty archive. The directory record is verified before writing, and all descendant paths
+follow the same rules as explicit entries. Supply exactly one of `entries` or `directory`.
 
 ## Entries
 

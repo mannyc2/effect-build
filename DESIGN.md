@@ -54,6 +54,8 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 
 ## Decided
 
+- **One assembled directory owns combined outputs.** `Directory.assemble` merges explicitly mapped artifacts, preserving directory members and rejecting conflicting paths before commit. Omitted directory paths mean contents at root; files require paths. Archives accept a whole directory as root contents, so a mixed runtime ships without a wrapper directory. Application manifests, dependency installation and migration fingerprints stay with the application.
+
 - **Providers share a factory, not a registry.** `Tool.provider(Service, spec)` takes a named service class; declaration emit rejects an inferred returned subclass. `extend` covers extra service state; no `layerConfig` is needed in 0.8.
 - **Version policy is declared once.** `tested` is exact versions satisfying `supported`; the provider table is generated. Operation constraints use `Tool.check` at the input-dependent call site and fail with `ToolVersionUnsupported`, never `InputInvalid`. Native Windows resource parsing stays effectful at the provider edge; semver ranges and full-version predicates retain their existing roles.
 - **The accessor is `Tool.producedBy`.** Its name matches the artifact field; no aliases remain.

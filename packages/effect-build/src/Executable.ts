@@ -150,8 +150,11 @@ function* thinMacho(base: number, size: number): Inspection {
       if (commandSize < 72 || commandSize !== 72 + u32(commands, offset + 64, le) * 80) fail("invalid-header");
       const fileOffset = u64(commands, offset + 40, le), fileSize = u64(commands, offset + 48, le);
       bounds(fileOffset, fileSize, size);
-      if (u64(commands, offset + 32, le) < fileSize) fail("invalid-header");
-      hasSegment ||= fileSize > 0;
+      const memorySize = u64(commands, offset + 32, le);
+      // Darwin permits unmapped segments such as Go's __DWARF: bytes on disk, no initial protection or virtual memory.
+      const unmapped = memorySize === 0 && u32(commands, offset + 60, le) === 0;
+      if (!unmapped && memorySize < fileSize) fail("invalid-header");
+      hasSegment ||= memorySize > 0 && fileSize > 0;
     }
     offset += commandSize;
   }

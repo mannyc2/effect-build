@@ -148,7 +148,7 @@ jobs:
           CONSUMER_NODE_TYPES: 24.13.3
 
   consumer-show:
-    name: Installed consumer (Show: Effect rc.113, Bun 1.4.2, TypeScript 7)
+    name: "Installed consumer (Show: Effect rc.113, Bun 1.4.2, TypeScript 7)"
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd

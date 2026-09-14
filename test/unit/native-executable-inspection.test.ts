@@ -16,6 +16,29 @@ const changed = (source: Uint8Array, update: (view: DataView) => void): Uint8Arr
   return bytes;
 };
 
+// Go's Darwin linker stores DWARF bytes in a segment that occupies no virtual memory.
+const machoWithDwarf = (): Uint8Array => {
+  const bytes = new Uint8Array(178), view = new DataView(bytes.buffer);
+  bytes.set(thinMacho().subarray(0, 32));
+  view.setUint32(16, 2, true);
+  view.setUint32(20, 144, true);
+  for (const offset of [32, 104]) {
+    view.setUint32(offset, 0x19, true);
+    view.setUint32(offset + 4, 72, true);
+  }
+  bytes.set(new TextEncoder().encode("__TEXT"), 40);
+  view.setBigUint64(64, 177n, true);
+  view.setBigUint64(80, 177n, true);
+  view.setUint32(88, 5, true);
+  view.setUint32(92, 5, true);
+  bytes.set(new TextEncoder().encode("__DWARF"), 112);
+  view.setBigUint64(128, 16384n, true);
+  view.setBigUint64(144, 177n, true);
+  view.setBigUint64(152, 1n, true);
+  bytes.set([0xcc, 0xde], 176);
+  return bytes;
+};
+
 const fixtures = [
   ["glibc x64", elf("/lib64/ld-linux-x86-64.so.2"), { format: "elf", os: "linux", arch: "x64", abi: "gnu" }, "linux-x64"],
   ["glibc arm64", elf("/lib/ld-linux-aarch64.so.1", 183), { format: "elf", os: "linux", arch: "arm64", abi: "gnu" }, "linux-arm64"],
@@ -23,6 +46,7 @@ const fixtures = [
   ["musl arm64", elf("/lib/ld-musl-aarch64.so.1", 183), { format: "elf", os: "linux", arch: "arm64", abi: "musl" }, "linux-arm64-musl"],
   ["Mach-O x64", thinMacho(0x01000007), { format: "mach-o", os: "darwin", arch: "x64" }, "darwin-x64"],
   ["Mach-O arm64", thinMacho(0x0100000c), { format: "mach-o", os: "darwin", arch: "arm64" }, "darwin-arm64"],
+  ["Mach-O with unmapped DWARF", machoWithDwarf(), { format: "mach-o", os: "darwin", arch: "arm64" }, "darwin-arm64"],
   ["fat Mach-O x64", fatMacho([0x01000007]), { format: "mach-o", os: "darwin", arch: "x64" }, "darwin-x64"],
   ["PE x64", pe(0x8664), { format: "pe", os: "windows", arch: "x64" }, "windows-x64"],
   ["PE arm64", pe(0xaa64), { format: "pe", os: "windows", arch: "arm64" }, "windows-arm64"],
@@ -73,6 +97,10 @@ describe("executable headers", () => {
     ["eight-byte Mach-O", thinMacho().subarray(0, 8), "truncated-header"],
     ["missing Mach-O load commands", thinMacho().subarray(0, 32), "truncated-header"],
     ["missing Mach-O segment payload", thinMacho().subarray(0, 104), "truncated-header"],
+    ["unmapped Mach-O segment with initial protection", changed(machoWithDwarf(), (v) => v.setUint32(164, 1, true)), "invalid-header"],
+    ["mapped Mach-O segment larger than its virtual memory", changed(machoWithDwarf(), (v) => v.setBigUint64(64, 176n, true)), "invalid-header"],
+    ["unmapped Mach-O segment outside the file", changed(machoWithDwarf(), (v) => v.setBigUint64(152, 2n, true)), "truncated-header"],
+    ["Mach-O with only unmapped payload", changed(thinMacho(), (v) => v.setBigUint64(64, 0n, true)), "invalid-header"],
     ["missing ELF program-header table", elf().subarray(0, 64), "truncated-header"],
     ["missing ELF interpreter", elf("/lib64/ld-linux-x86-64.so.2").subarray(0, 180), "truncated-header"],
     ["unknown ELF interpreter", elf("/lib/custom-loader.so"), "unsupported-interpreter"],
@@ -109,6 +137,17 @@ describe("executable headers", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("inspects a file with an unmapped DWARF segment", async () => {
+    const root = await mkdtemp(join(tmpdir(), "effect-build-dwarf-"));
+    try {
+      const path = join(root, "app");
+      await writeFile(path, machoWithDwarf());
+      expect(await Effect.runPromise(Executable.inspect(path).pipe(Effect.provide(NodeServices.layer)))).toEqual({
+        format: "mach-o", os: "darwin", arch: "arm64",
+      });
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it("inspects metadata near the end of a large sparse file without buffering its payload", async () => {

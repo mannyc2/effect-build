@@ -19,10 +19,19 @@ export interface ArchiveEntry {
   /** Regular files only; directory entries retain their recorded modes. */
   readonly executable?: boolean | undefined;
 }
-export interface ArchiveInput extends Commit.ProducerOptions {
-  readonly entries: readonly ArchiveEntry[];
-  readonly outfile: string;
-}
+export type ArchiveInput =
+  & Commit.ProducerOptions
+  & {
+    readonly outfile: string;
+  }
+  & ({
+    readonly entries: readonly ArchiveEntry[];
+    readonly directory?: undefined;
+  } | {
+    /** Archive the directory's contents at the root, without a wrapper directory. */
+    readonly directory: Artifact.Directory;
+    readonly entries?: undefined;
+  });
 export interface SourceInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
   readonly repository: string;
   /** A Git tree object ID, from `git rev-parse HEAD^{tree}`. */
@@ -86,6 +95,25 @@ const writeArchive = (
     return yield* Commit.output(outfile, produce, options);
   });
 
+const directoryEntries = (tree: Artifact.Directory, p: Path.Path, prefix?: string): ArchiveEntries =>
+  tree.entries.map((child): Entry<Artifact.ArtifactError, Fs> => {
+    const path = prefix === undefined ? child.path : `${prefix}/${child.path}`;
+    if (child.kind === "file") {
+      // Each file is verified as it streams, even if it changes after the tree was read.
+      const contents = Artifact.streamVerified({
+        kind: "file",
+        path: p.join(tree.path, child.path),
+        bytes: child.bytes,
+        sha256: child.sha256,
+        producedBy: tree.producedBy,
+      });
+      return { kind: "file", path, mode: child.mode, bytes: child.bytes, contents };
+    }
+    return child.kind === "symlink"
+      ? { kind: "symlink", path, mode: child.mode, target: child.linkTarget }
+      : { kind: "directory", path, mode: child.mode };
+  });
+
 const archive = (
   operation: string,
   format: Format,
@@ -96,7 +124,17 @@ const archive = (
     if (issue !== undefined) return yield* new Tool.InputInvalid({ operation, reason: `outfile ${issue}` });
     const p = yield* Path.Path;
     const entries: Entry<Artifact.ArtifactError, Fs>[] = [];
-    for (const entry of input.entries) {
+    if ((input.entries === undefined) === (input.directory === undefined)) {
+      return yield* new Tool.InputInvalid({ operation, reason: "provide either entries or directory" });
+    }
+    if (input.directory !== undefined) {
+      if (input.directory.kind !== "directory") {
+        return yield* new Tool.InputInvalid({ operation, reason: "directory must be a directory artifact" });
+      }
+      const tree = yield* Artifact.verify(input.directory);
+      for (const entry of directoryEntries(tree, p)) entries.push(entry);
+    }
+    for (const entry of input.entries ?? []) {
       const artifact = entry.artifact;
       // Archive directory prefixes accept one trailing separator; shipping paths are normalized thereafter.
       const path = artifact.kind === "directory" ? entry.path.replace(/\/$/u, "") : entry.path;
@@ -127,24 +165,7 @@ const archive = (
       // The archive root is the archive's own object, named by the caller rather than
       // taken from the tree, so it gets a fixed portable mode instead of the recorded rootMode.
       entries.push({ kind: "directory", path, mode: 0o755 });
-      for (const child of tree.entries) {
-        const childPath = `${path}/${child.path}`;
-        if (child.kind === "file") {
-          // Each file is verified as it streams, even if it changes after the tree was read.
-          const contents = Artifact.streamVerified({
-            kind: "file",
-            path: p.join(tree.path, child.path),
-            bytes: child.bytes,
-            sha256: child.sha256,
-            producedBy: tree.producedBy,
-          });
-          entries.push({ kind: "file", path: childPath, mode: child.mode, bytes: child.bytes, contents });
-        } else if (child.kind === "symlink") {
-          entries.push({ kind: "symlink", path: childPath, mode: child.mode, target: child.linkTarget });
-        } else {
-          entries.push({ kind: "directory", path: childPath, mode: child.mode });
-        }
-      }
+      for (const entry of directoryEntries(tree, p, path)) entries.push(entry);
     }
     return yield* writeArchive(operation, input.outfile, entries, format, input, {
       name: metadata.name,

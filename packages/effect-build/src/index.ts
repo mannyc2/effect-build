@@ -2,6 +2,7 @@ export * as Artifact from "./Artifact.js";
 export * as Cache from "./Cache.js";
 export * as Checksums from "./Checksums.js";
 export * as Commit from "./Commit.js";
+export * as Directory from "./Directory.js";
 export * as Executable from "./Executable.js";
 export * as Layout from "./Layout.js";
 export * as Target from "./Target.js";

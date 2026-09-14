@@ -1,6 +1,6 @@
 # Compatibility
 
-What effect-build 0.7 runs on, what it typechecks with, which Effect it accepts, and what the
+What effect-build 0.8 runs on, what it typechecks with, which Effect it accepts, and what the
 repository actually exercises for each operation.
 
 ## Runtime
@@ -16,7 +16,7 @@ repository actually exercises for each operation.
 ## TypeScript
 
 **TypeScript 5.9.3** is the declaration floor. Installed tarballs are checked with `strict: true`
-and `skipLibCheck: false` using TypeScript 5.9.3 with Node types 24.3.0, and TypeScript 6.0.3 with
+and `skipLibCheck: true` using TypeScript 5.9.3 with Node types 24.3.0, and TypeScript 6.0.3 with
 Node types 24.13.3, the pairing that accounts for the `URLPattern` declarations TypeScript 6
 changed. Every public export, including `effect-build-bun/api`, is imported and typechecked.
 JavaScript source maps embed their sources; declaration maps resolve to the `src` files shipped

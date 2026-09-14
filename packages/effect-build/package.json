@@ -44,6 +44,10 @@
       "types": "./dist/Commit.d.ts",
       "import": "./dist/Commit.js"
     },
+    "./Directory": {
+      "types": "./dist/Directory.d.ts",
+      "import": "./dist/Directory.js"
+    },
     "./Executable": {
       "types": "./dist/Executable.d.ts",
       "import": "./dist/Executable.js"
