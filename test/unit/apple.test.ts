@@ -3,15 +3,14 @@ import { Cause, Effect, Exit, FileSystem, PlatformError, Redacted, Schema } from
 import { Artifact, Executable, Tool } from "effect-build";
 import * as Apple from "effect-build-apple";
 import * as Bun from "effect-build-bun";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { TestArtifact, TestSpawner } from "effect-build/testing";
 import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import ts from "typescript";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { Config, Invocation, PackedEntry } from "../fixtures/apple-tool.js";
-import { elf, thinMacho } from "../fixtures/native-executable.js";
+import { script, type Config, type Invocation, type PackedEntry } from "../fixtures/apple-script.js";
+const { elf, thinMacho } = TestArtifact;
 
 const local = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
@@ -22,44 +21,29 @@ const submissionId = "3f33f890-0cbf-4c1e-bb39-6fba74a594f0";
 const credential: Apple.Notary.Credential = { kind: "apple-id", appleId: "fixture@example.test", teamId: "TEAMID1234", password: Redacted.make(password) };
 let root: string;
 let tool: string;
-let configPath: string;
 let config: Config;
-let spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
+let invocations: Invocation[];
 let executable: Artifact.Executable;
 let resource: Artifact.File;
-let toolSource: string;
-
-beforeAll(async () => {
-  // Compile once so short-lived fixture children only execute JavaScript.
-  toolSource = ts.transpileModule(await readFile(new URL("../fixtures/apple-tool.ts", import.meta.url), "utf8"), {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-  }).outputText;
-});
-
-// Credential-dependent commands mutate real staged files; real Node process handles exercise tool failures and cleanup.
+// Scripts mutate real staged files while TestSpawner owns child lifecycle and interruption.
 beforeEach(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-apple-")));
   tool = join(root, "xcrun.fixture");
-  const script = join(root, "xcrun.mjs");
-  configPath = join(root, "config.json");
-  config = { log: join(root, "calls.jsonl") };
+  config = {};
+  invocations = [];
   await writeFile(tool, "xcrun fixture bytes\n");
-  await writeFile(script, toolSource);
-  await writeFile(configPath, JSON.stringify(config));
   await writeFile(join(root, "native"), thinMacho());
   await writeFile(join(root, "resource"), "resource bytes\n");
   executable = await local(Artifact.executable(join(root, "native"), producer, "darwin-arm64"));
   resource = await local(Artifact.file(join(root, "resource"), producer));
-  const base = await local(ChildProcessSpawner.ChildProcessSpawner);
-  spawner = ChildProcessSpawner.make((command) => !ChildProcess.isStandardCommand(command) ? base.spawn(command) :
-    base.spawn(ChildProcess.make(process.execPath, [script, configPath, ...command.args], command.options)));
+
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 const run = <A, E>(effect: Effect.Effect<A, E, Apple.Apple | NodeServices.NodeServices>) => Effect.runPromise(effect.pipe(
-  Effect.provide(Apple.layer({ executable: tool })), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner), Effect.provide(NodeServices.layer),
+  Effect.provide(Apple.layer({ executable: tool })), Effect.provide(TestSpawner.layer(script(() => config, invocations))), Effect.provide(NodeServices.layer),
 ));
-const configure = async (changes: Partial<Config>) => { config = { ...config, ...changes }; await writeFile(configPath, JSON.stringify(config)); };
-const calls = async (): Promise<readonly Invocation[]> => (await readFile(config.log, "utf8").catch(() => "")).trim().split("\n").filter(Boolean).map((line) => JSON.parse(line) as Invocation);
+const configure = async (changes: Partial<Config>) => { config = { ...config, ...changes }; };
+const calls = async (): Promise<readonly Invocation[]> => [...invocations];
 const appInput = (): Apple.AppBundleInput => ({ executable, outdir: join(root, "Fixture.app"), bundleIdentifier: "dev.effect-build.fixture", bundleName: "Fixture", version: "42", shortVersion: "1.2.3", executableName: "fixture", resources: [{ artifact: resource, path: "Guide.txt" }] });
 const app = () => run(Apple.appBundle(appInput()));
 const signedApp = async () => run(Apple.sign({ artifact: await app(), certificateSha1, outdir: join(root, "Signed.app") }));
@@ -398,7 +382,7 @@ describe("Apple notarization and stapling", () => {
     await configure({ waitForAbort: true });
     const controller = new AbortController();
     const waiting = Effect.runPromiseExit(Apple.Notary.wait({ reference, credential }).pipe(
-      Effect.provide(Apple.layer({ executable: tool })), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner), Effect.provide(NodeServices.layer),
+      Effect.provide(Apple.layer({ executable: tool })), Effect.provide(TestSpawner.layer(script(() => config, invocations))), Effect.provide(NodeServices.layer),
     ), { signal: controller.signal });
     try {
       await expect.poll(async () => (await calls()).filter((call) => call.tool === "notarytool").map((call) => call.args[0])).toEqual(["submit", "wait"]);

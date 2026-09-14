@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { elf, thinMacho, fatMacho, pe } from "../fixtures/native-executable.js";
+import { TestArtifact } from "effect-build/testing";
+const { elf, thinMacho, fatMacho, pe } = TestArtifact;
 
 const changed = (source: Uint8Array, update: (view: DataView) => void): Uint8Array => {
   const bytes = Uint8Array.from(source);

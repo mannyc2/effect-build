@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { elf, thinMacho } from "../fixtures/native-executable.js";
+import { TestArtifact } from "effect-build/testing";
+const { elf, thinMacho } = TestArtifact;
 
 const producer = { name: "fixture", version: "0.7.0" };
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>

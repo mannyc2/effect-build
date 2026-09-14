@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { crc32, inflateRawSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { thinMacho } from "../fixtures/native-executable.js";
+import { TestArtifact } from "effect-build/testing";
+const { thinMacho } = TestArtifact;
 
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));

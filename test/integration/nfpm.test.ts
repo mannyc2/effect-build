@@ -1,4 +1,5 @@
-import { elf, pe } from "../fixtures/native-executable.js";
+import { TestArtifact } from "effect-build/testing";
+const { elf, pe } = TestArtifact;
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { Artifact, Tool } from "effect-build";

@@ -68,13 +68,18 @@
         "semver": "7.8.5",
       },
       "devDependencies": {
+        "@effect/platform-node": "4.0.0-rc.108",
         "@types/node": "24.3.0",
         "@types/semver": "7.8.0",
         "effect": "4.0.0-rc.108",
       },
       "peerDependencies": {
+        "@effect/platform-node": ">=4.0.0-rc.108 <4.1.0-0",
         "effect": ">=4.0.0-rc.108 <4.1.0-0",
       },
+      "optionalPeers": [
+        "@effect/platform-node",
+      ],
     },
     "packages/effect-build-apple": {
       "name": "effect-build-apple",

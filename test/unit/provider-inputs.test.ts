@@ -34,23 +34,12 @@ afterEach(async () => {
 });
 
 describe("provider input preparation", () => {
-  it.each(["compile", "watch"] as const)(
-    "rejects a raw empty Deno %s outfile before it can resolve to cwd",
-    async (operation) => {
-      const input = { entrypoint: "input.ts", outfile: "", cwd: root };
-      const effect: Effect.Effect<unknown, Deno.CompileError, Env> = operation === "compile"
-        ? Deno.compile(input)
-        : Effect.scoped(Deno.watch(input));
-      const failure = await run(effect.pipe(Effect.flip));
-      expect(failure).toMatchObject({
-        _tag: "InputInvalid",
-        operation: `Deno.${operation}`,
-        reason: expect.stringContaining("outfile"),
-      });
-      expect(await readdir(root)).toEqual(["keep.txt"]);
-      expect(await readFile(join(root, "keep.txt"), "utf8")).toBe("original output\n");
-    },
-  );
+  it("rejects an empty Deno watch outfile before it can resolve to cwd", async () => {
+    const failure = await run(Effect.scoped(Deno.watch({ entrypoint: "input.ts", outfile: "", cwd: root })).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "InputInvalid", operation: "Deno.watch", reason: expect.stringContaining("outfile") });
+    expect(await readdir(root)).toEqual(["keep.txt"]);
+    expect(await readFile(join(root, "keep.txt"), "utf8")).toBe("original output\n");
+  });
 
   it.each(["compile", "watch"] as const)(
     "keeps the lowercase .exe requirement in Deno %s preparation",

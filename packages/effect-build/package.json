@@ -63,6 +63,10 @@
     "./Checksums": {
       "types": "./dist/Checksums.d.ts",
       "import": "./dist/Checksums.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
     }
   },
   "scripts": {
@@ -70,12 +74,14 @@
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.108 <4.1.0-0"
+    "effect": ">=4.0.0-rc.108 <4.1.0-0",
+    "@effect/platform-node": ">=4.0.0-rc.108 <4.1.0-0"
   },
   "devDependencies": {
     "effect": "4.0.0-rc.108",
     "@types/node": "24.3.0",
-    "@types/semver": "7.8.0"
+    "@types/semver": "7.8.0",
+    "@effect/platform-node": "4.0.0-rc.108"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -83,5 +89,10 @@
   "dependencies": {
     "@noble/hashes": "2.4.0",
     "semver": "7.8.5"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-node": {
+      "optional": true
+    }
   }
 }
