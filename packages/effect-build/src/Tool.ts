@@ -40,9 +40,11 @@ export class VersionUnsupported extends Schema.TaggedError<VersionUnsupported>()
   tool: Schema.String,
   version: Schema.String,
   supported: Schema.String,
+  operation: Schema.optionalKey(Schema.String),
+  reason: Schema.optionalKey(Schema.String),
 }) {
   override get message(): string {
-    return `${this.tool} ${this.version} is not supported (${this.supported})`;
+    return `${this.tool} ${this.version} is not supported${this.operation === undefined ? "" : ` by ${this.operation}`} (${this.reason ?? this.supported})`;
   }
 }
 
@@ -122,6 +124,28 @@ export interface ResolveOptions extends LocateOptions {
   /** Extract the version from probe output. Default: first token of stdout. */
   readonly parseVersion?: ((completion: Completion) => string | undefined) | undefined;
 }
+
+export interface Probe { readonly completion: Completion; readonly path: string }
+/** An extractor may inspect native binary resources through FileSystem, as SignTool requires. */
+export type VersionResult = string | undefined | Effect.Effect<string | undefined, ProbeFailed, FileSystem.FileSystem | Path.Path>;
+
+/** Extract group 1 from stdout, then stderr. Stateful patterns are reset on every attempt. */
+export const versionPattern = (pattern: RegExp) => (probe: Probe): string | undefined => {
+  const expression = new RegExp(pattern.source, pattern.flags);
+  for (const bytes of [probe.completion.stdout, probe.completion.stderr]) {
+    expression.lastIndex = 0;
+    const version = expression.exec(text(bytes))?.[1];
+    if (version !== undefined) return version;
+  }
+  return undefined;
+};
+
+export interface Constraint {
+  /** Versions inside this npm semver range are rejected. */
+  readonly range: string;
+  readonly reason: string;
+}
+
 
 type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
 
@@ -275,6 +299,12 @@ export const requireVersion = (accept: string | ((version: string) => boolean)) 
     ),
   );
 };
+
+/** Reject a declared operation-specific range using its metadata as the error explanation. */
+export const check = (tool: Resolved, operation: string, constraint: Constraint): Effect.Effect<void, VersionUnsupported> =>
+  satisfies(constraint.range)(tool.version)
+    ? Effect.fail(new VersionUnsupported({ tool: tool.name, version: tool.version, supported: constraint.range, operation, reason: constraint.reason }))
+    : Effect.void;
 
 export const producer = (tool: Resolved): Artifact.Producer => ({
   name: tool.name,
