@@ -2,14 +2,15 @@
 
 ## What it is
 
-effect-build compiles TypeScript into things you can ship (native executables,
-bundles, archives, OS packages, wheels, signed Apple/Windows products, SBOMs) as
-composable Effect programs, and returns a plain record of what it made. Publishing is
-ts-release's job; it consumes files by path and re-hashes them, so the handoff is
-files on disk plus an optional JSON manifest (`Artifact.encode`).
+effect-build runs build tools as composable Effect programs. Producers return a plain,
+verified, hashed record of their output; those records compose through compilers, archives,
+installers, signing, and reports. The boundary is bytes: effect-build produces and describes
+files; ts-release moves them. Signing stays here because a signature is bytes in a file.
 
-The user is someone shipping a TS CLI to end users on three OSes. The first example
-in the README includes the runtime and layers needed to execute it. Everything defensive is a combinator they can add.
+The first README example includes runtime and platform layers. Queries decode values without
+committing files. Remote actions return persistent typed references and outcomes when they
+change or attest to bytes, as in Apple's notarization flow. Only local producers with declared
+inputs use the input cache; remote actions need fresh side effects or a future expected-output contract.
 
 ## Core
 
@@ -19,21 +20,30 @@ in the README includes the runtime and layers needed to execute it. Everything d
 | `Artifact`   | `File`, `Executable`, `Directory`, `Regular`, `Producer`; `file`, `executable`, `directory`, `verify`, `streamVerified`, `copyVerified`, `readVerified`, `sha256`, `ioError`, `encode`, `decode` | Observe what's on disk into a record. `Executable.target` comes from the header. `Directory.sha256` hashes the sorted manifest; symlinks recorded, not followed.                                                           |
 | `Executable` | `parse`, `inspect`, `matches`, `resolveTarget`, `expectTarget`                                                                                                                        | ELF/Mach-O/PE header facts. A static Linux binary matches gnu and musl.                                                                                                                                                    |
 | `Commit`     | `atomic(outfile, produce, { onExists, prefix, staging })`, `output(outfile, produce, ProducerOptions, staging?)`                                                                      | Stage with final path depth or basename, then commit with recovery. Checks run inside `produce` run before the rename. `output` is what producers do with `atomic`, `onExists` and `prefix`; the producer picks `staging`. |
-| `Tool`       | `InputInvalid`, `argumentIssue`, `locate`, `resolve`, `run`, `redact`, `parseVersion`, `satisfies`, `requireVersion`, `producer`                                                                                                 | Locate and resolve once, record path/version/hash. Nothing re-checks the binary later. Ranges use npm semver.                                                                                                              |
+| `Tool`       | `InputInvalid`, `argumentIssue`, `locate`, `resolve`, `run`, `redact`, `parseVersion`, `versionPattern`, `satisfies`, `requireVersion`, `check`, `provider`, `producedBy`                                                                                                 | Locate and resolve once, record path/version/hash. Nothing re-checks the binary later. Ranges use npm semver.                                                                                                              |
 | `Layout`     | `Entry`, `Issue`, `pathIssue`, `validate`                                                                                                                                             | Shared normalized shipping paths: every explicit or implicit prefix has one NFC/case-folded spelling and only directories have descendants.                                                                                |
 | `Checksums`  | `write`, `verify`                                                                                                                                                                               | `sha256sum -c` compatible writing and verification.                                                                                                                                                                                                 |
 
+`Cache` owns declared keys, a `KeyValueStore` index, and streamed objects provided by
+`Cache.objects(directory)`. `Cache.cached` composes with any artifact producer; `Cache.clear`
+clears dedicated resources. `effect-build/testing` exports scoped process fakes, real-file
+fixtures, fault injection, path layers, and the provider conformance suite.
+
 ## Providers
 
-Each wraps one external toolchain or domain:
+Every binary provider declares its service and supplies one spec:
 
 ```ts
-class X extends Context.Service<X, { tool: Tool.Resolved }>()("effect-build-x/X") {}
-const supported: string                                   // accepted range; the layer's default policy
-const tested: string                                      // exact versions real-tool CI runs
-const layer: (o?: { executable?; version?: string | ((v) => boolean) }) => Layer<X, ...>
-const compile/build/package/...: (input & { outfile } & Commit.ProducerOptions) => Effect<Artifact, ...>
+class X extends Context.Service<X, Tool.Service>()("effect-build-x/X") {}
+const { layer, supported, tested, constraints, resolved, testLayer } = Tool.provider(X, {
+  name: "x",
+  version: { supported: ">=1 <2", tested: ["1.0.0"] },
+});
 ```
+
+The spec owns version parsing, exact tested versions, constraints and host requirements.
+`extend` is required when the service holds extra fields; Deno records its explicit runtime,
+and Node SEA resolves `base` beside `tool`. Native bundlers retain their in-process APIs.
 
 Operations verify their own output before the rename (executables: header vs
 requested target) and commit through `Commit.output`, so `atomic: false` writes
@@ -43,6 +53,19 @@ and their own optionals without spreading. Domain packages may refine core
 types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 
 ## Decided
+
+- **Providers share a factory, not a registry.** `Tool.provider(Service, spec)` takes a named service class; declaration emit rejects an inferred returned subclass. `extend` covers extra service state; no `layerConfig` is needed in 0.8.
+- **Version policy is declared once.** `tested` is exact versions satisfying `supported`; the provider table is generated. Operation constraints use `Tool.check` at the input-dependent call site and fail with `ToolVersionUnsupported`, never `InputInvalid`. Native Windows resource parsing stays effectful at the provider edge; semver ranges and full-version predicates retain their existing roles.
+- **The accessor is `Tool.producedBy`.** Its name matches the artifact field; no aliases remain.
+- **The provider contract is executable.** `effect-build/testing` uses Effect's scoped spawner constructors against real files; actual process launch and OS signals stay in integration tests. Conformance uses a fresh fixture, an output adapter, and an observed tool boundary; conditional restrictions require activating witnesses.
+- **Declared-input cache, constructive storage.** Inputs, tool identity, host, canonical JSON options and format determine the key. No closure inference, sandbox, remote store, expected-output mode, TTL or pruning in 0.8. Provider signatures stay native; callers declare path/config/plugin/runtime dependencies. Scrubbed environments are optional; requirement metadata is descriptive, never a complete dependency closure.
+- **Index and objects are separate resources.** Effect rc.108 `KeyValueStore` stores metadata; `PersistedCache` stores exits and TTL policy, which this cache does not need. Whole-file objects stream independently; directories reuse their manifest identity plus root mode. This retains the Action/result/CAS split of [REAPI](https://github.com/bazelbuild/remote-apis/blob/main/build/bazel/remote/execution/v2/remote_execution.proto) without claiming protocol compatibility.
+- **Canonical JSON rejects ambiguous data.** Sorted object keys and omitted undefined properties; dense ordered arrays; no functions, accessors, cycles, non-finite numbers or class instances. Encoded components are retained for inspection; callers include implementation revisions and fingerprints of secret inputs where needed.
+- **Cache hits copy verified bytes.** Private verification precedes destination writes, including direct output; committed output is rehashed. No hardlinks to mutable output; Effect FileSystem exposes no reflink option. Corrupt/unavailable cache entries are misses and failed ingest warns; destination failures and interruption remain visible. Concurrent index writes are last-writer-wins, not a claim of reproducible output.
+- **Cached refinements need a codec.** The default returns the core union; an explicit schema retains the precise kind and provider fields with their services. Regular modes and directory roots survive restoration; only the root path is relocated. `Cache.clear` operates on dedicated stores while builds are stopped; format prefixes isolate incompatible schemas.
+- **Whole files in 0.8.** A Bun 1.3.14 host pair changed 37 of 63,446,114 bytes; the five-target CLI sample saved only 1.32% with fixed 64 KiB block deduplication (441,366,250 total bytes). Chunking may help repeated same-target outputs but is not needed for the first store implementation.
+- **Isolation is explicit and limited.** `env`/`extendEnv` and `scrubEnv` reach binary operations. Bun 1.3.14's `--compile-executable-path` and compile `--metafile` work in a real probe; an artifact-typed runtime option and reported-closure checks remain future provider features. Copying inputs into a temp cwd cannot confine undeclared absolute paths; no sandbox is claimed.
+- **Cache comparisons informed scope.** [Tangram](https://www.tangram.dev/docs/introduction) locks dependencies and sandboxes; [Nix fixed-output derivations](https://nix.dev/manual/nix/2.27/store/derivation/outputs/) pin output identity; [Turborepo](https://turborepo.dev/docs/crafting-your-repository/using-environment-variables) includes declared env values; [Build Systems à la Carte](https://www.microsoft.com/en-us/research/publication/build-systems-la-carte/) distinguishes constructive restoration from verifying existing output. effect-build ships declared inputs and constructive restoration only.
 
 - Directory replacement retains a recoverable old tree; regular-file no-replace uses exclusive hard-link creation, while directory no-replace is unsupported.
 - **Checksum paths are relative to their file's directory**, so a staged release tree can move without rewriting them.
@@ -69,7 +92,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Explicit `denort` is hashed and recorded, not executed** to establish identity.
 - **Git source archives fix host newline defaults to LF**; committed `.gitattributes` still controls file conversion.
 - **Node SEA uses a CommonJS preparation blob and resource injection** across Node
-  22–26; the builder and base executable must have matching Node versions. The target is read from the base's
+  22–26; the tool and base executable must have matching Node versions. The target is read from the base's
   header, so a base running under emulation is recorded as itself.
 - **SignTool reads its full SDK version from its binary resource**; string ranges select the first three
   components, while a caller predicate can pin the full four-component version. The Windows layer reads

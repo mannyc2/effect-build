@@ -1,6 +1,6 @@
 {
   "name": "effect-build-python",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Build Python projects with uv or write wheels directly from artifacts.",
   "type": "module",
   "license": "MIT",

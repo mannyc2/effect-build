@@ -6,7 +6,7 @@ wrap a tool of your own. The [repository README](https://github.com/mannyc2/effe
 shows how the providers fit together.
 
 ```sh
-npm install --save-dev --save-exact effect-build@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build@0.8.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
 ```ts
@@ -111,7 +111,7 @@ const compress = (executable: Artifact.Executable, outfile: string) =>
     }).pipe(Tool.requireVersion(">=4.0.0"));
     return yield* Commit.output(outfile, (staged) =>
       Tool.run(upx, ["--best", "-o", staged, executable.path]).pipe(
-        Effect.andThen(Artifact.executable(staged, Tool.producer(upx), executable.target)),
+        Effect.andThen(Artifact.executable(staged, Tool.producedBy(upx), executable.target)),
       ));
   });
 ```
@@ -171,3 +171,10 @@ without rewriting it:
 [Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
 [Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md) ·
 [Design](https://github.com/mannyc2/effect-build/blob/main/DESIGN.md)
+
+`Tool.provider(Service, spec)` is the shared binary-provider factory. `Cache.cached` adds
+declared-input caching with Effect `KeyValueStore` and streamed object storage; pass a codec
+for precise artifact or provider types. The `effect-build/testing` subpath provides the
+scripted spawner, real-file fixtures and conformance suite. Its path fixtures use the optional
+`@effect/platform-node` peer. See [cache semantics](../../docs/cache.md) and
+[provider recipes](../../docs/recipes.md#test-a-provider).

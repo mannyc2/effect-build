@@ -5,7 +5,7 @@ build; the [CLI example](../examples/cli) and the [artifact pipeline](../example
 run the same patterns end to end. The recipes assume these imports:
 
 ```ts
-import { Effect, FileSystem, Path } from "effect";
+import { Context, Effect, FileSystem, Path, Schema } from "effect";
 import { Artifact, Checksums, Commit, Target, Tool } from "effect-build";
 import * as Apple from "effect-build-apple";
 import * as Archive from "effect-build-archives";
@@ -285,27 +285,103 @@ const external = Effect.gen(function*() {
 
 ## Wrap a tool that has no provider
 
-The core package has what a provider is made of. `Tool.resolve` locates, hashes, and probes a
-binary once; `Tool.run` runs it with captured output; `Commit.output` gives your producer the
-same staged, atomic output as the built-in ones.
+`Tool.provider` resolves and records a tool once. `Tool.run` captures output and
+`Commit.output` supplies the same staged output used by first-party providers.
 
 ```ts
-const compress = (executable: Artifact.Executable, outfile: string) =>
+class Upx extends Context.Service<Upx, Tool.Service>()("example/Upx") {}
+const upx = Tool.provider(Upx, {
+  name: "upx",
+  version: { parse: Tool.versionPattern(/^upx (\d+\.\d+\.\d+)/u), supported: ">=4 <5", tested: ["4.2.0"] },
+});
+const compress = (input: { executable: Artifact.Executable; outfile: string } & Commit.ProducerOptions) =>
   Effect.gen(function*() {
-    const upx = yield* Tool.resolve({
-      name: "upx",
-      parseVersion: (probe) => /upx (\d+\.\d+\.\d+)/u.exec(new TextDecoder().decode(probe.stdout))?.[1],
-    }).pipe(Tool.requireVersion(">=4.0.0"));
-    return yield* Commit.output(outfile, (staged) =>
-      Tool.run(upx, ["--best", "-o", staged, executable.path]).pipe(
-        Effect.andThen(Artifact.executable(staged, Tool.producer(upx), executable.target)),
-      ));
+    const issue = Tool.argumentIssue(input.outfile);
+    if (issue !== undefined) return yield* new Tool.InputInvalid({ operation: "Upx.compress", reason: `outfile ${issue}` });
+    const tool = yield* upx.resolved;
+    return yield* Commit.output(input.outfile, (staged) =>
+      Tool.run(tool, ["--best", "-o", staged, input.executable.path]).pipe(
+        Effect.andThen(Artifact.executable(staged, Tool.producedBy(tool), input.executable.target)),
+      ), input);
   });
 ```
 
-`Commit.output` stages a file under a temporary directory next to `outfile`, so the tool writes
-to `staged` and never to the destination. Return the artifact recorded at the staged path; the
-commit renames it and returns the record with the final path.
+Provide `upx.layer()` and platform services. The returned artifact names the final path;
+output validation runs before commit. A provider can also declare version constraints and
+host requirements; see [provider declarations](providers.md).
+
+## Queries and stdout producers
+
+A query decodes stdout into a value and does not commit a file. When stdout itself is the
+artifact, write the bytes through `Commit.output` and return the file record instead.
+
+```ts
+const query = (tool: Tool.Resolved) => Tool.run(tool, ["--json"]).pipe(
+  Effect.flatMap((reply) => Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: Schema.String })))(new TextDecoder().decode(reply.stdout))),
+);
+const report = (tool: Tool.Resolved, outfile: string) => Commit.output(outfile, (staged) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.writeFile(staged, new Uint8Array());
+    yield* Tool.run(tool, ["report"], {
+      stdoutLimit: 0,
+      onOutput: (output) => output.stream === "stdout"
+        ? fs.writeFile(staged, output.chunk, { flag: "a" }).pipe(Effect.orDie)
+        : Effect.void,
+    });
+    return yield* Artifact.file(staged, Tool.producedBy(tool));
+  }));
+```
+
+The empty staged file handles tools that emit no bytes. `onOutput` is an
+Effect callback with no typed failure channel; a failed write interrupts the command and its
+scope discards staging. Queries with larger structured output can set `stdoutLimit: null`.
+
+Remote operations return a schema-typed reference the caller can persist, then an outcome:
+`Apple.Notary.submit`, `wait`, and `acceptedReference` demonstrate the pattern. Such operations
+belong here when they change or attest to bytes; transferring the product belongs to ts-release.
+They are never cached by declared inputs. [Cache](cache.md) applies to local producers whose
+complete dependencies the caller can declare.
+
+## Test a provider
+
+`effect-build/testing` has real-file fixtures and an in-process scripted spawner. No compiler
+installation is needed to exercise production, validation, interruption, and staging. The
+conformance suite takes a fresh fixture and an output adapter, so `outfile`, `outdir`, and
+in-process tools share the same guarantees. The observer must run inside the actual tool call.
+
+```ts
+import { Layer } from "effect";
+import { TestArtifact, TestProvider, TestSpawner, TestTool } from "effect-build/testing";
+
+const cases = TestProvider.conformance({
+  operation: "Upx.compress", kind: "executable", outputName: "output.exe",
+  make: (control) => Effect.gen(function*() {
+    const executable = yield* TestArtifact.executable("windows-x64");
+    const tool = TestTool.resolved("upx", "4.2.0");
+    const fake = TestSpawner.layer(({ args }) => Effect.gen(function*() {
+      const output = args[args.indexOf("-o") + 1]!;
+      yield* Artifact.copyVerified(executable, output).pipe(Effect.orDie);
+      return { exitCode: (yield* control.enter(output)) ? 1 : 0 };
+    }));
+    const services = yield* Layer.build(Layer.merge(upx.testLayer({ tool }), fake));
+    return {
+      run: (outfile: string, options: Commit.ProducerOptions) =>
+        compress({ executable, outfile, ...options }).pipe(Effect.provideContext(services)),
+      calls: TestSpawner.Calls.use((calls) => calls.all).pipe(Effect.map((calls) => calls.length), Effect.provideContext(services)),
+      provider: { tool, constraints: upx.constraints },
+    };
+  }),
+});
+for (const c of cases) it(c.name, () => Effect.runPromise(c.run.pipe(Effect.provide(NodeServices.layer))));
+```
+
+A conditional version restriction needs a witness with activating input and a rejected
+version. The suite rejects missing witnesses instead of claiming the declaration is tested.
+`TestFileSystem.failing` injects failures on named filesystem calls, `TestPlatform` exposes
+POSIX/Windows paths, and `expectReproducible` compares independent real outputs. Platform
+path fixtures use the optional `@effect/platform-node` peer. OS process launching, argv
+quoting and real signals stay in integration tests; the fake does not establish them.
 
 ## Handle a failure
 

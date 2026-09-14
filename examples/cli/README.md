@@ -20,11 +20,11 @@ The first run downloads a Bun runtime per target. The program prints the committ
 ```
 dist/
 ├── SHA256SUMS
-├── hello_0.7.0_darwin-arm64.tar.gz
-├── hello_0.7.0_linux-arm64.tar.gz
-├── hello_0.7.0_linux-x64-musl.tar.gz
-├── hello_0.7.0_linux-x64.tar.gz
-└── hello_0.7.0_windows-x64.zip
+├── hello_0.8.0_darwin-arm64.tar.gz
+├── hello_0.8.0_linux-arm64.tar.gz
+├── hello_0.8.0_linux-x64-musl.tar.gz
+├── hello_0.8.0_linux-x64.tar.gz
+└── hello_0.8.0_windows-x64.zip
 ```
 
 ## How it works
@@ -47,3 +47,10 @@ dist/
 Change `name`, `version`, and `targets` at the top of `index.ts`; any of the eight core targets
 works. Pass `options: { minify: true }` to `Bun.compile` for smaller binaries. To add a checksum
 signature, an SBOM, or OS packages, see the [recipes](../../docs/recipes.md).
+
+The matrix caches compiled executables under `.effect-build/cache`. Each key includes the
+standalone source tree, Bun identity, target, entrypoint options, and example version. Repeating
+the build restores verified executable bytes before writing the archives. This example imports
+no dependencies; add configuration, lockfiles, dependencies and environment fingerprints to the
+key when extending it. Cache resources live outside `src` and `dist`; `Cache.clear` clears both
+provided stores while builds are stopped.

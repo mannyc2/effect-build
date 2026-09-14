@@ -5,7 +5,7 @@ The executable comes back as an `Artifact.Executable` whose target was read from
 for an archive, an installer, a signer, or an SBOM scan.
 
 ```sh
-npm install --save-dev --save-exact effect-build-bun@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
 Bun 1.3.14 or newer must be installed; it does not have to run the build. The provider drives the

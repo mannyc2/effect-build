@@ -1,6 +1,6 @@
 {
   "name": "effect-build-bun",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Compile executables and bundle TypeScript with Bun as Effect programs.",
   "type": "module",
   "license": "MIT",

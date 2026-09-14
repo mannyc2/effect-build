@@ -1,6 +1,6 @@
 {
   "name": "effect-build-node-sea",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Package CommonJS scripts and assets as Node single executable applications.",
   "type": "module",
   "license": "MIT",

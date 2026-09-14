@@ -174,7 +174,7 @@ describe("wheels from real artifacts", () => {
     expect(second.path).toBe(join(root, "second", "wheel_fixture-1.2.3-py3-none-any.whl"));
     expect(await readFile(second.path)).toEqual(await readFile(first.path));
     expect(await run(Artifact.verify(first))).toEqual(first);
-    expect(first.producedBy).toEqual({ name: "effect-build-python", version: "0.7.0" });
+    expect(first.producedBy).toEqual({ name: "effect-build-python", version: "0.8.0" });
     const files = await readZip(first.path), names = [...files.keys()];
     expect(names).toEqual([...names].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b))));
     expect(files.get(`${info}/METADATA`)?.contents.toString()).toBe([

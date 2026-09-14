@@ -1,6 +1,6 @@
 {
   "name": "effect-build-deno",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Compile, bundle, and transpile TypeScript with Deno as Effect programs.",
   "type": "module",
   "license": "MIT",

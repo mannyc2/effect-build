@@ -1,6 +1,6 @@
 {
   "name": "effect-build-rolldown",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Bundle TypeScript with Rolldown as scoped Effect programs.",
   "type": "module",
   "license": "MIT",

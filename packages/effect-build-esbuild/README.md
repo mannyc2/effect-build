@@ -5,7 +5,7 @@ peer dependency (`>=0.28.2 <0.29.0`, tested with 0.28.2): your install's esbuild
 and no tool layer is needed.
 
 ```sh
-npm install --save-dev --save-exact effect-build-esbuild@0.7.0 esbuild@0.28.2 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-esbuild@0.8.0 esbuild@0.28.2 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
 ## Usage

@@ -15,7 +15,7 @@ program that did it, and points at what to do next. It takes about five minutes.
 ## Install
 
 ```sh
-npm install --save-dev --save-exact effect-build-bun@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
 `effect-build-bun` depends on the core `effect-build` package, so that comes along. Effect 4 is
@@ -111,7 +111,7 @@ manifest, `Artifact.decode` validates one back, and `Artifact.verify(artifact)` 
 file and fails if a byte changed. Those live in the core package:
 
 ```sh
-npm install --save-dev --save-exact effect-build@0.7.0
+npm install --save-dev --save-exact effect-build@0.8.0
 ```
 
 ## Next steps

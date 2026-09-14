@@ -6,7 +6,7 @@ Effect program. The result is an `Artifact.Executable` whose target is read from
 binary's header, ready for an archive, an installer, or a signer.
 
 ```sh
-npm install --save-dev --save-exact effect-build-node-sea@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-node-sea@0.8.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
 ## Usage
@@ -46,8 +46,8 @@ intermediates use private temporary files, even with `atomic: false`. Windows ou
 ## Layer and versions
 
 `NodeSea.layer({ executable?, baseExecutable?, version? })` resolves two Node binaries: the
-builder that runs the SEA tooling (default: the current process) and the base that is copied and
-injected (default: the builder). Both must report the same version. `NodeSea.supported` is
+`tool` that runs the SEA tooling (default: the current process) and the base that is copied and
+injected (default: `tool`). Both must report the same version. `NodeSea.supported` is
 `>=22.0.0 <27.0.0`, the versions sharing the preparation blob and injection workflow, and
 `NodeSea.tested` records the CI fixtures, 22.0.0 and 26.7.0. The target comes from the base
 executable's header, so a base running under emulation is recorded as itself.

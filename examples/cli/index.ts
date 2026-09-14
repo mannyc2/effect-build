@@ -8,7 +8,7 @@ import * as Bun from "effect-build-bun";
 // A release the way release tools lay one out: one archive per target and a checksum file,
 // committed to dist/ as a whole. Run `node index.ts`, then `(cd dist && sha256sum -c SHA256SUMS)`.
 const name = "hello";
-const version = "0.7.0";
+const version = "0.8.0";
 const targets = ["linux-x64", "linux-x64-musl", "linux-arm64", "darwin-arm64", "windows-x64"] as const;
 
 const release = Effect.gen(function*() {

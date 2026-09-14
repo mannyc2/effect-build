@@ -62,7 +62,7 @@
     },
     "packages/effect-build": {
       "name": "effect-build",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "@noble/hashes": "2.4.0",
         "semver": "7.8.5",
@@ -83,7 +83,7 @@
     },
     "packages/effect-build-apple": {
       "name": "effect-build-apple",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },
@@ -98,7 +98,7 @@
     },
     "packages/effect-build-archives": {
       "name": "effect-build-archives",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
         "fflate": "0.8.3",
@@ -112,7 +112,7 @@
     },
     "packages/effect-build-bun": {
       "name": "effect-build-bun",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },
@@ -130,7 +130,7 @@
     },
     "packages/effect-build-deno": {
       "name": "effect-build-deno",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },
@@ -143,7 +143,7 @@
     },
     "packages/effect-build-esbuild": {
       "name": "effect-build-esbuild",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },
@@ -158,7 +158,7 @@
     },
     "packages/effect-build-nfpm": {
       "name": "effect-build-nfpm",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },
@@ -171,7 +171,7 @@
     },
     "packages/effect-build-node-sea": {
       "name": "effect-build-node-sea",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
         "postject": "1.0.0-alpha.6",
@@ -185,7 +185,7 @@
     },
     "packages/effect-build-python": {
       "name": "effect-build-python",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
         "effect-build-archives": "workspace:^",
@@ -199,7 +199,7 @@
     },
     "packages/effect-build-rolldown": {
       "name": "effect-build-rolldown",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
         "rolldown": "1.2.5",
@@ -213,7 +213,7 @@
     },
     "packages/effect-build-sbom": {
       "name": "effect-build-sbom",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },
@@ -226,7 +226,7 @@
     },
     "packages/effect-build-windows": {
       "name": "effect-build-windows",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "effect-build": "workspace:^",
       },

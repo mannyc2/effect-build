@@ -1,7 +1,7 @@
 {
   "name": "effect-build",
-  "version": "0.7.0",
-  "description": "Effect programs for artifacts, tools, targets, atomic commits, and checksums.",
+  "version": "0.8.0",
+  "description": "Effect-native build tooling: run any tool, get a verified artifact.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,

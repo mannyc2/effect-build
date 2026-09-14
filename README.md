@@ -4,44 +4,8 @@
 [![npm](https://img.shields.io/npm/v/effect-build)](https://www.npmjs.com/package/effect-build)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Compile TypeScript into things you can ship, as composable [Effect](https://effect.website) programs.
-
-effect-build turns a TypeScript program into native executables, bundles, archives, OS packages,
-Python wheels, signed macOS and Windows products, and SBOMs. Every operation is an Effect, every
-result is the same small record of what was made, and the records compose: the executable Bun
-compiled is the artifact the archive, the installer, the signer, and the SBOM scanner accept.
-
-```ts
-const release = Effect.gen(function*() {
-  const executable = yield* Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli", target: "linux-x64" });
-  const archive = yield* Archive.tarGz({
-    entries: [{ artifact: executable, path: "cli" }],
-    outfile: "dist/cli.tar.gz",
-  });
-  return yield* Checksums.write({ artifacts: [archive], outfile: "dist/SHA256SUMS" });
-});
-```
-
-Publishing is not effect-build's job. It hands you files on disk and a JSON manifest; a release
-tool, a CI workflow, or your own script takes it from there.
-
-## Highlights
-
-- **One artifact type.** Every producer returns an `Artifact.File`, `Artifact.Executable`, or
-  `Artifact.Directory`: path, byte count, SHA-256, and what produced it. An executable's target
-  is read from its ELF, Mach-O, or PE header, never assumed.
-- **Producers compose.** A compiled executable goes straight into a ZIP, a tar.gz, a deb, an
-  RPM, an MSIX, a Python wheel, a DMG, a PKG, a code signer, or a Syft scan. A bundle directory
-  archives the same way. Effect supplies concurrency, scoping, interruption, and typed errors.
-- **Output is staged, checked, then committed.** Producers write to a staging directory, verify
-  what they wrote, and rename it into place. A failed build never leaves a truncated file, and a
-  release directory replaces the previous one as a unit.
-- **Archives are reproducible.** ZIP and tar.gz bytes depend only on their inputs: fixed
-  timestamps, fixed ordering, fixed compression. No external archiver is needed.
-- **Tools are resolved once.** A provider layer locates a compiler, records its path, version,
-  and hash, and every operation runs against that record. Version policy is an option.
-- **Errors are values.** Every failure is a tagged error with useful fields, and an unhandled one
-  prints as `Tag: message`, such as `ToolNotFound: bun not found (searched: PATH)`.
+Run build tools as [Effect](https://effect.website) programs. Producers return a hashed record
+of what they wrote; records compose; output is staged, checked, then committed.
 
 ## Quick start
 
@@ -49,7 +13,7 @@ You need Node 22.19 or newer and [Bun](https://bun.sh) 1.3.14 or newer on `PATH`
 Bun provider with Effect and its Node platform, pinned to one release candidate:
 
 ```sh
-npm install --save-dev --save-exact effect-build-bun@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
 ```
 
 Save this as `build.mjs` next to a `src/cli.ts`:
@@ -85,7 +49,38 @@ Add `target: "linux-arm64"` to cross-compile, or `options: { minify: true }` to 
 [getting started guide](docs/getting-started.md) explains each line and what to do when the
 compiler is not on `PATH`.
 
-## Ship a release
+## Any tool is a producer
+
+A provider wraps a tool once; its operations use the same artifact and commit primitives as
+our compilers. Here is a UPX provider (imports: `Context`, `Effect` from `effect`; `Artifact`,
+`Commit`, `Tool` from `effect-build`):
+
+```ts
+class Upx extends Context.Service<Upx, Tool.Service>()("example/Upx") {}
+const upx = Tool.provider(Upx, {
+  name: "upx",
+  version: { parse: Tool.versionPattern(/^upx (\d+\.\d+\.\d+)/u), supported: ">=4 <5", tested: ["4.2.0"] },
+});
+const compress = (executable: Artifact.Executable, outfile: string) => Effect.gen(function*() {
+  const tool = yield* upx.resolved;
+  return yield* Commit.output(outfile, (staged) =>
+    Tool.run(tool, ["--best", "-o", staged, executable.path]).pipe(
+      Effect.andThen(Artifact.executable(staged, Tool.producedBy(tool), executable.target)),
+    ));
+});
+// Provide upx.layer() and your platform services, just like Bun.layer().
+```
+
+[The full recipe](docs/recipes.md#wrap-a-tool-that-has-no-provider) adds input validation and
+the public [provider test kit](docs/recipes.md#test-a-provider).
+
+## Compose
+
+An executable feeds an archive, installer, signer, or SBOM scanner directly. A bundle directory
+archives the same way; Effect supplies concurrency, scopes, interruption, and typed errors.
+The [artifact pipeline](examples/artifact-pipeline) runs those compositions end to end.
+
+## Build a matrix
 
 A release is a matrix of targets, one archive per target, and a checksum file, committed as a
 whole. This is the [CLI example](examples/cli), abridged:
@@ -104,13 +99,13 @@ const release = Commit.atomic("dist", (staged) =>
           target,
         });
         const entries = [{ artifact: executable, path: `hello${executableSuffix}` }];
-        const outfile = path.join(staged, `hello_0.7.0_${target}`);
+        const outfile = path.join(staged, `hello_0.8.0_${target}`);
         return yield* os === "windows"
           ? Archive.zip({ entries, outfile: `${outfile}.zip` })
           : Archive.tarGz({ entries, outfile: `${outfile}.tar.gz` });
       }), { concurrency: 2 });
     yield* Checksums.write({ artifacts: archives, outfile: path.join(staged, "SHA256SUMS") });
-    return yield* Artifact.directory(staged, { name: "hello", version: "0.7.0" });
+    return yield* Artifact.directory(staged, { name: "hello", version: "0.8.0" });
   }), { staging: "sibling" });
 ```
 
@@ -120,22 +115,48 @@ recorded as one `Artifact.Directory` with an entry per file:
 ```
 dist/
 ├── SHA256SUMS
-├── hello_0.7.0_darwin-arm64.tar.gz
-├── hello_0.7.0_linux-arm64.tar.gz
-├── hello_0.7.0_linux-x64-musl.tar.gz
-├── hello_0.7.0_linux-x64.tar.gz
-└── hello_0.7.0_windows-x64.zip
+├── hello_0.8.0_darwin-arm64.tar.gz
+├── hello_0.8.0_linux-arm64.tar.gz
+├── hello_0.8.0_linux-x64-musl.tar.gz
+├── hello_0.8.0_linux-x64.tar.gz
+└── hello_0.8.0_windows-x64.zip
 ```
 
 If any target fails, `dist/` is left exactly as it was. The [recipes](docs/recipes.md) cover the
 rest of a release: OS packages, wheels that install a native command, signing and notarization,
 SBOMs, and handing the manifest to whatever publishes.
 
-## Packages
+## Cache
 
-| Package                                                 | What it builds                                                                        | Needs                           |
+Declare every input that affects the output, then wrap a producer with `Cache.cached`.
+A hit restores verified bytes at the requested path through `Commit.output`. The index and
+object directory are services you provide; cache corruption rebuilds and failed ingest logs a
+warning. The [CLI example](examples/cli) caches its five-target matrix. See [cache semantics](docs/cache.md)
+for environment inputs, provider schemas, and failure behavior.
+
+```ts
+const source = yield* Artifact.directory("src", { name: "source", version: "1" });
+const tool = yield* Bun.resolved;
+const executable = yield* Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli", target }).pipe(
+  Cache.cached({
+    key: { operation: "Bun.compile", tool, inputs: [source], options: { entrypoints: ["src/cli.ts"], target } },
+    outfile: "dist/cli",
+    schema: Artifact.Executable,
+  }),
+  Effect.provide(Cache.objects(".effect-build/cache/objects")),
+  Effect.provide(KeyValueStore.layerFileSystem(".effect-build/cache/keys")),
+);
+```
+
+Import `Cache` from `effect-build` and `KeyValueStore` from `effect/unstable/persistence`.
+This example assumes the source tree is the entire build input; add lockfiles, configuration,
+assets, dependencies and environment values whenever the program uses them.
+
+## Providers we ship
+
+| Package                                                 | Produces                                                                        | Needs                           |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------- |
-| [effect-build](packages/effect-build)                   | Artifacts, targets, executable inspection, tool resolution, atomic commits, checksums | Effect                          |
+| [effect-build](packages/effect-build)                   | Artifacts, targets, executable inspection, providers, atomic commits, checksums, cache, testing | Effect                          |
 | [effect-build-bun](packages/effect-build-bun)           | Native executables and bundles with Bun; scoped watch; Bun's in-process API           | Bun 1.3.14+                     |
 | [effect-build-deno](packages/effect-build-deno)         | Executables, bundles, and transpiled trees with Deno; scoped watch; Deno's bundle API | Deno 2.9.5+                     |
 | [effect-build-esbuild](packages/effect-build-esbuild)   | Bundles and transforms with esbuild; scoped rebuild, watch, and serve                 | esbuild 0.28 (peer)             |
