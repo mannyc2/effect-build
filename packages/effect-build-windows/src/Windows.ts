@@ -1,20 +1,11 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Redacted } from "effect";
+import { Context, Effect, FileSystem, Path, Redacted } from "effect";
 import { Artifact, Commit, Executable, Tool } from "effect-build";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 export class Windows
-  extends Context.Service<Windows, { readonly tool: Tool.Resolved }>()("effect-build-windows/Windows")
+  extends Context.Service<Windows, Tool.Service>()("effect-build-windows/Windows")
 {}
-export interface LayerOptions {
-  readonly executable?: string | undefined;
-  /** String ranges select SDK families; predicates receive the complete native version. */
-  readonly version?: string | ((version: string) => boolean) | undefined;
-}
-type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
-/** Windows SDK 26100 SignTool; production credentials remain experimental. */
-export const supported = ">=10.0.26100 <11.0.0";
-/** SDK family exercised by native CI with a temporary certificate. */
-export const tested = "10.0.26100";
+type Env = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
 // SignTool's help has no version. Search its language-independent VS_FIXEDFILEINFO resource:
 // https://learn.microsoft.com/en-us/windows/win32/api/verrsrc/ns-verrsrc-vs_fixedfileinfo
 const productVersion = (contents: Uint8Array): string | undefined => {
@@ -48,43 +39,28 @@ const productVersion = (contents: Uint8Array): string | undefined => {
   }
   return version;
 };
-export const layer = (options: LayerOptions = {}): Layer.Layer<
-  Windows,
-  Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
-  Env
-> => {
-  const version = options.version ?? supported;
-  const familyMatches = typeof version === "string" ? Tool.satisfies(version) : undefined;
-  // Keep the native revision in producedBy; only the range comparison uses its SDK family.
-  const accepts = typeof version === "function"
-    ? version
-    : (native: string) => familyMatches!(native.split(".").slice(0, 3).join("."));
-  return Layer.effect(
-    Windows,
-    Effect.gen(function*() {
-      const path = yield* Tool.locate({ name: "signtool", executable: options.executable });
+const provider = Tool.provider(Windows, {
+  name: "signtool", versionArgs: ["/?"],
+  version: {
+    supported: ">=10.0.26100 <11.0.0", tested: ["10.0.26100"],
+    parse: ({ path }) => Effect.gen(function*() {
       const contents = yield* FileSystem.FileSystem.use((fs) => fs.readFile(path)).pipe(
         Effect.mapError((error) => new Tool.ProbeFailed({ tool: "signtool", path, detail: String(error) })),
       );
       const native = productVersion(contents);
-      if (native === undefined) {
-        return yield* new Tool.ProbeFailed({
-          tool: "signtool",
-          path,
-          detail: "no single VS_FIXEDFILEINFO ProductVersion resource",
-        });
-      }
-      const tool = yield* Tool.resolve({
-        name: "signtool",
-        executable: path,
-        versionArgs: ["/?"],
-        parseVersion: () => native,
-      }).pipe(
-        Tool.requireVersion(accepts),
-      );
-      return { tool };
+      if (native === undefined) return yield* new Tool.ProbeFailed({ tool: "signtool", path, detail: "no single VS_FIXEDFILEINFO ProductVersion resource" });
+      return native;
     }),
-  );
+  },
+  requirements: { env: ["SystemRoot", "USERPROFILE", "TEMP", "AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"], network: true,
+    services: ["Windows certificate store", "RFC3161 timestamp service", "Azure Trusted Signing"],
+    detail: "Credentials select the certificate store, a PFX, or Trusted Signing; every signature obtains a timestamp." },
+});
+export const { name, supported, tested, constraints, requirements, resolved, testLayer } = provider;
+/** String ranges select SDK families; predicates receive the complete four-component native version. */
+export const layer = (options: Tool.LayerOptions = {}) => {
+  const version = options.version ?? supported;
+  return provider.layer({ ...options, version: typeof version === "function" ? version : (native) => Tool.satisfies(version)(native.split(".").slice(0, 3).join(".")) });
 };
 
 export type Credential = {
@@ -102,7 +78,7 @@ export type Credential = {
   readonly library: string;
   readonly metadata: string;
 };
-export type SignInput<A extends Artifact.Regular = Artifact.Regular> = Credential & Commit.ProducerOptions & {
+export type SignInput<A extends Artifact.Regular = Artifact.Regular> = Credential & Commit.ProducerOptions & Tool.EnvironmentOptions & {
   readonly artifact: A;
   readonly outfile?: string | undefined;
   readonly cwd?: string | undefined;
@@ -211,8 +187,15 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
     const { tool } = yield* Windows;
     const produce = (out: string) =>
       Effect.gen(function*() {
-        // Sign a verified copy whose header agrees with the declared target; an in-place destination is verified where it stands.
-        yield* Artifact.copyVerified(input.artifact, out);
+        // Sign a copy and inspect the resulting executable before commit.
+        yield* Artifact.copy(input.artifact, out);
+        if (input.artifact.kind === "executable") {
+          const target = input.artifact.target;
+          yield* Executable.inspect(out).pipe(
+            Effect.flatMap((facts) => Executable.resolveTarget(out, facts, target)),
+            Effect.mapError((error) => new Artifact.ArtifactError({ path: out, reason: "invalid-metadata", detail: String(error) })),
+          );
+        }
         yield* Tool.run(tool, [
           "sign",
           "/fd",
@@ -225,14 +208,14 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
           ...(input.descriptionUrl === undefined ? [] : ["/du", input.descriptionUrl]),
           ...credential,
           out,
-        ], { cwd, redact: password === undefined ? [] : [password] });
+        ], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd, redact: password === undefined ? [] : [password] });
         yield* Tool.run(tool, ["verify", "/pa", "/all", "/v", "/tw", out], {
-          cwd,
+          env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd,
           redact: password === undefined ? [] : [password],
         });
         return yield* input.artifact.kind === "executable"
-          ? Artifact.executable(out, Tool.producer(tool), input.artifact.target)
-          : Artifact.file(out, Tool.producer(tool));
+          ? Artifact.executable(out, Tool.producedBy(tool), input.artifact.target)
+          : Artifact.file(out, Tool.producedBy(tool));
       });
     const artifact = yield* Commit.output(outfile, produce, input);
     return {

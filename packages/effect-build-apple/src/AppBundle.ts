@@ -1,7 +1,7 @@
-import { Effect, FileSystem, Path } from "effect";
-import { Artifact, Commit, Layout, Tool } from "effect-build";
+import { Effect, FileSystem, Path, Sink, Stream } from "effect";
+import { Artifact, Commit, Executable, Layout, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
-import { outputPath, runNative } from "./internal.js";
+import { copyRegular, outputPath, runNative } from "./internal.js";
 import type { App } from "./Model.js";
 import { plist } from "./plist.js";
 
@@ -11,7 +11,7 @@ export interface Resource {
   readonly path: string;
   readonly executable?: boolean | undefined;
 }
-export interface AppBundleInput extends Commit.ProducerOptions {
+export interface AppBundleInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
   readonly executable: Artifact.Executable;
   readonly outdir: string;
   readonly bundleIdentifier: string;
@@ -29,6 +29,30 @@ export const validateResources = (operation: string, resources: readonly Resourc
   // Reserved product roots are opaque: resource entries cannot add descendants inside them.
   const issue = Layout.validate([...reserved, ...resources.map((resource) => resource.path)].map((path) => ({ path, kind: "file" })));
   if (issue !== undefined) return yield* new Tool.InputInvalid({ operation, ...issue });
+});
+/** Build declared parents exclusively so only collisions on this filesystem fail. */
+export const copyResources = (resources: readonly Resource[], root: string) => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const p = yield* Path.Path;
+  const parents = new Set<string>();
+  for (const resource of resources) {
+    const parts = resource.path.split("/");
+    for (let length = 1; length < parts.length; length++) parents.add(parts.slice(0, length).join("/"));
+  }
+  for (const parent of [...parents].sort()) {
+    const path = p.join(root, parent);
+    yield* fs.makeDirectory(path).pipe(Effect.mapError(Artifact.ioError(path, "write")));
+  }
+  for (const resource of resources) {
+    const path = p.join(root, resource.path);
+    yield* Stream.run(Artifact.stream(resource.artifact), fs.sink(path, { flag: "wx" }).pipe(Sink.mapError(Artifact.ioError(path, "write"))));
+    if (resource.artifact.kind === "executable") {
+      const target = resource.artifact.target;
+      yield* Executable.inspect(path).pipe(Effect.flatMap((facts) => Executable.resolveTarget(path, facts, target)),
+        Effect.mapError((error) => new Artifact.ArtifactError({ path, reason: "invalid-metadata", detail: String(error) })));
+    }
+    yield* fs.chmod(path, (resource.executable ?? resource.artifact.kind === "executable") ? 0o755 : 0o644).pipe(Effect.mapError(Artifact.ioError(path, "write")));
+  }
 });
 const invalid = (reason: string) => new Tool.InputInvalid({ operation: "Apple.appBundle", reason });
 export const appBundle = (input: AppBundleInput): Effect.Effect<App, AppBundleError, Apple | Env> => Effect.gen(function*() {
@@ -69,17 +93,12 @@ export const appBundle = (input: AppBundleInput): Effect.Effect<App, AppBundleEr
     const binary = p.join(out, "Contents", "MacOS", executableName);
     const resourceRoot = p.join(out, "Contents", "Resources");
     yield* fs.makeDirectory(resourceRoot, { recursive: true }).pipe(Effect.mapError(Artifact.ioError(out, "write")));
-    yield* Artifact.copyVerified(input.executable, binary);
-    yield* fs.chmod(binary, 0o755).pipe(Effect.mapError(Artifact.ioError(binary, "write")));
-    for (const resource of resources) {
-      const path = p.join(resourceRoot, resource.path);
-      yield* Artifact.copyVerified(resource.artifact, path);
-      yield* fs.chmod(path, (resource.executable ?? resource.artifact.kind === "executable") ? 0o755 : 0o644).pipe(Effect.mapError(Artifact.ioError(path, "write")));
-    }
+    yield* copyRegular(input.executable, binary);
+    yield* copyResources(resources, resourceRoot);
     const info = p.join(out, "Contents", "Info.plist");
     yield* fs.writeFileString(info, plist(fields)).pipe(Effect.mapError(Artifact.ioError(info, "write")));
-    yield* runNative("plutil", ["-lint", info]);
-    return { ...yield* Artifact.directory(out, Tool.producer(tool)), product: "app" as const };
+    yield* runNative("plutil", ["-lint", info], input);
+    return { ...yield* Artifact.directory(out, Tool.producedBy(tool)), product: "app" as const };
   });
   return yield* Commit.output(outdir, produce, input);
 });

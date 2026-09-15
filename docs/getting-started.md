@@ -15,13 +15,13 @@ program that did it, and points at what to do next. It takes about five minutes.
 ## Install
 
 ```sh
-npm install --save-dev --save-exact effect-build-bun@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 `effect-build-bun` depends on the core `effect-build` package, so that comes along. Effect 4 is
 a release candidate: pin `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` to
 the same version, because the platform packages use caret ranges and can otherwise select a
-newer shared candidate with a newer Effect peer. 4.0.0-rc.108 is the tested version; see
+newer shared candidate with a newer Effect peer. 4.0.0-rc.115 is the tested version; see
 [compatibility](compatibility.md) for the accepted range.
 
 ## The first build
@@ -66,8 +66,7 @@ The build logs the artifact record:
   kind: 'executable',
   path: '/home/you/app/dist/cli',
   bytes: 63446114,
-  sha256: 'd6f24411b71792aa84488e109dccc74ba6816b03af0647b1f065f0117ff7a73c',
-  producedBy: { name: 'bun', version: '1.3.14', path: '/usr/local/bin/bun', sha256: 'e0c90ec1…' },
+  producedBy: { name: 'bun', version: '1.3.14', path: '/usr/local/bin/bun' },
   target: 'darwin-arm64',
   format: 'mach-o'
 }
@@ -80,7 +79,7 @@ The build logs the artifact record:
   `outfile`, reads its header to confirm the target, records the file, and renames it into place.
 - `Effect.tap((artifact) => Effect.log(artifact))` logs the record and passes it through.
 - `Effect.provide(Bun.layer())` supplies the compiler. The layer finds `bun` on `PATH`, resolves
-  symlinks, hashes the binary, probes its version once, and checks the version against
+  symlinks, records its metadata, probes its version once, and checks the version against
   `Bun.supported` (`>=1.3.14 <2.0.0`). Every later operation uses that resolved tool; nothing
   re-checks it. `Bun.layer({ executable: "/opt/bun/bin/bun" })` selects a specific binary, and
   `Bun.layer({ version: "^1.4.2" })` changes the accepted range. An `undefined` executable, such
@@ -100,18 +99,20 @@ Every artifact has the same core fields. Executables and directories add a few m
 | `kind`       | `file`, `executable`, or `directory`.                                                                   |
 | `path`       | Absolute path of the output.                                                                            |
 | `bytes`      | Size as a number. A directory's `bytes` is the total of its files.                                      |
-| `sha256`     | Hex digest of the file. A directory's digest hashes its sorted entry manifest.                          |
-| `producedBy` | The tool or package that made it: `name`, `version`, and for external tools their `path` and `sha256`.  |
+| `producedBy` | The tool or package that made it: `name`, `version`, and for external tools their `path`.  |
 | `target`     | Executables only: one of the eight [targets](../packages/effect-build#target), read from the header.    |
 | `format`     | Executables only: `elf`, `mach-o`, or `pe`.                                                             |
-| `entries`    | Directories only: every file, directory, and symlink with its `path`, `mode`, and for files its digest. |
+| `entries`    | Directories only: every file, directory, and symlink with its `path`, `mode`, and for files its byte count. |
 
 The record is data. `Artifact.encode([artifact])` turns a list of them into plain JSON for a
-manifest, `Artifact.decode` validates one back, and `Artifact.verify(artifact)` re-reads the
-file and fails if a byte changed. Those live in the core package:
+manifest and `Artifact.decode` validates one back. To retain byte identity, add
+`Effect.flatMap(Artifact.withSha256)` to the build and encode with `Artifact.HashedArtifact`
+or the appropriate hashed/provider schema. `Artifact.verify` accepts that stronger record
+and fails if the current contents differ. Schema decoding performs no filesystem I/O.
+These operations live in the core package:
 
 ```sh
-npm install --save-dev --save-exact effect-build@0.7.0
+npm install --save-dev --save-exact effect-build@0.8.0
 ```
 
 ## Next steps
@@ -129,8 +130,8 @@ rest of `Bun.CompileOptions` map to `bun build --compile` flags.
 SBOMs, and the [CLI example](../examples/cli) is a complete release.
 
 **Keep the records.** Write `Artifact.encode(artifacts)` to a manifest file at the end of a build
-and hand it to whatever publishes. Verify with `Artifact.verify` before trusting a file that was
-written in an earlier step or an earlier process.
+and hand it to whatever publishes. If later consumers need byte identity, compute it with
+`Artifact.withSha256`, persist with the hashed schema, and explicitly verify when consuming it.
 
 ## When something goes wrong
 

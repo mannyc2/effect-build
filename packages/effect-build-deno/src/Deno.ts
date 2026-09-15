@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Scope } from "effect";
+import { Context, Effect, FileSystem, Path, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
 import * as CompileCommand from "./internal/CompileCommand.js";
@@ -7,51 +7,45 @@ import { type Check, type ImportPermissions, type ProjectOptions, renderCheck, r
 export type { Options as CompileOptions, Permissions } from "./internal/CompileCommand.js";
 export type { PermissionValue } from "./internal/Options.js";
 
-export type CompileArtifact = Artifact.Executable & { readonly runtime?: { readonly path: string; readonly sha256: string } };
-interface Service {
-  readonly tool: Tool.Resolved;
-  readonly runtime?: { readonly path: string; readonly sha256: string } | undefined;
+export type CompileArtifact = Artifact.Executable & { readonly runtime?: Artifact.File };
+interface Service extends Tool.Service {
+  readonly runtime?: Artifact.File | undefined;
 }
 export class Deno extends Context.Service<Deno, Service>()("effect-build-deno/Deno") {}
-export interface LayerOptions {
-  readonly executable?: string | undefined;
-  readonly version?: string | ((version: string) => boolean) | undefined;
-  /** An explicit denort file; its bytes are recorded without executing it. */
+interface Options {
+  /** An explicit denort file; its metadata is recorded without executing it. */
   readonly runtime?: string | undefined;
 }
-type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+type Fs = FileSystem.FileSystem | Path.Path;
 type Env = Deno | Fs | ChildProcessSpawner.ChildProcessSpawner;
 export type BuildError =
   | Tool.InputInvalid
+  | Tool.VersionUnsupported
   | Tool.Failed
   | Tool.SpawnFailed
   | Artifact.ArtifactError
   | Commit.CommitError;
 export type CompileError = BuildError | Executable.InspectError | Executable.TargetMismatch;
 
-/** Known removed CLI flags are checked only by the operations that use them. */
-export const supported = ">=2.9.5 <3.0.0";
-/** Exact version exercised by real-tool CI. */
-export const tested = "=2.9.5";
-export const layer = (options: LayerOptions = {}): Layer.Layer<
-  Deno,
-  Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported | Artifact.ArtifactError,
-  Fs | ChildProcessSpawner.ChildProcessSpawner
-> => Layer.effect(Deno, Effect.gen(function*() {
-  const tool = yield* Tool.resolve({
-    name: "deno",
-    executable: options.executable,
-    parseVersion: (completion) => /^deno\s+(\S+)/u.exec(new TextDecoder().decode(completion.stdout))?.[1],
-  }).pipe(Tool.requireVersion(options.version ?? supported));
-  if (options.runtime === undefined) return { tool };
-  const runtime = yield* Artifact.file(options.runtime, { name: "denort", version: tool.version });
-  return { tool, runtime: { path: runtime.path, sha256: runtime.sha256 } };
-}));
+const allowScripts: readonly Tool.Constraint[] = [{ range: ">=2.9.6", reason: "--allow-scripts was removed in Deno 2.9.6; omit it or select 2.9.5" }];
+export const { name, layer, supported, tested, constraints, requirements, resolved, testLayer } = Tool.provider<Deno, Omit<Service, "tool">, Options>(Deno, {
+  name: "deno",
+  version: { parse: Tool.versionPattern(/^deno\s+(\S+)/u), supported: ">=2.9.5 <3.0.0", tested: ["2.9.5"] },
+  constraints: {
+    "Deno.compile": allowScripts, "Deno.watch": allowScripts,
+    "Deno.transpile": [{ range: ">=2.9.6", reason: "--conditions was removed from deno transpile in Deno 2.9.6; omit it or select 2.9.5" }],
+  },
+  requirements: { env: ["HOME", "DENO_DIR", "DENO_AUTH_TOKENS", "DENO_CERT", "DENORT_BIN", "TMPDIR"], network: true, services: [],
+    detail: "Uncached dependencies and target runtimes may download; an explicit denort removes runtime discovery." },
+  extend: (tool, options) => Effect.gen(function*() {
+    if (options.runtime === undefined) return {};
+    const runtime = yield* Artifact.file(options.runtime, { name: "denort", version: tool.version });
+    return { runtime };
+  }),
+});
 
-interface Invocation {
+interface Invocation extends Tool.EnvironmentOptions {
   readonly cwd?: string | undefined;
-  readonly env?: Record<string, string> | undefined;
-  readonly extendEnv?: boolean | undefined;
   readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
 }
 export interface CompileInput extends Invocation, Commit.ProducerOptions {
@@ -64,7 +58,7 @@ export interface CompileInput extends Invocation, Commit.ProducerOptions {
 /** An explicit denort is selected through DENORT_BIN; the caller's environment stays inherited unless extendEnv is false. */
 const environment = (input: Invocation, runtime?: Service["runtime"]) => {
   const env = runtime === undefined ? input.env : { ...input.env, DENORT_BIN: runtime.path };
-  return { cwd: input.cwd, env, extendEnv: env === undefined ? undefined : input.extendEnv ?? true };
+  return { cwd: input.cwd, env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv };
 };
 const prepareOutput = Effect.fnUntraced(function*(operation: string, field: string, value: string, cwd?: string) {
   yield* validatePath(operation, field, value);
@@ -72,13 +66,8 @@ const prepareOutput = Effect.fnUntraced(function*(operation: string, field: stri
   const p = yield* Path.Path;
   return p.resolve(cwd ?? "", value);
 });
-const checkCapability = (tool: Tool.Resolved, operation: string, flag: string, used: boolean) =>
-  used && Tool.satisfies(">=2.9.6")(tool.version)
-    ? Effect.fail(new Tool.InputInvalid({
-      operation,
-      reason: `${flag} was removed in Deno 2.9.6; omit it or explicitly select 2.9.5`,
-    }))
-    : Effect.void;
+const checkCapability = (tool: Tool.Resolved, operation: string, used: boolean) =>
+  used ? Effect.forEach(constraints[operation] ?? [], (constraint) => Tool.check(tool, operation, constraint), { discard: true }) : Effect.void;
 const prepareCompile = Effect.fnUntraced(function*(operation: "Deno.compile" | "Deno.watch", input: CompileInput) {
   yield* validatePath(operation, "entrypoint", input.entrypoint);
   const outfile = yield* prepareOutput(operation, "outfile", input.outfile, input.cwd);
@@ -101,7 +90,7 @@ const prepareCompile = Effect.fnUntraced(function*(operation: "Deno.compile" | "
   };
   yield* CompileCommand.validateOptions(operation, command);
   const { tool, runtime } = yield* Deno;
-  yield* checkCapability(tool, operation, "--allow-scripts", command.allowScripts !== undefined);
+  yield* checkCapability(tool, operation, command.allowScripts !== undefined);
   return { command, outfile, target: expected, tool, runtime };
 });
 
@@ -109,7 +98,7 @@ export const compile = Effect.fn("Deno.compile")(function*(input: CompileInput):
   const { command, outfile, target, tool, runtime } = yield* prepareCompile("Deno.compile", input);
   const produce = (out: string) =>
     Tool.run(tool, CompileCommand.renderArgv(command, out), { ...environment(input, runtime), onOutput: input.onOutput }).pipe(
-      Effect.andThen(Artifact.executable(out, Tool.producer(tool), target)),
+      Effect.andThen(Artifact.executable(out, Tool.producedBy(tool), target)),
       Effect.map((artifact): CompileArtifact => runtime === undefined ? artifact : { ...artifact, runtime }),
     );
   return yield* Commit.output(outfile, produce, input);
@@ -187,7 +176,7 @@ const directory = Effect.fnUntraced(function*(
   const produce = (out: string) => Effect.gen(function*() {
     yield* fs.makeDirectory(out, { recursive: true }).pipe(Effect.mapError(Artifact.ioError(out, "write")));
     yield* Tool.run(tool, [command, ...options, "--outdir", out, ...files], { ...environment(input), onOutput: input.onOutput });
-    return yield* Artifact.directory(out, Tool.producer(tool));
+    return yield* Artifact.directory(out, Tool.producedBy(tool));
   });
   return yield* Commit.output(outdir, produce, input, "sibling");
 });
@@ -202,7 +191,7 @@ export const bundle = Effect.fn("Deno.bundle")(function*(input: BundleInput): Ef
 export const transpile = Effect.fn("Deno.transpile")(function*(input: TranspileInput): Effect.fn.Return<Artifact.Directory, BuildError, Env> {
   const options = input.options ?? {};
   const prepared = yield* prepareDirectory("transpile", input, input.files);
-  yield* checkCapability(prepared.tool, "Deno.transpile", "--conditions", (options.conditions?.length ?? 0) > 0);
+  yield* checkCapability(prepared.tool, "Deno.transpile", (options.conditions?.length ?? 0) > 0);
   return yield* directory(prepared, [...renderProject(options),
     ...(options.sourceMap === undefined ? [] : ["--source-map", options.sourceMap]),
     ...(options.quiet === true ? ["--quiet"] : []), ...(options.declaration === true ? ["--declaration"] : [])]);
@@ -220,12 +209,12 @@ export interface Watch {
   readonly outfile: string;
 }
 /** Rebuilds directly into outfile while its scope is open. */
-export const watch = Effect.fn("Deno.watch")(function*(input: WatchInput): Effect.fn.Return<Watch, Tool.InputInvalid | Tool.SpawnFailed, Deno | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> {
+export const watch = Effect.fn("Deno.watch")(function*(input: WatchInput): Effect.fn.Return<Watch, Tool.InputInvalid | Tool.VersionUnsupported | Tool.SpawnFailed, Deno | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> {
   const { command, outfile, tool, runtime } = yield* prepareCompile("Deno.watch", input);
   const process = yield* ChildProcess.make(
     tool.path,
     CompileCommand.renderArgv(command, outfile, { noClearScreen: input.noClearScreen, watchExclude: input.watchExclude }),
-    { ...environment(input, runtime), stdout: input.stdio ?? "inherit", stderr: input.stdio ?? "inherit", shell: false },
+    { ...environment(input, runtime), ...yield* Tool.environment(tool, environment(input, runtime)), stdout: input.stdio ?? "inherit", stderr: input.stdio ?? "inherit", shell: false },
   ).pipe(Effect.mapError((error) => new Tool.SpawnFailed({ tool: tool.name, detail: String(error) })));
   return { tool, process, outfile };
 });

@@ -2,6 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Exit, FileSystem, Path, PlatformError } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import * as Commit from "effect-build/Commit";
+import { TestFileSystem } from "effect-build/testing";
 import { mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -13,7 +14,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
 const write = (path: string, contents: string) => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.writeFileString(path, contents);
-  return yield* Artifact.file(path, producer);
+  return yield* Artifact.file(path, producer).pipe(Effect.flatMap(Artifact.withSha256));
 });
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "effect-build-commit-")); });
@@ -62,19 +63,13 @@ describe("commit failure ownership", () => {
     await writeFile(join(outdir, "previous"), "old output");
     const failure = await run(Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
-      let moves = 0;
       return yield* Commit.atomic(outdir, (staged) => Effect.gen(function*() {
         yield* fs.makeDirectory(staged);
         return yield* Artifact.directory(staged, producer);
-      })).pipe(Effect.provideService(FileSystem.FileSystem, {
-        ...fs,
-        rename: (from, to) => ++moves === failedMove
-          ? Effect.fail(PlatformError.systemError({ _tag: "Busy", module: "FileSystem", method: "rename", description: "primary rename failure" }))
-          : fs.rename(from, to),
-        remove: (path, options) => basename(path).startsWith(".effect-build-recovery-")
-          ? Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "remove", description: "secondary cleanup failure" }))
-          : fs.remove(path, options),
-      }), Effect.flip);
+      })).pipe(Effect.provide(TestFileSystem.failing({
+        rename: { call: failedMove, error: "primary rename failure" },
+        remove: { call: 1, error: "secondary cleanup failure" },
+      })), Effect.flip);
     }));
     expect(failure).toMatchObject({ reason: "rename-failed", detail: expect.stringContaining("primary rename failure") });
     expect(failure).not.toHaveProperty("recoveryPath");
@@ -97,12 +92,7 @@ describe("commit failure ownership", () => {
         yield* fs.makeDirectory(staged);
         yield* fs.writeFileString(join(staged, "current"), "new output");
         return yield* Artifact.directory(staged, producer);
-      })).pipe(Effect.provideService(FileSystem.FileSystem, {
-        ...fs,
-        remove: (path, options) => basename(path).startsWith(".effect-build-recovery-")
-          ? Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "remove" }))
-          : fs.remove(path, options),
-      }), Effect.flip);
+      })).pipe(Effect.provide(TestFileSystem.failing({ remove: { call: 1 } })), Effect.flip);
     }));
     if (!(failure instanceof Commit.CommitError)) throw new Error("expected commit error");
     expect(failure.reason).toBe("remove-failed");
@@ -210,7 +200,7 @@ describe("atomic output", () => {
     const outdir = join(root, "release");
     await mkdir(outdir);
     await writeFile(join(outdir, "cli"), "previous release");
-    const previous = await run(Artifact.directory(outdir, producer));
+    const previous = await run(Artifact.directory(outdir, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const failure = await run(Commit.atomic(outdir, (staged) => Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -253,7 +243,7 @@ describe("atomic output", () => {
     const outdir = join(root, "release");
     await mkdir(outdir);
     await writeFile(join(outdir, "previous"), "recover me");
-    const previous = await run(Artifact.directory(outdir, producer));
+    const previous = await run(Artifact.directory(outdir, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const failure = await run(Commit.atomic(outdir, (staged) => Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       yield* fs.makeDirectory(staged);
@@ -272,14 +262,10 @@ describe("atomic output", () => {
     await writeFile(join(outdir, "previous"), "recover me");
     const failure = await run(Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
-      let moves = 0;
       return yield* Commit.atomic(outdir, (staged) => Effect.gen(function*() {
         yield* fs.makeDirectory(staged);
         return yield* Artifact.directory(staged, producer);
-      })).pipe(Effect.provideService(FileSystem.FileSystem, {
-        ...fs,
-        rename: (from, to) => ++moves === 1 ? fs.rename(from, to) : fs.rename(join(root, "missing"), to),
-      }), Effect.flip);
+      })).pipe(Effect.provide(TestFileSystem.failing({ rename: [{ call: 2 }, { call: 3 }] })), Effect.flip);
     }));
     expect(failure).toMatchObject({ _tag: "CommitError", reason: "rollback-failed", recoveryPath: expect.any(String) });
     if (!(failure instanceof Commit.CommitError)) throw new Error("expected a commit failure");

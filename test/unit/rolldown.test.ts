@@ -43,7 +43,7 @@ describe("Rolldown builds", () => {
     const input = { input: "main.ts", cwd: root, outdir: "dist", output: { format: "esm" }, logLevel: "silent" } as const;
     const artifact = await run(Rolldown.buildToDirectory(input));
     expect(artifact.path).toBe(join(root, "dist"));
-    expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+    expect(await run(Artifact.withSha256(artifact).pipe(Effect.flatMap(Artifact.verify), Effect.as(artifact)))).toEqual(artifact);
     const previous = await readFile(join(artifact.path, "main.js"), "utf8");
     await writeFile(source, "const = ;\n");
     const failure = await run(Rolldown.buildToDirectory(input).pipe(Effect.flip));
@@ -73,7 +73,7 @@ describe("Rolldown builds", () => {
     }));
     expect(await readFile(join(artifact.path, "LICENSE"), "utf8")).toBe("license text\n");
     expect(artifact.entries.some((entry) => entry.path === "LICENSE")).toBe(true);
-    expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+    expect(await run(Artifact.withSha256(artifact).pipe(Effect.flatMap(Artifact.verify), Effect.as(artifact)))).toEqual(artifact);
   });
 
   it("reuses a scoped graph for different formats and a disk write, then closes it once", async () => {

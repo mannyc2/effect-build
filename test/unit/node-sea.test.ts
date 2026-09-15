@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
-import { elf } from "../fixtures/native-executable.js";
+import { TestArtifact } from "effect-build/testing";
+const { elf } = TestArtifact;
 
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
@@ -16,7 +17,6 @@ const tool = (path: string): Tool.Resolved => ({
   path,
   version: "22.0.0",
   bytes: 0,
-  sha256: "0".repeat(64),
 });
 
 it.skipIf(process.platform === "win32")(
@@ -36,7 +36,7 @@ it.skipIf(process.platform === "win32")(
       const artifact = await run(Artifact.file(main, { name: "fixture", version: "1" }));
       const failure = await run(
         NodeSea.assemble({ main: artifact, outfile, cwd: root }).pipe(
-          Effect.provideService(NodeSea.NodeSea, { builder: tool(builder), base: tool(base) }),
+          Effect.provideService(NodeSea.NodeSea, { tool: tool(builder), base: tool(base) }),
           Effect.flip,
         ),
       );

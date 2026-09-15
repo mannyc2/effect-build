@@ -31,10 +31,10 @@ export const buildDarwinRelease = (
   certificateSha1: string,
   credential: Apple.Notary.Credential,
 ) => Effect.gen(function*() {
-  const signed = yield* Apple.sign({ artifact: executable, certificateSha1, outfile: "dist/signed/example", entitlements: Bun.entitlements });
+  const signed = yield* Apple.sign({ artifact: executable, certificateSha1, outfile: "dist/signed/example", entitlements: Bun.entitlements }).pipe(Effect.flatMap((artifact) => Apple.verifySignature({ artifact })));
   const submission = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
-  const acceptance = yield* Apple.Notary.acceptedReference(submission);
-  const assessed = yield* Apple.assess({ artifact: signed, acceptance });
+  yield* Apple.Notary.expectAccepted(submission);
+  const assessed = yield* Apple.assess({ artifact: signed });
   const archive = yield* Archive.tarGz({ entries: [{ artifact: assessed, path: "example" }], outfile: "dist/example-darwin.tar.gz" });
   return { executable: assessed, archive, submission };
 }).pipe(Effect.provide(Apple.layer()));
@@ -48,17 +48,18 @@ export const buildAppleRelease = (
     executable, outdir: "dist/Example.app", bundleIdentifier: "dev.effect-build.example",
     bundleName: "Example", executableName: "example", version: "1", shortVersion: "1.0.0",
   });
-  const signedApp = yield* Apple.sign({ artifact: app, certificateSha1, outdir: "dist/signed/Example.app" });
+  const signedApp = yield* Apple.sign({ artifact: app, certificateSha1, outdir: "dist/signed/Example.app" }).pipe(Effect.flatMap((artifact) => Apple.verifySignature({ artifact })));
   const dmg = yield* Apple.dmg({
     artifact: signedApp, outfile: "dist/example.dmg", volumeName: "Example", applicationsLink: true,
   });
   const installer = yield* Apple.pkg({
     artifact: signedApp, outfile: "dist/example.pkg", identifier: "dev.effect-build.example", version: "1.0.0",
   });
-  const signedDmg = yield* Apple.sign({ artifact: dmg, certificateSha1 });
+  const signedDmg = yield* Apple.sign({ artifact: dmg, certificateSha1 }).pipe(Effect.flatMap((artifact) => Apple.verifySignature({ artifact })));
   const submission = yield* Apple.Notary.notarize({ artifact: signedDmg, credential });
-  const acceptance = yield* Apple.Notary.acceptedReference(submission);
-  const stapled = yield* Apple.staple({ artifact: signedDmg, acceptance, outfile: "dist/notarized/example.dmg" });
+  yield* Apple.Notary.expectAccepted(submission);
+  const stapled = yield* Apple.staple({ artifact: signedDmg, outfile: "dist/notarized/example.dmg" });
+  yield* Apple.validateTicket({ artifact: stapled });
   const assessed = yield* Apple.assess({ artifact: stapled });
   return { app: signedApp, dmg: assessed, installer, submission };
 }).pipe(Effect.provide(Apple.layer()));

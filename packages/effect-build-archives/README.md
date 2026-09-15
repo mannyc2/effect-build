@@ -4,7 +4,7 @@ Reproducible ZIP and tar.gz archives from artifacts, and exact source archives f
 as Effect programs. `zip` and `tarGz` are pure TypeScript: no external archiver, no tool layer.
 
 ```sh
-npm install --save-dev --save-exact effect-build-archives@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-archives@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 ## Usage
@@ -26,7 +26,17 @@ const archives = Effect.gen(function*() {
 ```
 
 Both operations take `{ entries, outfile, atomic?, onExists?, prefix? }` and return an
-`Artifact.File`.
+`Artifact.File`. To archive a complete directory's contents at the archive root, use
+`{ directory, outfile, atomic?, onExists?, prefix? }` instead:
+
+```ts
+const archive = Archive.tarGz({ directory: release, outfile: "dist/release.tar.gz" });
+```
+
+`directory` is an `Artifact.Directory`. Its files, executable modes, symlinks and empty
+subdirectories retain their paths without an extra wrapper directory. An empty source creates
+an empty archive. The declared directory manifest supplies the entries, and all descendant paths
+follow the same rules as explicit entries. Supply exactly one of `entries` or `directory`.
 
 ## Entries
 
@@ -37,11 +47,12 @@ archive.
 - A directory artifact expands beneath `path`, preserving descendant modes, empty directories,
   and symlinks, which are recorded and never followed. Each directory prefix has mode `0755`.
   Directory entries do not accept `executable`.
-- Paths use `/`, are relative, and contain no empty, `.`, or `..` segments. They must be distinct
-  after case folding and NFC normalization, including every implicit directory: `Docs/a` and
-  `docs/b` conflict too. No entry may descend through a file or symlink. Core `Layout.validate`
-  owns these shared shipping guarantees. Violations fail with `Tool.InputInvalid` before
-  anything is written.
+- Paths use `/`, are relative, and contain no empty, `.`, or `..` segments. Exact paths must be
+  distinct and no entry may descend through a file or symlink. Core `Layout.validate` owns these
+  structural checks; violations fail with `Tool.InputInvalid` before anything is written.
+  Names such as `Docs/a` and `docs/b` remain distinct archive members. Call
+  `Layout.validatePortable` explicitly to reject case-folding and NFC-normalization collisions
+  when your shipping target needs that policy.
 
 ## Reproducibility
 
@@ -52,10 +63,13 @@ inputs gives identical archives and identical digests.
 
 ## Streaming and limits
 
-Each input is read once in 64 KiB chunks through `Artifact.streamVerified`, checked against its
-record as it passes, and compressed straight into the staged output, so memory does not grow
-with archive size. A file that changed since it was recorded fails the archive at the end of its
-stream, and the staged output is discarded.
+Each input is read once in 64 KiB chunks through `Artifact.stream` and compressed straight into
+the staged output, so memory does not grow with archive size. Its byte count must match the
+declared size. Contents may change without changing size; ordinary packaging does not compare
+content identities or rescan directory membership. Outputs are `Artifact.File` records without
+a digest. Compose `Artifact.withSha256` to record one and `Artifact.verify` for a later check.
+Callers that need verification of the exact bytes consumed can supply `Artifact.streamVerified`
+as an entry's contents to `Zip.encode`.
 
 The only size limits are the formats' own. ZIP32 holds 65,535 entries, 4 GiB per entry and per
 archive, and names up to 65,535 bytes; ustar holds 8 GiB per entry. These fail with
@@ -91,7 +105,9 @@ export the reader cannot decode fails with `ArchiveTarInvalid`.
 ## The ZIP encoder
 
 `Zip.encode(entries)` is the encoder itself, a `Stream<Uint8Array>` for callers that assemble
-their own entries; `effect-build-python` writes wheels with it. Entries are `file`
+their own entries; `effect-build-python` writes wheels with it. Entries retain caller order,
+allowing generated metadata to follow the payloads it describes. `Archive.zip` sorts its inputs
+to keep ordinary archives deterministic. Entries are `file`
 (`path`, `mode`, `bytes`, and a `contents` stream), `directory`, or `symlink` (with `target`). The
 stream fails with the caller's stream errors, `ArchiveFormatLimit`, or `ArchiveEntrySizeMismatch`
 when a stream delivers a different byte count than it declared, and it can be run more than

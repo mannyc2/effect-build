@@ -1,25 +1,18 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path } from "effect";
+import { Context, FileSystem, Path } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { Tool } from "effect-build";
 
-export class Apple extends Context.Service<Apple, { readonly tool: Tool.Resolved }>()("effect-build-apple/Apple") {}
-export interface LayerOptions {
-  readonly executable?: string | undefined;
-  readonly version?: string | ((version: string) => boolean) | undefined;
-}
-export type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
-/** xcrun 70 is the command-line-tools baseline whose native commands are used here. */
-export const supported = ">=70.0.0 <71.0.0";
-/** Version checked locally; credentialed operations remain experimental. */
-export const tested = "70.0.0";
-export const layer = (options: LayerOptions = {}): Layer.Layer<
-  Apple, Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported, Env
-> => Layer.effect(Apple, Tool.resolve({
+export class Apple extends Context.Service<Apple, Tool.Service>()("effect-build-apple/Apple") {}
+export type Env = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
+export const { name, layer, supported, tested, constraints, requirements, resolved, testLayer } = Tool.provider(Apple, {
   name: "xcrun",
-  executable: options.executable,
-  versionArgs: ["--version"],
-  parseVersion: ({ stdout }) => {
-    const major = /^xcrun version (0|[1-9]\d*)\.?\s*$/u.exec(new TextDecoder().decode(stdout).trim())?.[1];
-    return major === undefined ? undefined : `${major}.0.0`;
+  version: {
+    parse: (probe) => {
+      const major = Tool.versionPattern(/^xcrun version (0|[1-9]\d*)\.?\s*$/u)(probe);
+      return major === undefined ? undefined : `${major}.0.0`;
+    },
+    supported: ">=70.0.0 <71.0.0", tested: ["70.0.0"],
   },
-}).pipe(Tool.requireVersion(options.version ?? supported), Effect.map((tool) => ({ tool }))));
+  requirements: { env: ["HOME", "DEVELOPER_DIR", "SDKROOT", "TMPDIR"], network: true, services: ["macOS keychain", "Apple notarization service"],
+    detail: "Signing reads keychain identities; notarization uploads bytes and waits for Apple. Local packaging can run without network." },
+});

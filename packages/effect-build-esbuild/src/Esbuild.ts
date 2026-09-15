@@ -1,4 +1,4 @@
-import { Crypto, Effect, FileSystem, Path, Schema, type Scope } from "effect";
+import { Effect, FileSystem, Path, Schema, type Scope } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import * as esbuild from "esbuild";
 import metadata from "../package.json" with { type: "json" };
@@ -6,7 +6,9 @@ import metadata from "../package.json" with { type: "json" };
 /** The peer range: the consumer's own esbuild runs in process; nothing is selected from PATH. */
 export const supported = metadata.peerDependencies.esbuild;
 /** The version the workspace installs for tests. */
-export const tested = metadata.devDependencies.esbuild;
+export const name = "esbuild";
+export const tested: readonly string[] = [metadata.devDependencies.esbuild];
+export const constraints: Readonly<Record<string, readonly Tool.Constraint[]>> = {};
 
 const messages = (cause: unknown, key: "errors" | "warnings"): readonly esbuild.Message[] => {
   const value: unknown = typeof cause === "object" && cause !== null ? Reflect.get(cause, key) : undefined;
@@ -64,9 +66,9 @@ export type DirectoryOptions = Omit<esbuild.BuildOptions, "outdir" | "outfile" |
 export const buildToDirectory = Effect.fn("Esbuild.buildToDirectory")((input: DirectoryOptions): Effect.Effect<
   Artifact.Directory,
   Tool.InputInvalid | EsbuildFailed | Artifact.ArtifactError | Commit.CommitError,
-  FileSystem.FileSystem | Path.Path | Crypto.Crypto
+  FileSystem.FileSystem | Path.Path
 > => Effect.gen(function*() {
-  if (typeof input.outdir !== "string" || input.outdir.length === 0 || input.outfile !== undefined || input.write !== undefined) {
+  if (typeof input.outdir !== "string" || Tool.argumentIssue(input.outdir) !== undefined || input.outfile !== undefined || input.write !== undefined) {
     return yield* new Tool.InputInvalid({
       operation: "Esbuild.buildToDirectory",
       reason: "buildToDirectory requires outdir and does not accept outfile or write",

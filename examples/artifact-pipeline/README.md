@@ -35,7 +35,7 @@ uv and run its native command; ordinary example verification needs no Python.
 
 The steps are numbered in `src/main.ts`:
 
-1. **Compile** with Bun and `Artifact.verify` the result: the record matches the file.
+1. **Compile** with Bun, opt in through `Artifact.withSha256`, then `Artifact.verify` the result: the record matches the file.
 2. **Archive and wheel** from the same executable. The wheel entry under `.data/scripts` puts
    `hello` (`hello.exe` on Windows) on the installing environment's command path with no Python
    wrapper. The platform tag describes the build host here; a real release picks the minimum

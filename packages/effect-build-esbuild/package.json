@@ -1,6 +1,6 @@
 {
   "name": "effect-build-esbuild",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Build JavaScript bundles and scoped esbuild contexts as Effect programs.",
   "type": "module",
   "license": "MIT",
@@ -44,11 +44,11 @@
     "effect-build": "workspace:^"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.108 <4.1.0-0",
+    "effect": ">=4.0.0-rc.113 <4.1.0-0",
     "esbuild": ">=0.28.2 <0.29.0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.108",
+    "effect": "4.0.0-rc.115",
     "esbuild": "0.28.2"
   },
   "engines": {

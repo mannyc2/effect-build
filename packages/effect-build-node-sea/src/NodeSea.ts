@@ -1,11 +1,11 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Path, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Executable, Tool } from "effect-build";
 import { Buffer } from "node:buffer";
 import { inject } from "postject";
 
 export class NodeSea extends Context.Service<NodeSea, {
-  readonly builder: Tool.Resolved;
+  readonly tool: Tool.Resolved;
   readonly base: Tool.Resolved;
 }>()("effect-build-node-sea/NodeSea") {}
 /** postject rejections are not always Error instances; a message getter must still render them. */
@@ -26,40 +26,30 @@ export class Failed extends Schema.TaggedError<Failed>()("NodeSeaFailed", {
     return `${this.operation} failed: ${describe(this.cause)}`;
   }
 }
-export interface LayerOptions {
-  readonly executable?: string | undefined;
-  readonly baseExecutable?: string | undefined;
-  readonly version?: string | ((version: string) => boolean) | undefined;
-}
-type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+interface Options { readonly baseExecutable?: string | undefined }
+type Fs = FileSystem.FileSystem | Path.Path;
 type Env = Fs | ChildProcessSpawner.ChildProcessSpawner;
-/** Node 22–26 share the SEA preparation blob and resource injection workflow. */
-export const supported = ">=22.0.0 <27.0.0";
-/** Exact versions exercised by real-tool CI. */
-export const tested = "22.0.0 || 26.7.0";
-const resolveNode = (executable: string, version: NonNullable<LayerOptions["version"]>) => Tool.resolve({
-  name: "node",
-  executable,
-  parseVersion: (completion) => new TextDecoder().decode(completion.stdout).trim().replace(/^v/u, ""),
-}).pipe(Tool.requireVersion(version));
-export const layer = (options: LayerOptions = {}): Layer.Layer<
-  NodeSea,
-  Tool.InputInvalid | Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
-  Env
-> => Layer.effect(NodeSea, Effect.gen(function*() {
-  const builder = yield* resolveNode(options.executable ?? process.execPath, options.version ?? supported);
-  const base = options.baseExecutable === undefined ? builder : yield* resolveNode(options.baseExecutable, options.version ?? supported);
-  // Node's preparation blob must be consumed by the same Node version.
-  if (builder.version !== base.version) {
-    return yield* new Tool.InputInvalid({
-      operation: "NodeSea.layer",
-      reason: `builder ${builder.version} and base ${base.version} must have the same Node version`,
+const parse = Tool.versionPattern(/^v(\S+)/u);
+const nodeVersion = { parse, supported: ">=22.0.0 <27.0.0", tested: ["22.0.0", "26.7.0"] };
+const provider = Tool.provider<NodeSea, { readonly base: Tool.Resolved }, Options>(NodeSea, {
+  name: "node", version: nodeVersion,
+  requirements: { env: ["NODE_OPTIONS", "NODE_PATH", "HOME", "DEVELOPER_DIR", "TMPDIR"], network: false, services: [],
+    detail: "Darwin output uses xcrun codesign for an ad hoc signature; builder and base must have the same version." },
+  extend: (tool, options) => Effect.gen(function*() {
+    const base = options.baseExecutable === undefined ? tool : yield* Tool.resolve({
+      name: "node", executable: options.baseExecutable, parseVersion: (completion, path) => parse({ completion, path }),
+    }).pipe(Tool.requireVersion(options.version ?? nodeVersion.supported));
+    if (tool.version !== base.version) return yield* new Tool.VersionUnsupported({
+      tool: tool.name, version: tool.version, supported: base.version, operation: "NodeSea.layer",
+      reason: `builder ${tool.version} and base ${base.version} must have the same Node version`,
     });
-  }
-  return { builder, base };
-}));
+    return { base };
+  }),
+});
+export const { name, supported, tested, constraints, requirements, resolved, testLayer } = provider;
+export const layer = (options: Tool.LayerOptions & Options = {}) => provider.layer({ ...options, executable: options.executable ?? process.execPath });
 
-export interface Input extends Commit.ProducerOptions {
+export interface Input extends Commit.ProducerOptions, Tool.EnvironmentOptions {
   /** One bundled CommonJS script. Its require() can load Node built-ins. */
   readonly main: Artifact.Regular;
   readonly assets?: Readonly<Record<string, Artifact.Regular>> | undefined;
@@ -76,7 +66,7 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
     const issue = Tool.argumentIssue(input.outfile);
     if (issue !== undefined) return yield* invalid(`outfile ${issue}`);
     if (input.cwd?.includes("\0")) return yield* invalid("cwd must contain no NUL");
-    const { builder, base } = yield* NodeSea;
+    const { tool, base } = yield* NodeSea;
     // The output is the base with one resource added, so its target is the base's; the host may be running it under emulation.
     const facts = yield* Executable.inspect(base.path);
     const target = yield* Executable.resolveTarget(base.path, facts);
@@ -91,12 +81,12 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
     // Inputs and the blob always live separately, including when atomic output is disabled.
     const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-sea-" }).pipe(Effect.mapError(Artifact.ioError(outfile, "write")));
     const main = p.join(temporary, "main.cjs");
-    yield* Artifact.copyVerified(input.main, main);
-    yield* Tool.run(builder, ["--check", main], { cwd });
+    yield* Artifact.copy(input.main, main);
+    yield* Tool.run(tool, ["--check", main], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
     const assets: [string, string][] = [];
     for (const [key, artifact] of Object.entries(input.assets ?? {})) {
       const path = p.join(temporary, `asset-${assets.length}`);
-      yield* Artifact.copyVerified(artifact, path);
+      yield* Artifact.copy(artifact, path);
       assets.push([key, path]);
     }
     const blob = p.join(temporary, "sea.blob");
@@ -109,10 +99,11 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
       useSnapshot: false,
       useCodeCache: false,
     })).pipe(Effect.mapError(Artifact.ioError(config, "write")));
-    yield* Tool.run(builder, ["--experimental-sea-config", config], { cwd });
+    yield* Tool.run(tool, ["--experimental-sea-config", config], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
     const contents = yield* fs.readFile(blob).pipe(Effect.mapError(Artifact.ioError(blob)));
     const signing = facts.format === "mach-o" ? yield* Tool.resolve({
       name: "xcrun",
+      env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv,
       parseVersion: (completion) => {
         const major = /^xcrun version (\d+)\./u.exec(new TextDecoder().decode(completion.stdout))?.[1];
         return major === undefined ? undefined : `${major}.0.0`;
@@ -126,7 +117,7 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
         detail: `copy ${base.path} -> ${out}: ${String(error)}`,
       })));
       yield* fs.chmod(out, 0o755).pipe(Effect.mapError(Artifact.ioError(out, "write")));
-      if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--remove-signature", out]);
+      if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--remove-signature", out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv });
       // postject cannot cancel: finish its writes before a scope removes temporary output.
       yield* Effect.uninterruptible(Effect.tryPromise({
         try: () => inject(out, "NODE_SEA_BLOB", Buffer.from(contents), {
@@ -135,8 +126,8 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
         }),
         catch: (cause) => new Failed({ operation: "inject", cause }),
       }));
-      if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--sign", "-", out]);
-      return yield* Artifact.executable(out, Tool.producer(builder), target);
+      if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--sign", "-", out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv });
+      return yield* Artifact.executable(out, Tool.producedBy(tool), target);
     });
     return yield* Commit.output(outfile, produce, input);
   })));

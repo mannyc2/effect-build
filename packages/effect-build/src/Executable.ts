@@ -150,8 +150,11 @@ function* thinMacho(base: number, size: number): Inspection {
       if (commandSize < 72 || commandSize !== 72 + u32(commands, offset + 64, le) * 80) fail("invalid-header");
       const fileOffset = u64(commands, offset + 40, le), fileSize = u64(commands, offset + 48, le);
       bounds(fileOffset, fileSize, size);
-      if (u64(commands, offset + 32, le) < fileSize) fail("invalid-header");
-      hasSegment ||= fileSize > 0;
+      const memorySize = u64(commands, offset + 32, le);
+      // Darwin permits unmapped segments such as Go's __DWARF: bytes on disk, no initial protection or virtual memory.
+      const unmapped = memorySize === 0 && u32(commands, offset + 60, le) === 0;
+      if (!unmapped && memorySize < fileSize) fail("invalid-header");
+      hasSegment ||= memorySize > 0 && fileSize > 0;
     }
     offset += commandSize;
   }
@@ -268,7 +271,7 @@ export const inspect = (path: string): Effect.Effect<Facts, InspectError, FileSy
     let step = yield* advance();
     while (!step.done) {
       const { offset, length } = step.value;
-      yield* handle.seek(offset, "start");
+      yield* handle.seek(BigInt(offset), "start").pipe(Effect.mapError(unreadable));
       const bytes = new Uint8Array(length);
       let read = 0;
       while (read < length) {

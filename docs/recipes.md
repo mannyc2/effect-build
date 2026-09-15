@@ -5,8 +5,8 @@ build; the [CLI example](../examples/cli) and the [artifact pipeline](../example
 run the same patterns end to end. The recipes assume these imports:
 
 ```ts
-import { Effect, FileSystem, Path } from "effect";
-import { Artifact, Checksums, Commit, Target, Tool } from "effect-build";
+import { Context, Effect, FileSystem, Path, Schema } from "effect";
+import { Artifact, Checksums, Commit, Directory, Target, Tool } from "effect-build";
 import * as Apple from "effect-build-apple";
 import * as Archive from "effect-build-archives";
 import * as Bun from "effect-build-bun";
@@ -23,8 +23,8 @@ and a runtime (`NodeRuntime.runMain`), as in [getting started](getting-started.m
 
 ## Share one compiler across operations
 
-Provide a provider layer once, around a program that uses it many times. The tool is located,
-hashed, and probed once; every operation inside runs against that record.
+Provide a provider layer once, around a program that uses it many times. The tool is located
+and probed once; every operation inside runs against that record.
 
 ```ts
 const build = Effect.gen(function*() {
@@ -33,6 +33,49 @@ const build = Effect.gen(function*() {
   return [cli, worker];
 }).pipe(Effect.provide(Bun.layer({ executable: process.env.EFFECT_BUILD_BUN })));
 ```
+
+## Assemble Node and Bun applications with runtime assets
+
+Each `Bun.bundle` owns and replaces its output directory. Build different targets into
+separate directories, then assemble their artifacts once. This also keeps a later bundle
+from deleting an earlier signer, native library, or worker.
+
+```ts
+const runtime = Effect.gen(function*() {
+  const node = yield* Bun.bundle({
+    entrypoints: ["src/show.ts"], outdir: "work/node",
+    options: { target: "node", packages: "external", sourcemap: "linked" },
+  });
+  const worker = yield* Bun.bundle({
+    entrypoints: ["src/worker.ts"], outdir: "work/bun",
+    options: { target: "bun", packages: "external", sourcemap: "linked" },
+  });
+  const assets = yield* Artifact.directory("runtime-assets", { name: "app", version: "1" });
+  return yield* Directory.assemble({
+    outdir: "dist/runtime",
+    entries: [{ artifact: node }, { artifact: worker }, { artifact: assets }],
+  });
+}).pipe(Effect.provide(Bun.layer()));
+```
+
+Omitting a directory entry's `path` merges its contents at the root; providing `path`
+mounts it below that shipping path. Files require a path. Exact shared directories merge
+when their modes agree; duplicate files and conflicting modes fail. Actual destination aliases
+fail during exclusive member creation. `Layout.validatePortable` can reject case/Unicode
+collisions before building when cross-filesystem portability is required.
+File inputs use 0644 and executable inputs use 0755; directory members retain their modes,
+empty directories and symlinks. Inputs must remain unchanged while assembly reads them.
+
+Keep the application's file allowlist and frozen production dependency installation in its
+own build script. External packages must be included in that tree with their workspace links.
+After installation or other writes, record the complete tree again with `Artifact.directory`.
+Its artifact can be passed to `Archive.tarGz({ directory, outfile })` or `Archive.zip` to
+archive the contents at root, with no extra directory prefix. Stage the archive and its
+checksum together using the release-directory pattern below.
+
+The [runtime integration test](../test/integration/runtime-directory.test.ts) builds both
+targets, restores the assembled directory from cache, removes the source/build trees, and
+runs the extracted programs with a shared workspace dependency.
 
 ## Cross-compile a target matrix
 
@@ -71,14 +114,16 @@ const release = Commit.atomic("dist", (staged) =>
         target,
         atomic: false,
       }), { concurrency: 2 });
-    yield* Checksums.write({ artifacts: executables, outfile: path.join(staged, "SHA256SUMS") });
+    const identities = yield* Effect.forEach(executables, Artifact.withSha256);
+    yield* Checksums.write({ artifacts: identities, outfile: path.join(staged, "SHA256SUMS") });
     return yield* Artifact.directory(staged, { name: "cli", version: "1.0.0" });
   }), { staging: "sibling" }).pipe(Effect.provide(Bun.layer()));
 ```
 
 Inside a staged directory, `atomic: false` lets each producer write its final path directly;
-the outer commit provides the atomicity. `Checksums.write` records paths relative to the
-checksum file, so `sha256sum -c SHA256SUMS` keeps passing after the tree moves.
+the outer commit provides the atomicity. `Artifact.withSha256` explicitly hashes each executable;
+`Checksums.write` records those digests and paths relative to the checksum file, so
+`sha256sum -c SHA256SUMS` keeps passing after the tree moves.
 
 ## Archive per target
 
@@ -139,7 +184,7 @@ const sea = Effect.gen(function*() {
 ## Debian and RPM packages
 
 `config` is nFPM's own configuration, passed through as JSON. `contents` maps artifacts to
-absolute paths in the package; the operation copies verified bytes and checks that each
+absolute paths in the package; the operation copies current bytes and checks that each
 executable's OS and architecture match the format and `arch`.
 
 ```ts
@@ -181,7 +226,7 @@ const wheel = (executable: Artifact.Executable) =>
 ## Sign and notarize a macOS CLI
 
 A bare executable signs with the hardened runtime and a secure timestamp, notarizes as a ZIP,
-and is assessed with its accepted submission because Apple cannot staple a ticket to a bare
+and is assessed directly because Apple cannot staple a ticket to a bare
 binary. Bun-compiled executables need Bun's JIT entitlements. Identities are certificate SHA-1
 fingerprints; credentials are a keychain profile, an App Store Connect API key, or an Apple ID.
 
@@ -189,9 +234,10 @@ fingerprints; credentials are a keychain profile, an App Store Connect API key, 
 const darwin = (executable: Artifact.Executable, certificateSha1: string, credential: Apple.Notary.Credential) =>
   Effect.gen(function*() {
     const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements });
+    yield* Apple.verifySignature({ artifact: signed });
     const submission = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
-    const acceptance = yield* Apple.Notary.acceptedReference(submission);
-    const assessed = yield* Apple.assess({ artifact: signed, acceptance });
+    yield* Apple.Notary.expectAccepted(submission);
+    const assessed = yield* Apple.assess({ artifact: signed });
     return yield* Archive.tarGz({
       entries: [{ artifact: assessed, path: "hello" }],
       outfile: "dist/hello_darwin-arm64.tar.gz",
@@ -199,15 +245,17 @@ const darwin = (executable: Artifact.Executable, certificateSha1: string, creden
   }).pipe(Effect.provide(Apple.layer()));
 ```
 
-`Apple.Notary.notarize` uploads and waits. When a build might be interrupted, call `Apple.Notary.submit`,
-persist the returned reference with its schema, and `Apple.Notary.wait` for it later. App bundles,
-DMGs, and PKGs follow the same path and are stapled instead of assessed with a reference; the
+`Apple.Notary.notarize` uploads and waits; `expectAccepted` explicitly requires acceptance.
+When a build might be interrupted, call `Apple.Notary.submit`, persist its submission ID,
+and call `Apple.Notary.wait({ submissionId, credential })` later. App bundles, DMGs, and PKGs
+can be stapled before assessment. `Apple.validateTicket` is the explicit ticket check.
+Stapling changes the bytes and returns a fresh base product record. The
 [signing module](../examples/artifact-pipeline/src/signing.ts) has both flows.
 
 ## Sign a Windows executable
 
 `Windows.sign` takes a PE executable or an MSIX file, signs with SHA-256, adds an RFC 3161
-timestamp, verifies the signature, and returns the same artifact kind with fresh hashes. The
+timestamp, verifies the signature, and returns the same artifact kind with fresh metadata. The
 credential is a certificate-store thumbprint, a PFX file, or Azure Trusted Signing.
 
 ```ts
@@ -247,21 +295,25 @@ const sbom = (executable: Artifact.Executable) =>
 
 ## Keep the manifest and verify it later
 
-`Artifact.encode` projects a list of artifacts to plain JSON; `Artifact.decode` validates JSON
-back into records. Provider refinements such as signatures are left out on purpose; persist those
-with the provider's own schema. Records describe files at a moment in time, so verify before a
-later step trusts them.
+Call `Artifact.withSha256` to record content identities, then persist them with the
+`HashedArtifact` schema. `Artifact.verify` checks those recorded identities against the files
+later. Base `Artifact.encode` and `Artifact.decode` project metadata only, dropping digests and
+provider refinements; preserve richer signing records with their provider's schema.
 
 ```ts
+const HashedManifest = Schema.Array(Artifact.HashedArtifact);
+
 const writeManifest = (artifacts: readonly Artifact.Artifact[]) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.writeFileString("dist/manifest.json", JSON.stringify(Artifact.encode(artifacts), null, 2));
+    const identities = yield* Effect.forEach(artifacts, Artifact.withSha256);
+    const encoded = Schema.encodeSync(HashedManifest)(identities);
+    yield* fs.writeFileString("dist/manifest.json", JSON.stringify(encoded, null, 2));
   });
 
 const verifyManifest = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const artifacts = Artifact.decode(JSON.parse(yield* fs.readFileString("dist/manifest.json")));
+  const artifacts = Schema.decodeUnknownSync(HashedManifest)(JSON.parse(yield* fs.readFileString("dist/manifest.json")));
   return yield* Effect.forEach(artifacts, Artifact.verify);
 });
 ```
@@ -285,27 +337,106 @@ const external = Effect.gen(function*() {
 
 ## Wrap a tool that has no provider
 
-The core package has what a provider is made of. `Tool.resolve` locates, hashes, and probes a
-binary once; `Tool.run` runs it with captured output; `Commit.output` gives your producer the
-same staged, atomic output as the built-in ones.
+`Tool.provider` resolves and records a tool once. `Tool.run` captures output and
+`Commit.output` supplies the same staged output used by first-party providers.
 
 ```ts
-const compress = (executable: Artifact.Executable, outfile: string) =>
+class Upx extends Context.Service<Upx, Tool.Service>()("example/Upx") {}
+const upx = Tool.provider(Upx, {
+  name: "upx",
+  version: { parse: Tool.versionPattern(/^upx (\d+\.\d+\.\d+)/u), supported: ">=4 <5", tested: ["4.2.0"] },
+});
+const compress = (input: { executable: Artifact.Executable; outfile: string } & Commit.ProducerOptions) =>
   Effect.gen(function*() {
-    const upx = yield* Tool.resolve({
-      name: "upx",
-      parseVersion: (probe) => /upx (\d+\.\d+\.\d+)/u.exec(new TextDecoder().decode(probe.stdout))?.[1],
-    }).pipe(Tool.requireVersion(">=4.0.0"));
-    return yield* Commit.output(outfile, (staged) =>
-      Tool.run(upx, ["--best", "-o", staged, executable.path]).pipe(
-        Effect.andThen(Artifact.executable(staged, Tool.producer(upx), executable.target)),
-      ));
+    const issue = Tool.argumentIssue(input.outfile);
+    if (issue !== undefined) return yield* new Tool.InputInvalid({ operation: "Upx.compress", reason: `outfile ${issue}` });
+    const tool = yield* upx.resolved;
+    return yield* Commit.output(input.outfile, (staged) =>
+      Tool.run(tool, ["--best", "-o", staged, input.executable.path]).pipe(
+        Effect.andThen(Artifact.executable(staged, Tool.producedBy(tool), input.executable.target)),
+      ), input);
   });
 ```
 
-`Commit.output` stages a file under a temporary directory next to `outfile`, so the tool writes
-to `staged` and never to the destination. Return the artifact recorded at the staged path; the
-commit renames it and returns the record with the final path.
+Provide `upx.layer()` and platform services. The returned artifact names the final path;
+output validation runs before commit. A provider can also declare version constraints and
+host requirements; see [provider declarations](providers.md).
+
+## Queries and stdout producers
+
+A query decodes stdout into a value and does not commit a file. When stdout itself is the
+artifact, write the bytes through `Commit.output` and return the file record instead.
+
+```ts
+const query = (tool: Tool.Resolved) => Tool.run(tool, ["--json"]).pipe(
+  Effect.flatMap((reply) => Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: Schema.String })))(new TextDecoder().decode(reply.stdout))),
+);
+const report = (tool: Tool.Resolved, outfile: string) => Commit.output(outfile, (staged) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.writeFile(staged, new Uint8Array());
+    yield* Tool.run(tool, ["report"], {
+      stdoutLimit: 0,
+      onOutput: (output) => output.stream === "stdout"
+        ? fs.writeFile(staged, output.chunk, { flag: "a" }).pipe(Effect.orDie)
+        : Effect.void,
+    });
+    return yield* Artifact.file(staged, Tool.producedBy(tool));
+  }));
+```
+
+The empty staged file handles tools that emit no bytes. `onOutput` is an
+Effect callback with no typed failure channel; a failed write interrupts the command and its
+scope discards staging. Queries with larger structured output can set `stdoutLimit: null`.
+
+Remote operations return a schema-typed reference the caller can persist, then an outcome:
+`Apple.Notary.submit`, `wait`, and `expectAccepted` demonstrate the pattern. Such operations
+belong here when they change or attest to bytes; transferring the product belongs to ts-release.
+They are never cached by declared inputs. [Cache](cache.md) applies to local producers whose
+complete dependencies the caller can declare.
+
+## Test a provider
+
+`effect-build/testing` has real-file fixtures and an in-process scripted spawner. No compiler
+installation is needed to exercise production, validation, interruption, and staging. The
+conformance suite takes a fresh fixture and an output adapter, so `outfile`, `outdir`, and
+in-process tools share the same guarantees. The observer must run inside the actual tool call.
+
+```ts
+import { Layer } from "effect";
+import { TestArtifact, TestProvider, TestSpawner, TestTool } from "effect-build/testing";
+
+const cases = TestProvider.conformance({
+  operation: "Upx.compress", kind: "executable", outputName: "output.exe",
+  make: (control) => Effect.gen(function*() {
+    const executable = yield* TestArtifact.executable("windows-x64");
+    const tool = TestTool.resolved("upx", "4.2.0");
+    const fake = TestSpawner.layer(({ args }) => Effect.gen(function*() {
+      const output = args[args.indexOf("-o") + 1]!;
+      yield* Artifact.copy(executable, output).pipe(Effect.orDie);
+      return { exitCode: (yield* control.enter(output)) ? 1 : 0 };
+    }));
+    const services = yield* Layer.build(Layer.merge(upx.testLayer({ tool }), fake));
+    return {
+      run: (outfile: string, options: Commit.ProducerOptions) =>
+        compress({ executable, outfile, ...options }).pipe(Effect.provideContext(services)),
+      calls: TestSpawner.Calls.use((calls) => calls.all).pipe(Effect.map((calls) => calls.length), Effect.provideContext(services)),
+      provider: { tool, constraints: upx.constraints },
+    };
+  }),
+});
+for (const c of cases) it(c.name, () => Effect.runPromise(c.run.pipe(Effect.provide(NodeServices.layer))));
+```
+
+A conditional version restriction needs a witness with activating input and a rejected
+version. The suite rejects missing witnesses instead of claiming the declaration is tested.
+Directory records are verified against disk on every host. Exact POSIX root permissions
+(0755 by default) are checked where supported; Windows still checks recorded modes, sorted
+entries, and stable manifest hashes without requiring POSIX permission bits.
+`TestFileSystem.failing` injects failures on named filesystem calls, `TestPlatform` exposes
+POSIX/Windows paths, and `expectReproducible` compares independent real outputs. Platform
+path fixtures use the optional `@effect/platform-node` peer. OS process launching, argv
+quoting and real signals stay in integration tests; the fake does not establish them.
 
 ## Handle a failure
 

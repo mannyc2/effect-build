@@ -3,7 +3,6 @@ import { Effect, FileSystem, Stream } from "effect";
 import { Artifact, Target, Tool } from "effect-build";
 import * as Deno from "effect-build-deno";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,7 +31,7 @@ describe("real Deno 2.9.5", () => {
     await writeFile(join(root, "hello.ts"), "console.log(JSON.stringify({ main: import.meta.main, url: import.meta.url }));\n");
     const artifact = await run(Deno.compile({
       entrypoint: "hello.ts", outfile: `bin/${name("chosen-name")}`, cwd: root, options,
-    }));
+    }).pipe(Effect.flatMap(Artifact.withSha256)));
     expect(artifact.path).toBe(join(root, "bin", name("chosen-name")));
     expect(artifact.target).toBe(Target.host());
     expect(await run(Artifact.verify(artifact))).toEqual(artifact);
@@ -40,11 +39,11 @@ describe("real Deno 2.9.5", () => {
     expect(result).toMatchObject({ main: true, url: expect.stringContaining("/deno-compile-chosen-name") });
   }, 300_000);
 
-  it("bundles and transpiles TypeScript into verified directories of executable JavaScript", async () => {
+  it("bundles and transpiles TypeScript into directories with opt-in identity", async () => {
     await writeFile(join(root, "hello.ts"), "export const answer: number = 42; console.log(answer);\n");
     const artifacts = await run(Effect.all([
-      Deno.bundle({ entrypoints: ["hello.ts"], outdir: "bundle", cwd: root, options }),
-      Deno.transpile({ files: ["hello.ts"], outdir: "transpiled", cwd: root, options: { config: false, noRemote: true } }),
+      Deno.bundle({ entrypoints: ["hello.ts"], outdir: "bundle", cwd: root, options }).pipe(Effect.flatMap(Artifact.withSha256)),
+      Deno.transpile({ files: ["hello.ts"], outdir: "transpiled", cwd: root, options: { config: false, noRemote: true } }).pipe(Effect.flatMap(Artifact.withSha256)),
     ]));
     for (const artifact of artifacts) {
       expect(await run(Artifact.verify(artifact))).toEqual(artifact);
@@ -77,17 +76,17 @@ describe("real Deno 2.9.5", () => {
     expect(await readdir(root)).toEqual(["hello.ts"]);
   });
 
-  it.skipIf(process.platform === "win32")("hashes an explicit runtime without executing it during layer acquisition", async () => {
+  it.skipIf(process.platform === "win32")("records explicit runtime metadata without executing it during layer acquisition", async () => {
     const marker = join(root, "was-executed");
     const runtime = join(root, "denort");
     const script = `#!/bin/sh\nprintf 'executed' > '${marker.replaceAll("'", "'\\''")}'\nexit 89\n`;
     await writeFile(runtime, script, { mode: 0o755 });
     const service = await run(Deno.Deno, runtime);
-    expect(service.runtime?.sha256).toBe(createHash("sha256").update(script).digest("hex"));
+    expect(service.runtime).toMatchObject({ path: runtime, bytes: Buffer.byteLength(script), kind: "file" });
     expect(await readdir(root)).not.toContain("was-executed");
   });
 
-  it("compiles with an explicit denort and records the runtime's actual bytes", async () => {
+  it("compiles with an explicit denort and records its file metadata", async () => {
     await run(Deno.compile({ entrypoint: "hello.ts", outfile: name("download-runtime"), cwd: root, options }));
     const info: unknown = JSON.parse((await execute(executable, ["info", "--json"])).stdout);
     if (typeof info !== "object" || info === null || !("denoDir" in info) || typeof info.denoDir !== "string") {
@@ -103,8 +102,8 @@ describe("real Deno 2.9.5", () => {
     const runtime = join(directory, name("denort"));
     await chmod(runtime, 0o755);
     const target = `${architecture}-${platform}` as const;
-    const artifact = await run(Deno.compile({ entrypoint: "hello.ts", outfile: name("explicit-runtime"), target, cwd: root, options }), runtime);
-    expect(artifact.runtime?.sha256).toBe(createHash("sha256").update(await readFile(runtime)).digest("hex"));
+    const artifact = await run(Deno.compile({ entrypoint: "hello.ts", outfile: name("explicit-runtime"), target, cwd: root, options }).pipe(Effect.flatMap(Artifact.withSha256)), runtime);
+    expect(artifact.runtime?.bytes).toBe((await readFile(runtime)).byteLength);
     expect(await realpath(artifact.runtime!.path)).toBe(await realpath(runtime));
     expect((await execute(artifact.path, [], { timeout: 30_000 })).stdout.trim()).toBe("hello from Deno");
     expect(await run(Artifact.verify(artifact))).toEqual(artifact);

@@ -5,12 +5,13 @@ Write Python wheels directly from artifacts, or build a Python project's sdist a
 a native CLI reaches `pip install`.
 
 ```sh
-npm install --save-dev --save-exact effect-build-python@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-python@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 ## Wheels from artifacts
 
 ```ts
+import { Artifact } from "effect-build";
 import * as Python from "effect-build-python";
 
 const wheel = (executable: Artifact.Executable) =>
@@ -24,8 +25,8 @@ const wheel = (executable: Artifact.Executable) =>
 
 `wheel({ metadata, tags, entries, outdir, cwd?, rootIsPurelib?, entryPoints?, atomic?, onExists?, prefix? })`
 writes `<name>-<version>-<python>-<abi>-<platform>.whl` into `outdir` and returns it as an
-`Artifact.File`. It generates `METADATA`, `WHEEL`, and a `RECORD` whose digests come from each
-artifact's record, plus `entry_points.txt` when `entryPoints` is given.
+`Artifact.File`. It generates `METADATA`, `WHEEL`, and a `RECORD` whose digests are computed
+while writing each payload, plus `entry_points.txt` when `entryPoints` is given.
 
 - **Native commands.** An entry at `<name>-<version>.data/scripts/<command>` (name and version
   normalized: `hello_cli-1.0.0`) is installed onto the environment's command path, so the user gets
@@ -39,15 +40,18 @@ artifact's record, plus `entry_points.txt` when `entryPoints` is given.
   manylinux or musllinux floor are promises only you can make; declare them through
   `platformTag({ target, glibc | musl | macos })`, or `executableTags(...)` for the full
   `py3-none` triple a compiled command ships with.
-- **Entries** are regular artifacts. Executables get mode `0755`, or set `executable: true`.
-  `.dist-info` entries belong to the writer. Paths and implicit directories must each have one
-  spelling after case folding and NFC normalization: `Docs/a` and `docs/b` conflict. Entries
+- **Entries** accept ordinary `Artifact.Regular` records. Executables get mode `0755`, or set `executable: true`.
+  `.dist-info` entries belong to the writer. Paths must be normalized and distinct. Entries
   cannot descend through a file, and wheel paths cannot contain control characters.
+  Compose `Layout.validatePortable` when case-folded and NFC-normalized spellings must also be distinct.
 - `rootIsPurelib` defaults to true only for `abi: "none"` with `platform: "any"`. `entryPoints`
   takes groups such as `{ console_scripts: { hello: "hello_cli.cli:main" } }`.
 
-Wheel bytes depend only on the inputs: DEFLATE level 6, fixed timestamps, sorted entries.
-Payloads stream from their artifacts in 64 KiB chunks and are verified as they pass. The only
+Wheel bytes depend only on the inputs: DEFLATE level 6, fixed timestamps, sorted payloads,
+then sorted metadata with `RECORD` last. Payloads stream once in 64 KiB chunks while SHA-256
+is computed; `RECORD` describes the exact bytes written. An existing artifact digest is not
+automatically verified. Compose `Artifact.verify` before packaging when the recorded identity
+must still match at that point. The only
 size limits are ZIP32's (65,535 entries including generated metadata, 4 GiB per entry and per
 wheel, names up to 65,535 bytes), reported as `ArchiveFormatLimit` before writing; a payload
 that streams a different byte count than its record fails with `ArchiveEntrySizeMismatch`. Both

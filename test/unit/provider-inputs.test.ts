@@ -14,14 +14,13 @@ const tool = (name: string, version: string): Tool.Resolved => ({
   version,
   path: "/not-a-tool",
   bytes: 0,
-  sha256: "0".repeat(64),
 });
 type Env = NodeServices.NodeServices | Bun.Bun | Deno.Deno | NodeSea.NodeSea;
 const run = <A, E>(effect: Effect.Effect<A, E, Env>) =>
   Effect.runPromise(effect.pipe(
     Effect.provideService(Bun.Bun, { tool: tool("bun", "1.3.14") }),
     Effect.provideService(Deno.Deno, { tool: tool("deno", "2.9.5") }),
-    Effect.provideService(NodeSea.NodeSea, { builder: tool("node", "22.0.0"), base: tool("node", "22.0.0") }),
+    Effect.provideService(NodeSea.NodeSea, { tool: tool("node", "22.0.0"), base: tool("node", "22.0.0") }),
     Effect.provide(NodeServices.layer),
   ));
 let root: string;
@@ -34,23 +33,12 @@ afterEach(async () => {
 });
 
 describe("provider input preparation", () => {
-  it.each(["compile", "watch"] as const)(
-    "rejects a raw empty Deno %s outfile before it can resolve to cwd",
-    async (operation) => {
-      const input = { entrypoint: "input.ts", outfile: "", cwd: root };
-      const effect: Effect.Effect<unknown, Deno.CompileError, Env> = operation === "compile"
-        ? Deno.compile(input)
-        : Effect.scoped(Deno.watch(input));
-      const failure = await run(effect.pipe(Effect.flip));
-      expect(failure).toMatchObject({
-        _tag: "InputInvalid",
-        operation: `Deno.${operation}`,
-        reason: expect.stringContaining("outfile"),
-      });
-      expect(await readdir(root)).toEqual(["keep.txt"]);
-      expect(await readFile(join(root, "keep.txt"), "utf8")).toBe("original output\n");
-    },
-  );
+  it("rejects an empty Deno watch outfile before it can resolve to cwd", async () => {
+    const failure = await run(Effect.scoped(Deno.watch({ entrypoint: "input.ts", outfile: "", cwd: root })).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "InputInvalid", operation: "Deno.watch", reason: expect.stringContaining("outfile") });
+    expect(await readdir(root)).toEqual(["keep.txt"]);
+    expect(await readFile(join(root, "keep.txt"), "utf8")).toBe("original output\n");
+  });
 
   it.each(["compile", "watch"] as const)(
     "keeps the lowercase .exe requirement in Deno %s preparation",

@@ -1,20 +1,17 @@
-import { Context, Crypto, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Path, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
 
-export class Bun extends Context.Service<Bun, { readonly tool: Tool.Resolved }>()("effect-build-bun/Bun") {}
+export class Bun extends Context.Service<Bun, Tool.Service>()("effect-build-bun/Bun") {}
 
-export interface LayerOptions {
-  /** Use this binary instead of searching PATH. */
-  readonly executable?: string | undefined;
-  /** Accept these versions: an npm semver range or predicate. Default: `supported`. */
-  readonly version?: string | ((version: string) => boolean) | undefined;
-}
-
-/** Compatible major; emitted builds separately reject the known 1.4.1 defect. */
-export const supported = ">=1.3.14 <2.0.0";
-/** Exact versions exercised by real-tool CI. */
-export const tested = "1.3.14 || 1.4.2";
+const collision: readonly Tool.Constraint[] = [{ range: "1.4.1", reason: "variable-collision defect in emitted builds" }];
+export const { name, layer, supported, tested, constraints, requirements, resolved, testLayer } = Tool.provider(Bun, {
+  name: "bun",
+  version: { parse: Tool.versionPattern(/^(?:bun )?(\S+)/u), supported: ">=1.3.14 <2.0.0", tested: ["1.3.14", "1.4.2"] },
+  constraints: { "Bun.compile": collision, "Bun.bundle": collision, "Bun.build": collision, "Bun.watch": collision },
+  requirements: { env: ["HOME", "BUN_INSTALL_CACHE_DIR", "BUN_INSTALL", "TMPDIR"], network: true, services: [],
+    detail: "Cross-compilation downloads an uncached target runtime; project configuration and inlined environment remain inputs." },
+});
 /**
  * Hardened-runtime entitlements Bun documents for its compiled executables: the
  * JavaScript engine needs JIT and dynamic-library allowances to start once signed.
@@ -27,21 +24,6 @@ export const entitlements: readonly string[] = [
   "com.apple.security.cs.allow-dyld-environment-variables",
   "com.apple.security.cs.disable-library-validation",
 ];
-
-export const layer = (
-  options: LayerOptions = {},
-): Layer.Layer<
-  Bun,
-  Tool.NotFound | Tool.ProbeFailed | Tool.VersionUnsupported,
-  FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner
-> =>
-  Layer.effect(
-    Bun,
-    Tool.resolve({ name: "bun", executable: options.executable }).pipe(
-      Tool.requireVersion(options.version ?? supported),
-      Effect.map((tool) => ({ tool })),
-    ),
-  );
 
 /** Bun's own target names, for people who want the variants (`-baseline`, `-modern`). */
 export const BunTarget = Schema.Literals([
@@ -88,7 +70,7 @@ export interface CompileOptions {
   } | undefined;
 }
 
-export interface CompileInput extends Commit.ProducerOptions {
+export interface CompileInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
   readonly entrypoints: readonly [string, ...string[]];
   readonly outfile: string;
   /** Default: the host. */
@@ -100,6 +82,7 @@ export interface CompileInput extends Commit.ProducerOptions {
 
 export type CompileError =
   | Tool.InputInvalid
+  | Tool.VersionUnsupported
   | Tool.Failed
   | Tool.SpawnFailed
   | Artifact.ArtifactError
@@ -163,12 +146,7 @@ const prepareBuild = Effect.fnUntraced(function*(
   if (outputIssue !== undefined) return yield* new Tool.InputInvalid({ operation, reason: `output ${outputIssue}` });
   if (input.cwd?.includes("\0")) return yield* new Tool.InputInvalid({ operation, reason: "cwd must contain no NUL" });
   const { tool } = yield* Bun;
-  if (Tool.satisfies("1.4.1")(tool.version)) {
-    return yield* new Tool.InputInvalid({
-      operation,
-      reason: "Bun 1.4.1 has a reproduced variable-collision bug in emitted builds; use another version",
-    });
-  }
+  for (const constraint of constraints[operation] ?? []) yield* Tool.check(tool, operation, constraint);
   return tool;
 });
 
@@ -184,7 +162,7 @@ export const compile = Effect.fn("Bun.compile")(function*(
 ): Effect.fn.Return<
   Artifact.Executable,
   CompileError,
-  Bun | FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner
+  Bun | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > {
   const tool = yield* prepareBuild("Bun.compile", input, input.outfile);
   const requested = input.target;
@@ -204,8 +182,8 @@ export const compile = Effect.fn("Bun.compile")(function*(
     });
   }
   const produce = (out: string) =>
-    Tool.run(tool, renderArgv(input, out, bunTarget), { cwd: input.cwd, onOutput: input.onOutput }).pipe(
-      Effect.andThen(Artifact.executable(out, Tool.producer(tool), target)),
+    Tool.run(tool, renderArgv(input, out, bunTarget), { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd: input.cwd, onOutput: input.onOutput }).pipe(
+      Effect.andThen(Artifact.executable(out, Tool.producedBy(tool), target)),
     );
   const outfile = yield* outputPath(input.outfile, input.cwd);
   return yield* Commit.output(outfile, produce, input);
@@ -234,7 +212,7 @@ export interface BundleOptions extends Omit<CompileOptions,
   readonly bundle?: boolean | undefined;
 }
 
-export interface BundleInput extends Commit.ProducerOptions {
+export interface BundleInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
   readonly entrypoints: readonly [string, ...string[]];
   readonly outdir: string;
   readonly cwd?: string | undefined;
@@ -242,7 +220,7 @@ export interface BundleInput extends Commit.ProducerOptions {
   readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
 }
 
-export interface BuildInput {
+export interface BuildInput extends Tool.EnvironmentOptions {
   readonly entrypoints: readonly [string, ...string[]];
   readonly cwd?: string | undefined;
   readonly onOutput?: Tool.RunOptions["onOutput"] | undefined;
@@ -282,7 +260,7 @@ const renderBundleOptions = (o: BundleOptions): string[] => [
 export const build = Effect.fn("Bun.build")(function*(input: BuildInput) {
   const tool = yield* prepareBuild("Bun.build", input);
   const result = yield* Tool.run(tool, ["build", ...renderBundleOptions(input.options ?? {}), ...input.entrypoints],
-    { cwd: input.cwd, onOutput: input.onOutput, stdoutLimit: null });
+    { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd: input.cwd, onOutput: input.onOutput, stdoutLimit: null });
   return result.stdout;
 });
 
@@ -291,8 +269,8 @@ export const bundle = Effect.fn("Bun.bundle")(function*(input: BundleInput) {
   const outdir = yield* outputPath(input.outdir, input.cwd);
   const produce = (out: string) => Tool.run(tool,
     ["build", ...renderBundleOptions(input.options ?? {}), `--outdir=${out}`, ...input.entrypoints],
-    { cwd: input.cwd, onOutput: input.onOutput }).pipe(
-      Effect.andThen(Artifact.directory(out, Tool.producer(tool))),
+    { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd: input.cwd, onOutput: input.onOutput }).pipe(
+      Effect.andThen(Artifact.directory(out, Tool.producedBy(tool))),
     );
   return yield* Commit.output(outdir, produce, input, "sibling");
 });
@@ -311,6 +289,7 @@ export const watch = Effect.fn("Bun.watch")(function*(input: WatchInput) {
     ...(input.noClearScreen === true ? ["--no-clear-screen"] : []),
     ...renderBundleOptions(input.options ?? {}), `--outdir=${outdir}`, ...input.entrypoints], {
     cwd: input.cwd,
+    ...yield* Tool.environment(tool, input),
     stdout: input.stdio ?? "inherit", stderr: input.stdio ?? "inherit",
     shell: false,
   }).pipe(Effect.mapError((e) => new Tool.SpawnFailed({ tool: tool.name, detail: String(e) })));

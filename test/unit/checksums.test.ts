@@ -32,17 +32,18 @@ it("checks files with the same basename after moving the output tree", async () 
   const x64Path = join(root, "dist", "x64", "cli");
   await writeFile(armPath, "arm executable\n");
   await writeFile(x64Path, "x64 executable\n");
-  const arm = await run(Artifact.file(armPath, producer));
-  const x64 = await run(Artifact.file(x64Path, producer));
+  const arm = await run(Artifact.file(armPath, producer).pipe(Effect.flatMap(Artifact.withSha256)));
+  const x64 = await run(Artifact.file(x64Path, producer).pipe(Effect.flatMap(Artifact.withSha256)));
   const checksumPath = join(root, "dist", "SHA256SUMS");
   const sums = await run(Checksums.write({ artifacts: [x64, arm], outfile: checksumPath }));
   const contents = await readFile(sums.path, "utf8");
   expect(contents).toBe(`${arm.sha256}  arm64/cli\n${x64.sha256}  x64/cli\n`);
-  expect(await run(Artifact.verify(sums))).toEqual(sums);
+  expect(sums).not.toHaveProperty("sha256");
+  await run(Checksums.verify(sums));
 
   const reordered = await run(Checksums.write({ artifacts: [arm, x64], outfile: join(root, "dist", "REORDERED") }));
   expect(await readFile(reordered.path, "utf8")).toBe(contents);
-  expect(reordered.sha256).toBe(sums.sha256);
+  expect((await run(Artifact.withSha256(reordered))).sha256).toBe((await run(Artifact.withSha256(sums))).sha256);
   const moved = join(root, "release");
   await rename(join(root, "dist"), moved);
   if (process.platform === "win32") {
@@ -63,10 +64,10 @@ it("checks files with the same basename after moving the output tree", async () 
 
 it.skipIf(process.platform === "win32")("escapes newlines and backslashes exactly like native checksum tools", async () => {
   const paths = [join(root, "line\nbreak.txt"), join(root, "back\\slash.txt")].sort();
-  const artifacts: Artifact.File[] = [];
+  const artifacts: Artifact.HashedFile[] = [];
   for (const path of paths) {
     await writeFile(path, "checksum payload\n");
-    artifacts.push(await run(Artifact.file(path, producer)));
+    artifacts.push(await run(Artifact.file(path, producer).pipe(Effect.flatMap(Artifact.withSha256))));
   }
   const checksum = await run(Checksums.write({ artifacts, outfile: join(root, "dist", "SHA256SUMS") }));
   const command = process.platform === "darwin" ? "shasum" : "sha256sum";
@@ -84,8 +85,8 @@ it("verifies listed files after the tree moves and pinpoints the failing path", 
   const x64Path = join(root, "dist", "x64", "cli");
   await writeFile(armPath, "arm executable\n");
   await writeFile(x64Path, "x64 executable\n");
-  const arm = await run(Artifact.file(armPath, producer));
-  const x64 = await run(Artifact.file(x64Path, producer));
+  const arm = await run(Artifact.file(armPath, producer).pipe(Effect.flatMap(Artifact.withSha256)));
+  const x64 = await run(Artifact.file(x64Path, producer).pipe(Effect.flatMap(Artifact.withSha256)));
   const sums = await run(Checksums.write({ artifacts: [arm, x64], outfile: join(root, "dist", "SHA256SUMS") }));
   await run(Checksums.verify(sums));
   const moved = join(root, "release");
@@ -96,16 +97,16 @@ it("verifies listed files after the tree moves and pinpoints the failing path", 
   expect(await run(Checksums.verify(relocated).pipe(Effect.flip))).toMatchObject({ reason: "changed", path: join(moved, "x64", "cli") });
   await rm(join(moved, "arm64", "cli"));
   expect(await run(Checksums.verify(relocated).pipe(Effect.flip))).toMatchObject({ reason: "not-found", path: join(moved, "arm64", "cli") });
-  await writeFile(relocated.path, "0", { flag: "a" });
-  expect(await run(Checksums.verify(relocated).pipe(Effect.flip))).toMatchObject({ reason: "changed", path: relocated.path });
+  await writeFile(relocated.path, "invalid checksum listing\n");
+  expect(await run(Checksums.verify(relocated).pipe(Effect.flip))).toMatchObject({ reason: "invalid-metadata", path: relocated.path });
 });
 
 it.skipIf(process.platform === "win32")("verifies names that need escaping", async () => {
   const paths = [join(root, "line\nbreak.txt"), join(root, "back\\slash.txt")];
-  const artifacts: Artifact.File[] = [];
+  const artifacts: Artifact.HashedFile[] = [];
   for (const path of paths) {
     await writeFile(path, "checksum payload\n");
-    artifacts.push(await run(Artifact.file(path, producer)));
+    artifacts.push(await run(Artifact.file(path, producer).pipe(Effect.flatMap(Artifact.withSha256))));
   }
   const checksum = await run(Checksums.write({ artifacts, outfile: join(root, "dist", "SHA256SUMS") }));
   await run(Checksums.verify(checksum));
