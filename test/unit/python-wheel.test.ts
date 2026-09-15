@@ -437,7 +437,7 @@ describe("wheels from real artifacts", () => {
     expect(chunks.reduce((total, bytes) => total + bytes, 0)).toBe(contents.length);
     expect(Math.max(...chunks)).toBeLessThanOrEqual(64 * 1024);
     const files = await readZip(wheel.path);
-    expect(files.get("data.bin")!.contents).toEqual(contents);
+    expect(files.get("data.bin")!.contents.equals(contents)).toBe(true);
     expect(files.get(`${info}/RECORD`)!.contents.toString()).toContain(
       `data.bin,sha256=${createHash("sha256").update(contents).digest("base64url")},${contents.length}\n`,
     );
