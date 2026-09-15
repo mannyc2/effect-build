@@ -1,7 +1,7 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Path } from "effect";
 import { KeyValueStore } from "effect/unstable/persistence";
-import { Artifact, Cache, Checksums, Commit, Target } from "effect-build";
+import { Artifact, Cache, Checksums, Commit, Target, Tool } from "effect-build";
 import * as Archive from "effect-build-archives";
 import * as Bun from "effect-build-bun";
 
@@ -12,8 +12,8 @@ const version = "0.8.0";
 const targets = ["linux-x64", "linux-x64-musl", "linux-arm64", "darwin-arm64", "windows-x64"] as const;
 
 const release = Effect.gen(function*() {
-  const source = yield* Artifact.directory("src", { name: "hello-source", version });
-  const tool = yield* Bun.resolved;
+  const source = yield* Artifact.directory("src", { name: "hello-source", version }).pipe(Effect.flatMap(Artifact.withSha256));
+  const tool = yield* Bun.resolved.pipe(Effect.flatMap(Tool.withSha256));
   return yield* Commit.atomic("dist", (staged) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
@@ -39,7 +39,7 @@ const release = Effect.gen(function*() {
           ? Archive.zip({ entries, outfile: `${outfile}.zip` })
           : Archive.tarGz({ entries, outfile: `${outfile}.tar.gz` });
       }), { concurrency: 2 });
-    yield* Checksums.write({ artifacts: archives, outfile: path.join(staged, "SHA256SUMS") });
+    yield* Checksums.write({ artifacts: yield* Effect.forEach(archives, Artifact.withSha256), outfile: path.join(staged, "SHA256SUMS") });
     return yield* Artifact.directory(staged, { name, version });
     // Sibling staging builds the tree at its final depth; a failed target never replaces any part of dist/.
   }), { staging: "sibling" });

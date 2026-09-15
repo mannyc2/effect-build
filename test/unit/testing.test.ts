@@ -23,7 +23,7 @@ describe("public testing fixtures", () => {
     "writes a verified executable for %s",
     async (target) =>
       run(Effect.scoped(Effect.gen(function*() {
-        const artifact = yield* TestArtifact.executable(target);
+        const artifact = yield* TestArtifact.executable(target).pipe(Effect.flatMap(Artifact.withSha256));
         expect(artifact.target).toBe(target);
         expect(artifact.format).toBe(Target.parts(target).format);
         expect(yield* Artifact.verify(artifact)).toEqual(artifact);
@@ -34,7 +34,7 @@ describe("public testing fixtures", () => {
     "writes a fat executable for %s",
     async (target) =>
       run(Effect.scoped(Effect.gen(function*() {
-        const artifact = yield* TestArtifact.executable(target, { fat: true });
+        const artifact = yield* TestArtifact.executable(target, { fat: true }).pipe(Effect.flatMap(Artifact.withSha256));
         expect(artifact.target).toBe(target);
         expect(yield* Artifact.verify(artifact)).toEqual(artifact);
       }))),
@@ -44,8 +44,8 @@ describe("public testing fixtures", () => {
     run(Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const roots = yield* Effect.scoped(Effect.gen(function*() {
-        const first = yield* TestArtifact.tree({ "z.txt": "last", "folder/a.txt": "first" });
-        const second = yield* TestArtifact.tree({ "folder/a.txt": "first", "z.txt": "last" });
+        const first = yield* TestArtifact.tree({ "z.txt": "last", "folder/a.txt": "first" }).pipe(Effect.flatMap(Artifact.withSha256));
+        const second = yield* TestArtifact.tree({ "folder/a.txt": "first", "z.txt": "last" }).pipe(Effect.flatMap(Artifact.withSha256));
         expect(first.entries.map((entry) => entry.path)).toEqual(["folder", "folder/a.txt", "z.txt"]);
         expect(first.sha256).toBe(second.sha256);
         if (process.platform !== "win32") expect(first.rootMode).toBe(0o755);
@@ -61,7 +61,7 @@ describe("public testing fixtures", () => {
     "preserves tree symlinks without following them",
     async () =>
       run(Effect.scoped(Effect.gen(function*() {
-        const tree = yield* TestArtifact.tree({ file: "contents", alias: { link: "file" } });
+        const tree = yield* TestArtifact.tree({ file: "contents", alias: { link: "file" } }).pipe(Effect.flatMap(Artifact.withSha256));
         expect(tree.entries[0]).toMatchObject({ path: "alias", kind: "symlink", linkTarget: "file" });
         expect(yield* Artifact.verify(tree)).toEqual(tree);
       }))),
@@ -78,8 +78,8 @@ describe("public testing fixtures", () => {
 
   it("copies and verifies real host executable bytes", async () =>
     run(Effect.scoped(Effect.gen(function*() {
-      const host = yield* TestArtifact.host();
-      const original = yield* Artifact.executable(process.execPath, host.producedBy);
+      const host = yield* TestArtifact.host().pipe(Effect.flatMap(Artifact.withSha256));
+      const original = yield* Artifact.executable(process.execPath, host.producedBy).pipe(Effect.flatMap(Artifact.withSha256));
       expect(host.sha256).toBe(original.sha256);
       expect(host.target).toBe(original.target);
     }))), 30_000);
@@ -97,7 +97,8 @@ describe("public testing fixtures", () => {
         Effect.provide(fixture.spawner),
       );
       expect(resolved).toMatchObject({ version: "2.0.0", name: "fixture" });
-      expect(resolved.sha256).not.toBe("0".repeat(64));
+      expect(resolved).not.toHaveProperty("sha256");
+      expect((yield* Tool.withSha256(resolved)).sha256).toMatch(/^[a-f0-9]{64}$/);
       expect(resolved.bytes).toBeGreaterThan(0);
     })));
   });
@@ -240,7 +241,7 @@ describe("filesystem faults and assertions", () => {
           Effect.andThen(Artifact.file(path, { name: "fixture", version: "1.0.0" })),
         );
       const result = yield* expectReproducible((path) => produce(path, "same"));
-      expect(yield* Artifact.verify(result)).toEqual(result);
+      expect(yield* Artifact.withSha256(result).pipe(Effect.flatMap(Artifact.verify), Effect.as(result))).toEqual(result);
       let count = 0;
       expect(yield* expectReproducible((path) => produce(path, String(count++))).pipe(Effect.flip)).toMatchObject({
         _tag: "ReproducibilityFailure",

@@ -1,8 +1,7 @@
-import { Config, Context, Crypto, Effect, FileSystem, Layer, Path, Schema, Scope, Stream } from "effect";
+import { Config, Context, Effect, FileSystem, Layer, Path, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { Range, satisfies as semverSatisfies } from "semver";
-import type * as Artifact from "./Artifact.js";
-import { file } from "./Artifact.js";
+import * as Artifact from "./Artifact.js";
 
 /** Anything handed to a tool or the filesystem: NUL cannot cross the exec boundary, and empty text names nothing. */
 export const argumentIssue = (value: string): string | undefined =>
@@ -14,8 +13,13 @@ export interface Resolved {
   readonly path: string;
   readonly version: string;
   readonly bytes: number;
-  readonly sha256: string;
 }
+
+export type WithSha256<A extends Resolved = Resolved> = Omit<A, "path" | "bytes" | "sha256"> & {
+  readonly path: string;
+  readonly bytes: number;
+  readonly sha256: Artifact.Sha256;
+};
 
 export class NotFound extends Schema.TaggedError<NotFound>()("ToolNotFound", {
   tool: Schema.String,
@@ -131,7 +135,7 @@ export interface ResolveOptions extends LocateOptions, EnvironmentOptions {
   readonly parseVersion?: ((completion: Completion, path: string) => VersionResult) | undefined;
 }
 
-export type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
+export type Env = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
 export interface Probe { readonly completion: Completion; readonly path: string }
 /** An extractor may inspect native binary resources through FileSystem, as SignTool requires. */
 export type VersionResult = string | undefined | Effect.Effect<string | undefined, ProbeFailed, FileSystem.FileSystem | Path.Path>;
@@ -338,13 +342,12 @@ export const locate = Effect.fn("Tool.locate")(function*(
 
 const firstToken = (completion: Completion): string | undefined => text(completion.stdout).trim().split(/\s+/u)[0];
 
-/** Locate, hash, and probe once per layer; later runs use the recorded path without rechecking bytes. */
+/** Locate and probe once per layer; later runs use the recorded path. */
 export const resolve = Effect.fn("Tool.resolve")(function*(options: ResolveOptions): Effect.fn.Return<Resolved, NotFound | ProbeFailed, Env> {
   const path = yield* locate(options);
   const probeFailed = (detail: string) => new ProbeFailed({ tool: options.name, path, detail });
-  // Compilers can be hundreds of megabytes; hash them in bounded chunks.
-  const identity = yield* file(path, { name: options.name, version: "unprobed" }).pipe(Effect.mapError((e) => probeFailed(e.message)));
-  const provisional: Resolved = { name: options.name, path, version: "", bytes: identity.bytes, sha256: identity.sha256 };
+  const identity = yield* Artifact.file(path, { name: options.name, version: "unprobed" }).pipe(Effect.mapError((e) => probeFailed(e.message)));
+  const provisional: Resolved = { name: options.name, path, version: "", bytes: identity.bytes };
   const completion = yield* run(provisional, options.versionArgs ?? ["--version"], options).pipe(
     Effect.mapError((e) => probeFailed(e instanceof SpawnFailed ? e.detail : e.message)),
   );
@@ -353,6 +356,13 @@ export const resolve = Effect.fn("Tool.resolve")(function*(options: ResolveOptio
   if (version === undefined || version.length === 0) return yield* probeFailed("could not read version");
   return { ...provisional, version };
 });
+
+/** Record the current executable's SHA-256 explicitly, for cache keys or checksum consumers. */
+export const withSha256 = <A extends Resolved>(tool: A): Effect.Effect<WithSha256<A>, Artifact.ArtifactError, FileSystem.FileSystem | Path.Path> =>
+  Artifact.file(tool.path, producedBy(tool)).pipe(
+    Effect.flatMap(Artifact.withSha256),
+    Effect.map((artifact) => ({ ...tool, path: artifact.path, bytes: artifact.bytes, sha256: artifact.sha256 })),
+  );
 
 type Version = readonly [number, number, number];
 
@@ -392,9 +402,9 @@ export const check = (tool: Resolved, operation: string, constraint: Constraint)
     ? Effect.fail(new VersionUnsupported({ tool: tool.name, version: tool.version, supported: constraint.range, operation, reason: constraint.reason }))
     : Effect.void;
 
-export const producedBy = (tool: Resolved): Artifact.Producer => ({
+export const producedBy = (tool: Resolved & { readonly sha256?: Artifact.Sha256 }): Artifact.Producer => ({
   name: tool.name,
   version: tool.version,
   path: tool.path,
-  sha256: tool.sha256,
+  ...(tool.sha256 === undefined ? {} : { sha256: tool.sha256 }),
 });

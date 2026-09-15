@@ -14,7 +14,6 @@ const tool = (name: string, version: string): Tool.Resolved => ({
   version,
   path: "/not-a-tool",
   bytes: 0,
-  sha256: "0".repeat(64),
 });
 type Env = NodeServices.NodeServices | Bun.Bun | Deno.Deno | NodeSea.NodeSea;
 const run = <A, E>(effect: Effect.Effect<A, E, Env>) =>

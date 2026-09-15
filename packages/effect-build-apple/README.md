@@ -25,13 +25,14 @@ but cannot staple one to them, so Gatekeeper fetches it.
 
 ```ts
 import { Effect } from "effect";
+import { Artifact } from "effect-build";
 import * as Apple from "effect-build-apple";
 import * as Archive from "effect-build-archives";
 import * as Bun from "effect-build-bun";
 
 const darwin = (executable: Artifact.Executable, certificateSha1: string, credential: Apple.Notary.Credential) =>
   Effect.gen(function*() {
-    const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements });
+    const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements }).pipe(Effect.flatMap(Artifact.withSha256));
     const submission = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
     const acceptance = yield* Apple.Notary.acceptedReference(submission);
     const assessed = yield* Apple.assess({ artifact: signed, acceptance });
@@ -78,7 +79,7 @@ const app = (executable: Artifact.Executable, certificateSha1: string, credentia
       volumeName: "Example",
       applicationsLink: true,
     });
-    const signedDmg = yield* Apple.sign({ artifact: dmg, certificateSha1 });
+    const signedDmg = yield* Apple.sign({ artifact: dmg, certificateSha1 }).pipe(Effect.flatMap(Artifact.withSha256));
     const submission = yield* Apple.Notary.notarize({ artifact: signedDmg, credential });
     const acceptance = yield* Apple.Notary.acceptedReference(submission);
     const stapled = yield* Apple.staple({ artifact: signedDmg, acceptance, outfile: "dist/notarized/example.dmg" });
@@ -99,8 +100,8 @@ const app = (executable: Artifact.Executable, certificateSha1: string, credentia
 | `Notary.notarize({ artifact, credential, timeout?, cwd? })`                                                                                                              | `Notary.Submission` with its status               |
 | `Notary.submit`, `Notary.wait`, `Notary.info`, `Notary.log`                                                                                                       | The steps `Notary.notarize` composes, individually       |
 | `Notary.acceptedReference(result)`                                                                                                                                | `AcceptedReference`, or `NotaryResultNotAccepted` |
-| `staple({ artifact: SignedApp \| SignedDmg \| SignedPkg, acceptance, outdir? \| outfile? })`                                                                      | `StapledApp`, `StapledDmg`, `StapledPkg`          |
-| `assess({ artifact: Stapled })`, `assess({ artifact: SignedExecutable, acceptance })`                                                                             | The same artifact, after Gatekeeper accepts it    |
+| `staple({ artifact: HashedSignedApp \| HashedSignedDmg \| HashedSignedPkg, acceptance, outdir? \| outfile? })`                                                                      | `StapledApp`, `StapledDmg`, `StapledPkg`          |
+| `assess({ artifact: Stapled })`, `assess({ artifact: HashedSignedExecutable, acceptance })`                                                                             | The same artifact, after Gatekeeper accepts it    |
 
 Files take `outfile` and apps `outdir`; every producing operation also takes `atomic`, `onExists`,
 and `prefix`. `sign` and `staple` default to the source path, replaced through staging unless
@@ -115,6 +116,12 @@ Products and signatures are refinements of the core artifacts: `SignedApp` is an
 and stapled products add `ticket`. `Artifact.encode` drops these fields on purpose; persist them
 with the exported schemas (`Apple.SignedExecutable`, `Apple.Notary.Submission`, and the
 rest) through `Schema.encodeSync`.
+
+`sign`, `dmg`, `pkg`, and `staple` return records without content hashes. Call
+`Artifact.withSha256` explicitly before notarization: its persisted reference names those exact
+bytes. Stapling consumes that identity and returns a fresh unhashed record because it changes
+the bytes. `HashedSignedApp`, `HashedSignedDmg`, `HashedSignedPkg`, and
+`HashedSignedExecutable` are the schemas for those explicit identities.
 
 ## Identities and credentials
 

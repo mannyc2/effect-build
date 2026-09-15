@@ -1,7 +1,6 @@
 # effect-build
 
-effect-build runs build tools as composable Effect programs. Producers return verified,
-hashed artifact records; queries return values; remote operations return typed references
+effect-build runs build tools as composable Effect programs. Producers return plain artifact records; hashing is an explicit schema refinement; queries return values; remote operations return typed references
 and outcomes when they change or attest to bytes. Publishing belongs to ts-release.
 
 ## Working here
@@ -16,7 +15,8 @@ and outcomes when they change or attest to bytes. Publishing belongs to ts-relea
 
 1. **One artifact type.** `Artifact.File | Artifact.Executable | Artifact.Directory`.
    Every producer returns one of these and composes through these records. No package defines its own
-   identity, digest, path, or size type. `bytes` is a `number`.
+   identity, digest, path, or size type. `bytes` is a `number`. Core `Hashed*` schemas add SHA-256;
+   ordinary producers never hash implicitly. Integrity-dependent consumers require those refinements.
 2. **Defenses are combinators or options, never services.** `Commit.atomic`,
    `Executable.expectTarget`, `Tool.requireVersion`, `Artifact.verify`. If you need
    a service to hold a decision, make a combinator instead.

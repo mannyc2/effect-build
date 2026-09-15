@@ -14,7 +14,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
 const write = (path: string, contents: string) => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.writeFileString(path, contents);
-  return yield* Artifact.file(path, producer);
+  return yield* Artifact.file(path, producer).pipe(Effect.flatMap(Artifact.withSha256));
 });
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "effect-build-commit-")); });
@@ -200,7 +200,7 @@ describe("atomic output", () => {
     const outdir = join(root, "release");
     await mkdir(outdir);
     await writeFile(join(outdir, "cli"), "previous release");
-    const previous = await run(Artifact.directory(outdir, producer));
+    const previous = await run(Artifact.directory(outdir, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const failure = await run(Commit.atomic(outdir, (staged) => Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -243,7 +243,7 @@ describe("atomic output", () => {
     const outdir = join(root, "release");
     await mkdir(outdir);
     await writeFile(join(outdir, "previous"), "recover me");
-    const previous = await run(Artifact.directory(outdir, producer));
+    const previous = await run(Artifact.directory(outdir, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const failure = await run(Commit.atomic(outdir, (staged) => Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       yield* fs.makeDirectory(staged);

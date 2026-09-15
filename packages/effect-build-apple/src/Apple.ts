@@ -1,9 +1,9 @@
-import { Context, Crypto, FileSystem, Path } from "effect";
+import { Context, FileSystem, Path } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { Tool } from "effect-build";
 
 export class Apple extends Context.Service<Apple, Tool.Service>()("effect-build-apple/Apple") {}
-export type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
+export type Env = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
 export const { name, layer, supported, tested, constraints, requirements, resolved, testLayer } = Tool.provider(Apple, {
   name: "xcrun",
   version: {

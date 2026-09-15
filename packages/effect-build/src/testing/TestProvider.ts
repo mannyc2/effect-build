@@ -1,10 +1,10 @@
-import { Cause, Crypto, Deferred, Effect, Exit, Fiber, FileSystem, Path, Schema, Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, Schema, Scope } from "effect";
 import * as Artifact from "../Artifact.js";
 import type * as Commit from "../Commit.js";
 import * as Executable from "../Executable.js";
 import * as Tool from "../Tool.js";
 
-export type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+export type Fs = FileSystem.FileSystem | Path.Path;
 
 export class ConformanceFailure extends Schema.TaggedError<ConformanceFailure>()("ConformanceFailure", {
   operation: Schema.String,
@@ -99,7 +99,7 @@ export const conformance = <A extends Artifact.Artifact, R, E, R0>(
       let release = yield* Deferred.make<void>();
       const observations: string[] = [];
       const violations: string[] = [];
-      let previous: Artifact.Artifact | undefined;
+      let previous: Artifact.HashedArtifact | undefined;
       const control: Control = {
         directory,
         enter: (output) =>
@@ -170,10 +170,10 @@ export const conformance = <A extends Artifact.Artifact, R, E, R0>(
         if (subject.kind === "directory") {
           yield* fs.makeDirectory(destination);
           yield* fs.writeFileString(p.join(destination, "previous"), "previous output");
-          previous = yield* Artifact.directory(destination, { name: "fixture", version: "1" });
+          previous = yield* Artifact.directory(destination, { name: "fixture", version: "1" }).pipe(Effect.flatMap(Artifact.withSha256));
         } else {
           yield* fs.writeFileString(destination, "previous output");
-          previous = yield* Artifact.file(destination, { name: "fixture", version: "1" });
+          previous = yield* Artifact.file(destination, { name: "fixture", version: "1" }).pipe(Effect.flatMap(Artifact.withSha256));
         }
       });
       const observed = Effect.gen(function*() {
@@ -285,7 +285,9 @@ export const conformance = <A extends Artifact.Artifact, R, E, R0>(
         name,
         "record kind or absolute output path differs",
       );
-      yield* Artifact.verify(artifact);
+      const identity = yield* Artifact.withSha256(artifact);
+      yield* check(JSON.stringify(Artifact.encode([identity])) === JSON.stringify(Artifact.encode([artifact])), name, "record metadata differs from disk");
+      yield* Artifact.verify(identity);
       if (fixture.provider !== undefined) {
         const expected = Tool.producedBy(fixture.provider.tool);
         yield* check(
@@ -306,7 +308,7 @@ export const conformance = <A extends Artifact.Artifact, R, E, R0>(
       }
       if (artifact.kind === "directory") {
         // Windows stat reports native permission approximations; chmod cannot establish POSIX 0755.
-        // Artifact.verify above still checks the recorded rootMode against disk on every host.
+        // The core record comparison above checks rootMode against disk on every host.
         if (typeof process === "undefined" || process.platform !== "win32") {
           yield* check(
             artifact.rootMode === (subject.rootMode ?? 0o755),
@@ -322,7 +324,7 @@ export const conformance = <A extends Artifact.Artifact, R, E, R0>(
         );
         const again = yield* output(p.join(directory, `again-${subject.outputName ?? "output"}`), options);
         yield* check(
-          again.sha256 === artifact.sha256,
+          (yield* Artifact.withSha256(again)).sha256 === identity.sha256,
           name,
           "directory manifest differs between identical productions",
         );

@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Path, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Executable, Tool } from "effect-build";
 import { Buffer } from "node:buffer";
@@ -27,7 +27,7 @@ export class Failed extends Schema.TaggedError<Failed>()("NodeSeaFailed", {
   }
 }
 interface Options { readonly baseExecutable?: string | undefined }
-type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+type Fs = FileSystem.FileSystem | Path.Path;
 type Env = Fs | ChildProcessSpawner.ChildProcessSpawner;
 const parse = Tool.versionPattern(/^v(\S+)/u);
 const nodeVersion = { parse, supported: ">=22.0.0 <27.0.0", tested: ["22.0.0", "26.7.0"] };
@@ -81,12 +81,12 @@ export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Eff
     // Inputs and the blob always live separately, including when atomic output is disabled.
     const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-sea-" }).pipe(Effect.mapError(Artifact.ioError(outfile, "write")));
     const main = p.join(temporary, "main.cjs");
-    yield* Artifact.copyVerified(input.main, main);
+    yield* Artifact.copy(input.main, main);
     yield* Tool.run(tool, ["--check", main], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
     const assets: [string, string][] = [];
     for (const [key, artifact] of Object.entries(input.assets ?? {})) {
       const path = p.join(temporary, `asset-${assets.length}`);
-      yield* Artifact.copyVerified(artifact, path);
+      yield* Artifact.copy(artifact, path);
       assets.push([key, path]);
     }
     const blob = p.join(temporary, "sea.blob");

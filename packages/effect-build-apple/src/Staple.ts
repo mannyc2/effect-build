@@ -2,7 +2,7 @@ import { Effect, Path, Schema } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
 import { copyProduct, inspectProduct, outputPath, runNative, verifySignature } from "./internal.js";
-import { SignedProduct, type SignedApp, type SignedDmg, type SignedPkg, type StapledApp, type StapledDmg, type StapledPkg, type StapledProduct } from "./Model.js";
+import { HashedSignedProduct, type HashedSignedApp, type HashedSignedDmg, type HashedSignedPkg, type StapledApp, type StapledDmg, type StapledPkg, type StapledProduct } from "./Model.js";
 import { AcceptedReference } from "./Notary.js";
 
 interface StapleOptions extends Commit.ProducerOptions, Tool.EnvironmentOptions {
@@ -10,10 +10,10 @@ interface StapleOptions extends Commit.ProducerOptions, Tool.EnvironmentOptions 
   readonly cwd?: string | undefined;
 }
 export interface StapleAppInput extends StapleOptions {
-  readonly artifact: SignedApp;
+  readonly artifact: HashedSignedApp;
   readonly outdir?: string | undefined;
 }
-export interface StapleFileInput<P extends SignedDmg | SignedPkg = SignedDmg | SignedPkg> extends StapleOptions {
+export interface StapleFileInput<P extends HashedSignedDmg | HashedSignedPkg = HashedSignedDmg | HashedSignedPkg> extends StapleOptions {
   readonly artifact: P;
   readonly outfile?: string | undefined;
 }
@@ -22,12 +22,12 @@ export type StapleError = Tool.InputInvalid | Artifact.ArtifactError | Commit.Co
 
 const invalid = (reason: unknown) => new Tool.InputInvalid({ operation: "Apple.staple", reason: String(reason) });
 export function staple(input: StapleAppInput): Effect.Effect<StapledApp, StapleError, Apple | Env>;
-export function staple(input: StapleFileInput<SignedDmg>): Effect.Effect<StapledDmg, StapleError, Apple | Env>;
-export function staple(input: StapleFileInput<SignedPkg>): Effect.Effect<StapledPkg, StapleError, Apple | Env>;
+export function staple(input: StapleFileInput<HashedSignedDmg>): Effect.Effect<StapledDmg, StapleError, Apple | Env>;
+export function staple(input: StapleFileInput<HashedSignedPkg>): Effect.Effect<StapledPkg, StapleError, Apple | Env>;
 export function staple(input: StapleInput): Effect.Effect<StapledProduct, StapleError, Apple | Env>;
 export function staple(input: StapleInput): Effect.Effect<StapledProduct, StapleError, Apple | Env> {
   return Effect.gen(function*() {
-    yield* Schema.decodeUnknownEffect(SignedProduct)(input.artifact).pipe(Effect.mapError(invalid));
+    yield* Schema.decodeUnknownEffect(HashedSignedProduct)(input.artifact).pipe(Effect.mapError(invalid));
     yield* Schema.decodeUnknownEffect(AcceptedReference)(input.acceptance).pipe(Effect.mapError(invalid));
     const source = input.artifact;
     const accepted = input.acceptance.artifact;
@@ -41,10 +41,10 @@ export function staple(input: StapleInput): Effect.Effect<StapledProduct, Staple
     const requested = "outdir" in input ? input.outdir : "outfile" in input ? input.outfile : undefined;
     const destination = yield* outputPath("Apple.staple", requested ?? source.path, `.${source.product}`, input.cwd);
     const p = yield* Path.Path;
-    yield* Artifact.verify(source);
     const produce = (out: string) => Effect.gen(function*() {
       // Direct output can intentionally staple in place; copying a file over itself would truncate it.
       if (out !== p.resolve(source.path)) yield* copyProduct("Apple.staple", source, out, input);
+      yield* Artifact.verify({ ...source, path: out });
       yield* verifySignature(source, out, input);
       yield* runNative("stapler", ["staple", out], input);
       yield* runNative("stapler", ["validate", out], input);

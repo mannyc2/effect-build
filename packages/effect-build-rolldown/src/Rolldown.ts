@@ -1,4 +1,4 @@
-import { Crypto, Effect, FileSystem, Path, type Scope } from "effect";
+import { Effect, FileSystem, Path, type Scope } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import * as rolldown from "rolldown";
 import { transform as nativeTransform, type TransformOptions, type TransformResult, type TsconfigCache } from "rolldown/utils";
@@ -61,7 +61,7 @@ export type DirectoryOptions = rolldown.InputOptions & Commit.ProducerOptions & 
 export const buildToDirectory = Effect.fn("Rolldown.buildToDirectory")((input: DirectoryOptions): Effect.Effect<
   Artifact.Directory,
   Failed | Tool.InputInvalid | Artifact.ArtifactError | Commit.CommitError,
-  FileSystem.FileSystem | Path.Path | Crypto.Crypto
+  FileSystem.FileSystem | Path.Path
 > => Effect.gen(function*() {
   if (Tool.argumentIssue(input.outdir) !== undefined || input.output?.dir !== undefined || input.output?.file !== undefined) {
     return yield* new Tool.InputInvalid({

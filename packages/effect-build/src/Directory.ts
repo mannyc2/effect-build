@@ -1,4 +1,4 @@
-import { Crypto, Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, Schema } from "effect";
 import * as Artifact from "./Artifact.js";
 import * as Commit from "./Commit.js";
 import * as Layout from "./Layout.js";
@@ -16,7 +16,7 @@ export interface AssembleInput extends Commit.ProducerOptions {
 }
 
 export type AssembleError = Tool.InputInvalid | Artifact.ArtifactError | Commit.CommitError;
-type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+type Fs = FileSystem.FileSystem | Path.Path;
 type DirectoryNode = { readonly kind: "directory"; readonly path: string; readonly mode: number };
 type Node = DirectoryNode
   | { readonly kind: "file"; readonly path: string; readonly mode: number; readonly artifact: Artifact.Regular }
@@ -24,7 +24,7 @@ type Node = DirectoryNode
 
 const invalid = (reason: string, path?: string) => new Tool.InputInvalid({ operation: "Directory.assemble", reason, ...(path === undefined ? {} : { path }) });
 
-/** Assemble verified inputs into one tree, preserving directory members' modes and symlinks.
+/** Assemble declared inputs into one tree, preserving directory members' modes and symlinks.
  * Exact shared directories merge when their modes agree; every other collision fails before output changes. */
 export const assemble = Effect.fn("Directory.assemble")(function*(input: AssembleInput): Effect.fn.Return<Artifact.Directory, AssembleError, Fs> {
   const issue = Tool.argumentIssue(input.outdir);
@@ -38,7 +38,8 @@ export const assemble = Effect.fn("Directory.assemble")(function*(input: Assembl
     || path.startsWith(directory.endsWith(p.sep) ? directory : `${directory}${p.sep}`);
   const nodes: Node[] = [];
   for (const entry of input.entries) {
-    const artifact = yield* Artifact.verify(entry.artifact);
+    const artifact = yield* Schema.decodeUnknownEffect(Artifact.Artifact)(entry.artifact).pipe(Effect.mapError((error) =>
+      new Artifact.ArtifactError({ path: entry.artifact.path, reason: "invalid-metadata", detail: String(error) })));
     // Direct sibling output removes the old tree before production. It must not delete any part of an input.
     const source = p.resolve(artifact.path);
     if (directDestination !== undefined) {
@@ -59,7 +60,7 @@ export const assemble = Effect.fn("Directory.assemble")(function*(input: Assembl
       else if (member.kind === "symlink") nodes.push({ kind: "symlink", path, linkTarget: member.linkTarget });
       else nodes.push({ kind: "file", path, mode: member.mode, artifact: {
         kind: "file", path: p.join(source, ...member.path.split("/")), bytes: member.bytes,
-        sha256: member.sha256, producedBy: artifact.producedBy,
+        producedBy: artifact.producedBy,
       } });
     }
   }
@@ -96,7 +97,7 @@ export const assemble = Effect.fn("Directory.assemble")(function*(input: Assembl
       const path = p.join(root, ...node.path.split("/"));
       if (node.kind === "symlink") yield* fs.symlink(node.linkTarget, path).pipe(Effect.mapError(write(path)));
       else {
-        yield* Artifact.copyVerified(node.artifact, path);
+        yield* Artifact.copy(node.artifact, path);
         yield* fs.chmod(path, node.mode).pipe(Effect.mapError(write(path)));
       }
     }

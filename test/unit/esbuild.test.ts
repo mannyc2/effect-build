@@ -57,7 +57,7 @@ describe("esbuild native operations", () => {
     const input = { absWorkingDir: root, entryPoints: ["hello.ts"], outdir: "dist", bundle: true, logLevel: "silent" } as const;
     const artifact = await run(Esbuild.buildToDirectory({ ...input, entryPoints: [...input.entryPoints] }));
     expect(artifact.path).toBe(join(root, "dist"));
-    expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+    expect(await run(Artifact.withSha256(artifact).pipe(Effect.flatMap(Artifact.verify), Effect.as(artifact)))).toEqual(artifact);
     const previous = await readFile(join(artifact.path, "hello.js"), "utf8");
     await writeFile(source, "const = ;\n");
     const failure = await run(Esbuild.buildToDirectory({ ...input, entryPoints: [...input.entryPoints] }).pipe(Effect.flip));
@@ -74,7 +74,7 @@ describe("esbuild native operations", () => {
     expect(both.entries.map((entry) => entry.path)).toEqual(["hello.js", "other.js"]);
     const one = await run(Esbuild.buildToDirectory({ entryPoints: [source], outdir, atomic: false, logLevel: "silent" }));
     expect(one.entries.map((entry) => entry.path)).toEqual(["hello.js"]);
-    expect(await run(Artifact.verify(one))).toEqual(one);
+    expect(await run(Artifact.withSha256(one).pipe(Effect.flatMap(Artifact.verify), Effect.as(one)))).toEqual(one);
     expect(await readdir(outdir)).toEqual(["hello.js"]);
   });
 

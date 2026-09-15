@@ -15,7 +15,7 @@ const layer = Bun.layer({ executable: process.env.EFFECT_BUILD_BUN, version: "^1
 ```
 
 - `layer({ executable?, version? })` chooses the binary: an explicit path, or the first runnable
-  match on `PATH`. It resolves symlinks, hashes the file, runs its version probe once, and checks
+  match on `PATH`. It resolves symlinks, records file metadata, runs its version probe once, and checks
   the version against `version`, which defaults to the package's `supported` range. Later
   operations use the recorded path without checking it again. `executable: undefined` means
   `PATH`, so forwarding an unset environment variable needs no branch.
@@ -25,7 +25,7 @@ const layer = Bun.layer({ executable: process.env.EFFECT_BUILD_BUN, version: "^1
 - `version` accepts any npm semver range (`^1.4.2`, `>=1.3.14 <2`, `1.3.14 || 1.4.2`) or a
   predicate on the version string. Prereleases match only a range that names a prerelease. An
   invalid range fails through `ToolVersionUnsupported` rather than throwing.
-- Operations take `outfile` or `outdir`, run the tool against the resolved record, verify their
+- Operations take `outfile` or `outdir`, run the tool against the resolved record, validate their
   output, and commit it through the [atomic output](errors.md#atomic-output) options every
   producer shares.
 - Layers need platform services: `NodeServices.layer` from `@effect/platform-node`, or
@@ -35,7 +35,7 @@ const layer = Bun.layer({ executable: process.env.EFFECT_BUILD_BUN, version: "^1
 A binary provider is `Tool.provider(Service, spec)`: its declaration owns the tool name,
 version extractor, supported range, tested versions, operation constraints, and host requirements.
 `resolved` reads the tool from the service; `testLayer({ tool, ...extra })` installs an existing
-record. `extend` adds toolchain state such as Deno's hashed `denort` or Node SEA's base executable.
+record. `extend` adds toolchain state such as Deno's file-backed `denort` or Node SEA's base executable.
 An extractor normally uses `Tool.versionPattern`; an Effect extractor can inspect the resolved
 path when the native version lives in binary resources.
 
@@ -144,3 +144,6 @@ The compiler's host and the host running Effect are separate choices: a Node pro
 Bun and Deno on any host they support, but a cross-compiled binary still needs a matching host to
 run. The [compatibility](compatibility.md) page has the evidence per operation, and
 [CONTRIBUTING.md](../CONTRIBUTING.md) the commands that run the real-tool tests.
+
+Tool byte identity is optional: compose `Bun.resolved.pipe(Effect.flatMap(Tool.withSha256))`
+when a caller needs it. Resolving a provider does not read the compiler for hashing.

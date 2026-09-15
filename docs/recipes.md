@@ -23,8 +23,8 @@ and a runtime (`NodeRuntime.runMain`), as in [getting started](getting-started.m
 
 ## Share one compiler across operations
 
-Provide a provider layer once, around a program that uses it many times. The tool is located,
-hashed, and probed once; every operation inside runs against that record.
+Provide a provider layer once, around a program that uses it many times. The tool is located
+and probed once; every operation inside runs against that record.
 
 ```ts
 const build = Effect.gen(function*() {
@@ -112,14 +112,16 @@ const release = Commit.atomic("dist", (staged) =>
         target,
         atomic: false,
       }), { concurrency: 2 });
-    yield* Checksums.write({ artifacts: executables, outfile: path.join(staged, "SHA256SUMS") });
+    const identities = yield* Effect.forEach(executables, Artifact.withSha256);
+    yield* Checksums.write({ artifacts: identities, outfile: path.join(staged, "SHA256SUMS") });
     return yield* Artifact.directory(staged, { name: "cli", version: "1.0.0" });
   }), { staging: "sibling" }).pipe(Effect.provide(Bun.layer()));
 ```
 
 Inside a staged directory, `atomic: false` lets each producer write its final path directly;
-the outer commit provides the atomicity. `Checksums.write` records paths relative to the
-checksum file, so `sha256sum -c SHA256SUMS` keeps passing after the tree moves.
+the outer commit provides the atomicity. `Artifact.withSha256` explicitly hashes each executable;
+`Checksums.write` records those digests and paths relative to the checksum file, so
+`sha256sum -c SHA256SUMS` keeps passing after the tree moves.
 
 ## Archive per target
 
@@ -180,7 +182,7 @@ const sea = Effect.gen(function*() {
 ## Debian and RPM packages
 
 `config` is nFPM's own configuration, passed through as JSON. `contents` maps artifacts to
-absolute paths in the package; the operation copies verified bytes and checks that each
+absolute paths in the package; the operation copies current bytes and checks that each
 executable's OS and architecture match the format and `arch`.
 
 ```ts
@@ -229,7 +231,7 @@ fingerprints; credentials are a keychain profile, an App Store Connect API key, 
 ```ts
 const darwin = (executable: Artifact.Executable, certificateSha1: string, credential: Apple.Notary.Credential) =>
   Effect.gen(function*() {
-    const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements });
+    const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements }).pipe(Effect.flatMap(Artifact.withSha256));
     const submission = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
     const acceptance = yield* Apple.Notary.acceptedReference(submission);
     const assessed = yield* Apple.assess({ artifact: signed, acceptance });
@@ -240,15 +242,17 @@ const darwin = (executable: Artifact.Executable, certificateSha1: string, creden
   }).pipe(Effect.provide(Apple.layer()));
 ```
 
+`Artifact.withSha256` records the signed bytes that the notarization reference will identify.
 `Apple.Notary.notarize` uploads and waits. When a build might be interrupted, call `Apple.Notary.submit`,
 persist the returned reference with its schema, and `Apple.Notary.wait` for it later. App bundles,
-DMGs, and PKGs follow the same path and are stapled instead of assessed with a reference; the
+DMGs, and PKGs follow the same path and are stapled before assessment. Stapling changes the
+bytes and returns a fresh record without a digest. The
 [signing module](../examples/artifact-pipeline/src/signing.ts) has both flows.
 
 ## Sign a Windows executable
 
 `Windows.sign` takes a PE executable or an MSIX file, signs with SHA-256, adds an RFC 3161
-timestamp, verifies the signature, and returns the same artifact kind with fresh hashes. The
+timestamp, verifies the signature, and returns the same artifact kind with fresh metadata. The
 credential is a certificate-store thumbprint, a PFX file, or Azure Trusted Signing.
 
 ```ts
@@ -288,21 +292,25 @@ const sbom = (executable: Artifact.Executable) =>
 
 ## Keep the manifest and verify it later
 
-`Artifact.encode` projects a list of artifacts to plain JSON; `Artifact.decode` validates JSON
-back into records. Provider refinements such as signatures are left out on purpose; persist those
-with the provider's own schema. Records describe files at a moment in time, so verify before a
-later step trusts them.
+Call `Artifact.withSha256` to record content identities, then persist them with the
+`HashedArtifact` schema. `Artifact.verify` checks those recorded identities against the files
+later. Base `Artifact.encode` and `Artifact.decode` project metadata only, dropping digests and
+provider refinements; preserve richer signing records with their provider's schema.
 
 ```ts
+const HashedManifest = Schema.Array(Artifact.HashedArtifact);
+
 const writeManifest = (artifacts: readonly Artifact.Artifact[]) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.writeFileString("dist/manifest.json", JSON.stringify(Artifact.encode(artifacts), null, 2));
+    const identities = yield* Effect.forEach(artifacts, Artifact.withSha256);
+    const encoded = Schema.encodeSync(HashedManifest)(identities);
+    yield* fs.writeFileString("dist/manifest.json", JSON.stringify(encoded, null, 2));
   });
 
 const verifyManifest = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const artifacts = Artifact.decode(JSON.parse(yield* fs.readFileString("dist/manifest.json")));
+  const artifacts = Schema.decodeUnknownSync(HashedManifest)(JSON.parse(yield* fs.readFileString("dist/manifest.json")));
   return yield* Effect.forEach(artifacts, Artifact.verify);
 });
 ```
@@ -402,7 +410,7 @@ const cases = TestProvider.conformance({
     const tool = TestTool.resolved("upx", "4.2.0");
     const fake = TestSpawner.layer(({ args }) => Effect.gen(function*() {
       const output = args[args.indexOf("-o") + 1]!;
-      yield* Artifact.copyVerified(executable, output).pipe(Effect.orDie);
+      yield* Artifact.copy(executable, output).pipe(Effect.orDie);
       return { exitCode: (yield* control.enter(output)) ? 1 : 0 };
     }));
     const services = yield* Layer.build(Layer.merge(upx.testLayer({ tool }), fake));

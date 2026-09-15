@@ -49,7 +49,7 @@ describe("real Node SEA executables", () => {
       main: await observe(mainPath),
       assets: { message: await observe(assetPath), ["__proto__"]: await observe(binaryPath) },
       outfile: `dist/${name("hello")}`, cwd: root,
-    }));
+    }).pipe(Effect.flatMap(Artifact.withSha256)));
     expect(artifact.path).toBe(join(root, "dist", name("hello")));
     const base = await run(Executable.inspect(executable).pipe(Effect.flatMap((facts) => Executable.resolveTarget(executable, facts))));
     expect(artifact.target).toBe(base);
@@ -61,13 +61,15 @@ describe("real Node SEA executables", () => {
     expect(await readdir(join(root, "dist"))).toEqual([name("hello")]);
   }, 300_000);
 
-  it.each(["main", "asset"] as const)("rejects changed %s bytes while preserving existing output", async (changed) => {
-    const main = await observe(mainPath);
-    const asset = await observe(assetPath);
+  it.each(["main", "asset"] as const)("composes verification of changed %s bytes before assembly", async (changed) => {
+    const main = await run(Artifact.withSha256(await observe(mainPath)));
+    const asset = await run(Artifact.withSha256(await observe(assetPath)));
     const outfile = join(root, name("existing"));
     await writeFile(outfile, "previous output");
     await writeFile(changed === "main" ? mainPath : assetPath, "changed input\n");
-    const failure = await run(NodeSea.assemble({ main, assets: { message: asset }, outfile }).pipe(Effect.flip));
+    const failure = await run(Effect.all([Artifact.verify(main), Artifact.verify(asset)]).pipe(
+      Effect.andThen(NodeSea.assemble({ main, assets: { message: asset }, outfile })), Effect.flip,
+    ));
     expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "changed", path: changed === "main" ? mainPath : assetPath });
     expect(await readFile(outfile, "utf8")).toBe("previous output");
     expect((await readdir(root)).sort()).toEqual([name("existing"), "main.cjs", "message.txt"].sort());
@@ -91,8 +93,8 @@ describe("real Node SEA executables", () => {
     const main = await observe(mainPath);
     const { service, artifact } = await run(Effect.gen(function*() {
       const service = yield* NodeSea.NodeSea;
-      const artifact = yield* NodeSea.assemble({ main, outfile: name("explicit-base"), cwd: root, atomic: false });
-      return { service, artifact };
+      const artifact = yield* NodeSea.assemble({ main, outfile: name("explicit-base"), cwd: root, atomic: false }).pipe(Effect.flatMap(Artifact.withSha256));
+      return { service: { tool: yield* Tool.withSha256(service.tool), base: yield* Tool.withSha256(service.base) }, artifact };
     }), base);
     expect(service.tool.path).toBe(await realpath(executable));
     expect(service.base.path).toBe(await realpath(base));
@@ -110,7 +112,7 @@ describe("real Node SEA executables", () => {
     await chmod(base, 0o755);
     const outfile = alias === "same path" ? base : join(root, name("linked-output"));
     if (alias === "hardlink") await link(base, outfile);
-    const artifact = await run(NodeSea.assemble({ main: await observe(mainPath), outfile, cwd: root, atomic: false }), base);
+    const artifact = await run(NodeSea.assemble({ main: await observe(mainPath), outfile, cwd: root, atomic: false }).pipe(Effect.flatMap(Artifact.withSha256)), base);
     expect(artifact.path).toBe(outfile);
     expect((await execute(artifact.path, [], { timeout: 30_000 })).stdout).toBe("hello from SEA\n");
     expect(await run(Artifact.verify(artifact))).toEqual(artifact);

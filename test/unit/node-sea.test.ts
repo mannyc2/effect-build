@@ -17,7 +17,6 @@ const tool = (path: string): Tool.Resolved => ({
   path,
   version: "22.0.0",
   bytes: 0,
-  sha256: "0".repeat(64),
 });
 
 it.skipIf(process.platform === "win32")(

@@ -36,7 +36,9 @@ describe("real uv Python builds", () => {
     const outdir = join(root, "dist");
     await mkdir(outdir);
     if (atomic) await writeFile(join(outdir, "previous-output"), "replace this directory");
-    const result = await run(Python.build({ project, outdir, atomic }));
+    const result = await run(Python.build({ project, outdir, atomic }).pipe(Effect.flatMap((result) => Effect.all({
+      wheel: Artifact.withSha256(result.wheel), sdist: Artifact.withSha256(result.sdist),
+    }))));
     expect(result.wheel.path).toBe(join(outdir, "effect_build_fixture-1.2.3-py3-none-any.whl"));
     expect(result.sdist.path).toBe(join(outdir, "effect_build_fixture-1.2.3.tar.gz"));
     expect(await run(Artifact.verify(result.wheel))).toEqual(result.wheel);

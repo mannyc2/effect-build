@@ -31,10 +31,10 @@ const sbom = (executable: Artifact.Executable) =>
 `generate({ subject, source?, format, outfile, cwd?, atomic?, onExists?, prefix? })` returns the
 SBOM as an `Artifact.File`. `format` is `spdx-json` or `cyclonedx-json`.
 
-- `subject` is the release artifact the inventory describes: any core artifact, always verified.
+- `subject` is the release artifact the inventory describes: any core artifact.
   Without `source`, Syft scans the subject at its original path, so filename-based detection
   still works.
-- `source` is a verified source directory or a named lockfile. When given, Syft scans it instead
+- `source` is a source directory or a named lockfile. When given, Syft scans it instead
   of the subject, which is how a compiled TypeScript executable gets an inventory of the
   dependencies that were bundled into it. Include the manifests and lockfiles Syft supports.
 

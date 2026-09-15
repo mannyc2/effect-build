@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path } from "effect";
 import { Artifact, Commit, Layout, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
-import { outputPath, runNative } from "./internal.js";
+import { copyRegular, outputPath, runNative } from "./internal.js";
 import type { App } from "./Model.js";
 import { plist } from "./plist.js";
 
@@ -69,12 +69,10 @@ export const appBundle = (input: AppBundleInput): Effect.Effect<App, AppBundleEr
     const binary = p.join(out, "Contents", "MacOS", executableName);
     const resourceRoot = p.join(out, "Contents", "Resources");
     yield* fs.makeDirectory(resourceRoot, { recursive: true }).pipe(Effect.mapError(Artifact.ioError(out, "write")));
-    yield* Artifact.copyVerified(input.executable, binary);
-    yield* fs.chmod(binary, 0o755).pipe(Effect.mapError(Artifact.ioError(binary, "write")));
+    yield* copyRegular(input.executable, binary);
     for (const resource of resources) {
       const path = p.join(resourceRoot, resource.path);
-      yield* Artifact.copyVerified(resource.artifact, path);
-      yield* fs.chmod(path, (resource.executable ?? resource.artifact.kind === "executable") ? 0o755 : 0o644).pipe(Effect.mapError(Artifact.ioError(path, "write")));
+      yield* copyRegular(resource.artifact, path, resource.executable ?? resource.artifact.kind === "executable");
     }
     const info = p.join(out, "Contents", "Info.plist");
     yield* fs.writeFileString(info, plist(fields)).pipe(Effect.mapError(Artifact.ioError(info, "write")));

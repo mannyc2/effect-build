@@ -31,7 +31,7 @@ export const buildDarwinRelease = (
   certificateSha1: string,
   credential: Apple.Notary.Credential,
 ) => Effect.gen(function*() {
-  const signed = yield* Apple.sign({ artifact: executable, certificateSha1, outfile: "dist/signed/example", entitlements: Bun.entitlements });
+  const signed = yield* Apple.sign({ artifact: executable, certificateSha1, outfile: "dist/signed/example", entitlements: Bun.entitlements }).pipe(Effect.flatMap(Artifact.withSha256));
   const submission = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
   const acceptance = yield* Apple.Notary.acceptedReference(submission);
   const assessed = yield* Apple.assess({ artifact: signed, acceptance });
@@ -55,7 +55,7 @@ export const buildAppleRelease = (
   const installer = yield* Apple.pkg({
     artifact: signedApp, outfile: "dist/example.pkg", identifier: "dev.effect-build.example", version: "1.0.0",
   });
-  const signedDmg = yield* Apple.sign({ artifact: dmg, certificateSha1 });
+  const signedDmg = yield* Apple.sign({ artifact: dmg, certificateSha1 }).pipe(Effect.flatMap(Artifact.withSha256));
   const submission = yield* Apple.Notary.notarize({ artifact: signedDmg, credential });
   const acceptance = yield* Apple.Notary.acceptedReference(submission);
   const stapled = yield* Apple.staple({ artifact: signedDmg, acceptance, outfile: "dist/notarized/example.dmg" });

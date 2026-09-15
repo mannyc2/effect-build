@@ -1,4 +1,4 @@
-import { Crypto, Effect, FileSystem, Path, Schema, type Scope } from "effect";
+import { Effect, FileSystem, Path, Schema, type Scope } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import * as esbuild from "esbuild";
 import metadata from "../package.json" with { type: "json" };
@@ -66,7 +66,7 @@ export type DirectoryOptions = Omit<esbuild.BuildOptions, "outdir" | "outfile" |
 export const buildToDirectory = Effect.fn("Esbuild.buildToDirectory")((input: DirectoryOptions): Effect.Effect<
   Artifact.Directory,
   Tool.InputInvalid | EsbuildFailed | Artifact.ArtifactError | Commit.CommitError,
-  FileSystem.FileSystem | Path.Path | Crypto.Crypto
+  FileSystem.FileSystem | Path.Path
 > => Effect.gen(function*() {
   if (typeof input.outdir !== "string" || Tool.argumentIssue(input.outdir) !== undefined || input.outfile !== undefined || input.write !== undefined) {
     return yield* new Tool.InputInvalid({

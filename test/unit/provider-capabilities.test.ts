@@ -7,7 +7,7 @@ import * as Deno from "effect-build-deno";
 import * as NodeSea from "effect-build-node-sea";
 import { describe, expect, it } from "vitest";
 
-const tool = (name: string, version: string): Tool.Resolved => ({ name, version, path: "/not-a-tool", bytes: 0, sha256: "0".repeat(64) });
+const tool = (name: string, version: string): Tool.Resolved => ({ name, version, path: "/not-a-tool", bytes: 0 });
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 
 describe("version policy and operation capabilities", () => {
@@ -32,7 +32,8 @@ describe("version policy and operation capabilities", () => {
       Effect.provide(TestSpawner.layer((call) => Effect.sync(() => { calls.push(call.command); return { stdout: "deno 2.9.5\n" }; }))),
     );
     expect(calls).toEqual([service.tool.path]);
-    expect(service.runtime).toEqual({ path: runtime.path, sha256: runtime.sha256 });
+    expect(service.runtime).toMatchObject({ path: runtime.path, bytes: runtime.bytes, kind: "file" });
+    expect(service.runtime).not.toHaveProperty("sha256");
   }))));
 
   it("accepts unreviewed compatible Bun versions and rejects only the defective build operation", async () => {

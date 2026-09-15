@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path } from "effect";
-import { Artifact, Tool } from "effect-build";
+import { Artifact, Executable, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
-import type { Product, Signed } from "./Model.js";
+import type { Signed, SignedProduct } from "./Model.js";
 import { plist } from "./plist.js";
 
 export type NativeTool = "codesign" | "hdiutil" | "plutil" | "pkgbuild" | "productbuild" | "productsign" | "pkgutil" | "notarytool" | "stapler" | "spctl" | "ditto";
@@ -24,7 +24,13 @@ export const outputPath = (operation: string, value: string, extension: ".app" |
 export const copyRegular = (artifact: Artifact.Regular, destination: string, executable = artifact.kind === "executable") => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const p = yield* Path.Path;
-  yield* Artifact.copyVerified(artifact, destination);
+  yield* Artifact.copy(artifact, destination);
+  if (artifact.kind === "executable") {
+    yield* Executable.inspect(destination).pipe(
+      Effect.flatMap((facts) => Executable.resolveTarget(destination, facts, artifact.target)),
+      Effect.mapError((error) => new Artifact.ArtifactError({ path: destination, reason: "invalid-metadata", detail: String(error) })),
+    );
+  }
   // An in-place destination keeps its own mode.
   if (p.resolve(artifact.path) !== p.resolve(destination)) {
     yield* fs.chmod(destination, executable ? 0o755 : 0o644).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
@@ -34,7 +40,6 @@ export const copyProduct = (operation: string, artifact: Artifact.Artifact, dest
   void, Tool.InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed, Apple | Env
 > => Effect.gen(function*() {
   if (artifact.kind !== "directory") return yield* copyRegular(artifact, destination);
-  yield* Artifact.verify(artifact);
   const fs = yield* FileSystem.FileSystem;
   const p = yield* Path.Path;
   const source = yield* fs.realPath(artifact.path).pipe(Effect.mapError(Artifact.ioError(artifact.path)));
@@ -63,7 +68,6 @@ export const copyProduct = (operation: string, artifact: Artifact.Artifact, dest
   yield* fs.remove(destination, { recursive: true, force: true }).pipe(Effect.mapError(Artifact.ioError(destination, "write")));
   // ditto preserves framework symlinks verbatim; Node's recursive copy can rewrite them toward the source tree.
   yield* runNative("ditto", [artifact.path, destination], options);
-  yield* Artifact.verify({ ...artifact, path: destination });
 });
 export const verifySignature = (signed: Signed, path = signed.path, options: Tool.EnvironmentOptions = {}): Effect.Effect<
   void, Tool.Failed | Tool.SpawnFailed, Apple | Env
@@ -90,8 +94,10 @@ export const entitlementsFile = (operation: string, entitlements: Entitlements |
   return path;
 });
 /** Refresh core file facts after the caller has checked the retained product refinements. */
-export const inspectProduct = <P extends Product>(product: P, path: string): Effect.Effect<P, Artifact.ArtifactError, Apple | Env> => Effect.gen(function*() {
+export const inspectProduct = (product: SignedProduct, path: string): Effect.Effect<SignedProduct, Artifact.ArtifactError, Apple | Env> => Effect.gen(function*() {
   const { tool } = yield* Apple;
-  const current = product.kind === "directory" ? yield* Artifact.directory(path, Tool.producedBy(tool)) : yield* Artifact.file(path, Tool.producedBy(tool));
-  return { ...product, ...current };
+  // Rebuild the record after mutation so an input digest cannot survive as stale metadata.
+  return product.product === "app"
+    ? { ...yield* Artifact.directory(path, Tool.producedBy(tool)), product: "app" as const, signature: product.signature }
+    : { ...yield* Artifact.file(path, Tool.producedBy(tool)), product: product.product, signature: product.signature };
 });

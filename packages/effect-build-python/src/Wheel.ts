@@ -17,7 +17,8 @@ export interface WheelTags {
   readonly platform: string;
 }
 export interface WheelEntry {
-  readonly artifact: Artifact.Regular;
+  /** RECORD requires an identity for exactly the bytes embedded in the wheel. */
+  readonly artifact: Artifact.HashedRegular;
   readonly path: string;
   readonly executable?: boolean | undefined;
 }

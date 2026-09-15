@@ -2,7 +2,7 @@ import { Effect, FileSystem, Path, Redacted, Schema } from "effect";
 import { Artifact, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
 import { copyProduct, runNative, verifySignature } from "./internal.js";
-import { Signed } from "./Model.js";
+import { HashedSigned, type Signed } from "./Model.js";
 
 export const SubmissionKind = Schema.Literals(["zip", "dmg", "pkg"] as const);
 export type SubmissionKind = typeof SubmissionKind.Type;
@@ -24,7 +24,7 @@ const matchingKind = Schema.makeFilter((value: { readonly kind: SubmissionKind; 
 export const SubmissionReference = Schema.Struct({
   submissionId: SubmissionId,
   kind: SubmissionKind,
-  artifact: Signed,
+  artifact: HashedSigned,
   producedBy: Artifact.Producer,
 }).check(matchingKind);
 export type SubmissionReference = typeof SubmissionReference.Type;
@@ -163,7 +163,7 @@ const status = (operation: Operation, providerStatus: string | undefined, summar
 };
 
 export interface SubmitInput extends Tool.EnvironmentOptions {
-  readonly artifact: Signed;
+  readonly artifact: HashedSigned;
   readonly credential: Credential;
   readonly cwd?: string | undefined;
 }
@@ -171,7 +171,7 @@ export type NotarizeError = LookupError | Artifact.ArtifactError;
 /** Upload once and return the submission ID before waiting. Persist this reference to recover after interruption. */
 export const submit = (input: SubmitInput): Effect.Effect<SubmissionReference, NotarizeError, Apple | Env> =>
   Effect.scoped(Effect.gen(function*() {
-    yield* Schema.decodeUnknownEffect(Signed)(input.artifact).pipe(Effect.mapError((error) => new Tool.InputInvalid({ operation: "Apple.Notary.submit", reason: String(error) })));
+    yield* Schema.decodeUnknownEffect(HashedSigned)(input.artifact).pipe(Effect.mapError((error) => new Tool.InputInvalid({ operation: "Apple.Notary.submit", reason: String(error) })));
     const { tool } = yield* Apple;
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
@@ -179,6 +179,7 @@ export const submit = (input: SubmitInput): Effect.Effect<SubmissionReference, N
     const snapshot = p.join(temporary, p.basename(input.artifact.path));
     // Upload a verified private copy so changes to the caller's file cannot change the submitted bytes.
     yield* copyProduct("Apple.Notary.submit", input.artifact, snapshot, input);
+    yield* Artifact.verify({ ...input.artifact, path: snapshot });
     yield* verifySignature(input.artifact, snapshot, input);
     let path = snapshot;
     const kind = submissionKind(input.artifact);

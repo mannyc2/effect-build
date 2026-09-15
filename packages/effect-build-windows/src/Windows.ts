@@ -1,11 +1,11 @@
-import { Context, Crypto, Effect, FileSystem, Path, Redacted } from "effect";
+import { Context, Effect, FileSystem, Path, Redacted } from "effect";
 import { Artifact, Commit, Executable, Tool } from "effect-build";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 export class Windows
   extends Context.Service<Windows, Tool.Service>()("effect-build-windows/Windows")
 {}
-type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
+type Env = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
 // SignTool's help has no version. Search its language-independent VS_FIXEDFILEINFO resource:
 // https://learn.microsoft.com/en-us/windows/win32/api/verrsrc/ns-verrsrc-vs_fixedfileinfo
 const productVersion = (contents: Uint8Array): string | undefined => {
@@ -187,8 +187,15 @@ export function sign(input: SignInput): Effect.Effect<Signed, SignError, Windows
     const { tool } = yield* Windows;
     const produce = (out: string) =>
       Effect.gen(function*() {
-        // Sign a verified copy whose header agrees with the declared target; an in-place destination is verified where it stands.
-        yield* Artifact.copyVerified(input.artifact, out);
+        // Sign a copy and inspect the resulting executable before commit.
+        yield* Artifact.copy(input.artifact, out);
+        if (input.artifact.kind === "executable") {
+          const target = input.artifact.target;
+          yield* Executable.inspect(out).pipe(
+            Effect.flatMap((facts) => Executable.resolveTarget(out, facts, target)),
+            Effect.mapError((error) => new Artifact.ArtifactError({ path: out, reason: "invalid-metadata", detail: String(error) })),
+          );
+        }
         yield* Tool.run(tool, [
           "sign",
           "/fd",

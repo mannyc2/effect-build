@@ -4,8 +4,9 @@
 [![npm](https://img.shields.io/npm/v/effect-build)](https://www.npmjs.com/package/effect-build)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Run build tools as [Effect](https://effect.website) programs. Producers return a hashed record
+Run build tools as [Effect](https://effect.website) programs. Producers return a record
 of what they wrote; records compose; output is staged, checked, then committed.
+Content hashing is an explicit step for consumers that need byte identity.
 
 ## Quick start
 
@@ -39,8 +40,7 @@ the artifact record:
 kind: 'executable',
 path: '/home/you/app/dist/cli',
 bytes: 63446114,
-sha256: 'd6f24411b71792aa84488e109dccc74ba6816b03af0647b1f065f0117ff7a73c',
-producedBy: { name: 'bun', version: '1.3.14', path: '/usr/local/bin/bun', sha256: 'e0c90ec1…' },
+producedBy: { name: 'bun', version: '1.3.14', path: '/usr/local/bin/bun' },
 target: 'darwin-arm64',
 format: 'mach-o'
 ```
@@ -80,6 +80,24 @@ An executable feeds an archive, installer, signer, or SBOM scanner directly. A b
 archives the same way; Effect supplies concurrency, scopes, interruption, and typed errors.
 The [artifact pipeline](examples/artifact-pipeline) runs those compositions end to end.
 
+## Opt in to content identity
+
+Base artifact schemas contain metadata without a digest. `Artifact.HashedFile`,
+`HashedExecutable`, and `HashedDirectory` extend them with required SHA-256 fields:
+
+```ts
+const HashedFile = Artifact.File.pipe(Schema.fieldsAssign({ sha256: Artifact.Sha256 }));
+const hashed = build.pipe(Effect.flatMap(Artifact.withSha256));
+// A consumer can require typeof HashedFile.Type. Ordinary producers keep returning the base type.
+```
+
+`withSha256` reads the current contents in bounded chunks and preserves top-level provider
+fields. `verify`, `readVerified`, `streamVerified`, and `copyVerified` accept hashed records.
+Schema decoding checks the stored record without touching its path. Ordinary archives,
+assembly, signing, and package copies consume current contents; passing a hashed record does
+not silently enable verification. Wheel RECORD inputs, cache key inputs, checksums, and
+notarization identity references require explicit hashed records.
+
 ## Build a matrix
 
 A release is a matrix of targets, one archive per target, and a checksum file, committed as a
@@ -104,7 +122,7 @@ const release = Commit.atomic("dist", (staged) =>
           ? Archive.zip({ entries, outfile: `${outfile}.zip` })
           : Archive.tarGz({ entries, outfile: `${outfile}.tar.gz` });
       }), { concurrency: 2 });
-    yield* Checksums.write({ artifacts: archives, outfile: path.join(staged, "SHA256SUMS") });
+    yield* Checksums.write({ artifacts: yield* Effect.forEach(archives, Artifact.withSha256), outfile: path.join(staged, "SHA256SUMS") });
     return yield* Artifact.directory(staged, { name: "hello", version: "0.8.0" });
   }), { staging: "sibling" });
 ```
@@ -129,7 +147,7 @@ SBOMs, and handing the manifest to whatever publishes.
 ## Compose application directories
 
 `Directory.assemble` combines separately built programs, dependency trees and runtime assets
-into one verified `Artifact.Directory`. It preserves directory members' modes and symlinks,
+into one `Artifact.Directory`. It preserves directory members' modes and symlinks,
 rejects conflicting shipping paths, and commits the complete output once. Omit a directory
 entry's path to merge its contents at root; file entries require a shipping path.
 `Archive.tarGz({ directory, outfile })` archives that tree without an extra directory prefix.
@@ -144,8 +162,8 @@ warning. The [CLI example](examples/cli) caches its five-target matrix. See [cac
 for environment inputs, provider schemas, and failure behavior.
 
 ```ts
-const source = yield* Artifact.directory("src", { name: "source", version: "1" });
-const tool = yield* Bun.resolved;
+const source = yield* Artifact.directory("src", { name: "source", version: "1" }).pipe(Effect.flatMap(Artifact.withSha256));
+const tool = yield* Bun.resolved.pipe(Effect.flatMap(Tool.withSha256));
 const executable = yield* Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli", target }).pipe(
   Cache.cached({
     key: { operation: "Bun.compile", tool, inputs: [source], options: { entrypoints: ["src/cli.ts"], target } },
@@ -157,7 +175,7 @@ const executable = yield* Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "d
 );
 ```
 
-Import `Cache` from `effect-build` and `KeyValueStore` from `effect/unstable/persistence`.
+Import `Cache` and `Tool` from `effect-build` and `KeyValueStore` from `effect/unstable/persistence`.
 This example assumes the source tree is the entire build input; add lockfiles, configuration,
 assets, dependencies and environment values whenever the program uses them.
 
@@ -184,17 +202,17 @@ Every package is ESM, depends on `effect-build` for its types, and accepts Effec
 
 ## How it fits together
 
-- **Artifacts** are records of files on disk: `kind`, `path`, `bytes`, `sha256`, `producedBy`,
+- **Artifacts** are records of files on disk: `kind`, `path`, `bytes`, `producedBy`,
   plus `target` and `format` for executables and a sorted entry manifest for directories.
-  `Artifact.verify` re-reads one against its record; `Artifact.encode` and `decode` turn a list
-  into JSON and back.
+  `Artifact.withSha256` adds a content identity; `Artifact.verify` checks a hashed record.
+  `Artifact.encode` and `decode` persist the base fields; use the hashed/provider schema to retain refinements.
 - **Targets** are eight strings: `linux-x64`, `linux-x64-musl`, `linux-arm64`,
   `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `windows-x64`, `windows-arm64`. Linux without
   a suffix means glibc.
 - **Providers** wrap one tool each. `Bun.layer({ executable?, version? })` resolves the tool
   once; `Bun.compile`, `Bun.bundle`, and the rest run against it. In-process tools (esbuild,
   Rolldown, the archive and wheel writers) need no layer, only the platform services.
-- **Commits** make output atomic. Producers stage, verify, and rename by default; `atomic: false`
+- **Commits** make output atomic. Producers stage, validate their output, and rename by default; `atomic: false`
   writes in place, `onExists: "fail"` refuses to replace a file, and `Commit.atomic` gives a
   whole directory of your own output the same guarantee.
 - **Checks** are combinators you add where you want them: `Artifact.verify`,

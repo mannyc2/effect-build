@@ -11,15 +11,17 @@ npm install --save-dev --save-exact effect-build-python@0.8.0 effect@4.0.0-rc.11
 ## Wheels from artifacts
 
 ```ts
+import { Effect } from "effect";
+import { Artifact } from "effect-build";
 import * as Python from "effect-build-python";
 
 const wheel = (executable: Artifact.Executable) =>
-  Python.wheel({
+  Artifact.withSha256(executable).pipe(Effect.flatMap((artifact) => Python.wheel({
     metadata: { name: "hello-cli", version: "1.0.0", summary: "Hello CLI", requiresPython: ">=3.9" },
     tags: { python: "py3", abi: "none", platform: "manylinux_2_17_x86_64" },
-    entries: [{ artifact: executable, path: "hello_cli-1.0.0.data/scripts/hello" }],
+    entries: [{ artifact, path: "hello_cli-1.0.0.data/scripts/hello" }],
     outdir: "dist/wheels",
-  });
+  })));
 ```
 
 `wheel({ metadata, tags, entries, outdir, cwd?, rootIsPurelib?, entryPoints?, atomic?, onExists?, prefix? })`
@@ -39,7 +41,8 @@ artifact's record, plus `entry_points.txt` when `entryPoints` is given.
   manylinux or musllinux floor are promises only you can make; declare them through
   `platformTag({ target, glibc | musl | macos })`, or `executableTags(...)` for the full
   `py3-none` triple a compiled command ships with.
-- **Entries** are regular artifacts. Executables get mode `0755`, or set `executable: true`.
+- **Entries** require `Artifact.HashedRegular`: opt in with `Artifact.withSha256` because
+  the wheel format requires content digests in `RECORD`. Executables get mode `0755`, or set `executable: true`.
   `.dist-info` entries belong to the writer. Paths and implicit directories must each have one
   spelling after case folding and NFC normalization: `Docs/a` and `docs/b` conflict. Entries
   cannot descend through a file, and wheel paths cannot contain control characters.

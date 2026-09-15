@@ -93,12 +93,22 @@ try {
   const bunApi = "effect-build-bun/api";
   // A Node consumer never installs bun-types, so no other export may depend on them.
   await typecheck("consumer-node", `${importAll(exports.filter((name) => name !== bunApi))}
-import { Artifact, Directory } from "effect-build";
+import { Effect, Schema } from "effect";
+import { Artifact, Checksums, Directory } from "effect-build";
 import * as Archive from "effect-build-archives";
 declare const file: Artifact.File;
 declare const directory: Artifact.Directory;
 Directory.assemble({ entries: [{ artifact: directory }, { artifact: file, path: "assets/input.txt" }], outdir: "runtime" });
 Archive.tarGz({ directory, outfile: "runtime.tar.gz" });
+const HashedFile = Artifact.File.pipe(Schema.fieldsAssign({ sha256: Artifact.Sha256 }));
+declare const hashed: typeof HashedFile.Type;
+Checksums.write({ artifacts: [hashed], outfile: "SHA256SUMS" });
+// @ts-expect-error: checksum records require an explicit identity
+Checksums.write({ artifacts: [file], outfile: "SHA256SUMS" });
+// @ts-expect-error: verified reads require an explicit identity
+Artifact.readVerified(file);
+const composed = Effect.succeed(file).pipe(Effect.flatMap(Artifact.withSha256), Effect.flatMap(Artifact.readVerified));
+void composed;
 `);
   await npm([...installArgs, `bun-types@${bunTypes}`], { cwd: directory });
   await typecheck(
@@ -132,13 +142,15 @@ const artifact = await Effect.runPromise(
 );
 assert.equal(artifact.bytes, new TextEncoder().encode(text).byteLength);
 const [restored] = Artifact.decode(Artifact.encode([artifact]));
-assert.equal(restored.sha256, artifact.sha256);
+assert.deepEqual(restored, artifact);
+assert.equal("sha256" in artifact, false);
 await Effect.runPromise(Effect.gen(function*() {
   const first = yield* Directory.assemble({ entries: [{ artifact, path: "assets/input.txt" }], outdir: "first" });
   const merged = yield* Directory.assemble({ entries: [{ artifact: first }], outdir: "merged" });
-  assert.equal(merged.sha256, first.sha256);
+  assert.deepEqual(merged.entries, first.entries);
+  assert.equal("sha256" in merged, false);
   const archive = yield* Archive.tarGz({ directory: merged, outfile: "runtime.tar.gz" });
-  yield* Artifact.verify(archive);
+  yield* Artifact.withSha256(archive).pipe(Effect.flatMap(Artifact.verify));
 }).pipe(Effect.provide(NodeServices.layer)));
 assert.match(Layout.validate([
   { path: "Docs/a", kind: "file" },
@@ -160,8 +172,11 @@ await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const hit = yield* Effect.die("installed cache producer unexpectedly ran").pipe(
       Cache.cached({ key, outfile: "restored.txt", schema: Artifact.File }),
     );
-    yield* Artifact.verify(hit);
-    assert.equal(hit.sha256, original.sha256);
+    const firstIdentity = yield* Artifact.withSha256(original);
+    const hitIdentity = yield* Artifact.withSha256(hit);
+    yield* Artifact.verify(hitIdentity);
+    assert.equal(hitIdentity.sha256, firstIdentity.sha256);
+    assert.equal("sha256" in hit, false);
   }).pipe(Effect.provide(cache));
 })).pipe(Effect.provide(NodeServices.layer)));
 `,
@@ -202,8 +217,10 @@ await Effect.runPromise(Effect.gen(function*() {
   assert.equal(tool.version, ${JSON.stringify(bunTypes)});
   const completion = yield* Tool.run(tool, ["--version"]);
   assert.equal(new TextDecoder().decode(completion.stdout).trim(), tool.version);
-  const artifact = yield* Artifact.file(tool.path, tool);
-  assert.equal(artifact.sha256, tool.sha256);
+  assert.equal("sha256" in tool, false);
+  const hashedTool = yield* Tool.withSha256(tool);
+  const artifact = yield* Artifact.file(tool.path, tool).pipe(Effect.flatMap(Artifact.withSha256));
+  assert.equal(artifact.sha256, hashedTool.sha256);
 }).pipe(
   Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ PATH: dirname(process.execPath) })),
   Effect.provide(BunServices.layer),

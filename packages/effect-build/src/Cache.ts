@@ -6,13 +6,13 @@ import * as Target from "./Target.js";
 import * as Tool from "./Tool.js";
 
 type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
-const format = "effect-build-cache-v1";
+const format = "effect-build-cache-v2";
 
 /** The complete inputs the caller declares. Paths do not contribute to artifact/tool identity. */
 export interface Key {
   readonly operation: string;
   readonly tool: Tool.Resolved | Artifact.Producer;
-  readonly inputs: readonly Artifact.Artifact[];
+  readonly inputs: readonly Artifact.HashedArtifact[];
   /** Plain JSON data, including all options and environment values that affect output. */
   readonly options?: unknown;
 }
@@ -67,9 +67,9 @@ const components = (input: Key) => Effect.try({
   try: () => {
     const issue = Tool.argumentIssue(input.operation);
     if (issue !== undefined) throw new Error(`operation ${issue}`);
-    Schema.decodeUnknownSync(Artifact.Producer)(input.tool);
+    const tool = Schema.decodeUnknownSync(Artifact.Producer)(input.tool);
     const inputs = input.inputs.map((record) => {
-      const artifact = Schema.decodeUnknownSync(Artifact.Artifact)(record);
+      const artifact = Schema.decodeUnknownSync(Artifact.HashedArtifact)(record);
       return {
         kind: artifact.kind,
         sha256: artifact.sha256,
@@ -79,7 +79,7 @@ const components = (input: Key) => Effect.try({
       };
     });
     return canonical({ format, host: Target.host() ?? "unknown", operation: input.operation,
-      tool: { name: input.tool.name, version: input.tool.version, sha256: input.tool.sha256 }, inputs, options: input.options });
+      tool: { name: tool.name, version: tool.version, sha256: tool.sha256 }, inputs, options: input.options });
   },
   catch: (error) => new Tool.InputInvalid({ operation: "Cache.key", reason: String(error) }),
 });
@@ -93,16 +93,17 @@ const Entry = Schema.Struct({
   format: Schema.Literal(format),
   components: Schema.String,
   artifact: Schema.Unknown,
+  identity: Artifact.HashedArtifact,
   mode: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(0o7777)),
 });
 class Miss extends Data.TaggedError("CacheMiss")<{}> {}
 
-const fileRecord = (path: string, entry: Extract<Artifact.Entry, { kind: "file" }>, producedBy: Artifact.Producer): Artifact.File =>
+const fileRecord = (path: string, entry: Extract<Artifact.HashedEntry, { kind: "file" }>, producedBy: Artifact.Producer): Artifact.HashedFile =>
   ({ kind: "file", path, bytes: entry.bytes, sha256: entry.sha256, producedBy });
 
 const objectPath = (directory: string, hash: string) => Path.Path.use((p) => Effect.succeed(p.join(directory, hash)));
 
-const ingestFile = (artifact: Artifact.Regular, directory: string) => Effect.gen(function*() {
+const ingestFile = (artifact: Artifact.HashedRegular, directory: string) => Effect.gen(function*() {
   const destination = yield* objectPath(directory, artifact.sha256);
   // Concurrent writers have private staging. Only a complete verified object becomes visible.
   yield* Commit.atomic(destination, (staged) => Artifact.copyVerified(artifact, staged).pipe(
@@ -110,7 +111,7 @@ const ingestFile = (artifact: Artifact.Regular, directory: string) => Effect.gen
   ));
 });
 
-const ingest = (artifact: Artifact.Artifact, directory: string) => Effect.gen(function*() {
+const ingest = (artifact: Artifact.HashedArtifact, directory: string) => Effect.gen(function*() {
   yield* Artifact.verify(artifact);
   if (artifact.kind !== "directory") return yield* ingestFile(artifact, directory);
   const p = yield* Path.Path;
@@ -119,14 +120,14 @@ const ingest = (artifact: Artifact.Artifact, directory: string) => Effect.gen(fu
   }
 });
 
-const copyObject = (artifact: Artifact.Regular, directory: string, destination: string) => Effect.gen(function*() {
+const copyObject = (artifact: Artifact.HashedRegular, directory: string, destination: string) => Effect.gen(function*() {
   const path = yield* objectPath(directory, artifact.sha256);
   yield* Artifact.copyVerified({ ...artifact, path }, destination).pipe(
     Effect.catch((error) => Effect.fail<Miss | Artifact.ArtifactError>(error.path === path ? new Miss() : error)),
   );
 });
 
-const restore = <A extends Artifact.Artifact>(artifact: A, directory: string | undefined, destination: string, mode: number) => Effect.gen(function*() {
+const restore = (artifact: Artifact.HashedArtifact, directory: string | undefined, destination: string, mode: number) => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const p = yield* Path.Path;
   if (artifact.kind === "directory") {
@@ -191,8 +192,13 @@ const cacheWith = <A extends Artifact.Artifact, RD, RE>(input: Options, schema: 
       const entry = yield* Schema.decodeUnknownEffect(Entry)(json);
       if (entry.components !== encoded) return undefined;
       const artifact = yield* Schema.decodeUnknownEffect(schema)(entry.artifact);
-      yield* Schema.decodeUnknownEffect(Artifact.Artifact)(artifact);
-      return { artifact, mode: entry.mode };
+      const core = yield* Schema.encodeEffect(Artifact.Artifact)(artifact);
+      const identityCore = yield* Schema.encodeEffect(Artifact.Artifact)(entry.identity);
+      if (canonical(core) !== canonical(identityCore)) return undefined;
+      const recorded = yield* Schema.encodeEffect(schema)(artifact);
+      const identified = yield* Schema.encodeUnknownEffect(schema)({ ...artifact, ...entry.identity });
+      if (canonical(recorded) !== canonical(identified)) return undefined;
+      return { artifact, identity: entry.identity, mode: entry.mode };
     }).pipe(Effect.orElseSucceed(() => undefined));
     const entry = yield* decode;
     if (entry !== undefined) {
@@ -202,12 +208,12 @@ const cacheWith = <A extends Artifact.Artifact, RD, RE>(input: Options, schema: 
         const staged = yield* Effect.gen(function*() {
           const fs = yield* FileSystem.FileSystem;
           const scratch = yield* fs.makeTempDirectoryScoped();
-          return yield* restore(entry.artifact, directory, p.join(scratch, "output"), entry.mode);
+          return yield* restore(entry.identity, directory, p.join(scratch, "output"), entry.mode);
         }).pipe(Effect.catch(() => Effect.fail(new Miss())));
         return yield* Commit.output(destination,
           (path) => restore(staged, undefined, path, entry.mode), input, staged.kind === "directory" ? "sibling" : "nested");
       })).pipe(Effect.catchTag("CacheMiss", () => Effect.succeed(undefined)));
-      if (hit !== undefined) return hit;
+      if (hit !== undefined) return { ...entry.artifact, path: hit.path };
     }
     const result = yield* producer;
     if (p.resolve(result.path) !== destination) {
@@ -216,15 +222,23 @@ const cacheWith = <A extends Artifact.Artifact, RD, RE>(input: Options, schema: 
     yield* Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const encodedArtifact = yield* Schema.encodeEffect(schema)(result);
+      const identity = yield* Artifact.withSha256(result);
+      const encodedIdentity = yield* Schema.encodeEffect(Artifact.HashedArtifact)(identity);
+      const identified = yield* Schema.encodeUnknownEffect(schema)(identity);
+      const core = yield* Schema.encodeEffect(Artifact.Artifact)(result);
+      const identityCore = yield* Schema.encodeEffect(Artifact.Artifact)(identity);
+      if (canonical(core) !== canonical(identityCore) || canonical(encodedArtifact) !== canonical(identified)) {
+        return yield* new Artifact.ArtifactError({ path: result.path, reason: "changed" });
+      }
       const info = yield* fs.stat(result.path);
-      yield* ingest(result, directory);
-      const value = canonical({ format, components: encoded, artifact: encodedArtifact, mode: info.mode & 0o7777 });
+      yield* ingest(identity, directory);
+      const value = canonical({ format, components: encoded, artifact: encodedArtifact, identity: encodedIdentity, mode: info.mode & 0o7777 });
       yield* store.set(id, value);
     }).pipe(Effect.catch((error) => Effect.logWarning("Cache ingest failed", { operation: input.key.operation, detail: String(error) })));
     return result;
   });
 
-/** Restore a verified output or run and ingest the producer. Storage failures are misses;
+/** Restore a verified output or run and hash the producer's output for storage. Storage failures are misses;
  * destination/commit errors remain typed failures. Provide a schema to retain a precise kind
  * or provider refinement; the default codec returns the core Artifact union. */
 export function cached<A extends Artifact.Artifact, RD = never, RE = never>(input: Options & { readonly schema: Schema.Codec<A, unknown, RD, RE> }):

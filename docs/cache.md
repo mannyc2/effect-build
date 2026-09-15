@@ -8,12 +8,14 @@ both the source input tree and output tree.
 ```ts
 import { Effect } from "effect";
 import { KeyValueStore } from "effect/unstable/persistence";
-import { Artifact, Cache } from "effect-build";
+import { Artifact, Cache, Tool } from "effect-build";
 import * as Bun from "effect-build-bun";
 
 const build = Effect.gen(function*() {
-  const source = yield* Artifact.directory("src", { name: "source", version: "1" });
-  const tool = yield* Bun.resolved;
+  const source = yield* Artifact.directory("src", { name: "source", version: "1" }).pipe(
+    Effect.flatMap(Artifact.withSha256),
+  );
+  const tool = yield* Bun.resolved.pipe(Effect.flatMap(Tool.withSha256));
   const input = { entrypoints: ["src/cli.ts"], target: "linux-x64" as const, outfile: "dist/cli" };
   return yield* Bun.compile(input).pipe(Cache.cached({
     key: { operation: "Bun.compile", tool, inputs: [source], options: { entrypoints: input.entrypoints, target: input.target } },
@@ -29,11 +31,17 @@ const build = Effect.gen(function*() {
 
 ## What a key means
 
-`Cache.key` hashes the operation, tool name/version/hash, ordered input artifact kinds and
+`Cache.key` hashes the operation, tool name/version and optional hash, ordered input artifact kinds and
 hashes, executable targets, directory root modes, canonical options, host target, and format
 version. Tool and artifact paths do not contribute. The key and its encoded components are
-stored beside each result, so the index is inspectable. Downstream keys use output hashes:
+stored beside each result, so the index is inspectable. Inputs must be `Artifact.HashedArtifact`
+records: add identity explicitly with `Artifact.withSha256`. Downstream keys use output hashes:
 a rebuilt executable with unchanged bytes leaves an archive's key unchanged.
+
+Tool name/version is a valid declared identity, including for an in-process implementation.
+The example explicitly adds the resolved Bun binary's digest with `Tool.withSha256`; it becomes
+part of the key when present. `Tool.resolve` itself only records metadata and probes the version.
+Hashing a tool does not lock its executable against subsequent changes.
 
 Declare the complete input closure. A source directory alone is enough only for programs
 that read nothing else. Add lockfiles, configuration, dependencies, assets, tool runtimes,
@@ -57,19 +65,28 @@ use fingerprints of secret inputs in keys instead of credentials themselves.
 
 ## Records and bytes
 
-Without `schema`, the result type is the core `Artifact.Artifact` union. Supply
+Caching opts into hashing and verifying stored output. Without `schema`, the result type is the
+ordinary `Artifact.Artifact` union; caching does not add a digest field to that public result. Supply
 `Artifact.File`, `Artifact.Executable`, or `Artifact.Directory` for a precise kind; supply
-a provider schema such as `Apple.SignedApp` for a refined record. The same codec encodes
+a provider schema such as `Apple.SignedApp` for a refined record. A producer that explicitly returns
+a hashed record can use `Artifact.HashedFile`, `Artifact.HashedExecutable`, or
+`Artifact.HashedDirectory`. The same codec encodes
 misses and decodes hits, and codec services remain in the Effect environment. Core validation
 always checks the artifact metadata before using paths or manifests. Provider-local paths in
 extra fields remain the provider codec's responsibility; only the artifact's root `path` is
 relocated.
 
+The v2 index stores the caller's encoded record and a separate hashed identity. The cache hashes
+output internally on a miss, checks that the stored identity agrees with the record, and verifies
+the bytes restored on a hit. Provider refinements and codec transformations survive either path.
+Schema validation establishes valid metadata; it does not read or verify current file contents.
+
 Files are streamed into private staging and atomically renamed to SHA-256 object names.
 Directories store each file object once; their sorted manifest retains modes, empty directories
 and symlinks. Regular file modes are retained in the index. Hits verify into private scratch,
 then copy from there through `Commit.output`, honoring `atomic`, `onExists`, and `prefix`.
-The restored record is rehashed and keeps its original `producedBy`. No object is hardlinked
+Restored bytes are rehashed against the private identity; the returned record keeps its original
+`producedBy` and declared schema. No object is hardlinked
 to mutable output. Even with `atomic: false`, corruption is detected before touching the destination.
 
 The producer's output path must equal `outfile` after resolution. A mismatch is an
@@ -107,7 +124,7 @@ The 0.8 source audit keeps provider-native inputs. No signature change derives a
 | esbuild/Rolldown buildToDirectory | Native options, path or stdin, plugin inputs | Keep native options; a directory cannot describe plugin dependencies. |
 | Archive zip/tarGz; Python wheel; Checksums write | Artifact entries and format metadata | Already artifact-based. |
 | Archive source | Repository, fixed Git tree, attributes, filters and local config | Keep the fixed tree identity. |
-| Node SEA assemble | Main/assets, tool and base executable | Already artifact-based with explicit binary identities. |
+| Node SEA assemble | Main/assets, tool and base executable | Artifact-based; hash declared file inputs explicitly and choose the tool identity. |
 | nFPM package | Artifact contents, native config, script paths and env substitutions | Keep native config; declare auxiliary files. |
 | Python build | Project, backend, env and build dependency closure | A future directory input helps; current wheel/sdist composite needs an artifact adapter to cache. |
 | SBOM generate | Source/subject artifact, cataloger/config/env | Already artifact-based; declare cataloger dependencies. |

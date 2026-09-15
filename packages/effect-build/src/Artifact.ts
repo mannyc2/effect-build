@@ -5,33 +5,36 @@ import { readLink } from "./internal/fileSystem.js";
 import { parts, Target } from "./Target.js";
 
 const Bytes = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
-const Digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+export const Sha256 = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)).pipe(Schema.brand("Sha256"));
+export type Sha256 = typeof Sha256.Type;
 const Mode = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(0o7777));
 
 export const Producer = Schema.Struct({
   name: Schema.NonEmptyString,
   version: Schema.NonEmptyString,
   path: Schema.optionalKey(Schema.String),
-  sha256: Schema.optionalKey(Digest),
+  sha256: Schema.optionalKey(Sha256),
 });
 export type Producer = typeof Producer.Type;
 
 const Common = {
   path: Schema.NonEmptyString,
   bytes: Bytes,
-  sha256: Digest,
   producedBy: Producer,
 };
 
 export const File = Schema.Struct({ kind: Schema.Literal("file"), ...Common });
 export type File = typeof File.Type;
 
+const executableCheck = Schema.makeFilter((value: { readonly target: Target; readonly format: string }) =>
+  parts(value.target).format === value.format ? undefined : "executable format must match its target");
+
 export const Executable = Schema.Struct({
   kind: Schema.Literal("executable"),
   ...Common,
   target: Target,
   format: Schema.Literals(["elf", "mach-o", "pe"] as const),
-}).check(Schema.makeFilter((value) => parts(value.target).format === value.format ? undefined : "executable format must match its target"));
+}).check(executableCheck);
 export type Executable = typeof Executable.Type;
 
 const EntryCommon = {
@@ -40,38 +43,15 @@ const EntryCommon = {
       ? undefined : "entry path must be a normalized relative path")),
   mode: Mode,
 };
-/** Each kind has exactly the metadata that describes its filesystem object; absent fields are
- * declared so `manifestDigest` reads every kind through the same keys. */
+/** Directory members carry metadata without reading their contents. */
 export const Entry = Schema.Union([
-  Schema.Struct({ ...EntryCommon, kind: Schema.Literal("file"), bytes: Bytes, sha256: Digest, linkTarget: Schema.optionalKey(Schema.Never) }),
-  Schema.Struct({ ...EntryCommon, kind: Schema.Literal("directory"), bytes: Schema.Literal(0), sha256: Schema.optionalKey(Schema.Never), linkTarget: Schema.optionalKey(Schema.Never) }),
-  Schema.Struct({ ...EntryCommon, kind: Schema.Literal("symlink"), bytes: Schema.Literal(0), sha256: Schema.optionalKey(Schema.Never), linkTarget: Schema.NonEmptyString }),
+  Schema.Struct({ ...EntryCommon, kind: Schema.Literal("file"), bytes: Bytes, linkTarget: Schema.optionalKey(Schema.Never) }),
+  Schema.Struct({ ...EntryCommon, kind: Schema.Literal("directory"), bytes: Schema.Literal(0), linkTarget: Schema.optionalKey(Schema.Never) }),
+  Schema.Struct({ ...EntryCommon, kind: Schema.Literal("symlink"), bytes: Schema.Literal(0), linkTarget: Schema.NonEmptyString }),
 ]);
 export type Entry = typeof Entry.Type;
 
-const encoder = new TextEncoder();
-// Persisted identity: SHA-256 of UTF-8 JSON tuples in this exact field order. JSON keeps the
-// fields apart even when a name or link target contains newlines, and absent fields become null;
-// changing either or the order changes every existing directory identity.
-const manifestDigest = (entries: readonly Entry[]): string => {
-  const hash = incrementalSha256.create().update(encoder.encode("["));
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i]!;
-    if (i > 0) hash.update(encoder.encode(","));
-    hash.update(encoder.encode(JSON.stringify([e.kind, e.mode, e.bytes, e.sha256, e.linkTarget, e.path])));
-  }
-  return Encoding.encodeHex(hash.update(encoder.encode("]")).digest());
-};
-
-/** `sha256` of a directory is the hash of its sorted entry manifest. The root's
- * own mode travels beside the digest — like an executable's target — and verify
- * checks both. */
-export const Directory = Schema.Struct({
-  kind: Schema.Literal("directory"),
-  ...Common,
-  rootMode: Mode,
-  entries: Schema.Array(Entry),
-}).check(Schema.makeFilter((value) => {
+const directoryCheck = Schema.makeFilter((value: { readonly bytes: number; readonly entries: readonly Entry[] }) => {
   let bytes = 0, previous: string | undefined;
   const seen = new Map<string, Entry>();
   for (const entry of value.entries) {
@@ -83,10 +63,57 @@ export const Directory = Schema.Struct({
     previous = entry.path;
     seen.set(entry.path, entry);
   }
-  if (!Number.isSafeInteger(bytes) || bytes !== value.bytes) return "directory bytes must equal its file entries";
-  return manifestDigest(value.entries) === value.sha256 ? undefined : "directory digest must match its entry manifest";
-}));
+  return Number.isSafeInteger(bytes) && bytes === value.bytes ? undefined : "directory bytes must equal its file entries";
+});
+
+export const Directory = Schema.Struct({
+  kind: Schema.Literal("directory"),
+  ...Common,
+  rootMode: Mode,
+  entries: Schema.Array(Entry),
+}).check(directoryCheck);
 export type Directory = typeof Directory.Type;
+
+const identity = { sha256: Sha256 };
+export const HashedFile = File.pipe(Schema.fieldsAssign(identity));
+export type HashedFile = typeof HashedFile.Type;
+export const HashedExecutable = Executable.pipe(Schema.fieldsAssign(identity)).check(executableCheck);
+export type HashedExecutable = typeof HashedExecutable.Type;
+export const HashedEntry = Schema.Union([
+  Entry.members[0].pipe(Schema.fieldsAssign(identity)),
+  Entry.members[1],
+  Entry.members[2],
+]);
+export type HashedEntry = typeof HashedEntry.Type;
+
+const encoder = new TextEncoder();
+// Directory identity is SHA-256 of UTF-8 JSON tuples in this exact field order.
+// The root mode is carried beside the digest and verified separately.
+const manifestDigest = (entries: readonly HashedEntry[]): Sha256 => {
+  const hash = incrementalSha256.create().update(encoder.encode("["));
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]!;
+    if (i > 0) hash.update(encoder.encode(","));
+    hash.update(encoder.encode(JSON.stringify([e.kind, e.mode, e.bytes, e.kind === "file" ? e.sha256 : undefined, e.linkTarget, e.path])));
+  }
+  return Encoding.encodeHex(hash.update(encoder.encode("]")).digest()) as Sha256;
+};
+
+export const HashedDirectory = Directory.pipe(Schema.fieldsAssign({
+  ...identity,
+  entries: Schema.Array(HashedEntry),
+})).check(directoryCheck, Schema.makeFilter((value) =>
+  manifestDigest(value.entries) === value.sha256 ? undefined : "directory digest must match its entry manifest"));
+export type HashedDirectory = typeof HashedDirectory.Type;
+export const HashedArtifact = Schema.Union([HashedFile, HashedExecutable, HashedDirectory]);
+export type HashedArtifact = typeof HashedArtifact.Type;
+export type HashedRegular = HashedFile | HashedExecutable;
+
+/** Add identity while retaining the producer's more specific record fields. */
+export type WithSha256<A extends Artifact> =
+  A extends Directory ? Omit<A, keyof Directory | "sha256"> & HashedDirectory
+  : A extends Executable ? Omit<A, keyof Executable | "sha256"> & HashedExecutable
+  : Omit<A, keyof File | "sha256"> & HashedFile;
 
 export const Artifact = Schema.Union([File, Executable, Directory]);
 export type Artifact = typeof Artifact.Type;
@@ -123,24 +150,33 @@ export const ioError = (path: string, operation: "read" | "write" = "read") => (
     detail: String(error),
   });
 
-type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+type Fs = FileSystem.FileSystem | Path.Path;
 
 /** Every read here moves this much at a time; encoders downstream see the same boundaries on every run. */
 const chunkSize = 64 * 1024;
 
-export const sha256 = (data: Uint8Array): Effect.Effect<string, never, Crypto.Crypto> =>
-  Crypto.Crypto.use((crypto) => crypto.digest("SHA-256", data)).pipe(Effect.map(Encoding.encodeHex), Effect.orDie);
+export const sha256 = (data: Uint8Array): Effect.Effect<Sha256, never, Crypto.Crypto> =>
+  Crypto.Crypto.use((crypto) => crypto.digest("SHA-256", data)).pipe(Effect.map((digest) => Encoding.encodeHex(digest) as Sha256), Effect.orDie);
 
-/** Hash bounded chunks; large executables and directory members never require whole-file buffers. */
+/** Read metadata without opening the file's contents. */
+export const file = (path: string, producedBy: Producer): Effect.Effect<File, ArtifactError, Fs> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const p = yield* Path.Path;
+    const absolute = p.resolve(path);
+    const info = yield* fs.stat(absolute).pipe(Effect.mapError(ioError(absolute)));
+    if (info.type !== "File") return yield* new ArtifactError({ path: absolute, reason: "not-a-file" });
+    if (!Number.isSafeInteger(Number(info.size))) return yield* new ArtifactError({ path: absolute, reason: "unreadable", detail: "file exceeds the maximum safe byte count" });
+    return { kind: "file", path: absolute, bytes: Number(info.size), producedBy };
+  });
+
+/** Hash through a scoped handle in bounded chunks. */
 const hashRegular = (path: string) => Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const p = yield* Path.Path;
-  const absolute = p.resolve(path);
-  const info = yield* fs.stat(absolute).pipe(Effect.mapError(ioError(absolute)));
-  if (info.type !== "File") return yield* new ArtifactError({ path: absolute, reason: "not-a-file" });
-  if (info.size > BigInt(Number.MAX_SAFE_INTEGER)) return yield* new ArtifactError({ path: absolute, reason: "unreadable", detail: "file exceeds the maximum safe byte count" });
-  const unreadable = ioError(absolute);
-  const handle = yield* fs.open(absolute).pipe(Effect.mapError(unreadable));
+  const unreadable = ioError(path);
+  const handle = yield* fs.open(path).pipe(Effect.mapError(unreadable));
+  const info = yield* handle.stat.pipe(Effect.mapError(unreadable));
+  if (info.type !== "File") return yield* new ArtifactError({ path, reason: "not-a-file" });
   const buffer = new Uint8Array(chunkSize), hash = incrementalSha256.create();
   let bytes = 0;
   while (true) {
@@ -150,14 +186,9 @@ const hashRegular = (path: string) => Effect.scoped(Effect.gen(function*() {
     bytes += count;
     if (!Number.isSafeInteger(bytes)) return yield* unreadable("file exceeds the maximum safe byte count");
   }
-  if (bytes !== Number(info.size)) return yield* new ArtifactError({ path: absolute, reason: "changed" });
-  return { absolute, bytes, digest: Encoding.encodeHex(hash.digest()) };
+  if (bytes !== Number(info.size)) return yield* new ArtifactError({ path, reason: "changed" });
+  return { bytes, sha256: Encoding.encodeHex(hash.digest()) as Sha256 };
 }));
-
-export const file = (path: string, producedBy: Producer): Effect.Effect<File, ArtifactError, Fs> =>
-  hashRegular(path).pipe(
-    Effect.map(({ absolute, bytes, digest }) => ({ kind: "file" as const, path: absolute, bytes, sha256: digest, producedBy })),
-  );
 
 export const executable = (
   path: string,
@@ -165,15 +196,12 @@ export const executable = (
   expected?: Target,
 ): Effect.Effect<Executable, ArtifactError | Inspect.InspectError | Inspect.TargetMismatch, Fs> =>
   Effect.gen(function*() {
-    const { absolute, bytes, digest } = yield* hashRegular(path);
-    const facts = yield* Inspect.inspect(absolute);
-    const target = yield* Inspect.resolveTarget(absolute, facts, expected);
+    const current = yield* file(path, producedBy);
+    const facts = yield* Inspect.inspect(current.path);
+    const target = yield* Inspect.resolveTarget(current.path, facts, expected);
     return {
+      ...current,
       kind: "executable" as const,
-      path: absolute,
-      bytes,
-      sha256: digest,
-      producedBy,
       target,
       format: facts.format,
     };
@@ -215,10 +243,11 @@ export const directory = (root: string, producedBy: Producer): Effect.Effect<Dir
         );
         names.push(...children.map((child) => p.join(name, child)));
       } else {
-        const member = yield* hashRegular(full);
+        if (stat.type !== "File") return yield* new ArtifactError({ path: full, reason: "not-a-file" });
+        const member = { bytes: Number(stat.size) };
         total += member.bytes;
         if (!Number.isSafeInteger(total)) return yield* new ArtifactError({ path: absolute, reason: "unreadable", detail: "directory exceeds the maximum safe byte count" });
-        entries.push({ path: rel, kind: "file", bytes: member.bytes, mode: stat.mode & 0o7777, sha256: member.digest });
+        entries.push({ path: rel, kind: "file", bytes: member.bytes, mode: stat.mode & 0o7777 });
       }
     }
     entries.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
@@ -226,18 +255,62 @@ export const directory = (root: string, producedBy: Producer): Effect.Effect<Dir
       kind: "directory" as const,
       path: absolute,
       bytes: total,
-      sha256: manifestDigest(entries),
       producedBy,
       rootMode: info.mode & 0o7777,
       entries,
     };
   });
 
+/** Opt in to content identity. Files hash their bytes; directories hash each member
+ * and the sorted manifest. Schema decoding alone never reads the filesystem. */
+export function withSha256<A extends Artifact>(artifact: A): Effect.Effect<WithSha256<A>, ArtifactError, Fs>;
+export function withSha256(artifact: Artifact): Effect.Effect<HashedArtifact, ArtifactError, Fs> {
+  return Effect.gen(function*() {
+    const p = yield* Path.Path;
+    if (artifact.kind !== "directory") {
+      const path = p.resolve(artifact.path);
+      return { ...artifact, path, ...yield* hashRegular(path) };
+    }
+    const current = yield* directory(artifact.path, artifact.producedBy);
+    const entries: HashedEntry[] = [];
+    let bytes = 0;
+    for (const entry of current.entries) {
+      if (entry.kind !== "file") entries.push(entry);
+      else {
+        const identity = yield* hashRegular(p.join(current.path, entry.path));
+        bytes += identity.bytes;
+        if (!Number.isSafeInteger(bytes)) return yield* new ArtifactError({ path: current.path, reason: "unreadable", detail: "directory exceeds the maximum safe byte count" });
+        entries.push({ ...entry, ...identity });
+      }
+    }
+    return { ...artifact, ...current, entries, bytes, sha256: manifestDigest(entries) };
+  });
+}
+
+/** Stream current file contents without requiring a recorded content identity. */
+export const stream = (artifact: Regular): Stream.Stream<Uint8Array, ArtifactError, FileSystem.FileSystem> =>
+  Stream.unwrap(FileSystem.FileSystem.use((fs) => Effect.succeed(fs.stream(artifact.path, { chunkSize }).pipe(
+    Stream.mapError(ioError(artifact.path)),
+  ))));
+
+/** Copy current contents. Same-file aliases are handled by the filesystem's native copy. */
+export const copy = (artifact: Regular, destination: string): Effect.Effect<void, ArtifactError, Fs> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const p = yield* Path.Path;
+    const target = p.resolve(destination);
+    if (target === p.resolve(artifact.path)) return;
+    yield* fs.makeDirectory(p.dirname(target), { recursive: true }).pipe(Effect.mapError(ioError(target, "write")));
+    yield* fs.copyFile(artifact.path, target).pipe(Effect.mapError((error) => new ArtifactError({
+      path: artifact.path, reason: "copy-failed", detail: `${artifact.path} -> ${target}: ${String(error)}`,
+    })));
+  });
+
 const invalidMetadata = (path: string) => (error: unknown) => new ArtifactError({ path, reason: "invalid-metadata", detail: String(error) });
 
 /** Decoded records can carry anything; check the schema before trusting a field such as `bytes` or `target`. */
-const checkRecord = (artifact: Artifact) =>
-  Schema.decodeUnknownEffect(Artifact)(artifact).pipe(Effect.mapError(invalidMetadata(artifact.path)));
+const checkRecord = (artifact: HashedArtifact) =>
+  Schema.decodeUnknownEffect(HashedArtifact)(artifact).pipe(Effect.mapError(invalidMetadata(artifact.path)));
 
 /** The header must still agree with the recorded target, whichever way the header was read. */
 const checkTarget = <E, R>(artifact: Executable, facts: Effect.Effect<Inspect.Facts, E, R>) =>
@@ -247,12 +320,10 @@ const checkTarget = <E, R>(artifact: Executable, facts: Effect.Effect<Inspect.Fa
   );
 
 /** Artifacts record bytes; call verify when consuming them later in a pipeline. */
-export const verify = <A extends Artifact>(artifact: A): Effect.Effect<A, ArtifactError, Fs> =>
+export const verify = <A extends HashedArtifact>(artifact: A): Effect.Effect<A, ArtifactError, Fs> =>
   Effect.gen(function*() {
     yield* checkRecord(artifact);
-    const current = artifact.kind === "directory"
-      ? yield* directory(artifact.path, artifact.producedBy)
-      : yield* file(artifact.path, artifact.producedBy);
+    const current = yield* withSha256(artifact);
     const rootChanged = artifact.kind === "directory" && current.kind === "directory" && current.rootMode !== artifact.rootMode;
     if (current.sha256 !== artifact.sha256 || current.bytes !== artifact.bytes || rootChanged) {
       return yield* new ArtifactError({ path: artifact.path, reason: "changed" });
@@ -265,7 +336,7 @@ export const verify = <A extends Artifact>(artifact: A): Effect.Effect<A, Artifa
  * Read the entire verified file into one buffer, bounded to its recorded size.
  * Files that grow are rejected without buffering the excess. Use verify when only integrity is needed.
  */
-export const readVerified = (artifact: Regular): Effect.Effect<Uint8Array, ArtifactError, Fs> =>
+export const readVerified = (artifact: HashedRegular): Effect.Effect<Uint8Array, ArtifactError, Fs> =>
   Effect.scoped(Effect.gen(function*() {
     yield* checkRecord(artifact);
     const fs = yield* FileSystem.FileSystem;
@@ -302,7 +373,7 @@ export const readVerified = (artifact: Regular): Effect.Effect<Uint8Array, Artif
  * stream completes; `Commit.atomic` discards staged output on failure. An executable's
  * header is checked against its recorded target before the first chunk.
  */
-export const streamVerified = (artifact: Regular): Stream.Stream<Uint8Array, ArtifactError, Fs> =>
+export const streamVerified = (artifact: HashedRegular): Stream.Stream<Uint8Array, ArtifactError, Fs> =>
   Stream.unwrap(Effect.gen(function*() {
     yield* checkRecord(artifact);
     const fs = yield* FileSystem.FileSystem;
@@ -334,7 +405,7 @@ export const streamVerified = (artifact: Regular): Stream.Stream<Uint8Array, Art
  * Copy a file through `streamVerified`, so `destination` ends up holding exactly the
  * recorded bytes or nothing at all. A destination equal to the source is verified in place.
  */
-export const copyVerified = (artifact: Regular, destination: string): Effect.Effect<void, ArtifactError, Fs> =>
+export const copyVerified = (artifact: HashedRegular, destination: string): Effect.Effect<void, ArtifactError, Fs> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;

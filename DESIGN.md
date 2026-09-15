@@ -3,7 +3,7 @@
 ## What it is
 
 effect-build runs build tools as composable Effect programs. Producers return a plain,
-verified, hashed record of their output; those records compose through compilers, archives,
+record of their output; those records compose through compilers, archives,
 installers, signing, and reports. The boundary is bytes: effect-build produces and describes
 files; ts-release moves them. Signing stays here because a signature is bytes in a file.
 
@@ -17,10 +17,10 @@ inputs use the input cache; remote actions need fresh side effects or a future e
 | Module       | Exports                                                                                                                                                                               | Role                                                                                                                                                                                                                       |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Target`     | 8 literals (`linux-x64`, `linux-x64-musl`, `linux-arm64`, `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `windows-x64`, `windows-arm64`), `parts`, `all`, `host`                   | Same names ts-release uses. Linux without suffix means glibc.                                                                                                                                                              |
-| `Artifact`   | `File`, `Executable`, `Directory`, `Regular`, `Producer`; `file`, `executable`, `directory`, `verify`, `streamVerified`, `copyVerified`, `readVerified`, `sha256`, `ioError`, `encode`, `decode` | Observe what's on disk into a record. `Executable.target` comes from the header. `Directory.sha256` hashes the sorted manifest; symlinks recorded, not followed.                                                           |
+| `Artifact`   | `File`, `Executable`, `Directory`, `Regular`, `Producer`; `file`, `executable`, `directory`, `withSha256`, `stream`, `copy`, `verify`, `streamVerified`, `copyVerified`, `readVerified`, `sha256`, `ioError`, `encode`, `decode` | Observe what's on disk into a record. `Executable.target` comes from the header. `HashedDirectory.sha256` hashes the sorted manifest; symlinks recorded, not followed.                                                           |
 | `Executable` | `parse`, `inspect`, `matches`, `resolveTarget`, `expectTarget`                                                                                                                        | ELF/Mach-O/PE header facts. A static Linux binary matches gnu and musl.                                                                                                                                                    |
 | `Commit`     | `atomic(outfile, produce, { onExists, prefix, staging })`, `output(outfile, produce, ProducerOptions, staging?)`                                                                      | Stage with final path depth or basename, then commit with recovery. Checks run inside `produce` run before the rename. `output` is what producers do with `atomic`, `onExists` and `prefix`; the producer picks `staging`. |
-| `Tool`       | `InputInvalid`, `argumentIssue`, `locate`, `resolve`, `run`, `redact`, `parseVersion`, `versionPattern`, `satisfies`, `requireVersion`, `check`, `provider`, `producedBy`                                                                                                 | Locate and resolve once, record path/version/hash. Nothing re-checks the binary later. Ranges use npm semver.                                                                                                              |
+| `Tool`       | `InputInvalid`, `argumentIssue`, `locate`, `resolve`, `run`, `redact`, `parseVersion`, `versionPattern`, `satisfies`, `requireVersion`, `check`, `provider`, `producedBy`                                                                                                 | Locate and resolve once, record path/version/size; `Tool.withSha256` adds identity. Nothing re-checks the binary later. Ranges use npm semver.                                                                                                              |
 | `Layout`     | `Entry`, `Issue`, `pathIssue`, `validate`                                                                                                                                             | Shared normalized shipping paths: every explicit or implicit prefix has one NFC/case-folded spelling and only directories have descendants.                                                                                |
 | `Checksums`  | `write`, `verify`                                                                                                                                                                               | `sha256sum -c` compatible writing and verification.                                                                                                                                                                                                 |
 
@@ -76,7 +76,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Replace on exists by default.** Every producer takes `onExists: "fail"` and `prefix`; `staging` stays
   the producer's, because files stage nested and import-bearing directories stage sibling. Direct sibling output
   starts from an empty destination, so a record never holds an earlier build's files.
-- **No tool re-check before launch.** The hash at resolve time is a record, not a lock.
+- **No tool re-check before launch.** Resolution records metadata; explicit `Tool.withSha256` records bytes without locking the binary.
 - **No overwrite guard on executables' inputs.** `Artifact.verify` is opt-in.
 - **Inputs stream.** Hashing, verified copies, archives, wheels and Git source tars move 64 KiB at a
   time; `readVerified` is the explicit whole-buffer exception. A verified stream fails at EOF, so its
@@ -91,14 +91,14 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Deno 2.9.6 removed flags are checked per operation**; unrelated operations remain available.
 - **Deno embeds the output basename**; Windows outputs require lowercase `.exe`
   so staging and the committed executable have the same name.
-- **Explicit `denort` is hashed and recorded, not executed** to establish identity.
+- **Explicit `denort` is recorded without execution or hashing.** Its base file metadata is available for composition.
 - **Git source archives fix host newline defaults to LF**; committed `.gitattributes` still controls file conversion.
 - **Node SEA uses a CommonJS preparation blob and resource injection** across Node
   22–26; the tool and base executable must have matching Node versions. The target is read from the base's
   header, so a base running under emulation is recorded as itself.
 - **SignTool reads its full SDK version from its binary resource**; string ranges select the first three
   components, while a caller predicate can pin the full four-component version. The Windows layer reads
-  those bytes itself; `Tool.resolve` hashes incrementally and parses probe output only.
+  those bytes itself; `Tool.resolve` records metadata and parses probe output; `Tool.withSha256` explicitly hashes incrementally.
 - **Errors name their tool in `tool`, never `name`**, so `Error.name` stays the `_tag` and every error
   prints as `Tag: message`.
 - **Windows signing accepts MSIX files and PE executables**; signed executables must retain their input target before commit.
@@ -118,8 +118,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 
 - **Core manifests project core fields only.** Provider schemas preserve richer signing/runtime/product/notary records.
 - **Release retries consume retained exact tarballs** and verify registry bytes before skipping an existing version.
-- **SHA-256 is the only digest.** Every artifact and directory entry carries one; there is no unhashed
-  observation and no algorithm choice.
+- **Content identity is opt-in schema composition.** Base artifacts and directory entries carry metadata; `Hashed*` schemas require SHA-256. `withSha256` computes identity, schemas decode without I/O, and integrity consumers require hashed inputs. Ordinary producers never hash; cache v2 stores its output identity separately from the caller's record.
 - **Layouts reject case-insensitive and NFC collisions at every path prefix on every host.** Core `Layout` owns this shipping guarantee for archives, wheels and app bundles, including implicit directories; local artifact observations still record host-specific names.
 - **Archive and wheel bytes depend only on their inputs**: DEFLATE level 6, fixed ZIP timestamps, zero tar
   owners and times, zero gzip mtime. There are no timestamp, ownership, comment or compression options.

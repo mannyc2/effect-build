@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Path, Schema } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -11,14 +11,14 @@ export const { name, layer, supported, tested, constraints, requirements, resolv
     detail: "Syft configuration and catalogers may enable network access; filesystem scans need the source closure." },
 });
 
-type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
+type Env = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
 
 export const Format = Schema.Literals(["spdx-json", "cyclonedx-json"] as const);
 export type Format = typeof Format.Type;
 const nativeFormat = { "spdx-json": "spdx-json@2.3", "cyclonedx-json": "cyclonedx-json@1.6" } as const;
 
 export interface GenerateInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
-  /** Release artifact associated with the inventory; always verified. */
+  /** Release artifact associated with the inventory. */
   readonly subject: Artifact.Artifact;
   /** Source tree or named lockfile to scan for bundled dependencies. Without this, only the subject is scanned. */
   readonly source?: Artifact.Directory | Artifact.File | undefined;
@@ -49,9 +49,8 @@ export const generate = Effect.fn("Sbom.generate")((
     const p = yield* Path.Path;
     const cwd = p.resolve(input.cwd ?? "");
     const outfile = p.resolve(cwd, input.outfile);
-    // Syft's catalogers use source filenames; verify the artifact and scan its original path.
-    const subject = yield* Artifact.verify(input.subject);
-    const source = input.source === undefined ? subject : yield* Artifact.verify(input.source);
+    // Syft's catalogers use source filenames, so scan the provided artifact's path.
+    const source = input.source ?? input.subject;
     const produce = (out: string) =>
       Tool.run(tool, [
         "scan",

@@ -1,5 +1,5 @@
 import { Effect, Exit, FileSystem, Path, Schema } from "effect";
-import type * as Artifact from "../Artifact.js";
+import * as Artifact from "../Artifact.js";
 
 export class ReproducibilityFailure extends Schema.TaggedError<ReproducibilityFailure>()("ReproducibilityFailure", {
   first: Schema.String,
@@ -28,10 +28,11 @@ export const expectReproducible = <A extends Artifact.Artifact, E, R>(
     const path = yield* Path.Path;
     const first = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-repro-first-" });
     const second = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-repro-second-" });
-    const a = yield* produce(path.join(first, "output"));
-    const b = yield* produce(path.join(second, "output"));
+    const firstResult = yield* produce(path.join(first, "output"));
+    const a = yield* Artifact.withSha256(firstResult);
+    const b = yield* produce(path.join(second, "output")).pipe(Effect.flatMap(Artifact.withSha256));
     if (a.sha256 !== b.sha256) return yield* new ReproducibilityFailure({ first: a.sha256, second: b.sha256 });
-    return a;
+    return firstResult;
   });
 
 /** Check after success, failure or interruption; preserve the original cause when no staging leaked. */

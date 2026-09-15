@@ -52,8 +52,9 @@ the rest), project options (`config`, `importMap`, `lock`, `frozen`, `nodeModule
 
 `target` accepts the core targets and Deno's native triples. Deno has no musl target. Deno embeds
 the output basename in the executable, so staging preserves it and Windows outputs must end in
-lowercase `.exe`. `Deno.layer({ runtime })` points at an explicit `denort` file: its path and hash
-are recorded (and exported as `DENORT_BIN`) without executing it.
+lowercase `.exe`. `Deno.layer({ runtime })` points at an explicit `denort` file: its file metadata
+is recorded as `Artifact.File` and its path is exported as `DENORT_BIN` without executing it.
+Use `Artifact.withSha256(artifact.runtime)` when runtime identity is required.
 
 ## Versions
 

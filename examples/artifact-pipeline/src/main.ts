@@ -37,6 +37,7 @@ const program = Effect.gen(function*() {
   // 1. Compile a native executable for the host and prove the record matches the file.
   const executable = yield* Bun.compile({ entrypoints: [entrypoint], outfile: out(executableName("hello")) }).pipe(
     Effect.provide(Bun.layer({ executable: tool("EFFECT_BUILD_BUN") })),
+    Effect.flatMap(Artifact.withSha256),
   );
   yield* Artifact.verify(executable);
   artifacts.push(executable);
@@ -141,7 +142,7 @@ const program = Effect.gen(function*() {
 
   // 5. Checksums cover every regular file; the manifest is the JSON handoff to a release system.
   const checksums = yield* Checksums.write({
-    artifacts: artifacts.filter(Artifact.isRegular),
+    artifacts: yield* Effect.forEach(artifacts.filter(Artifact.isRegular), Artifact.withSha256),
     outfile: out("SHA256SUMS"),
   });
   const manifest = Artifact.decode(Artifact.encode([...artifacts, checksums]));

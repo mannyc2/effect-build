@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Path, Scope } from "effect";
+import { Context, Effect, FileSystem, Path, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
 import * as CompileCommand from "./internal/CompileCommand.js";
@@ -7,16 +7,16 @@ import { type Check, type ImportPermissions, type ProjectOptions, renderCheck, r
 export type { Options as CompileOptions, Permissions } from "./internal/CompileCommand.js";
 export type { PermissionValue } from "./internal/Options.js";
 
-export type CompileArtifact = Artifact.Executable & { readonly runtime?: { readonly path: string; readonly sha256: string } };
+export type CompileArtifact = Artifact.Executable & { readonly runtime?: Artifact.File };
 interface Service extends Tool.Service {
-  readonly runtime?: { readonly path: string; readonly sha256: string } | undefined;
+  readonly runtime?: Artifact.File | undefined;
 }
 export class Deno extends Context.Service<Deno, Service>()("effect-build-deno/Deno") {}
 interface Options {
-  /** An explicit denort file; its bytes are recorded without executing it. */
+  /** An explicit denort file; its metadata is recorded without executing it. */
   readonly runtime?: string | undefined;
 }
-type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+type Fs = FileSystem.FileSystem | Path.Path;
 type Env = Deno | Fs | ChildProcessSpawner.ChildProcessSpawner;
 export type BuildError =
   | Tool.InputInvalid
@@ -36,11 +36,11 @@ export const { name, layer, supported, tested, constraints, requirements, resolv
     "Deno.transpile": [{ range: ">=2.9.6", reason: "--conditions was removed from deno transpile in Deno 2.9.6; omit it or select 2.9.5" }],
   },
   requirements: { env: ["HOME", "DENO_DIR", "DENO_AUTH_TOKENS", "DENO_CERT", "DENORT_BIN", "TMPDIR"], network: true, services: [],
-    detail: "Uncached dependencies and target runtimes may download; an explicit hashed denort removes runtime discovery." },
+    detail: "Uncached dependencies and target runtimes may download; an explicit denort removes runtime discovery." },
   extend: (tool, options) => Effect.gen(function*() {
     if (options.runtime === undefined) return {};
     const runtime = yield* Artifact.file(options.runtime, { name: "denort", version: tool.version });
-    return { runtime: { path: runtime.path, sha256: runtime.sha256 } };
+    return { runtime };
   }),
 });
 

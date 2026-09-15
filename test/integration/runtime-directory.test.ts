@@ -35,21 +35,24 @@ it("ships separately built Node and Bun programs with their shared dependency tr
       const wasm = yield* Artifact.file(join(root, "main.wasm"), producer);
       const output = join(root, "runtime");
       const cache = yield* TestCache.layer;
+      const inputs = yield* Effect.forEach([node, worker, modules, wasm], Artifact.withSha256);
       let assemblies = 0;
       const assemble = Effect.suspend(() => {
         assemblies++;
         return Directory.assemble({ outdir: output, entries: [{ artifact: node }, { artifact: worker }, { artifact: modules }, { artifact: wasm, path: "signer/main.wasm" }] });
-      }).pipe(Cache.cached({ key: { operation: "runtime.assemble", tool: producer, inputs: [node, worker, modules, wasm] }, outfile: output, schema: Artifact.Directory }));
+      }).pipe(Cache.cached({ key: { operation: "runtime.assemble", tool: producer, inputs }, outfile: output, schema: Artifact.Directory }));
       const release = yield* Effect.gen(function*() {
         const first = yield* assemble;
+        const firstIdentity = yield* Artifact.withSha256(first);
         yield* Effect.promise(() => rm(output, { recursive: true }));
         const restored = yield* assemble;
-        expect(restored.sha256).toBe(first.sha256);
+        expect((yield* Artifact.withSha256(restored)).sha256).toBe(firstIdentity.sha256);
+        expect(restored).not.toHaveProperty("sha256");
         expect(assemblies).toBe(1);
         return restored;
       }).pipe(Effect.provide(cache));
       yield* Commit.atomic(join(root, "delivery"), (staged) => Effect.gen(function*() {
-        const archive = yield* Archive.tarGz({ directory: release, outfile: join(staged, "runtime.tar.gz") });
+        const archive = yield* Archive.tarGz({ directory: release, outfile: join(staged, "runtime.tar.gz") }).pipe(Effect.flatMap(Artifact.withSha256));
         const checksums = yield* Checksums.write({ artifacts: [archive], outfile: join(staged, "runtime.tar.gz.sha256") });
         yield* Checksums.verify(checksums);
         return yield* Artifact.directory(staged, producer);

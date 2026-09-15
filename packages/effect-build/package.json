@@ -1,7 +1,7 @@
 {
   "name": "effect-build",
   "version": "0.8.0",
-  "description": "Effect-native build tooling: run any tool, get a verified artifact.",
+  "description": "Effect-native build tooling: composable artifacts with opt-in content identity.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,

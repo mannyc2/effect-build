@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Path, Stream } from "effect";
+import { Context, Effect, FileSystem, Path, Stream } from "effect";
 import { Artifact, Commit, Layout as PortableLayout, Tool } from "effect-build";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import metadata from "../package.json" with { type: "json" };
@@ -44,8 +44,8 @@ export interface SourceInput extends Commit.ProducerOptions, Tool.EnvironmentOpt
   /** Repository-relative paths to leave out, with their descendants. Gitlinks and `.git` components are always left out. */
   readonly excludes?: readonly string[] | undefined;
 }
-type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
-/** Entries carry verified artifact streams, so their failures are artifact failures. */
+type Fs = FileSystem.FileSystem | Path.Path;
+/** File contents stream directly from their artifact paths. */
 type ArchiveEntries = ReadonlyArray<Entry<Artifact.ArtifactError, Fs>>;
 export type ArchiveError =
   | Tool.InputInvalid
@@ -99,12 +99,10 @@ const directoryEntries = (tree: Artifact.Directory, p: Path.Path, prefix?: strin
   tree.entries.map((child): Entry<Artifact.ArtifactError, Fs> => {
     const path = prefix === undefined ? child.path : `${prefix}/${child.path}`;
     if (child.kind === "file") {
-      // Each file is verified as it streams, even if it changes after the tree was read.
-      const contents = Artifact.streamVerified({
+      const contents = Artifact.stream({
         kind: "file",
         path: p.join(tree.path, child.path),
         bytes: child.bytes,
-        sha256: child.sha256,
         producedBy: tree.producedBy,
       });
       return { kind: "file", path, mode: child.mode, bytes: child.bytes, contents };
@@ -131,8 +129,7 @@ const archive = (
       if (input.directory.kind !== "directory") {
         return yield* new Tool.InputInvalid({ operation, reason: "directory must be a directory artifact" });
       }
-      const tree = yield* Artifact.verify(input.directory);
-      for (const entry of directoryEntries(tree, p)) entries.push(entry);
+      for (const entry of directoryEntries(input.directory, p)) entries.push(entry);
     }
     for (const entry of input.entries ?? []) {
       const artifact = entry.artifact;
@@ -146,7 +143,7 @@ const archive = (
           path,
           mode: (entry.executable ?? artifact.kind === "executable") ? 0o755 : 0o644,
           bytes: artifact.bytes,
-          contents: Artifact.streamVerified(artifact),
+          contents: Artifact.stream(artifact),
         });
         continue;
       }
@@ -157,15 +154,10 @@ const archive = (
           reason: "executable overrides apply only to regular files",
         });
       }
-      // Rebuild the manifest from disk: decoded records can contain entries inconsistent with their digest.
-      const tree = yield* Artifact.directory(artifact.path, artifact.producedBy);
-      if (tree.sha256 !== artifact.sha256 || tree.bytes !== artifact.bytes) {
-        return yield* new Artifact.ArtifactError({ path: tree.path, reason: "changed" });
-      }
       // The archive root is the archive's own object, named by the caller rather than
       // taken from the tree, so it gets a fixed portable mode instead of the recorded rootMode.
       entries.push({ kind: "directory", path, mode: 0o755 });
-      for (const entry of directoryEntries(tree, p, path)) entries.push(entry);
+      for (const entry of directoryEntries(artifact, p, path)) entries.push(entry);
     }
     return yield* writeArchive(operation, input.outfile, entries, format, input, {
       name: metadata.name,

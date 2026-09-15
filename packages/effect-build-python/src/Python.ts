@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Path } from "effect";
+import { Context, Effect, FileSystem, Path } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -10,7 +10,7 @@ export const { name, layer, supported, tested, constraints, requirements, resolv
     detail: "Build backends and Python may be downloaded; credentials and project settings remain caller inputs." },
 });
 
-type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+type Fs = FileSystem.FileSystem | Path.Path;
 type Env = Fs | ChildProcessSpawner.ChildProcessSpawner;
 
 export interface BuildInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {

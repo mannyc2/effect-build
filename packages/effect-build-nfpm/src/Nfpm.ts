@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Path, Schema } from "effect";
 import { Artifact, Commit, Target, Tool } from "effect-build";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -11,7 +11,7 @@ export const { name, layer, supported, tested, constraints, requirements, resolv
     detail: "Configuration may expand environment variables; package scripts name additional host inputs." },
 });
 
-type Env = FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner;
+type Env = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
 
 export const Format = Schema.Literals(["deb", "rpm", "apk", "archlinux", "msix"] as const);
 export type Format = typeof Format.Type;
@@ -129,7 +129,7 @@ const packageArtifact = Effect.fn("Nfpm.package")((
     const contents: Schema.Json[] = [];
     for (const content of input.contents) {
       const source = p.join(temporary, `input-${contents.length}`);
-      yield* Artifact.copyVerified(content.artifact, source);
+      yield* Artifact.copy(content.artifact, source);
       contents.push({
         src: source,
         dst: content.dst,

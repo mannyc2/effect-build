@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { access, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from "vitest";
 
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
@@ -87,18 +87,27 @@ describe("tool resolution and execution", () => {
     expect(value.home).not.toBe(process.env.HOME);
     await expect(access(value.home)).rejects.toMatchObject({ code: "ENOENT" });
   });
-  it("uses an explicit executable, hashes its real bytes, and parses its version output", async () => {
+  it("uses an explicit executable and parses its version output without reading its bytes", async () => {
     const tool = await run(Tool.resolve({
       name: "node-fixture",
       executable: process.execPath,
       versionArgs: ["-e", "process.stdout.write('fixture version 1.3.14\\n')"],
       parseVersion: (completion) => new TextDecoder().decode(completion.stdout).trim().split(" ").at(-1),
-    }).pipe(withPath(root)));
+    }).pipe(withPath(root), Effect.provideServiceEffect(FileSystem.FileSystem, FileSystem.FileSystem.use((fs) => Effect.succeed({
+      ...fs, open: () => Effect.die("resolution must not read executable bytes"),
+    })))));
     const contents = await readFile(process.execPath);
     expect(tool.path).toBe(await realpath(process.execPath));
     expect(tool.version).toBe("1.3.14");
     expect(tool.bytes).toBe(contents.byteLength);
-    expect(tool.sha256).toBe(createHash("sha256").update(contents).digest("hex"));
+    expect(tool).not.toHaveProperty("sha256");
+    const hashed = await run(Tool.withSha256({ ...tool, bytes: 0 as const, label: "fixture" as const }));
+    expect(hashed.sha256).toBe(createHash("sha256").update(contents).digest("hex"));
+    expect(hashed.bytes).toBe(contents.byteLength);
+    expectTypeOf(hashed.bytes).toEqualTypeOf<number>();
+    expectTypeOf(hashed.label).toEqualTypeOf<"fixture">();
+    expect(Tool.producedBy(tool)).not.toHaveProperty("sha256");
+    expect(Tool.producedBy(hashed).sha256).toBe(hashed.sha256);
     const completion = await run(Tool.run(tool, ["-e", "process.stdout.write('hello');process.stderr.write('warning')"]));
     expect(new TextDecoder().decode(completion.stdout)).toBe("hello");
     expect(new TextDecoder().decode(completion.stderr)).toBe("warning");
@@ -210,7 +219,7 @@ describe("provider declarations", () => {
   });
 
   it("checks rejected ranges through an operation-specific version error", async () => {
-    const tool: Tool.Resolved = { name: "bun", path: "/bun", version: "1.4.1", bytes: 0, sha256: "" };
+    const tool: Tool.Resolved = { name: "bun", path: "/bun", version: "1.4.1", bytes: 0 };
     const constraint = { range: "1.4.1", reason: "variable-collision defect in emitted builds" };
     const failure = await Effect.runPromise(Tool.check(tool, "Bun.compile", constraint).pipe(Effect.flip));
     expect(failure).toMatchObject({ _tag: "ToolVersionUnsupported", tool: "bun", version: "1.4.1", supported: constraint.range, operation: "Bun.compile", reason: constraint.reason });
@@ -229,7 +238,7 @@ describe("provider declarations", () => {
     ));
     expect(value.service.label).toBe("resolved");
     expect(value.tool).toBe(value.service.tool);
-    expect(value.tool.sha256).toBe(createHash("sha256").update(await readFile(process.execPath)).digest("hex"));
+    expect(value.tool).not.toHaveProperty("sha256");
     const injected = await Effect.runPromise(provider.resolved.pipe(Effect.provide(provider.testLayer(value.service))));
     expect(injected).toBe(value.tool);
   });
@@ -285,7 +294,7 @@ describe("tool versions", () => {
   });
 
   it("applies a range or caller predicate to a resolved version", async () => {
-    const tool: Tool.Resolved = { name: "fixture", path: "/fixture", version: "1.3.14", bytes: 0, sha256: "" };
+    const tool: Tool.Resolved = { name: "fixture", path: "/fixture", version: "1.3.14", bytes: 0 };
     expect(await Effect.runPromise(Effect.succeed(tool).pipe(Tool.requireVersion("=1.3.14")))).toBe(tool);
     expect(await Effect.runPromise(Effect.succeed(tool).pipe(Tool.requireVersion((v) => v.startsWith("1."))))).toBe(tool);
     const failure = await Effect.runPromise(Effect.succeed(tool).pipe(Tool.requireVersion("=1.4.2"), Effect.flip));

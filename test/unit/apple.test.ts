@@ -59,7 +59,7 @@ const signFile = (source: Apple.Dmg | Apple.Pkg, outfile: string) =>
     ? run(Apple.sign({ artifact: source, certificateSha1, outfile }))
     : run(Apple.sign({ artifact: source, certificateSha1, outfile }));
 const signedFile = async (product: "dmg" | "pkg") => signFile(await unsignedFile(product), join(root, `signed.${product}`));
-const accepted = async (artifact: Apple.Signed) => local(Apple.Notary.acceptedReference(await run(Apple.Notary.notarize({ artifact, credential }))));
+const accepted = async (artifact: Apple.HashedSigned) => local(Apple.Notary.acceptedReference(await run(Apple.Notary.notarize({ artifact, credential }))));
 const signedExecutable = (outfile?: string) => run(Apple.sign({ artifact: executable, certificateSha1, outfile, entitlements: Bun.entitlements }));
 
 describe("Apple products on real files", () => {
@@ -78,7 +78,6 @@ describe("Apple products on real files", () => {
       expect((await stat(join(result.path, "Contents/Resources/bin/helper"))).mode & 0o777).toBe(0o755);
       expect((await stat(join(result.path, "Contents/Resources/data/helper"))).mode & 0o777).toBe(0o644);
     }
-    expect(await local(Artifact.verify(result))).toEqual(result);
     expect((await calls()).filter((call) => call.tool === "plutil")).toHaveLength(1);
   });
 
@@ -128,10 +127,11 @@ describe("Apple products on real files", () => {
     expect((await readdir(root)).sort()).toEqual(before);
   });
 
-  it.each(["executable", "resource"])("rejects changed %s bytes", async (changed) => {
-    await writeFile(changed === "executable" ? executable.path : resource.path, "changed input");
-    expect(await run(Apple.appBundle(appInput()).pipe(Effect.flip))).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
-    expect(await readdir(root)).not.toContain("Fixture.app");
+  it("copies current resource bytes without requiring a content identity", async () => {
+    await writeFile(resource.path, "changed input");
+    const result = await run(Apple.appBundle(appInput()));
+    expect(await readFile(join(result.path, "Contents/Resources/Guide.txt"), "utf8")).toBe("changed input");
+    expect(result).not.toHaveProperty("sha256");
   });
 
   it("signs nested code before the app, preserves framework symlinks, and commits only verified bytes", async () => {
@@ -156,9 +156,6 @@ describe("Apple products on real files", () => {
     expect(commands.every((call) => !call.watchPathExisted)).toBe(true);
     expect(commands[0]!.args).toContain("runtime");
     expect(commands[1]!.args).toContain("--entitlements");
-    expect(await local(Artifact.verify(source))).toEqual(source);
-    expect(await local(Artifact.verify(result))).toEqual(result);
-    expect(result.sha256).not.toBe(source.sha256);
     expect(await readFile(join(result.path, "Contents/_CodeSignature/CodeResources"), "utf8")).toBe("signed resources");
     if (process.platform !== "win32") {
       expect(await readlink(join(result.path, "Contents/Frameworks/Fixture.framework/Versions/Current"))).toBe("A");
@@ -170,12 +167,11 @@ describe("Apple products on real files", () => {
   it.each(["codesign.sign", "codesign.verify"])("preserves source and destination apps after %s fails", async (fail) => {
     const source = await app(), outdir = join(root, "Previous.app");
     await mkdir(outdir); await writeFile(join(outdir, "keep"), "previous app");
-    const previous = await local(Artifact.directory(outdir, producer));
+    const previous = await local(Artifact.directory(outdir, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     await configure({ fail });
     const before = (await readdir(root)).sort();
     expect(await run(Apple.sign({ artifact: source, certificateSha1, outdir }).pipe(Effect.flip))).toBeInstanceOf(Tool.Failed);
     expect(await local(Artifact.verify(previous))).toEqual(previous);
-    expect(await local(Artifact.verify(source))).toEqual(source);
     expect((await readdir(root)).sort()).toEqual(before);
   });
 
@@ -185,8 +181,6 @@ describe("Apple products on real files", () => {
     const result = await run(Apple.sign({ artifact: source, certificateSha1, outdir, atomic: false }));
     expect(await readdir(result.path)).toEqual(["Contents"]);
     expect(await readFile(join(result.path, "Contents/MacOS/fixture"))).toEqual(await readFile(executable.path));
-    expect(await local(Artifact.verify(result))).toEqual(result);
-    if (destination === "different") expect(await local(Artifact.verify(source))).toEqual(source);
   });
 
   it("packages one signed app into a disk image and installer with the requested contents", async () => {
@@ -199,9 +193,6 @@ describe("Apple products on real files", () => {
     if (process.platform !== "win32") expect(packed.entries.find((entry) => entry.path === "Applications")?.target).toBe("/Applications");
     const pkg = JSON.parse(await readFile(installer.path, "utf8")) as { readonly entries: readonly PackedEntry[] };
     expect(pkg.entries.find((entry) => entry.path === "Contents/MacOS/fixture")?.contents).toBe(Buffer.from(await readFile(executable.path)).toString("base64"));
-    expect(await local(Artifact.verify(dmg))).toEqual(dmg);
-    expect(await local(Artifact.verify(installer))).toEqual(installer);
-    expect(await local(Artifact.verify(source))).toEqual(source);
   });
 
   it("packages a signed executable into an installer that lands in a bin directory", async () => {
@@ -217,8 +208,6 @@ describe("Apple products on real files", () => {
     expect((await calls()).filter((call) => call.tool === "codesign" && call.args[0] === "--verify").map((call) => call.args.at(-1))).toContain(join(build.args[1]!, "cli"));
     const custom = await run(Apple.pkg({ artifact: source, outfile: join(root, "custom.pkg"), identifier: "dev.effect-build.cli", version: "1.2.3", installLocation: "/opt/cli/bin" }));
     expect((JSON.parse(await readFile(custom.path, "utf8")) as { readonly location: string }).location).toBe("/opt/cli/bin");
-    expect(await local(Artifact.verify(installer))).toEqual(installer);
-    expect(await local(Artifact.verify(source))).toEqual(source);
   });
 
   it.each(["hdiutil.create", "hdiutil.verify", "pkgbuild", "productbuild"])("preserves an existing package and removes staging after %s fails", async (fail) => {
@@ -233,27 +222,23 @@ describe("Apple products on real files", () => {
     expect((await readdir(root)).sort()).toEqual(before);
   });
 
-  it.each(["dmg", "pkg"] as const)("signs %s copies and hashes the modified bytes", async (product) => {
-    const source = await unsignedFile(product);
+  it.each(["dmg", "pkg"] as const)("signs %s copies and reports the modified bytes", async (product) => {
+    const source = await local(Artifact.withSha256(await unsignedFile(product)));
     const result = await signFile(source, join(root, `signed.${product}`));
+    expect(result).not.toHaveProperty("sha256");
     expect(await readFile(source.path, "utf8")).toBe(`unsigned-${product}`);
     expect(await readFile(result.path, "utf8")).toBe(`unsigned-${product}:signed`);
-    expect(result.sha256).not.toBe(source.sha256);
-    expect(await local(Artifact.verify(result))).toEqual(result);
   });
 });
 
 describe("Standalone Darwin executables", () => {
-  it("signs a verified copy with the hardened runtime and Bun's entitlements, retaining the target", async () => {
+  it("signs a copy with the hardened runtime and Bun's entitlements, retaining the target", async () => {
     const original = await readFile(executable.path);
     const result = await signedExecutable(join(root, "signed-cli"));
     expect(result).toMatchObject({ kind: "executable", target: "darwin-arm64", format: "mach-o", path: join(root, "signed-cli") });
     expect(result.signature).toEqual({ certificateSha1, secureTimestamp: true, hardenedRuntime: true });
     expect(await readFile(result.path)).toEqual(Buffer.concat([original, Buffer.from(":signed")]));
-    expect(result.sha256).not.toBe(executable.sha256);
     expect(await readFile(executable.path)).toEqual(original);
-    expect(await local(Artifact.verify(result))).toEqual(result);
-    expect(await local(Artifact.verify(executable))).toEqual(executable);
     if (process.platform !== "win32") expect((await stat(result.path)).mode & 0o777).toBe(0o755);
     const plist = (await calls()).find((call) => call.tool === "plutil")!.plist!;
     for (const key of Bun.entitlements) expect(plist).toMatch(new RegExp(`<key>${key.replaceAll(".", "\\.")}</key>\\s*<true/>`));
@@ -271,7 +256,6 @@ describe("Standalone Darwin executables", () => {
     const result = await run(Apple.sign({ artifact: executable, certificateSha1, entitlements }));
     expect(result.path).toBe(executable.path);
     expect(await readFile(result.path)).toEqual(Buffer.concat([thinMacho(), Buffer.from(":signed")]));
-    expect(await local(Artifact.verify(result))).toEqual(result);
     expect((await calls()).find((call) => call.tool === "plutil")!.plist).toContain("<dict/>");
   });
 
@@ -294,7 +278,6 @@ describe("Standalone Darwin executables", () => {
     const before = await listing();
     expect(await run(Apple.sign({ artifact: executable, certificateSha1, outfile, entitlements: Bun.entitlements }).pipe(Effect.flip))).toBeInstanceOf(Tool.Failed);
     expect(await readFile(outfile, "utf8")).toBe("previous executable");
-    expect(await local(Artifact.verify(executable))).toEqual(executable);
     expect(await listing()).toEqual(before);
   });
 
@@ -302,12 +285,11 @@ describe("Standalone Darwin executables", () => {
     await configure({ corruptTarget: true });
     const failure = await run(Apple.sign({ artifact: executable, certificateSha1, outfile: join(root, "never") }).pipe(Effect.flip));
     expect(failure).toBeInstanceOf(Executable.TargetMismatch);
-    expect(await local(Artifact.verify(executable))).toEqual(executable);
     expect(await readdir(root)).not.toContain("never");
   });
 
   it("notarizes a signed executable as a ZIP and assesses the accepted bytes without stapling", async () => {
-    const signed = await signedExecutable(join(root, "signed-cli"));
+    const signed = await local(Artifact.withSha256(await signedExecutable(join(root, "signed-cli"))));
     const acceptance = await accepted(signed);
     expect(acceptance.kind).toBe("zip");
     expect(acceptance.artifact).toEqual(signed);
@@ -324,10 +306,10 @@ describe("Standalone Darwin executables", () => {
   });
 
   it("refuses to assess an executable whose acceptance names different bytes", async () => {
-    const signed = await signedExecutable(join(root, "signed-cli"));
+    const signed = await local(Artifact.withSha256(await signedExecutable(join(root, "signed-cli"))));
     const acceptance = await accepted(signed);
     const before = await calls();
-    for (const artifact of [{ ...signed, bytes: signed.bytes + 1 }, { ...signed, sha256: "0".repeat(64) }]) {
+    for (const artifact of [{ ...signed, bytes: signed.bytes + 1 }, { ...signed, sha256: Schema.decodeUnknownSync(Artifact.Sha256)("0".repeat(64)) }]) {
       const wrong: Apple.Notary.AcceptedReference = { ...acceptance, artifact };
       expect(await run(Apple.assess({ artifact: signed, acceptance: wrong }).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     }
@@ -337,7 +319,7 @@ describe("Standalone Darwin executables", () => {
 
 describe("Apple notarization and stapling", () => {
   it("submits once, waits separately, and persists a reference usable after the original file is gone", async () => {
-    const source = await signedFile("dmg");
+    const source = await local(Artifact.withSha256(await signedFile("dmg")));
     await configure({ submit: { id: submissionId.toUpperCase(), status: "Accepted", message: `uploaded with ${password}` } });
     const submission = await run(Apple.Notary.notarize({ artifact: source, credential, timeout: "5m" }));
     expect(submission.submissionId).toBe(submissionId);
@@ -360,7 +342,7 @@ describe("Apple notarization and stapling", () => {
   });
 
   it("persists an upload reference before waiting and recovers from a failed wait without resubmitting", async () => {
-    const source = await signedFile("pkg");
+    const source = await local(Artifact.withSha256(await signedFile("pkg")));
     await configure({ submit: { id: submissionId, message: "Upload complete" } });
     const submitted = await run(Apple.Notary.submit({ artifact: source, credential }));
     expect((await calls()).filter((call) => call.tool === "notarytool").map((call) => call.args[0])).toEqual(["submit"]);
@@ -378,7 +360,7 @@ describe("Apple notarization and stapling", () => {
   });
 
   it("keeps an interrupted wait as interruption and resumes from the persisted ID", async () => {
-    const source = await signedFile("pkg"), reference = await run(Apple.Notary.submit({ artifact: source, credential }));
+    const source = await local(Artifact.withSha256(await signedFile("pkg"))), reference = await run(Apple.Notary.submit({ artifact: source, credential }));
     await configure({ waitForAbort: true });
     const controller = new AbortController();
     const waiting = Effect.runPromiseExit(Apple.Notary.wait({ reference, credential }).pipe(
@@ -396,14 +378,24 @@ describe("Apple notarization and stapling", () => {
   });
 
   it.each(["Invalid", "Rejected", "In Progress"])("retains native status %s and refuses acceptance", async (status) => {
-    const source = await signedFile("dmg"); await configure({ submit: { id: submissionId, status } });
+    const source = await local(Artifact.withSha256(await signedFile("dmg"))); await configure({ submit: { id: submissionId, status } });
     const submission = await run(Apple.Notary.notarize({ artifact: source, credential }));
     expect(submission.status.providerStatus).toBe(status);
     expect(await local(Apple.Notary.acceptedReference(submission).pipe(Effect.flip))).toBeInstanceOf(Apple.Notary.ResultNotAccepted);
   });
 
+  it("rejects changed explicitly hashed bytes before uploading", async () => {
+    const source = await local(Artifact.withSha256(await signedFile("dmg")));
+    const contents = await readFile(source.path);
+    contents[0] = contents[0]! ^ 1;
+    await writeFile(source.path, contents);
+    const failure = await run(Apple.Notary.submit({ artifact: source, credential }).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
+    expect((await calls()).some((call) => call.tool === "notarytool")).toBe(false);
+  });
+
   it("uploads the verified private snapshot when the original changes during native verification", async () => {
-    const source = await signedFile("dmg");
+    const source = await local(Artifact.withSha256(await signedFile("dmg")));
     await configure({ mutateDuringVerify: source.path });
     const submission = await run(Apple.Notary.notarize({ artifact: source, credential }));
     const uploaded = (await calls()).find((call) => call.tool === "notarytool" && call.args[0] === "submit")!;
@@ -415,7 +407,7 @@ describe("Apple notarization and stapling", () => {
   });
 
   it("rejects malformed responses, mismatched UUIDs and transport failure without retrying submit", async () => {
-    const source = await signedFile("dmg");
+    const source = await local(Artifact.withSha256(await signedFile("dmg")));
     await configure({ rawResponse: "{not JSON" });
     expect(await run(Apple.Notary.notarize({ artifact: source, credential }).pipe(Effect.flip))).toBeInstanceOf(Apple.Notary.ResponseInvalid);
     expect((await calls()).filter((call) => call.tool === "notarytool" && call.args[0] === "submit")).toHaveLength(1);
@@ -435,7 +427,7 @@ describe("Apple notarization and stapling", () => {
   });
 
   it("decodes nullable log issues and preserves issue diagnostics through JSON", async () => {
-    const reference = await accepted(await signedFile("pkg"));
+    const reference = await accepted(await local(Artifact.withSha256(await signedFile("pkg"))));
     expect((await run(Apple.Notary.log({ reference, credential }))).issues).toEqual([]);
     await configure({ logResponse: { jobId: submissionId.toUpperCase(), status: "Invalid", statusCode: 4000, statusSummary: "Invalid signature", issues: [{ severity: "error", message: `problem ${password}`, path: "Fixture.app", architecture: "arm64", code: 123 }] } });
     const log = await run(Apple.Notary.log({ reference, credential }));
@@ -446,7 +438,7 @@ describe("Apple notarization and stapling", () => {
   });
 
   it("submits an app ZIP while retaining the original signed directory in the reference", async () => {
-    const source = await signedApp(), reference = await accepted(source);
+    const source = await local(Artifact.withSha256(await signedApp())), reference = await accepted(source);
     expect(reference.kind).toBe("zip");
     expect(reference.artifact).toEqual(source);
     const submit = (await calls()).find((call) => call.tool === "notarytool" && call.args[0] === "submit")!;
@@ -456,8 +448,8 @@ describe("Apple notarization and stapling", () => {
     expect(await local(Artifact.verify(source))).toEqual(source);
   });
 
-  it.each(["app", "dmg", "pkg"] as const)("staples a relocated %s and assesses its new hash while retaining the original accepted artifact", async (product) => {
-    const source = product === "app" ? await signedApp() : await signedFile(product);
+  it.each(["app", "dmg", "pkg"] as const)("staples a relocated %s without retaining a stale digest and assesses its native ticket", async (product) => {
+    const source = product === "app" ? await local(Artifact.withSha256(await signedApp())) : await local(Artifact.withSha256(await signedFile(product)));
     const acceptance = await accepted(source), relocatedPath = join(root, `Relocated.${product}`);
     if (source.kind === "directory") await cp(source.path, relocatedPath, { recursive: true, verbatimSymlinks: true }); else await copyFile(source.path, relocatedPath);
     await rm(source.path, { recursive: true });
@@ -465,9 +457,9 @@ describe("Apple notarization and stapling", () => {
     const stapled = relocated.product === "app"
       ? await run(Apple.staple({ artifact: relocated, acceptance, outdir: join(root, "Stapled.app") }))
       : await run(Apple.staple({ artifact: relocated, acceptance, outfile: join(root, `stapled.${product}`) }));
-    expect(stapled.sha256).not.toBe(source.sha256);
+    expect(stapled).not.toHaveProperty("sha256");
+    expect((await local(Artifact.withSha256(stapled))).sha256).not.toBe(source.sha256);
     expect(stapled.ticket.artifact).toEqual(source);
-    expect(await local(Artifact.verify(stapled))).toEqual(stapled);
     expect(await run(Apple.assess({ artifact: stapled }))).toBe(stapled);
     expect(await local(Artifact.verify(relocated))).toEqual(relocated);
     const assess = (await calls()).find((call) => call.tool === "spctl")!;
@@ -476,8 +468,8 @@ describe("Apple notarization and stapling", () => {
   });
 
   it("rejects mismatched accepted product, size, or digest before invoking stapler", async () => {
-    const source = await signedFile("dmg"), acceptance = await accepted(source), before = await calls();
-    for (const artifact of [{ ...source, product: "pkg" as const }, { ...source, bytes: source.bytes + 1 }, { ...source, sha256: "0".repeat(64) }]) {
+    const source = await local(Artifact.withSha256(await signedFile("dmg"))), acceptance = await accepted(source), before = await calls();
+    for (const artifact of [{ ...source, product: "pkg" as const }, { ...source, bytes: source.bytes + 1 }, { ...source, sha256: Schema.decodeUnknownSync(Artifact.Sha256)("0".repeat(64)) }]) {
       const wrong: Apple.Notary.AcceptedReference = { ...acceptance, artifact };
       expect(await run(Apple.staple({ artifact: source, acceptance: wrong, outfile: join(root, "never.dmg") }).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     }
@@ -486,7 +478,7 @@ describe("Apple notarization and stapling", () => {
   });
 
   it.each(["stapler.staple", "stapler.validate"])("preserves existing bytes after %s fails", async (fail) => {
-    const source = await signedFile("dmg"), acceptance = await accepted(source), outfile = join(root, "previous.dmg");
+    const source = await local(Artifact.withSha256(await signedFile("dmg"))), acceptance = await accepted(source), outfile = join(root, "previous.dmg");
     await writeFile(outfile, "previous bytes"); await configure({ fail });
     const before = (await readdir(root)).sort();
     expect(await run(Apple.staple({ artifact: source, acceptance, outfile }).pipe(Effect.flip))).toBeInstanceOf(Tool.Failed);

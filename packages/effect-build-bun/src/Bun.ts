@@ -1,4 +1,4 @@
-import { Context, Crypto, Effect, FileSystem, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Path, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
 
@@ -162,7 +162,7 @@ export const compile = Effect.fn("Bun.compile")(function*(
 ): Effect.fn.Return<
   Artifact.Executable,
   CompileError,
-  Bun | FileSystem.FileSystem | Path.Path | Crypto.Crypto | ChildProcessSpawner.ChildProcessSpawner
+  Bun | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > {
   const tool = yield* prepareBuild("Bun.compile", input, input.outfile);
   const requested = input.target;

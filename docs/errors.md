@@ -75,8 +75,9 @@ and stderr by default; pass `stdio: "pipe"` when your program consumes the child
 
 ## Checks
 
-Checks are combinators and functions you add where you need them; nothing runs them for you
-except where a producer verifies its own output before committing.
+Content checks accept explicit hashed records. Add `Artifact.withSha256` when recording an
+identity, then choose `verify` or a verified read/copy at the consuming boundary. Providers
+retain their native output and format checks.
 
 | Check                     | What it does                                                                                                                                 |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -87,8 +88,9 @@ except where a producer verifies its own output before committing.
 | `Executable.expectTarget` | Re-reads an executable's header after a step that rewrote it (signing, stripping) and fails on a mismatch.                                   |
 | `Tool.requireVersion`     | Applies a range or predicate to a resolved tool; the layers use it for `supported`.                                                          |
 
-Because a verified stream fails only at EOF, producers run it inside staged output: a wheel or
-archive whose input changed mid-stream is discarded with its staging directory.
+A verified stream can fail at EOF, so consumers using it should stage provisional output.
+The wheel writer does this because RECORD requires exact input digests. Ordinary archives
+stream current bytes and enforce their format sizes without mandatory digest verification.
 
 ## Atomic output
 
@@ -97,7 +99,7 @@ Every producer accepts the same three options, `Commit.ProducerOptions`, and for
 
 | Option     | Default            | Effect                                                                                                                                                                |
 | ---------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atomic`   | `true`             | Stage in a temporary directory next to the destination, verify, then rename. `false` writes the destination directly, with no staging or rename.                      |
+| `atomic`   | `true`             | Stage in a temporary directory next to the destination, produce and validate output, then rename. `false` writes the destination directly, with no staging or rename.                      |
 | `onExists` | `"replace"`        | `"replace"` renames over an existing destination. `"fail"` refuses to replace a regular file, using exclusive hard-link creation, and is unsupported for directories. |
 | `prefix`   | `".effect-build-"` | Name prefix of the staging directory.                                                                                                                                 |
 

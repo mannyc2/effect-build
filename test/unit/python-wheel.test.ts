@@ -16,12 +16,12 @@ const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
 const producer = { name: "fixture", version: "0.7.0" };
 const info = "wheel_fixture-1.2.3.dist-info";
 let root: string;
-let payload: Artifact.File;
+let payload: Artifact.HashedFile;
 let input: Python.WheelInput;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "effect-build-wheel-"));
   await writeFile(join(root, "payload"), "answer = 42\n");
-  payload = await run(Artifact.file(join(root, "payload"), producer));
+  payload = await run(Artifact.file(join(root, "payload"), producer).pipe(Effect.flatMap(Artifact.withSha256)));
   input = {
     metadata: { name: "Wheel-Fixture", version: "1.2.3" },
     tags: { python: "py3", abi: "none", platform: "any" },
@@ -104,7 +104,7 @@ describe("wheels from real artifacts", () => {
   });
   it("compresses repeated input and retains valid RECORD hashes", async () => {
     await writeFile(payload.path, "x".repeat(1024 * 1024));
-    const artifact = await run(Artifact.file(payload.path, producer));
+    const artifact = await run(Artifact.file(payload.path, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const result = await run(Python.wheel({ ...input, entries: [{ artifact, path: "data.txt" }] }));
     expect(result.bytes).toBeLessThan(10_000);
     expect((await readZip(result.path)).get("data.txt")?.contents.toString()).toBe("x".repeat(1024 * 1024));
@@ -114,7 +114,7 @@ describe("wheels from real artifacts", () => {
     "rejects Darwin arm64 native commands tagged %s",
     async (platform) => {
       await writeFile(payload.path, thinMacho());
-      const artifact = await run(Artifact.executable(payload.path, producer));
+      const artifact = await run(Artifact.executable(payload.path, producer).pipe(Effect.flatMap(Artifact.withSha256)));
       const result = await run(
         Python.wheel({
           ...input,
@@ -155,7 +155,7 @@ describe("wheels from real artifacts", () => {
         "fixture.plugins": { demo: "wheel_fixture" },
       },
     };
-    const first = await run(Python.wheel(options));
+    const first = await run(Python.wheel(options).pipe(Effect.flatMap(Artifact.withSha256)));
     await utimes(payload.path, new Date(0), new Date(0));
     const second = await run(Python.wheel({
       ...options,
@@ -207,7 +207,7 @@ describe("wheels from real artifacts", () => {
   });
 
   it("preserves executable artifact modes unless explicitly overridden", async () => {
-    const executable = await run(Artifact.executable(process.execPath, producer, Target.host()));
+    const executable = await run(Artifact.executable(process.execPath, producer, Target.host()).pipe(Effect.flatMap(Artifact.withSha256)));
     const platform = process.platform === "win32"
       ? `win_${process.arch === "arm64" ? "arm64" : "amd64"}`
       : process.platform === "darwin"
@@ -238,7 +238,7 @@ describe("wheels from real artifacts", () => {
     const tags = Python.executableTags({ target: "darwin-arm64", macos: [11, 0] });
     expect(tags).toEqual({ python: "py3", abi: "none", platform: "macosx_11_0_arm64" });
     await writeFile(payload.path, thinMacho());
-    const artifact = await run(Artifact.executable(payload.path, producer));
+    const artifact = await run(Artifact.executable(payload.path, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     expect(artifact.target).toBe("darwin-arm64");
     const result = await run(
       Python.wheel({ ...input, tags, entries: [{ artifact, path: "wheel_fixture-1.2.3.data/scripts/tool" }] }),

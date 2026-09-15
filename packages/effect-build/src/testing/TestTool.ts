@@ -7,11 +7,10 @@ export const resolved = (name: string, version: string): Tool.Resolved => ({
   name,
   version,
   path: `/effect-build-testing/${name}`,
-  sha256: "0".repeat(64),
   bytes: 0,
 });
 
-/** Installs a placeholder for discovery and hashing. Override the reply for a tool-specific version grammar. */
+/** Installs a placeholder for discovery. Override the reply for a tool-specific version grammar. */
 export const installed = (name: string, version: string, reply: TestSpawner.Reply = { stdout: `${version}\n` }) =>
   Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;

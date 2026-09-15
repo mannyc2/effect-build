@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
-const producedBy = { name: "fixture", version: "1.0.0", sha256: "0".repeat(64) };
+const producedBy = { name: "fixture", version: "1.0.0", sha256: Artifact.Sha256.make("0".repeat(64)) };
 let root: string;
 let cacheLayer: Layer.Layer<Cache.Objects | KeyValueStore.KeyValueStore, never, import("effect").Path.Path>;
 beforeEach(async () => {
@@ -37,12 +37,28 @@ it("canonicalizes options and identities without erasing meaningful values", asy
   expect(await run(Cache.key(cacheKey(cycle)).pipe(Effect.flip))).toHaveProperty("_tag", "InputInvalid");
 });
 
+it("requires input digests, accepts version-only tools, and distinguishes changed input bytes", async () => {
+  const path = join(root, "input");
+  await writeFile(path, "before");
+  const file = await run(Artifact.file(path, producedBy));
+  // @ts-expect-error A cache input requires a recorded content identity.
+  expect(await run(Cache.key({ ...cacheKey(), inputs: [file] }).pipe(Effect.flip))).toHaveProperty("_tag", "InputInvalid");
+  const versionOnly = { name: "fixture", version: "1.0.0" };
+  expect(await run(Cache.key({ ...cacheKey(), tool: versionOnly }))).not.toBe(await run(Cache.key(cacheKey())));
+  expect(await run(Cache.key({ ...cacheKey(), tool: versionOnly }))).not.toBe(await run(Cache.key({ ...cacheKey(), tool: { ...versionOnly, version: "2.0.0" } })));
+  const first = await run(Artifact.withSha256(file));
+  await writeFile(path, "after!");
+  const second = await run(Artifact.withSha256(file));
+  expect(await run(Cache.key({ ...cacheKey(), inputs: [first] }))).not.toBe(await run(Cache.key({ ...cacheKey(), inputs: [second] })));
+});
+
 it("hits across destinations, preserves producer identity, and never hardlinks objects", async () => {
   await run(Effect.gen(function*() {
     const first = yield* produce(join(root, "first")).pipe(Cache.cached({ key: cacheKey(), outfile: join(root, "first"), schema: Artifact.File }));
     const second = yield* Effect.die("producer must not run on a hit").pipe(Cache.cached({ key: cacheKey(), outfile: join(root, "second"), schema: Artifact.File }));
+    expect(first).not.toHaveProperty("sha256");
     expect(second).toEqual({ ...first, path: join(root, "second") });
-    yield* Artifact.verify(second);
+    expect(yield* (yield* FileSystem.FileSystem).readFileString(second.path)).toBe("hello");
   }));
   const entries = await readdir(join(root, "objects"));
   expect(entries).toHaveLength(1);
@@ -54,15 +70,16 @@ it.each(["missing", "corrupt", "malformed-index"] as const)("rebuilds a %s entry
   await run(Effect.gen(function*() {
     const outfile = join(root, "out");
     const first = yield* produce(outfile).pipe(Cache.cached({ key: cacheKey(), outfile, schema: Artifact.File }));
+    const identity = yield* Artifact.withSha256(first);
     const fs = yield* FileSystem.FileSystem;
-    if (damage === "missing") yield* fs.remove(join(root, "objects", first.sha256));
-    else if (damage === "corrupt") yield* fs.writeFileString(join(root, "objects", first.sha256), "wrong");
+    if (damage === "missing") yield* fs.remove(join(root, "objects", identity.sha256));
+    else if (damage === "corrupt") yield* fs.writeFileString(join(root, "objects", identity.sha256), "wrong");
     else yield* (yield* KeyValueStore.KeyValueStore).set(yield* Cache.key(cacheKey()), "{broken");
     let invoked = false;
     const second = yield* Effect.sync(() => { invoked = true; }).pipe(Effect.andThen(produce(outfile, "rebuilt")), Cache.cached({ key: cacheKey(), outfile, schema: Artifact.File }));
     expect(invoked).toBe(true);
-    expect(second.sha256).not.toBe(first.sha256);
-    yield* Artifact.verify(second);
+    expect((yield* Artifact.withSha256(second)).sha256).not.toBe(identity.sha256);
+    expect(yield* fs.readFileString(second.path)).toBe("rebuilt");
   }));
 });
 
@@ -70,8 +87,9 @@ it("corrupt direct hits leave the previous destination intact before the produce
   await run(Effect.gen(function*() {
     const outfile = join(root, "out");
     const first = yield* produce(outfile).pipe(Cache.cached({ key: cacheKey(), outfile }));
+    const identity = yield* Artifact.withSha256(first);
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.writeFileString(join(root, "objects", first.sha256), "broken");
+    yield* fs.writeFileString(join(root, "objects", identity.sha256), "broken");
     yield* Effect.gen(function*() {
       expect(yield* fs.readFileString(outfile)).toBe("hello");
       return yield* produce(outfile, "next");
@@ -90,7 +108,7 @@ it("preserves modes, symlinks and directory manifests", async () => {
     yield* Effect.succeed(artifact).pipe(Cache.cached({ key: cacheKey(), outfile: source, schema: Artifact.Directory }));
     const restored = yield* Effect.die("hit").pipe(Cache.cached({ key: cacheKey(), outfile: join(root, "restored"), schema: Artifact.Directory }));
     expect(restored).toEqual({ ...artifact, path: join(root, "restored") });
-    yield* Artifact.verify(restored);
+    expect((yield* Artifact.withSha256(restored)).sha256).toBe((yield* Artifact.withSha256(artifact)).sha256);
   }));
   expect((await stat(join(root, "restored", "bin", "tool"))).mode & 0o777).toBe(process.platform === "win32" ? 0o666 : 0o755);
   if (process.platform !== "win32") expect(await readlink(join(root, "restored", "link"))).toBe("bin/tool");
@@ -143,25 +161,45 @@ it("streams executable objects and retains their header and executable mode", as
       ...fs, readFile: () => Effect.die("cache bytes must stream"),
     }));
     expect(restored).toEqual({ ...artifact, path: outfile });
-    yield* Artifact.verify(restored);
+    expect((yield* Artifact.withSha256(restored)).sha256).toBe((yield* Artifact.withSha256(artifact)).sha256);
     if (process.platform !== "win32") expect(Number((yield* fs.stat(outfile)).mode) & 0o111).not.toBe(0);
   })));
 });
 
 it("keys directory root modes even though the manifest digest excludes them", async () => {
   const path = join(root, "tree"); await mkdir(path);
-  const artifact = await run(Artifact.directory(path, producedBy));
+  const artifact = await run(Artifact.directory(path, producedBy).pipe(Effect.flatMap(Artifact.withSha256)));
   expect(await run(Cache.key({ ...cacheKey(), inputs: [artifact] }))).not.toBe(await run(Cache.key({ ...cacheKey(), inputs: [{ ...artifact, rootMode: 0o700 }] })));
 });
 
 it("retains provider refinements through their schema", async () => {
-  const Refined = Schema.Struct({ ...Artifact.File.fields, signature: Schema.String });
+  const Refined = Schema.Struct({ ...Artifact.File.fields, signature: Schema.String, signedAt: Schema.DateFromString });
   await run(Effect.gen(function*() {
     const outfile = join(root, "signed");
-    const artifact = { ...yield* produce(outfile), signature: "certificate" };
+    const artifact = { ...yield* produce(outfile), signature: "certificate", signedAt: new Date("2026-01-01T00:00:00Z") };
     yield* Effect.succeed(artifact).pipe(Cache.cached({ key: cacheKey(), outfile, schema: Refined }));
     const restored = yield* Effect.die("hit").pipe(Cache.cached({ key: cacheKey(), outfile: join(root, "restored"), schema: Refined }));
     expect(restored.signature).toBe("certificate");
+    expect(restored.signedAt).toEqual(artifact.signedAt);
+    expect(restored).not.toHaveProperty("sha256");
+  }));
+});
+
+it("retains explicitly hashed output and rejects a conflicting recorded digest", async () => {
+  await run(Effect.gen(function*() {
+    const outfile = join(root, "hashed");
+    const first = yield* produce(outfile).pipe(Effect.flatMap(Artifact.withSha256), Cache.cached({ key: cacheKey(), outfile, schema: Artifact.HashedFile }));
+    const hit = yield* Effect.die("hit").pipe(Cache.cached({ key: cacheKey(), outfile: join(root, "hit"), schema: Artifact.HashedFile }));
+    expect(hit.sha256).toBe(first.sha256);
+    yield* Artifact.verify(hit);
+    const store = yield* KeyValueStore.KeyValueStore;
+    const id = yield* Cache.key(cacheKey());
+    const entry = JSON.parse((yield* store.get(id))!);
+    entry.artifact.sha256 = "0".repeat(64);
+    yield* store.set(id, JSON.stringify(entry));
+    const rebuilt = yield* produce(outfile, "fresh").pipe(Effect.flatMap(Artifact.withSha256), Cache.cached({ key: cacheKey(), outfile, schema: Artifact.HashedFile }));
+    expect(rebuilt.sha256).not.toBe(first.sha256);
+    expect(yield* (yield* FileSystem.FileSystem).readFileString(outfile)).toBe("fresh");
   }));
 });
 
@@ -183,7 +221,7 @@ it("does not fail a successful build when index reads or ingest fail", async () 
     const record = yield* produce(outfile).pipe(Cache.cached({ key: cacheKey(), outfile }), Effect.provideService(KeyValueStore.KeyValueStore, {
       ...store, get: () => Effect.fail(error), set: () => Effect.fail(error),
     }));
-    yield* Artifact.verify(record);
+    expect(yield* (yield* FileSystem.FileSystem).readFileString(record.path)).toBe("hello");
   }));
 });
 
@@ -217,7 +255,7 @@ it("rejects invalid or mismatched output paths without populating an index entry
 it("concurrent misses never expose partial objects and interrupted ingest remains interruptible", async () => {
   await run(Effect.gen(function*() {
     const results = yield* Effect.forEach(["a", "b"], (name) => produce(join(root, name)).pipe(Cache.cached({ key: cacheKey(), outfile: join(root, name) })), { concurrency: 2 });
-    expect(results[0]!.sha256).toBe(results[1]!.sha256);
+    expect((yield* Artifact.withSha256(results[0]!)).sha256).toBe((yield* Artifact.withSha256(results[1]!)).sha256);
     yield* Effect.die("hit").pipe(Cache.cached({ key: cacheKey(), outfile: join(root, "c") }));
     const started = yield* Deferred.make<void>();
     const store = yield* KeyValueStore.KeyValueStore;

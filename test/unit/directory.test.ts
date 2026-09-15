@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import { TestArtifact } from "effect-build/testing";
 import * as Directory from "../../packages/effect-build/src/Directory.js";
@@ -22,9 +22,9 @@ const file = async (path: string, contents: string | Uint8Array = path) => {
 };
 const previous = async () => {
   await file("release/previous", "previous output");
-  return run(Artifact.directory(join(root, "release"), producer));
+  return run(Artifact.directory(join(root, "release"), producer).pipe(Effect.flatMap(Artifact.withSha256)));
 };
-const unchanged = async (before: Artifact.Directory) => {
+const unchanged = async (before: Artifact.HashedDirectory) => {
   expect(await run(Artifact.verify(before))).toEqual(before);
   expect((await readdir(root)).some((path) => path.startsWith(".effect-build-"))).toBe(false);
 };
@@ -47,7 +47,7 @@ describe("directory assembly", () => {
     ]);
     expect(await readFile(join(assembled.path, "chunks/node.js"), "utf8")).toContain("node");
     expect(await readFile(join(assembled.path, "chunks/bun.js"), "utf8")).toContain("bun");
-    expect(await run(Artifact.verify(assembled))).toEqual(assembled);
+    expect(await run(Artifact.directory(assembled.path, assembled.producedBy))).toEqual(assembled);
     if (process.platform !== "win32") {
       expect(assembled.rootMode).toBe(0o755);
       expect((await stat(join(assembled.path, "signer/main.wasm"))).mode & 0o7777).toBe(0o644);
@@ -63,7 +63,7 @@ describe("directory assembly", () => {
     await chmod(join(root, "source/lib/data"), 0o640);
     await symlink("lib", join(root, "source/current"));
     await symlink("missing", join(root, "source/dangling"));
-    const source = await run(Artifact.directory(join(root, "source"), producer));
+    const source = await run(Artifact.directory(join(root, "source"), producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const result = await run(Directory.assemble({ outdir: join(root, "release"), entries: [{ artifact: source, path: "runtime" }] }));
     expect(result.entries.find((entry) => entry.path === "runtime")).toMatchObject({ kind: "directory", mode: 0o750 });
     expect(result.entries.find((entry) => entry.path === "runtime/lib")).toMatchObject({ mode: 0o700 });
@@ -95,7 +95,7 @@ describe("directory assembly", () => {
     await file("outside/untouched", "outside");
     await mkdir(join(root, "source"));
     await symlink(join(root, "outside"), join(root, "source/link"));
-    const source = await run(Artifact.directory(join(root, "source"), producer));
+    const source = await run(Artifact.directory(join(root, "source"), producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const input = await file("input");
     const before = await previous();
     const failure = await run(Directory.assemble({ outdir: before.path, entries: [
@@ -118,14 +118,15 @@ describe("directory assembly", () => {
     await unchanged(before);
   });
 
-  it.each(["file", "directory", "manifest"])("rejects a changed %s input while preserving the previous output", async (kind) => {
-    const member = await file("source/input", "before");
-    const directory = await run(Artifact.directory(join(root, "source"), producer));
+  it.each(["file", "directory", "manifest"])("explicit verification rejects a changed %s input before assembly", async (kind) => {
+    const member = await run(Artifact.withSha256(await file("source/input", "before")));
+    const directory = await run(Artifact.directory(join(root, "source"), producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const before = await previous();
     if (kind === "directory") await file("source/added", "unexpected");
     else if (kind === "file") await writeFile(member.path, "after!");
     const artifact = kind === "file" ? member : kind === "manifest" ? { ...directory, entries: [] } : directory;
-    const failure = await run(Directory.assemble({ outdir: before.path, entries: [{ artifact, path: "input" }] }).pipe(Effect.flip));
+    const failure = await run(Artifact.verify(artifact).pipe(Effect.flatMap((verified) =>
+      Directory.assemble({ outdir: before.path, entries: [{ artifact: verified, path: "input" }] })), Effect.flip));
     expect(failure).toMatchObject({ _tag: "ArtifactError", reason: kind === "manifest" ? "invalid-metadata" : "changed" });
     await unchanged(before);
   });
@@ -143,7 +144,7 @@ describe("directory assembly", () => {
 
   it("can assemble a source snapshot into a nested destination without including its staging", async () => {
     await file("source/main.js", "export const current = true;");
-    const source = await run(Artifact.directory(join(root, "source"), producer));
+    const source = await run(Artifact.directory(join(root, "source"), producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const result = await run(Directory.assemble({ outdir: join(source.path, "release"), entries: [{ artifact: source }] }));
     expect(result.entries.map((entry) => entry.path)).toEqual(["main.js"]);
     expect(await readFile(join(result.path, "main.js"), "utf8")).toContain("current");
@@ -152,12 +153,12 @@ describe("directory assembly", () => {
   it("rejects direct output inside a directory input before deleting members, including path aliases", async () => {
     await file("source/main.js", "current source");
     await file("source/release/previous", "previous output");
-    const source = await run(Artifact.directory(join(root, "source"), producer));
-    const before = await run(Artifact.directory(join(source.path, "release"), producer));
+    const source = await run(Artifact.directory(join(root, "source"), producer).pipe(Effect.flatMap(Artifact.withSha256)));
+    const before = await run(Artifact.directory(join(source.path, "release"), producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const cases = [{ artifact: source, outdir: before.path }];
     if (process.platform !== "win32") {
       await symlink(source.path, join(root, "alias"));
-      const alias = await run(Artifact.directory(join(root, "alias"), producer));
+      const alias = await run(Artifact.directory(join(root, "alias"), producer).pipe(Effect.flatMap(Artifact.withSha256)));
       cases.push({ artifact: alias, outdir: before.path }, { artifact: source, outdir: join(root, "alias/release") });
     }
     for (const { artifact, outdir } of cases) {
@@ -177,16 +178,15 @@ describe("directory assembly", () => {
     await unchanged(before);
   });
 
-  it("interrupts a streamed copy and removes staging without changing previous output", async () => {
+  it("interrupts during copying and removes staging without changing previous output", async () => {
     const input = await file("input", new Uint8Array(192 * 1024).fill(42));
     const before = await previous();
     const exit = await run(Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const blocked = yield* Deferred.make<void>();
-      let chunks = 0;
       const fiber = yield* Directory.assemble({ outdir: before.path, entries: [{ artifact: input, path: "payload" }] }).pipe(
-        Effect.provideService(FileSystem.FileSystem, { ...fs, stream: (path, options) => fs.stream(path, options).pipe(
-          Stream.tap(() => ++chunks === 2 ? Deferred.succeed(blocked, undefined).pipe(Effect.andThen(Effect.never)) : Effect.void),
+        Effect.provideService(FileSystem.FileSystem, { ...fs, copyFile: (source, destination) => fs.copyFile(source, destination).pipe(
+          Effect.andThen(Deferred.succeed(blocked, undefined)), Effect.andThen(Effect.never),
         ) }), Effect.forkChild,
       );
       yield* Deferred.await(blocked);
@@ -196,4 +196,18 @@ describe("directory assembly", () => {
     expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
     await unchanged(before);
   });
+});
+
+
+it("assembles current input bytes without reading for hashes", async () => {
+  const input = await file("input", "before");
+  await writeFile(input.path, "after!");
+  const result = await run(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    return yield* Directory.assemble({ outdir: join(root, "release"), entries: [{ artifact: input, path: "payload" }] }).pipe(
+      Effect.provideService(FileSystem.FileSystem, { ...fs, open: () => Effect.die("assembly opened an input or output for hashing") }),
+    );
+  }));
+  expect(await readFile(join(result.path, "payload"), "utf8")).toBe("after!");
+  expect(result).not.toHaveProperty("sha256");
 });
