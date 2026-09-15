@@ -76,18 +76,27 @@ always checks the artifact metadata before using paths or manifests. Provider-lo
 extra fields remain the provider codec's responsibility; only the artifact's root `path` is
 relocated.
 
-The v2 index stores the caller's encoded record and a separate hashed identity. The cache hashes
-output internally on a miss, checks that the stored identity agrees with the record, and verifies
-the bytes restored on a hit. Provider refinements and codec transformations survive either path.
+The v3 index stores the caller's encoded record once, plus its root digest and, for directories,
+a map of file digests. Paths, sizes, targets, modes, and producer metadata belong to the record.
+The cache computes digests while ingesting output and reconstructs hashed records when decoding a
+hit. Provider refinements and codec transformations survive either path.
 Schema validation establishes valid metadata; it does not read or verify current file contents.
 
-Files are streamed into private staging and atomically renamed to SHA-256 object names.
+Files are streamed into private staging while their bytes are hashed, then atomically renamed
+to the completed digest's object name. Ingestion makes one full pass over each file; it does not
+hash the source first or reread the stored object afterward.
 Directories store each file object once; their sorted manifest retains modes, empty directories
-and symlinks. Regular file modes are retained in the index. Hits verify into private scratch,
-then copy from there through `Commit.output`, honoring `atomic`, `onExists`, and `prefix`.
-Restored bytes are rehashed against the private identity; the returned record keeps its original
-`producedBy` and declared schema. No object is hardlinked
-to mutable output. Even with `atomic: false`, corruption is detected before touching the destination.
+and symlinks. Regular file modes are retained in the index.
+
+Atomic hits verify object bytes while copying directly into `Commit.output` staging, then publish
+the completed output. They make one full read of each object. With `atomic: false`, a hit first
+copies and verifies into private scratch, then copies into the destination: two full reads keep
+cache corruption from touching an existing output. Neither path rereads completed copies for
+another hash. Executable header checks still establish the recorded target.
+
+Both paths honor `onExists` and `prefix`. The returned record keeps its original `producedBy`
+and declared schema, and objects are never hardlinked to mutable output. Directory members are
+created exclusively, so names that alias on the destination filesystem fail instead of overwriting.
 
 The producer's output path must equal `outfile` after resolution. A mismatch is an
 `InputInvalid` on a miss. Supply the same commit options to the producer and combinator so

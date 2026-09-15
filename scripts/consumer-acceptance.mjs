@@ -96,10 +96,19 @@ try {
 import { Effect, Schema } from "effect";
 import { Artifact, Checksums, Directory } from "effect-build";
 import * as Archive from "effect-build-archives";
+import * as Apple from "effect-build-apple";
+import * as Python from "effect-build-python";
 declare const file: Artifact.File;
 declare const directory: Artifact.Directory;
 Directory.assemble({ entries: [{ artifact: directory }, { artifact: file, path: "assets/input.txt" }], outdir: "runtime" });
 Archive.tarGz({ directory, outfile: "runtime.tar.gz" });
+Python.wheel({ metadata: { name: "consumer", version: "1.0.0" }, tags: { python: "py3", abi: "none", platform: "any" },
+  entries: [{ artifact: file, path: "consumer/data.txt" }], outdir: "wheels" });
+declare const app: Apple.App;
+Apple.staple({ artifact: app });
+Apple.assess({ artifact: app });
+Apple.verifySignature({ artifact: app });
+Apple.validateTicket({ artifact: app });
 const HashedFile = Artifact.File.pipe(Schema.fieldsAssign({ sha256: Artifact.Sha256 }));
 declare const hashed: typeof HashedFile.Type;
 Checksums.write({ artifacts: [hashed], outfile: "SHA256SUMS" });
@@ -152,7 +161,11 @@ await Effect.runPromise(Effect.gen(function*() {
   const archive = yield* Archive.tarGz({ directory: merged, outfile: "runtime.tar.gz" });
   yield* Artifact.withSha256(archive).pipe(Effect.flatMap(Artifact.verify));
 }).pipe(Effect.provide(NodeServices.layer)));
-assert.match(Layout.validate([
+assert.equal(Layout.validate([
+  { path: "Docs/a", kind: "file" },
+  { path: "docs/b", kind: "file" },
+]), undefined);
+assert.match(Layout.validatePortable([
   { path: "Docs/a", kind: "file" },
   { path: "docs/b", kind: "file" },
 ]).reason, /collision/);

@@ -1,19 +1,17 @@
-import { Effect, Path, Schema } from "effect";
+import { Effect, Path } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
-import { copyProduct, inspectProduct, outputPath, runNative, verifySignature } from "./internal.js";
-import { HashedSignedProduct, type HashedSignedApp, type HashedSignedDmg, type HashedSignedPkg, type StapledApp, type StapledDmg, type StapledPkg, type StapledProduct } from "./Model.js";
-import { AcceptedReference } from "./Notary.js";
+import { copyProduct, inspectProduct, outputPath, runNative } from "./internal.js";
+import type { App, Dmg, Pkg, Product } from "./Model.js";
 
 interface StapleOptions extends Commit.ProducerOptions, Tool.EnvironmentOptions {
-  readonly acceptance: AcceptedReference;
   readonly cwd?: string | undefined;
 }
 export interface StapleAppInput extends StapleOptions {
-  readonly artifact: HashedSignedApp;
+  readonly artifact: App;
   readonly outdir?: string | undefined;
 }
-export interface StapleFileInput<P extends HashedSignedDmg | HashedSignedPkg = HashedSignedDmg | HashedSignedPkg> extends StapleOptions {
+export interface StapleFileInput<P extends Dmg | Pkg = Dmg | Pkg> extends StapleOptions {
   readonly artifact: P;
   readonly outfile?: string | undefined;
 }
@@ -21,20 +19,13 @@ export type StapleInput = StapleAppInput | StapleFileInput;
 export type StapleError = Tool.InputInvalid | Artifact.ArtifactError | Commit.CommitError | Tool.Failed | Tool.SpawnFailed;
 
 const invalid = (reason: unknown) => new Tool.InputInvalid({ operation: "Apple.staple", reason: String(reason) });
-export function staple(input: StapleAppInput): Effect.Effect<StapledApp, StapleError, Apple | Env>;
-export function staple(input: StapleFileInput<HashedSignedDmg>): Effect.Effect<StapledDmg, StapleError, Apple | Env>;
-export function staple(input: StapleFileInput<HashedSignedPkg>): Effect.Effect<StapledPkg, StapleError, Apple | Env>;
-export function staple(input: StapleInput): Effect.Effect<StapledProduct, StapleError, Apple | Env>;
-export function staple(input: StapleInput): Effect.Effect<StapledProduct, StapleError, Apple | Env> {
+export function staple(input: StapleAppInput): Effect.Effect<App, StapleError, Apple | Env>;
+export function staple(input: StapleFileInput<Dmg>): Effect.Effect<Dmg, StapleError, Apple | Env>;
+export function staple(input: StapleFileInput<Pkg>): Effect.Effect<Pkg, StapleError, Apple | Env>;
+export function staple(input: StapleInput): Effect.Effect<Product, StapleError, Apple | Env>;
+export function staple(input: StapleInput): Effect.Effect<Product, StapleError, Apple | Env> {
   return Effect.gen(function*() {
-    yield* Schema.decodeUnknownEffect(HashedSignedProduct)(input.artifact).pipe(Effect.mapError(invalid));
-    yield* Schema.decodeUnknownEffect(AcceptedReference)(input.acceptance).pipe(Effect.mapError(invalid));
     const source = input.artifact;
-    const accepted = input.acceptance.artifact;
-    // Acceptance names the input before stapling; its path can change without changing the accepted bytes.
-    if (accepted.kind !== source.kind || accepted.product !== source.product || accepted.bytes !== source.bytes || accepted.sha256 !== source.sha256) {
-      return yield* invalid("notarization acceptance does not match the artifact to staple");
-    }
     if (source.product === "app" ? "outfile" in input : "outdir" in input) {
       return yield* invalid("app stapling takes outdir; file stapling takes outfile");
     }
@@ -44,13 +35,8 @@ export function staple(input: StapleInput): Effect.Effect<StapledProduct, Staple
     const produce = (out: string) => Effect.gen(function*() {
       // Direct output can intentionally staple in place; copying a file over itself would truncate it.
       if (out !== p.resolve(source.path)) yield* copyProduct("Apple.staple", source, out, input);
-      yield* Artifact.verify({ ...source, path: out });
-      yield* verifySignature(source, out, input);
       yield* runNative("stapler", ["staple", out], input);
-      yield* runNative("stapler", ["validate", out], input);
-      yield* verifySignature(source, out, input);
-      const current = yield* inspectProduct(source, out);
-      return { ...current, ticket: input.acceptance };
+      return yield* inspectProduct(source, out);
     });
     return yield* Commit.output(destination, produce, input);
   });

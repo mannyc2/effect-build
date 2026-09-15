@@ -2,6 +2,7 @@ import { sha256 as incrementalSha256 } from "@noble/hashes/sha2.js";
 import { Crypto, Effect, Encoding, FileSystem, Path, PlatformError, Schema, Stream } from "effect";
 import * as Inspect from "./Executable.js";
 import { readLink } from "./internal/fileSystem.js";
+import { manifestDigest } from "./internal/directoryIdentity.js";
 import { parts, Target } from "./Target.js";
 
 const Bytes = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
@@ -85,19 +86,6 @@ export const HashedEntry = Schema.Union([
   Entry.members[2],
 ]);
 export type HashedEntry = typeof HashedEntry.Type;
-
-const encoder = new TextEncoder();
-// Directory identity is SHA-256 of UTF-8 JSON tuples in this exact field order.
-// The root mode is carried beside the digest and verified separately.
-const manifestDigest = (entries: readonly HashedEntry[]): Sha256 => {
-  const hash = incrementalSha256.create().update(encoder.encode("["));
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i]!;
-    if (i > 0) hash.update(encoder.encode(","));
-    hash.update(encoder.encode(JSON.stringify([e.kind, e.mode, e.bytes, e.kind === "file" ? e.sha256 : undefined, e.linkTarget, e.path])));
-  }
-  return Encoding.encodeHex(hash.update(encoder.encode("]")).digest()) as Sha256;
-};
 
 export const HashedDirectory = Directory.pipe(Schema.fieldsAssign({
   ...identity,
@@ -402,8 +390,9 @@ export const streamVerified = (artifact: HashedRegular): Stream.Stream<Uint8Arra
   }));
 
 /**
- * Copy a file through `streamVerified`, so `destination` ends up holding exactly the
- * recorded bytes or nothing at all. A destination equal to the source is verified in place.
+ * Copy through `streamVerified`. Failure attempts to remove incomplete output; use
+ * `Commit.atomic` when publication must be all-or-nothing. An equal source and
+ * destination path is verified in place.
  */
 export const copyVerified = (artifact: HashedRegular, destination: string): Effect.Effect<void, ArtifactError, Fs> =>
   Effect.gen(function*() {

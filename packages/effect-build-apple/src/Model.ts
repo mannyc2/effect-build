@@ -1,6 +1,5 @@
 import { Schema } from "effect";
 import { Artifact } from "effect-build";
-import type { AcceptedReference } from "./Notary.js";
 
 export const App = Schema.Struct({ ...Artifact.Directory.fields, product: Schema.Literal("app") }).check(Schema.makeFilter((value) => Schema.is(Artifact.Directory)(value) ? undefined : "invalid directory artifact"));
 export type App = typeof App.Type;
@@ -24,20 +23,3 @@ export const SignedExecutable = Schema.Struct({ ...Artifact.Executable.fields, s
 export type SignedExecutable = typeof SignedExecutable.Type;
 export const Signed = Schema.Union([SignedApp, SignedDmg, SignedPkg, SignedExecutable]);
 export type Signed = typeof Signed.Type;
-/** Explicit content identities for remote notarization and acceptance matching. */
-export const HashedSignedApp = Schema.Struct({ ...SignedApp.fields, ...Artifact.HashedDirectory.fields }).check(Schema.makeFilter((value) => Schema.is(Artifact.HashedDirectory)(value) ? undefined : "invalid hashed app artifact"));
-export type HashedSignedApp = typeof HashedSignedApp.Type;
-export const HashedSignedDmg = Schema.Struct({ ...SignedDmg.fields, ...Artifact.HashedFile.fields });
-export type HashedSignedDmg = typeof HashedSignedDmg.Type;
-export const HashedSignedPkg = Schema.Struct({ ...SignedPkg.fields, ...Artifact.HashedFile.fields });
-export type HashedSignedPkg = typeof HashedSignedPkg.Type;
-export const HashedSignedExecutable = Schema.Struct({ ...SignedExecutable.fields, ...Artifact.HashedExecutable.fields }).check(Schema.makeFilter((value) => Schema.is(Artifact.HashedExecutable)(value) ? undefined : "invalid hashed executable artifact"));
-export type HashedSignedExecutable = typeof HashedSignedExecutable.Type;
-export const HashedSignedProduct = Schema.Union([HashedSignedApp, HashedSignedDmg, HashedSignedPkg]);
-export type HashedSignedProduct = typeof HashedSignedProduct.Type;
-export const HashedSigned = Schema.Union([HashedSignedApp, HashedSignedDmg, HashedSignedPkg, HashedSignedExecutable]);
-export type HashedSigned = typeof HashedSigned.Type;
-export type StapledApp = SignedApp & { readonly ticket: AcceptedReference };
-export type StapledDmg = SignedDmg & { readonly ticket: AcceptedReference };
-export type StapledPkg = SignedPkg & { readonly ticket: AcceptedReference };
-export type StapledProduct = StapledApp | StapledDmg | StapledPkg;

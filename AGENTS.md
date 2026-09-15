@@ -16,10 +16,13 @@ and outcomes when they change or attest to bytes. Publishing belongs to ts-relea
 1. **One artifact type.** `Artifact.File | Artifact.Executable | Artifact.Directory`.
    Every producer returns one of these and composes through these records. No package defines its own
    identity, digest, path, or size type. `bytes` is a `number`. Core `Hashed*` schemas add SHA-256;
-   ordinary producers never hash implicitly. Integrity-dependent consumers require those refinements.
+   artifact construction never hashes implicitly. Require a prior identity only when comparing against
+   previously identified bytes; formats and caches compute needed digests while consuming bytes.
 2. **Defenses are combinators or options, never services.** `Commit.atomic`,
    `Executable.expectTarget`, `Tool.requireVersion`, `Artifact.verify`. If you need
    a service to hold a decision, make a combinator instead.
+   Ordinary operations establish their stated result. Additional assurance and portability are explicit;
+   do not repeat payload checks already established by the operation consuming those bytes.
 3. **Core is domain-free.** It knows files, executables, directories, tools, and
    rename. It does not know Bun, zip, wheels, or Apple. A concept enters core only
    when two packages need it for the same reason. A provider is core's shape for wrapping a tool;

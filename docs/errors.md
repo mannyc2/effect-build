@@ -84,13 +84,14 @@ retain their native output and format checks.
 | `Artifact.verify`         | Re-reads a file or directory and fails with `changed` if any byte, mode, or entry differs from the record.                                   |
 | `Artifact.readVerified`   | Returns a file's bytes, bounded to the recorded size, or fails.                                                                              |
 | `Artifact.streamVerified` | Streams a file's bytes while hashing them; the stream fails at the end if they changed, so output written from it is provisional until then. |
-| `Artifact.copyVerified`   | Copies through `streamVerified`, so the destination holds exactly the recorded bytes or nothing.                                             |
+| `Artifact.copyVerified`   | Verifies bytes while copying and attempts cleanup on failure. Compose with `Commit.atomic` for staged publication.                         |
 | `Executable.expectTarget` | Re-reads an executable's header after a step that rewrote it (signing, stripping) and fails on a mismatch.                                   |
 | `Tool.requireVersion`     | Applies a range or predicate to a resolved tool; the layers use it for `supported`.                                                          |
 
 A verified stream can fail at EOF, so consumers using it should stage provisional output.
-The wheel writer does this because RECORD requires exact input digests. Ordinary archives
-stream current bytes and enforce their format sizes without mandatory digest verification.
+Cache restoration verifies its expected digests during copying. The wheel writer hashes current
+payloads while encoding and writes those digests into RECORD. Ordinary archives stream current
+bytes and enforce their format sizes without mandatory digest verification.
 
 ## Atomic output
 

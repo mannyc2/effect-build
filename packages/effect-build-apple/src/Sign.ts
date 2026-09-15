@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path } from "effect";
 import { Artifact, Commit, type Executable, Layout, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
-import { copyProduct, copyRegular, type Entitlements, entitlementsFile, outputPath, runNative, verifySignature } from "./internal.js";
+import { copyProduct, copyRegular, type Entitlements, entitlementsFile, outputPath, runNative } from "./internal.js";
 import type { App, Dmg, Pkg, SignedApp, SignedDmg, SignedExecutable, SignedPkg, SignedProduct } from "./Model.js";
 
 export type { Entitlements } from "./internal.js";
@@ -77,7 +77,7 @@ const signProduct = (input: SignAppInput | SignDmgInput): Effect.Effect<SignedAp
       return input.artifact.product === "app"
         ? { ...yield* Artifact.directory(out, Tool.producedBy(tool)), product: "app" as const, signature: { ...signature, hardenedRuntime: true as const } }
         : { ...yield* Artifact.file(out, Tool.producedBy(tool)), product: "dmg" as const, signature };
-    }, Effect.tap((signed) => verifySignature(signed, signed.path, input)));
+    });
     return yield* Commit.output(destination, produce, input);
   }));
 const signPkg = (input: SignPkgInput): Effect.Effect<SignedPkg, SignError, Apple | Env> =>
@@ -96,7 +96,7 @@ const signPkg = (input: SignPkgInput): Effect.Effect<SignedPkg, SignError, Apple
     const produce = Effect.fn("Apple.sign.produce")(function*(out: string) {
       yield* runNative("productsign", ["--sign", input.certificateSha1, "--timestamp", source, out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
       return { ...yield* Artifact.file(out, Tool.producedBy(tool)), product: "pkg" as const, signature };
-    }, Effect.tap((signed) => verifySignature(signed, signed.path, input)));
+    });
     return yield* Commit.output(destination, produce, input);
   }));
 const signExecutable = (input: SignExecutableInput): Effect.Effect<SignedExecutable, SignError, Apple | Env> =>
@@ -121,7 +121,7 @@ const signExecutable = (input: SignExecutableInput): Effect.Effect<SignedExecuta
       ], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
       // Signing rewrites the binary; its header must still describe the input target.
       return { ...yield* Artifact.executable(out, Tool.producedBy(tool), input.artifact.target), signature };
-    }, Effect.tap((signed) => verifySignature(signed, signed.path, input)));
+    });
     return yield* Commit.output(destination, produce, input);
   }));
 

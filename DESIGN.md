@@ -21,7 +21,7 @@ inputs use the input cache; remote actions need fresh side effects or a future e
 | `Executable` | `parse`, `inspect`, `matches`, `resolveTarget`, `expectTarget`                                                                                                                        | ELF/Mach-O/PE header facts. A static Linux binary matches gnu and musl.                                                                                                                                                    |
 | `Commit`     | `atomic(outfile, produce, { onExists, prefix, staging })`, `output(outfile, produce, ProducerOptions, staging?)`                                                                      | Stage with final path depth or basename, then commit with recovery. Checks run inside `produce` run before the rename. `output` is what producers do with `atomic`, `onExists` and `prefix`; the producer picks `staging`. |
 | `Tool`       | `InputInvalid`, `argumentIssue`, `locate`, `resolve`, `run`, `redact`, `parseVersion`, `versionPattern`, `satisfies`, `requireVersion`, `check`, `provider`, `producedBy`                                                                                                 | Locate and resolve once, record path/version/size; `Tool.withSha256` adds identity. Nothing re-checks the binary later. Ranges use npm semver.                                                                                                              |
-| `Layout`     | `Entry`, `Issue`, `pathIssue`, `validate`                                                                                                                                             | Shared normalized shipping paths: every explicit or implicit prefix has one NFC/case-folded spelling and only directories have descendants.                                                                                |
+| `Layout`     | `Entry`, `Issue`, `pathIssue`, `validate`, `validatePortable`                                                                                                                                             | Structural shipping paths; explicit portability validation adds case/NFC collision checks.                                                                                |
 | `Checksums`  | `write`, `verify`                                                                                                                                                                               | `sha256sum -c` compatible writing and verification.                                                                                                                                                                                                 |
 
 `Cache` owns declared keys, a `KeyValueStore` index, and streamed objects provided by
@@ -45,7 +45,7 @@ The spec owns version parsing, exact tested versions, constraints and host requi
 `extend` is required when the service holds extra fields; Deno records its explicit runtime,
 and Node SEA resolves `base` beside `tool`. Native bundlers retain their in-process APIs.
 
-Operations verify their own output before the rename (executables: header vs
+Operations establish their returned metadata before the rename (executables: header vs
 requested target) and commit through `Commit.output`, so `atomic: false` writes
 directly and `onExists`/`prefix` reach the commit; staging depth is the operation's
 own choice. Optional inputs accept `undefined`; callers forward `process.env` values
@@ -63,7 +63,7 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
 - **Declared-input cache, constructive storage.** Inputs, tool identity, host, canonical JSON options and format determine the key. No closure inference, sandbox, remote store, expected-output mode, TTL or pruning in 0.8. Provider signatures stay native; callers declare path/config/plugin/runtime dependencies. Scrubbed environments are optional; requirement metadata is descriptive, never a complete dependency closure.
 - **Index and objects are separate resources.** Effect rc.113 `KeyValueStore` stores metadata; `PersistedCache` stores exits and TTL policy, which this cache does not need. Whole-file objects stream independently; directories reuse their manifest identity plus root mode. This retains the Action/result/CAS split of [REAPI](https://github.com/bazelbuild/remote-apis/blob/main/build/bazel/remote/execution/v2/remote_execution.proto) without claiming protocol compatibility.
 - **Canonical JSON rejects ambiguous data.** Sorted object keys and omitted undefined properties; dense ordered arrays; no functions, accessors, cycles, non-finite numbers or class instances. Encoded components are retained for inspection; callers include implementation revisions and fingerprints of secret inputs where needed.
-- **Cache hits copy verified bytes.** Private verification precedes destination writes, including direct output; committed output is rehashed. No hardlinks to mutable output; Effect FileSystem exposes no reflink option. Corrupt/unavailable cache entries are misses and failed ingest warns; destination failures and interruption remain visible. Concurrent index writes are last-writer-wins, not a claim of reproducible output.
+- **Cache bytes are checked while copying.** Misses hash into private objects and publish them under their completed digest. Atomic hits verify straight into commit staging; direct hits first prepare privately so corruption leaves existing output intact. No post-copy payload rereads or hardlinks to mutable output. Corrupt/unavailable entries miss and failed ingest warns; destination failures and interruption remain visible. Concurrent index writes are last-writer-wins, not a claim of reproducible output.
 - **Cached refinements need a codec.** The default returns the core union; an explicit schema retains the precise kind and provider fields with their services. Regular modes and directory roots survive restoration; only the root path is relocated. `Cache.clear` operates on dedicated stores while builds are stopped; format prefixes isolate incompatible schemas.
 - **Whole files in 0.8.** A Bun 1.3.14 host pair changed 37 of 63,446,114 bytes; the five-target CLI sample saved only 1.32% with fixed 64 KiB block deduplication (441,366,250 total bytes). Chunking may help repeated same-target outputs but is not needed for the first store implementation.
 - **Isolation is explicit and limited.** `env`/`extendEnv` and `scrubEnv` reach binary operations. Bun 1.3.14's `--compile-executable-path` and compile `--metafile` work in a real probe; an artifact-typed runtime option and reported-closure checks remain future provider features. Copying inputs into a temp cwd cannot confine undeclared absolute paths; no sandbox is claimed.
@@ -83,8 +83,9 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
   output is provisional until then and only atomic staging makes that safe. The only size limits are
   ZIP32 and ustar field widths, typed as `Archive.FormatLimit`; there is no byte budget to tune.
 - **Static Linux binaries report as glibc** when no target is requested.
-- **One streaming ZIP encoder.** `Archive.Zip.encode` writes archives and wheels; `effect-build-python`
-  depends on `effect-build-archives` for it, so both share the same limits and verified streams.
+- **One streaming ZIP encoder.** `Archive.Zip.encode` preserves caller entry order. Archives sort
+  their entries; wheels sort payloads and emit metadata with RECORD last. Wheels hash actual payload
+  bytes during encoding, so ordinary artifacts need no precomputed digest. Both share format limits.
 - **Bun forces lowercase `.exe` on Windows outputs**, so callers' `outfile` must end in `.exe`
   for Windows targets; the provider rejects otherwise rather than renaming.
 - **Tested versions are evidence, not compatibility gates.** Bun 1.4.1 is rejected only for emitted builds; native APIs retain independent capability checks.
@@ -111,15 +112,17 @@ types (`SignedApp = Artifact.Directory & { signature }`) but never replace them.
   install runs in process; the Rolldown wrapper uses `rolldown/experimental`, whose types move outside semver.
 - **Standalone executables sign with the hardened runtime, notarize as ZIPs, and are assessed, never stapled**:
   Apple issues tickets for them but cannot attach one. Entitlements come from the caller; the Bun provider lists its own.
-- **PKGs carry one signed app or one signed executable.** An executable's payload root installs to
+- **PKGs carry one app or one executable.** An executable's payload root installs to
   `/usr/local/bin` unless `installLocation` says otherwise; that is where a CLI belongs.
 - **Trusted Signing credentials are two paths.** SignTool's client library reads Azure identity from the
   environment, so the library holds no Azure secret.
 
 - **Core manifests project core fields only.** Provider schemas preserve richer signing/runtime/product/notary records.
 - **Release retries consume retained exact tarballs** and verify registry bytes before skipping an existing version.
-- **Content identity is opt-in schema composition.** Base artifacts and directory entries carry metadata; `Hashed*` schemas require SHA-256. `withSha256` computes identity, schemas decode without I/O, and integrity consumers require hashed inputs. Ordinary producers never hash; cache v2 stores its output identity separately from the caller's record.
-- **Layouts reject case-insensitive and NFC collisions at every path prefix on every host.** Core `Layout` owns this shipping guarantee for archives, wheels and app bundles, including implicit directories; local artifact observations still record host-specific names.
+- **Content identity is opt-in schema composition.** Base artifacts and entries carry metadata; `Hashed*` schemas require SHA-256. Require prior identity when comparing expected bytes. Formats and caches compute needed digests while consuming bytes. The cache stores a digest supplement beside the caller's canonical record instead of duplicating its core fields.
+- **Layout validity and portability are separate.** `Layout.validate` rejects traversal, duplicate exact paths and descendants through files or symlinks. `validatePortable` explicitly adds case/NFC collision checks. Filesystem writers create members exclusively so actual destination aliases fail; encoders can retain distinct archive names on any host.
+- **Apple operations follow their native boundary.** Packaging accepts base products; stapling and assessment need no prior submission receipt. Signature verification, ticket validation and accepted-status checks are explicit effects in release compositions. Notary lookup and wait use the native submission ID; stapling returns fresh product metadata without attaching a historical receipt.
+- **Assurance has one owner.** Each operation establishes its stated result. Additional checks are explicitly composed; avoid repeated payload validation and stronger input types that merely shift an implementation's work onto callers.
 - **Archive and wheel bytes depend only on their inputs**: DEFLATE level 6, fixed ZIP timestamps, zero tar
   owners and times, zero gzip mtime. There are no timestamp, ownership, comment or compression options.
 - **Windows signatures always carry an RFC3161 SHA-256 timestamp, and SignTool warnings fail.** Exit 2 means

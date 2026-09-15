@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path } from "effect";
 import { Artifact, Executable, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
-import type { Signed, SignedProduct } from "./Model.js";
+import type { Product } from "./Model.js";
 import { plist } from "./plist.js";
 
 export type NativeTool = "codesign" | "hdiutil" | "plutil" | "pkgbuild" | "productbuild" | "productsign" | "pkgutil" | "notarytool" | "stapler" | "spctl" | "ditto";
@@ -69,11 +69,6 @@ export const copyProduct = (operation: string, artifact: Artifact.Artifact, dest
   // ditto preserves framework symlinks verbatim; Node's recursive copy can rewrite them toward the source tree.
   yield* runNative("ditto", [artifact.path, destination], options);
 });
-export const verifySignature = (signed: Signed, path = signed.path, options: Tool.EnvironmentOptions = {}): Effect.Effect<
-  void, Tool.Failed | Tool.SpawnFailed, Apple | Env
-> => ("product" in signed && signed.product === "pkg"
-  ? runNative("pkgutil", ["--check-signature", path], options)
-  : runNative("codesign", ["--verify", ...("product" in signed && signed.product === "app" ? ["--deep"] : []), "--strict", path], options)).pipe(Effect.asVoid);
 /** Entitlements arrive as a plist artifact or as keys; both are linted as the file codesign receives. */
 export type Entitlements = Artifact.Regular | readonly string[];
 export const entitlementsFile = (operation: string, entitlements: Entitlements | undefined, path: string, options: Tool.EnvironmentOptions = {}): Effect.Effect<
@@ -93,11 +88,10 @@ export const entitlementsFile = (operation: string, entitlements: Entitlements |
   yield* runNative("plutil", ["-lint", path], options);
   return path;
 });
-/** Refresh core file facts after the caller has checked the retained product refinements. */
-export const inspectProduct = (product: SignedProduct, path: string): Effect.Effect<SignedProduct, Artifact.ArtifactError, Apple | Env> => Effect.gen(function*() {
+/** Describe the mutated product without carrying old signatures, receipts, or digests. */
+export const inspectProduct = (product: Product, path: string): Effect.Effect<Product, Artifact.ArtifactError, Apple | Env> => Effect.gen(function*() {
   const { tool } = yield* Apple;
-  // Rebuild the record after mutation so an input digest cannot survive as stale metadata.
   return product.product === "app"
-    ? { ...yield* Artifact.directory(path, Tool.producedBy(tool)), product: "app" as const, signature: product.signature }
-    : { ...yield* Artifact.file(path, Tool.producedBy(tool)), product: product.product, signature: product.signature };
+    ? { ...yield* Artifact.directory(path, Tool.producedBy(tool)), product: "app" as const }
+    : { ...yield* Artifact.file(path, Tool.producedBy(tool)), product: product.product };
 });

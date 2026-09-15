@@ -34,8 +34,8 @@ describe("real Python wheel installation", () => {
       ].join("\n"));
       const nativePath = join(root, nativeName);
       await standaloneProgram(nativePath);
-      const native = await run(Artifact.executable(nativePath, { name: "fixture", version: "0.7.0" }, Target.host()).pipe(Effect.flatMap(Artifact.withSha256)));
-      const module = await run(Artifact.file(source, { name: "fixture", version: "0.7.0" }).pipe(Effect.flatMap(Artifact.withSha256)));
+      const native = await run(Artifact.executable(nativePath, { name: "fixture", version: "0.7.0" }, Target.host()));
+      const module = await run(Artifact.file(source, { name: "fixture", version: "0.7.0" }));
       const options = {
         metadata: { name: "Native-Wheel-Fixture", version, requiresPython: ">=3.9" },
         tags: { python: "py3", abi: "none", platform: windows ? `win_${process.arch === "arm64" ? "arm64" : "amd64"}` : process.platform === "darwin" ? `macosx_11_0_${process.arch === "arm64" ? "arm64" : "x86_64"}` : `linux_${process.arch === "arm64" ? "aarch64" : "x86_64"}` },
@@ -58,8 +58,10 @@ describe("real Python wheel installation", () => {
         "with zipfile.ZipFile(sys.argv[1]) as wheel:",
         " assert wheel.testzip() is None",
         " names = wheel.namelist()",
-        " assert names == sorted(names, key=lambda name: name.encode('utf-8'))",
         " record = next(name for name in names if name.endswith('.dist-info/RECORD'))",
+        " payloads = [name for name in names if '.dist-info/' not in name]",
+        " metadata = [name for name in names if '.dist-info/' in name and name != record]",
+        " assert names == sorted(payloads, key=lambda name: name.encode('utf-8')) + sorted(metadata, key=lambda name: name.encode('utf-8')) + [record]",
         " rows = list(csv.reader(io.StringIO(wheel.read(record).decode('utf-8'), newline='')))",
         " assert len(rows) == len(names)",
         " assert {row[0] for row in rows} == set(names)",

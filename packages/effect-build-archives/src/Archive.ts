@@ -4,7 +4,7 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import metadata from "../package.json" with { type: "json" };
 import { EntrySizeMismatch } from "./EntrySizeMismatch.js";
 import { FormatLimit } from "./FormatLimit.js";
-import { chunkSize, encodeTarGzip, encodeZip, type Entry, tarLimit, zipLimit } from "./internal/archive.js";
+import { chunkSize, encodeTarGzip, encodeZip, type Entry, sortEntries, tarLimit, zipLimit } from "./internal/archive.js";
 import { gitlinksFrom, readGitTar } from "./internal/gitTar.js";
 import { TarInvalid } from "./TarInvalid.js";
 
@@ -84,7 +84,7 @@ const writeArchive = (
       Effect.gen(function*() {
         yield* Effect.scoped(Effect.gen(function*() {
           const file = yield* fs.open(out, { flag: "w" }).pipe(Effect.mapError(Artifact.ioError(out, "write")));
-          const encoded = format === "zip" ? encodeZip(entries) : encodeTarGzip(entries);
+          const encoded = format === "zip" ? encodeZip(sortEntries(entries)) : encodeTarGzip(entries);
           yield* Stream.runForEach(
             encoded,
             (chunk) => file.writeAll(chunk).pipe(Effect.mapError(Artifact.ioError(out, "write"))),

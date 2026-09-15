@@ -1,46 +1,19 @@
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { Artifact, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
-import { runNative, verifySignature } from "./internal.js";
-import { HashedSignedExecutable, type StapledProduct } from "./Model.js";
-import { AcceptedReference } from "./Notary.js";
+import { runNative } from "./internal.js";
+import type { Product } from "./Model.js";
 
-export type AssessError = Tool.InputInvalid | Artifact.ArtifactError | Tool.Failed | Tool.SpawnFailed;
-export interface AssessProductInput<A extends StapledProduct = StapledProduct> extends Tool.EnvironmentOptions { readonly artifact: A }
-/** Standalone executables cannot be stapled: Gatekeeper fetches their ticket online, so acceptance must name these exact bytes. */
-export interface AssessExecutableInput extends Tool.EnvironmentOptions { readonly artifact: HashedSignedExecutable; readonly acceptance: AcceptedReference }
-const invalid = (reason: unknown) => new Tool.InputInvalid({ operation: "Apple.assess", reason: String(reason) });
-
-export function assess<A extends StapledProduct>(input: AssessProductInput<A>): Effect.Effect<A, AssessError, Apple | Env>;
-export function assess(input: AssessExecutableInput): Effect.Effect<HashedSignedExecutable, AssessError, Apple | Env>;
-export function assess(input: AssessProductInput | AssessExecutableInput): Effect.Effect<StapledProduct | HashedSignedExecutable, AssessError, Apple | Env> {
-  return Effect.gen(function*() {
-    const artifact = input.artifact;
-    if (artifact.kind === "executable") {
-      yield* Schema.decodeUnknownEffect(HashedSignedExecutable)(artifact).pipe(Effect.mapError(invalid));
-      const acceptance = "acceptance" in input ? input.acceptance : undefined;
-      if (acceptance === undefined) return yield* invalid("executable assessment requires the notarization acceptance");
-      yield* Schema.decodeUnknownEffect(AcceptedReference)(acceptance).pipe(Effect.mapError(invalid));
-      const accepted = acceptance.artifact;
-      if (accepted.kind !== "executable" || accepted.bytes !== artifact.bytes || accepted.sha256 !== artifact.sha256) {
-        return yield* invalid("notarization acceptance does not match the executable");
-      }
-      yield* Artifact.verify(artifact);
-      yield* verifySignature(artifact, artifact.path, input);
-      yield* runNative("spctl", ["--assess", "--type", "execute", "--verbose=4", artifact.path], input);
-      return artifact;
-    }
-    yield* Schema.decodeUnknownEffect(AcceptedReference)(artifact.ticket).pipe(Effect.mapError(invalid));
-    if (artifact.ticket.artifact.kind !== artifact.kind || !("product" in artifact.ticket.artifact) || artifact.ticket.artifact.product !== artifact.product) {
-      return yield* invalid("the notarization ticket describes a different product kind");
-    }
-    // Stapling changes the accepted bytes; the native ticket validates the current product.
-    yield* verifySignature(artifact, artifact.path, input);
-    yield* runNative("stapler", ["validate", artifact.path], input);
-    const mode = artifact.product === "app" ? ["execute"]
-      : artifact.product === "pkg" ? ["install"]
-      : ["open", "--context", "context:primary-signature"];
-    yield* runNative("spctl", ["--assess", "--type", ...mode, "--verbose=4", artifact.path], input);
-    return artifact;
-  });
-}
+export type AssessError = Tool.InputInvalid | Tool.Failed | Tool.SpawnFailed;
+export interface AssessInput<A extends Product | Artifact.Executable> extends Tool.EnvironmentOptions { readonly artifact: A }
+/** Ask Gatekeeper to assess the current product or standalone Darwin executable. */
+export const assess = <A extends Product | Artifact.Executable>(input: AssessInput<A>): Effect.Effect<A, AssessError, Apple | Env> => Effect.gen(function*() {
+  const artifact = input.artifact;
+  if (artifact.kind === "executable" && (artifact.format !== "mach-o" || !artifact.target.startsWith("darwin-"))) {
+    return yield* new Tool.InputInvalid({ operation: "Apple.assess", reason: "executables must target Darwin and use Mach-O" });
+  }
+  const mode = artifact.kind === "executable" || artifact.product === "app" ? ["execute"]
+    : artifact.product === "pkg" ? ["install"] : ["open", "--context", "context:primary-signature"];
+  yield* runNative("spctl", ["--assess", "--type", ...mode, "--verbose=4", artifact.path], input);
+  return artifact;
+});

@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Stream } from "effect";
 import * as Artifact from "effect-build/Artifact";
 import { TestArtifact } from "effect-build/testing";
 import * as Directory from "../../packages/effect-build/src/Directory.js";
@@ -81,7 +81,7 @@ describe("directory assembly", () => {
     await unchanged(before);
   });
 
-  it.each([["same", "same"], ["Asset/a", "asset/b"], ["caf\u00e9/a", "cafe\u0301/b"], ["file", "file/child"]])("rejects conflicting paths %j and %j before changing output", async (first, second) => {
+  it.each([["same", "same"], ["file", "file/child"]])("rejects conflicting paths %j and %j before changing output", async (first, second) => {
     const input = await file("input");
     const before = await previous();
     const failure = await run(Directory.assemble({ outdir: before.path, entries: [
@@ -89,6 +89,26 @@ describe("directory assembly", () => {
     ] }).pipe(Effect.flip));
     expect(failure).toMatchObject({ _tag: "InputInvalid", operation: "Directory.assemble" });
     await unchanged(before);
+  });
+
+  it.each([["Readme", "README"], ["Asset/a", "asset/b"], ["caf\u00e9/a", "cafe\u0301/b"]])("preserves %j and %j when the destination filesystem distinguishes them", async (first, second) => {
+    const one = await file("one", "first member");
+    const two = await file("two", "second member");
+    const before = await previous();
+    // Observe this filesystem's actual spelling behavior rather than guessing from the OS.
+    await file(`probe/${first}`, "probe");
+    const alias = await stat(join(root, "probe", second!.split("/")[0]!)).then(() => true, () => false);
+    const outcome = await run(Directory.assemble({ outdir: before.path, entries: [
+      { artifact: one, path: first! }, { artifact: two, path: second! },
+    ] }).pipe(Effect.result));
+    if (alias) {
+      expect(outcome._tag).toBe("Failure");
+      await unchanged(before);
+    } else {
+      expect(outcome._tag).toBe("Success");
+      expect(await readFile(join(before.path, first!), "utf8")).toBe("first member");
+      expect(await readFile(join(before.path, second!), "utf8")).toBe("second member");
+    }
   });
 
   it.skipIf(process.platform === "win32")("rejects a symlink prefix before any write can escape the output tree", async () => {
@@ -185,8 +205,8 @@ describe("directory assembly", () => {
       const fs = yield* FileSystem.FileSystem;
       const blocked = yield* Deferred.make<void>();
       const fiber = yield* Directory.assemble({ outdir: before.path, entries: [{ artifact: input, path: "payload" }] }).pipe(
-        Effect.provideService(FileSystem.FileSystem, { ...fs, copyFile: (source, destination) => fs.copyFile(source, destination).pipe(
-          Effect.andThen(Deferred.succeed(blocked, undefined)), Effect.andThen(Effect.never),
+        Effect.provideService(FileSystem.FileSystem, { ...fs, stream: (...args) => fs.stream(...args).pipe(
+          Stream.tap(() => Deferred.succeed(blocked, undefined).pipe(Effect.andThen(Effect.never))),
         ) }), Effect.forkChild,
       );
       yield* Deferred.await(blocked);

@@ -79,7 +79,7 @@ digest validates its representation; it does not establish that a file still mat
 | `verify(artifact)`                        | Require a `HashedArtifact`; re-read and fail with `ArtifactError` (`changed`) if it differs from the record.                                                                                   |
 | `readVerified(artifact)`                  | Require a `HashedRegular`; return verified bytes, bounded to the recorded size.                                                                                                               |
 | `streamVerified(artifact)`                | Require a `HashedRegular`; stream in 64 KiB chunks and fail at the end if bytes changed, so consume it inside staged output.                                                                   |
-| `copyVerified(artifact, destination)`     | Require a `HashedRegular`; copy through `streamVerified` and remove incomplete output on failure.                                                                                             |
+| `copyVerified(artifact, destination)`     | Require a `HashedRegular`; copy through `streamVerified` and attempt cleanup on failure. Use `Commit.atomic` for staged publication.                                                           |
 | `sha256(bytes)`                           | Hex SHA-256 of a buffer.                                                                                                                                                                      |
 | `encode(artifacts)`, `decode(json)`       | Project base artifacts to plain JSON and validate them back. Digest and provider refinements are omitted; persist those with the corresponding hashed or provider schema.                    |
 
@@ -89,11 +89,14 @@ performs filesystem I/O.
 ## Layout
 
 `Layout.validate(entries)` checks relative shipping paths with `file`, `directory`, or `symlink`
-roles. It returns `{ path, reason }` on failure or `undefined` on success. Every explicit or
-implicit directory must have one spelling under NFC normalization and case folding, and only
-directories may have descendants. `Layout.pathIssue(path)` checks one normalized relative path.
-Archives, wheels and app resources use this check; `Artifact.directory` still records the names
-present on the local filesystem. Format-specific requirements stay with each provider.
+roles. It returns `{ path, reason }` on failure or `undefined` on success. Exact paths must be
+distinct and only directories may have descendants. `Layout.pathIssue(path)` checks one normalized
+relative path. Archives, wheels and app resources use this structural check.
+
+`Layout.validatePortable(entries)` additionally rejects case-folding and NFC-normalization
+collisions at every path prefix. Call it explicitly when shipping to filesystems that need that
+policy. Filesystem writers use exclusive member creation to reject actual destination collisions;
+archives can retain distinct names that the current host could not extract together.
 
 ## Target
 
@@ -201,8 +204,9 @@ without rewriting it:
 `Tool.provider(Service, spec)` is the shared binary-provider factory. `Cache.cached` adds
 declared-input caching with Effect `KeyValueStore` and streamed object storage; pass a codec
 for precise artifact or provider types. Cache inputs require hashed identities; tool identity is
-name/version plus an optional hash. Cache v2 hashes output internally and stores that identity
-separately, so ordinary and refined output records retain their declared shape on hits and misses.
+name/version plus an optional hash. The cache hashes while ingesting output and stores digest
+information beside the caller's canonical record. Ordinary and refined results retain their
+declared shape on hits and misses; restoration verifies the bytes during copying.
 The `effect-build/testing` subpath provides the
 scripted spawner, real-file fixtures and conformance suite. Its path fixtures use the optional
 `@effect/platform-node` peer. See [cache semantics](../../docs/cache.md) and

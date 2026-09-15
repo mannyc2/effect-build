@@ -60,7 +60,9 @@ const runtime = Effect.gen(function*() {
 
 Omitting a directory entry's `path` merges its contents at the root; providing `path`
 mounts it below that shipping path. Files require a path. Exact shared directories merge
-when their modes agree; duplicate files, conflicting modes and case/Unicode collisions fail.
+when their modes agree; duplicate files and conflicting modes fail. Actual destination aliases
+fail during exclusive member creation. `Layout.validatePortable` can reject case/Unicode
+collisions before building when cross-filesystem portability is required.
 File inputs use 0644 and executable inputs use 0755; directory members retain their modes,
 empty directories and symlinks. Inputs must remain unchanged while assembly reads them.
 
@@ -224,17 +226,18 @@ const wheel = (executable: Artifact.Executable) =>
 ## Sign and notarize a macOS CLI
 
 A bare executable signs with the hardened runtime and a secure timestamp, notarizes as a ZIP,
-and is assessed with its accepted submission because Apple cannot staple a ticket to a bare
+and is assessed directly because Apple cannot staple a ticket to a bare
 binary. Bun-compiled executables need Bun's JIT entitlements. Identities are certificate SHA-1
 fingerprints; credentials are a keychain profile, an App Store Connect API key, or an Apple ID.
 
 ```ts
 const darwin = (executable: Artifact.Executable, certificateSha1: string, credential: Apple.Notary.Credential) =>
   Effect.gen(function*() {
-    const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements }).pipe(Effect.flatMap(Artifact.withSha256));
+    const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements });
+    yield* Apple.verifySignature({ artifact: signed });
     const submission = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
-    const acceptance = yield* Apple.Notary.acceptedReference(submission);
-    const assessed = yield* Apple.assess({ artifact: signed, acceptance });
+    yield* Apple.Notary.expectAccepted(submission);
+    const assessed = yield* Apple.assess({ artifact: signed });
     return yield* Archive.tarGz({
       entries: [{ artifact: assessed, path: "hello" }],
       outfile: "dist/hello_darwin-arm64.tar.gz",
@@ -242,11 +245,11 @@ const darwin = (executable: Artifact.Executable, certificateSha1: string, creden
   }).pipe(Effect.provide(Apple.layer()));
 ```
 
-`Artifact.withSha256` records the signed bytes that the notarization reference will identify.
-`Apple.Notary.notarize` uploads and waits. When a build might be interrupted, call `Apple.Notary.submit`,
-persist the returned reference with its schema, and `Apple.Notary.wait` for it later. App bundles,
-DMGs, and PKGs follow the same path and are stapled before assessment. Stapling changes the
-bytes and returns a fresh record without a digest. The
+`Apple.Notary.notarize` uploads and waits; `expectAccepted` explicitly requires acceptance.
+When a build might be interrupted, call `Apple.Notary.submit`, persist its submission ID,
+and call `Apple.Notary.wait({ submissionId, credential })` later. App bundles, DMGs, and PKGs
+can be stapled before assessment. `Apple.validateTicket` is the explicit ticket check.
+Stapling changes the bytes and returns a fresh base product record. The
 [signing module](../examples/artifact-pipeline/src/signing.ts) has both flows.
 
 ## Sign a Windows executable
@@ -387,7 +390,7 @@ Effect callback with no typed failure channel; a failed write interrupts the com
 scope discards staging. Queries with larger structured output can set `stdoutLimit: null`.
 
 Remote operations return a schema-typed reference the caller can persist, then an outcome:
-`Apple.Notary.submit`, `wait`, and `acceptedReference` demonstrate the pattern. Such operations
+`Apple.Notary.submit`, `wait`, and `expectAccepted` demonstrate the pattern. Such operations
 belong here when they change or attest to bytes; transferring the product belongs to ts-release.
 They are never cached by declared inputs. [Cache](cache.md) applies to local producers whose
 complete dependencies the caller can declare.

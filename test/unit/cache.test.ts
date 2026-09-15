@@ -1,8 +1,9 @@
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, Fiber, FileSystem, Layer, Path, PlatformError, Schema } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Path, PlatformError, Schema, Stream } from "effect";
 import { KeyValueStore } from "effect/unstable/persistence";
 import { Artifact, Cache, Commit } from "effect-build";
 import { TestArtifact } from "effect-build/testing";
+import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -66,6 +67,68 @@ it("hits across destinations, preserves producer identity, and never hardlinks o
   expect(await readFile(join(root, "objects", entries[0]!), "utf8")).toBe("hello");
 });
 
+it.each([
+  { kind: "file", atomic: true }, { kind: "file", atomic: false },
+  { kind: "directory", atomic: true }, { kind: "directory", atomic: false },
+])("ingests $kind in one payload read and restores without rereading copied bytes (atomic: $atomic)", async ({ kind, atomic }) => {
+  const payload = "x".repeat(2 * 64 * 1024 + 13);
+  await run(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    let bytesRead = 0;
+    const observed = FileSystem.make({
+      ...fs,
+      readFile: () => Effect.die("cache payloads must stream"),
+      open: (path, options) => fs.open(path, options).pipe(Effect.map((handle) => new Proxy(handle, {
+        get(target, key) {
+          if (key === "read") return (buffer: Uint8Array) => target.read(buffer).pipe(Effect.tap((bytes) => Effect.sync(() => { bytesRead += Number(bytes); })));
+          if (key === "readAlloc") return (size: number) => target.readAlloc(size).pipe(Effect.tap((chunk) => Effect.sync(() => {
+            if (Option.isSome(chunk)) bytesRead += chunk.value.byteLength;
+          })));
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }))),
+    });
+    const outfile = join(root, "first");
+    const producer = kind === "file" ? produce(outfile, payload) : Effect.gen(function*() {
+      yield* fs.makeDirectory(outfile);
+      yield* fs.writeFileString(join(outfile, "payload"), payload);
+      return yield* Artifact.directory(outfile, producedBy);
+    });
+    yield* producer.pipe(Cache.cached({ key: cacheKey(), outfile }), Effect.provideService(FileSystem.FileSystem, observed));
+    expect(bytesRead).toBe(payload.length);
+    const object = join(root, "objects", createHash("sha256").update(payload).digest("hex"));
+    expect(yield* fs.readFileString(object)).toBe(payload);
+    bytesRead = 0;
+    const restored = yield* Effect.die("must hit").pipe(Cache.cached({ key: cacheKey(), outfile: join(root, "restored"), atomic }), Effect.provideService(FileSystem.FileSystem, observed));
+    expect(bytesRead).toBe(payload.length * (atomic ? 1 : 2));
+    expect(yield* fs.readFileString(kind === "file" ? restored.path : join(restored.path, "payload"))).toBe(payload);
+  }));
+});
+
+it("addresses the bytes consumed during ingestion and publishes only the completed object", async () => {
+  await run(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const outfile = join(root, "out");
+    const content = "changed while opening";
+    const expectedHash = createHash("sha256").update(content).digest("hex");
+    let observedCopy = false;
+    yield* produce(outfile, "x".repeat(content.length)).pipe(Cache.cached({ key: cacheKey(), outfile }), Effect.provideService(FileSystem.FileSystem, {
+      ...fs,
+      stream: (path, options) => path === outfile
+        ? Stream.unwrap(fs.writeFileString(path, content).pipe(Effect.as(fs.stream(path, options).pipe(Stream.tap(() => Effect.gen(function*() {
+          observedCopy = true;
+          expect(yield* fs.exists(join(root, "objects", expectedHash))).toBe(false);
+        }))))))
+        : fs.stream(path, options),
+    }));
+    expect(observedCopy).toBe(true);
+    expect(yield* fs.readFileString(join(root, "objects", expectedHash))).toBe(content);
+    const restored = yield* Effect.die("must hit the copied identity").pipe(Cache.cached({ key: cacheKey(), outfile: join(root, "restored") }));
+    expect(yield* fs.readFileString(restored.path)).toBe(content);
+  }));
+});
+
 it.each(["missing", "corrupt", "malformed-index"] as const)("rebuilds a %s entry", async (damage) => {
   await run(Effect.gen(function*() {
     const outfile = join(root, "out");
@@ -83,17 +146,17 @@ it.each(["missing", "corrupt", "malformed-index"] as const)("rebuilds a %s entry
   }));
 });
 
-it("corrupt direct hits leave the previous destination intact before the producer starts", async () => {
+it.each([true, false])("corrupt hits preserve the previous destination before rebuilding (atomic: %s)", async (atomic) => {
   await run(Effect.gen(function*() {
     const outfile = join(root, "out");
     const first = yield* produce(outfile).pipe(Cache.cached({ key: cacheKey(), outfile }));
     const identity = yield* Artifact.withSha256(first);
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.writeFileString(join(root, "objects", identity.sha256), "broken");
+    yield* fs.writeFileString(join(root, "objects", identity.sha256), "wrong");
     yield* Effect.gen(function*() {
       expect(yield* fs.readFileString(outfile)).toBe("hello");
       return yield* produce(outfile, "next");
-    }).pipe(Cache.cached({ key: cacheKey(), outfile, atomic: false }));
+    }).pipe(Cache.cached({ key: cacheKey(), outfile, atomic }));
   }));
 });
 
@@ -126,6 +189,31 @@ it("replaces an existing directory completely on a direct hit", async () => {
     const restored = yield* Effect.die("hit").pipe(Cache.cached({ key: cacheKey(), outfile: source, schema: Artifact.Directory, atomic: false }));
     expect(restored.entries).toEqual(artifact.entries);
     expect(yield* fs.exists(join(source, "stale"))).toBe(false);
+  }));
+});
+
+it("rejects directory members that alias on the destination filesystem before publication", async () => {
+  const source = join(root, "source"), outfile = join(root, "restored");
+  await mkdir(source); await mkdir(outfile);
+  await writeFile(join(source, "first"), "first member");
+  await writeFile(join(source, "second"), "second member");
+  await writeFile(join(outfile, "previous"), "previous output");
+  await run(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    yield* Artifact.directory(source, producedBy).pipe(Cache.cached({ key: cacheKey(), outfile: source }));
+    const p = yield* Path.Path;
+    // Model a filesystem where the second spelling aliases the first. The real
+    // exclusive open must fail instead of silently replacing the first member.
+    const failure = yield* Effect.die("a destination collision must not run the producer").pipe(
+      Cache.cached({ key: cacheKey(), outfile }),
+      Effect.provideService(FileSystem.FileSystem, FileSystem.make({
+        ...fs, open: (path, options) => fs.open(path.endsWith(`${p.sep}second`) ? path.slice(0, -6) + "first" : path, options),
+      })),
+      Effect.flip,
+    );
+    expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "unwritable" });
+    expect(yield* fs.readFileString(join(outfile, "previous"))).toBe("previous output");
+    expect(yield* fs.readDirectory(outfile)).toEqual(["previous"]);
   }));
 });
 
@@ -203,6 +291,33 @@ it("retains explicitly hashed output and rejects a conflicting recorded digest",
   }));
 });
 
+it("preserves a codec's member digests without requiring a root digest", async () => {
+  const MembersHashed = Artifact.Directory.pipe(Schema.fieldsAssign({ entries: Schema.Array(Artifact.HashedEntry) }));
+  const source = join(root, "source");
+  await mkdir(source); await writeFile(join(source, "file"), "original");
+  await run(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const producer = Artifact.directory(source, producedBy).pipe(Effect.flatMap(Artifact.withSha256), Effect.flatMap(Schema.decodeUnknownEffect(MembersHashed)));
+    const first = yield* producer.pipe(Cache.cached({ key: cacheKey(), outfile: source, schema: MembersHashed }));
+    const hit = yield* Effect.die("must hit").pipe(Cache.cached({ key: cacheKey(), outfile: join(root, "hit"), schema: MembersHashed }));
+    expect(hit).not.toHaveProperty("sha256");
+    expect(hit.entries).toEqual(first.entries);
+    const store = yield* KeyValueStore.KeyValueStore;
+    const id = yield* Cache.key(cacheKey());
+    const entry = JSON.parse((yield* store.get(id))!);
+    entry.artifact.entries[0].sha256 = "0".repeat(64);
+    yield* store.set(id, JSON.stringify(entry));
+    let rebuilt = false;
+    yield* Effect.gen(function*() {
+      rebuilt = true;
+      yield* fs.writeFileString(join(source, "file"), "rebuilt");
+      return yield* producer;
+    }).pipe(Cache.cached({ key: cacheKey(), outfile: source, schema: MembersHashed }));
+    expect(rebuilt).toBe(true);
+    expect(yield* fs.readFileString(join(source, "file"))).toBe("rebuilt");
+  }));
+});
+
 it("preserves commit failures instead of rerunning the producer", async () => {
   await run(Effect.gen(function*() {
     const outfile = join(root, "out");
@@ -230,9 +345,9 @@ it("preserves output on object write failure, and reports destination write fail
     const fs = yield* FileSystem.FileSystem;
     const outfile = join(root, "out");
     yield* produce(outfile).pipe(Cache.cached({ key: cacheKey(), outfile }), Effect.provideService(FileSystem.FileSystem, {
-      ...fs, makeTempDirectory: (options) => options?.directory === join(root, "objects")
-        ? Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "makeTempDirectory" }))
-        : fs.makeTempDirectory(options),
+      ...fs, rename: (from, to) => to.startsWith(join(root, "objects"))
+        ? Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "rename" }))
+        : fs.rename(from, to),
     }));
     expect(yield* fs.readFileString(outfile)).toBe("hello");
     yield* produce(outfile).pipe(Cache.cached({ key: cacheKey(), outfile }));
@@ -240,6 +355,47 @@ it("preserves output on object write failure, and reports destination write fail
     const failure = yield* Effect.die("hit destination failure must not run producer").pipe(Cache.cached({ key: cacheKey(), outfile: join(blocked, "out") }), Effect.flip);
     expect(failure._tag).toBe("CommitError");
   }));
+});
+
+it("keeps destination write failures on cache hits instead of rebuilding", async () => {
+  await run(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const outfile = join(root, "out");
+    yield* produce(outfile).pipe(Cache.cached({ key: cacheKey(), outfile }));
+    const denied = PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "open" });
+    const failure = yield* Effect.die("a destination failure must not rerun the producer").pipe(
+      Cache.cached({ key: cacheKey(), outfile }),
+      Effect.provideService(FileSystem.FileSystem, FileSystem.make({
+        ...fs, open: (path, options) => options?.flag === "w" ? Effect.fail(denied) : fs.open(path, options),
+      })),
+      Effect.flip,
+    );
+    expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "unwritable" });
+    expect(yield* fs.readFileString(outfile)).toBe("hello");
+  }));
+});
+
+it("interruption during an atomic cache copy preserves the previous output", async () => {
+  await run(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const outfile = join(root, "out");
+    yield* produce(outfile).pipe(Cache.cached({ key: cacheKey(), outfile }));
+    const started = yield* Deferred.make<void>();
+    const fiber = yield* Effect.die("interruption must not rerun the producer").pipe(
+      Cache.cached({ key: cacheKey(), outfile }),
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs, stream: (path, options) => fs.stream(path, options).pipe(Stream.tap(() =>
+          Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)))),
+      }),
+      Effect.forkChild,
+    );
+    yield* Deferred.await(started);
+    yield* Fiber.interrupt(fiber);
+    const exit = yield* Fiber.await(fiber);
+    expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+    expect(yield* fs.readFileString(outfile)).toBe("hello");
+  }));
+  expect((await readdir(root)).some((path) => path.startsWith(".effect-build-"))).toBe(false);
 });
 
 it("rejects invalid or mismatched output paths without populating an index entry", async () => {

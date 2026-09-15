@@ -50,6 +50,7 @@ const program = Effect.gen(function*() {
     yield* Python.wheel({
       metadata: { name: "effect-build-hello", version: "0.7.0" },
       tags: { python: "py3", abi: "none", platform: wheelPlatform() },
+      // Wheels hash these bytes while writing RECORD; the input needs no digest.
       // Installers put `.data/scripts` entries on the environment's command path, so `hello` needs no Python wrapper.
       entries: [{
         artifact: executable,

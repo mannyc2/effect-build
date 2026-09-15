@@ -8,3 +8,4 @@ export * from "./Sign.js";
 export * as Notary from "./Notary.js";
 export * from "./Staple.js";
 export * from "./Assess.js";
+export * from "./Verify.js";

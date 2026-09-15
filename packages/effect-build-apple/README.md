@@ -1,27 +1,25 @@
 # effect-build-apple
 
-Build macOS app bundles, disk images, and installers; sign, notarize, staple, and assess them and
-bare executables with Apple's tools, as Effect programs. Products refine the core artifacts, so a
-signed CLI goes into an archive and a signed app into a DMG with the same API.
+Build macOS app bundles, disk images, and installers; sign, notarize, staple, and assess them
+with Apple's tools, as Effect programs. Local products refine core artifact records.
 
-**Experimental.** Unsigned app construction is checked with native macOS tools, and the
-credentialed paths (signing, notarization, stapling, assessment) run through scripted processes.
-The on-demand [signing workflow](https://github.com/mannyc2/effect-build/blob/main/.github/workflows/signing.yml)
-signs, notarizes, and assesses a compiled CLI with Developer ID credentials but has not yet been
-run.
+**Experimental.** Unsigned app construction is checked with native macOS tools. Credentialed
+operations run through scripted processes; the on-demand
+[signing workflow](https://github.com/mannyc2/effect-build/blob/main/.github/workflows/signing.yml)
+has not yet run with Developer ID credentials.
 
 ```sh
 npm install --save-dev --save-exact effect-build-apple@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
-Everything runs on macOS through `xcrun` from the Xcode command-line tools. Signing needs a
+Everything runs through `xcrun` from the Xcode command-line tools on macOS. Signing needs a
 Developer ID identity in a keychain; notarization needs App Store Connect credentials.
 
-## Ship a CLI
+## Choose distribution checks explicitly
 
-A bare Mach-O executable signs with the hardened runtime and a secure timestamp, notarizes as a
-ZIP, and is assessed with its accepted submission: Apple issues tickets for standalone binaries
-but cannot staple one to them, so Gatekeeper fetches it.
+Signing, packaging, stapling, and Gatekeeper assessment are independent operations. None
+requires a previous wrapper receipt or a content hash. Verification runs only when you call
+`verifySignature`, `validateTicket`, or `Artifact.verify` yourself.
 
 ```ts
 import { Effect } from "effect";
@@ -32,119 +30,112 @@ import * as Bun from "effect-build-bun";
 
 const darwin = (executable: Artifact.Executable, certificateSha1: string, credential: Apple.Notary.Credential) =>
   Effect.gen(function*() {
-    const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements }).pipe(Effect.flatMap(Artifact.withSha256));
-    const submission = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
-    const acceptance = yield* Apple.Notary.acceptedReference(submission);
-    const assessed = yield* Apple.assess({ artifact: signed, acceptance });
-    const installer = yield* Apple.pkg({
-      artifact: signed,
-      outfile: "dist/hello.pkg",
-      identifier: "dev.example.hello",
-      version: "1.0.0",
-    });
-    const archive = yield* Archive.tarGz({
-      entries: [{ artifact: assessed, path: "hello" }],
+    const signed = yield* Apple.sign({ artifact: executable, certificateSha1, entitlements: Bun.entitlements });
+    yield* Apple.verifySignature({ artifact: signed });
+    const result = yield* Apple.Notary.notarize({ artifact: signed, credential, timeout: "30m" });
+    yield* Apple.Notary.expectAccepted(result);
+    yield* Apple.assess({ artifact: signed });
+    return yield* Archive.tarGz({
+      entries: [{ artifact: signed, path: "hello" }],
       outfile: "dist/hello_darwin-arm64.tar.gz",
     });
-    return { archive, installer };
   }).pipe(Effect.provide(Apple.layer()));
 ```
 
-Bun-compiled executables need `Bun.entitlements`; other entitlements come as a plist artifact or
-a list of keys. A PKG of a signed executable installs it under `/usr/local/bin` unless
-`installLocation` says otherwise.
+Provide platform services and a runtime at application composition time. Bun-compiled
+executables need `Bun.entitlements`; other entitlements come as a plist artifact or a list of
+keys. A bare executable uploads as a ZIP and can be assessed, but cannot be stapled.
 
-## Ship an app
+## Package and staple an app
 
-`appBundle` builds `Example.app` around a Darwin executable; `sign` signs it; `dmg` and `pkg`
-package it; the DMG is signed, notarized, stapled, and assessed. The
-[signing module](https://github.com/mannyc2/effect-build/blob/main/examples/artifact-pipeline/src/signing.ts)
-of the pipeline example has this flow in full.
+`appBundle` builds an app around a Darwin executable. `dmg` and `pkg` accept unsigned apps;
+`pkg` also accepts a standalone Darwin executable. Choose signing and verification in the
+release program when the distribution requires them.
 
 ```ts
-const app = (executable: Artifact.Executable, certificateSha1: string, credential: Apple.Notary.Credential) =>
+const image = (app: Apple.App, certificateSha1: string, credential: Apple.Notary.Credential) =>
   Effect.gen(function*() {
-    const app = yield* Apple.appBundle({
-      executable,
-      outdir: "dist/Example.app",
-      bundleIdentifier: "dev.example.app",
-      bundleName: "Example",
-      version: "1",
-      shortVersion: "1.0.0",
-    });
-    const signedApp = yield* Apple.sign({ artifact: app, certificateSha1, outdir: "dist/signed/Example.app" });
-    const dmg = yield* Apple.dmg({
-      artifact: signedApp,
-      outfile: "dist/example.dmg",
-      volumeName: "Example",
-      applicationsLink: true,
-    });
-    const signedDmg = yield* Apple.sign({ artifact: dmg, certificateSha1 }).pipe(Effect.flatMap(Artifact.withSha256));
-    const submission = yield* Apple.Notary.notarize({ artifact: signedDmg, credential });
-    const acceptance = yield* Apple.Notary.acceptedReference(submission);
-    const stapled = yield* Apple.staple({ artifact: signedDmg, acceptance, outfile: "dist/notarized/example.dmg" });
+    const signedApp = yield* Apple.sign({ artifact: app, certificateSha1 });
+    yield* Apple.verifySignature({ artifact: signedApp });
+    const dmg = yield* Apple.dmg({ artifact: signedApp, outfile: "dist/example.dmg", volumeName: "Example" });
+    const signedDmg = yield* Apple.sign({ artifact: dmg, certificateSha1 });
+    yield* Apple.verifySignature({ artifact: signedDmg });
+    const result = yield* Apple.Notary.notarize({ artifact: signedDmg, credential });
+    yield* Apple.Notary.expectAccepted(result);
+    const stapled = yield* Apple.staple({ artifact: signedDmg, outfile: "dist/notarized/example.dmg" });
+    yield* Apple.validateTicket({ artifact: stapled });
     return yield* Apple.assess({ artifact: stapled });
   }).pipe(Effect.provide(Apple.layer()));
 ```
 
+Files take `outfile` and apps `outdir`. Producers accept `atomic`, `onExists`, and `prefix`.
+`sign` and `staple` default to the source path, replaced through staging unless `atomic: false`.
+Compose checks inside an outer `Commit.atomic` producer when those checks must precede
+replacement of the release directory. The complete
+[signing example](https://github.com/mannyc2/effect-build/blob/main/examples/artifact-pipeline/src/signing.ts)
+includes CLI, app, and Windows flows.
+
 ## Operations
 
-| Operation                                                                                                                                                         | Returns                                           |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `appBundle({ executable, outdir, bundleIdentifier, bundleName, version, shortVersion?, displayName?, executableName?, minimumSystemVersion?, resources?, cwd? })` | `App`, a directory artifact with `product: "app"` |
-| `sign({ artifact: App, certificateSha1, outdir?, entitlements?, nestedCode? })`                                                                                   | `SignedApp`                                       |
-| `sign({ artifact: Dmg \| Pkg, certificateSha1, outfile? })`                                                                                                       | `SignedDmg`, `SignedPkg`                          |
-| `sign({ artifact: Artifact.Executable, certificateSha1, outfile?, entitlements? })`                                                                               | `SignedExecutable`                                |
-| `dmg({ artifact: SignedApp, outfile, volumeName, layout?, applicationsLink?, cwd? })`                                                                             | `Dmg`, a file artifact with `product: "dmg"`      |
-| `pkg({ artifact: SignedApp \| SignedExecutable, outfile, identifier, version, installLocation?, cwd? })`                                                          | `Pkg`, a file artifact with `product: "pkg"`      |
-| `Notary.notarize({ artifact, credential, timeout?, cwd? })`                                                                                                              | `Notary.Submission` with its status               |
-| `Notary.submit`, `Notary.wait`, `Notary.info`, `Notary.log`                                                                                                       | The steps `Notary.notarize` composes, individually       |
-| `Notary.acceptedReference(result)`                                                                                                                                | `AcceptedReference`, or `NotaryResultNotAccepted` |
-| `staple({ artifact: HashedSignedApp \| HashedSignedDmg \| HashedSignedPkg, acceptance, outdir? \| outfile? })`                                                                      | `StapledApp`, `StapledDmg`, `StapledPkg`          |
-| `assess({ artifact: Stapled })`, `assess({ artifact: HashedSignedExecutable, acceptance })`                                                                             | The same artifact, after Gatekeeper accepts it    |
+| Operation | Input and result |
+| --- | --- |
+| `appBundle` | Darwin executable and resources → `App` |
+| `dmg` | `App` → `Dmg` |
+| `pkg` | `App` or Darwin `Artifact.Executable` → `Pkg` |
+| `sign` | Product or Darwin executable → its signed refinement |
+| `verifySignature({ artifact })` | Product or executable → the same record after native signature verification |
+| `staple` | `App`, `Dmg`, or `Pkg` → a fresh product record |
+| `validateTicket({ artifact })` | Product → the same record after `stapler validate` |
+| `assess({ artifact })` | Product or Darwin executable → the same record after Gatekeeper assessment |
+| `Notary.submit` | Product or Darwin executable → Apple's `SubmissionId` |
+| `Notary.wait`, `Notary.info`, `Notary.log` | Submission ID and credentials → native status and details |
+| `Notary.notarize` | Convenience composition of submit and wait |
+| `Notary.expectAccepted(result)` | Explicitly fail unless the result is accepted |
 
-Files take `outfile` and apps `outdir`; every producing operation also takes `atomic`, `onExists`,
-and `prefix`. `sign` and `staple` default to the source path, replaced through staging unless
-`atomic: false`. Apps and executables sign with the hardened runtime; every signature carries a
-secure timestamp. Signed executables re-read their header, so `target` survives. Copied app trees
-preserve framework symlinks. Universal (fat) Mach-O inputs are unsupported.
+Signing currently selects certificate fingerprints, secure timestamps, and hardened runtime
+for apps/executables. Its `signature` field describes the signing operation; signing does not
+run a second verification command. Executables retain their declared target through a header
+check after signing. Copied app trees preserve framework symlinks. Universal Mach-O inputs
+are unsupported.
 
-## Records
+A PKG installs an app under `/Applications` or an executable under `/usr/local/bin`, unless
+`installLocation` says otherwise. Resource layouts reject exact conflicts and unsafe paths;
+case or Unicode spelling conflicts fail only when the destination filesystem conflates them.
+Call `Layout.validatePortable` explicitly when the release must reject such spellings on all hosts.
 
-Products and signatures are refinements of the core artifacts: `SignedApp` is an
-`Artifact.Directory` plus `product` and `signature: { certificateSha1, secureTimestamp, hardenedRuntime }`,
-and stapled products add `ticket`. `Artifact.encode` drops these fields on purpose; persist them
-with the exported schemas (`Apple.SignedExecutable`, `Apple.Notary.Submission`, and the
-rest) through `Schema.encodeSync`.
+## Resume notarization by native ID
 
-`sign`, `dmg`, `pkg`, and `staple` return records without content hashes. Call
-`Artifact.withSha256` explicitly before notarization: its persisted reference names those exact
-bytes. Stapling consumes that identity and returns a fresh unhashed record because it changes
-the bytes. `HashedSignedApp`, `HashedSignedDmg`, `HashedSignedPkg`, and
-`HashedSignedExecutable` are the schemas for those explicit identities.
+No local artifact record is needed to inspect or wait for a job created elsewhere.
 
-## Identities and credentials
+```ts
+const resume = (submissionId: Apple.Notary.SubmissionId, credential: Apple.Notary.Credential) =>
+  Apple.Notary.wait({ submissionId, credential, timeout: "30m" }).pipe(
+    Effect.flatMap(Apple.Notary.expectAccepted),
+    Effect.provide(Apple.layer()),
+  );
+```
 
-- `certificateSha1` is the SHA-1 fingerprint of the signing identity in your keychain. Names are
-  ambiguous and ad hoc signatures cannot be notarized, so only fingerprints are accepted.
-- `Notary.Credential` is `{ kind: "keychain", profile, keychain? }` for a stored notarytool
-  profile, `{ kind: "api-key", keyFile, keyId, issuer }` for an App Store Connect API key, or
-  `{ kind: "apple-id", appleId, teamId, password }` with the password as an Effect `Redacted`.
-- Apps and executables upload as ZIP archives; DMGs and PKGs upload as themselves.
-- `notarize` submits and waits. When an interruption must be recoverable, call `Notary.submit`,
-  persist the `SubmissionReference` with its schema, and call `Notary.wait` later; `Notary.info`
-  and `Notary.log` retrieve results for a saved reference. `timeout` is a native notarytool
-  duration such as `"30m"`, and a timeout does not cancel Apple's processing.
+`submit` uploads current contents. Apps/executables are packed into a scoped temporary ZIP;
+DMGs and PKGs upload directly. Persist the returned ID before waiting when interruption recovery
+matters. A wait timeout does not cancel Apple's processing. Results preserve pending/rejected
+statuses until the caller explicitly invokes `expectAccepted`.
 
-## Versions and errors
+## Records and credentials
 
-`Apple.layer({ executable?, version? })` resolves `xcrun` once; native commands come from the
-active Xcode tools. `Apple.supported` is `>=70.0.0 <71.0.0` and `Apple.tested` is 70.0.0. Errors
-are `Tool.InputInvalid`, `Artifact.ArtifactError`, `Executable.InspectError`,
-`Executable.TargetMismatch`, `Tool.Failed`, `Tool.SpawnFailed`, `Commit.CommitError`,
-`Notary.ResultNotAccepted` (a pending or rejected submission, status preserved), and
-`Notary.ResponseInvalid` (malformed notarytool JSON).
+`App`, `Dmg`, and `Pkg` add a `product` field to core artifacts. Signed records add `signature`.
+Stapling changes bytes and returns a fresh base product without retaining an old digest,
+signature record, or receipt. `Artifact.encode` projects core fields only; persist richer
+records using their exported Effect schemas, such as `Apple.SignedExecutable` or
+`Apple.Notary.Submission`. Content identity remains an explicit `Artifact.withSha256` operation.
+
+- `certificateSha1` is a 40-digit certificate fingerprint.
+- `Notary.Credential` selects a keychain profile, an App Store Connect API key, or an Apple ID.
+  Apple ID passwords use Effect `Redacted` values.
+- `Apple.layer({ executable?, version? })` resolves `xcrun` once. Native commands come from the
+  active Xcode tools. Supported xcrun versions are `>=70.0.0 <71.0.0`; 70.0.0 is tested.
+- Errors include `Tool.InputInvalid`, `Artifact.ArtifactError`, executable inspection/target
+  errors, native tool failures, and commit failures. Notary response decoding reports
+  `Notary.ResponseInvalid`; `expectAccepted` can fail with `Notary.ResultNotAccepted`.
 
 [Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
-[Compatibility](https://github.com/mannyc2/effect-build/blob/main/docs/compatibility.md) ·
-[Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)
+[Compatibility](https://github.com/mannyc2/effect-build/blob/main/docs/compatibility.md)

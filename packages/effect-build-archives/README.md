@@ -47,11 +47,12 @@ archive.
 - A directory artifact expands beneath `path`, preserving descendant modes, empty directories,
   and symlinks, which are recorded and never followed. Each directory prefix has mode `0755`.
   Directory entries do not accept `executable`.
-- Paths use `/`, are relative, and contain no empty, `.`, or `..` segments. They must be distinct
-  after case folding and NFC normalization, including every implicit directory: `Docs/a` and
-  `docs/b` conflict too. No entry may descend through a file or symlink. Core `Layout.validate`
-  owns these shared shipping guarantees. Violations fail with `Tool.InputInvalid` before
-  anything is written.
+- Paths use `/`, are relative, and contain no empty, `.`, or `..` segments. Exact paths must be
+  distinct and no entry may descend through a file or symlink. Core `Layout.validate` owns these
+  structural checks; violations fail with `Tool.InputInvalid` before anything is written.
+  Names such as `Docs/a` and `docs/b` remain distinct archive members. Call
+  `Layout.validatePortable` explicitly to reject case-folding and NFC-normalization collisions
+  when your shipping target needs that policy.
 
 ## Reproducibility
 
@@ -104,7 +105,9 @@ export the reader cannot decode fails with `ArchiveTarInvalid`.
 ## The ZIP encoder
 
 `Zip.encode(entries)` is the encoder itself, a `Stream<Uint8Array>` for callers that assemble
-their own entries; `effect-build-python` writes wheels with it. Entries are `file`
+their own entries; `effect-build-python` writes wheels with it. Entries retain caller order,
+allowing generated metadata to follow the payloads it describes. `Archive.zip` sorts its inputs
+to keep ordinary archives deterministic. Entries are `file`
 (`path`, `mode`, `bytes`, and a `contents` stream), `directory`, or `symlink` (with `target`). The
 stream fails with the caller's stream errors, `ArchiveFormatLimit`, or `ArchiveEntrySizeMismatch`
 when a stream delivers a different byte count than it declared, and it can be run more than

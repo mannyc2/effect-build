@@ -1,12 +1,12 @@
 import { Effect, FileSystem, Path } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
 import { Apple, type Env } from "./Apple.js";
-import { validateResources, type Resource } from "./AppBundle.js";
-import { copyProduct, copyRegular, outputPath, runNative, verifySignature } from "./internal.js";
-import type { Dmg, Pkg, SignedApp, SignedExecutable } from "./Model.js";
+import { copyResources, validateResources, type Resource } from "./AppBundle.js";
+import { copyProduct, outputPath, runNative } from "./internal.js";
+import type { App, Dmg, Pkg } from "./Model.js";
 
 export interface DmgInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
-  readonly artifact: SignedApp;
+  readonly artifact: App;
   readonly outfile: string;
   readonly volumeName: string;
   readonly layout?: readonly Resource[] | undefined;
@@ -14,8 +14,8 @@ export interface DmgInput extends Commit.ProducerOptions, Tool.EnvironmentOption
   readonly cwd?: string | undefined;
 }
 export interface PkgInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
-  /** A signed app installs under `/Applications`; a signed executable under `/usr/local/bin`, unless installLocation says otherwise. */
-  readonly artifact: SignedApp | SignedExecutable;
+  /** An app installs under `/Applications`; an executable under `/usr/local/bin`, unless installLocation says otherwise. */
+  readonly artifact: App | Artifact.Executable;
   readonly outfile: string;
   readonly identifier: string;
   readonly version: string;
@@ -39,14 +39,12 @@ export const dmg = (input: DmgInput): Effect.Effect<Dmg, ProductError, Apple | E
   yield* fs.makeDirectory(volume).pipe(Effect.mapError(Artifact.ioError(volume, "write")));
   const app = p.join(volume, appName);
   yield* copyProduct("Apple.dmg", input.artifact, app, input);
-  yield* verifySignature(input.artifact, app, input);
-  for (const entry of input.layout ?? []) yield* copyRegular(entry.artifact, p.join(volume, entry.path), entry.executable ?? entry.artifact.kind === "executable");
+  yield* copyResources(input.layout ?? [], volume);
   if (input.applicationsLink === true) yield* fs.symlink("/Applications", p.join(volume, "Applications")).pipe(Effect.mapError(Artifact.ioError(volume, "write")));
   const { tool } = yield* Apple;
   const cwd = p.resolve(input.cwd ?? "");
   const produce = (out: string) => Effect.gen(function*() {
     yield* runNative("hdiutil", ["create", "-ov", "-volname", input.volumeName, "-srcfolder", volume, "-fs", "HFS+", "-format", "UDZO", out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
-    yield* runNative("hdiutil", ["verify", out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
     return { ...yield* Artifact.file(out, Tool.producedBy(tool)), product: "dmg" as const };
   });
   return yield* Commit.output(outfile, produce, input);
@@ -54,6 +52,9 @@ export const dmg = (input: DmgInput): Effect.Effect<Dmg, ProductError, Apple | E
 
 export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | Env> => Effect.scoped(Effect.gen(function*() {
   const outfile = yield* outputPath("Apple.pkg", input.outfile, ".pkg", input.cwd);
+  if (input.artifact.kind === "executable" && (input.artifact.format !== "mach-o" || !input.artifact.target.startsWith("darwin-"))) {
+    return yield* new Tool.InputInvalid({ operation: "Apple.pkg", reason: "executables must target Darwin and use Mach-O" });
+  }
   const app = input.artifact.kind === "directory";
   const installLocation = input.installLocation ?? (app ? "/Applications" : "/usr/local/bin");
   if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u.test(input.identifier) || Tool.argumentIssue(input.version) !== undefined || Tool.argumentIssue(installLocation) !== undefined || !installLocation.startsWith("/") || installLocation.split("/").includes("..")) {
@@ -67,14 +68,12 @@ export const pkg = (input: PkgInput): Effect.Effect<Pkg, ProductError, Apple | E
   // pkgbuild takes an app as a component; an executable ships as a payload root holding it under its own name.
   const payload = app ? p.join(temporary, name) : p.join(temporary, "root", name);
   yield* copyProduct("Apple.pkg", input.artifact, payload, input);
-  yield* verifySignature(input.artifact, payload, input);
   const component = p.join(temporary, "component.pkg");
   const cwd = p.resolve(input.cwd ?? "");
   yield* runNative("pkgbuild", [...(app ? ["--component", payload] : ["--root", p.dirname(payload)]), "--identifier", input.identifier, "--version", input.version, "--install-location", installLocation, component], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
   const { tool } = yield* Apple;
   const produce = (out: string) => Effect.gen(function*() {
     yield* runNative("productbuild", ["--package", component, out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
-    yield* runNative("pkgutil", ["--payload-files", out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
     return { ...yield* Artifact.file(out, Tool.producedBy(tool)), product: "pkg" as const };
   });
   return yield* Commit.output(outfile, produce, input);

@@ -95,8 +95,10 @@ const hashed = build.pipe(Effect.flatMap(Artifact.withSha256));
 fields. `verify`, `readVerified`, `streamVerified`, and `copyVerified` accept hashed records.
 Schema decoding checks the stored record without touching its path. Ordinary archives,
 assembly, signing, and package copies consume current contents; passing a hashed record does
-not silently enable verification. Wheel RECORD inputs, cache key inputs, checksums, and
-notarization identity references require explicit hashed records.
+not silently enable verification. Cache key inputs and checksums require explicit hashed records.
+Wheels hash their payloads while encoding RECORD; caches hash while ingesting output.
+Apple signature verification, ticket validation, and assessment are separate operations that a
+release pipeline selects explicitly. `Layout.validatePortable` adds case/Unicode portability checks.
 
 ## Build a matrix
 

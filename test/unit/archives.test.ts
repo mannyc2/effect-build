@@ -21,6 +21,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { gunzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { standaloneProgram } from "../fixtures/standalone-program.js";
 
@@ -201,11 +202,7 @@ describe("archives from real files", () => {
     ["absolute path", ["/absolute", "safe"]],
     ["Windows path", ["C:\\escape", "safe"]],
     ["duplicate path", ["same", "same"]],
-    ["case collision", ["Readme", "README"]],
-    ["implicit directory case collision", ["Docs/a", "docs/b"]],
-    ["implicit directory Unicode collision", ["café/a", "cafe\u0301/b"]],
-    ["case-folded ancestor", ["Bin", "bin/tool"]],
-    ["Unicode-equivalent ancestor", ["café", "cafe\u0301/tool"]],
+    ["file ancestor", ["file", "file/child"]],
   ] as const;
   it.each(formats.flatMap((format) => unsafe.map(([label, paths]) => ({ format, label, paths }))))(
     "rejects $label in $format without creating output",
@@ -223,6 +220,19 @@ describe("archives from real files", () => {
       expect(await readdir(root)).toEqual(["payload"]);
     },
   );
+
+  it.each(formats)("preserves case and Unicode distinctions in %s member names", async (format) => {
+    const paths = ["Readme", "README", "Docs/a", "docs/b", "café/a", "cafe\u0301/b"];
+    const output = await run(pack(format, {
+      entries: paths.map((path) => ({ artifact: payload, path })),
+      outfile: join(root, `spellings.${format}`),
+    }));
+    // Member names are UTF-8 in both headers. Native listing tools may normalize
+    // Unicode for display, and extracting could collide on this filesystem.
+    const archive = await readFile(output.path);
+    const headers = format === "zip" ? archive : gunzipSync(archive);
+    for (const path of paths) expect(headers.includes(Buffer.from(path, "utf8"))).toBe(true);
+  });
 
   it.each(formats)("rejects an input size mismatch and preserves an existing %s output", async (format) => {
     const outfile = join(root, `existing.${format}`);
@@ -437,7 +447,7 @@ describe("archives from real directories", () => {
     const invalid: readonly (readonly Archive.ArchiveEntry[])[] = [
       ...["", "../escape", "/absolute", "C:\\escape"].map((path) => [{ artifact, path }]),
       [{ artifact, path: "app", executable: true }],
-      ...["app/file", "APP/file", "APP/other", "APP", "app/file/child"].map((path) => [
+      ...["app/file", "app", "app/file/child"].map((path) => [
         { artifact, path: "app" },
         { artifact: payload, path },
       ]),
@@ -547,7 +557,7 @@ describe("Zip.encode", () => {
       Array.from({ length: Math.ceil(bytes.byteLength / size) }, (_, index) =>
         bytes.subarray(index * size, (index + 1) * size)),
     );
-  const entries = (size: number): Archive.Zip.FileEntry[] => [
+  const entries = (size: number): Archive.Zip.FileEntry[] => ([
     { kind: "file", path: "docs/café.txt", mode: 0o644, bytes: small.byteLength, contents: chunked(small, size) },
     {
       kind: "file",
@@ -557,7 +567,7 @@ describe("Zip.encode", () => {
       contents: chunked(largePayload, size),
     },
     { kind: "file", path: "bin/tool", mode: 0o755, bytes: small.byteLength, contents: chunked(small, size) },
-  ];
+  ] satisfies Archive.Zip.FileEntry[]).sort((a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(b.path)));
 
   it.each([1, 7, 4096, 64 * 1024, 200_000])(
     "writes the pinned bytes when payloads arrive in %d-byte chunks",
@@ -572,12 +582,30 @@ describe("Zip.encode", () => {
     expect(sha256(await collect(stream))).toBe(pinned.zip);
   });
 
+  it("preserves caller order so later entries can describe earlier payloads", async () => {
+    const seen: string[] = [];
+    const first: Archive.Zip.FileEntry = {
+      kind: "file", path: "z-payload", mode: 0o644, bytes: 1,
+      contents: Stream.suspend(() => { seen.push("z-payload"); return Stream.make(new Uint8Array([42])); }),
+    };
+    const last: Archive.Zip.FileEntry = {
+      kind: "file", path: "a-metadata", mode: 0o644, bytes: 9,
+      contents: Stream.suspend(() => Stream.make(new TextEncoder().encode(seen.join("\n")))),
+    };
+    const outfile = join(root, "ordered.zip");
+    await writeFile(outfile, await collect(Archive.Zip.encode([first, last])));
+    const extracted = join(root, "extracted");
+    await extract("zip", outfile, extracted);
+    expect(await readFile(join(extracted, "a-metadata"), "utf8")).toBe("z-payload");
+    expect(await readFile(join(extracted, "z-payload"))).toEqual(Buffer.from([42]));
+  });
+
   it.each([-1, 1])("fails with the counted bytes when a payload is off by %d", async (delta) => {
     const [first, ...rest] = entries(4096);
     const stream = Archive.Zip.encode([{ ...first!, bytes: small.byteLength + delta }, ...rest]);
     expect(await Effect.runPromise(Stream.runCollect(stream).pipe(Effect.flip))).toMatchObject({
       _tag: "ArchiveEntrySizeMismatch",
-      path: "docs/café.txt",
+      path: first!.path,
       expected: small.byteLength + delta,
       actual: small.byteLength,
     });

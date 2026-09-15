@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema, Sink, Stream } from "effect";
 import * as Artifact from "./Artifact.js";
 import * as Commit from "./Commit.js";
 import * as Layout from "./Layout.js";
@@ -97,7 +97,9 @@ export const assemble = Effect.fn("Directory.assemble")(function*(input: Assembl
       const path = p.join(root, ...node.path.split("/"));
       if (node.kind === "symlink") yield* fs.symlink(node.linkTarget, path).pipe(Effect.mapError(write(path)));
       else {
-        yield* Artifact.copy(node.artifact, path);
+        // Let the destination filesystem decide whether distinct spellings alias.
+        // Exclusive creation prevents one declared member from overwriting another.
+        yield* Stream.run(Artifact.stream(node.artifact), fs.sink(path, { flag: "wx" }).pipe(Sink.mapError(write(path))));
         yield* fs.chmod(path, node.mode).pipe(Effect.mapError(write(path)));
       }
     }

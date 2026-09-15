@@ -1,4 +1,5 @@
-import { Crypto, Effect, Encoding, FileSystem, Path, Stream } from "effect";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { Effect, Encoding, FileSystem, Path, Stream } from "effect";
 import { Artifact, Commit, Layout, Target, Tool } from "effect-build";
 import { type EntrySizeMismatch, type FormatLimit, Zip } from "effect-build-archives";
 import packageMetadata from "../package.json" with { type: "json" };
@@ -17,8 +18,7 @@ export interface WheelTags {
   readonly platform: string;
 }
 export interface WheelEntry {
-  /** RECORD requires an identity for exactly the bytes embedded in the wheel. */
-  readonly artifact: Artifact.HashedRegular;
+  readonly artifact: Artifact.Regular;
   readonly path: string;
   readonly executable?: boolean | undefined;
 }
@@ -77,8 +77,7 @@ const tag = (input: string): Effect.Effect<string, Tool.InputInvalid> =>
     ? Effect.succeed([...new Set(input.toLowerCase().split("."))].sort(utf8Order).join("."))
     : Effect.fail(invalid("tags must contain dot-separated letters, numbers, or underscores"));
 const csv = (input: string): string => /[,"\r\n]/u.test(input) ? `"${input.replaceAll('"', '""')}"` : input;
-const hexBytes = (hex: string): Uint8Array =>
-  Uint8Array.from(hex.match(/.{2}/gu) ?? [], (pair) => Number.parseInt(pair, 16));
+const recordLine = (path: string, digest: string, bytes: number): string => `${csv(path)},sha256=${digest},${bytes}\n`;
 
 /** Support a compiled executable promises: Windows tags carry no version floor;
  * Linux and macOS floors are the caller's declaration, never inferred. */
@@ -245,7 +244,7 @@ const prepareWheel = (input: WheelInput) =>
     };
   });
 
-type Fs = FileSystem.FileSystem | Path.Path | Crypto.Crypto;
+type Fs = FileSystem.FileSystem | Path.Path;
 export type WheelError =
   | Tool.InputInvalid
   | FormatLimit
@@ -258,51 +257,63 @@ export const wheel = Effect.fn("Python.wheel")((input: WheelInput): Effect.Effec
     const prepared = yield* prepareWheel(input);
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
-    const crypto = yield* Crypto.Crypto;
     const entries: Zip.FileEntry<Artifact.ArtifactError, Fs>[] = [];
+    const metadata: Zip.FileEntry[] = [];
     const records: { readonly path: string; readonly line: string }[] = [];
+    const selfRecord = `${csv(prepared.record)},,\n`;
+    let recordBytes = encoder.encode(selfRecord).byteLength;
     // PEP 427: RECORD digests are urlsafe base64 without padding, and RECORD lists itself with no hash or size.
-    for (const entry of prepared.metadata) {
-      const digest = yield* crypto.digest("SHA-256", entry.contents).pipe(Effect.orDie);
-      entries.push({
+    for (const entry of prepared.metadata.sort((a, b) => utf8Order(a.path, b.path))) {
+      const line = recordLine(entry.path, Encoding.encodeBase64Url(sha256(entry.contents)), entry.contents.byteLength);
+      metadata.push({
         kind: "file",
         path: entry.path,
         mode: 0o644,
         bytes: entry.contents.byteLength,
         contents: Stream.make(entry.contents),
       });
-      records.push({
-        path: entry.path,
-        line: `${csv(entry.path)},sha256=${Encoding.encodeBase64Url(digest)},${entry.contents.byteLength}`,
-      });
+      records.push({ path: entry.path, line });
+      recordBytes += encoder.encode(line).byteLength;
     }
-    for (const entry of input.entries) {
-      // The verified stream fails unless the wheel receives exactly the recorded bytes, so RECORD can cite the recorded digest.
+    for (const entry of [...input.entries].sort((a, b) => utf8Order(a.path, b.path))) {
+      // SHA-256's unpadded base64url form always has 43 characters. The ZIP encoder
+      // checks declared sizes, so RECORD's byte length is known before reading files.
+      recordBytes += encoder.encode(recordLine(entry.path, "0".repeat(43), entry.artifact.bytes)).byteLength;
       entries.push({
         kind: "file",
         path: entry.path,
         mode: (entry.executable ?? entry.artifact.kind === "executable") ? 0o755 : 0o644,
         bytes: entry.artifact.bytes,
-        contents: Artifact.streamVerified(entry.artifact),
-      });
-      records.push({
-        path: entry.path,
-        line: `${csv(entry.path)},sha256=${
-          Encoding.encodeBase64Url(hexBytes(entry.artifact.sha256))
-        },${entry.artifact.bytes}`,
+        contents: Stream.suspend(() => {
+          const hash = sha256.create();
+          return Artifact.stream(entry.artifact).pipe(
+            Stream.map((chunk) => {
+              hash.update(chunk);
+              return chunk;
+            }),
+            Stream.onEnd(Effect.sync(() =>
+              records.push({
+                path: entry.path,
+                line: recordLine(entry.path, Encoding.encodeBase64Url(hash.digest()), entry.artifact.bytes),
+              })
+            )),
+          );
+        }),
       });
     }
-    const record = encoder.encode(
-      `${records.sort((a, b) => utf8Order(a.path, b.path)).map((entry) => entry.line).join("\n")}\n${
-        csv(prepared.record)
-      },,\n`,
-    );
+    // Metadata follows the payloads it describes; RECORD is emitted only after
+    // every file stream has ended and the ZIP encoder has checked its byte count.
+    entries.push(...metadata);
     entries.push({
       kind: "file",
       path: prepared.record,
       mode: 0o644,
-      bytes: record.byteLength,
-      contents: Stream.make(record),
+      bytes: recordBytes,
+      contents: Stream.suspend(() =>
+        Stream.make(encoder.encode(
+          records.sort((a, b) => utf8Order(a.path, b.path)).map((entry) => entry.line).join("") + selfRecord,
+        ))
+      ),
     });
     const limit = Zip.limit(entries);
     if (limit !== undefined) return yield* limit;
