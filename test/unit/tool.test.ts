@@ -1,11 +1,11 @@
 import { NodeServices } from "@effect/platform-node";
-import { Cause, ConfigProvider, Effect, Exit, Fiber, FileSystem, PlatformError } from "effect";
+import { Cause, ConfigProvider, Context, Effect, Exit, Fiber, FileSystem, PlatformError } from "effect";
 import * as Tool from "effect-build/Tool";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from "vitest";
 
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
@@ -51,18 +51,63 @@ describe("truthful tool diagnostics", () => {
 });
 
 describe("tool resolution and execution", () => {
-  it("uses an explicit executable, hashes its real bytes, and parses its version output", async () => {
+  it("removes inherited application variables with extendEnv:false, with or without env", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const previous = process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST;
+    process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST = "inherited sentinel";
+    const args = ["-e", "process.stdout.write(JSON.stringify({custom:process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST}))"];
+    try {
+      const inherited = await run(Tool.run(tool, args));
+      expect(JSON.parse(new TextDecoder().decode(inherited.stdout))).toEqual({ custom: "inherited sentinel" });
+      for (const env of [undefined, {}]) {
+        const replaced = await run(Tool.run(tool, args, { extendEnv: false, env }));
+        expect(JSON.parse(new TextDecoder().decode(replaced.stdout))).toEqual({});
+      }
+    } finally {
+      if (previous === undefined) delete process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST;
+      else process.env.EFFECT_BUILD_ENV_REPLACEMENT_TEST = previous;
+    }
+  });
+
+  it("honors explicit PATH and application variables in a replacement environment", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const completion = await run(Tool.run(tool, ["-e", "process.stdout.write(JSON.stringify({path:process.env.PATH,custom:process.env.EFFECT_BUILD_TEST}))"], {
+      extendEnv: false, env: { PATH: root, EFFECT_BUILD_TEST: "explicit" },
+    }));
+    expect(JSON.parse(new TextDecoder().decode(completion.stdout))).toEqual({ path: root, custom: "explicit" });
+  });
+
+  it("scrubs inherited environment and removes its temporary home after the tool exits", async () => {
+    const tool = await run(Tool.resolve({ name: "node", executable: process.execPath }));
+    const completion = await run(Tool.run(tool, ["-e", "process.stdout.write(JSON.stringify({path:process.env.PATH,home:process.env.HOME,tmp:process.env.TMPDIR,custom:process.env.EFFECT_BUILD_TEST}))"], {
+      scrubEnv: true, env: { EFFECT_BUILD_TEST: "explicit" },
+    }));
+    const value = JSON.parse(new TextDecoder().decode(completion.stdout));
+    expect(value).toMatchObject({ path: dirname(tool.path), custom: "explicit", tmp: value.home });
+    expect(value.home).not.toBe(process.env.HOME);
+    await expect(access(value.home)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it("uses an explicit executable and parses its version output without reading its bytes", async () => {
     const tool = await run(Tool.resolve({
       name: "node-fixture",
       executable: process.execPath,
       versionArgs: ["-e", "process.stdout.write('fixture version 1.3.14\\n')"],
       parseVersion: (completion) => new TextDecoder().decode(completion.stdout).trim().split(" ").at(-1),
-    }).pipe(withPath(root)));
+    }).pipe(withPath(root), Effect.provideServiceEffect(FileSystem.FileSystem, FileSystem.FileSystem.use((fs) => Effect.succeed({
+      ...fs, open: () => Effect.die("resolution must not read executable bytes"),
+    })))));
     const contents = await readFile(process.execPath);
     expect(tool.path).toBe(await realpath(process.execPath));
     expect(tool.version).toBe("1.3.14");
     expect(tool.bytes).toBe(contents.byteLength);
-    expect(tool.sha256).toBe(createHash("sha256").update(contents).digest("hex"));
+    expect(tool).not.toHaveProperty("sha256");
+    const hashed = await run(Tool.withSha256({ ...tool, bytes: 0 as const, label: "fixture" as const }));
+    expect(hashed.sha256).toBe(createHash("sha256").update(contents).digest("hex"));
+    expect(hashed.bytes).toBe(contents.byteLength);
+    expectTypeOf(hashed.bytes).toEqualTypeOf<number>();
+    expectTypeOf(hashed.label).toEqualTypeOf<"fixture">();
+    expect(Tool.producedBy(tool)).not.toHaveProperty("sha256");
+    expect(Tool.producedBy(hashed).sha256).toBe(hashed.sha256);
     const completion = await run(Tool.run(tool, ["-e", "process.stdout.write('hello');process.stderr.write('warning')"]));
     expect(new TextDecoder().decode(completion.stdout)).toBe("hello");
     expect(new TextDecoder().decode(completion.stderr)).toBe("warning");
@@ -160,6 +205,59 @@ describe("tool resolution and execution", () => {
   });
 });
 
+describe("provider declarations", () => {
+  const probe = (stdout: string, stderr = ""): Tool.Probe => ({ path: "/fixture", completion: {
+    exitCode: 0, stdout: new TextEncoder().encode(stdout), stderr: new TextEncoder().encode(stderr), stdoutTruncated: false, stderrTruncated: false,
+  } });
+
+  it("extracts stdout before stderr and resets stateful patterns on every probe", () => {
+    const parse = Tool.versionPattern(/version (\S+)/gu);
+    expect(parse(probe("version 1.2.3", "version 2.0.0"))).toBe("1.2.3");
+    expect(parse(probe("other text", "version 2.0.0"))).toBe("2.0.0");
+    expect(parse(probe("version 1.2.3"))).toBe("1.2.3");
+    expect(parse(probe("no version"))).toBeUndefined();
+  });
+
+  it("checks rejected ranges through an operation-specific version error", async () => {
+    const tool: Tool.Resolved = { name: "bun", path: "/bun", version: "1.4.1", bytes: 0 };
+    const constraint = { range: "1.4.1", reason: "variable-collision defect in emitted builds" };
+    const failure = await Effect.runPromise(Tool.check(tool, "Bun.compile", constraint).pipe(Effect.flip));
+    expect(failure).toMatchObject({ _tag: "ToolVersionUnsupported", tool: "bun", version: "1.4.1", supported: constraint.range, operation: "Bun.compile", reason: constraint.reason });
+    expect(String(failure)).toBe("ToolVersionUnsupported: bun 1.4.1 is not supported by Bun.compile (variable-collision defect in emitted builds)");
+    await Effect.runPromise(Tool.check({ ...tool, version: "1.4.2" }, "Bun.compile", constraint));
+  });
+
+  it("resolves, extends, and reads a named provider and can install an existing record", async () => {
+    class Fixture extends Context.Service<Fixture, Tool.Service & { readonly label: string }>()("test/Fixture") {}
+    const provider = Tool.provider<Fixture, { readonly label: string }, { readonly label?: string }>(Fixture, {
+      name: "node", version: { parse: Tool.versionPattern(/^v(\S+)/u), supported: ">=22 <27", tested: ["22.0.0"] },
+      extend: (_, options) => Effect.succeed({ label: options.label ?? "default" }),
+    });
+    const value = await run(Effect.all({ service: Fixture, tool: provider.resolved }).pipe(
+      Effect.provide(provider.layer({ executable: process.execPath, label: "resolved" })),
+    ));
+    expect(value.service.label).toBe("resolved");
+    expect(value.tool).toBe(value.service.tool);
+    expect(value.tool).not.toHaveProperty("sha256");
+    const injected = await Effect.runPromise(provider.resolved.pipe(Effect.provide(provider.testLayer(value.service))));
+    expect(injected).toBe(value.tool);
+  });
+
+  it("lets a native-resource parser read the resolved file through Effect", async () => {
+    class Fixture extends Context.Service<Fixture, Tool.Service>()("test/ResourceFixture") {}
+    const provider = Tool.provider(Fixture, { name: "node", version: {
+      supported: "1.2.3", tested: ["1.2.3"],
+      parse: ({ path }) => FileSystem.FileSystem.use((fs) => fs.stat(path)).pipe(
+        Effect.map((stat) => stat.size > 0 ? "1.2.3" : undefined),
+        Effect.mapError((error) => new Tool.ProbeFailed({ tool: "node", path, detail: String(error) })),
+      ),
+    } });
+    const value = await run(provider.resolved.pipe(Effect.provide(provider.layer({ executable: process.execPath }))));
+    expect(value.version).toBe("1.2.3");
+    expect(value.path).toBe(await realpath(process.execPath));
+  });
+});
+
 describe("tool versions", () => {
   it.each(["0.0.0", "1.3.14", "26.1.2"])("parses canonical version %s", (version) => {
     expect(Tool.parseVersion(version)).toEqual(version.split(".").map(Number));
@@ -196,7 +294,7 @@ describe("tool versions", () => {
   });
 
   it("applies a range or caller predicate to a resolved version", async () => {
-    const tool: Tool.Resolved = { name: "fixture", path: "/fixture", version: "1.3.14", bytes: 0, sha256: "" };
+    const tool: Tool.Resolved = { name: "fixture", path: "/fixture", version: "1.3.14", bytes: 0 };
     expect(await Effect.runPromise(Effect.succeed(tool).pipe(Tool.requireVersion("=1.3.14")))).toBe(tool);
     expect(await Effect.runPromise(Effect.succeed(tool).pipe(Tool.requireVersion((v) => v.startsWith("1."))))).toBe(tool);
     const failure = await Effect.runPromise(Effect.succeed(tool).pipe(Tool.requireVersion("=1.4.2"), Effect.flip));

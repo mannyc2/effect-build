@@ -341,11 +341,10 @@ const zipEntry = <E, R>(entry: Entry<E, R>, archive: ZipState): Bytes<E | Encode
  * ZIP32 with fixed DEFLATE level and zero timestamps. Each entry's CRC and sizes follow its
  * data in a descriptor (flag bit 3), so no payload is buffered to fill in its header.
  */
-export const encodeZip = <E, R>(unsorted: ReadonlyArray<Entry<E, R>>): Bytes<E | EncodeError, R> =>
+export const encodeZip = <E, R>(entries: ReadonlyArray<Entry<E, R>>): Bytes<E | EncodeError, R> =>
   Stream.suspend((): Bytes<E | EncodeError, R> => {
-    const limit = zipLimit(unsorted);
+    const limit = zipLimit(entries);
     if (limit !== undefined) return Stream.fail(limit);
-    const entries = sortEntries(unsorted);
     const archive: ZipState = { offset: 0, central: [] };
     return Stream.fromIterable(entries).pipe(
       // Sequential by default, which the offsets need.

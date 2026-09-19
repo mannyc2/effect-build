@@ -23,12 +23,7 @@ export const pathIssue = (path: string): string | undefined => {
   return undefined;
 };
 
-/**
- * Every explicit or implicit directory has one spelling under NFC/case folding,
- * and only directories may have descendants. Input order does not affect validity.
- * Local Artifact.directory observations remain free to record host-specific names.
- */
-export const validate = (entries: readonly Entry[]): Issue | undefined => {
+const validateEntries = (entries: readonly Entry[], keyOf: (path: string) => string): Issue | undefined => {
   const indexed = new Map<string, Entry & { readonly explicit: boolean }>();
   for (const entry of entries) {
     const reason = pathIssue(entry.path);
@@ -36,7 +31,7 @@ export const validate = (entries: readonly Entry[]): Issue | undefined => {
     const parts = entry.path.split("/");
     for (let length = 1; length <= parts.length; length++) {
       const path = parts.slice(0, length).join("/");
-      const key = path.normalize("NFC").toLowerCase();
+      const key = keyOf(path);
       const explicit = length === parts.length;
       const kind = explicit ? entry.kind : "directory";
       const previous = indexed.get(key);
@@ -57,3 +52,12 @@ export const validate = (entries: readonly Entry[]): Issue | undefined => {
   }
   return undefined;
 };
+
+/** Reject unsafe paths, duplicate destinations and descendants through files or symlinks.
+ * Distinct spellings remain distinct; a filesystem writer owns actual destination collisions. */
+export const validate = (entries: readonly Entry[]): Issue | undefined => validateEntries(entries, (path) => path);
+
+/** Opt in to one spelling at every path prefix under NFC normalization and case folding,
+ * in addition to structural validity. This is a shipping policy, not an archive-format requirement. */
+export const validatePortable = (entries: readonly Entry[]): Issue | undefined =>
+  validateEntries(entries, (path) => path.normalize("NFC").toLowerCase());

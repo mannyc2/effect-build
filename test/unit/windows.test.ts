@@ -3,13 +3,13 @@ import { Effect, Redacted } from "effect";
 import { Artifact, Executable, Tool } from "effect-build";
 import * as Windows from "effect-build-windows";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { pe, thinMacho } from "../fixtures/native-executable.js";
+import { TestArtifact } from "effect-build/testing";
+const { pe, thinMacho } = TestArtifact;
 
 const runLocal = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
@@ -129,9 +129,6 @@ describe("Windows signing through real files and a scripted native tool", () => 
     const result = await run(Windows.sign({ ...input(), description: "A fixture", descriptionUrl: "https://example.test/fixture" }));
     expect(await readFile(config.source, "utf8")).toBe(unsigned);
     expect(await readFile(result.path, "utf8")).toBe(signed);
-    expect(result.sha256).toBe(createHash("sha256").update(signed).digest("hex"));
-    expect(result.sha256).not.toBe(artifact.sha256);
-    expect(await runLocal(Artifact.verify(result))).toEqual(result);
     expect(result.signature).toMatchObject({ fileDigest: "SHA256", timestampDigest: "SHA256", timestampProtocol: "RFC3161", timestampUrl, verification: "Authenticode" });
     expect(JSON.stringify(result)).not.toContain(password);
     const invocations = await calls();
@@ -158,7 +155,6 @@ describe("Windows signing through real files and a scripted native tool", () => 
     expect(result.path).toBe(artifact.path);
     expect(await readFile(result.path, "utf8")).toBe(signed);
     expect((await calls()).every((call) => call.source === encoded(unsigned) && call.output === encoded(unsigned))).toBe(true);
-    expect(await runLocal(Artifact.verify(result))).toEqual(result);
   });
 
   it.each([
@@ -175,9 +171,7 @@ describe("Windows signing through real files and a scripted native tool", () => 
     expect(await readFile(result.path)).toEqual(bytes);
     expect(result.kind).toBe("executable");
     expect(result.target).toBe(target);
-    expect(result.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect(await runLocal(Executable.inspect(result.path))).toEqual({ format: "pe", os: "windows", arch: target.slice(8) });
-    expect(await runLocal(Artifact.verify(result))).toEqual(result);
     if (!inPlace) expect(await readFile(native.path)).toEqual(original);
     const invocations = await calls();
     expect(invocations.map((call) => call.args[0])).toEqual(["sign", "verify"]);
@@ -208,7 +202,6 @@ describe("Windows signing through real files and a scripted native tool", () => 
     const { outfile: _outfile, ...options } = input();
     expect(await run(Windows.sign({ ...options, artifact: native }).pipe(Effect.flip))).toBeInstanceOf(Tool.Failed);
     expect(await readFile(native.path)).toEqual(original);
-    expect(await runLocal(Artifact.verify(native))).toEqual(native);
   });
 
   it("rejects a non-Windows executable even when its filename ends in .exe", async () => {
@@ -218,7 +211,6 @@ describe("Windows signing through real files and a scripted native tool", () => 
     const failure = await run(Windows.sign({ ...input(), artifact: native, outfile: join(root, "signed.exe") }).pipe(Effect.flip));
     expect(failure).toBeInstanceOf(Tool.InputInvalid);
     expect(await readdir(root)).not.toContain("calls.jsonl");
-    expect(await runLocal(Artifact.verify(native))).toEqual(native);
   });
 
   it("rejects a declared Windows target that disagrees with the input PE header before signing", async () => {
@@ -227,7 +219,6 @@ describe("Windows signing through real files and a scripted native tool", () => 
     expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "invalid-metadata" });
     expect(await readdir(root)).not.toContain("calls.jsonl");
     expect(await readdir(root)).not.toContain("signed.exe");
-    expect(await runLocal(Artifact.verify(native))).toEqual(native);
   });
 
   it("requires executable inspection for .exe files", async () => {
@@ -235,7 +226,6 @@ describe("Windows signing through real files and a scripted native tool", () => 
     const file = await runLocal(Artifact.file(native.path, native.producedBy));
     expect(await run(Windows.sign({ ...input(), artifact: file }).pipe(Effect.flip))).toBeInstanceOf(Tool.InputInvalid);
     expect(await readdir(root)).not.toContain("calls.jsonl");
-    expect(await runLocal(Artifact.verify(file))).toEqual(file);
   });
 
   it("passes explicit certificate-store selection to the signer", async () => {
@@ -293,16 +283,14 @@ describe("Windows signing through real files and a scripted native tool", () => 
     const { outfile: _outfile, ...options } = input();
     expect(await run(Windows.sign(options).pipe(Effect.flip))).toBeInstanceOf(Tool.Failed);
     expect(await readFile(artifact.path, "utf8")).toBe(unsigned);
-    expect(await runLocal(Artifact.verify(artifact))).toEqual(artifact);
   });
 
-  it.each(["bytes", "digest"])("rejects changed input %s before signing", async (changed) => {
-    if (changed === "digest") await writeFile(artifact.path, "changed payload");
-    const supplied = changed === "bytes" ? { ...artifact, bytes: artifact.bytes + 1 } : artifact;
-    const failure = await run(Windows.sign({ ...input(), artifact: supplied }).pipe(Effect.flip));
-    expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
-    expect(await readdir(root)).not.toContain("calls.jsonl");
-    expect(await readdir(root)).not.toContain("signed.msix");
+  it("signs current input bytes without retaining or requiring a supplied content identity", async () => {
+    const recorded = await runLocal(Artifact.withSha256(artifact));
+    await writeFile(artifact.path, "changed payload");
+    const result = await run(Windows.sign({ ...input(), artifact: recorded }));
+    expect(await readFile(result.path, "utf8")).toBe("changed payloadsigned:SHA256\ntimestamp:RFC3161\n");
+    expect(result).not.toHaveProperty("sha256");
   });
 
   it("redacts passwords from native spawn failure details", async () => {

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.0 (unreleased)
+
+Every binary provider now uses `Tool.provider(Service, spec)`, with declared tested versions,
+constraints and host requirements. `Tool.versionPattern` extracts probe versions and
+`Tool.check` reports operation-specific version failures. The provider table is generated.
+Operations accept explicit environments and opt-in scrubbing without changing inherited defaults.
+
+`effect-build/testing` exports the scripted spawner, real-file fixtures, fault injection,
+path layers and a runner-independent provider conformance suite. `Cache.cached` stores declared
+input keys in Effect `KeyValueStore`, streams whole-file objects, and restores verified files
+or directory manifests through `Commit.output`. Pass a schema to preserve provider refinements.
+
+Breaking changes: `tested` is an array of exact versions; version failures use
+`ToolVersionUnsupported` instead of `InputInvalid`; `Tool.producer` is now `Tool.producedBy`;
+provider layer errors uniformly include `ArtifactError`; Node SEA service `builder` is now
+`tool`. `Tool.run` also requires `FileSystem` and `Path` for scoped environment scrubbing;
+standard platform layers already supply them. There are no aliases. Update the twelve
+published packages together.
+
 ## 0.7.0 (unreleased)
 
 0.7.0 composes compilers and packagers through one `Artifact.File | Artifact.Executable |

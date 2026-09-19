@@ -37,6 +37,7 @@ const program = Effect.gen(function*() {
   // 1. Compile a native executable for the host and prove the record matches the file.
   const executable = yield* Bun.compile({ entrypoints: [entrypoint], outfile: out(executableName("hello")) }).pipe(
     Effect.provide(Bun.layer({ executable: tool("EFFECT_BUILD_BUN") })),
+    Effect.flatMap(Artifact.withSha256),
   );
   yield* Artifact.verify(executable);
   artifacts.push(executable);
@@ -49,6 +50,7 @@ const program = Effect.gen(function*() {
     yield* Python.wheel({
       metadata: { name: "effect-build-hello", version: "0.7.0" },
       tags: { python: "py3", abi: "none", platform: wheelPlatform() },
+      // Wheels hash these bytes while writing RECORD; the input needs no digest.
       // Installers put `.data/scripts` entries on the environment's command path, so `hello` needs no Python wrapper.
       entries: [{
         artifact: executable,
@@ -141,7 +143,7 @@ const program = Effect.gen(function*() {
 
   // 5. Checksums cover every regular file; the manifest is the JSON handoff to a release system.
   const checksums = yield* Checksums.write({
-    artifacts: artifacts.filter(Artifact.isRegular),
+    artifacts: yield* Effect.forEach(artifacts.filter(Artifact.isRegular), Artifact.withSha256),
     outfile: out("SHA256SUMS"),
   });
   const manifest = Artifact.decode(Artifact.encode([...artifacts, checksums]));

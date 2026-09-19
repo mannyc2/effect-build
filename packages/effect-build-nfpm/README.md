@@ -5,7 +5,7 @@ Build Debian, RPM, Alpine, Arch Linux, and MSIX packages from artifacts with
 `Artifact.File`.
 
 ```sh
-npm install --save-dev --save-exact effect-build-nfpm@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-nfpm@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 nFPM 2.47 or newer must be installed.

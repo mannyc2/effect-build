@@ -5,7 +5,7 @@ programs. Executables come back as `Artifact.Executable` records with their targ
 header; bundles and transpiled trees as `Artifact.Directory`.
 
 ```sh
-npm install --save-dev --save-exact effect-build-deno@0.7.0 effect@4.0.0-rc.108 @effect/platform-node@4.0.0-rc.108 @effect/platform-node-shared@4.0.0-rc.108
+npm install --save-dev --save-exact effect-build-deno@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
 Deno 2.9.5 or newer must be installed. The provider drives the `deno` CLI from Node or Bun.
@@ -52,8 +52,9 @@ the rest), project options (`config`, `importMap`, `lock`, `frozen`, `nodeModule
 
 `target` accepts the core targets and Deno's native triples. Deno has no musl target. Deno embeds
 the output basename in the executable, so staging preserves it and Windows outputs must end in
-lowercase `.exe`. `Deno.layer({ runtime })` points at an explicit `denort` file: its path and hash
-are recorded (and exported as `DENORT_BIN`) without executing it.
+lowercase `.exe`. `Deno.layer({ runtime })` points at an explicit `denort` file: its file metadata
+is recorded as `Artifact.File` and its path is exported as `DENORT_BIN` without executing it.
+Use `Artifact.withSha256(artifact.runtime)` when runtime identity is required.
 
 ## Versions
 

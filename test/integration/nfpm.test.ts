@@ -1,4 +1,5 @@
-import { elf, pe } from "../fixtures/native-executable.js";
+import { TestArtifact } from "effect-build/testing";
+const { elf, pe } = TestArtifact;
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { Artifact, Tool } from "effect-build";
@@ -19,7 +20,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, Nfpm.Nfpm | NodeServices.NodeServ
 const observe = (path: string) => run(Artifact.file(path, { name: "fixture", version: "0.7.0" }));
 const extension = { deb: ".deb", rpm: ".rpm", apk: ".apk", archlinux: ".pkg.tar.zst", msix: ".msix" } as const;
 let root: string;
-let binary: Artifact.Executable;
+let binary: Artifact.HashedExecutable;
 let message: Artifact.File;
 beforeEach(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), "effect-build-nfpm-")));
@@ -29,7 +30,7 @@ beforeEach(async () => {
   if (process.platform === "linux") await execute("cc", [main, "-o", source], { timeout: 30_000 });
   else await writeFile(source, elf(undefined, process.arch === "arm64" ? 183 : 62));
   await rm(main);
-  binary = await run(Artifact.executable(source, { name: "fixture", version: "0.7.0" }));
+  binary = await run(Artifact.executable(source, { name: "fixture", version: "0.7.0" }).pipe(Effect.flatMap(Artifact.withSha256)));
   const readme = join(root, "message.txt");
   await writeFile(readme, "packaged message\n");
   message = await observe(readme);
@@ -73,7 +74,7 @@ describe("real nFPM packages", () => {
   });
 
   it.each(["deb", "rpm", "apk", "archlinux"] as const)("preserves executable and file bytes and modes in %s", async (format) => {
-    const artifact = await run(Nfpm.package(input(format)));
+    const artifact = await run(Nfpm.package(input(format)).pipe(Effect.flatMap(Artifact.withSha256)));
     expect(artifact.path).toBe(join(root, "dist", `fixture${extension[format]}`));
     expect(artifact.producedBy.name).toBe("nfpm");
     expect(await run(Artifact.verify(artifact))).toEqual(artifact);
@@ -160,17 +161,18 @@ describe("real nFPM packages", () => {
     expect(manifest).toContain('Publisher="CN=Effect Build Fixture"');
     expect(manifest).toContain('Executable="app.exe"');
     expect(manifest).toContain('Version="1.2.3.0"');
-    expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+    expect((await stat(artifact.path)).size).toBe(artifact.bytes);
     expect(await readdir(join(root, "dist"))).toEqual(["fixture.msix"]);
   }, 60_000);
 
-  it("rejects changed content before replacing an existing package", async () => {
+  it("composes input verification before replacing an existing package", async () => {
     const config = input("deb");
+    const identified = await run(Artifact.withSha256(message));
     const outfile = join(root, config.outfile);
     await mkdir(join(root, "dist"));
     await writeFile(outfile, "previous package");
     await writeFile(message.path, "changed bytes");
-    const error = await run(Nfpm.package(config).pipe(Effect.flip));
+    const error = await run(Artifact.verify(identified).pipe(Effect.andThen(Nfpm.package(config)), Effect.flip));
     expect(error).toMatchObject({ _tag: "ArtifactError", reason: "changed", path: message.path });
     expect(await readFile(outfile, "utf8")).toBe("previous package");
     expect(await readdir(join(root, "dist"))).toEqual(["fixture.deb"]);

@@ -49,17 +49,19 @@ describe("real Syft SBOM generation", () => {
     await writeFile(main, "int main(void) { return 0; }\n");
     await execute("cc", [main, "-o", program], { timeout: 30_000 });
     const subject = await run(Artifact.executable(program, producer));
-    const source = await run(Artifact.directory(subjectRoot, producer));
+    const source = await run(Artifact.directory(subjectRoot, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const artifact = await run(Sbom.generate({ subject, source, format, outfile: join(root, "source-sbom") }));
     expectPackage(await readDocument(artifact.path), format);
     await writeFile(lockfile, "changed source");
-    expect(await run(Sbom.generate({ subject, source, format, outfile: join(root, "source-sbom") }).pipe(Effect.flip))).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
+    expect(await run(Artifact.verify(source).pipe(
+      Effect.andThen(Sbom.generate({ subject, source, format, outfile: join(root, "source-sbom") })), Effect.flip,
+    ))).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
     expectPackage(await readDocument(artifact.path), format);
   }, 60_000);
 
   it.each(formats)("detects package coordinates in a directory and writes %s without a required extension", async (format) => {
-    const subject = await run(Artifact.directory(subjectRoot, producer));
-    const artifact = await run(Sbom.generate({ subject, format, outfile: `dist/${format}`, cwd: root }));
+    const subject = await run(Artifact.directory(subjectRoot, producer).pipe(Effect.flatMap(Artifact.withSha256)));
+    const artifact = await run(Sbom.generate({ subject, format, outfile: `dist/${format}`, cwd: root }).pipe(Effect.flatMap(Artifact.withSha256)));
     expect(artifact.path).toBe(join(root, "dist", format));
     expect(artifact.producedBy.name).toBe("syft");
     expect(await run(Artifact.verify(artifact))).toEqual(artifact);
@@ -71,8 +73,8 @@ describe("real Syft SBOM generation", () => {
   }, 60_000);
 
   it.each(formats)("preserves package-lock.json detection when scanning one file as %s", async (format) => {
-    const subject = await run(Artifact.file(lockfile, producer));
-    const artifact = await run(Sbom.generate({ subject, format, outfile: `file-${format}`, cwd: root, atomic: false }));
+    const subject = await run(Artifact.file(lockfile, producer).pipe(Effect.flatMap(Artifact.withSha256)));
+    const artifact = await run(Sbom.generate({ subject, format, outfile: `file-${format}`, cwd: root, atomic: false }).pipe(Effect.flatMap(Artifact.withSha256)));
     const document = await readDocument(artifact.path);
     expectFormat(document, format);
     expectPackage(document, format);
@@ -87,9 +89,9 @@ describe("real Syft SBOM generation", () => {
     const program = join(root, "program");
     await writeFile(main, "int main(void) { return 0; }\n");
     await execute("cc", [main, "-o", program], { timeout: 30_000 });
-    const binary = await run(Artifact.executable(program, producer));
+    const binary = await run(Artifact.executable(program, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const subject = { ...binary, runtime: { path: program, sha256: binary.sha256 } };
-    const artifact = await run(Sbom.generate({ subject, format, outfile: join(root, "executable-sbom") }));
+    const artifact = await run(Sbom.generate({ subject, format, outfile: join(root, "executable-sbom") }).pipe(Effect.flatMap(Artifact.withSha256)));
     const document = await readDocument(artifact.path);
     expectFormat(document, format);
     if (format === "cyclonedx-json") {
@@ -101,14 +103,14 @@ describe("real Syft SBOM generation", () => {
     expect(await run(Artifact.verify(binary))).toEqual(binary);
   }, 60_000);
 
-  it.each(["file", "directory"] as const)("rejects changed %s subjects while preserving an existing document", async (kind) => {
+  it.each(["file", "directory"] as const)("composes verification of %s subjects before replacing a document", async (kind) => {
     const subject = kind === "file"
-      ? await run(Artifact.file(lockfile, producer))
-      : await run(Artifact.directory(subjectRoot, producer));
+      ? await run(Artifact.file(lockfile, producer).pipe(Effect.flatMap(Artifact.withSha256)))
+      : await run(Artifact.directory(subjectRoot, producer).pipe(Effect.flatMap(Artifact.withSha256)));
     const outfile = join(root, "existing-sbom");
     await writeFile(outfile, "previous document");
     await writeFile(lockfile, "changed bytes\n");
-    const error = await run(Sbom.generate({ subject, format: "spdx-json", outfile }).pipe(Effect.flip));
+    const error = await run(Artifact.verify(subject).pipe(Effect.andThen(Sbom.generate({ subject, format: "spdx-json", outfile })), Effect.flip));
     expect(error).toMatchObject({ _tag: "ArtifactError", reason: "changed", path: subject.path });
     expect(await readFile(outfile, "utf8")).toBe("previous document");
     expect((await readdir(root)).sort()).toEqual(["existing-sbom", "subject"]);

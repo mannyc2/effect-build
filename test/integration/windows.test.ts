@@ -75,11 +75,11 @@ try {
     await writeFile(entrypoint, 'console.log("signed hello");\n');
     const bun = process.env.EFFECT_BUILD_BUN;
     const original = await run(Bun.compile({ entrypoints: [entrypoint], outfile: join(root, "unsigned.exe") }).pipe(
-      Effect.provide(Bun.layer(bun === undefined ? {} : { executable: bun })),
+      Effect.provide(Bun.layer(bun === undefined ? {} : { executable: bun })), Effect.flatMap(Artifact.withSha256),
     ));
     const signed = await run(Windows.sign({
       artifact: original, outfile: join(root, "signed.exe"), kind: "store", thumbprint, timestampUrl,
-    }).pipe(Effect.provide(Windows.layer({ executable: tool })), Effect.timeout("120 seconds")));
+    }).pipe(Effect.provide(Windows.layer({ executable: tool })), Effect.flatMap(Artifact.withSha256), Effect.timeout("120 seconds")));
     expect(signed.kind).toBe("executable");
     expect(signed.target).toBe(original.target);
     expect(signed.format).toBe("pe");

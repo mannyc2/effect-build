@@ -19,6 +19,9 @@ try {
   const candidate = await readCandidate(packed);
   const typescript = process.env.CONSUMER_TYPESCRIPT ?? "5.9.3";
   const nodeTypes = process.env.CONSUMER_NODE_TYPES ?? "24.3.0";
+  // Show uses skipLibCheck with rc.113's incomplete upstream declarations.
+  // Other required consumers check dependency declarations with the corrected RC.
+  const skipLibCheck = process.env.CONSUMER_SKIP_LIB_CHECK === "true";
   // The workspace pins the tested release candidate; `CONSUMER_EFFECT=rc` observes the newest one.
   const effect = process.env.CONSUMER_EFFECT ?? workspace.devDependencies.effect;
   const bunTypes = process.env.CONSUMER_BUN_TYPES ?? bunPackage.devDependencies["bun-types"];
@@ -73,7 +76,7 @@ try {
           module: "NodeNext",
           moduleResolution: "NodeNext",
           strict: true,
-          skipLibCheck: false,
+          skipLibCheck,
           noEmit: true,
           types: ["node"],
           lib: ["ES2022", "DOM", "DOM.Iterable"],
@@ -89,7 +92,33 @@ try {
   };
   const bunApi = "effect-build-bun/api";
   // A Node consumer never installs bun-types, so no other export may depend on them.
-  await typecheck("consumer-node", importAll(exports.filter((name) => name !== bunApi)));
+  await typecheck("consumer-node", `${importAll(exports.filter((name) => name !== bunApi))}
+import { Effect, Schema } from "effect";
+import { Artifact, Checksums, Directory } from "effect-build";
+import * as Archive from "effect-build-archives";
+import * as Apple from "effect-build-apple";
+import * as Python from "effect-build-python";
+declare const file: Artifact.File;
+declare const directory: Artifact.Directory;
+Directory.assemble({ entries: [{ artifact: directory }, { artifact: file, path: "assets/input.txt" }], outdir: "runtime" });
+Archive.tarGz({ directory, outfile: "runtime.tar.gz" });
+Python.wheel({ metadata: { name: "consumer", version: "1.0.0" }, tags: { python: "py3", abi: "none", platform: "any" },
+  entries: [{ artifact: file, path: "consumer/data.txt" }], outdir: "wheels" });
+declare const app: Apple.App;
+Apple.staple({ artifact: app });
+Apple.assess({ artifact: app });
+Apple.verifySignature({ artifact: app });
+Apple.validateTicket({ artifact: app });
+const HashedFile = Artifact.File.pipe(Schema.fieldsAssign({ sha256: Artifact.Sha256 }));
+declare const hashed: typeof HashedFile.Type;
+Checksums.write({ artifacts: [hashed], outfile: "SHA256SUMS" });
+// @ts-expect-error: checksum records require an explicit identity
+Checksums.write({ artifacts: [file], outfile: "SHA256SUMS" });
+// @ts-expect-error: verified reads require an explicit identity
+Artifact.readVerified(file);
+const composed = Effect.succeed(file).pipe(Effect.flatMap(Artifact.withSha256), Effect.flatMap(Artifact.readVerified));
+void composed;
+`);
   await npm([...installArgs, `bun-types@${bunTypes}`], { cwd: directory });
   await typecheck(
     "consumer-bun",
@@ -99,6 +128,9 @@ Build.build({ entrypoints: ["input.ts"], minify: true });
 Transpiler.make({ loader: "ts" });
 `,
   );
+  if (process.env.CONSUMER_BUN_PLATFORM === "true") {
+    await npm([...installArgs, `@effect/platform-bun@${effect}`], { cwd: directory });
+  }
   await writeFile(
     join(directory, "consumer.mjs"),
     String.raw`${importAll(exports)}
@@ -106,7 +138,9 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { Artifact, Layout, Tool } from "effect-build";
+import { Artifact, Cache, Directory, Layout, Tool } from "effect-build";
+import * as Archive from "effect-build-archives";
+import { TestCache, TestArtifact } from "effect-build/testing";
 
 const text = "installed consumer\n";
 await writeFile("input.txt", text);
@@ -117,8 +151,21 @@ const artifact = await Effect.runPromise(
 );
 assert.equal(artifact.bytes, new TextEncoder().encode(text).byteLength);
 const [restored] = Artifact.decode(Artifact.encode([artifact]));
-assert.equal(restored.sha256, artifact.sha256);
-assert.match(Layout.validate([
+assert.deepEqual(restored, artifact);
+assert.equal("sha256" in artifact, false);
+await Effect.runPromise(Effect.gen(function*() {
+  const first = yield* Directory.assemble({ entries: [{ artifact, path: "assets/input.txt" }], outdir: "first" });
+  const merged = yield* Directory.assemble({ entries: [{ artifact: first }], outdir: "merged" });
+  assert.deepEqual(merged.entries, first.entries);
+  assert.equal("sha256" in merged, false);
+  const archive = yield* Archive.tarGz({ directory: merged, outfile: "runtime.tar.gz" });
+  yield* Artifact.withSha256(archive).pipe(Effect.flatMap(Artifact.verify));
+}).pipe(Effect.provide(NodeServices.layer)));
+assert.equal(Layout.validate([
+  { path: "Docs/a", kind: "file" },
+  { path: "docs/b", kind: "file" },
+]), undefined);
+assert.match(Layout.validatePortable([
   { path: "Docs/a", kind: "file" },
   { path: "docs/b", kind: "file" },
 ]).reason, /collision/);
@@ -129,6 +176,22 @@ const failed = await Effect.runPromise(Effect.gen(function*() {
 }).pipe(Effect.provide(NodeServices.layer)));
 assert.equal(failed.stderr, "<redacted>");
 assert.equal(failed.exitCode, 7);
+await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const cache = yield* TestCache.layer;
+  const original = yield* TestArtifact.file("packed cache consumer");
+  const key = { operation: "Consumer.file", tool: original.producedBy, inputs: [] };
+  yield* Effect.gen(function*() {
+    yield* Effect.succeed(original).pipe(Cache.cached({ key, outfile: original.path, schema: Artifact.File }));
+    const hit = yield* Effect.die("installed cache producer unexpectedly ran").pipe(
+      Cache.cached({ key, outfile: "restored.txt", schema: Artifact.File }),
+    );
+    const firstIdentity = yield* Artifact.withSha256(original);
+    const hitIdentity = yield* Artifact.withSha256(hit);
+    yield* Artifact.verify(hitIdentity);
+    assert.equal(hitIdentity.sha256, firstIdentity.sha256);
+    assert.equal("sha256" in hit, false);
+  }).pipe(Effect.provide(cache));
+})).pipe(Effect.provide(NodeServices.layer)));
 `,
   );
   execFileSync(process.execPath, [join(directory, "consumer.mjs")], { cwd: directory, stdio: "inherit" });
@@ -154,10 +217,34 @@ NodeRuntime.runMain(
   );
   execFileSync(process.execPath, [join(directory, "build.mjs")], { cwd: directory, stdio: "inherit" });
   assert.equal(execFileSync(executable, { cwd: directory, encoding: "utf8" }).trim(), "Hello!");
+  if (process.env.CONSUMER_BUN_PLATFORM === "true") {
+    const runtime = bunOptions.executable ?? "bun";
+    await typecheck("consumer-bun-platform", `
+import assert from "node:assert/strict";
+import { BunServices } from "@effect/platform-bun";
+import { ConfigProvider, Effect } from "effect";
+import { Artifact, Tool } from "effect-build";
+import { dirname } from "node:path";
+await Effect.runPromise(Effect.gen(function*() {
+  const tool = yield* Tool.resolve({ name: "bun" });
+  assert.equal(tool.version, ${JSON.stringify(bunTypes)});
+  const completion = yield* Tool.run(tool, ["--version"]);
+  assert.equal(new TextDecoder().decode(completion.stdout).trim(), tool.version);
+  assert.equal("sha256" in tool, false);
+  const hashedTool = yield* Tool.withSha256(tool);
+  const artifact = yield* Artifact.file(tool.path, tool).pipe(Effect.flatMap(Artifact.withSha256));
+  assert.equal(artifact.sha256, hashedTool.sha256);
+}).pipe(
+  Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ PATH: dirname(process.execPath) })),
+  Effect.provide(BunServices.layer),
+));
+`);
+    execFileSync(runtime, ["--no-env-file", join(directory, "consumer-bun-platform.ts")], { cwd: directory, stdio: "inherit" });
+  }
   console.log(
     `Installed consumer passed: ${candidate.packages.length} packages, ${exports.length} exports; Node ${process.version}, TypeScript ${typescript}, Node types ${nodeTypes}, Effect ${
       (await installed("effect")).version
-    }, bun-types ${(await installed("bun-types")).version}, esbuild ${(await installed("esbuild")).version}`,
+    }, bun-types ${(await installed("bun-types")).version}, esbuild ${(await installed("esbuild")).version}; skipLibCheck=${skipLibCheck}`,
   );
 } finally {
   await rm(directory, { recursive: true, force: true });

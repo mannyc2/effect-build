@@ -1,4 +1,4 @@
-import { Crypto, Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path } from "effect";
 import * as Artifact from "./Artifact.js";
 import metadata from "../package.json" with { type: "json" };
 
@@ -7,9 +7,9 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 
 /** Paths are relative to the checksum file's directory, so the output tree can move. */
 export const write = (input: {
-  readonly artifacts: readonly Artifact.Regular[];
+  readonly artifacts: readonly Artifact.HashedRegular[];
   readonly outfile: string;
-}): Effect.Effect<Artifact.File, Artifact.ArtifactError, FileSystem.FileSystem | Path.Path | Crypto.Crypto> =>
+}): Effect.Effect<Artifact.File, Artifact.ArtifactError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const p = yield* Path.Path;
@@ -48,13 +48,14 @@ const unescape = (name: string): string | undefined => {
 /**
  * Check every listed file against its recorded digest. Lines take the text format
  * `write` produces (native `sha256sum` output matches); names resolve against the
- * checksum file's directory, and the checksum file is itself re-verified first.
+ * checksum file's directory. Reading the listing does not require its own digest.
  */
-export const verify = (checksums: Artifact.File): Effect.Effect<void, Artifact.ArtifactError, FileSystem.FileSystem | Path.Path | Crypto.Crypto> =>
+export const verify = (checksums: Artifact.File): Effect.Effect<void, Artifact.ArtifactError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const p = yield* Path.Path;
+    const fs = yield* FileSystem.FileSystem;
     const invalid = (detail: string) => new Artifact.ArtifactError({ path: checksums.path, reason: "invalid-metadata", detail });
-    const bytes = yield* Artifact.readVerified(checksums);
+    const bytes = yield* fs.readFile(checksums.path).pipe(Effect.mapError(Artifact.ioError(checksums.path)));
     const contents = yield* Effect.try({ try: () => decoder.decode(bytes), catch: () => invalid("checksum lines must be UTF-8") });
     if (contents.includes("\r")) return yield* invalid("checksum lines must not contain carriage returns");
     const lines = contents.split("\n");
@@ -68,7 +69,7 @@ export const verify = (checksums: Artifact.File): Effect.Effect<void, Artifact.A
       const path = p.resolve(directory, name);
       if (seen.has(path)) return yield* invalid(`line ${index + 1} repeats ${path}`);
       seen.add(path);
-      const current = yield* Artifact.file(path, checksums.producedBy);
+      const current = yield* Artifact.file(path, checksums.producedBy).pipe(Effect.flatMap(Artifact.withSha256));
       if (current.sha256 !== match[2]) {
         return yield* new Artifact.ArtifactError({ path, reason: "changed", detail: `sha256 ${current.sha256} does not match the recorded ${match[2]}` });
       }

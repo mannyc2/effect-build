@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import { Artifact, Target, Tool } from "effect-build";
+import { Effect, FileSystem, Stream } from "effect";
+import { Artifact, Layout, Target, Tool } from "effect-build";
 import * as Python from "effect-build-python";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { crc32, inflateRawSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { thinMacho } from "../fixtures/native-executable.js";
+import { TestArtifact } from "effect-build/testing";
+const { thinMacho } = TestArtifact;
 
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
@@ -154,7 +155,7 @@ describe("wheels from real artifacts", () => {
         "fixture.plugins": { demo: "wheel_fixture" },
       },
     };
-    const first = await run(Python.wheel(options));
+    const first = await run(Python.wheel(options).pipe(Effect.flatMap(Artifact.withSha256)));
     await utimes(payload.path, new Date(0), new Date(0));
     const second = await run(Python.wheel({
       ...options,
@@ -173,9 +174,12 @@ describe("wheels from real artifacts", () => {
     expect(second.path).toBe(join(root, "second", "wheel_fixture-1.2.3-py3-none-any.whl"));
     expect(await readFile(second.path)).toEqual(await readFile(first.path));
     expect(await run(Artifact.verify(first))).toEqual(first);
-    expect(first.producedBy).toEqual({ name: "effect-build-python", version: "0.7.0" });
+    expect(first.producedBy).toEqual({ name: "effect-build-python", version: "0.8.0" });
     const files = await readZip(first.path), names = [...files.keys()];
-    expect(names).toEqual([...names].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b))));
+    const payloads = names.filter((name) => !name.startsWith(`${info}/`));
+    const metadata = names.filter((name) => name.startsWith(`${info}/`) && name !== `${info}/RECORD`);
+    const sorted = (names: string[]) => [...names].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+    expect(names).toEqual([...sorted(payloads), ...sorted(metadata), `${info}/RECORD`]);
     expect(files.get(`${info}/METADATA`)?.contents.toString()).toBe([
       "Metadata-Version: 2.1",
       "Name: Wheel-Fixture",
@@ -325,12 +329,7 @@ describe("wheels from real artifacts", () => {
     ["line\nbreak"],
     ["line\rbreak"],
     ["same", "same"],
-    ["Readme", "README"],
-    ["Docs/a", "docs/b"],
-    ["café/a", "cafe\u0301/b"],
-    ["café", "cafe\u0301"],
-    ["Bin", "bin/tool"],
-    ["café", "cafe\u0301/tool"],
+    ["file", "file/child"],
     ["wheel_fixture-1.2.3.dist-info/METADATA"],
     ["other.DIST-INFO/data"],
   ])("rejects unsafe wheel layout %j before writing", async (...paths) => {
@@ -341,6 +340,20 @@ describe("wheels from real artifacts", () => {
       expect(failure).toBeInstanceOf(Tool.InputInvalid);
     }
     expect(await readdir(root)).toEqual(["payload"]);
+  });
+
+  it.each([
+    ["Readme", "README"],
+    ["Docs/a", "docs/b"],
+    ["café/a", "cafe\u0301/b"],
+    ["café", "cafe\u0301"],
+    ["Bin", "bin/tool"],
+    ["café", "cafe\u0301/tool"],
+  ])("preserves distinct spellings %j unless portability is explicitly required", async (...paths) => {
+    expect(Layout.validatePortable(paths.map((path) => ({ path, kind: "file" })))).toBeDefined();
+    const wheel = await run(Python.wheel({ ...input, entries: paths.map((path) => ({ path, artifact: payload })) }));
+    const files = await readZip(wheel.path);
+    for (const path of paths) expect(files.get(path)?.contents).toEqual(await readFile(payload.path));
   });
 
   it.each(
@@ -366,16 +379,82 @@ describe("wheels from real artifacts", () => {
     expect(await readdir(root)).toEqual(["payload"]);
   });
 
-  it.each(["bytes", "digest"])("refuses a changed artifact %s and preserves existing output", async (changed) => {
+  it.each([-1, 1])("rejects a payload size mismatch of %d and preserves existing output", async (delta) => {
     const original = await run(Python.wheel(input));
     const before = await readFile(original.path);
-    if (changed === "digest") await writeFile(payload.path, "answer = 43\n");
-    const artifact = changed === "bytes" ? { ...payload, bytes: payload.bytes + 1 } : payload;
+    const artifact = { ...payload, bytes: payload.bytes + delta };
     const failure = await run(
       Python.wheel({ ...input, entries: [{ artifact, path: "wheel_fixture/__init__.py" }] }).pipe(Effect.flip),
     );
-    expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
+    expect(failure).toMatchObject({
+      _tag: "ArchiveEntrySizeMismatch",
+      expected: artifact.bytes,
+      actual: payload.bytes,
+    });
     expect(await readFile(original.path)).toEqual(before);
     expect(await readdir(input.outdir)).toEqual([basename(original.path)]);
+  });
+
+  it("records the bytes consumed while expected-identity verification stays explicit", async () => {
+    const identified = await run(Artifact.withSha256(payload));
+    const original = await run(Python.wheel(input));
+    const before = await readFile(original.path);
+    await writeFile(payload.path, "answer = 43\n");
+    const options = { ...input, entries: [{ artifact: identified, path: "wheel_fixture/__init__.py" }] };
+    const failure = await run(Artifact.verify(identified).pipe(Effect.andThen(Python.wheel(options)), Effect.flip));
+    expect(failure).toMatchObject({ _tag: "ArtifactError", reason: "changed" });
+    expect(await readFile(original.path)).toEqual(before);
+    const wheel = await run(Python.wheel(options));
+    const files = await readZip(wheel.path);
+    const bytes = files.get("wheel_fixture/__init__.py")!.contents;
+    expect(bytes.toString()).toBe("answer = 43\n");
+    expect(files.get(`${info}/RECORD`)!.contents.toString()).toContain(
+      `wheel_fixture/__init__.py,sha256=${createHash("sha256").update(bytes).digest("base64url")},${bytes.length}\n`,
+    );
+  });
+
+  it("reads a payload once in bounded chunks and records its actual digest", async () => {
+    const contents = Buffer.alloc(2 * 1024 * 1024 + 7, 0x61);
+    await writeFile(payload.path, contents);
+    const artifact = await run(Artifact.file(payload.path, producer));
+    const fs = await run(FileSystem.FileSystem);
+    const chunks: number[] = [];
+    let streams = 0;
+    const observing: FileSystem.FileSystem = {
+      ...fs,
+      stream: (path, options) => {
+        if (path !== artifact.path) return fs.stream(path, options);
+        streams++;
+        return fs.stream(path, options).pipe(Stream.tap((chunk) => Effect.sync(() => chunks.push(chunk.byteLength))));
+      },
+    };
+    const wheel = await run(
+      Python.wheel({ ...input, entries: [{ artifact, path: "data.bin" }] }).pipe(
+        Effect.provideService(FileSystem.FileSystem, observing),
+      ),
+    );
+    expect(streams).toBe(1);
+    expect(chunks.reduce((total, bytes) => total + bytes, 0)).toBe(contents.length);
+    expect(Math.max(...chunks)).toBeLessThanOrEqual(64 * 1024);
+    const files = await readZip(wheel.path);
+    expect(files.get("data.bin")!.contents.equals(contents)).toBe(true);
+    expect(files.get(`${info}/RECORD`)!.contents.toString()).toContain(
+      `data.bin,sha256=${createHash("sha256").update(contents).digest("base64url")},${contents.length}\n`,
+    );
+  });
+
+  it("finalizes empty payloads and starts fresh when the same wheel effect runs again", async () => {
+    await writeFile(payload.path, "");
+    const artifact = await run(Artifact.file(payload.path, producer));
+    const make = Python.wheel({ ...input, entries: [{ artifact, path: "empty" }] });
+    const first = await run(make);
+    const before = await readFile(first.path);
+    const second = await run(make);
+    expect(await readFile(second.path)).toEqual(before);
+    const files = await readZip(second.path);
+    expect(files.get("empty")!.contents.byteLength).toBe(0);
+    expect(files.get(`${info}/RECORD`)!.contents.toString()).toContain(
+      `empty,sha256=${createHash("sha256").digest("base64url")},0\n`,
+    );
   });
 });

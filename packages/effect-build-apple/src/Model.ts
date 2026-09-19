@@ -1,6 +1,5 @@
 import { Schema } from "effect";
 import { Artifact } from "effect-build";
-import type { AcceptedReference } from "./Notary.js";
 
 export const App = Schema.Struct({ ...Artifact.Directory.fields, product: Schema.Literal("app") }).check(Schema.makeFilter((value) => Schema.is(Artifact.Directory)(value) ? undefined : "invalid directory artifact"));
 export type App = typeof App.Type;
@@ -24,7 +23,3 @@ export const SignedExecutable = Schema.Struct({ ...Artifact.Executable.fields, s
 export type SignedExecutable = typeof SignedExecutable.Type;
 export const Signed = Schema.Union([SignedApp, SignedDmg, SignedPkg, SignedExecutable]);
 export type Signed = typeof Signed.Type;
-export type StapledApp = SignedApp & { readonly ticket: AcceptedReference };
-export type StapledDmg = SignedDmg & { readonly ticket: AcceptedReference };
-export type StapledPkg = SignedPkg & { readonly ticket: AcceptedReference };
-export type StapledProduct = StapledApp | StapledDmg | StapledPkg;

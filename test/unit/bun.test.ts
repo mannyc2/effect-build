@@ -46,7 +46,7 @@ describe("Bun CLI", () => {
     const artifact = await run(Bun.bundle({ entrypoints: ["hello.ts"], outdir: "nested/bundle", cwd: root }));
     expect(artifact.path).toBe(join(root, "nested/bundle"));
     expect(artifact.entries.map((entry) => entry.path)).toContain("hello.js");
-    expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+    expect(await run(Artifact.withSha256(artifact).pipe(Effect.flatMap(Artifact.verify), Effect.as(artifact)))).toEqual(artifact);
     expect((await execute(process.execPath, [join(artifact.path, "hello.js")])).stdout.trim()).toBe("hello");
   });
 

@@ -29,7 +29,7 @@ describe("real Bun executables", () => {
       expect(artifact.path).toBe(outfile);
       expect(artifact.target).toBe(target);
       expect(artifact.bytes).toBeGreaterThan(0);
-      expect(await run(Artifact.verify(artifact))).toEqual(artifact);
+      expect(await run(Artifact.withSha256(artifact).pipe(Effect.flatMap(Artifact.verify), Effect.as(artifact)))).toEqual(artifact);
       const facts = await run(Executable.inspect(outfile));
       expect(Executable.matches(facts, target)).toBe(true);
     },
@@ -46,6 +46,6 @@ describe("real Bun executables", () => {
       target,
     }));
     expect(execFileSync(artifact.path, [], { encoding: "utf8", timeout: 30_000 }).trim()).toBe("42");
-    await run(Artifact.verify(artifact));
+    await run(Artifact.withSha256(artifact).pipe(Effect.flatMap(Artifact.verify), Effect.as(artifact)));
   }, 300_000);
 });

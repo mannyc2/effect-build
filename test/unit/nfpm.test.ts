@@ -6,10 +6,11 @@ import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { elf, pe, thinMacho } from "../fixtures/native-executable.js";
+import { TestArtifact } from "effect-build/testing";
+const { elf, pe, thinMacho } = TestArtifact;
 
 const producer = { name: "fixture", version: "0.7.0" };
-const tool = { name: "nfpm", path: "/not-launched", version: "2.47.0", bytes: 0, sha256: "0".repeat(64) };
+const tool = { name: "nfpm", path: "/not-launched", version: "2.47.0", bytes: 0 };
 const run = <A, E>(effect: Effect.Effect<A, E, Nfpm.Nfpm | NodeServices.NodeServices>) =>
   Effect.runPromise(effect.pipe(Effect.provideService(Nfpm.Nfpm, { tool }), Effect.provide(NodeServices.layer)));
 let root: string;
