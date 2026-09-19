@@ -4,8 +4,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 import { publish, readCandidate } from "./release-packages.mjs";
+
+// The test worker owns its release context; a real CI tag must not change fixtures.
+beforeEach(() => {
+  process.env.GITHUB_SHA = "a".repeat(40);
+  process.env.GITHUB_REF_TYPE = "tag";
+  process.env.GITHUB_REF_NAME = "v0.7.0";
+});
 
 const fixture = async (run) => {
   const directory = await mkdtemp(join(tmpdir(), "effect-build-publish-"));
@@ -37,7 +44,7 @@ const fixture = async (run) => {
   const manifest = () =>
     writeFile(
       join(directory, "manifest.json"),
-      JSON.stringify({ schema: 1, commit: process.env.GITHUB_SHA ?? "a".repeat(40), packages }),
+      JSON.stringify({ schema: 1, commit: "a".repeat(40), packages }),
     );
   try {
     await writeFile(join(directory, item.filename), bytes);
@@ -65,6 +72,24 @@ const fixture = async (run) => {
     await rm(directory, { recursive: true, force: true });
   }
 };
+
+test("rejects a candidate from a different commit before publishing", () =>
+  fixture(async ({ directory, registry }) => {
+    process.env.GITHUB_SHA = "b".repeat(40);
+    await assert.rejects(
+      publish(directory, { registry, publishPackage: () => assert.fail("must not publish") }),
+      /Candidate commit differs from release commit/u,
+    );
+  }));
+
+test("rejects a candidate for a different release tag before publishing", () =>
+  fixture(async ({ directory, registry }) => {
+    process.env.GITHUB_REF_NAME = "v0.8.0";
+    await assert.rejects(
+      publish(directory, { registry, publishPackage: () => assert.fail("must not publish") }),
+      /Candidate version differs from release tag/u,
+    );
+  }));
 
 test("resumption skips identical installed registry bytes", () =>
   fixture(async ({ directory, registry, observe }) => {
