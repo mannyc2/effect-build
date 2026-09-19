@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "effect-build": "workspace:^",
-    "rolldown": "1.2.5"
+    "rolldown": "1.2.9"
   },
   "peerDependencies": {
     "effect": ">=4.0.0-rc.113 <4.1.0-0"
