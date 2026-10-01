@@ -25,7 +25,8 @@
     "examples/**/*.md",
     "packages/**/*.md",
     "DESIGN.md",
-    "scripts/**/*.mjs"
+    "scripts/**/*.mjs",
+    "scripts/**/*.ts"
   ],
   "excludes": [
     "node_modules",

@@ -1,0 +1,178 @@
+{
+  // The lint policy. `bun run lint` runs Oxlint with this file and denies warnings, so every
+  // rule here, including the presets' warnings, blocks. Effect's diagnostics run here rather than in
+  // tsc: `bun run prepare` patches Oxlint and tsgolint with @effect/tsgo, which adds `effecttsgo`.
+  // A genuine exception names its reason in the directive:
+  //   // oxlint-disable-next-line <rule> -- <why this site is an exception>
+  "$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
+  "extends": [
+    "./node_modules/@effect/tsgo/oxlint-presets/correctness.json",
+    "./node_modules/@effect/tsgo/oxlint-presets/antipattern.json",
+    "./node_modules/@effect/tsgo/oxlint-presets/effect-native.json",
+    "./node_modules/@effect/tsgo/oxlint-presets/style.json",
+    // Last, so its per-file exceptions win: the old code's remaining findings, to be burned down.
+    "./.oxlintrc.legacy.json"
+  ],
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "vitest", "effecttsgo"],
+  "options": { "typeAware": true },
+  "categories": { "correctness": "error" },
+  "rules": {
+    // Imports.
+    "import/no-cycle": "error",
+    "import/no-duplicates": "error",
+    "import/no-self-import": "error",
+    "unicorn/prefer-node-protocol": "error",
+    // Separate type imports erase under verbatimModuleSyntax; inline ones leave `import {}`.
+    "typescript/consistent-type-imports": [
+      "error",
+      { "fixStyle": "separate-type-imports", "prefer": "type-imports" }
+    ],
+    "typescript/consistent-type-exports": "error",
+
+    // Don't panic: a failure is a typed value, not an unchecked escape.
+    "typescript/no-non-null-assertion": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/prefer-promise-reject-errors": "error",
+
+    // Don't fail silently: no dropped work, swallowed failure or empty handler.
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/use-unknown-in-catch-callback-variable": "error",
+    "eslint/preserve-caught-error": "error",
+    "eslint/no-empty": "error",
+
+    // Don't do bad async things: keep interruption and settlement explicit.
+    "typescript/await-thenable": "error",
+    "typescript/require-await": "error",
+    "typescript/return-await": "error",
+    "eslint/no-promise-executor-return": "error",
+    "promise/no-callback-in-promise": "error",
+    "promise/no-multiple-resolved": "error",
+    "promise/no-promise-in-callback": "error",
+
+    // Don't escape the type system: `any` and narrowing casts are TypeScript's `unsafe`.
+    "typescript/no-explicit-any": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-enum-comparison": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-type-assertion": "error",
+    "typescript/no-unsafe-unary-minus": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/non-nullable-type-assertion-style": "error",
+    "typescript/ban-ts-comment": [
+      "error",
+      {
+        "ts-check": false,
+        "ts-expect-error": "allow-with-description",
+        "ts-ignore": true,
+        "ts-nocheck": true,
+        "minimumDescriptionLength": 10
+      }
+    ],
+
+    // Say what you mean: conditions are booleans and every member of a union is handled.
+    "typescript/strict-boolean-expressions": "error",
+    "typescript/no-unnecessary-condition": "error",
+    "typescript/no-unnecessary-boolean-literal-compare": "error",
+    // A `default` clause marks a switch over a union as deliberately partial.
+    "typescript/switch-exhaustiveness-check": [
+      "error",
+      { "considerDefaultExhaustiveForUnions": true }
+    ],
+    "eqeqeq": "error",
+
+    // Don't do potentially incorrect things with numbers, strings and arrays.
+    "typescript/restrict-plus-operands": "error",
+    "typescript/restrict-template-expressions": "error",
+    "typescript/require-array-sort-compare": "error",
+    "typescript/no-base-to-string": "error",
+    "typescript/no-array-delete": "error",
+    "typescript/no-for-in-array": "error",
+    "unicorn/prefer-number-properties": "error",
+    "eslint/radix": "error",
+
+    // Keep types and code minimal.
+    "typescript/no-duplicate-type-constituents": "error",
+    "typescript/no-redundant-type-constituents": "error",
+    "typescript/no-meaningless-void-operator": "error",
+    "typescript/no-mixed-enums": "error",
+    "typescript/no-unnecessary-qualifier": "error",
+    "typescript/no-unnecessary-template-expression": "error",
+    "typescript/no-unnecessary-type-conversion": "error",
+    "typescript/no-unnecessary-type-parameters": "error",
+    "typescript/no-useless-default-assignment": "error",
+    "typescript/prefer-reduce-type-parameter": "error",
+    "typescript/prefer-return-this-type": "error",
+    "typescript/related-getter-setter-pairs": "error",
+    "typescript/prefer-readonly": "error",
+    "typescript/dot-notation": "error",
+    "typescript/prefer-find": "error",
+    "typescript/prefer-includes": "error",
+    "typescript/prefer-nullish-coalescing": "error",
+    "typescript/prefer-optional-chain": "error",
+    "typescript/prefer-regexp-exec": "error",
+    "typescript/prefer-string-starts-ends-with": "error",
+    "eslint/no-unused-vars": ["error", { "ignoreRestSiblings": true, "argsIgnorePattern": "^_" }],
+
+    // Don't do bad things that are easy to avoid.
+    "typescript/no-implied-eval": "error",
+    "typescript/unbound-method": "error",
+    "typescript/no-deprecated": "error",
+    "eslint/no-new": "error",
+    // Comments give the reason now; work still to do belongs in an issue, not a TODO.
+    "eslint/no-warning-comments": "error",
+    // Tests: nothing focused, skipped or assertion-free reaches main.
+    "vitest/no-focused-tests": "error",
+    "vitest/no-disabled-tests": "error",
+    "vitest/no-identical-title": "error",
+    "vitest/no-conditional-expect": "error",
+    "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expect*", "assert", "assert*"] }],
+    // Vitest's `expect` takes a message as its second argument.
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+    // It doesn't recognise `it.effect` as a test, so it reports every assertion inside one.
+    "vitest/no-standalone-expect": "off",
+    // Rebuilding a Schema class instance through `make` spreads it on purpose.
+    "typescript/no-misused-spread": "off"
+  },
+  "overrides": [
+    {
+      // Library code never leaves the Effect runtime it was given, and never unwraps.
+      "files": ["packages/*/src/**/*.ts"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          { "object": "Option", "property": "getOrThrow" },
+          { "object": "Option", "property": "getOrThrowWith" },
+          { "object": "Result", "property": "getOrThrow" },
+          { "object": "Result", "property": "getOrThrowWith" },
+          { "object": "Context", "property": "getUnsafe" },
+          { "object": "Effect", "property": "runSync" },
+          { "object": "Effect", "property": "runSyncExit" },
+          { "object": "Effect", "property": "runPromise" },
+          { "object": "Effect", "property": "runPromiseExit" },
+          { "object": "Effect", "property": "runFork" },
+          {
+            "property": "randomUUID",
+            "message": "Draw a UUID from Effect's `Random` or `Crypto` service."
+          }
+        ]
+      }
+    },
+    {
+      // Tests drive real tools: they read the environment variables that select a binary, and use
+      // Node's filesystem and process APIs for fixtures. Everything else, time included, follows
+      // the library's rules.
+      "files": ["test/**/*.ts", "vitest.config.ts"],
+      "rules": {
+        "effecttsgo/node-builtin-import": "off",
+        "effecttsgo/process-env": "off",
+        "effecttsgo/process-env-in-effect": "off",
+        "effecttsgo/prefer-schema-over-json": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**", ".agent-sources/**"]
+}

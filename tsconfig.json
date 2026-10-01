@@ -11,7 +11,8 @@
   "include": [
     "test/unit/*.test.ts",
     "test/integration/*.test.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "scripts/**/*.ts"
   ],
   "exclude": [
     "node_modules"
