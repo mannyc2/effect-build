@@ -1,5 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { Effect, Encoding, FileSystem, Path, Stream } from "effect";
+import { Effect, FileSystem, Path, Stream } from "effect";
+import { Base64Url } from "effect/encoding";
 import { Artifact, Commit, Layout, Target, Tool } from "effect-build";
 import { type EntrySizeMismatch, type FormatLimit, Zip } from "effect-build-archives";
 import packageMetadata from "../package.json" with { type: "json" };
@@ -264,7 +265,7 @@ export const wheel = Effect.fn("Python.wheel")((input: WheelInput): Effect.Effec
     let recordBytes = encoder.encode(selfRecord).byteLength;
     // PEP 427: RECORD digests are urlsafe base64 without padding, and RECORD lists itself with no hash or size.
     for (const entry of prepared.metadata.sort((a, b) => utf8Order(a.path, b.path))) {
-      const line = recordLine(entry.path, Encoding.encodeBase64Url(sha256(entry.contents)), entry.contents.byteLength);
+      const line = recordLine(entry.path, Base64Url.encode(sha256(entry.contents)), entry.contents.byteLength);
       metadata.push({
         kind: "file",
         path: entry.path,
@@ -294,7 +295,7 @@ export const wheel = Effect.fn("Python.wheel")((input: WheelInput): Effect.Effec
             Stream.onEnd(Effect.sync(() =>
               records.push({
                 path: entry.path,
-                line: recordLine(entry.path, Encoding.encodeBase64Url(hash.digest()), entry.artifact.bytes),
+                line: recordLine(entry.path, Base64Url.encode(hash.digest()), entry.artifact.bytes),
               })
             )),
           );

@@ -1,5 +1,5 @@
 import { Context, Effect, FileSystem, Path, Scope } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
 import * as CompileCommand from "./internal/CompileCommand.js";
 import { type Check, type ImportPermissions, type ProjectOptions, renderCheck, renderPermission, renderProject, validatePath, validatePermission } from "./internal/Options.js";

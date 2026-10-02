@@ -1,6 +1,6 @@
 # Compatibility
 
-What effect-build 0.8 runs on, what it typechecks with, which Effect it accepts, and what the
+What the unreleased effect-build checkout runs on, what it typechecks with, which Effect it accepts, and what the
 repository actually exercises for each operation.
 
 ## Runtime
@@ -24,28 +24,24 @@ in each package.
 
 ## Effect
 
-Effect 4 is a prerelease. Every package accepts `>=4.0.0-rc.113 <4.1.0-0` as its Effect peer
-range, the shape Effect's own platform packages use. The workspace and cross-platform checks
-pin **4.0.0-rc.115**. A required Ubuntu 22.04 consumer installs **4.0.0-rc.113** with The Show's
-exact toolchain. A non-gating consumer tracks the `rc` dist-tag; nothing newer is promised
-until tested. Effect 3 is unsupported.
+The published 0.8.0 packages use Effect 4.0.0-rc.115 and retain the prerelease module paths.
+The following describes the unreleased source checkout.
+
+Every package accepts `>=4.0.0 <4.1.0` as its Effect peer range. The workspace and required
+consumer checks pin **4.0.0**. Effect 3 and Effect 4 prereleases are unsupported: the stable
+release uses `effect/process` and `effect/persistence` instead of `effect/unstable/*`.
 
 Install `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` at one version.
-The platform packages' caret dependency can otherwise select a newer shared candidate with a
-newer Effect peer. Stable Effect 4 support follows its release and verification.
+The platform packages' caret dependency can otherwise select a newer shared package with a
+newer Effect peer.
 
-Use the tested rc.115 platform on Windows. The rc.113 Node filesystem rejects valid NTFS
-inode numbers above JavaScript's safe integer range; the official platform
-[fixed optional stat fields in rc.114](https://github.com/Effect-TS/effect/pull/8164).
-The library does not replace the platform layer or round those identifiers.
-
-The Show consumer uses `strict: true` and `skipLibCheck: true`, matching that application.
-Other required installed consumers check dependency declarations with `skipLibCheck: false`.
-Effect rc.113's published declarations reference omitted internal
-types (`EffectTypeId`, `Contextual`, and `AnnotationSchemaConstraint`). Advisory CI checks
-both rc.113 and the floating RC with `skipLibCheck: false`; those upstream declaration
-failures remain visible. The required Show consumer pins Node 24.14.1, Bun 1.4.2,
-TypeScript 7.0.2 and Node types 22.20.2, and exercises both Node and Bun platform layers.
+The default and TypeScript 6 installed consumers check dependency declarations with
+`skipLibCheck: false`. The Ubuntu 22.04 Bun consumer retains `skipLibCheck: true`: it checks
+application types and runtime behavior, but does not establish that Bun dependency declarations
+are valid. Its Bun 1.4.2 / Node types 22.20.2 declarations fail a strict dependency check on
+`TextEncoderEncodeIntoResult`, `ConnectionOptions`, `KeyObject`, and `TLSSocket`. It uses
+Node 24.14.1 and TypeScript 7.0.2, and exercises both Node and Bun platform layers. An advisory consumer tracks the
+`latest` Effect dist-tag; nothing newer is promised until tested.
 
 ## Support matrix
 

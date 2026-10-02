@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Redacted } from "effect";
 import { Artifact, Executable, Tool } from "effect-build";
 import * as Windows from "effect-build-windows";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";

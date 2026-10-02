@@ -1,6 +1,6 @@
 import { Context, Effect, FileSystem, Path, Schema } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 
 export class Sbom extends Context.Service<Sbom, Tool.Service>()("effect-build-sbom/Sbom") {}
 

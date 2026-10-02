@@ -1,5 +1,5 @@
 import { Config, Context, Effect, FileSystem, Layer, Path, Schema, Scope, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Range, satisfies as semverSatisfies } from "semver";
 import * as Artifact from "./Artifact.js";
 

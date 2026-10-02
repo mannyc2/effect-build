@@ -1,6 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Schema, Stream } from "effect";
-import { ChildProcess } from "effect/unstable/process";
+import { ChildProcess } from "effect/process";
 
 // Fails while .oxlintrc.legacy.json lists a path that no longer breaks its rule, so the list only
 // shrinks: it lints with the policy alone and compares the findings with every listed exception.

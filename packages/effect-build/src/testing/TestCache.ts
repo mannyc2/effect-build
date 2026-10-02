@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Layer, Path } from "effect";
-import { KeyValueStore } from "effect/unstable/persistence";
+import { KeyValueStore } from "effect/persistence";
 import * as Cache from "../Cache.js";
 
 /** A fresh memory index and scoped real object directory. Keep the returned layer within the scope. */

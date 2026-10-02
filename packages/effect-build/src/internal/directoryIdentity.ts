@@ -1,5 +1,5 @@
 import { sha256 as incrementalSha256 } from "@noble/hashes/sha2.js";
-import { Encoding } from "effect";
+import { Hex } from "effect/encoding";
 import type * as Artifact from "../Artifact.js";
 
 const encoder = new TextEncoder();
@@ -12,6 +12,6 @@ export const manifestDigest = (entries: readonly Artifact.HashedEntry[]): Artifa
     if (i > 0) hash.update(encoder.encode(","));
     hash.update(encoder.encode(JSON.stringify([e.kind, e.mode, e.bytes, e.kind === "file" ? e.sha256 : undefined, e.linkTarget, e.path])));
   }
-  return Encoding.encodeHex(hash.update(encoder.encode("]")).digest()) as Artifact.Sha256;
+  return Hex.encode(hash.update(encoder.encode("]")).digest()) as Artifact.Sha256;
 };
 

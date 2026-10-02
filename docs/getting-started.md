@@ -18,11 +18,10 @@ program that did it, and points at what to do next. It takes about five minutes.
 npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
 ```
 
-`effect-build-bun` depends on the core `effect-build` package, so that comes along. Effect 4 is
-a release candidate: pin `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` to
-the same version, because the platform packages use caret ranges and can otherwise select a
-newer shared candidate with a newer Effect peer. 4.0.0-rc.115 is the tested version; see
-[compatibility](compatibility.md) for the accepted range.
+`effect-build-bun` depends on the core `effect-build` package, so that comes along. These
+versions are for the published 0.8.0 packages. The unreleased source checkout instead pins
+Effect 4.0.0. Keep `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` at the
+same version; see [compatibility](compatibility.md) for the source checkout's requirements.
 
 ## The first build
 

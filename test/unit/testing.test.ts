@@ -11,8 +11,8 @@ import {
   TestSpawner,
   TestTool,
 } from "effect-build/testing";
-import { KeyValueStore } from "effect/unstable/persistence";
-import { ChildProcess } from "effect/unstable/process";
+import { KeyValueStore } from "effect/persistence";
+import { ChildProcess } from "effect/process";
 import { describe, expect, it } from "vitest";
 
 const run = <A, E>(program: Effect.Effect<A, E, NodeServices.NodeServices>) =>

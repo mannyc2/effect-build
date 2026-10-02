@@ -1,5 +1,5 @@
 import { Context, Effect, FileSystem, Path, Schema } from "effect";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import { Artifact, Commit, Executable, Tool } from "effect-build";
 import { Buffer } from "node:buffer";
 import { inject } from "postject";

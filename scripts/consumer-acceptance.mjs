@@ -19,10 +19,9 @@ try {
   const candidate = await readCandidate(packed);
   const typescript = process.env.CONSUMER_TYPESCRIPT ?? "5.9.3";
   const nodeTypes = process.env.CONSUMER_NODE_TYPES ?? "24.3.0";
-  // Show uses skipLibCheck with rc.113's incomplete upstream declarations.
-  // Other required consumers check dependency declarations with the corrected RC.
+  // Default consumers check dependency declarations; the Bun platform fixture retains its upstream limitation.
   const skipLibCheck = process.env.CONSUMER_SKIP_LIB_CHECK === "true";
-  // The workspace pins the tested release candidate; `CONSUMER_EFFECT=rc` observes the newest one.
+  // The workspace pins the tested stable release; overrides exercise another version.
   const effect = process.env.CONSUMER_EFFECT ?? workspace.devDependencies.effect;
   const bunTypes = process.env.CONSUMER_BUN_TYPES ?? bunPackage.devDependencies["bun-types"];
   // esbuild is a peer; the tested version is installed explicitly so the gate does not float with the registry.
@@ -220,6 +219,7 @@ NodeRuntime.runMain(
   if (process.env.CONSUMER_BUN_PLATFORM === "true") {
     const runtime = bunOptions.executable ?? "bun";
     await typecheck("consumer-bun-platform", `
+/// <reference types="bun-types" />
 import assert from "node:assert/strict";
 import { BunServices } from "@effect/platform-bun";
 import { ConfigProvider, Effect } from "effect";

@@ -147,8 +147,8 @@ jobs:
           CONSUMER_TYPESCRIPT: 6.0.3
           CONSUMER_NODE_TYPES: 24.13.3
 
-  consumer-show:
-    name: "Installed consumer (Show: Effect rc.113, Bun 1.4.2, TypeScript 7)"
+  consumer-bun:
+    name: "Installed consumer (Effect 4.0.0, Bun 1.4.2, TypeScript 7)"
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -167,23 +167,24 @@ jobs:
         run: echo "EFFECT_BUILD_BUN=$(node scripts/install-provider-fixture.mjs bun 1.4.2)" >> "$GITHUB_ENV"
       - run: bun run test:consumer
         env:
-          CONSUMER_EFFECT: 4.0.0-rc.113
+          CONSUMER_EFFECT: 4.0.0
           CONSUMER_TYPESCRIPT: 7.0.2
           CONSUMER_NODE_TYPES: 22.20.2
           CONSUMER_BUN_TYPES: 1.4.2
           CONSUMER_BUN_PLATFORM: 'true'
+          # Bun 1.4.2's declarations with Node types 22 fail strict dependency checks.
+          # Keep this existing runtime/application check; other required consumers check dependencies.
           CONSUMER_SKIP_LIB_CHECK: 'true'
 
   consumer-effect-declarations:
     name: Advisory dependency declarations (Effect ${{ matrix.effect }})
     runs-on: ubuntu-24.04
-    # rc.113 omits internal declarations referenced by its public types. Keep that
-    # failure and newer candidate compatibility visible without blocking consumers.
+    # Observe newer stable dependency declarations without changing the pinned required gate.
     continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
-        effect: ['4.0.0-rc.113', 'rc']
+        effect: ['latest']
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:

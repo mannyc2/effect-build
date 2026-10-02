@@ -1,5 +1,5 @@
 import { Context, Effect, Fiber, FileSystem, Layer, Path, PlatformError, Scope, Sink, Stream } from "effect";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 
 export interface Call {
   readonly command: string;

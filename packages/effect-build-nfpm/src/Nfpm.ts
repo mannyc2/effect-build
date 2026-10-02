@@ -1,6 +1,6 @@
 import { Context, Effect, FileSystem, Path, Schema } from "effect";
 import { Artifact, Commit, Target, Tool } from "effect-build";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 
 export class Nfpm extends Context.Service<Nfpm, Tool.Service>()("effect-build-nfpm/Nfpm") {}
 

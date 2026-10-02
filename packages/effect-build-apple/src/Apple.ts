@@ -1,5 +1,5 @@
 import { Context, FileSystem, Path } from "effect";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import { Tool } from "effect-build";
 
 export class Apple extends Context.Service<Apple, Tool.Service>()("effect-build-apple/Apple") {}

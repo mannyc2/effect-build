@@ -5,15 +5,15 @@
     "": {
       "name": "effect-build-workspace",
       "devDependencies": {
-        "@effect/platform-bun": "4.0.0-rc.115",
-        "@effect/platform-deno": "4.0.0-rc.115",
-        "@effect/platform-node": "4.0.0-rc.115",
+        "@effect/platform-bun": "4.0.0",
+        "@effect/platform-deno": "4.0.0",
+        "@effect/platform-node": "4.0.0",
         "@effect/tsgo": "0.45.0",
-        "@effect/vitest": "4.0.0-rc.115",
+        "@effect/vitest": "4.0.0",
         "@types/node": "24.3.0",
         "@types/semver": "7.8.0",
         "dprint": "0.49.1",
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
         "effect-build": "workspace:*",
         "effect-build-apple": "workspace:*",
         "effect-build-archives": "workspace:*",
@@ -37,8 +37,8 @@
     "examples/artifact-pipeline": {
       "name": "@effect-build/example-artifact-pipeline",
       "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.115",
-        "effect": "4.0.0-rc.115",
+        "@effect/platform-node": "4.0.0",
+        "effect": "4.0.0",
         "effect-build": "workspace:^",
         "effect-build-apple": "workspace:^",
         "effect-build-archives": "workspace:^",
@@ -56,8 +56,8 @@
     "examples/cli": {
       "name": "@effect-build/example-cli",
       "dependencies": {
-        "@effect/platform-node": "4.0.0-rc.115",
-        "effect": "4.0.0-rc.115",
+        "@effect/platform-node": "4.0.0",
+        "effect": "4.0.0",
         "effect-build": "workspace:^",
         "effect-build-archives": "workspace:^",
         "effect-build-bun": "workspace:^",
@@ -71,14 +71,14 @@
         "semver": "7.8.5",
       },
       "devDependencies": {
-        "@effect/platform-node": "4.0.0-rc.115",
+        "@effect/platform-node": "4.0.0",
         "@types/node": "24.3.0",
         "@types/semver": "7.8.0",
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
-        "@effect/platform-node": ">=4.0.0-rc.113 <4.1.0-0",
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "@effect/platform-node": ">=4.0.0 <4.1.0",
+        "effect": ">=4.0.0 <4.1.0",
       },
       "optionalPeers": [
         "@effect/platform-node",
@@ -91,12 +91,12 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "@effect/platform-node": "4.0.0-rc.115",
-        "effect": "4.0.0-rc.115",
+        "@effect/platform-node": "4.0.0",
+        "effect": "4.0.0",
         "vitest": "3.2.6",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
     },
     "packages/effect-build-archives": {
@@ -107,10 +107,10 @@
         "fflate": "0.8.3",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
     },
     "packages/effect-build-bun": {
@@ -121,11 +121,11 @@
       },
       "devDependencies": {
         "bun-types": "1.3.14",
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
         "bun-types": ">=1.3.14 <2.0.0",
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
       "optionalPeers": [
         "bun-types",
@@ -138,10 +138,10 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
     },
     "packages/effect-build-esbuild": {
@@ -151,11 +151,11 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
         "esbuild": "0.28.2",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
         "esbuild": ">=0.28.2 <0.29.0",
       },
     },
@@ -166,10 +166,10 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
     },
     "packages/effect-build-node-sea": {
@@ -180,10 +180,10 @@
         "postject": "1.0.0-alpha.6",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
     },
     "packages/effect-build-python": {
@@ -195,10 +195,10 @@
         "effect-build-archives": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
     },
     "packages/effect-build-rolldown": {
@@ -209,10 +209,10 @@
         "rolldown": "1.2.5",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
     },
     "packages/effect-build-sbom": {
@@ -222,10 +222,10 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
     },
     "packages/effect-build-windows": {
@@ -235,18 +235,18 @@
         "effect-build": "workspace:^",
       },
       "devDependencies": {
-        "effect": "4.0.0-rc.115",
+        "effect": "4.0.0",
       },
       "peerDependencies": {
-        "effect": ">=4.0.0-rc.113 <4.1.0-0",
+        "effect": ">=4.0.0 <4.1.0",
       },
     },
   },
   "overrides": {
-    "@effect/platform-node-shared": "4.0.0-rc.115",
+    "@effect/platform-node-shared": "4.0.0",
   },
   "packages": {
-    "@db/redis": ["@jsr/db__redis@0.41.2", "https://npm.jsr.io/~/11/@jsr/db__redis/0.41.2.tgz", { "dependencies": { "@jsr/std__async": "^1", "@jsr/std__bytes": "^1", "@jsr/std__collections": "^1", "@jsr/std__io": "0.224.5", "@jsr/std__random": "0.1.0", "cluster-key-slot": "1.1.0" } }, "sha512-pDHlF3sQaU5+VDwDH3jRkETBSD9gAIqdoaC3j0B4nrffr+H/Kh0Pbw7i/p5eD+9W5j38l8yRqZGbo4xgohYttg=="],
+    "@db/redis": ["@jsr/db__redis@0.42.0", "https://npm.jsr.io/~/11/@jsr/db__redis/0.42.0.tgz", { "dependencies": { "@jsr/std__async": "^1", "@jsr/std__bytes": "^1", "@jsr/std__collections": "^1", "@jsr/std__io": "0.224.5", "@jsr/std__random": "0.1.0", "cluster-key-slot": "1.1.0" } }, "sha512-VWY0bdbnGYp+1IpovAOCM40Jky114hFcEwKcs4+4xFtASC9GHY96rad3yTYggiLhASOlniF4W8FxRRSZMvqSWQ=="],
 
     "@dprint/darwin-arm64": ["@dprint/darwin-arm64@0.49.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-ib6KcJWo/M5RJWXOQKhP664FG1hAvG7nrbkh+j8n+oXdzmbyDdXTP+zW+aM3/sIQUkGaZky1xy1j2VeScMEEHQ=="],
 
@@ -270,13 +270,13 @@
 
     "@effect-build/example-cli": ["@effect-build/example-cli@workspace:examples/cli"],
 
-    "@effect/platform-bun": ["@effect/platform-bun@4.0.0-rc.115", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.115" }, "peerDependencies": { "effect": "^4.0.0-rc.115" } }, "sha512-ilTFcs66ghInP8WHCJYa4bx/yzohYM9dRR//qjmVBBpSKu1hrCTiRWpEcc1N6zrnOEPk2kyVaKg5ykSMgiBMqQ=="],
+    "@effect/platform-bun": ["@effect/platform-bun@4.0.0", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0" }, "peerDependencies": { "effect": "^4.0.0" } }, "sha512-g9O41Sub/+JKfLjvBNEoqR1Pg6wtc2bbYzv7Kw8YsMihbt/ypCn7ZoydEXaHvTTUvbVrXOQbVFlfplyo84Clug=="],
 
-    "@effect/platform-deno": ["@effect/platform-deno@4.0.0-rc.115", "", { "dependencies": { "@db/redis": "npm:@jsr/db__redis@^0.41.2", "@effect/platform-node-shared": "^4.0.0-rc.115", "@std/fs": "npm:@jsr/std__fs@^1.0.24", "@std/media-types": "npm:@jsr/std__media-types@^1.1.0", "@std/path": "npm:@jsr/std__path@^1.1.6", "@std/streams": "npm:@jsr/std__streams@^1.1.2" }, "peerDependencies": { "effect": "^4.0.0-rc.115" } }, "sha512-/SNpH2qdVi7Kmh8uYF2IPsy+dkAoWrBoCb3HsCCNJ6ANBikSNwXLrLRxysWG5VoeycQ7SpJSxAwaUJFO3UZbHg=="],
+    "@effect/platform-deno": ["@effect/platform-deno@4.0.0", "", { "dependencies": { "@db/redis": "npm:@jsr/db__redis@^0.42.0", "@effect/platform-node-shared": "^4.0.0", "@std/fs": "npm:@jsr/std__fs@^1.0.24", "@std/media-types": "npm:@jsr/std__media-types@^1.1.0", "@std/path": "npm:@jsr/std__path@^1.1.6", "@std/streams": "npm:@jsr/std__streams@^1.2.0" }, "peerDependencies": { "effect": "^4.0.0" } }, "sha512-guV8xylp+jU+kK+Bgyp//xfFX0ol0jlQC8b3pWab4G2zO5RF+xy9Isd2mZtKik4TfEzxxyeF4MCsQ+fLmt4dRQ=="],
 
-    "@effect/platform-node": ["@effect/platform-node@4.0.0-rc.115", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.115", "undici": "^8.10.2" }, "peerDependencies": { "effect": "^4.0.0-rc.115", "redis": ">=5.0.0 <7.0.0" } }, "sha512-mW03Wjq2FiTL5oi9yOkaKpCyUNBaduKgTk7qMHNELvC21Jq2qOAfdsfH+p+s2zmpB9w2RSa+ApODv4WjO9wQfw=="],
+    "@effect/platform-node": ["@effect/platform-node@4.0.0", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0", "undici": "^8.11.2" }, "peerDependencies": { "effect": "^4.0.0", "redis": ">=5.0.0 <7.0.0" } }, "sha512-/L+4MUbl8FejPKLHLROYSOebvHnfixkP8KiblSD/DE5uH5xENZBHaux4nH6XMnRP+lr8ajpEJFS8sUrmmxFJeQ=="],
 
-    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-rc.115", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.21.3" }, "peerDependencies": { "effect": "^4.0.0-rc.115" } }, "sha512-rcBwhDIfb82akJoTv7Vwh8K5x9vC/XfuePS7JjOr+z+dORXzsmKqI1BUQF27ARCN9fTAbDh7I6YvBlWhLjnqNg=="],
+    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.22.0" }, "peerDependencies": { "effect": "^4.0.0" } }, "sha512-VBXHJU9UXVZPdQGGDRjGXpo+TpOzRwZuMrdKAtIxi1qwcRftmacZ1zTgIrzBa0Z2RA2KVkoOecQUsTlt/nJZhw=="],
 
     "@effect/tsgo": ["@effect/tsgo@0.45.0", "", { "optionalDependencies": { "@effect/tsgo-darwin-arm64": "0.45.0", "@effect/tsgo-darwin-x64": "0.45.0", "@effect/tsgo-linux-arm": "0.45.0", "@effect/tsgo-linux-arm64": "0.45.0", "@effect/tsgo-linux-x64": "0.45.0", "@effect/tsgo-win32-arm64": "0.45.0", "@effect/tsgo-win32-x64": "0.45.0" }, "bin": { "effect-tsgo": "dist/effect-tsgo.cjs" } }, "sha512-gPG0ixVHgtYBUe5DbKX9vzHlhqd9+ZEfs4m/XWy0808av0A2XqMzaG3F5rnPBN7EUJRPlo9TluIi8WHx/pBV+A=="],
 
@@ -294,7 +294,7 @@
 
     "@effect/tsgo-win32-x64": ["@effect/tsgo-win32-x64@0.45.0", "", { "os": "win32", "cpu": "x64" }, "sha512-1Hsr/sT5dmIafoY9L0ASJo4VqGyPNzM1nwTb4Wj1Lmjq6kGuwO/PVozFg3WZZ0piChFmgiU3nx1AKZfyqgjGUw=="],
 
-    "@effect/vitest": ["@effect/vitest@4.0.0-rc.115", "", { "peerDependencies": { "effect": "^4.0.0-rc.115", "vitest": ">=5.0.0 <6.0.0" } }, "sha512-DJR0hfdr3HNXAkzW8AzfvUz6VmrNFLrKk9tZGDURi33faMyxkc7ZewxELMMZwGpOTGN4mfqYVbX2CXgI+ZJBeQ=="],
+    "@effect/vitest": ["@effect/vitest@4.0.0", "", { "peerDependencies": { "effect": "^4.0.0", "vitest": ">=5.0.0 <6.0.0" } }, "sha512-kGElCPFGtP+CgMCwV/HjJWqtE3zYo6I1+8MSA54l+EI24lPU9p2Efa+TBp1jfkg9j711KKzEqgSAy3VzTsb76Q=="],
 
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.28.2", "", { "os": "aix", "cpu": "ppc64" }, "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ=="],
 
@@ -526,7 +526,7 @@
 
     "@std/path": ["@jsr/std__path@1.1.6", "https://npm.jsr.io/~/11/@jsr/std__path/1.1.6.tgz", { "dependencies": { "@jsr/std__internal": "^1.0.14" } }, "sha512-H1Cmg6z8jFyIsQbVV+vZB4eOx4k6Qg8lyUM6l7nZysj5MZumg89kb0M1bsPBTGQis3fw6mJFkJELo5+AK6oCFA=="],
 
-    "@std/streams": ["@jsr/std__streams@1.1.2", "https://npm.jsr.io/~/11/@jsr/std__streams/1.1.2.tgz", { "dependencies": { "@jsr/std__bytes": "^1.0.6" } }, "sha512-TNg+Mr/vE2Wg+JDdZpVj9umEyzcmSAOtcp0ildlyVCjHy0/fJ2BJZgO8PQXA/SwJOchvKLaMafZzfFkm9PO13A=="],
+    "@std/streams": ["@jsr/std__streams@1.2.0", "https://npm.jsr.io/~/11/@jsr/std__streams/1.2.0.tgz", { "dependencies": { "@jsr/std__bytes": "^1.0.6" } }, "sha512-cQnU2wdP12rYRy+gGAiFarEK9YmWjVwnFMiOGIe0wMKmRLY68INH9hB/mqjKdPX/ruUhNYB70x5YRPLzUYIrbg=="],
 
     "@types/chai": ["@types/chai@5.2.3", "", { "dependencies": { "@types/deep-eql": "*", "assertion-error": "^2.0.1" } }, "sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA=="],
 
@@ -614,7 +614,7 @@
 
     "dprint": ["dprint@0.49.1", "", { "optionalDependencies": { "@dprint/darwin-arm64": "0.49.1", "@dprint/darwin-x64": "0.49.1", "@dprint/linux-arm64-glibc": "0.49.1", "@dprint/linux-arm64-musl": "0.49.1", "@dprint/linux-riscv64-glibc": "0.49.1", "@dprint/linux-x64-glibc": "0.49.1", "@dprint/linux-x64-musl": "0.49.1", "@dprint/win32-arm64": "0.49.1", "@dprint/win32-x64": "0.49.1" }, "bin": { "dprint": "bin.js" } }, "sha512-pO9XH79SyXybj2Vhc9ITZMEI8cJkdlQQRoD8oEfPH6Jjpp/7WX5kIgECVd3DBOjjAdCSiW6R47v3gJBx/qZVkw=="],
 
-    "effect": ["effect@4.0.0-rc.115", "", {}, "sha512-ogYulZ5ffeOzrJqQrG0XOkDO5lKn2s9KNHhoxJy/6wKUkF0i12dlVXWA9TgsgQ+zV/JzizyG0+XMPepZEQX6vw=="],
+    "effect": ["effect@4.0.0", "", {}, "sha512-ooc1TG5t+FfzgYnFz2ff6BBKyZ7EwBRVXC7c4RhQUAD6/TZ2gTXXMeb4WX7a19ozQo4J73/QW+S00YAIresoMQ=="],
 
     "effect-build": ["effect-build@workspace:packages/effect-build"],
 
@@ -714,7 +714,7 @@
 
     "typescript": ["typescript@7.0.2", "", { "optionalDependencies": { "@typescript/typescript-aix-ppc64": "7.0.2", "@typescript/typescript-darwin-arm64": "7.0.2", "@typescript/typescript-darwin-x64": "7.0.2", "@typescript/typescript-freebsd-arm64": "7.0.2", "@typescript/typescript-freebsd-x64": "7.0.2", "@typescript/typescript-linux-arm": "7.0.2", "@typescript/typescript-linux-arm64": "7.0.2", "@typescript/typescript-linux-loong64": "7.0.2", "@typescript/typescript-linux-mips64el": "7.0.2", "@typescript/typescript-linux-ppc64": "7.0.2", "@typescript/typescript-linux-riscv64": "7.0.2", "@typescript/typescript-linux-s390x": "7.0.2", "@typescript/typescript-linux-x64": "7.0.2", "@typescript/typescript-netbsd-arm64": "7.0.2", "@typescript/typescript-netbsd-x64": "7.0.2", "@typescript/typescript-openbsd-arm64": "7.0.2", "@typescript/typescript-openbsd-x64": "7.0.2", "@typescript/typescript-sunos-x64": "7.0.2", "@typescript/typescript-win32-arm64": "7.0.2", "@typescript/typescript-win32-x64": "7.0.2" }, "bin": { "tsc": "bin/tsc" } }, "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA=="],
 
-    "undici": ["undici@8.10.2", "", {}, "sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ=="],
+    "undici": ["undici@8.11.2", "", {}, "sha512-u4UB2/IrKdU6lFxumHmmo1a3fCQO5tzQllRorfoRS63txhrB7xTpSn1PftwC4qEHkOaqP95fCWW4lJzwErwzhQ=="],
 
     "undici-types": ["undici-types@7.10.0", "", {}, "sha512-t5Fy/nfn+14LuOc2KNYg75vZqClpAiqscVvMygNnlsHBFpSXdJaYtXMcdNLpl/Qvc3P2cB3s6lOV51nqsFq4ag=="],
 
@@ -726,7 +726,7 @@
 
     "why-is-node-running": ["why-is-node-running@2.3.0", "", { "dependencies": { "siginfo": "^2.0.0", "stackback": "0.0.2" }, "bin": { "why-is-node-running": "cli.js" } }, "sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w=="],
 
-    "ws": ["ws@8.21.3", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw=="],
+    "ws": ["ws@8.22.0", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg=="],
 
     "@jridgewell/trace-mapping/@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 

@@ -1,6 +1,6 @@
 import { Context, Effect, FileSystem, Path, Redacted } from "effect";
 import { Artifact, Commit, Executable, Tool } from "effect-build";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 
 export class Windows
   extends Context.Service<Windows, Tool.Service>()("effect-build-windows/Windows")

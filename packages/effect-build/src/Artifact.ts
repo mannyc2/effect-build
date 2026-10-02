@@ -1,5 +1,6 @@
 import { sha256 as incrementalSha256 } from "@noble/hashes/sha2.js";
-import { Crypto, Effect, Encoding, FileSystem, Path, PlatformError, Schema, Stream } from "effect";
+import { Crypto, Effect, FileSystem, Path, PlatformError, Schema, Stream } from "effect";
+import { Hex } from "effect/encoding";
 import * as Inspect from "./Executable.js";
 import { readLink } from "./internal/fileSystem.js";
 import { manifestDigest } from "./internal/directoryIdentity.js";
@@ -144,7 +145,7 @@ type Fs = FileSystem.FileSystem | Path.Path;
 const chunkSize = 64 * 1024;
 
 export const sha256 = (data: Uint8Array): Effect.Effect<Sha256, never, Crypto.Crypto> =>
-  Crypto.Crypto.use((crypto) => crypto.digest("SHA-256", data)).pipe(Effect.map((digest) => Encoding.encodeHex(digest) as Sha256), Effect.orDie);
+  Crypto.Crypto.use((crypto) => crypto.digest("SHA-256", data)).pipe(Effect.map((digest) => Hex.encode(digest) as Sha256), Effect.orDie);
 
 /** Read metadata without opening the file's contents. */
 export const file = (path: string, producedBy: Producer): Effect.Effect<File, ArtifactError, Fs> =>
@@ -175,7 +176,7 @@ const hashRegular = (path: string) => Effect.scoped(Effect.gen(function*() {
     if (!Number.isSafeInteger(bytes)) return yield* unreadable("file exceeds the maximum safe byte count");
   }
   if (bytes !== Number(info.size)) return yield* new ArtifactError({ path, reason: "changed" });
-  return { bytes, sha256: Encoding.encodeHex(hash.digest()) as Sha256 };
+  return { bytes, sha256: Hex.encode(hash.digest()) as Sha256 };
 }));
 
 export const executable = (
@@ -350,7 +351,7 @@ export const readVerified = (artifact: HashedRegular): Effect.Effect<Uint8Array,
     // One byte past the recorded size detects growth since the stat without reading the excess.
     const excess = yield* handle.read(new Uint8Array(1)).pipe(Effect.mapError(unreadable));
     if (excess !== 0) return yield* changed();
-    if (Encoding.encodeHex(hash.digest()) !== artifact.sha256) return yield* changed();
+    if (Hex.encode(hash.digest()) !== artifact.sha256) return yield* changed();
     if (artifact.kind === "executable") yield* checkTarget(artifact, Inspect.parse(contents));
     return contents;
   }));
@@ -384,7 +385,7 @@ export const streamVerified = (artifact: HashedRegular): Stream.Stream<Uint8Arra
         })
       ),
       Stream.onEnd(Effect.suspend(() =>
-        total === artifact.bytes && Encoding.encodeHex(hash.digest()) === artifact.sha256 ? Effect.void : Effect.fail(changed())
+        total === artifact.bytes && Hex.encode(hash.digest()) === artifact.sha256 ? Effect.void : Effect.fail(changed())
       )),
     );
   }));

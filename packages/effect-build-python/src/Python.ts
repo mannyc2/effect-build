@@ -1,6 +1,6 @@
 import { Context, Effect, FileSystem, Path } from "effect";
 import { Artifact, Commit, Tool } from "effect-build";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 
 export class Python extends Context.Service<Python, Tool.Service>()("effect-build-python/Python") {}
 export const { name, layer, supported, tested, constraints, requirements, resolved, testLayer } = Tool.provider(Python, {

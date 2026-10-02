@@ -45,10 +45,10 @@
     "postject": "1.0.0-alpha.6"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.113 <4.1.0-0"
+    "effect": ">=4.0.0 <4.1.0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.115"
+    "effect": "4.0.0"
   },
   "engines": {
     "node": ">=22.19.0"

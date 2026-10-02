@@ -71,9 +71,9 @@ design, Effect, data at the boundaries, tests and documentation. Read both befor
 - Read the Effect sources this design depends on:
   - Before writing Effect code, read `node_modules/effect/AGENTS.md` completely, then its `ai-docs`, declarations and
     source for the APIs you use. Use the installed version's APIs, because snippets from elsewhere may target another
-    prerelease.
+    release.
   - Before changing the public API, read Effect's declare-once modules: `node_modules/effect/src/http-api/`, `rpc/`,
-    `cli/` and `ai/` (`Tool`, `Toolkit`). Before Effect 4.0.0 they live under `src/unstable/`.
+    `cli/` and `ai/` (`Tool`, `Toolkit`).
   - Before changing how processes run, read `node_modules/effect/src/process/` and the platform's
     `NodeChildProcessSpawner`.
   - The `effect-development` skill helps with design.

@@ -1,5 +1,5 @@
 import { Context, Effect, FileSystem, Path, Schema } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Artifact, Commit, Executable, Target, Tool } from "effect-build";
 
 export class Bun extends Context.Service<Bun, Tool.Service>()("effect-build-bun/Bun") {}

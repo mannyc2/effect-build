@@ -1,6 +1,7 @@
 import { sha256 as incrementalSha256 } from "@noble/hashes/sha2.js";
-import { Context, Crypto, Data, Effect, Encoding, FileSystem, Layer, Path, Schema, Stream } from "effect";
-import { KeyValueStore } from "effect/unstable/persistence";
+import { Context, Crypto, Data, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import { Hex } from "effect/encoding";
+import { KeyValueStore } from "effect/persistence";
 import * as Artifact from "./Artifact.js";
 import * as Commit from "./Commit.js";
 import * as Target from "./Target.js";
@@ -130,7 +131,7 @@ const ingestFile = (artifact: Artifact.Regular, directory: string) => Effect.sco
   );
   if (bytes !== artifact.bytes) return yield* changed(artifact.path);
   if (artifact.kind === "executable") yield* Artifact.executable(staged, artifact.producedBy, artifact.target);
-  const sha256 = Encoding.encodeHex(hash.digest()) as Artifact.Sha256;
+  const sha256 = Hex.encode(hash.digest()) as Artifact.Sha256;
   const destination = yield* objectPath(directory, sha256);
   yield* fs.rename(staged, destination).pipe(Effect.mapError(Artifact.ioError(destination, "write")), Effect.uninterruptible);
   return { identity: { ...artifact, sha256 }, mode: info.mode & 0o7777 };

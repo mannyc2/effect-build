@@ -1,6 +1,6 @@
 import { Context, Effect, FileSystem, Path, Stream } from "effect";
 import { Artifact, Commit, Layout as PortableLayout, Tool } from "effect-build";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import metadata from "../package.json" with { type: "json" };
 import { EntrySizeMismatch } from "./EntrySizeMismatch.js";
 import { FormatLimit } from "./FormatLimit.js";

@@ -7,7 +7,7 @@ both the source input tree and output tree.
 
 ```ts
 import { Effect } from "effect";
-import { KeyValueStore } from "effect/unstable/persistence";
+import { KeyValueStore } from "effect/persistence";
 import { Artifact, Cache, Tool } from "effect-build";
 import * as Bun from "effect-build-bun";
 

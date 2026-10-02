@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Path, PlatformError, Schema, Stream } from "effect";
-import { KeyValueStore } from "effect/unstable/persistence";
+import { KeyValueStore } from "effect/persistence";
 import { Artifact, Cache, Commit } from "effect-build";
 import { TestArtifact } from "effect-build/testing";
 import { createHash } from "node:crypto";

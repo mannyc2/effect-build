@@ -1,6 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Path } from "effect";
-import { KeyValueStore } from "effect/unstable/persistence";
+import { KeyValueStore } from "effect/persistence";
 import { Artifact, Cache, Checksums, Commit, Target, Tool } from "effect-build";
 import * as Archive from "effect-build-archives";
 import * as Bun from "effect-build-bun";
