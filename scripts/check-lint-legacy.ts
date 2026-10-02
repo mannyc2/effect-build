@@ -38,6 +38,18 @@ const withoutLineComments = (text: string): string =>
     .filter((line) => !line.trimStart().startsWith("//"))
     .join("\n");
 
+// oxlint's launcher runs on whatever `node` is first on PATH. Under Bun it exits before a piped stdout
+// drains, which cuts the report off at 64 KiB, so this check needs Node there.
+const requireNode = Effect.fn("checkLintLegacy.requireNode")(function*() {
+  const handle = yield* ChildProcess.make("node", ["-p", "typeof Bun"]);
+  const runtime = yield* handle.stdout.pipe(Stream.decodeText(), Stream.mkString);
+  if (runtime.trim() !== "undefined") {
+    return yield* Effect.die(
+      "`node` on PATH is Bun, under which oxlint cuts its piped report off at 64 KiB. Put Node first on PATH.",
+    );
+  }
+});
+
 const lintWithPolicyOnly = Effect.fn("checkLintLegacy.lintWithPolicyOnly")(function*() {
   const fs = yield* FileSystem.FileSystem;
   const policy = yield* fs.readFileString(policyPath);
@@ -66,6 +78,7 @@ const program = Effect.gen(function*() {
     .pipe(
       Effect.flatMap((text) => Schema.decodeEffect(Schema.fromJsonString(Legacy))(withoutLineComments(text))),
     );
+  yield* Effect.scoped(requireNode());
   const report = yield* Effect.scoped(lintWithPolicyOnly());
   const found = new Set(
     report.diagnostics.map(({ code, filename }) => `${ruleOfCode(code)} ${filename}`),

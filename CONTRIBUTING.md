@@ -83,8 +83,9 @@ document usage, and this file doesn't repeat them.
 - **The simple path is the default; extras are opt-in.** A feature only some callers need is an option, combinator or
   middleware chosen by the binding author or the caller. It never runs on every call, and it never becomes a service
   that holds a decision.
-- **Requirements don't leak.** A binding's methods require nothing (`R = never`), and its layer requires only platform
-  services.
+- **Requirements don't leak.** A binding's methods require no other service, and its layer requires only platform
+  services. The one requirement a caller supplies is `Scope`, for a method that returns a resource tied to a lifetime
+  (a session), as `ChildProcessSpawner.spawn` does. Don't pass a scope as an argument to avoid it.
 - **A declaration is separate from its implementation.** What a tool and its commands are (Schemas, errors, options) is
   data that other code can read, test and document. How they run is a layer.
 - **Don't re-model the platform.** A file is a path you read with `FileSystem`, and output bytes are a `Stream`. A

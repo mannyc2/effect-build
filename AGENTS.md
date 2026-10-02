@@ -72,8 +72,10 @@ design, Effect, data at the boundaries, tests and documentation. Read both befor
   - Before writing Effect code, read `node_modules/effect/AGENTS.md` completely, then its `ai-docs`, declarations and
     source for the APIs you use. Use the installed version's APIs, because snippets from elsewhere may target another
     prerelease.
-  - Before changing the public API, read `node_modules/effect/src/unstable/httpapi/`.
-  - Before changing how processes run, read `node_modules/effect/src/unstable/process/`.
+  - Before changing the public API, read Effect's declare-once modules: `node_modules/effect/src/http-api/`, `rpc/`,
+    `cli/` and `ai/` (`Tool`, `Toolkit`). Before Effect 4.0.0 they live under `src/unstable/`.
+  - Before changing how processes run, read `node_modules/effect/src/process/` and the platform's
+    `NodeChildProcessSpawner`.
   - The `effect-development` skill helps with design.
 - Every manifest names one exact version of each dependency, and the Effect packages move together.
   - Never relax a version check or accept the host's versions to get a pass.
