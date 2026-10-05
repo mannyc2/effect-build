@@ -129,6 +129,28 @@ layer(native, { excludeTestServices: true })("Tool with real Node processes", (i
       yield* assertChildGone(pid);
     }), 10_000);
 
+  it.effect(
+    "closing the caller's session scope reaps a child whose stdout was never consumed",
+    () =>
+      Effect.gen(function*() {
+        const { tool, pid } = yield* trackedTool();
+        yield* Effect.scoped(Effect.gen(function*() {
+          const handle = yield* tool.session(nodeCommand(
+            tool,
+            // An ordinary socket keeps stdout writes asynchronous on Windows too.
+            "const{Socket}=require('node:net');const output=new Socket({fd:1,readable:false,writable:true});output.write(Buffer.alloc(5000000,65));const marker=new Socket({fd:3,readable:false,writable:true});marker.end('ready');setInterval(()=>{},1000)",
+            { stdout: "pipe", stderr: "ignore", additionalFds: { fd3: { type: "output" } } },
+          ));
+          const marker = yield* Stream.run(handle.getOutputFd(3), tool.text({ maxBytes: 16 }));
+          assert.strictEqual(marker, "ready");
+          assert.isTrue(yield* handle.isRunning);
+          assert.isTrue(yield* isAlive(handle.pid));
+        }));
+        yield* assertChildGone(pid);
+      }),
+    10_000,
+  );
+
   it.effect("sanitizes real failures and preserves native termination status", () =>
     Effect.gen(function*() {
       const tool = yield* Tool.make("node", { executable: process.execPath });
