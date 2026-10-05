@@ -11,7 +11,6 @@
     },
     {
       "files": [
-        "packages/effect-build/src/Tool.ts",
         "packages/effect-build/src/testing/TestProvider.ts",
         "test/unit/archives.test.ts",
         "test/unit/provider-capabilities.test.ts",
@@ -56,7 +55,6 @@
         "test/unit/rolldown-dev.test.ts",
         "test/unit/rolldown.test.ts",
         "test/unit/testing.test.ts",
-        "test/unit/tool.test.ts",
         "test/unit/windows.test.ts"
       ],
       "rules": { "effecttsgo/async-function": "off" }
@@ -72,8 +70,7 @@
         "packages/effect-build-bun/src/Api/Transpiler.ts",
         "packages/effect-build/src/testing/TestSpawner.ts",
         "test/unit/provider-conformance.test.ts",
-        "test/unit/testing.test.ts",
-        "test/unit/tool.test.ts"
+        "test/unit/testing.test.ts"
       ],
       "rules": { "effecttsgo/deterministic-keys": "off" }
     },
@@ -82,7 +79,6 @@
         "packages/effect-build-apple/src/internal.ts",
         "packages/effect-build/src/Cache.ts",
         "packages/effect-build/src/Directory.ts",
-        "packages/effect-build/src/Tool.ts",
         "packages/effect-build/src/internal/fileSystem.ts"
       ],
       "rules": { "effecttsgo/effect-succeed-with-void": "off" }
@@ -145,7 +141,6 @@
         "packages/effect-build/src/Artifact.ts",
         "packages/effect-build/src/Cache.ts",
         "packages/effect-build/src/Executable.ts",
-        "packages/effect-build/src/Tool.ts",
         "test/integration/nfpm.test.ts",
         "test/integration/node-sea.test.ts",
         "test/integration/sbom.test.ts",
@@ -178,7 +173,6 @@
         "packages/effect-build/src/Artifact.ts",
         "packages/effect-build/src/Commit.ts",
         "packages/effect-build/src/Executable.ts",
-        "packages/effect-build/src/Tool.ts",
         "packages/effect-build/src/testing/TestArtifact.ts",
         "packages/effect-build/src/testing/TestTool.ts",
         "test/fixtures/apple-script.ts"
@@ -250,12 +244,10 @@
         "packages/effect-build/src/Commit.ts",
         "packages/effect-build/src/Directory.ts",
         "packages/effect-build/src/Executable.ts",
-        "packages/effect-build/src/Tool.ts",
         "packages/effect-build/src/testing/TestArtifact.ts",
         "packages/effect-build/src/testing/TestProvider.ts",
         "packages/effect-build/src/testing/assertions.ts",
-        "test/unit/provider-conformance.test.ts",
-        "test/unit/tool.test.ts"
+        "test/unit/provider-conformance.test.ts"
       ],
       "rules": { "effecttsgo/new-schema-class": "off" }
     },
@@ -315,8 +307,7 @@
         "packages/effect-build-apple/src/Notary.ts",
         "packages/effect-build-archives/src/EntrySizeMismatch.ts",
         "packages/effect-build-archives/src/FormatLimit.ts",
-        "packages/effect-build-archives/src/TarInvalid.ts",
-        "packages/effect-build/src/Tool.ts"
+        "packages/effect-build-archives/src/TarInvalid.ts"
       ],
       "rules": { "effecttsgo/schema-number": "off" }
     },
@@ -385,7 +376,6 @@
         "test/unit/python-wheel.test.ts",
         "test/unit/rolldown.test.ts",
         "test/unit/testing.test.ts",
-        "test/unit/tool.test.ts",
         "test/unit/windows.test.ts"
       ],
       "rules": { "effecttsgo/strict-effect-provide": "off" }
@@ -424,7 +414,6 @@
         "packages/effect-build-sbom/src/Sbom.ts",
         "packages/effect-build-windows/src/Windows.ts",
         "packages/effect-build/src/Cache.ts",
-        "packages/effect-build/src/Tool.ts",
         "packages/effect-build/src/testing/TestProvider.ts",
         "packages/effect-build/src/testing/TestSpawner.ts",
         "test/unit/cache.test.ts",
@@ -450,7 +439,6 @@
         "packages/effect-build/src/Cache.ts",
         "packages/effect-build/src/Checksums.ts",
         "packages/effect-build/src/Executable.ts",
-        "packages/effect-build/src/Tool.ts",
         "packages/effect-build/src/internal/directoryIdentity.ts",
         "test/fixtures/apple-script.ts",
         "test/integration/deno.test.ts",
@@ -512,8 +500,7 @@
     },
     {
       "files": [
-        "test/fixtures/sea-remove-base.mjs",
-        "test/unit/tool.test.ts"
+        "test/fixtures/sea-remove-base.mjs"
       ],
       "rules": { "typescript/no-unsafe-argument": "off" }
     },
@@ -531,8 +518,7 @@
         "test/unit/directory.test.ts",
         "test/unit/native-executable-inspection.test.ts",
         "test/unit/provider-capabilities.test.ts",
-        "test/unit/provider-inputs.test.ts",
-        "test/unit/tool.test.ts"
+        "test/unit/provider-inputs.test.ts"
       ],
       "rules": { "typescript/no-unsafe-assignment": "off" }
     },
@@ -545,8 +531,7 @@
     {
       "files": [
         "test/fixtures/sea-remove-base.mjs",
-        "test/unit/cache.test.ts",
-        "test/unit/tool.test.ts"
+        "test/unit/cache.test.ts"
       ],
       "rules": { "typescript/no-unsafe-member-access": "off" }
     },
@@ -569,7 +554,6 @@
         "packages/effect-build/src/Artifact.ts",
         "packages/effect-build/src/Cache.ts",
         "packages/effect-build/src/Target.ts",
-        "packages/effect-build/src/Tool.ts",
         "packages/effect-build/src/internal/directoryIdentity.ts",
         "packages/effect-build/src/testing/TestFileSystem.ts",
         "test/fixtures/apple-script.ts",
@@ -654,7 +638,6 @@
         "test/unit/commit.test.ts",
         "test/unit/directory.test.ts",
         "test/unit/rolldown.test.ts",
-        "test/unit/tool.test.ts",
         "test/unit/windows.test.ts"
       ],
       "rules": { "vitest/no-conditional-expect": "off" }

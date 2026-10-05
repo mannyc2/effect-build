@@ -1,410 +1,345 @@
-import { Config, Context, Effect, FileSystem, Layer, Path, Schema, Scope, Stream } from "effect";
+/** Resolved native tools with checked runs, streams and caller-owned sessions. */
+import { Config, Effect, Fiber, FileSystem, Path, Schema, SchemaIssue, Sink, Stream } from "effect";
+import type { PlatformError, Redacted, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { Range, satisfies as semverSatisfies } from "semver";
-import * as Artifact from "./Artifact.js";
+import { checkBound, commandOutputFds, sanitize } from "./internal/Process.js";
+import { stderrTail } from "./internal/Stderr.js";
 
-/** Anything handed to a tool or the filesystem: NUL cannot cross the exec boundary, and empty text names nothing. */
-export const argumentIssue = (value: string): string | undefined =>
-  value.length === 0 ? "is empty" : value.includes("\0") ? "contains NUL" : undefined;
-
-/** An external executable we resolved once and will keep using. */
-export interface Resolved {
-  readonly name: string;
-  readonly path: string;
-  readonly version: string;
-  readonly bytes: number;
-}
-
-export type WithSha256<A extends Resolved = Resolved> = Omit<A, "path" | "bytes" | "sha256"> & {
-  readonly path: string;
-  readonly bytes: number;
-  readonly sha256: Artifact.Sha256;
-};
-
-export class NotFound extends Schema.TaggedError<NotFound>()("ToolNotFound", {
-  tool: Schema.String,
-  searched: Schema.Array(Schema.String),
+/** No runnable executable was found on PATH. */
+export class NotFound extends Schema.TaggedError<NotFound>()("NotFound", {
+  executable: Schema.String,
 }) {
   override get message(): string {
-    return `${this.tool} not found (searched: ${this.searched.join(", ") || "PATH"})`;
+    return "was not found on PATH";
   }
 }
 
-export class ProbeFailed extends Schema.TaggedError<ProbeFailed>()("ToolProbeFailed", {
-  tool: Schema.String,
-  path: Schema.String,
+/** The process could not start, or reading, writing or waiting on it failed. */
+export class Process extends Schema.TaggedError<Process>()("Process", {
+  /** The platform error's message without argv, such as `NotFound: ChildProcess.spawn (ffprobe): spawn ffprobe ENOENT`. */
   detail: Schema.String,
+  /** The platform's PlatformError, rebuilt without argv or environment values. */
+  cause: Schema.Defect(),
 }) {
   override get message(): string {
-    return `${this.tool} at ${this.path} could not be inspected: ${this.detail}`;
+    return `process failed: ${this.detail}`;
   }
 }
 
-export class VersionUnsupported extends Schema.TaggedError<VersionUnsupported>()("ToolVersionUnsupported", {
-  tool: Schema.String,
-  version: Schema.String,
-  supported: Schema.String,
-  operation: Schema.optionalKey(Schema.String),
-  reason: Schema.optionalKey(Schema.String),
-}) {
-  override get message(): string {
-    return `${this.tool} ${this.version} is not supported${this.operation === undefined ? "" : ` by ${this.operation}`} (${this.reason ?? this.supported})`;
-  }
-}
-
-export class Failed extends Schema.TaggedError<Failed>()("ToolFailed", {
-  tool: Schema.String,
-  args: Schema.Array(Schema.String),
-  exitCode: Schema.Number,
-  stdout: Schema.String,
+/** The process exited with a code the command does not accept. */
+export class Exit extends Schema.TaggedError<Exit>()("Exit", {
+  code: Schema.Int,
+  // Bounded tail of piped stderr, with the command's redacted values removed.
   stderr: Schema.String,
-  stdoutTruncated: Schema.Boolean,
-  stderrTruncated: Schema.Boolean,
 }) {
   override get message(): string {
-    return `${this.tool} ${this.args.join(" ")} exited ${this.exitCode}\n${this.stderr}`;
+    return this.stderr === "" ? `exited with code ${this.code}` : `exited with code ${this.code}: ${this.stderr}`;
   }
 }
 
-export class SpawnFailed extends Schema.TaggedError<SpawnFailed>()("ToolSpawnFailed", {
+/** The tool's output did not decode. */
+export class Output extends Schema.TaggedError<Output>()("Output", {
+  cause: Schema.Defect(),
+}) {
+  override get message(): string {
+    return "produced output that did not decode";
+  }
+}
+
+/** The tool's output, or one line of it, exceeded a declared bound. */
+export class Limit extends Schema.TaggedError<Limit>()("Limit", {
+  unit: Schema.Literals(["output", "line"]),
+  maxBytes: Schema.Int,
+}) {
+  override get message(): string {
+    return `${this.unit === "line" ? "an output line" : "output"} exceeded ${this.maxBytes} bytes`;
+  }
+}
+
+export class ToolError extends Schema.TaggedError<ToolError>()("ToolError", {
   tool: Schema.String,
-  detail: Schema.String,
+  reason: Schema.Union([NotFound, Process, Exit, Output, Limit]),
 }) {
   override get message(): string {
-    return `${this.tool} could not be started: ${this.detail}`;
+    return `${this.tool} ${this.reason.message}`;
   }
 }
 
-/** An operation rejected its input. `operation` names it the way its span does, such as `Bun.compile`. */
-export class InputInvalid extends Schema.TaggedError<InputInvalid>()("InputInvalid", {
-  operation: Schema.String,
-  reason: Schema.String,
-  /** The offending shipping path, when one entry is at fault. */
-  path: Schema.optionalKey(Schema.String),
-}) {
-  override get message(): string {
-    return `${this.operation}: ${this.reason}${this.path === undefined ? "" : `: ${this.path}`}`;
-  }
+export interface RunOptions {
+  /** Exit codes that count as success. Default `[0]`. */
+  readonly exitCodes?: ReadonlyArray<number> | undefined;
+  /** Values the command reveals into argv or env; removed from the stderr tail. */
+  readonly redact?: ReadonlyArray<Redacted.Redacted<string>> | undefined;
+  /** Bytes of piped stderr kept for the Exit reason. Default 8 KiB. */
+  readonly stderrTailBytes?: number | undefined;
 }
 
-export interface Completion {
-  readonly exitCode: number;
-  readonly stdout: Uint8Array;
-  readonly stderr: Uint8Array;
-  readonly stdoutTruncated: boolean;
-  readonly stderrTruncated: boolean;
-}
-
-export interface Output {
-  readonly stream: "stdout" | "stderr";
-  readonly chunk: Uint8Array;
-}
-
-/** Every option accepts `undefined`, so callers can forward their own optional inputs directly. */
-export interface EnvironmentOptions {
-  /** Merged into the inherited environment unless `extendEnv` is false. */
-  readonly env?: Record<string, string> | undefined;
-  /** False submits only env (or an empty map) to the platform spawner; native APIs may add required variables. */
-  readonly extendEnv?: boolean | undefined;
-  /** Submit the tool's directory on PATH and a scoped temporary home; env overrides these defaults. Native-required variables may remain. */
-  readonly scrubEnv?: boolean | undefined;
-}
-
-export interface RunOptions extends EnvironmentOptions {
-  readonly cwd?: string | undefined;
-  /** Bytes retained per stream. Default 8 MiB. */
-  readonly outputLimit?: number | undefined;
-  /** Retain stdout as data; null removes the diagnostic limit. */
-  readonly stdoutLimit?: number | null | undefined;
-  /** Receive every chunk as it arrives, including bytes beyond the retention limit. */
-  readonly onOutput?: ((output: Output) => Effect.Effect<void>) | undefined;
-  /** Remove these values from failed-process diagnostics. Successful bytes and onOutput remain raw data. */
-  readonly redact?: readonly string[] | undefined;
-}
-
-export interface LocateOptions {
+/** A resolved tool. Its functions capture the spawner, so they require no service. */
+export interface Tool {
   readonly name: string;
-  /** Path to use instead of searching PATH. */
+  readonly executable: string;
+  /**
+   * Spawns `command`, reads stdout through `output` and then drains the rest,
+   * drains piped stderr into a bounded tail, and checks the exit code. A
+   * process exit never cancels unread output.
+   */
+  readonly run: <A, E = never>(
+    command: ChildProcess.Command,
+    output: Sink.Sink<A, Uint8Array, Uint8Array, E>,
+    options?: RunOptions,
+  ) => Effect.Effect<A, ToolError | E>;
+  /**
+   * Spawns `command` when the stream is consumed. Emits `events(stdout)`, then
+   * drains the rest of stdout and checks the exit code before it ends.
+   */
+  readonly stream: <A, E = never>(
+    command: ChildProcess.Command,
+    events: (stdout: Stream.Stream<Uint8Array, ToolError>) => Stream.Stream<A, E>,
+    options?: RunOptions,
+  ) => Stream.Stream<A, ToolError | E>;
+  /**
+   * Spawns `command` in the caller's Scope and returns the platform's handle
+   * type. Its PlatformErrors are rebuilt without argv; the platform's own
+   * errors embed the whole command line.
+   */
+  readonly session: (
+    command: ChildProcess.Command,
+  ) => Effect.Effect<ChildProcessSpawner.ChildProcessHandle, ToolError, Scope.Scope>;
+  /** Collects UTF-8 text, failing with Limit past `maxBytes`. */
+  readonly text: (options: { readonly maxBytes: number }) => Sink.Sink<string, Uint8Array, Uint8Array, ToolError>;
+  /** Splits UTF-8 lines (LF or CRLF), flushing a final unterminated line; Limit past `maxLineBytes`. */
+  readonly lines: (
+    options: { readonly maxLineBytes: number },
+  ) => <E, R>(self: Stream.Stream<Uint8Array, E, R>) => Stream.Stream<string, E | ToolError, R>;
+  /** Decodes tool output, failing with Output. */
+  readonly decode: <S extends Schema.Decoder<unknown, unknown>>(
+    schema: S,
+  ) => (input: unknown) => Effect.Effect<S["Type"], ToolError, S["DecodingServices"]>;
+}
+
+export interface VersionCheck {
+  /** Arguments that print the version, such as `["--version"]`. Run with stdin ignored and a 10-second deadline. */
+  readonly args: ReadonlyArray<string>;
+  /** The tested range, for the warning. */
+  readonly tested: string;
+  readonly isTested: (output: string) => boolean;
+}
+
+export interface Options {
+  /** Used exactly as given; skips the PATH search. */
   readonly executable?: string | undefined;
+  /** Probe once here; log one warning outside the tested range, or if the probe fails or times out. Never fails. */
+  readonly version?: VersionCheck | undefined;
 }
 
-export interface ResolveOptions extends LocateOptions, EnvironmentOptions {
-  /** Arguments that print the version. Default `["--version"]`. */
-  readonly versionArgs?: readonly string[] | undefined;
-  /** Extract the version from probe output. Default: first token of stdout. */
-  readonly parseVersion?: ((completion: Completion, path: string) => VersionResult) | undefined;
-}
-
-export type Env = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
-export interface Probe { readonly completion: Completion; readonly path: string }
-/** An extractor may inspect native binary resources through FileSystem, as SignTool requires. */
-export type VersionResult = string | undefined | Effect.Effect<string | undefined, ProbeFailed, FileSystem.FileSystem | Path.Path>;
-
-/** Extract group 1 from stdout, then stderr. Stateful patterns are reset on every attempt. */
-export const versionPattern = (pattern: RegExp) => (probe: Probe): string | undefined => {
-  const expression = new RegExp(pattern.source, pattern.flags);
-  for (const bytes of [probe.completion.stdout, probe.completion.stderr]) {
-    expression.lastIndex = 0;
-    const version = expression.exec(text(bytes))?.[1];
-    if (version !== undefined) return version;
-  }
-  return undefined;
-};
-
-export interface Constraint {
-  /** Versions inside this npm semver range are rejected. */
-  readonly range: string;
-  readonly reason: string;
-}
-
-export interface Service { readonly tool: Resolved }
-export interface LayerOptions {
-  readonly executable?: string | undefined;
-  readonly version?: string | ((version: string) => boolean) | undefined;
-}
-/** Documented host inputs, not an exhaustive closure or a sandbox policy. */
-export interface Requirements {
-  readonly env: readonly string[];
-  readonly network: boolean;
-  readonly services: readonly string[];
-  readonly detail?: string | undefined;
-}
-export type LayerError = NotFound | ProbeFailed | VersionUnsupported | Artifact.ArtifactError;
-interface BaseSpec {
-  readonly name: string;
-  readonly versionArgs?: readonly string[] | undefined;
-  readonly version: {
-    readonly parse?: ((probe: Probe) => VersionResult) | undefined;
-    readonly supported: string;
-    readonly tested: readonly string[];
-  };
-  readonly constraints?: Readonly<Record<string, readonly Constraint[]>> | undefined;
-  readonly requirements?: Requirements | undefined;
-}
-type Extend<Extra, Options> = (tool: Resolved, options: LayerOptions & Options) => Effect.Effect<Extra, LayerError, Env>;
-/** A service with extra fields must declare how resolution constructs them. */
-export type Spec<Extra = {}, Options = {}> = BaseSpec & (keyof Extra extends never
-  ? { readonly extend?: Extend<Extra, Options> | undefined }
-  : { readonly extend: Extend<Extra, Options> });
-type LayerArguments<Options> = {} extends Options
-  ? [options?: LayerOptions & Options]
-  : [options: LayerOptions & Options];
-export interface Provider<Self, Extra = {}, Options = {}> {
-  readonly name: string;
-  readonly layer: (...args: LayerArguments<Options>) => Layer.Layer<Self, LayerError, Env>;
-  readonly supported: string;
-  readonly tested: readonly string[];
-  readonly constraints: Readonly<Record<string, readonly Constraint[]>>;
-  readonly requirements: Requirements;
-  readonly resolved: Effect.Effect<Resolved, never, Self>;
-  readonly testLayer: (service: Service & Extra) => Layer.Layer<Self>;
-}
-
-/** Keep the named service at the provider edge; share resolution, policy, and test construction. */
-export const provider = <Self, Extra = {}, Options = {}>(
-  service: Context.Service<Self, Service & Extra>,
-  spec: Spec<Extra, Options>,
-): Provider<Self, Extra, Options> => ({
-  name: spec.name,
-  supported: spec.version.supported,
-  tested: spec.version.tested,
-  constraints: spec.constraints ?? {},
-  requirements: spec.requirements ?? { env: [], network: false, services: [] },
-  resolved: Effect.map(service, ({ tool }) => tool),
-  testLayer: (value) => Layer.succeed(service, value),
-  layer: (...args) => {
-    // The optional tuple branch permits omission only when Options has no required fields.
-    const options = args[0] ?? {} as LayerOptions & Options;
-    return Layer.effect(service, Effect.gen(function*() {
-      const tool = yield* resolve({ name: spec.name, executable: options.executable, versionArgs: spec.versionArgs,
-        parseVersion: spec.version.parse === undefined ? undefined : (completion, path) => spec.version.parse!({ completion, path }),
-      }).pipe(requireVersion(options.version ?? spec.version.supported));
-      const extra = spec.extend === undefined ? undefined : yield* spec.extend(tool, options);
-      return Object.assign({}, extra, { tool });
-    }));
-  },
-});
-
-const collect = (stream: Stream.Stream<Uint8Array, unknown>, limit: number) =>
-  Stream.runFold(stream, () => ({ chunks: [] as Uint8Array[], size: 0, truncated: false }), (acc, chunk) => {
-    const room = Math.max(0, limit - acc.size);
-    const kept = chunk.byteLength <= room ? chunk : chunk.subarray(0, room);
-    if (kept.byteLength > 0) acc.chunks.push(kept);
-    acc.size += kept.byteLength;
-    acc.truncated ||= kept.byteLength < chunk.byteLength;
-    return acc;
-  }).pipe(
-    Effect.map(({ chunks, size, truncated }) => {
-      const out = new Uint8Array(size);
-      let o = 0;
-      for (const c of chunks) {
-        out.set(c, o);
-        o += c.byteLength;
-      }
-      return { bytes: out, truncated };
-    }),
-  );
-
-const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
-
-/** Replace each secret with `<redacted>`, longer secrets first so an overlapping value cannot expose a suffix. */
-export const redact = (secrets: readonly string[]): ((text: string) => string) => {
-  const ordered = [...new Set(secrets)].filter((value) => value.length > 0).sort((a, b) => b.length - a.length);
-  return (text) => ordered.reduce((scrubbed, secret) => scrubbed.replaceAll(secret, "<redacted>"), text);
-};
-
-/** Scoped environment for both one-shot runs and caller-scoped watch processes. Explicit env always wins. */
-export const environment = Effect.fn("Tool.environment")(function*(tool: Resolved, options: EnvironmentOptions = {}) {
-  if (options.scrubEnv !== true) {
-    return { env: options.env ?? (options.extendEnv === false ? {} : undefined), extendEnv: options.extendEnv ?? true };
-  }
+const findOnPath = Effect.fnUntraced(function*(name: string) {
   const fs = yield* FileSystem.FileSystem;
-  const p = yield* Path.Path;
-  const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-env-" }).pipe(
-    Effect.mapError((error) => new SpawnFailed({ tool: tool.name, detail: String(error) })),
+  const path = yield* Path.Path;
+  const windows = path.sep === "\\";
+  const value = yield* Config.String("PATH").pipe(Config.orElse(() => Config.String("Path")));
+  const names = windows ? [name, `${name}.exe`, `${name}.cmd`] : [name];
+  const candidates = value.split(windows ? ";" : ":").filter((directory) => directory.length > 0)
+    .flatMap((directory) => names.map((file) => path.resolve(directory, file)));
+  const found = yield* Effect.findFirst(candidates, (candidate) =>
+    fs.stat(candidate).pipe(
+      Effect.map((info) => info.type === "File" && (windows || (info.mode & 0o111) !== 0)),
+      Effect.orElseSucceed(() => false),
+    ));
+  return yield* Effect.fromOption(found).pipe(
+    Effect.mapError(() => ToolError.make({ tool: name, reason: NotFound.make({ executable: name }) })),
   );
-  return { env: { PATH: p.dirname(tool.path), HOME: temporary, TMPDIR: temporary, TEMP: temporary, TMP: temporary, USERPROFILE: temporary, ...options.env }, extendEnv: false };
 });
 
-/** Run a resolved tool; failures retain both diagnostic streams and truncation flags. */
-export const run = Effect.fn("Tool.run")(function*(
-  tool: Resolved,
-  args: readonly string[],
-  options: RunOptions = {},
-): Effect.fn.Return<Completion, Failed | SpawnFailed, ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Scope.Scope> {
-  const scrub = redact(options.redact ?? []);
-  const spawnFailed = (error: unknown) => new SpawnFailed({ tool: scrub(tool.name), detail: scrub(String(error)) });
-  const limit = options.outputLimit ?? 8 * 1024 * 1024;
-  const stdoutLimit = options.stdoutLimit === null ? Infinity : options.stdoutLimit ?? limit;
-  if (!Number.isSafeInteger(limit) || limit < 0 || (stdoutLimit !== Infinity && (!Number.isSafeInteger(stdoutLimit) || stdoutLimit < 0))) {
-    return yield* new SpawnFailed({ tool: tool.name, detail: "output limits must be non-negative safe integers (or null for uncapped stdout)" });
-  }
-  const handle = yield* ChildProcess.make(tool.path, [...args], {
-    cwd: options.cwd,
-    ...yield* environment(tool, options),
-    shell: false,
-  }).pipe(
-    // Native spawners can throw synchronously before reporting a typed launch error.
-    Effect.catchDefect(Effect.fail),
-    Effect.mapError(spawnFailed),
-  );
-  const observe = (stream: "stdout" | "stderr") => options.onOutput === undefined
-    ? handle[stream]
-    : handle[stream].pipe(Stream.tap((chunk) => options.onOutput!({ stream, chunk })));
-  const { stdout, stderr, exitCode } = yield* Effect.all(
-    { stdout: collect(observe("stdout"), stdoutLimit), stderr: collect(observe("stderr"), limit), exitCode: handle.exitCode },
-    { concurrency: "unbounded" },
-  ).pipe(Effect.mapError(spawnFailed));
-  if (exitCode !== 0) {
-    return yield* new Failed({ tool: scrub(tool.name), args: args.map(scrub), exitCode,
-      stdout: scrub(text(stdout.bytes)), stderr: scrub(text(stderr.bytes)), stdoutTruncated: stdout.truncated, stderrTruncated: stderr.truncated });
-  }
-  return { exitCode, stdout: stdout.bytes, stderr: stderr.bytes, stdoutTruncated: stdout.truncated, stderrTruncated: stderr.truncated };
-}, Effect.scoped);
+const makeTool = (
+  name: string,
+  executable: string,
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+): Tool => {
+  const processError = (cause: PlatformError.PlatformError) =>
+    ToolError.make({ tool: name, reason: Process.make({ detail: cause.message, cause }) });
+  const limit = (unit: "output" | "line", maxBytes: number) =>
+    ToolError.make({ tool: name, reason: Limit.make({ unit, maxBytes }) });
 
-const findOnPath = (name: string) =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem;
-    const p = yield* Path.Path;
-    // Windows commonly names this key Path; both reads must honor the caller's ConfigProvider.
-    const path = yield* Config.String("PATH").pipe(Config.orElse(() => Config.String("Path")), Effect.orElseSucceed(() => ""));
-    const names = p.sep === "\\" ? [name, `${name}.exe`, `${name}.cmd`] : [name];
-    const searched = path.split(p.sep === "\\" ? ";" : ":").filter((dir) => dir.length > 0);
-    for (const dir of searched) {
-      for (const n of names) {
-        const candidate = p.join(dir, n);
-        const info = yield* fs.stat(candidate).pipe(Effect.catch((error) => error.reason._tag === "NotFound"
-          ? Effect.succeed(undefined)
-          : Effect.fail(new ProbeFailed({ tool: name, path: candidate, detail: String(error) }))));
-        if (info?.type === "File" && (p.sep === "\\" || (info.mode & 0o111) !== 0)) return candidate;
-      }
-    }
-    return yield* new NotFound({ tool: name, searched });
+  const session: Tool["session"] = Effect.fnUntraced(function*(command) {
+    const scrub = sanitize(command);
+    const handle = yield* spawner.spawn(command).pipe(Effect.mapError(scrub), Effect.mapError(processError));
+    return ChildProcessSpawner.makeHandle({
+      pid: handle.pid,
+      exitCode: Effect.mapError(handle.exitCode, scrub),
+      isRunning: Effect.mapError(handle.isRunning, scrub),
+      kill: (options) => Effect.mapError(handle.kill(options), scrub),
+      stdin: Sink.mapError(handle.stdin, scrub),
+      stdout: Stream.mapError(handle.stdout, scrub),
+      stderr: Stream.mapError(handle.stderr, scrub),
+      all: Stream.mapError(handle.all, scrub),
+      getInputFd: (fd) => Sink.mapError(handle.getInputFd(fd), scrub),
+      getOutputFd: (fd) => Stream.mapError(handle.getOutputFd(fd), scrub),
+      unref: Effect.mapError(handle.unref, scrub).pipe(Effect.map((reref) => Effect.mapError(reref, scrub))),
+    });
   });
 
-/** Find the executable without probing it: an explicit path, or the first runnable PATH match, with symlinks resolved. */
-export const locate = Effect.fn("Tool.locate")(function*(
-  options: LocateOptions,
-): Effect.fn.Return<string, NotFound | ProbeFailed, FileSystem.FileSystem | Path.Path> {
-  const fs = yield* FileSystem.FileSystem;
-  const p = yield* Path.Path;
-  let executable: string;
-  if (options.executable === undefined) {
-    executable = yield* findOnPath(options.name);
-  } else {
-    executable = p.resolve(options.executable);
-    yield* fs.stat(executable).pipe(Effect.mapError((error) => error.reason._tag === "NotFound"
-      ? new NotFound({ tool: options.name, searched: [executable] })
-      : new ProbeFailed({ tool: options.name, path: executable, detail: String(error) })));
+  const checkExit = Effect.fnUntraced(function*(code: number, stderr: string, options?: RunOptions) {
+    if (!(options?.exitCodes ?? [0]).includes(code)) {
+      return yield* ToolError.make({ tool: name, reason: Exit.make({ code, stderr }) });
+    }
+  });
+
+  const outputs = Effect.fnUntraced(
+    function*(command: ChildProcess.Command, handle: ChildProcessSpawner.ChildProcessHandle, options?: RunOptions) {
+      const [tail] = yield* Effect.all([
+        stderrTail(
+          Stream.mapError(handle.stderr, processError),
+          options?.stderrTailBytes ?? 8192,
+          options?.redact ?? [],
+        ),
+        Effect.forEach(
+          commandOutputFds(command),
+          (fd) => Stream.runDrain(Stream.mapError(handle.getOutputFd(fd), processError)),
+          { concurrency: "unbounded", discard: true },
+        ),
+      ], { concurrency: "unbounded" });
+      return tail;
+    },
+  );
+
+  const run: Tool["run"] = Effect.fn("Tool.run")(
+    function*<A, E>(
+      command: ChildProcess.Command,
+      output: Sink.Sink<A, Uint8Array, Uint8Array, E>,
+      options?: RunOptions,
+    ) {
+      yield* checkBound(options?.stderrTailBytes ?? 8192, "stderrTailBytes");
+      const handle = yield* session(command);
+      const [value, tail, code] = yield* Effect.all([
+        Stream.run(
+          Stream.mapError(handle.stdout, processError),
+          Sink.flatMap(output, (value) => Sink.as(Sink.drain, value)),
+        ),
+        outputs(command, handle, options),
+        Effect.mapError(handle.exitCode, processError),
+      ], { concurrency: "unbounded" });
+      yield* checkExit(code, tail, options);
+      return value;
+    },
+    Effect.scoped,
+  );
+
+  const acquireStream = Effect.fnUntraced(
+    function*<A, E>(
+      command: ChildProcess.Command,
+      events: (stdout: Stream.Stream<Uint8Array, ToolError>) => Stream.Stream<A, E>,
+      options?: RunOptions,
+    ) {
+      yield* checkBound(options?.stderrTailBytes ?? 8192, "stderrTailBytes");
+      const handle = yield* session(command);
+      // The native reader belongs to this scope, including when the transform stops early.
+      const pull = yield* Stream.toPull(Stream.mapError(handle.stdout, processError));
+      const stdout = Stream.fromPull(Effect.succeed(pull));
+      const terminal = yield* Effect.forkScoped(Effect.all([
+        outputs(command, handle, options),
+        Effect.mapError(handle.exitCode, processError),
+      ], { concurrency: "unbounded" }));
+      const finish = Effect.gen(function*() {
+        yield* Stream.runDrain(stdout);
+        const [tail, code] = yield* Fiber.join(terminal);
+        yield* checkExit(code, tail, options);
+      });
+      return Stream.concat(events(stdout), Stream.fromEffectDrain(finish)).pipe(
+        Stream.mergeEffect(Fiber.join(terminal)),
+      );
+    },
+  );
+  const stream: Tool["stream"] = (command, events, options) => Stream.unwrap(acquireStream(command, events, options));
+
+  const text: Tool["text"] = (options) =>
+    Sink.unwrap(
+      checkBound(options.maxBytes, "maxBytes").pipe(Effect.map(() =>
+        Sink.suspend(() => {
+          const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+          return Sink.reduceEffect(() => ({ size: 0, text: "" }), (state, chunk: Uint8Array) => {
+            const size = state.size + chunk.length;
+            return size > options.maxBytes
+              ? Effect.fail(limit("output", options.maxBytes))
+              : Effect.succeed({ size, text: state.text + decoder.decode(chunk, { stream: true }) });
+          }).pipe(Sink.map((state) => state.text + decoder.decode()));
+        })
+      )),
+    );
+
+  const lines: Tool["lines"] = (options) => (self) =>
+    Stream.unwrap(
+      checkBound(options.maxLineBytes, "maxLineBytes").pipe(Effect.as(Stream.suspend(() => {
+        const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+        const frame = Effect.fnUntraced(function*(pending: Uint8Array, chunk: Uint8Array | undefined) {
+          if (chunk === undefined) {
+            if (pending.length > options.maxLineBytes) return yield* limit("line", options.maxLineBytes);
+            return [new Uint8Array(0), pending.length === 0 ? [] : [decoder.decode(pending)]] as const;
+          }
+          const bytes = new Uint8Array(pending.length + chunk.length);
+          bytes.set(pending);
+          bytes.set(chunk, pending.length);
+          const out: Array<string> = [];
+          let start = 0;
+          for (let end = bytes.indexOf(10); end !== -1; end = bytes.indexOf(10, start)) {
+            const size = end - start - (bytes[end - 1] === 13 ? 1 : 0);
+            if (size > options.maxLineBytes) return yield* limit("line", options.maxLineBytes);
+            out.push(decoder.decode(bytes.subarray(start, start + size)));
+            start = end + 1;
+          }
+          const rest = bytes.subarray(start);
+          if (rest.length - (rest.at(-1) === 13 ? 1 : 0) > options.maxLineBytes) {
+            return yield* limit("line", options.maxLineBytes);
+          }
+          // Copy the partial line rather than retaining the whole source chunk.
+          return [rest.slice(), out] as const;
+        });
+        return Stream.concat(self, Stream.succeed(undefined)).pipe(
+          Stream.mapAccumEffect(() => new Uint8Array(0), frame),
+        );
+      }))),
+    );
+
+  const decode: Tool["decode"] = (schema) => {
+    const parse = Schema.decodeUnknownEffect(schema, { reportInput: false });
+    // Schema paths and custom messages can contain output even with input reporting disabled.
+    return (input) =>
+      parse(input).pipe(Effect.mapError(() =>
+        ToolError.make({
+          tool: name,
+          reason: Output.make({
+            cause: new Schema.SchemaError(new SchemaIssue.InvalidValue({ message: "Output did not match its schema" })),
+          }),
+        })
+      ));
+  };
+  return { name, executable, run, stream, session, text, lines, decode };
+};
+
+const probeVersion = Effect.fnUntraced(function*(tool: Tool, version: VersionCheck) {
+  const output = yield* tool.run(
+    ChildProcess.make(tool.executable, version.args, {
+      stdin: "ignore",
+      killSignal: "SIGTERM",
+      forceKillAfter: "500 millis",
+    }),
+    tool.text({ maxBytes: 4096 }),
+  ).pipe(Effect.timeout("10 seconds"), Effect.result);
+  if (output._tag === "Failure") {
+    yield* Effect.logWarning(`${tool.name} version probe failed; tested range is ${version.tested}`);
+  } else if (!version.isTested(output.success)) {
+    yield* Effect.logWarning(`${tool.name} is outside the tested range ${version.tested}`);
   }
-  return yield* fs.realPath(executable).pipe(Effect.mapError((error) => new ProbeFailed({ tool: options.name, path: executable, detail: String(error) })));
 });
 
-const firstToken = (completion: Completion): string | undefined => text(completion.stdout).trim().split(/\s+/u)[0];
-
-/** Locate and probe once per layer; later runs use the recorded path. */
-export const resolve = Effect.fn("Tool.resolve")(function*(options: ResolveOptions): Effect.fn.Return<Resolved, NotFound | ProbeFailed, Env> {
-  const path = yield* locate(options);
-  const probeFailed = (detail: string) => new ProbeFailed({ tool: options.name, path, detail });
-  const identity = yield* Artifact.file(path, { name: options.name, version: "unprobed" }).pipe(Effect.mapError((e) => probeFailed(e.message)));
-  const provisional: Resolved = { name: options.name, path, version: "", bytes: identity.bytes };
-  const completion = yield* run(provisional, options.versionArgs ?? ["--version"], options).pipe(
-    Effect.mapError((e) => probeFailed(e instanceof SpawnFailed ? e.detail : e.message)),
-  );
-  const result = (options.parseVersion ?? firstToken)(completion, path);
-  const version = Effect.isEffect(result) ? yield* result : result;
-  if (version === undefined || version.length === 0) return yield* probeFailed("could not read version");
-  return { ...provisional, version };
-});
-
-/** Record the current executable's SHA-256 explicitly, for cache keys or checksum consumers. */
-export const withSha256 = <A extends Resolved>(tool: A): Effect.Effect<WithSha256<A>, Artifact.ArtifactError, FileSystem.FileSystem | Path.Path> =>
-  Artifact.file(tool.path, producedBy(tool)).pipe(
-    Effect.flatMap(Artifact.withSha256),
-    Effect.map((artifact) => ({ ...tool, path: artifact.path, bytes: artifact.bytes, sha256: artifact.sha256 })),
-  );
-
-type Version = readonly [number, number, number];
-
-/** Canonical `x.y.z` only. Prereleases, canaries, and decorated strings are rejected. */
-export const parseVersion = (text: string): Version | undefined => {
-  const m = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(text);
-  return m === null ? undefined : [Number(m[1]), Number(m[2]), Number(m[3])];
-};
-
-/** npm semver ranges, including caret, tilde, wildcard and hyphen ranges. Invalid ranges never match. */
-export const satisfies = (range: string): ((version: string) => boolean) => {
-  let parsed: Range;
-  try {
-    parsed = new Range(range);
-  } catch {
-    return () => false;
-  }
-  return (version) => semverSatisfies(version, parsed);
-};
-
-/** Apply an explicit version policy; rejection occurs in the Effect error channel. */
-export const requireVersion = (accept: string | ((version: string) => boolean)) =>
-<E, R>(self: Effect.Effect<Resolved, E, R>): Effect.Effect<Resolved, E | VersionUnsupported, R> => {
-  const test = typeof accept === "string" ? satisfies(accept) : accept;
-  const supported = typeof accept === "string" ? accept : "custom predicate";
-  return self.pipe(
-    Effect.filterOrFail(
-      (tool) => test(tool.version),
-      (tool) => new VersionUnsupported({ tool: tool.name, version: tool.version, supported }),
-    ),
-  );
-};
-
-/** Reject a declared operation-specific range using its metadata as the error explanation. */
-export const check = (tool: Resolved, operation: string, constraint: Constraint): Effect.Effect<void, VersionUnsupported> =>
-  satisfies(constraint.range)(tool.version)
-    ? Effect.fail(new VersionUnsupported({ tool: tool.name, version: tool.version, supported: constraint.range, operation, reason: constraint.reason }))
-    : Effect.void;
-
-export const producedBy = (tool: Resolved & { readonly sha256?: Artifact.Sha256 }): Artifact.Producer => ({
-  name: tool.name,
-  version: tool.version,
-  path: tool.path,
-  ...(tool.sha256 === undefined ? {} : { sha256: tool.sha256 }),
+/** Resolves once and captures the spawner. No tool is installed, retried or substituted. */
+export const make = Effect.fn("Tool.make")(function*(name: string, options?: Options): Effect.fn.Return<
+  Tool,
+  ToolError | Config.ConfigError,
+  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+> {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const executable = options?.executable ?? (yield* findOnPath(name));
+  const tool = makeTool(name, executable, spawner);
+  if (options?.version !== undefined) yield* probeVersion(tool, options.version);
+  return tool;
 });
