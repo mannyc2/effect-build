@@ -186,6 +186,55 @@ describe("lazy checked streams", () => {
     }));
 });
 
+it.effect("checked run and stream observe a stderr failure after raw exit", () =>
+  Effect.gen(function*() {
+    for (const mode of ["run", "stream"] as const) {
+      const stdoutEnded = yield* Deferred.make<void>();
+      const stderrStarted = yield* Deferred.make<void>();
+      const failStderr = yield* Deferred.make<void>();
+      const rawExit = yield* Deferred.make<ChildProcessSpawner.ExitCode>();
+      const exitObserved = yield* Deferred.make<void>();
+      const released = yield* Ref.make(0);
+      const handle = ToolTest.handle({
+        stdout: Stream.succeed(bytes("event")).pipe(Stream.onEnd(Deferred.succeed(stdoutEnded, undefined))),
+        stderr: Stream.fromEffect(
+          Deferred.succeed(stderrStarted, undefined).pipe(
+            Effect.andThen(Deferred.await(failStderr)),
+            Effect.andThen(Effect.fail(platformFailure())),
+          ),
+        ),
+        exitCode: Deferred.await(rawExit).pipe(Effect.tap(() => Deferred.succeed(exitObserved, undefined))),
+      });
+      const spawner = ChildProcessSpawner.make(() =>
+        Effect.acquireRelease(Effect.succeed(handle), () => Ref.update(released, (count) => count + 1))
+      );
+      const tool = yield* Tool.make("fixture", { executable: "fixture" }).pipe(
+        // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This test constructs the complete fake platform once, including its process scope.
+        Effect.provide(Layer.mergeAll(
+          Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          FileSystem.layerNoop({}),
+          Path.layer,
+        )),
+      );
+      const operation = mode === "run"
+        ? tool.run(command, Sink.drain)
+        : tool.stream(command, (stdout) => stdout).pipe(Stream.runDrain);
+      const fiber = yield* Effect.forkChild(operation.pipe(Effect.flip));
+      yield* Deferred.await(stderrStarted);
+      yield* Deferred.await(stdoutEnded);
+      yield* Deferred.succeed(rawExit, ChildProcessSpawner.ExitCode(0));
+      yield* Deferred.await(exitObserved);
+      yield* Effect.yieldNow;
+      assert.isUndefined(fiber.pollUnsafe());
+      assert.strictEqual(yield* Ref.get(released), 0);
+      yield* Deferred.succeed(failStderr, undefined);
+      const error = yield* Fiber.join(fiber);
+      assert.instanceOf(error.reason, Tool.Process);
+      assert.notInclude(JSON.stringify(error), "credential");
+      assert.strictEqual(yield* Ref.get(released), 1);
+    }
+  }));
+
 describe("bounded output decoding", () => {
   it.effect("flushes incomplete UTF-8, splits CRLF, and retains final lines", () =>
     Effect.gen(function*() {
