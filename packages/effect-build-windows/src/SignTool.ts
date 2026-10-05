@@ -1,43 +1,41 @@
 import type { Config } from "effect";
-import { Config as C, Context, Effect, Layer, Path, Redacted, Schema, Sink } from "effect";
+import { Config as C, Context, Effect, Layer, Path, Redacted, Sink } from "effect";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
-export const Credential = Schema.Union([
-  Schema.TaggedStruct("Pfx", {
-    file: Schema.String,
-    password: Schema.optionalKey(Schema.Redacted(Schema.String, { disallowJsonEncode: true })),
-  }),
-  Schema.TaggedStruct("Store", {
-    thumbprint: Schema.String,
-    name: Schema.optionalKey(Schema.String),
-    machine: Schema.optionalKey(Schema.Boolean),
-  }),
-  Schema.TaggedStruct("TrustedSigning", {
-    library: Schema.String,
-    metadata: Schema.String,
+export type Credential =
+  | {
+    readonly _tag: "Pfx";
+    readonly file: string;
+    readonly password?: Redacted.Redacted<string> | undefined;
+  }
+  | {
+    readonly _tag: "Store";
+    readonly thumbprint: string;
+    readonly name?: string | undefined;
+    readonly machine?: boolean | undefined;
+  }
+  | {
+    readonly _tag: "TrustedSigning";
+    readonly library: string;
+    readonly metadata: string;
     /** Secrets consumed by the native signing library, such as Azure identity credentials. */
-    env: Schema.optionalKey(Schema.Record(Schema.String, Schema.Redacted(Schema.String, { disallowJsonEncode: true }))),
-  }),
-]);
-export type Credential = typeof Credential.Type;
+    readonly env?: Readonly<Record<string, Redacted.Redacted<string>>> | undefined;
+  };
 
-const Common = {
-  path: Schema.String,
-  cwd: Schema.optionalKey(Schema.String),
-  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  extendEnv: Schema.optionalKey(Schema.Boolean),
-  extraArgs: Schema.optionalKey(Schema.Array(Schema.String)),
-};
-export const SignInput = Schema.Struct({
-  ...Common,
-  credential: Credential,
-  timestampUrl: Schema.optionalKey(Schema.String),
-  description: Schema.optionalKey(Schema.String),
-});
-export type SignInput = typeof SignInput.Type;
-export const VerifyInput = Schema.Struct(Common);
-export type VerifyInput = typeof VerifyInput.Type;
+interface Common {
+  readonly path: string;
+  readonly cwd?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly extraArgs?: ReadonlyArray<string> | undefined;
+}
+export interface SignInput extends Common {
+  readonly credential: Credential;
+  readonly timestampUrl?: string | undefined;
+  readonly description?: string | undefined;
+}
+export type VerifyInput = Common;
 
 const credentials = (credential: Credential): {
   readonly args: ReadonlyArray<string>;

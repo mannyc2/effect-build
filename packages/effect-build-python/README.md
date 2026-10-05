@@ -1,6 +1,6 @@
 # effect-build-python
 
-`Python` runs uv's native build command as an Effect service. Import it from `effect-build-python`; its input schema
+`Python` runs uv's native build command as an Effect service. Import it from `effect-build-python`; its input types
 and options are available at `effect-build-python/Python`.
 
 `Python.layer` resolves uv once. `build` takes a project path and output directory, returns the absolute directory,

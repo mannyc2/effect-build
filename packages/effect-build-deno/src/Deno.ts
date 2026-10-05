@@ -1,48 +1,42 @@
-import type { Config, FileSystem } from "effect";
-import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
+import type { Config } from "effect";
+import { Config as C, Context, Effect, FileSystem, Layer, Path, Sink } from "effect";
 import * as Atomic from "effect-build/Atomic";
 import * as Executable from "effect-build/Executable";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
-export const Target = Schema.Literals([
-  "x86_64-unknown-linux-gnu",
-  "aarch64-unknown-linux-gnu",
-  "x86_64-pc-windows-msvc",
-  "aarch64-pc-windows-msvc",
-  "x86_64-apple-darwin",
-  "aarch64-apple-darwin",
-]);
-export type Target = typeof Target.Type;
+export type Target =
+  | "x86_64-unknown-linux-gnu"
+  | "aarch64-unknown-linux-gnu"
+  | "x86_64-pc-windows-msvc"
+  | "aarch64-pc-windows-msvc"
+  | "x86_64-apple-darwin"
+  | "aarch64-apple-darwin";
 
-const Common = {
-  cwd: Schema.optionalKey(Schema.String),
-  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  extendEnv: Schema.optionalKey(Schema.Boolean),
-  config: Schema.optionalKey(Schema.Union([Schema.String, Schema.Literal(false)])),
-  extraArgs: Schema.optionalKey(Schema.Array(Schema.String)),
-  atomic: Schema.optionalKey(Schema.Boolean),
-};
+interface Common {
+  readonly cwd?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly config?: string | false | undefined;
+  readonly extraArgs?: ReadonlyArray<string> | undefined;
+  readonly atomic?: boolean | undefined;
+}
 
-export const CompileInput = Schema.Struct({
-  ...Common,
-  entrypoint: Schema.String,
-  outfile: Schema.String,
-  target: Schema.optionalKey(Target),
-  allowAll: Schema.optionalKey(Schema.Boolean),
-  scriptArgs: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-export type CompileInput = typeof CompileInput.Type;
+export interface CompileInput extends Common {
+  readonly entrypoint: string;
+  readonly outfile: string;
+  readonly target?: Target | undefined;
+  readonly allowAll?: boolean | undefined;
+  readonly scriptArgs?: ReadonlyArray<string> | undefined;
+}
 
-export const BundleInput = Schema.Struct({
-  ...Common,
-  entrypoints: Schema.NonEmptyArray(Schema.String),
-  outdir: Schema.String,
-  platform: Schema.optionalKey(Schema.Literals(["browser", "deno"])),
-  format: Schema.optionalKey(Schema.Literals(["esm", "cjs", "iife"])),
-  minify: Schema.optionalKey(Schema.Boolean),
-});
-export type BundleInput = typeof BundleInput.Type;
+export interface BundleInput extends Common {
+  readonly entrypoints: readonly [string, ...string[]];
+  readonly outdir: string;
+  readonly platform?: "browser" | "deno" | undefined;
+  readonly format?: "esm" | "cjs" | "iife" | undefined;
+  readonly minify?: boolean | undefined;
+}
 
 const flags = (input: CompileInput | BundleInput) => {
   const args = [...(input.extraArgs ?? [])];
@@ -61,7 +55,8 @@ export class Deno extends Context.Service<Deno>()("effect-build-deno/Deno", {
   make: Effect.fn("Deno.make")(function*(options: Options = {}) {
     const tool = yield* Tool.make("deno", { executable: options.executable });
     const path = yield* Path.Path;
-    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    const fs = yield* FileSystem.FileSystem;
+    const platform = Context.make(FileSystem.FileSystem, fs).pipe(Context.add(Path.Path, path));
     const run = (input: CompileInput | BundleInput, args: ReadonlyArray<string>) =>
       tool.run(
         ChildProcess.make(tool.executable, args, {

@@ -1,28 +1,27 @@
 import type { Config } from "effect";
-import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
+import { Config as C, Context, Effect, Layer, Path, Sink } from "effect";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
-const Common = {
-  path: Schema.String,
-  cwd: Schema.optionalKey(Schema.String),
-  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  extendEnv: Schema.optionalKey(Schema.Boolean),
-  extraArgs: Schema.optionalKey(Schema.Array(Schema.String)),
-};
+interface Common {
+  readonly path: string;
+  readonly cwd?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly extraArgs?: ReadonlyArray<string> | undefined;
+}
 
-export const SignInput = Schema.Struct({
-  ...Common,
-  identity: Schema.String,
-  force: Schema.optionalKey(Schema.Boolean),
-  hardenedRuntime: Schema.optionalKey(Schema.Boolean),
-  timestamp: Schema.optionalKey(Schema.Boolean),
-  entitlements: Schema.optionalKey(Schema.String),
-});
-export type SignInput = typeof SignInput.Type;
+export interface SignInput extends Common {
+  readonly identity: string;
+  readonly force?: boolean | undefined;
+  readonly hardenedRuntime?: boolean | undefined;
+  readonly timestamp?: boolean | undefined;
+  readonly entitlements?: string | undefined;
+}
 
-export const VerifyInput = Schema.Struct({ ...Common, strict: Schema.optionalKey(Schema.Boolean) });
-export type VerifyInput = typeof VerifyInput.Type;
+export interface VerifyInput extends Common {
+  readonly strict?: boolean | undefined;
+}
 
 export interface Options {
   readonly executable?: string | undefined;

@@ -1,7 +1,7 @@
 # effect-build-windows
 
 `SignTool` is an Effect service for native Windows SignTool. Import it from `effect-build-windows`; credential/input
-schemas and options are available at `effect-build-windows/SignTool`.
+types and options are available at `effect-build-windows/SignTool`.
 
 `SignTool.layer` resolves one explicit executable or PATH match and captures the platform. `sign` signs a path in place
 and returns its absolute path. `verify` performs native Authenticode verification separately. Signing supports PFX,

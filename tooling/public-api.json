@@ -128,9 +128,7 @@
       },
       "./Codesign": {
         "runtime": [
-          "Codesign",
-          "SignInput",
-          "VerifyInput"
+          "Codesign"
         ],
         "declarations": [
           "Codesign",
@@ -141,13 +139,9 @@
       },
       "./Notarytool": {
         "runtime": [
-          "Credential",
-          "LookupInput",
           "Notarytool",
           "Status",
-          "Submission",
-          "SubmitInput",
-          "WaitInput"
+          "Submission"
         ],
         "declarations": [
           "Credential",
@@ -162,7 +156,6 @@
       },
       "./Stapler": {
         "runtime": [
-          "Input",
           "Stapler"
         ],
         "declarations": [
@@ -203,10 +196,7 @@
     "effect-build-deno": {
       ".": {
         "runtime": [
-          "BundleInput",
-          "CompileInput",
-          "Deno",
-          "Target"
+          "Deno"
         ],
         "declarations": [
           "BundleInput",
@@ -218,10 +208,7 @@
       },
       "./Deno": {
         "runtime": [
-          "BundleInput",
-          "CompileInput",
-          "Deno",
-          "Target"
+          "Deno"
         ],
         "declarations": [
           "BundleInput",
@@ -235,9 +222,7 @@
     "effect-build-nfpm": {
       ".": {
         "runtime": [
-          "Format",
-          "Nfpm",
-          "PackageInput"
+          "Nfpm"
         ],
         "declarations": [
           "Format",
@@ -248,9 +233,7 @@
       },
       "./Nfpm": {
         "runtime": [
-          "Format",
-          "Nfpm",
-          "PackageInput"
+          "Nfpm"
         ],
         "declarations": [
           "Format",
@@ -289,7 +272,6 @@
     "effect-build-python": {
       ".": {
         "runtime": [
-          "BuildInput",
           "Python"
         ],
         "declarations": [
@@ -300,7 +282,6 @@
       },
       "./Python": {
         "runtime": [
-          "BuildInput",
           "Python"
         ],
         "declarations": [
@@ -313,9 +294,6 @@
     "effect-build-sbom": {
       ".": {
         "runtime": [
-          "Format",
-          "GenerateInput",
-          "ReportInput",
           "Sbom"
         ],
         "declarations": [
@@ -328,9 +306,6 @@
       },
       "./Sbom": {
         "runtime": [
-          "Format",
-          "GenerateInput",
-          "ReportInput",
           "Sbom"
         ],
         "declarations": [
@@ -345,10 +320,7 @@
     "effect-build-windows": {
       ".": {
         "runtime": [
-          "Credential",
-          "SignInput",
-          "SignTool",
-          "VerifyInput"
+          "SignTool"
         ],
         "declarations": [
           "Credential",
@@ -360,10 +332,7 @@
       },
       "./SignTool": {
         "runtime": [
-          "Credential",
-          "SignInput",
-          "SignTool",
-          "VerifyInput"
+          "SignTool"
         ],
         "declarations": [
           "Credential",

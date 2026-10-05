@@ -1,6 +1,6 @@
 # effect-build-nfpm
 
-`Nfpm` packages native nFPM configuration through an Effect service. Import it from `effect-build-nfpm`; schemas and
+`Nfpm` packages native nFPM configuration through an Effect service. Import it from `effect-build-nfpm`; native types and
 options are available at `effect-build-nfpm/Nfpm`.
 
 `Nfpm.layer` resolves nFPM once. `package` accepts a YAML/JSON config path, native packager format and outfile, and

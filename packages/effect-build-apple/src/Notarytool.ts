@@ -3,38 +3,42 @@ import { Config as C, Context, Effect, Layer, Redacted, Schema } from "effect";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
-export const Credential = Schema.Union([
-  Schema.TaggedStruct("Keychain", {
-    profile: Schema.String,
-    keychain: Schema.optionalKey(Schema.String),
-  }),
-  Schema.TaggedStruct("ApiKey", {
-    keyFile: Schema.String,
-    keyId: Schema.String,
-    issuer: Schema.optionalKey(Schema.String),
-  }),
-  Schema.TaggedStruct("AppleId", {
-    appleId: Schema.String,
-    teamId: Schema.String,
-    password: Schema.Redacted(Schema.String, { disallowJsonEncode: true }),
-  }),
-]);
-export type Credential = typeof Credential.Type;
+export type Credential =
+  | {
+    readonly _tag: "Keychain";
+    readonly profile: string;
+    readonly keychain?: string | undefined;
+  }
+  | {
+    readonly _tag: "ApiKey";
+    readonly keyFile: string;
+    readonly keyId: string;
+    readonly issuer?: string | undefined;
+  }
+  | {
+    readonly _tag: "AppleId";
+    readonly appleId: string;
+    readonly teamId: string;
+    readonly password: Redacted.Redacted<string>;
+  };
 
-const Common = {
-  credential: Credential,
-  cwd: Schema.optionalKey(Schema.String),
-  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  extendEnv: Schema.optionalKey(Schema.Boolean),
-  extraArgs: Schema.optionalKey(Schema.Array(Schema.String)),
-};
+interface Common {
+  readonly credential: Credential;
+  readonly cwd?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly extraArgs?: ReadonlyArray<string> | undefined;
+}
 
-export const SubmitInput = Schema.Struct({ ...Common, path: Schema.String });
-export type SubmitInput = typeof SubmitInput.Type;
-export const LookupInput = Schema.Struct({ ...Common, id: Schema.String });
-export type LookupInput = typeof LookupInput.Type;
-export const WaitInput = Schema.Struct({ ...LookupInput.fields, timeout: Schema.optionalKey(Schema.String) });
-export type WaitInput = typeof WaitInput.Type;
+export interface SubmitInput extends Common {
+  readonly path: string;
+}
+export interface LookupInput extends Common {
+  readonly id: string;
+}
+export interface WaitInput extends LookupInput {
+  readonly timeout?: string | undefined;
+}
 
 export const Submission = Schema.Struct({
   id: Schema.String,

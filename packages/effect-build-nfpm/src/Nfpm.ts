@@ -1,24 +1,22 @@
-import type { Config, FileSystem } from "effect";
-import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
+import type { Config } from "effect";
+import { Config as C, Context, Effect, FileSystem, Layer, Path, Sink } from "effect";
 import * as Atomic from "effect-build/Atomic";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
-export const Format = Schema.Literals(["deb", "rpm", "apk", "archlinux", "msix"]);
-export type Format = typeof Format.Type;
+export type Format = "deb" | "rpm" | "apk" | "archlinux" | "msix";
 
-export const PackageInput = Schema.Struct({
+export interface PackageInput {
   /** Native nFPM YAML or JSON configuration. */
-  config: Schema.String,
-  format: Format,
-  outfile: Schema.String,
-  cwd: Schema.optionalKey(Schema.String),
-  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  extendEnv: Schema.optionalKey(Schema.Boolean),
-  extraArgs: Schema.optionalKey(Schema.Array(Schema.String)),
-  atomic: Schema.optionalKey(Schema.Boolean),
-});
-export type PackageInput = typeof PackageInput.Type;
+  readonly config: string;
+  readonly format: Format;
+  readonly outfile: string;
+  readonly cwd?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly extraArgs?: ReadonlyArray<string> | undefined;
+  readonly atomic?: boolean | undefined;
+}
 
 export interface Options {
   readonly executable?: string | undefined;
@@ -28,7 +26,8 @@ export class Nfpm extends Context.Service<Nfpm>()("effect-build-nfpm/Nfpm", {
   make: Effect.fn("Nfpm.make")(function*(options: Options = {}) {
     const tool = yield* Tool.make("nfpm", options);
     const path = yield* Path.Path;
-    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    const fs = yield* FileSystem.FileSystem;
+    const platform = Context.make(FileSystem.FileSystem, fs).pipe(Context.add(Path.Path, path));
     return {
       /** Packages the native configuration and returns its absolute output path. */
       package: Effect.fn("Nfpm.package")(function*(input: PackageInput) {

@@ -1,19 +1,18 @@
-import type { Config, FileSystem } from "effect";
-import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
+import type { Config } from "effect";
+import { Config as C, Context, Effect, FileSystem, Layer, Path, Sink } from "effect";
 import * as Atomic from "effect-build/Atomic";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
-export const BuildInput = Schema.Struct({
-  project: Schema.String,
-  outdir: Schema.String,
-  cwd: Schema.optionalKey(Schema.String),
-  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  extendEnv: Schema.optionalKey(Schema.Boolean),
-  extraArgs: Schema.optionalKey(Schema.Array(Schema.String)),
-  atomic: Schema.optionalKey(Schema.Boolean),
-});
-export type BuildInput = typeof BuildInput.Type;
+export interface BuildInput {
+  readonly project: string;
+  readonly outdir: string;
+  readonly cwd?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly extraArgs?: ReadonlyArray<string> | undefined;
+  readonly atomic?: boolean | undefined;
+}
 
 export interface Options {
   readonly executable?: string | undefined;
@@ -23,7 +22,8 @@ export class Python extends Context.Service<Python>()("effect-build-python/Pytho
   make: Effect.fn("Python.make")(function*(options: Options = {}) {
     const tool = yield* Tool.make("uv", options);
     const path = yield* Path.Path;
-    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    const fs = yield* FileSystem.FileSystem;
+    const platform = Context.make(FileSystem.FileSystem, fs).pipe(Context.add(Path.Path, path));
     return {
       /** uv builds its wheel from the sdist by default. Returns the distribution directory. */
       build: Effect.fn("Python.build")(function*(input: BuildInput) {

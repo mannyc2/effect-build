@@ -5,7 +5,9 @@ release graphs, registry retries, application restart policy, artifact records, 
 
 ## Decided
 
-- A binding is a Context.Service whose make captures platform services and resolves one executable.
+- A binding is a Context.Service whose make captures only the platform services it needs and resolves one executable.
+  Method calls retain the caller's tracing and Scope context.
+- Call arguments are TypeScript types; schemas describe actual configuration and tool-output decoding boundaries.
 - ChildProcess.Command is the complete native request; no argv/options transport exists beside it.
 - Runs drain one stdout reader and stderr concurrently with exit, then check the exit code.
 - Streams acquire on consumption and finish only after output and checked exit; sessions use the caller's Scope.

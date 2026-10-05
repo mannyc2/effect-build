@@ -83,8 +83,10 @@ document usage, and this file doesn't repeat them.
 - **Use plain words.** The API settles the final names; keep one word per concept, and list the names in the README.
   Don't use producer, provider, artifact record, admission, durable, adoption, lane or claim.
 
-A service resolves its tool in `make`, captures the platform once, and returns the methods callers run. Tests
-substitute the same inferred service shape with `Layer.succeed(Service, Service.of(...))`.
+A service resolves its tool in `make`, captures only the platform services its methods need, and returns the methods
+callers run. Build a fresh context containing those services instead of capturing the full construction context;
+method calls must retain the caller's tracing and Scope. Tests substitute the same inferred service shape with
+`Layer.succeed(Service, Service.of(...))`.
 
 ## It reads on its own
 

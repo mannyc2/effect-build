@@ -1,16 +1,15 @@
 import type { Config } from "effect";
-import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
+import { Config as C, Context, Effect, Layer, Path, Sink } from "effect";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
-export const Input = Schema.Struct({
-  path: Schema.String,
-  cwd: Schema.optionalKey(Schema.String),
-  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  extendEnv: Schema.optionalKey(Schema.Boolean),
-  extraArgs: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-export type Input = typeof Input.Type;
+export interface Input {
+  readonly path: string;
+  readonly cwd?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly extraArgs?: ReadonlyArray<string> | undefined;
+}
 
 export interface Options {
   /** Explicit native stapler path. Otherwise xcrun is resolved once. */

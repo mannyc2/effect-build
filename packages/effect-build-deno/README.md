@@ -1,7 +1,7 @@
 # effect-build-deno
 
 `Deno` is an Effect service for native `compile` and `bundle` commands. Import it from `effect-build-deno`;
-input schemas, types and Deno's native `Target` are available at `effect-build-deno/Deno`.
+input types and Deno's native `Target` are available at `effect-build-deno/Deno`.
 
 `Deno.layer` resolves one executable from an explicit path or PATH. Its methods capture the platform and return
 absolute output paths. `compile` accepts an entrypoint, outfile, native target, an allow-all option and script arguments.

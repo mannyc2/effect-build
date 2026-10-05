@@ -1,31 +1,27 @@
-import type { Config, FileSystem } from "effect";
-import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
+import type { Config } from "effect";
+import { Config as C, Context, Effect, FileSystem, Layer, Path, Schema, Sink } from "effect";
 import * as Atomic from "effect-build/Atomic";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
-export const Format = Schema.Literals(["syft-json", "spdx-json@2.3", "cyclonedx-json@1.6"]);
-export type Format = typeof Format.Type;
+export type Format = "syft-json" | "spdx-json@2.3" | "cyclonedx-json@1.6";
 
-const Common = {
+interface Common {
   /** A native Syft source, for example a directory path or `file:archive.tar`. */
-  source: Schema.String,
-  cwd: Schema.optionalKey(Schema.String),
-  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  extendEnv: Schema.optionalKey(Schema.Boolean),
-  extraArgs: Schema.optionalKey(Schema.Array(Schema.String)),
-};
+  readonly source: string;
+  readonly cwd?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly extraArgs?: ReadonlyArray<string> | undefined;
+}
 
-export const GenerateInput = Schema.Struct({
-  ...Common,
-  format: Format,
-  outfile: Schema.String,
-  atomic: Schema.optionalKey(Schema.Boolean),
-});
-export type GenerateInput = typeof GenerateInput.Type;
+export interface GenerateInput extends Common {
+  readonly format: Format;
+  readonly outfile: string;
+  readonly atomic?: boolean | undefined;
+}
 
-export const ReportInput = Schema.Struct(Common);
-export type ReportInput = typeof ReportInput.Type;
+export type ReportInput = Common;
 
 export interface Options {
   readonly executable?: string | undefined;
@@ -35,7 +31,8 @@ export class Sbom extends Context.Service<Sbom>()("effect-build-sbom/Sbom", {
   make: Effect.fn("Sbom.make")(function*(options: Options = {}) {
     const tool = yield* Tool.make("syft", options);
     const path = yield* Path.Path;
-    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    const fs = yield* FileSystem.FileSystem;
+    const platform = Context.make(FileSystem.FileSystem, fs).pipe(Context.add(Path.Path, path));
     const command = (input: ReportInput, output: string) =>
       ChildProcess.make(tool.executable, [
         "scan",

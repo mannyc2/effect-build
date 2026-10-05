@@ -1,5 +1,5 @@
-import type { Config, FileSystem } from "effect";
-import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
+import type { Config } from "effect";
+import { Config as C, Context, Effect, FileSystem, Layer, Path, Schema, Sink } from "effect";
 import * as Atomic from "effect-build/Atomic";
 import * as Executable from "effect-build/Executable";
 import * as Tool from "effect-build/Tool";
@@ -53,7 +53,9 @@ export class Bun extends Context.Service<Bun>()("effect-build-bun/Bun", {
       },
     });
     const path = yield* Path.Path;
-    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    const platform = Context.make(FileSystem.FileSystem, yield* FileSystem.FileSystem).pipe(
+      Context.add(Path.Path, path),
+    );
     const bun = (input: BuildInput | CompileInput, args: ReadonlyArray<string>) =>
       tool.run(
         ChildProcess.make(tool.executable, ["build", ...flags(input), ...args, "--", ...input.entrypoints], {

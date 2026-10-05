@@ -1,7 +1,7 @@
 # effect-build-apple
 
 `Codesign`, `Notarytool` and `Stapler` are ordinary Effect services for Apple's native tools. Import the services from
-`effect-build-apple`; each service's schemas and types are available at its matching module subpath.
+`effect-build-apple`; argument types and notary output schemas are available at the matching module subpaths.
 
 | Service      | Methods                         | Behavior                                                          |
 | ------------ | ------------------------------- | ----------------------------------------------------------------- |

@@ -57,7 +57,7 @@ export class NodeSea extends Context.Service<NodeSea>()("effect-build-node-sea/N
       : (yield* Tool.make("node", { executable: options.baseExecutable })).executable;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    const platform = Context.make(FileSystem.FileSystem, fs).pipe(Context.add(Path.Path, path));
     const prepareFailure = (cause: unknown) => NodeSeaError.make({ step: "prepare", cause });
 
     const assemble = Effect.fn("NodeSea.assemble")(
