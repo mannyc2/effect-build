@@ -9,7 +9,7 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = path.resolve(yield* fs.makeTempDirectoryScoped());
       const destination = path.join(root, "app");
       yield* fs.writeFileString(destination, "old");
       let staging = "";
@@ -34,7 +34,7 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = path.resolve(yield* fs.makeTempDirectoryScoped());
       const destination = path.join(root, "app");
       yield* fs.writeFileString(destination, "old");
       const production = yield* Atomic.file(destination, () => Effect.fail("production")).pipe(Effect.flip);
@@ -51,7 +51,7 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = path.resolve(yield* fs.makeTempDirectoryScoped());
       const denied = PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "remove" });
       const cause = yield* Atomic.file(path.join(root, "app"), () => Effect.fail("production")).pipe(
         Effect.provideService(FileSystem.FileSystem, { ...fs, remove: () => Effect.fail(denied) }),
@@ -68,7 +68,7 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = path.resolve(yield* fs.makeTempDirectoryScoped());
       const destination = path.join(root, "app");
       const denied = PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "remove" });
       const error = yield* Atomic.file(destination, (staged) => fs.writeFileString(staged, "published")).pipe(
@@ -83,7 +83,7 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = path.resolve(yield* fs.makeTempDirectoryScoped());
       const destination = path.join(root, "app");
       yield* fs.writeFileString(destination, "old");
       const staged = yield* Deferred.make<string>();
@@ -105,7 +105,7 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = path.resolve(yield* fs.makeTempDirectoryScoped());
       const destination = path.join(root, "bundle");
       yield* fs.makeDirectory(destination);
       yield* fs.writeFileString(path.join(destination, "keep"), "unrelated");
@@ -130,7 +130,7 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = path.resolve(yield* fs.makeTempDirectoryScoped());
       const destination = path.join(root, "bundle");
       yield* fs.makeDirectory(destination);
       yield* fs.writeFileString(path.join(destination, "a"), "old-a");
@@ -160,7 +160,7 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = path.resolve(yield* fs.makeTempDirectoryScoped());
       const destination = path.join(root, "empty");
       assert.strictEqual(yield* Atomic.directory(destination, () => Effect.void), destination);
       assert.deepStrictEqual(yield* fs.readDirectory(destination), []);

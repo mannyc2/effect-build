@@ -1,3 +1,4 @@
+import { NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Redacted } from "effect";
 import { Codesign, Notarytool, Stapler } from "effect-build-apple";
@@ -6,7 +7,7 @@ import { ChildProcessSpawner } from "effect/process";
 
 it.effect("codesign signs paths in place and leaves verification explicit", () =>
   Effect.gen(function*() {
-    const path = yield* Path.Path.pipe(Effect.provideContext(yield* Layer.build(Path.layer)));
+    const path = yield* Path.Path.pipe(Effect.provideContext(yield* Layer.build(NodePath.layer)));
     const commands: Array<ReadonlyArray<string>> = [];
     const codesign = yield* Codesign.make({ executable: "codesign" }).pipe(
       Effect.provideContext(
@@ -19,7 +20,7 @@ it.effect("codesign signs paths in place and leaves verification explicit", () =
             })
           ),
           FileSystem.layerNoop({}),
-          Path.layer,
+          NodePath.layer,
         )),
       ),
     );
@@ -72,7 +73,7 @@ it.effect("notarytool decodes submit without assuming a completed native status"
             })
           ),
           FileSystem.layerNoop({}),
-          Path.layer,
+          NodePath.layer,
         )),
       ),
     );
@@ -114,7 +115,7 @@ it.effect("notarytool wait returns a rejected status for application policy", ()
             })
           ),
           FileSystem.layerNoop({}),
-          Path.layer,
+          NodePath.layer,
         )),
       ),
     );
@@ -155,7 +156,7 @@ it.effect("notarytool removes a Redacted native password from failed diagnostics
             })
           ),
           FileSystem.layerNoop({}),
-          Path.layer,
+          NodePath.layer,
         )),
       ),
     );
@@ -192,7 +193,7 @@ it.effect("notarytool log preserves JSON issues with the native log arguments", 
             })
           ),
           FileSystem.layerNoop({}),
-          Path.layer,
+          NodePath.layer,
         )),
       ),
     );
@@ -204,7 +205,7 @@ it.effect("notarytool log preserves JSON issues with the native log arguments", 
 
 it.effect("stapler keeps in-place mutation and ticket validation separate", () =>
   Effect.gen(function*() {
-    const path = yield* Path.Path.pipe(Effect.provideContext(yield* Layer.build(Path.layer)));
+    const path = yield* Path.Path.pipe(Effect.provideContext(yield* Layer.build(NodePath.layer)));
     const commands: Array<ReadonlyArray<string>> = [];
     const stapler = yield* Stapler.make({ executable: "stapler" }).pipe(
       Effect.provideContext(
@@ -217,7 +218,7 @@ it.effect("stapler keeps in-place mutation and ticket validation separate", () =
             })
           ),
           FileSystem.layerNoop({}),
-          Path.layer,
+          NodePath.layer,
         )),
       ),
     );

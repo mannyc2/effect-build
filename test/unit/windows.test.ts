@@ -1,3 +1,4 @@
+import { NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Redacted } from "effect";
 import { SignTool } from "effect-build-windows";
@@ -6,7 +7,7 @@ import { ChildProcessSpawner } from "effect/process";
 
 it.effect("SignTool uses native PFX flags and leaves verification explicit", () =>
   Effect.gen(function*() {
-    const path = yield* Path.Path.pipe(Effect.provideContext(yield* Layer.build(Path.layer)));
+    const path = yield* Path.Path.pipe(Effect.provideContext(yield* Layer.build(NodePath.layer)));
     const commands: Array<ReadonlyArray<string>> = [];
     const signtool = yield* SignTool.make({ executable: "signtool" }).pipe(
       Effect.provideContext(
@@ -19,7 +20,7 @@ it.effect("SignTool uses native PFX flags and leaves verification explicit", () 
             })
           ),
           FileSystem.layerNoop({}),
-          Path.layer,
+          NodePath.layer,
         )),
       ),
     );
@@ -64,7 +65,7 @@ it.effect("SignTool keeps PFX passwords out of native failure diagnostics", () =
             )
           ),
           FileSystem.layerNoop({}),
-          Path.layer,
+          NodePath.layer,
         )),
       ),
     );
@@ -97,7 +98,7 @@ it.effect("SignTool store and Trusted Signing credentials use native options", (
             })
           ),
           FileSystem.layerNoop({}),
-          Path.layer,
+          NodePath.layer,
         )),
       ),
     );

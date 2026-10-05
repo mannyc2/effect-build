@@ -45,16 +45,17 @@ describe("NodeSea", () => {
         Layer.provide(NodeServices.layer),
       );
       const outfile = path.join(directory, "published");
+      const published = path.resolve(directory, path.sep === "\\" ? "published.exe" : "published");
       const output = yield* Effect.gen(function*() {
         const sea = yield* NodeSea;
         return yield* sea.assemble({ main, outfile, assets: { data: "data.txt" }, cwd: directory, atomic: true });
       }).pipe(Effect.provideContext(yield* Layer.build(services)));
-      assert.strictEqual(output, outfile);
-      assert.deepStrictEqual(yield* fs.readFile(outfile), Uint8Array.of(0x7f, 0x45, 0x4c, 0x46, 1));
+      assert.strictEqual(output, published);
+      assert.deepStrictEqual(yield* fs.readFile(published), Uint8Array.of(0x7f, 0x45, 0x4c, 0x46, 1));
       assert.deepStrictEqual(calls.map((args) => args[0]), ["--version", "--check", "--build-sea"]);
       assert.deepStrictEqual((yield* fs.readDirectory(directory)).sort((a, b) => a.localeCompare(b)), [
         "main.cjs",
-        "published",
+        path.basename(published),
       ]);
       // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This is the test entry point.
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
@@ -64,7 +65,7 @@ describe("NodeSea", () => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const directory = yield* fs.makeTempDirectoryScoped({ prefix: "sea-failure-test-" });
-      const outfile = path.join(directory, "published");
+      const outfile = path.join(directory, "published.exe");
       yield* fs.writeFileString(outfile, "old");
       const spawner = ToolTest.layer((command) =>
         Effect.sync(() => {
