@@ -12,8 +12,7 @@ const native = SignTool.layer({ executable: process.env.EFFECT_BUILD_SIGNTOOL })
 // CertificateRequest exports a temporary PFX directly; no certificate store is changed.
 const certificate = [
   "$ErrorActionPreference = 'Stop'",
-  "$rsa = [System.Security.Cryptography.RSA]::Create()",
-  "$rsa.KeySize = 2048",
+  "$rsa = [System.Security.Cryptography.RSACng]::new(2048)",
   "$request = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=Effect Build Integration', $rsa, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)",
   "$request.CertificateExtensions.Add([System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]::new($false, $false, 0, $true))",
   "$request.CertificateExtensions.Add([System.Security.Cryptography.X509Certificates.X509KeyUsageExtension]::new([System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::DigitalSignature, $true))",
