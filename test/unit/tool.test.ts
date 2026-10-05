@@ -18,6 +18,7 @@ import {
   Schema,
   Sink,
   Stream,
+  Tracer,
 } from "effect";
 import { ToolTest } from "effect-build/testing";
 import * as Tool from "effect-build/Tool";
@@ -339,7 +340,109 @@ describe("construction", () => {
       assert.strictEqual(tool.name, "fixture");
       assert.strictEqual(warnings.length, 1);
     }));
+
+  it.effect("probes once when selected, warns only when needed, and logs no raw output", () =>
+    Effect.gen(function*() {
+      const modes = ["absent", "tested", "untested", "failed"] as const;
+      for (const mode of modes) {
+        const probes: Array<ChildProcess.Command> = [];
+        const warnings: Array<string> = [];
+        const logger = Logger.make((entry) => {
+          if (entry.logLevel === "Warn") warnings.push(String(entry.message));
+        });
+        const options: Tool.Options = {
+          executable: "fixture",
+          version: mode === "absent"
+            ? undefined
+            : { args: ["--version"], tested: "1.x", isTested: () => mode === "tested" },
+        };
+        const tool = yield* Tool.make("fixture", options).pipe(
+          // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This test provides its complete fake platform once.
+          Effect.provide(Layer.mergeAll(
+            ToolTest.layer((request) =>
+              Effect.sync(() => {
+                probes.push(request);
+                return ToolTest.handle({
+                  stdout: "PRIVATE_VERSION_OUTPUT",
+                  stderr: "PRIVATE_VERSION_DIAGNOSTIC",
+                  exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(mode === "failed" ? 1 : 0)),
+                });
+              })
+            ),
+            FileSystem.layerNoop({}),
+            Path.layer,
+            Logger.layer([logger]),
+          )),
+        );
+        assert.strictEqual(tool.executable, "fixture");
+        assert.strictEqual(probes.length, mode === "absent" ? 0 : 1);
+        assert.strictEqual(warnings.length, mode === "untested" || mode === "failed" ? 1 : 0);
+        assert.notInclude(warnings.join(" "), "PRIVATE_VERSION");
+      }
+    }));
 });
+
+it.effect("run spans retain safe failure facts without argument or output attributes", () =>
+  Effect.gen(function*() {
+    const spans: Array<Tracer.NativeSpan> = [];
+    const tracer = Tracer.make({
+      span: (options) => {
+        const span = new Tracer.NativeSpan(options);
+        spans.push(span);
+        return span;
+      },
+    });
+    const tool = yield* makeFake(
+      ToolTest.handle({ stdout: "PRIVATE_STDOUT", exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)) }),
+    );
+    yield* tool.run(command, tool.text({ maxBytes: 32 })).pipe(Effect.withTracer(tracer), Effect.flip);
+    assert.deepStrictEqual(spans.map((span) => span.name), ["Tool.run"]);
+    for (const span of spans) {
+      assert.strictEqual(span.status._tag, "Ended");
+      assert.notInclude(JSON.stringify(Array.from(span.attributes)), "credential");
+      assert.notInclude(JSON.stringify(Array.from(span.attributes)), "PRIVATE_STDOUT");
+      const status = span.status;
+      assert.isTrue(status._tag === "Ended" && Exit.isFailure(status.exit));
+      if (status._tag === "Ended" && Exit.isFailure(status.exit)) {
+        assert.notInclude(Cause.pretty(status.exit.cause), "credential");
+        assert.notInclude(Cause.pretty(status.exit.cause), "PRIVATE_STDOUT");
+      }
+    }
+  }));
+
+it.effect("native tracing covers stream consumption and the caller's session scope", () =>
+  Effect.gen(function*() {
+    const spans: Array<Tracer.NativeSpan> = [];
+    const tracer = Tracer.make({
+      span: (options) => {
+        const span = new Tracer.NativeSpan(options);
+        spans.push(span);
+        return span;
+      },
+    });
+    const started = yield* Deferred.make<void>();
+    const exited = yield* Deferred.make<ChildProcessSpawner.ExitCode>();
+    const tool = yield* makeFake(ToolTest.handle({
+      stdout: Stream.fromEffect(Deferred.succeed(started, undefined).pipe(Effect.as(bytes("event")))),
+      exitCode: Deferred.await(exited),
+    }));
+    const session = Effect.fnUntraced(function*(request: ChildProcess.Command) {
+      return yield* tool.session(request);
+    }, Effect.withSpanScoped("Binding.session"));
+    yield* Effect.scoped(Effect.gen(function*() {
+      yield* session(command);
+      assert.strictEqual(spans.find((span) => span.name === "Binding.session")?.status._tag, "Started");
+    })).pipe(Effect.withTracer(tracer));
+    assert.strictEqual(spans.find((span) => span.name === "Binding.session")?.status._tag, "Ended");
+    const events = tool.stream(command, (stdout) => stdout).pipe(Stream.withSpan("Binding.events"));
+    assert.strictEqual(spans.filter((span) => span.name === "Binding.events").length, 0);
+    const fiber = yield* Effect.forkChild(Stream.runDrain(events).pipe(Effect.withTracer(tracer)));
+    yield* Deferred.await(started);
+    assert.strictEqual(spans.find((span) => span.name === "Binding.events")?.status._tag, "Started");
+    yield* Deferred.succeed(exited, ChildProcessSpawner.ExitCode(0));
+    yield* Fiber.join(fiber);
+    assert.strictEqual(spans.find((span) => span.name === "Binding.events")?.status._tag, "Ended");
+  }));
 
 it.effect("sanitizes every native handle failure, including Deno syscall and reref", () =>
   Effect.gen(function*() {
