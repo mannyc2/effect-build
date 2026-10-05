@@ -47,6 +47,16 @@ observation, pipes, Windows system environment supplementation, and cleanup foll
 platform. The kernel sanitizes process errors and bounds diagnostics; it preserves native
 session handle types and does not introduce a parallel process runtime.
 
+With the Node backend, a pipeline exposes the last child's exit code, stdout, stderr, and
+extra descriptors, plus the first child's stdin. Only the last child's status is checked.
+Earlier stderr must be inherited, ignored, or explicitly wired; the returned handle cannot
+drain it. An accepted final exit code does not establish that every stage succeeded.
+
+Scope close follows the backend's termination policy and does not recover unread output.
+Node's process finalizer and pipeline kill operation suppress native kill failures; `Tool`
+cannot surface failures already discarded by the backend. Configure the command's
+`killSignal` and `forceKillAfter` for the process's shutdown needs.
+
 Native multi-input applications must observe process exit alongside persistent writes.
 The ffmpeg example documents that pattern. Additional-descriptor reset handling and stale
 writes to an exited child depend on the backend's behavior; downstream applications carrying

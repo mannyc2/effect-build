@@ -171,7 +171,8 @@ for the APIs you use.
   removed.
 - **Secrets are `Redacted` input fields.** They are revealed only when argv or env is rendered, and never appear in
   spans, errors or logs.
-- **An opt-in digest is computed once and memoized.** A persisted record is read back through the Schema that wrote it,
+- **Digest reads are fresh; callers choose memoization.** Use `Effect.cached` for the chosen output and lifetime;
+  verification always reads current bytes. A persisted record is read back through the Schema that wrote it,
   declared once with `Schema.toCodecJson`.
 
 ## Tests
