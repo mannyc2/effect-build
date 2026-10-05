@@ -8,17 +8,29 @@ const native = Sbom.layer({ executable: process.env.EFFECT_BUILD_SYFT_BIN }).pip
 );
 
 it.live(
-  "real Syft discovers an npm package and writes the requested SPDX format",
+  "real Syft discovers a locked npm package and writes the requested SPDX format",
   () =>
     Layer.build(native).pipe(Effect.flatMap((context) =>
       Effect.gen(function*() {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-syft-" });
-        yield* fs.makeDirectory(path.join(root, "node_modules", "effect"), { recursive: true });
         yield* fs.writeFileString(
-          path.join(root, "node_modules", "effect", "package.json"),
-          '{"name":"effect","version":"4.0.0","license":"MIT"}',
+          path.join(root, "package.json"),
+          JSON.stringify({ name: "fixture", version: "1.0.0", dependencies: { effect: "4.0.0" } }),
+        );
+        yield* fs.writeFileString(
+          path.join(root, "package-lock.json"),
+          JSON.stringify({
+            name: "fixture",
+            version: "1.0.0",
+            lockfileVersion: 3,
+            requires: true,
+            packages: {
+              "": { name: "fixture", version: "1.0.0", dependencies: { effect: "4.0.0" } },
+              "node_modules/effect": { version: "4.0.0", license: "MIT" },
+            },
+          }),
         );
         const sbom = yield* Sbom;
         const input = { source: `dir:${root}`, env: { SYFT_CHECK_FOR_APP_UPDATE: "false" }, extendEnv: true };

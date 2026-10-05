@@ -1,7 +1,7 @@
 import type { Config } from "effect";
 import { Config as C, Context, Effect, Layer, Path, Redacted, Schema, Sink } from "effect";
-import { ChildProcess } from "effect/process";
 import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
 export const Credential = Schema.Union([
   Schema.TaggedStruct("Pfx", {
@@ -47,14 +47,20 @@ const credentials = (credential: Credential): {
   switch (credential._tag) {
     case "Pfx":
       return {
-        args: ["/f", credential.file, ...(credential.password === undefined ? [] : ["/p", Redacted.value(credential.password)])],
+        args: [
+          "/f",
+          credential.file,
+          ...(credential.password === undefined ? [] : ["/p", Redacted.value(credential.password)]),
+        ],
         redact: credential.password === undefined ? [] : [credential.password],
       };
     case "Store":
       return {
         args: [
           ...(credential.machine === true ? ["/sm"] : []),
-          ...(credential.name === undefined ? [] : ["/s", credential.name]), "/sha1", credential.thumbprint,
+          ...(credential.name === undefined ? [] : ["/s", credential.name]),
+          "/sha1",
+          credential.thumbprint,
         ],
         redact: [],
       };
@@ -82,25 +88,40 @@ export class SignTool extends Context.Service<SignTool>()("effect-build-windows/
       sign: Effect.fn("SignTool.sign")(function*(input: SignInput) {
         const credential = credentials(input.credential);
         const destination = path.resolve(input.cwd ?? ".", input.path);
-        yield* tool.run(ChildProcess.make(tool.executable, [
-          "sign", ...(input.extraArgs ?? []), "/fd", "SHA256",
-          ...(input.timestampUrl === undefined ? [] : ["/tr", input.timestampUrl, "/td", "SHA256"]),
-          ...(input.description === undefined ? [] : ["/d", input.description]),
-          ...credential.args, destination,
-        ], {
-          cwd: input.cwd,
-          env: credential.env === undefined ? input.env : { ...input.env, ...credential.env },
-          extendEnv: credential.env === undefined ? input.extendEnv : (input.extendEnv ?? true),
-          stdin: "ignore",
-        }), Sink.drain, {
-          redact: credential.redact,
-        });
+        yield* tool.run(
+          ChildProcess.make(tool.executable, [
+            "sign",
+            ...(input.extraArgs ?? []),
+            "/fd",
+            "SHA256",
+            ...(input.timestampUrl === undefined ? [] : ["/tr", input.timestampUrl, "/td", "SHA256"]),
+            ...(input.description === undefined ? [] : ["/d", input.description]),
+            ...credential.args,
+            destination,
+          ], {
+            cwd: input.cwd,
+            env: credential.env === undefined ? input.env : { ...input.env, ...credential.env },
+            extendEnv: credential.env === undefined ? input.extendEnv : (input.extendEnv ?? true),
+            stdin: "ignore",
+          }),
+          Sink.drain,
+          {
+            redact: credential.redact,
+          },
+        );
         return destination;
       }),
       verify: Effect.fn("SignTool.verify")(function*(input: VerifyInput) {
-        yield* tool.run(ChildProcess.make(tool.executable, [
-          "verify", ...(input.extraArgs ?? []), "/pa", "/all", path.resolve(input.cwd ?? ".", input.path),
-        ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }), Sink.drain);
+        yield* tool.run(
+          ChildProcess.make(tool.executable, [
+            "verify",
+            ...(input.extraArgs ?? []),
+            "/pa",
+            "/all",
+            path.resolve(input.cwd ?? ".", input.path),
+          ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }),
+          Sink.drain,
+        );
       }),
     };
   }),

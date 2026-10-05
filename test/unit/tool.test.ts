@@ -310,19 +310,27 @@ describe("construction", () => {
       assert.strictEqual(error._tag === "ToolError" ? error.reason._tag : "", "NotFound");
     }));
 
-  it.effect("warns once on a timed-out probe, uses ignored stdin, and returns the tool", () =>
+  it.effect("releases a timed-out probe at ten seconds, warns safely once, and returns the tool", () =>
     Effect.gen(function*() {
       const started = yield* Deferred.make<void>();
+      const released = yield* Ref.make(0);
       const warnings: Array<string> = [];
       const logger = Logger.make((entry) => {
         if (entry.logLevel === "Warn") warnings.push(String(entry.message));
       });
       const spawn = (request: ChildProcess.Command) =>
-        Effect.gen(function*() {
-          assert.strictEqual(request._tag === "StandardCommand" ? request.options.stdin : "", "ignore");
-          yield* Deferred.succeed(started, undefined);
-          return ToolTest.handle({ exitCode: Effect.never });
-        });
+        Effect.acquireRelease(
+          Effect.gen(function*() {
+            assert.strictEqual(request._tag === "StandardCommand" ? request.options.stdin : "", "ignore");
+            yield* Deferred.succeed(started, undefined);
+            return ToolTest.handle({
+              stdout: "PRIVATE_VERSION_OUTPUT",
+              stderr: "PRIVATE_VERSION_DIAGNOSTIC",
+              exitCode: Effect.never,
+            });
+          }),
+          () => Ref.update(released, (count) => count + 1),
+        );
       const fiber = yield* Effect.forkChild(
         Tool.make("fixture", {
           executable: "fixture",
@@ -330,15 +338,26 @@ describe("construction", () => {
         }).pipe(
           // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This test construction provides its complete fake platform once.
           Effect.provide(
-            Layer.mergeAll(ToolTest.layer(spawn), FileSystem.layerNoop({}), Path.layer, Logger.layer([logger])),
+            Layer.mergeAll(
+              Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, ChildProcessSpawner.make(spawn)),
+              FileSystem.layerNoop({}),
+              Path.layer,
+              Logger.layer([logger]),
+            ),
           ),
         ),
       );
       yield* Deferred.await(started);
-      yield* TestClock.adjust("10 seconds");
+      yield* TestClock.adjust("9999 millis");
+      assert.isUndefined(fiber.pollUnsafe());
+      assert.strictEqual(yield* Ref.get(released), 0);
+      assert.deepStrictEqual(warnings, []);
+      yield* TestClock.adjust("1 millis");
       const tool = yield* Fiber.join(fiber);
       assert.strictEqual(tool.name, "fixture");
+      assert.strictEqual(yield* Ref.get(released), 1);
       assert.strictEqual(warnings.length, 1);
+      assert.notInclude(warnings.join(" "), "PRIVATE_VERSION");
     }));
 
   it.effect("probes once when selected, warns only when needed, and logs no raw output", () =>

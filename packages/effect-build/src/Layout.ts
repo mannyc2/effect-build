@@ -31,7 +31,9 @@ const pathIssue = (path: string): string | undefined => {
       return "control characters and Windows-reserved characters are forbidden";
     }
     if (/[ .]$/u.test(part)) return "segments cannot end with a dot or space";
-    if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(part)) return "Windows device names are forbidden";
+    if (/^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(part)) {
+      return "Windows device names are forbidden";
+    }
   }
   return undefined;
 };

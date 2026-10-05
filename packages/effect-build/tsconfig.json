@@ -5,9 +5,7 @@
     "outDir": "dist",
     "tsBuildInfoFile": "../../node_modules/.cache/effect-build.tsbuildinfo",
     "resolveJsonModule": true,
-    "types": [
-      "node"
-    ]
+    "types": []
   },
   "include": [
     "src/**/*.ts",

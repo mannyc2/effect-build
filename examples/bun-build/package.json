@@ -1,0 +1,14 @@
+{
+  "name": "@effect-build/example-bun-build",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node src/main.ts"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0",
+    "effect": "4.0.0",
+    "effect-build": "workspace:^",
+    "effect-build-bun": "workspace:^"
+  }
+}

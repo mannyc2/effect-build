@@ -1,133 +1,121 @@
-import { Context, Effect, FileSystem, Path, Schema } from "effect";
-import { ChildProcessSpawner } from "effect/process";
-import { Artifact, Commit, Executable, Tool } from "effect-build";
-import { Buffer } from "node:buffer";
-import { inject } from "postject";
+import type { Config } from "effect";
+import { Config as C, Context, Effect, FileSystem, Layer, Path, Schema, Sink } from "effect";
+import { Atomic, Executable, Tool } from "effect-build";
+import { ChildProcess } from "effect/process";
 
-export class NodeSea extends Context.Service<NodeSea, {
-  readonly tool: Tool.Resolved;
-  readonly base: Tool.Resolved;
-}>()("effect-build-node-sea/NodeSea") {}
-/** postject rejections are not always Error instances; a message getter must still render them. */
-const describe = (cause: unknown): string => {
-  const message: unknown = typeof cause === "object" && cause !== null ? Reflect.get(cause, "message") : undefined;
-  if (typeof message === "string" && message.length > 0) return message;
-  try {
-    return String(cause);
-  } catch {
-    return Object.prototype.toString.call(cause);
-  }
-};
-export class Failed extends Schema.TaggedError<Failed>()("NodeSeaFailed", {
-  operation: Schema.String,
-  cause: Schema.Unknown,
+/** Failure to prepare or clean the native Node SEA configuration. */
+export class NodeSeaError extends Schema.TaggedError<NodeSeaError>()("NodeSeaError", {
+  step: Schema.Literals(["prepare", "cleanup"]),
+  cause: Schema.Defect(),
 }) {
   override get message(): string {
-    return `${this.operation} failed: ${describe(this.cause)}`;
+    return `Node SEA ${this.step} failed`;
   }
 }
-interface Options { readonly baseExecutable?: string | undefined }
-type Fs = FileSystem.FileSystem | Path.Path;
-type Env = Fs | ChildProcessSpawner.ChildProcessSpawner;
-const parse = Tool.versionPattern(/^v(\S+)/u);
-const nodeVersion = { parse, supported: ">=22.0.0 <27.0.0", tested: ["22.0.0", "26.7.0"] };
-const provider = Tool.provider<NodeSea, { readonly base: Tool.Resolved }, Options>(NodeSea, {
-  name: "node", version: nodeVersion,
-  requirements: { env: ["NODE_OPTIONS", "NODE_PATH", "HOME", "DEVELOPER_DIR", "TMPDIR"], network: false, services: [],
-    detail: "Darwin output uses xcrun codesign for an ad hoc signature; builder and base must have the same version." },
-  extend: (tool, options) => Effect.gen(function*() {
-    const base = options.baseExecutable === undefined ? tool : yield* Tool.resolve({
-      name: "node", executable: options.baseExecutable, parseVersion: (completion, path) => parse({ completion, path }),
-    }).pipe(Tool.requireVersion(options.version ?? nodeVersion.supported));
-    if (tool.version !== base.version) return yield* new Tool.VersionUnsupported({
-      tool: tool.name, version: tool.version, supported: base.version, operation: "NodeSea.layer",
-      reason: `builder ${tool.version} and base ${base.version} must have the same Node version`,
-    });
-    return { base };
-  }),
-});
-export const { name, supported, tested, constraints, requirements, resolved, testLayer } = provider;
-export const layer = (options: Tool.LayerOptions & Options = {}) => provider.layer({ ...options, executable: options.executable ?? process.execPath });
 
-export interface Input extends Commit.ProducerOptions, Tool.EnvironmentOptions {
-  /** One bundled CommonJS script. Its require() can load Node built-ins. */
-  readonly main: Artifact.Regular;
-  readonly assets?: Readonly<Record<string, Artifact.Regular>> | undefined;
+export interface Options {
+  readonly executable?: string | undefined;
+  /** Base executable passed to Node's native assembly. Defaults to the resolved builder. */
+  readonly baseExecutable?: string | undefined;
+}
+
+/** Node assembles an already-bundled source file; bundling stays with the caller. */
+export interface AssembleInput {
+  readonly main: string;
+  readonly mainFormat?: "commonjs" | "module" | undefined;
   readonly outfile: string;
+  readonly assets?: Readonly<Record<string, string>> | undefined;
   readonly cwd?: string | undefined;
+  readonly atomic?: boolean | undefined;
   readonly disableExperimentalSEAWarning?: boolean | undefined;
 }
-export type AssembleError =
-  | Tool.InputInvalid | Failed | Tool.NotFound | Tool.ProbeFailed | Tool.Failed | Tool.SpawnFailed
-  | Artifact.ArtifactError | Executable.InspectError | Executable.TargetMismatch | Commit.CommitError;
-const invalid = (reason: string) => new Tool.InputInvalid({ operation: "NodeSea.assemble", reason });
-export const assemble = Effect.fn("NodeSea.assemble")((input: Input): Effect.Effect<Artifact.Executable, AssembleError, NodeSea | Env> =>
-  Effect.scoped(Effect.gen(function*() {
-    const issue = Tool.argumentIssue(input.outfile);
-    if (issue !== undefined) return yield* invalid(`outfile ${issue}`);
-    if (input.cwd?.includes("\0")) return yield* invalid("cwd must contain no NUL");
-    const { tool, base } = yield* NodeSea;
-    // The output is the base with one resource added, so its target is the base's; the host may be running it under emulation.
-    const facts = yield* Executable.inspect(base.path);
-    const target = yield* Executable.resolveTarget(base.path, facts);
-    // Windows launches .EXE and .exe alike, and the base is copied under the caller's exact name.
-    if (facts.os === "windows" && !input.outfile.toLowerCase().endsWith(".exe")) {
-      return yield* invalid("Windows outfile must end in .exe");
-    }
-    const fs = yield* FileSystem.FileSystem;
-    const p = yield* Path.Path;
-    const cwd = p.resolve(input.cwd ?? "");
-    const outfile = p.resolve(cwd, input.outfile);
-    // Inputs and the blob always live separately, including when atomic output is disabled.
-    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-sea-" }).pipe(Effect.mapError(Artifact.ioError(outfile, "write")));
-    const main = p.join(temporary, "main.cjs");
-    yield* Artifact.copy(input.main, main);
-    yield* Tool.run(tool, ["--check", main], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
-    const assets: [string, string][] = [];
-    for (const [key, artifact] of Object.entries(input.assets ?? {})) {
-      const path = p.join(temporary, `asset-${assets.length}`);
-      yield* Artifact.copy(artifact, path);
-      assets.push([key, path]);
-    }
-    const blob = p.join(temporary, "sea.blob");
-    const config = p.join(temporary, "sea-config.json");
-    yield* fs.writeFileString(config, JSON.stringify({
-      main,
-      output: blob,
-      assets: Object.fromEntries(assets),
-      disableExperimentalSEAWarning: input.disableExperimentalSEAWarning ?? false,
-      useSnapshot: false,
-      useCodeCache: false,
-    })).pipe(Effect.mapError(Artifact.ioError(config, "write")));
-    yield* Tool.run(tool, ["--experimental-sea-config", config], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd });
-    const contents = yield* fs.readFile(blob).pipe(Effect.mapError(Artifact.ioError(blob)));
-    const signing = facts.format === "mach-o" ? yield* Tool.resolve({
-      name: "xcrun",
-      env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv,
-      parseVersion: (completion) => {
-        const major = /^xcrun version (\d+)\./u.exec(new TextDecoder().decode(completion.stdout))?.[1];
-        return major === undefined ? undefined : `${major}.0.0`;
+
+const SeaConfig = Schema.fromJsonString(Schema.Struct({
+  main: Schema.String,
+  mainFormat: Schema.Literals(["commonjs", "module"]),
+  executable: Schema.String,
+  output: Schema.String,
+  assets: Schema.Record(Schema.String, Schema.String),
+  useSnapshot: Schema.Boolean,
+  useCodeCache: Schema.Boolean,
+  disableExperimentalSEAWarning: Schema.Boolean,
+}));
+
+/** Direct native `node --build-sea` assembly, without an injection library. */
+export class NodeSea extends Context.Service<NodeSea>()("effect-build-node-sea/NodeSea", {
+  make: Effect.fn("NodeSea.make")(function*(options: Options = {}) {
+    const tool = yield* Tool.make("node", {
+      executable: options.executable,
+      version: {
+        args: ["--version"],
+        tested: "26.7.x",
+        isTested: (output) => output.trim().startsWith("v26.7."),
       },
-    }) : undefined;
-    const produce = (out: string) => Effect.gen(function*() {
-      // Native copy preserves same-file and hardlink aliases without truncating the base.
-      yield* fs.copyFile(base.path, out).pipe(Effect.mapError((error) => new Artifact.ArtifactError({
-        path: out,
-        reason: "copy-failed",
-        detail: `copy ${base.path} -> ${out}: ${String(error)}`,
-      })));
-      yield* fs.chmod(out, 0o755).pipe(Effect.mapError(Artifact.ioError(out, "write")));
-      if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--remove-signature", out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv });
-      // postject cannot cancel: finish its writes before a scope removes temporary output.
-      yield* Effect.uninterruptible(Effect.tryPromise({
-        try: () => inject(out, "NODE_SEA_BLOB", Buffer.from(contents), {
-          sentinelFuse: "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2",
-          machoSegmentName: "NODE_SEA",
-        }),
-        catch: (cause) => new Failed({ operation: "inject", cause }),
-      }));
-      if (signing !== undefined) yield* Tool.run(signing, ["codesign", "--sign", "-", out], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv });
-      return yield* Artifact.executable(out, Tool.producedBy(tool), target);
     });
-    return yield* Commit.output(outfile, produce, input);
-  })));
+    const base = options.baseExecutable === undefined
+      ? tool.executable
+      : (yield* Tool.make("node", { executable: options.baseExecutable })).executable;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    const prepareFailure = (cause: unknown) => NodeSeaError.make({ step: "prepare", cause });
+
+    const assemble = Effect.fn("NodeSea.assemble")(
+      function*(input: AssembleInput) {
+        const cwd = path.resolve(input.cwd ?? ".");
+        const requested = path.resolve(cwd, input.outfile);
+        const outfile = path.sep === "\\" && !requested.toLowerCase().endsWith(".exe")
+          ? `${requested}.exe`
+          : requested;
+        const main = path.resolve(cwd, input.main);
+        const produce = Effect.fnUntraced(function*(output: string) {
+          yield* fs.makeDirectory(path.dirname(output), { recursive: true }).pipe(Effect.mapError(prepareFailure));
+          return yield* Effect.acquireUseRelease(
+            fs.makeTempDirectory({ directory: path.dirname(output), prefix: ".node-sea-" }).pipe(
+              Effect.mapError(prepareFailure),
+            ),
+            Effect.fnUntraced(function*(directory: string) {
+              yield* tool.run(
+                ChildProcess.make(tool.executable, ["--check", main], { cwd, stdin: "ignore" }),
+                Sink.drain,
+              );
+              const config = yield* Schema.encodeEffect(SeaConfig)({
+                main,
+                mainFormat: input.mainFormat ?? "commonjs",
+                executable: base,
+                output,
+                assets: Object.fromEntries(
+                  Object.entries(input.assets ?? {}).map(([name, file]) => [name, path.resolve(cwd, file)]),
+                ),
+                useSnapshot: false,
+                useCodeCache: false,
+                disableExperimentalSEAWarning: input.disableExperimentalSEAWarning ?? false,
+              }).pipe(Effect.mapError(prepareFailure));
+              const configFile = path.join(directory, "sea-config.json");
+              yield* fs.writeFileString(configFile, config).pipe(Effect.mapError(prepareFailure));
+              yield* tool.run(
+                ChildProcess.make(tool.executable, ["--build-sea", configFile], { cwd, stdin: "ignore" }),
+                Sink.drain,
+              );
+            }),
+            (directory) =>
+              fs.remove(directory, { recursive: true }).pipe(
+                Effect.mapError((cause) => NodeSeaError.make({ step: "cleanup", cause })),
+              ),
+          );
+        });
+        if (input.atomic === true) {
+          return yield* Atomic.file(outfile, produce, { check: Executable.checkNative });
+        }
+        yield* produce(outfile);
+        return outfile;
+      },
+      Effect.provideContext(platform),
+    );
+    return { assemble };
+  }),
+}) {
+  static readonly layer = (options?: Options) => Layer.effect(this, this.make(options));
+  static readonly layerConfig = (options: Config.Wrap<Options>) =>
+    Layer.effect(this, Effect.flatMap(C.unwrap(options), (values) => this.make(values)));
+}

@@ -1,9 +1,9 @@
 import type { Config, FileSystem } from "effect";
 import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
-import { ChildProcess } from "effect/process";
 import * as Atomic from "effect-build/Atomic";
 import * as Executable from "effect-build/Executable";
 import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
 const Common = {
   entrypoints: Schema.NonEmptyArray(Schema.String),
@@ -55,12 +55,15 @@ export class Bun extends Context.Service<Bun>()("effect-build-bun/Bun", {
     const path = yield* Path.Path;
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     const bun = (input: BuildInput | CompileInput, args: ReadonlyArray<string>) =>
-      tool.run(ChildProcess.make(tool.executable, ["build", ...flags(input), ...args, "--", ...input.entrypoints], {
-        cwd: input.cwd,
-        env: input.env,
-        extendEnv: input.extendEnv,
-        stdin: "ignore",
-      }), Sink.drain);
+      tool.run(
+        ChildProcess.make(tool.executable, ["build", ...flags(input), ...args, "--", ...input.entrypoints], {
+          cwd: input.cwd,
+          env: input.env,
+          extendEnv: input.extendEnv,
+          stdin: "ignore",
+        }),
+        Sink.drain,
+      );
     return {
       /** Bundles into the absolute output directory. Atomic publication is opt-in. */
       build: Effect.fn("Bun.build")(function*(input: BuildInput) {

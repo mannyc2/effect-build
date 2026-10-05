@@ -1,8 +1,8 @@
 import type { Config, FileSystem } from "effect";
 import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
-import { ChildProcess } from "effect/process";
 import * as Atomic from "effect-build/Atomic";
 import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
 export const BuildInput = Schema.Struct({
   project: Schema.String,
@@ -29,9 +29,18 @@ export class Python extends Context.Service<Python>()("effect-build-python/Pytho
       build: Effect.fn("Python.build")(function*(input: BuildInput) {
         const project = path.resolve(input.cwd ?? ".", input.project);
         const outdir = path.resolve(input.cwd ?? ".", input.outdir);
-        const produce = (out: string) => tool.run(ChildProcess.make(tool.executable, [
-          "build", ...(input.extraArgs ?? []), project, "--out-dir", out, "--no-create-gitignore",
-        ], { cwd: project, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }), Sink.drain);
+        const produce = (out: string) =>
+          tool.run(
+            ChildProcess.make(tool.executable, [
+              "build",
+              ...(input.extraArgs ?? []),
+              project,
+              "--out-dir",
+              out,
+              "--no-create-gitignore",
+            ], { cwd: project, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }),
+            Sink.drain,
+          );
         if (input.atomic === true) return yield* Atomic.directory(outdir, produce);
         yield* produce(outdir);
         return outdir;

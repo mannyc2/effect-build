@@ -1,7 +1,7 @@
 import type { Config } from "effect";
 import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
-import { ChildProcess } from "effect/process";
 import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
 const Common = {
   path: Schema.String,
@@ -33,27 +33,39 @@ export class Codesign extends Context.Service<Codesign>()("effect-build-apple/Co
     const tool = yield* Tool.make("codesign", options);
     const path = yield* Path.Path;
     const run = (input: SignInput | VerifyInput, args: ReadonlyArray<string>) =>
-      tool.run(ChildProcess.make(tool.executable, args, {
-        cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore",
-      }), Sink.drain);
+      tool.run(
+        ChildProcess.make(tool.executable, args, {
+          cwd: input.cwd,
+          env: input.env,
+          extendEnv: input.extendEnv,
+          stdin: "ignore",
+        }),
+        Sink.drain,
+      );
     return {
       /** Signs a path in place. Nested code ordering belongs to the application. */
       sign: Effect.fn("Codesign.sign")(function*(input: SignInput) {
         const destination = path.resolve(input.cwd ?? ".", input.path);
         yield* run(input, [
-          ...(input.extraArgs ?? []), "--sign", input.identity,
+          ...(input.extraArgs ?? []),
+          "--sign",
+          input.identity,
           ...(input.force === true ? ["--force"] : []),
           ...(input.hardenedRuntime === true ? ["--options", "runtime"] : []),
           ...(input.timestamp === undefined ? [] : [input.timestamp ? "--timestamp" : "--timestamp=none"]),
           ...(input.entitlements === undefined ? [] : ["--entitlements", input.entitlements]),
-          "--", destination,
+          "--",
+          destination,
         ]);
         return destination;
       }),
       verify: Effect.fn("Codesign.verify")(function*(input: VerifyInput) {
         yield* run(input, [
-          ...(input.extraArgs ?? []), "--verify", ...(input.strict === true ? ["--strict"] : []),
-          "--", path.resolve(input.cwd ?? ".", input.path),
+          ...(input.extraArgs ?? []),
+          "--verify",
+          ...(input.strict === true ? ["--strict"] : []),
+          "--",
+          path.resolve(input.cwd ?? ".", input.path),
         ]);
       }),
     };

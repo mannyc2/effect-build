@@ -1,7 +1,7 @@
 import type { Config } from "effect";
 import { Config as C, Context, Effect, Layer, Redacted, Schema } from "effect";
-import { ChildProcess } from "effect/process";
 import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
 export const Credential = Schema.Union([
   Schema.TaggedStruct("Keychain", {
@@ -52,22 +52,41 @@ export const Status = Schema.Struct({
 });
 export type Status = typeof Status.Type;
 
-const credentials = (credential: Credential): { readonly args: ReadonlyArray<string>; readonly redact: ReadonlyArray<Redacted.Redacted<string>> } => {
+const credentials = (
+  credential: Credential,
+): { readonly args: ReadonlyArray<string>; readonly redact: ReadonlyArray<Redacted.Redacted<string>> } => {
   switch (credential._tag) {
     case "Keychain":
       return {
-        args: ["--keychain-profile", credential.profile, ...(credential.keychain === undefined ? [] : ["--keychain", credential.keychain])],
+        args: [
+          "--keychain-profile",
+          credential.profile,
+          ...(credential.keychain === undefined ? [] : ["--keychain", credential.keychain]),
+        ],
         redact: [],
       };
     case "ApiKey":
       return {
-        args: ["--key", credential.keyFile, "--key-id", credential.keyId, ...(credential.issuer === undefined ? [] : ["--issuer", credential.issuer])],
+        args: [
+          "--key",
+          credential.keyFile,
+          "--key-id",
+          credential.keyId,
+          ...(credential.issuer === undefined ? [] : ["--issuer", credential.issuer]),
+        ],
         redact: [],
       };
     case "AppleId":
       // notarytool supports native password flags, not altool's environment references.
       return {
-        args: ["--apple-id", credential.appleId, "--team-id", credential.teamId, "--password", Redacted.value(credential.password)],
+        args: [
+          "--apple-id",
+          credential.appleId,
+          "--team-id",
+          credential.teamId,
+          "--password",
+          Redacted.value(credential.password),
+        ],
         redact: [credential.password],
       };
   }
@@ -82,24 +101,38 @@ export class Notarytool extends Context.Service<Notarytool>()("effect-build-appl
   make: Effect.fn("Notarytool.make")(function*(options: Options = {}) {
     const tool = yield* Tool.make(options.executable === undefined ? "xcrun" : "notarytool", options);
     const prefix = options.executable === undefined ? ["notarytool"] : [];
-    const json = Effect.fnUntraced(function*(input: SubmitInput | LookupInput, args: ReadonlyArray<string>, outputFormat: boolean = true) {
-      const credential = credentials(input.credential);
-      const output = yield* tool.run(ChildProcess.make(tool.executable, [
-        ...prefix, ...args, ...(input.extraArgs ?? []), ...credential.args, ...(outputFormat ? ["--output-format", "json"] : []),
-      ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }), tool.text({ maxBytes: 1024 * 1024 }), {
-        redact: credential.redact,
-      });
-      return output;
-    });
+    const json = Effect.fnUntraced(
+      function*(input: SubmitInput | LookupInput, args: ReadonlyArray<string>, outputFormat: boolean = true) {
+        const credential = credentials(input.credential);
+        const output = yield* tool.run(
+          ChildProcess.make(tool.executable, [
+            ...prefix,
+            ...args,
+            ...(input.extraArgs ?? []),
+            ...credential.args,
+            ...(outputFormat ? ["--output-format", "json"] : []),
+          ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }),
+          tool.text({ maxBytes: 1024 * 1024 }),
+          {
+            redact: credential.redact,
+          },
+        );
+        return output;
+      },
+    );
     return {
       /** Uploads once and returns the native submission ID/status without waiting. */
       submit: Effect.fn("Notarytool.submit")(function*(input: SubmitInput) {
         return yield* tool.decode(Schema.fromJsonString(Submission))(yield* json(input, ["submit", input.path]));
       }),
       wait: Effect.fn("Notarytool.wait")(function*(input: WaitInput) {
-        return yield* tool.decode(Schema.fromJsonString(Status))(yield* json(input, [
-          "wait", input.id, ...(input.timeout === undefined ? [] : ["--timeout", input.timeout]),
-        ]));
+        return yield* tool.decode(Schema.fromJsonString(Status))(
+          yield* json(input, [
+            "wait",
+            input.id,
+            ...(input.timeout === undefined ? [] : ["--timeout", input.timeout]),
+          ]),
+        );
       }),
       info: Effect.fn("Notarytool.info")(function*(input: LookupInput) {
         return yield* tool.decode(Schema.fromJsonString(Status))(yield* json(input, ["info", input.id]));

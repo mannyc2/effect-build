@@ -6,24 +6,9 @@ document usage, and this file doesn't repeat them.
 
 ## Design
 
-- **A tool is declared once.** The declaration names the executable and its commands. Each command has:
-  - an input Schema;
-  - a rendering of that input into argv, env and stdin;
-  - an output protocol.
-
-  From the declaration come a `Context.Service` with typed methods, a layer that resolves the executable once, a test
-  layer with typed handlers, and spans.
-- **Effect's HttpApi is the reference design.** The hypothesis is that its parts map to tools as follows:
-  - definitions, groups and endpoints → tools and commands;
-  - schemas → output protocols;
-  - errors → failures;
-  - middleware → opt-in features;
-  - security → credentials;
-  - builders → fakes;
-  - clients → the derived service.
-
-  Where a tool's concept matches, copy HttpApi's structure and naming. A departure is deliberate, and its reason is in
-  the doc comment of the API that departs.
+- **A binding is a `Context.Service`.** Its `make` resolves the executable with `Tool.make` and returns `Effect.fn`
+  methods. Its inferred service shape is the definition test doubles, spans, and docs follow. The platform's own
+  `NodeChildProcessSpawner` layer is the model: capture what a method needs at construction.
 - **Three modes:**
   - **run** returns decoded output;
   - **stream** returns decoded events;
@@ -52,8 +37,7 @@ document usage, and this file doesn't repeat them.
   - There are no `utils/`, `common/`, `shared/` or layer folders: they hide who owns what.
   - A type lives beside the code that produces it.
 - Every other package wraps one tool or toolchain and depends on core only.
-- `effect-build/testing` is the public test kit: a fake spawner that records argv and replays scripted output, and the
-  test layers. There are no private helper packages for tests.
+- `effect-build/testing` is the public test kit: thin defaults over the platform's spawner and handle constructors. There are no private helper packages for tests.
 - Tests go in two places:
   - `test/unit/` holds files named after the module or binding they exercise. They use the fake spawner and no real
     tools.
@@ -67,18 +51,17 @@ document usage, and this file doesn't repeat them.
 - **Copy Effect's precedent.** When Effect already has a shape for the problem, use it rather than inventing a parallel
   one:
 
-  | Concern                                                | Use                           |
-  | ------------------------------------------------------ | ----------------------------- |
-  | Declared interfaces (the model for this whole package) | `HttpApi`                     |
-  | Capabilities and how they're built                     | `Context.Service` and `Layer` |
-  | Data                                                   | `Schema`                      |
-  | Sequences                                              | `Stream`                      |
-  | Sinks of bytes                                         | `Sink`                        |
-  | Lifetimes                                              | `Scope`                       |
-  | Retry and recurrence                                   | `Schedule`                    |
-  | Settings and secrets                                   | `Config` and `Redacted`       |
+  | Concern                            | Use                           |
+  | ---------------------------------- | ----------------------------- |
+  | Capabilities and how they're built | `Context.Service` and `Layer` |
+  | Data                               | `Schema`                      |
+  | Sequences                          | `Stream`                      |
+  | Sinks of bytes                     | `Sink`                        |
+  | Lifetimes                          | `Scope`                       |
+  | Retry and recurrence               | `Schedule`                    |
+  | Settings and secrets               | `Config` and `Redacted`       |
 
-  Follow Effect's naming too: `make`, `layer`, `layerConfig`, `layerTest`. If a precedent doesn't fit, say why in the
+  Follow Effect's naming too: `make`, `layer`, and `layerConfig`. If a precedent doesn't fit, say why in the
   pull request.
 - **The simple path is the default; extras are opt-in.** A feature only some callers need is an option, combinator or
   middleware chosen by the binding author or the caller. It never runs on every call, and it never becomes a service
@@ -86,12 +69,10 @@ document usage, and this file doesn't repeat them.
 - **Requirements don't leak.** A binding's methods require no other service, and its layer requires only platform
   services. The one requirement a caller supplies is `Scope`, for a method that returns a resource tied to a lifetime
   (a session), as `ChildProcessSpawner.spawn` does. Don't pass a scope as an argument to avoid it.
-- **A declaration is separate from its implementation.** What a tool and its commands are (Schemas, errors, options) is
-  data that other code can read, test and document. How they run is a layer.
 - **Don't re-model the platform.** A file is a path you read with `FileSystem`, and output bytes are a `Stream`. A
   digest is computed when someone asks for it.
 - **Types carry the information.**
-  - A command's input and output types come from its Schemas.
+  - A method's input and output are typed. Schemas decode actual tool output and configuration boundaries.
   - Its failures are an exact union.
   - No public signature uses `unknown` for a shape you know.
 - **The surface is small.**
@@ -102,20 +83,8 @@ document usage, and this file doesn't repeat them.
 - **Use plain words.** The API settles the final names; keep one word per concept, and list the names in the README.
   Don't use producer, provider, artifact record, admission, durable, adoption, lane or claim.
 
-```ts
-// No: the service holds data, operations are free functions, and every caller supplies the platform
-export class Bun extends Context.Service<Bun, { readonly tool: Tool.Resolved }>()("effect-build-bun/Bun") {}
-export declare const compile: (input: CompileInput) => Effect.Effect<
-  Artifact.Executable,
-  CompileError,
-  Bun | FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
->;
-
-// Yes: the service has methods; its layer resolves the tool and acquires the platform once
-export class Ffprobe extends Context.Service<Ffprobe, {
-  readonly probe: (input: { readonly file: string }) => Effect.Effect<ProbeResult, ToolError>;
-}>()("effect-build-ffmpeg/Ffprobe") {}
-```
+A service resolves its tool in `make`, captures the platform once, and returns the methods callers run. Tests
+substitute the same inferred service shape with `Layer.succeed(Service, Service.of(...))`.
 
 ## It reads on its own
 
@@ -125,7 +94,8 @@ export class Ffprobe extends Context.Service<Ffprobe, {
   - A measured number stays, with what was measured.
 - **One name, one thing.**
   - There is no alias that only dodges a clash.
-  - Nothing is named like an Effect export (`Command`, `Scope`, `Stream`, `Clock`) unless it is that thing.
+  - Nothing is named like a root Effect export or an imported platform module unless it is that thing.
+    `Tool` names a native executable; alias it when importing Effect AI tools in the same file.
   - An `Effect.fn` name matches its function.
 - **Short lines, one statement each.**
   - `bun run format` applies dprint at 120 columns. Until the repository is formatted as a whole, format only the files
@@ -153,7 +123,8 @@ for the APIs you use.
 - **Services.**
   - A service is a `Context.Service` with a `layer` built with `Service.of` beside it, and one concern.
   - Its key names its package and module.
-  - Constructors are `make`, `layer` and `layerConfig`, and a test double is `layerTest`.
+  - Constructors are `make`, `layer` and `layerConfig`. Test doubles are `Layer.succeed(Service, Service.of(...))`;
+    a named `layerTest` exists only when a binding ships a reusable double.
   - A service with one implementation, one caller and no seam folds into its caller.
 - **Functions.**
   - Every public operation is `Effect.fn("Module.operation")` with a stable span name.
@@ -170,7 +141,7 @@ for the APIs you use.
   - Effect code never calls `Date.now()`, `new Date()`, `setTimeout` or `Math.random()`.
 - **Host facts come from `Config` or a `Context.Reference` defaulted at the edge.** That covers the platform, the
   architecture and `PATH`. Library code never reads `process.*`.
-- **Errors are exact.**
+- **Errors are exact.** Reasons are tagged error classes.
   - Expected failures are Schema tagged errors that route on a tagged `reason` (`Effect.catchReason`).
   - Every operation's type names its exact union.
   - Library code fails with `return yield* error`, and never throws.
@@ -178,8 +149,8 @@ for the APIs you use.
   - A bug stays a defect, and `orDie` is never used to hide an expected failure.
 - **Schema classes, errors included, are built from their fields.** Never override a constructor; a derived form gets a
   named static factory. Construct one with `make`, not `new`.
-- **Spans name the tool, the command, its version and the outcome.** argv appears only with `Redacted` values removed.
-  Spans never carry tool output.
+- **Spans name the method (`Binding.method`).** They carry no argv, env, or output. A `ToolError` never stores argv,
+  env, or stdout; its bounded stderr tail removes supplied `Redacted` values before trimming.
 - **Layers are composed, then provided once.** Library code never calls `Effect.provide` with a concrete layer or
   `Effect.run*`; examples and tests provide at their edge.
 - **Configuration is read by the layer that uses it.** An executable override, a version range or a credential comes
@@ -188,8 +159,8 @@ for the APIs you use.
 
 ## Data at the boundaries
 
-- **The Schema comes first.** A command's input, a tool's JSON or line output, and any persisted record each start as a
-  Schema.
+- **Schemas describe decoding boundaries.** Tool output, configuration files, and persisted records each have a Schema.
+  Plain call arguments use TypeScript types.
 - **Decode once, where the data comes in, and as an Effect** (`Schema.decodeUnknownEffect`, `Schema.fromJsonString`).
   - Never use `JSON.parse` followed by shape probes, and library code never uses `*Sync` decoding.
   - There are no `as` casts, `any`, non-null assertions or hand-written type guards; use `Predicate`.
@@ -225,10 +196,13 @@ changes as bindings are added and removed; update it in the same change.
 | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `bun run test:integration:bun`      | `EFFECT_BUILD_BUN`; CI uses 1.3.14 and 1.4.2                                                   |
 | `bun run test:integration:deno`     | `EFFECT_BUILD_DENO`; 2.9.5                                                                     |
-| `bun run test:integration:node-sea` | `EFFECT_BUILD_NODE`; CI uses 22.0.0 and 26.7.0                                                 |
+| `bun run test:integration:node-sea` | `EFFECT_BUILD_NODE`; CI uses 26.7.0                                                            |
 | `bun run test:integration:nfpm`     | `EFFECT_BUILD_NFPM_BIN`; 2.47.0, plus a C compiler and archive tools                           |
 | `bun run test:integration:python`   | `EFFECT_BUILD_UV_BIN`; 0.12.0, plus Python                                                     |
 | `bun run test:integration:sbom`     | `EFFECT_BUILD_SYFT_BIN`; 1.50.0                                                                |
+| `bun run test:integration:tool`     | native process and pipe behavior on Linux, macOS and Windows                                   |
+| `bun run test:integration:ffmpeg`   | `EFFECT_BUILD_FFMPEG` and `EFFECT_BUILD_FFPROBE`; native ffmpeg/ffprobe                        |
+| `bun run test:integration:apple`    | macOS codesign; notarytool/stapler diagnostics without credentials                             |
 | `bun run test:integration:windows`  | an elevated, disposable Windows environment with SignTool (or `EFFECT_BUILD_SIGNTOOL`) and Bun |
 
 ## Validation
@@ -237,7 +211,7 @@ Iterate with the smallest check that can invalidate the change, then run the rel
 
 | Change                         | Gate                                                                                                       |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Any change to code             | `bun run verify`: build, check, lint, the legacy list, the release script's tests, unit tests and examples |
+| Any change to code             | `bun run verify`: build, public surface, API docs, typecheck, lint, release tests, unit tests and examples |
 | A binding                      | the above, plus its `bun run test:integration:<tool>`                                                      |
 | A public export or package map | the above, plus `bun run test:consumer`                                                                    |
 | The release script             | `bun run test:release`                                                                                     |
@@ -271,11 +245,11 @@ couldn't run, and why.
 - A pull request says how behaviour differs before and after, which boundary it touches, and which checks actually ran.
   - Name the checks that didn't run: other platforms, signing identities, tools that weren't installed.
   - When a future contributor could reasonably propose a rejected alternative again, say why it was rejected.
-- Don't bundle a runtime refactor with packaging or CI maintenance.
+- Update package maps, consumers, examples, and required CI checks in the same change as a public cutover.
 
 ## Releasing
 
-A release tag triggers the [release workflow](.github/workflows/release.yml).
+A new lockstep version tagged from main after the complete CI matrix passes triggers the [release workflow](.github/workflows/release.yml).
 
 - It builds and verifies once.
 - It retains the exact tarballs and their SHA-512 manifest in a 90-day Actions artifact.

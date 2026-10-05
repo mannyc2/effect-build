@@ -3,11 +3,11 @@
 `Codesign`, `Notarytool` and `Stapler` are ordinary Effect services for Apple's native tools. Import the services from
 `effect-build-apple`; each service's schemas and types are available at its matching module subpath.
 
-| Service | Methods | Behavior |
-| --- | --- | --- |
-| `Codesign` | `sign`, `verify` | Sign a path in place; verify separately |
+| Service      | Methods                         | Behavior                                                          |
+| ------------ | ------------------------------- | ----------------------------------------------------------------- |
+| `Codesign`   | `sign`, `verify`                | Sign a path in place; verify separately                           |
 | `Notarytool` | `submit`, `wait`, `info`, `log` | Upload once, keep the native submission ID/status and JSON issues |
-| `Stapler` | `staple`, `validate` | Mutate a path in place; validate its ticket separately |
+| `Stapler`    | `staple`, `validate`            | Mutate a path in place; validate its ticket separately            |
 
 Each layer resolves its executable once and captures the platform. Codesign searches PATH by default. Notarytool and
 Stapler resolve `xcrun` by default; an explicit executable selects the corresponding native binary directly. There is

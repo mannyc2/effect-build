@@ -1,6 +1,6 @@
 {
   "name": "effect-build-apple",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Run codesign, notarytool and stapler as composable Effect services.",
   "type": "module",
   "license": "MIT",

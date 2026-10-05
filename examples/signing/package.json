@@ -1,0 +1,17 @@
+{
+  "name": "@effect-build/example-signing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "apple": "node src/apple.ts",
+    "windows": "node src/windows.ts"
+  },
+  "dependencies": {
+    "effect": "4.0.0",
+    "@effect/platform-node": "4.0.0",
+    "effect-build": "workspace:*",
+    "effect-build-bun": "workspace:*",
+    "effect-build-apple": "workspace:*",
+    "effect-build-windows": "workspace:*"
+  }
+}

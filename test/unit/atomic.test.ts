@@ -18,7 +18,8 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
         Effect.fnUntraced(function*(staged) {
           staging = path.dirname(staged);
           assert.strictEqual(path.dirname(staging), root);
-          assert.strictEqual((yield* fs.stat(staging)).mode & 0o777, 0o700);
+          // Windows permissions are ACLs; native mode bits do not express POSIX owner privacy.
+          if (path.sep === "/") assert.strictEqual((yield* fs.stat(staging)).mode & 0o777, 0o700);
           assert.strictEqual(yield* fs.readFileString(destination), "old");
           yield* fs.writeFileString(staged, "new");
           return { path: staged };

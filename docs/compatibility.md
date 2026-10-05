@@ -1,73 +1,68 @@
 # Compatibility
 
-What the unreleased effect-build checkout runs on, what it typechecks with, which Effect it accepts, and what the
-repository actually exercises for each operation.
+This checkout contains the unreleased 0.9.0 API. All nine packages release together and are
+ESM-only. The source checkout pins Effect and platform packages to **4.0.0**; package peer
+ranges accept `>=4.0.0 <4.1.0`. Keep the chosen Effect and platform packages at one version.
 
-## Runtime
+Node 22.19 or newer can run the library with `NodeServices.layer`. The source examples and
+native kernel tests use Node 24.14.1. Bun 1.3.14 runs repository tooling. Bun and Deno
+applications supply their corresponding Effect platform services; library source imports
+no `node:*` modules and does not start an Effect runtime.
 
-- **ESM only.** Use `import` from a `.mjs` file, a `"type": "module"` package, or a TypeScript
-  project configured for `NodeNext` or `Bundler`. CommonJS `require("effect-build")` and
-  unlisted subpaths are unsupported.
-- **Node 22.19.0** is the floor for the process that runs the build. Node 24 also runs a `build.ts`
-  directly with its built-in type stripping. Bun runs the packages with `BunServices.layer`.
-- The compiler a build selects is independent of the Node that runs it. Bun 1.3.14 can drive a
-  build from Node 22, and Node SEA can embed a Node 26 while running under Node 24.
+## Runtime and native tool
 
-## TypeScript
+The runtime running Effect and the tool launched by a binding are separate choices.
+A Node application can launch Bun, Deno, uv, or another installed tool on a host that tool
+supports. Cross-compilation does not establish that the result was run on its target.
 
-**TypeScript 5.9.3** is the declaration floor. Installed tarballs are checked with `strict: true`
-and `skipLibCheck: false` using TypeScript 5.9.3 with Node types 24.3.0, and TypeScript 6.0.3 with
-Node types 24.13.3, the pairing that accounts for the `URLPattern` declarations TypeScript 6
-changed. Every public export, including `effect-build-bun/api`, is imported and typechecked.
-JavaScript source maps embed their sources; declaration maps resolve to the `src` files shipped
-in each package.
+| Binding  | Native requirement                                                                                  |
+| -------- | --------------------------------------------------------------------------------------------------- |
+| Bun      | Bun CLI; compile targets use native `bun-...` names                                                 |
+| Deno     | Deno CLI with native compile/bundle commands; six supported target triples                          |
+| Node SEA | Node with native `--build-sea`; caller supplies already-bundled source and optional base executable |
+| Python   | uv and the project's native Python build requirements                                               |
+| nFPM     | nFPM and its native package configuration                                                           |
+| Syft     | Syft and source context appropriate to the requested inventory                                      |
+| Apple    | codesign, Xcode's notarytool/stapler through xcrun, and caller-selected signing credentials         |
+| Windows  | Windows SDK SignTool and caller-selected certificate or signing library                             |
 
-## Effect
+Bun's construction probe warns outside 1.3.x/1.4.x. Node SEA's probe warns outside 26.7.x.
+These ranges describe probe policy; they do not gate construction or guarantee all native
+capabilities. Other bindings currently rely directly on native command failures.
+No binding installs, substitutes, or retries a selected tool.
 
-The published 0.8.0 packages use Effect 4.0.0-rc.115 and retain the prerelease module paths.
-The following describes the unreleased source checkout.
+Signing mutates existing files in place. Production signing and notarization require the
+caller's credentials and native host tools. Unit tests and non-credentialed integration runs
+do not establish production credential compatibility.
 
-Every package accepts `>=4.0.0 <4.1.0` as its Effect peer range. The workspace and required
-consumer checks pin **4.0.0**. Effect 3 and Effect 4 prereleases are unsupported: the stable
-release uses `effect/process` and `effect/persistence` instead of `effect/unstable/*`.
+The manual [signing workflow](../.github/workflows/signing.yml) runs the typed
+[signing applications](../examples/signing) with existing Developer ID/API-key or Trusted Signing
+credentials. It composes native signature verification and, on Apple, accepted-status policy
+and stapled-ticket validation. Normal verification typechecks these applications only.
 
-Install `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` at one version.
-The platform packages' caret dependency can otherwise select a newer shared package with a
-newer Effect peer.
+## Process backend boundaries
 
-The default and TypeScript 6 installed consumers check dependency declarations with
-`skipLibCheck: false`. The Ubuntu 22.04 Bun consumer retains `skipLibCheck: true`: it checks
-application types and runtime behavior, but does not establish that Bun dependency declarations
-are valid. Its Bun 1.4.2 / Node types 22.20.2 declarations fail a strict dependency check on
-`TextEncoderEncodeIntoResult`, `ConnectionOptions`, `KeyObject`, and `TLSSocket`. It uses
-Node 24.14.1 and TypeScript 7.0.2, and exercises both Node and Bun platform layers. An advisory consumer tracks the
-`latest` Effect dist-tag; nothing newer is promised until tested.
+`Tool` uses Effect's native `ChildProcessSpawner` and handle model. Backend signal
+observation, pipes, Windows system environment supplementation, and cleanup follow that
+platform. The kernel sanitizes process errors and bounds diagnostics; it preserves native
+session handle types and does not introduce a parallel process runtime.
 
-## Support matrix
+Native multi-input applications must observe process exit alongside persistent writes.
+The ffmpeg example documents that pattern. Additional-descriptor reset handling and stale
+writes to an exited child depend on the backend's behavior; downstream applications carrying
+a platform fix must keep that fix until their chosen platform version contains it.
 
-The matrix describes what the repository checks and where support ends. It is not a claim that
-every host and target combination, or production signing, has been certified.
+File publication uses same-parent staging and native rename semantics. Directory output is
+a sequence of per-file renames, so partial commit is possible. Portable layout validation
+is an explicit application operation; an executable magic check establishes neither target
+architecture nor complete executable validity.
 
-| Operation                                        | Host and tool                                                                                | Targets and evidence                                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core artifacts, commits, archives, direct wheels | Node 22.19+ with `NodeServices`; Bun with `BunServices`                                      | Portable filesystem tests run on Linux, macOS, and Windows. Payloads stream; ZIP32 and ustar field widths are the only archive and wheel size limits.                                                                                                                                                                                                                                       |
-| Bun compile and bundle                           | Bun CLI on a host Bun supports; the build may run on Node                                    | All eight core targets are accepted. Linux real-tool CI runs Bun 1.3.14 and 1.4.2 and builds Linux x64 glibc and musl, Linux arm64, and Windows x64. Building a target does not establish that every cross-compiled binary was executed.                                                                                                                                                    |
-| Bun native API                                   | Bun runtime                                                                                  | Native build and transpiler results; these operations do not run on Node. Installed imports and declarations typecheck on Node.                                                                                                                                                                                                                                                             |
-| Deno compile, bundle, transpile                  | Deno CLI on a host Deno supports                                                             | Native Deno targets, excluding musl. Linux real-tool CI uses 2.9.5. Flags Deno removed are rejected by the operations that used them.                                                                                                                                                                                                                                                       |
-| Deno native API                                  | Deno runtime                                                                                 | Native lifecycle and results, separate from CLI version compatibility.                                                                                                                                                                                                                                                                                                                      |
-| esbuild and Rolldown                             | esbuild from the consumer's install (peer `>=0.28.2 <0.29.0`); Rolldown's pinned npm package | Bundles and scoped native APIs. Portable unit tests and installed imports run on three OSes with esbuild 0.28.2.                                                                                                                                                                                                                                                                            |
-| Node SEA                                         | Builder and base Node at the same version, 22 to 26; Mach-O bases need `xcrun`               | The target is read from the base executable's header. Linux real-tool CI uses Node 22.0.0 and 26.7.0. The compiler version does not change the orchestration floor.                                                                                                                                                                                                                         |
-| uv, nFPM, Syft                                   | Their CLI plus the native packaging tools each needs                                         | Linux real-tool CI pins uv 0.12.0, nFPM 2.47.0, and Syft 1.50.0. A Syft scan inventories discoverable packages; source or lockfile context is needed for source dependencies.                                                                                                                                                                                                               |
-| Windows signing                                  | Windows host with the Windows SDK SignTool                                                   | Native CI signs, timestamps, verifies, and runs a PE executable with a temporary self-signed certificate. PFX, store, and Trusted Signing credentials pass scripted tests. Production certificates and native MSIX signing are experimental and unverified: the on-demand [signing workflow](../.github/workflows/signing.yml) exercises Trusted Signing and has not yet been run.          |
-| Apple products, signing, notarization            | macOS with Xcode command-line tools and the caller's credentials                             | Unsigned app construction is checked with native tools. Standalone executables sign, notarize as ZIPs, ship in PKGs, and are assessed through scripted processes. Credentialed distribution is experimental until the on-demand signing workflow, which signs, notarizes, and assesses a compiled CLI with Developer ID credentials, has been run. Universal Mach-O inputs are unsupported. |
+## Verification and release
 
-## What experimental means
+`bun run verify` builds packages, checks the public API and examples, generates documentation,
+runs unit and release tests, and checks formatting and lint. Real-tool integration runs against
+installed native tools separately. The Linux, macOS, Windows, and real-tool CI matrix must be
+green before a new version is released.
 
-`effect-build-windows` and `effect-build-apple` are marked experimental because the repository
-has not yet run their credentialed paths against production identities. The code paths are
-tested with a temporary certificate (Windows) and scripted tool processes (both), and the
-[signing workflow](../.github/workflows/signing.yml) exists to run them for real. When it passes,
-its run is recorded here and the label comes off.
-
-See [tools and providers](providers.md) for accepted version ranges and the capability
-restrictions of specific tool versions.
+The guides describe the 0.9.0 source API, and the [changelog](../CHANGELOG.md) records the
+breaking cutover. The older published API remains a different version.

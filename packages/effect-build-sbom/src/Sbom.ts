@@ -1,8 +1,8 @@
 import type { Config, FileSystem } from "effect";
 import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
-import { ChildProcess } from "effect/process";
 import * as Atomic from "effect-build/Atomic";
 import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
 export const Format = Schema.Literals(["syft-json", "spdx-json@2.3", "cyclonedx-json@1.6"]);
 export type Format = typeof Format.Type;
@@ -36,9 +36,15 @@ export class Sbom extends Context.Service<Sbom>()("effect-build-sbom/Sbom", {
     const tool = yield* Tool.make("syft", options);
     const path = yield* Path.Path;
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
-    const command = (input: ReportInput, output: string) => ChildProcess.make(tool.executable, [
-      "scan", input.source, ...(input.extraArgs ?? []), "--output", output, "--quiet",
-    ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" });
+    const command = (input: ReportInput, output: string) =>
+      ChildProcess.make(tool.executable, [
+        "scan",
+        input.source,
+        ...(input.extraArgs ?? []),
+        "--output",
+        output,
+        "--quiet",
+      ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" });
     return {
       /** Writes the requested native format; discovery does not establish completeness. */
       generate: Effect.fn("Sbom.generate")(function*(input: GenerateInput) {

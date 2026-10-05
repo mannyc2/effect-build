@@ -1,63 +1,68 @@
 # effect-build-node-sea
 
-Package a bundled CommonJS script and its assets as a Node
-[single executable application](https://nodejs.org/api/single-executable-applications.html), as an
-Effect program. The result is an `Artifact.Executable` whose target is read from the base Node
-binary's header, ready for an archive, an installer, or a signer.
+An Effect service for native Node
+[single executable application assembly](https://nodejs.org/api/single-executable-applications.html#generating-single-executable-applications-with---build-sea).
+The 0.9.0 source API is currently unreleased and uses Effect 4.0.0.
 
-```sh
-npm install --save-dev --save-exact effect-build-node-sea@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
-```
+`NodeSea` runs `node --check` and `node --build-sea` against already-bundled JavaScript.
+Bundling and signing belong to the application. The native assembly command was
+[added in Node 25.5.0](https://nodejs.org/api/single-executable-applications.html);
+the binding's one-time probe warns outside 26.7.x and allows native failures to surface.
 
 ## Usage
 
-```ts
-import { Effect, Path } from "effect";
-import { Artifact } from "effect-build";
-import * as Esbuild from "effect-build-esbuild";
-import * as NodeSea from "effect-build-node-sea";
+This [typechecked example](../../examples/tool-runs/src/NodeSea.ts) takes plain input and
+output paths. The application's entry point supplies `NodeSea.layer()` and its platform
+services.
 
-const sea = Effect.gen(function*() {
-  const path = yield* Path.Path;
-  const bundle = yield* Esbuild.buildToDirectory({
-    entryPoints: ["src/main.ts"],
-    bundle: true,
-    platform: "node",
-    format: "cjs",
-    outdir: "dist/sea",
-  });
-  const main = yield* Artifact.file(path.join(bundle.path, "main.js"), bundle.producedBy);
-  const license = yield* Artifact.file("LICENSE", bundle.producedBy);
-  return yield* NodeSea.assemble({ main, assets: { "LICENSE": license }, outfile: "dist/cli" });
-}).pipe(Effect.provide(NodeSea.layer()));
+```ts
+import { Effect } from "effect";
+import { NodeSea } from "effect-build-node-sea";
+
+/** The entry point supplies NodeSea.layer and its chosen platform services. */
+export const assemble = Effect.fn("Example.assemble")(function*(main: string, outfile: string) {
+  const sea = yield* NodeSea;
+  return yield* sea.assemble({ main, outfile, atomic: true });
+});
 ```
 
-`assemble({ main, assets?, outfile, cwd?, disableExperimentalSEAWarning?, atomic?, onExists?, prefix? })`
-returns the executable. `main` must be bundled CommonJS: a SEA's `require()` loads only Node's
-built-ins, so bundle every dependency into the script. `assets` are regular artifacts keyed by
-the name the program reads them with (`require("node:sea").getAsset(name)`).
+The service's `assemble` method accepts:
 
-Assembly writes the SEA preparation blob, copies the base executable, injects the blob with
-postject, ad hoc signs it on macOS with `xcrun codesign` (injection invalidates the base
-signature, and an unsigned arm64 binary will not launch), and checks the header. Inputs and
-intermediates use private temporary files, even with `atomic: false`. Windows outputs must end in
-`.exe`. Replace the ad hoc signature with `Apple.sign` before shipping.
+| Input                            | Meaning                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| `main`                           | Path to already-bundled JavaScript                                                          |
+| `outfile`                        | Requested output path; Windows appends `.exe` when needed                                   |
+| `mainFormat?`                    | `"commonjs"` by default, or `"module"`                                                      |
+| `assets?`                        | Native asset names mapped to file paths                                                     |
+| `cwd?`                           | Base for relative input, asset, and output paths                                            |
+| `atomic?`                        | Default false; true stages beside the destination and checks native magic before one rename |
+| `disableExperimentalSEAWarning?` | Native configuration option; default false                                                  |
 
-## Layer and versions
+Success returns the absolute final path. Configuration files live in a private temporary
+directory and are cleaned after assembly. Snapshot and code-cache generation are disabled.
 
-`NodeSea.layer({ executable?, baseExecutable?, version? })` resolves two Node binaries: the
-`tool` that runs the SEA tooling (default: the current process) and the base that is copied and
-injected (default: `tool`). Both must report the same version. `NodeSea.supported` is
-`>=22.0.0 <27.0.0`, the versions sharing the preparation blob and injection workflow, and
-`NodeSea.tested` records the CI fixtures, 22.0.0 and 26.7.0. The target comes from the base
-executable's header, so a base running under emulation is recorded as itself.
+## Construction
+
+`NodeSea.make(options?)`, `NodeSea.layer(options?)`, and `NodeSea.layerConfig(config)`
+accept `executable?` and `baseExecutable?`. The builder is resolved once from PATH unless
+explicitly supplied. The base defaults to that builder; an explicit base is passed to Node's
+native configuration. Choose a base compatible with the builder's native SEA requirements.
+
+The service captures its process spawner, filesystem, and path services at construction.
+Version probing is warn-only. An older Node without `--build-sea` reports a native
+`ToolError` when assembly runs. No fallback or injection library is selected.
+
+macOS applications compose their required signing step, for example through the
+[Codesign service](../effect-build-apple/README.md), after assembly. The Node SEA integration
+job exercises native Node 26.7 on Linux; it does not establish credentialed signing behavior.
 
 ## Errors
 
-`NodeSea.AssembleError` is `Tool.InputInvalid`, `Failed` (tag `NodeSeaFailed`,
-with the failing `operation` and its `cause`), the `Tool` errors, `Artifact.ArtifactError`,
-`Executable.InspectError`, `Executable.TargetMismatch`, or `Commit.CommitError`.
+Native command failures use `ToolError`. `NodeSeaError` carries `step: "prepare" | "cleanup"`
+and a cause for configuration filesystem failures. With `atomic: true`, publication can also
+fail with `AtomicError` or `ExecutableError`; a native-magic read failure remains
+`PlatformError`. See [errors and publication](../../docs/errors.md) for commit and cleanup semantics.
 
-[Recipes](https://github.com/mannyc2/effect-build/blob/main/docs/recipes.md) ·
-[Tools and providers](https://github.com/mannyc2/effect-build/blob/main/docs/providers.md) ·
-[Errors and checks](https://github.com/mannyc2/effect-build/blob/main/docs/errors.md)
+[Getting started](../../docs/getting-started.md) ·
+[Tools and bindings](../../docs/providers.md) ·
+[Compatibility](../../docs/compatibility.md)

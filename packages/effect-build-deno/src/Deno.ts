@@ -1,14 +1,17 @@
 import type { Config, FileSystem } from "effect";
 import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
-import { ChildProcess } from "effect/process";
 import * as Atomic from "effect-build/Atomic";
 import * as Executable from "effect-build/Executable";
 import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
 export const Target = Schema.Literals([
-  "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu",
-  "x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc",
-  "x86_64-apple-darwin", "aarch64-apple-darwin",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+  "aarch64-pc-windows-msvc",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin",
 ]);
 export type Target = typeof Target.Type;
 
@@ -60,24 +63,32 @@ export class Deno extends Context.Service<Deno>()("effect-build-deno/Deno", {
     const path = yield* Path.Path;
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     const run = (input: CompileInput | BundleInput, args: ReadonlyArray<string>) =>
-      tool.run(ChildProcess.make(tool.executable, args, {
-        cwd: input.cwd,
-        env: options.runtime === undefined ? input.env : { ...input.env, DENORT_BIN: options.runtime },
-        extendEnv: options.runtime === undefined ? input.extendEnv : (input.extendEnv ?? true),
-        stdin: "ignore",
-      }), Sink.drain);
+      tool.run(
+        ChildProcess.make(tool.executable, args, {
+          cwd: input.cwd,
+          env: options.runtime === undefined ? input.env : { ...input.env, DENORT_BIN: options.runtime },
+          extendEnv: options.runtime === undefined ? input.extendEnv : (input.extendEnv ?? true),
+          stdin: "ignore",
+        }),
+        Sink.drain,
+      );
     return {
       /** Deno embeds the output basename; staging keeps that basename intact. */
       compile: Effect.fn("Deno.compile")(function*(input: CompileInput) {
         const requested = path.resolve(input.cwd ?? ".", input.outfile);
         const windows = input.target === undefined ? path.sep === "\\" : input.target.endsWith("-windows-msvc");
         const outfile = windows && !requested.endsWith(".exe") ? `${requested}.exe` : requested;
-        const produce = (out: string) => run(input, [
-          "compile", ...flags(input),
-          ...(input.allowAll === true ? ["--allow-all"] : []),
-          ...(input.target === undefined ? [] : ["--target", input.target]),
-          "--output", out, input.entrypoint, ...(input.scriptArgs ?? []),
-        ]);
+        const produce = (out: string) =>
+          run(input, [
+            "compile",
+            ...flags(input),
+            ...(input.allowAll === true ? ["--allow-all"] : []),
+            ...(input.target === undefined ? [] : ["--target", input.target]),
+            "--output",
+            out,
+            input.entrypoint,
+            ...(input.scriptArgs ?? []),
+          ]);
         if (input.atomic === true) return yield* Atomic.file(outfile, produce, { check: Executable.checkNative });
         yield* produce(outfile);
         return outfile;
@@ -85,13 +96,17 @@ export class Deno extends Context.Service<Deno>()("effect-build-deno/Deno", {
       /** Bundles with the native Deno command and returns the output directory. */
       bundle: Effect.fn("Deno.bundle")(function*(input: BundleInput) {
         const outdir = path.resolve(input.cwd ?? ".", input.outdir);
-        const produce = (out: string) => run(input, [
-          "bundle", ...flags(input),
-          ...(input.platform === undefined ? [] : ["--platform", input.platform]),
-          ...(input.format === undefined ? [] : ["--format", input.format]),
-          ...(input.minify === true ? ["--minify"] : []),
-          "--outdir", out, ...input.entrypoints,
-        ]);
+        const produce = (out: string) =>
+          run(input, [
+            "bundle",
+            ...flags(input),
+            ...(input.platform === undefined ? [] : ["--platform", input.platform]),
+            ...(input.format === undefined ? [] : ["--format", input.format]),
+            ...(input.minify === true ? ["--minify"] : []),
+            "--outdir",
+            out,
+            ...input.entrypoints,
+          ]);
         if (input.atomic === true) return yield* Atomic.directory(outdir, produce);
         yield* produce(outdir);
         return outdir;

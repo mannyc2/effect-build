@@ -1,7 +1,7 @@
 import type { Config } from "effect";
 import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
-import { ChildProcess } from "effect/process";
 import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
 export const Input = Schema.Struct({
   path: Schema.String,
@@ -22,9 +22,16 @@ export class Stapler extends Context.Service<Stapler>()("effect-build-apple/Stap
     const tool = yield* Tool.make(options.executable === undefined ? "xcrun" : "stapler", options);
     const prefix = options.executable === undefined ? ["stapler"] : [];
     const path = yield* Path.Path;
-    const run = (input: Input, operation: string) => tool.run(ChildProcess.make(tool.executable, [
-      ...prefix, operation, ...(input.extraArgs ?? []), path.resolve(input.cwd ?? ".", input.path),
-    ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }), Sink.drain);
+    const run = (input: Input, operation: string) =>
+      tool.run(
+        ChildProcess.make(tool.executable, [
+          ...prefix,
+          operation,
+          ...(input.extraArgs ?? []),
+          path.resolve(input.cwd ?? ".", input.path),
+        ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }),
+        Sink.drain,
+      );
     return {
       staple: Effect.fn("Stapler.staple")(function*(input: Input) {
         yield* run(input, "staple");

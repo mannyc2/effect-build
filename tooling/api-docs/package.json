@@ -1,0 +1,12 @@
+{
+  "name": "effect-build-api-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node generate.mjs"
+  },
+  "devDependencies": {
+    "typedoc": "0.28.20",
+    "typescript": "6.0.3"
+  }
+}

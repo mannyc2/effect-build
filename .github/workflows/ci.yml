@@ -36,28 +36,40 @@ jobs:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
       - run: bun run verify
+      - run: bun run test:integration:tool
+      - name: Sign and verify a native macOS executable
+        if: runner.os == 'macOS'
+        run: bun run test:integration:apple
       - name: Check installed tarball consumer types and runtime
         run: bun run test:consumer
+      - name: Select the installed Windows SDK SignTool fixture
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $kits = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+          $signtool = Get-ChildItem (Join-Path $kits 'Windows Kits\10\bin\*\x64\signtool.exe') |
+            Sort-Object { [version] $_.Directory.Parent.Name } -Descending | Select-Object -First 1
+          if (-not $signtool) { throw 'Windows SDK signing tools are missing' }
+          "EFFECT_BUILD_SIGNTOOL=$($signtool.FullName)" >> $env:GITHUB_ENV
       - name: Sign and verify a native Windows executable
         if: runner.os == 'Windows'
         run: bun run test:integration:windows
 
-  bun:
-    name: Tools (Bun ${{ matrix.version }}, Node ${{ matrix.node }}, Git ${{ matrix.git }})
+  native-bindings:
+    name: Native bindings (Bun ${{ matrix.bun }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { version: '1.3.14', node: '22.0.0', git: '2.40.0' }
-          - { version: '1.4.2', node: '26.7.0', git: '2.55.0' }
+        bun: ['1.3.14', '1.4.2']
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 26.7.0
           package-manager-cache: false
       - run: echo "EFFECT_BUILD_NODE=$(command -v node)" >> "$GITHUB_ENV"
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -67,33 +79,19 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - name: Install exact native Bun fixture
-        env:
-          BUN_VERSION: ${{ matrix.version }}
-        run: |
-          fixture=$(node scripts/install-provider-fixture.mjs bun "$BUN_VERSION")
-          echo "EFFECT_BUILD_BUN=$fixture" >> "$GITHUB_ENV"
-      - run: bun run test:integration:bun
-      - run: bun run test:integration:node-sea
-      - name: Build exact Git source fixture and test archives
-        env:
-          GIT_VERSION: ${{ matrix.git }}
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y build-essential zlib1g-dev
-          EFFECT_BUILD_GIT=$(node scripts/install-provider-fixture.mjs git "$GIT_VERSION")
-          export EFFECT_BUILD_GIT
-          bun x --no-install vitest run test/unit/archives.test.ts
-      - if: matrix.version == '1.3.14'
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: 3.12.11
-      - name: Install the tested packaging tools
-        if: matrix.version == '1.3.14'
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Install exact native fixtures
+        env:
+          BUN_VERSION: ${{ matrix.bun }}
         run: |
           set -euo pipefail
-          sudo apt-get update -qq && sudo apt-get install -y libarchive-tools
+          echo "EFFECT_BUILD_BUN=$(node scripts/install-provider-fixture.mjs bun "$BUN_VERSION")" >> "$GITHUB_ENV"
+          echo "EFFECT_BUILD_DENO=$(node scripts/install-provider-fixture.mjs deno 2.9.5)" >> "$GITHUB_ENV"
+          sudo apt-get update -qq && sudo apt-get install -y ffmpeg libarchive-tools
           install_tool() {
             local name="$1" url="$2" digest="$3" member="$4"
             local archive="$RUNNER_TEMP/$name.tar.gz"
@@ -108,23 +106,13 @@ jobs:
           echo "EFFECT_BUILD_UV_BIN=$RUNNER_TEMP/uv" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_NFPM_BIN=$RUNNER_TEMP/nfpm" >> "$GITHUB_ENV"
           echo "EFFECT_BUILD_SYFT_BIN=$RUNNER_TEMP/syft" >> "$GITHUB_ENV"
-          echo "EFFECT_BUILD_PYTHON_BIN=$(command -v python)" >> "$GITHUB_ENV"
-      - if: matrix.version == '1.3.14'
-        run: bun run test:integration:nfpm && bun run test:integration:python && bun run test:integration:sbom
-      - if: matrix.version == '1.3.14'
-        run: echo "EFFECT_BUILD_DENO=$(node scripts/install-provider-fixture.mjs deno 2.9.5)" >> "$GITHUB_ENV"
-      - if: matrix.version == '1.3.14'
-        run: bun run test:integration:deno && bun run --cwd examples/artifact-pipeline test
-      - name: Compile the CLI matrix and verify its checksums
-        working-directory: examples/cli
-        run: |
-          bun run test
-          (cd dist && sha256sum -c SHA256SUMS)
-      - name: Check installed consumers against bun-types ${{ matrix.version }}
-        if: matrix.version == '1.4.2'
-        run: bun run test:consumer
-        env:
-          CONSUMER_BUN_TYPES: ${{ matrix.version }}
+      - run: bun run test:integration:bun
+      - run: bun run test:integration:deno
+      - run: bun run test:integration:node-sea
+      - run: bun run test:integration:python
+      - run: bun run test:integration:nfpm
+      - run: bun run test:integration:sbom
+      - run: bun run test:integration:ffmpeg
 
   consumer-minimum:
     name: Installed consumer (Node 22.19, TypeScript 6)

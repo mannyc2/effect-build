@@ -1,262 +1,121 @@
 # effect-build
 
-[![CI](https://github.com/mannyc2/effect-build/actions/workflows/ci.yml/badge.svg)](https://github.com/mannyc2/effect-build/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/effect-build)](https://www.npmjs.com/package/effect-build)
-[![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+Typed native tool bindings as composable Effect programs.
 
-Run build tools as [Effect](https://effect.website) programs. Producers return a record
-of what they wrote; records compose; output is staged, checked, then committed.
-Content hashing is an explicit step for consumers that need byte identity.
+A binding is an Effect service: resolve an executable once, then call its methods to build,
+package, sign, or inspect files. Methods return paths or native reports. Applications supply
+the platform, choose publication boundaries, and compose the release workflow.
 
-## Quick start
+This checkout contains **0.9.0, unreleased**, with Effect 4.0.0. The 0.9 API replaces the earlier
+artifact and provider model without compatibility aliases. See the [changelog](CHANGELOG.md)
+for the breaking changes.
 
-You need Node 22.19 or newer and [Bun](https://bun.sh) 1.3.14 or newer on `PATH`. Install the
-Bun provider with Effect and its Node platform, pinned to the release candidate used by the published 0.8.0 packages:
+## A build is an Effect
+
+This complete program is the [typechecked Bun example](examples/bun-build/src/main.ts).
+It creates a source file, bundles it with the native Bun command, and logs the final output
+directory. The surrounding scope removes the example's temporary files when it ends.
+
+```ts
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Console, Effect, FileSystem, Layer, Path } from "effect";
+import { Bun } from "effect-build-bun";
+
+const program = Effect.gen(function*() {
+  const bun = yield* Bun;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const directory = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-example-" });
+  const main = path.join(directory, "main.ts");
+  yield* fs.writeFileString(main, 'console.log("built with Effect");\n');
+  const output = yield* bun.build({
+    entrypoints: [main],
+    outdir: path.join(directory, "output"),
+    target: "bun",
+    atomic: true,
+  });
+  yield* Console.log(output);
+});
+
+const services = Bun.layer().pipe(Layer.provideMerge(NodeServices.layer));
+NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(services)));
+```
+
+The Bun layer captures its native process spawner and the filesystem services it needs.
+An explicit executable wins; otherwise it chooses the first runnable PATH match. It never
+installs a compiler or changes the selected executable after construction. Its version probe
+warns outside the tested range and allows the operation to run.
+
+Producing bindings write directly by default. `atomic: true` stages beside the destination:
+one rename for a file, or one rename per produced bundle file. Bundle publication preserves
+unrelated destination files and can partially commit. See [publication and errors](docs/errors.md).
+
+## Bindings
+
+Core and all eight bindings share the 0.9.0 version. Each binding depends on core, with no provider sibling
+dependencies. The service owns its native flags, inputs, and results.
+
+| Package                                                           | Services and operations                              |
+| ----------------------------------------------------------------- | ---------------------------------------------------- |
+| [effect-build-bun](packages/effect-build-bun/README.md)           | `Bun.build`, `Bun.compile`                           |
+| [effect-build-deno](packages/effect-build-deno/README.md)         | `Deno.compile`, `Deno.bundle`                        |
+| [effect-build-node-sea](packages/effect-build-node-sea/README.md) | `NodeSea.assemble` through native `node --build-sea` |
+| [effect-build-python](packages/effect-build-python/README.md)     | `Python.build` through uv                            |
+| [effect-build-nfpm](packages/effect-build-nfpm/README.md)         | `Nfpm.package`                                       |
+| [effect-build-sbom](packages/effect-build-sbom/README.md)         | `Sbom.generate`, `Sbom.report` through Syft          |
+| [effect-build-apple](packages/effect-build-apple/README.md)       | `Codesign`, `Notarytool`, `Stapler`                  |
+| [effect-build-windows](packages/effect-build-windows/README.md)   | `SignTool.sign`, `SignTool.verify`                   |
+
+Here `Bun.build` names the method on the service obtained with `yield* Bun`; operations are
+called on that service instance. JavaScript bundler APIs and archive or wheel format writers
+belong in the application.
+
+## Core
+
+[effect-build](packages/effect-build/README.md) exposes six modules. Third-party bindings use
+the same kernel as the packages above.
+
+| Module        | Purpose                                                                               |
+| ------------- | ------------------------------------------------------------------------------------- |
+| `Tool`        | Resolve once; run a command, consume an event stream, or open a scoped native session |
+| `Atomic`      | Stage and publish files or bundle leaves                                              |
+| `Executable`  | Check four bytes for recognizable native executable magic                             |
+| `Digest`      | Stream SHA-256 reads and verify current file bytes                                    |
+| `Environment` | Replace command environments with caller-supplied values                              |
+| `Layout`      | Validate portable relative leaf paths                                                 |
+
+`Tool.run` waits for consumed output and the accepted exit code. `Tool.stream` starts when
+consumed, emits decoded events, and checks completion before ending. `Tool.session` returns
+the platform's process handle in the caller's scope for applications that own pipe writers
+and lifecycle policy.
+
+`effect-build/testing` supplies `ToolTest.handle` and `ToolTest.layer`, thin defaults over
+Effect's native process test seam. Application tests can replace a binding directly with
+`Layer.succeed`. See [recipes](docs/recipes.md).
+
+## Run the source examples
+
+Use Node 22.19 or newer, Bun 1.3.14 for workspace tooling, and an ESM project. The checked-in
+examples run with Node 24.14.1. The Bun build also needs the native Bun executable on PATH.
 
 ```sh
-npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
+bun install --frozen-lockfile
+bun run build
+bun run --cwd examples/tool-runs test
+bun run --cwd examples/bun-build test
 ```
 
-The unreleased source checkout targets Effect 4.0.0. The published 0.8.0 packages still use
-Effect 4.0.0-rc.115; use the versions above when installing them from npm.
+The [ffmpeg session example](examples/ffmpeg-session) contains finite ffprobe bindings and a
+live encoder with two input pipes, bounded queues, progress events, and an Effect-clock
+watchdog. It stays an example until another caller needs a shared package.
 
-Save this as `build.mjs` next to a `src/cli.ts`:
+The [signing applications](examples/signing) compose Developer ID notarization and Windows
+Trusted Signing. They are typechecked normally and run only in the manual credentialed workflow.
 
-```js
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import * as Bun from "effect-build-bun";
+Read [getting started](docs/getting-started.md), [tools and bindings](docs/providers.md),
+[compatibility](docs/compatibility.md), [digests](docs/digests.md), and the
+[documentation guide](docs/README.md). `bun run docs` builds the API reference from exported
+classes and JSDoc into `dist/api`.
 
-NodeRuntime.runMain(
-  Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }).pipe(
-    Effect.tap((artifact) => Effect.log(artifact)),
-    Effect.provide(Bun.layer()),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-```
-
-Run `node build.mjs`. It compiles `dist/cli` (`dist/cli.exe` is required on Windows) and logs
-the artifact record:
-
-```
-kind: 'executable',
-path: '/home/you/app/dist/cli',
-bytes: 63446114,
-producedBy: { name: 'bun', version: '1.3.14', path: '/usr/local/bin/bun' },
-target: 'darwin-arm64',
-format: 'mach-o'
-```
-
-Add `target: "linux-arm64"` to cross-compile, or `options: { minify: true }` to minify. The
-[getting started guide](docs/getting-started.md) explains each line and what to do when the
-compiler is not on `PATH`.
-
-## Any tool is a producer
-
-A provider wraps a tool once; its operations use the same artifact and commit primitives as
-our compilers. Here is a UPX provider (imports: `Context`, `Effect` from `effect`; `Artifact`,
-`Commit`, `Tool` from `effect-build`):
-
-```ts
-class Upx extends Context.Service<Upx, Tool.Service>()("example/Upx") {}
-const upx = Tool.provider(Upx, {
-  name: "upx",
-  version: { parse: Tool.versionPattern(/^upx (\d+\.\d+\.\d+)/u), supported: ">=4 <5", tested: ["4.2.0"] },
-});
-const compress = (executable: Artifact.Executable, outfile: string) => Effect.gen(function*() {
-  const tool = yield* upx.resolved;
-  return yield* Commit.output(outfile, (staged) =>
-    Tool.run(tool, ["--best", "-o", staged, executable.path]).pipe(
-      Effect.andThen(Artifact.executable(staged, Tool.producedBy(tool), executable.target)),
-    ));
-});
-// Provide upx.layer() and your platform services, just like Bun.layer().
-```
-
-[The full recipe](docs/recipes.md#wrap-a-tool-that-has-no-provider) adds input validation and
-the public [provider test kit](docs/recipes.md#test-a-provider).
-
-## Compose
-
-An executable feeds an archive, installer, signer, or SBOM scanner directly. A bundle directory
-archives the same way; Effect supplies concurrency, scopes, interruption, and typed errors.
-The [artifact pipeline](examples/artifact-pipeline) runs those compositions end to end.
-
-## Opt in to content identity
-
-Base artifact schemas contain metadata without a digest. `Artifact.HashedFile`,
-`HashedExecutable`, and `HashedDirectory` extend them with required SHA-256 fields:
-
-```ts
-const HashedFile = Artifact.File.pipe(Schema.fieldsAssign({ sha256: Artifact.Sha256 }));
-const hashed = build.pipe(Effect.flatMap(Artifact.withSha256));
-// A consumer can require typeof HashedFile.Type. Ordinary producers keep returning the base type.
-```
-
-`withSha256` reads the current contents in bounded chunks and preserves top-level provider
-fields. `verify`, `readVerified`, `streamVerified`, and `copyVerified` accept hashed records.
-Schema decoding checks the stored record without touching its path. Ordinary archives,
-assembly, signing, and package copies consume current contents; passing a hashed record does
-not silently enable verification. Cache key inputs and checksums require explicit hashed records.
-Wheels hash their payloads while encoding RECORD; caches hash while ingesting output.
-Apple signature verification, ticket validation, and assessment are separate operations that a
-release pipeline selects explicitly. `Layout.validatePortable` adds case/Unicode portability checks.
-
-## Build a matrix
-
-A release is a matrix of targets, one archive per target, and a checksum file, committed as a
-whole. This is the [CLI example](examples/cli), abridged:
-
-```ts
-const release = Commit.atomic("dist", (staged) =>
-  Effect.gen(function*() {
-    const path = yield* Path.Path;
-    const build = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped();
-    const archives = yield* Effect.forEach(targets, (target) =>
-      Effect.gen(function*() {
-        const { os, executableSuffix } = Target.parts(target);
-        const executable = yield* Bun.compile({
-          entrypoints: ["src/cli.ts"],
-          outfile: path.join(build, target, `hello${executableSuffix}`),
-          target,
-        });
-        const entries = [{ artifact: executable, path: `hello${executableSuffix}` }];
-        const outfile = path.join(staged, `hello_0.8.0_${target}`);
-        return yield* os === "windows"
-          ? Archive.zip({ entries, outfile: `${outfile}.zip` })
-          : Archive.tarGz({ entries, outfile: `${outfile}.tar.gz` });
-      }), { concurrency: 2 });
-    yield* Checksums.write({ artifacts: yield* Effect.forEach(archives, Artifact.withSha256), outfile: path.join(staged, "SHA256SUMS") });
-    return yield* Artifact.directory(staged, { name: "hello", version: "0.8.0" });
-  }), { staging: "sibling" });
-```
-
-The result is a directory that `sha256sum -c` accepts from anywhere the tree is moved to,
-recorded as one `Artifact.Directory` with an entry per file:
-
-```
-dist/
-├── SHA256SUMS
-├── hello_0.8.0_darwin-arm64.tar.gz
-├── hello_0.8.0_linux-arm64.tar.gz
-├── hello_0.8.0_linux-x64-musl.tar.gz
-├── hello_0.8.0_linux-x64.tar.gz
-└── hello_0.8.0_windows-x64.zip
-```
-
-If any target fails, `dist/` is left exactly as it was. The [recipes](docs/recipes.md) cover the
-rest of a release: OS packages, wheels that install a native command, signing and notarization,
-SBOMs, and handing the manifest to whatever publishes.
-
-## Compose application directories
-
-`Directory.assemble` combines separately built programs, dependency trees and runtime assets
-into one `Artifact.Directory`. It preserves directory members' modes and symlinks,
-rejects conflicting shipping paths, and commits the complete output once. Omit a directory
-entry's path to merge its contents at root; file entries require a shipping path.
-`Archive.tarGz({ directory, outfile })` archives that tree without an extra directory prefix.
-See the [Node and Bun application recipe](docs/recipes.md#assemble-node-and-bun-applications-with-runtime-assets).
-
-## Cache
-
-Declare every input that affects the output, then wrap a producer with `Cache.cached`.
-A hit restores verified bytes at the requested path through `Commit.output`. The index and
-object directory are services you provide; cache corruption rebuilds and failed ingest logs a
-warning. The [CLI example](examples/cli) caches its five-target matrix. See [cache semantics](docs/cache.md)
-for environment inputs, provider schemas, and failure behavior.
-
-```ts
-const source = yield* Artifact.directory("src", { name: "source", version: "1" }).pipe(Effect.flatMap(Artifact.withSha256));
-const tool = yield* Bun.resolved.pipe(Effect.flatMap(Tool.withSha256));
-const executable = yield* Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli", target }).pipe(
-  Cache.cached({
-    key: { operation: "Bun.compile", tool, inputs: [source], options: { entrypoints: ["src/cli.ts"], target } },
-    outfile: "dist/cli",
-    schema: Artifact.Executable,
-  }),
-  Effect.provide(Cache.objects(".effect-build/cache/objects")),
-  Effect.provide(KeyValueStore.layerFileSystem(".effect-build/cache/keys")),
-);
-```
-
-Import `Cache` and `Tool` from `effect-build` and `KeyValueStore` from `effect/persistence`.
-This example assumes the source tree is the entire build input; add lockfiles, configuration,
-assets, dependencies and environment values whenever the program uses them.
-
-## Providers we ship
-
-| Package                                                 | Produces                                                                        | Needs                           |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------- |
-| [effect-build](packages/effect-build)                   | Artifacts, targets, executable inspection, providers, atomic commits, checksums, cache, testing | Effect                          |
-| [effect-build-bun](packages/effect-build-bun)           | Native executables and bundles with Bun; scoped watch; Bun's in-process API           | Bun 1.3.14+                     |
-| [effect-build-deno](packages/effect-build-deno)         | Executables, bundles, and transpiled trees with Deno; scoped watch; Deno's bundle API | Deno 2.9.5+                     |
-| [effect-build-esbuild](packages/effect-build-esbuild)   | Bundles and transforms with esbuild; scoped rebuild, watch, and serve                 | esbuild 0.28 (peer)             |
-| [effect-build-rolldown](packages/effect-build-rolldown) | Bundles and transforms with Rolldown; scoped builders and watch streams               | Nothing (Rolldown is bundled)   |
-| [effect-build-node-sea](packages/effect-build-node-sea) | Node single executable applications with embedded assets                              | Node 22 to 26                   |
-| [effect-build-archives](packages/effect-build-archives) | Reproducible ZIP and tar.gz archives; exact Git source archives                       | Nothing (Git for `source`)      |
-| [effect-build-python](packages/effect-build-python)     | Wheels written directly from artifacts; sdists and wheels of Python projects with uv  | Nothing (uv for `build`)        |
-| [effect-build-nfpm](packages/effect-build-nfpm)         | Debian, RPM, Alpine, Arch Linux, and MSIX packages with nFPM                          | nFPM 2.47+                      |
-| [effect-build-sbom](packages/effect-build-sbom)         | SPDX and CycloneDX JSON with Syft                                                     | Syft 1.50+                      |
-| [effect-build-windows](packages/effect-build-windows)   | Authenticode signing of executables and MSIX files (experimental)                     | Windows SDK SignTool            |
-| [effect-build-apple](packages/effect-build-apple)       | App bundles, DMGs, PKGs, signing, notarization, and assessment (experimental)         | macOS, Xcode command-line tools |
-
-Every package is ESM, depends on `effect-build` for its types, and accepts Effect
-`>=4.0.0 <4.1.0` as a peer. The exact versions each tool is tested with are in
-[tools and providers](docs/providers.md).
-
-## How it fits together
-
-- **Artifacts** are records of files on disk: `kind`, `path`, `bytes`, `producedBy`,
-  plus `target` and `format` for executables and a sorted entry manifest for directories.
-  `Artifact.withSha256` adds a content identity; `Artifact.verify` checks a hashed record.
-  `Artifact.encode` and `decode` persist the base fields; use the hashed/provider schema to retain refinements.
-- **Targets** are eight strings: `linux-x64`, `linux-x64-musl`, `linux-arm64`,
-  `linux-arm64-musl`, `darwin-x64`, `darwin-arm64`, `windows-x64`, `windows-arm64`. Linux without
-  a suffix means glibc.
-- **Providers** wrap one tool each. `Bun.layer({ executable?, version? })` resolves the tool
-  once; `Bun.compile`, `Bun.bundle`, and the rest run against it. In-process tools (esbuild,
-  Rolldown, the archive and wheel writers) need no layer, only the platform services.
-- **Commits** make output atomic. Producers stage, validate their output, and rename by default; `atomic: false`
-  writes in place, `onExists: "fail"` refuses to replace a file, and `Commit.atomic` gives a
-  whole directory of your own output the same guarantee.
-- **Checks** are combinators you add where you want them: `Artifact.verify`,
-  `Executable.expectTarget`, `Tool.requireVersion`.
-
-## Documentation
-
-- [Getting started](docs/getting-started.md): the first build, line by line, and what to do next.
-- [Recipes](docs/recipes.md): target matrices, archives, packages, wheels, signing, SBOMs,
-  manifests, and wrapping your own tools.
-- [Tools and providers](docs/providers.md): how tool layers work, and the versions each provider
-  accepts and is tested with.
-- [Compatibility](docs/compatibility.md): Node, TypeScript, and Effect requirements, plus the
-  host and target support matrix.
-- [Errors and checks](docs/errors.md): every error type, atomic output, and recovery.
-- [Design](DESIGN.md): what effect-build is, what it refuses to be, and the decisions behind it.
-- [Changelog](CHANGELOG.md), including how to upgrade from 0.6.
-
-## Examples
-
-- [CLI](examples/cli): five targets, one archive each, a checksum file, and one atomic `dist/`.
-- [Artifact pipeline](examples/artifact-pipeline): every producer in one program, from a compiled
-  executable to archives, wheels, bundles, Node SEA, Deno, deb packages, uv builds, and an SBOM.
-  Its [signing module](examples/artifact-pipeline/src/signing.ts) shows Windows Authenticode and
-  macOS Developer ID flows for both bare executables and app bundles.
-
-## Requirements
-
-Node 22.19 or newer runs the build program (Node 24 also runs `build.ts` directly). Packages are
-ESM-only and typecheck from TypeScript 5.9. The workspace tests Effect 4.0.0, with installed consumers on
-TypeScript 5.9, 6 and 7. The Effect peer range starts at 4.0.0. Compilers and packagers are separate installs, resolved from
-`PATH` or an explicit path. Details are in [compatibility](docs/compatibility.md).
-
-## Contributing
-
-`bun install --frozen-lockfile` then `bun run verify` builds, typechecks, lints, and runs the
-unit tests and both examples. [CONTRIBUTING.md](CONTRIBUTING.md) lists the real-tool test
-commands and how releases are cut; [AGENTS.md](AGENTS.md) holds the rules every change follows.
-
-## License
-
-[MIT](LICENSE)
+For repository development, [CONTRIBUTING.md](CONTRIBUTING.md) describes the checks.
+`bun run verify` is the merge bar; the operating-system and real-tool CI matrix is the release bar.

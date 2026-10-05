@@ -18,6 +18,8 @@
     "examples/**/*.json",
     "*.ts",
     "*.json",
+    "tooling/**/*.json",
+    "CHANGELOG.md",
     "README.md",
     "CONTRIBUTING.md",
     "AGENTS.md",
@@ -26,7 +28,8 @@
     "packages/**/*.md",
     "DESIGN.md",
     "scripts/**/*.mjs",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "tooling/**/*.mjs"
   ],
   "excludes": [
     "node_modules",
