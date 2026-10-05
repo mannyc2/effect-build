@@ -137,12 +137,16 @@ layer(native, { excludeTestServices: true })("Tool with real Node processes", (i
         yield* Effect.scoped(Effect.gen(function*() {
           const handle = yield* tool.session(nodeCommand(
             tool,
-            // An ordinary socket keeps stdout writes asynchronous on Windows too.
-            "const{Socket}=require('node:net');const output=new Socket({fd:1,readable:false,writable:true});output.write(Buffer.alloc(5000000,65));const marker=new Socket({fd:3,readable:false,writable:true});marker.end('ready');setInterval(()=>{},1000)",
+            // Readiness follows a completed stdout write; stdout itself remains unread.
+            "process.stdout.write('unread',()=>require('node:fs').writeSync(3,'ready\\n'));setInterval(()=>{},1000)",
             { stdout: "pipe", stderr: "ignore", additionalFds: { fd3: { type: "output" } } },
           ));
-          const marker = yield* Stream.run(handle.getOutputFd(3), tool.text({ maxBytes: 16 }));
-          assert.strictEqual(marker, "ready");
+          const marker = yield* handle.getOutputFd(3).pipe(
+            tool.lines({ maxLineBytes: 16 }),
+            Stream.runHead,
+            Effect.timeout("3 seconds"),
+          );
+          assert.deepStrictEqual(marker, Option.some("ready"));
           assert.isTrue(yield* handle.isRunning);
           assert.isTrue(yield* isAlive(handle.pid));
         }));
