@@ -1,40 +1,50 @@
-import * as Layout from "effect-build/Layout";
-import { describe, expect, it } from "vitest";
+import { assert, it } from "@effect/vitest";
+import { Effect } from "effect";
+import * as Layout from "../../packages/effect-build/src/Layout.ts";
 
-describe("shipping layouts", () => {
-  it("accepts a shared directory before or after its children", () => {
-    const entries: readonly Layout.Entry[] = [
-      { path: "docs", kind: "directory" },
-      { path: "docs/a", kind: "file" },
-      { path: "docs/b", kind: "symlink" },
-    ];
-    expect(Layout.validate(entries)).toBeUndefined();
-    expect(Layout.validate([...entries].reverse())).toBeUndefined();
-  });
+it.effect("accepts distinct leaves sharing implicit directories", () =>
+  Effect.gen(function*() {
+    assert.isUndefined(yield* Layout.validatePortable(["docs/README.md", "docs/logo.svg", "app"]));
+    assert.isUndefined(yield* Layout.validatePortable([]));
+  }));
 
-  it.each(
-    [
-      ["duplicate", [{ path: "a", kind: "file" }, { path: "a", kind: "directory" }]],
-      ["file ancestor", [{ path: "a", kind: "file" }, { path: "a/b", kind: "file" }]],
-      ["symlink ancestor", [{ path: "a", kind: "symlink" }, { path: "a/b", kind: "file" }]],
-    ] satisfies readonly [string, readonly Layout.Entry[]][],
-  )("rejects %s in either input order", (_label, entries) => {
-    expect(Layout.validate(entries)).toBeDefined();
-    expect(Layout.validate([...entries].reverse())).toBeDefined();
-    expect(Layout.validatePortable(entries)).toBeDefined();
-  });
+it.effect.each([
+  "",
+  "/app",
+  "C:/app",
+  "../app",
+  "a/./b",
+  "a//b",
+  "a/",
+  "a\\b",
+  "a\0b",
+  "CON",
+  "con.txt",
+  "assets/COM1.png",
+  "LPT9",
+  "name.",
+  "name ",
+  "a:b",
+  "a?b",
+])("rejects the nonportable path %j", (path) =>
+  Effect.gen(function*() {
+    const error = yield* Layout.validatePortable([path]).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "LayoutError");
+    assert.strictEqual(error.path, path);
+    assert.strictEqual(error.reason._tag, "InvalidPath");
+  }));
 
-  it.each(
-    [
-      ["file spelling", [{ path: "Readme", kind: "file" }, { path: "README", kind: "file" }]],
-      ["implicit directory spelling", [{ path: "Docs/a", kind: "file" }, { path: "docs/b", kind: "file" }]],
-      ["explicit directory spelling", [{ path: "Docs", kind: "directory" }, { path: "docs/b", kind: "file" }]],
-      ["Unicode directory spelling", [{ path: "café/a", kind: "file" }, { path: "cafe\u0301/b", kind: "file" }]],
-    ] satisfies readonly [string, readonly Layout.Entry[]][],
-  )("checks %s only when portability is requested", (_label, entries) => {
-    for (const ordered of [entries, [...entries].reverse()]) {
-      expect(Layout.validate(ordered)).toBeUndefined();
-      expect(Layout.validatePortable(ordered)).toBeDefined();
+it.effect.each([
+  ["same", "same"],
+  ["file", "file/child"],
+  ["Readme", "README"],
+  ["Docs/a", "docs/b"],
+  ["café/a", "cafe\u0301/b"],
+])("rejects duplicate, prefix, case and Unicode collisions %j", (paths) =>
+  Effect.gen(function*() {
+    for (const ordered of [paths, [...paths].reverse()]) {
+      const error = yield* Layout.validatePortable(ordered).pipe(Effect.flip);
+      assert.strictEqual(error._tag, "LayoutError");
+      assert.strictEqual(error.reason._tag, "Collision");
     }
-  });
-});
+  }));

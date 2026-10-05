@@ -1,63 +1,59 @@
-import { argumentIssue } from "./Tool.js";
+import { Effect, Schema } from "effect";
 
-/** A shipping path's filesystem role; payloads and provider metadata stay with their owner. */
-export interface Entry {
-  readonly path: string;
-  readonly kind: "file" | "directory" | "symlink";
-}
+export class InvalidPath extends Schema.TaggedError<InvalidPath>()("InvalidPath", {
+  detail: Schema.String,
+}) {}
 
-export interface Issue {
-  readonly path: string;
-  readonly reason: string;
-}
+export class Collision extends Schema.TaggedError<Collision>()("Collision", {
+  previous: Schema.String,
+}) {}
 
-/** Normalized relative shipping paths use '/', without traversal or a trailing separator. */
-export const pathIssue = (path: string): string | undefined => {
-  const argument = argumentIssue(path);
-  if (argument !== undefined) return `path ${argument}`;
-  if (path.includes("\\")) return "backslashes are forbidden; shipping paths use '/'";
-  if (path.startsWith("/") || /^[a-z]:/iu.test(path)) return "absolute paths are forbidden";
-  const segments = path.split("/");
-  if (segments.some((part) => part === "")) return "empty path segments are forbidden";
-  if (segments.some((part) => part === "." || part === "..")) return "'.' and '..' path segments are forbidden";
-  return undefined;
-};
-
-const validateEntries = (entries: readonly Entry[], keyOf: (path: string) => string): Issue | undefined => {
-  const indexed = new Map<string, Entry & { readonly explicit: boolean }>();
-  for (const entry of entries) {
-    const reason = pathIssue(entry.path);
-    if (reason !== undefined) return { path: entry.path, reason };
-    const parts = entry.path.split("/");
-    for (let length = 1; length <= parts.length; length++) {
-      const path = parts.slice(0, length).join("/");
-      const key = keyOf(path);
-      const explicit = length === parts.length;
-      const kind = explicit ? entry.kind : "directory";
-      const previous = indexed.get(key);
-      if (previous !== undefined) {
-        if (previous.path !== path) {
-          return {
-            path: entry.path,
-            reason: `case/Unicode-normalization collision with ${JSON.stringify(previous.path)}`,
-          };
-        }
-        if (explicit && previous.explicit) return { path: entry.path, reason: `duplicates ${JSON.stringify(path)}` };
-        if (previous.kind !== "directory" || kind !== "directory") {
-          return { path: entry.path, reason: `non-directory entry ${JSON.stringify(path)} has descendants` };
-        }
-      }
-      indexed.set(key, { path, kind, explicit: explicit || previous?.explicit === true });
+export class LayoutError extends Schema.TaggedError<LayoutError>()("LayoutError", {
+  path: Schema.String,
+  reason: Schema.Union([InvalidPath, Collision]),
+}) {
+  override get message(): string {
+    switch (this.reason._tag) {
+      case "InvalidPath":
+        return `Invalid portable path ${this.path}: ${this.reason.detail}`;
+      case "Collision":
+        return `Portable path ${this.path} collides with ${this.reason.previous}`;
     }
+  }
+}
+
+const pathIssue = (path: string): string | undefined => {
+  if (path.startsWith("/") || /^[a-z]:/iu.test(path)) return "absolute paths are forbidden";
+  if (path.includes("\\")) return "paths use '/' separators";
+  for (const part of path.split("/")) {
+    if (part === "" || part === "." || part === "..") return "empty and traversal segments are forbidden";
+    if ([...part].some((character) => character.charCodeAt(0) < 32) || /[<>:"|?*]/u.test(part)) {
+      return "control characters and Windows-reserved characters are forbidden";
+    }
+    if (/[ .]$/u.test(part)) return "segments cannot end with a dot or space";
+    if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(part)) return "Windows device names are forbidden";
   }
   return undefined;
 };
 
-/** Reject unsafe paths, duplicate destinations and descendants through files or symlinks.
- * Distinct spellings remain distinct; a filesystem writer owns actual destination collisions. */
-export const validate = (entries: readonly Entry[]): Issue | undefined => validateEntries(entries, (path) => path);
-
-/** Opt in to one spelling at every path prefix under NFC normalization and case folding,
- * in addition to structural validity. This is a shipping policy, not an archive-format requirement. */
-export const validatePortable = (entries: readonly Entry[]): Issue | undefined =>
-  validateEntries(entries, (path) => path.normalize("NFC").toLowerCase());
+/** Validates relative leaf file/symlink paths; directories are implicit prefixes.
+ * Rejects Windows device names and separators, and NFC/case/prefix collisions.
+ * Empty directories have no representation in this operation. */
+export const validatePortable = Effect.fn("Layout.validatePortable")(function*(paths: readonly string[]) {
+  const indexed = new Map<string, { readonly path: string; readonly leaf: boolean }>();
+  for (const path of paths) {
+    const detail = pathIssue(path);
+    if (detail !== undefined) return yield* LayoutError.make({ path, reason: InvalidPath.make({ detail }) });
+    const segments = path.split("/");
+    for (let length = 1; length <= segments.length; length++) {
+      const prefix = segments.slice(0, length).join("/");
+      const key = prefix.normalize("NFC").toLowerCase();
+      const leaf = length === segments.length;
+      const previous = indexed.get(key);
+      if (previous !== undefined && (previous.path !== prefix || previous.leaf || leaf)) {
+        return yield* LayoutError.make({ path, reason: Collision.make({ previous: previous.path }) });
+      }
+      indexed.set(key, { path: prefix, leaf });
+    }
+  }
+});
