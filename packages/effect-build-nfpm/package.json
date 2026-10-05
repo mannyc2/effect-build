@@ -37,6 +37,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./Nfpm": {
+      "types": "./dist/Nfpm.d.ts",
+      "import": "./dist/Nfpm.js"
     }
   },
   "scripts": {

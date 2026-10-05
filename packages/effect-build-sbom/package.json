@@ -35,6 +35,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./Sbom": {
+      "types": "./dist/Sbom.d.ts",
+      "import": "./dist/Sbom.js"
     }
   },
   "scripts": {

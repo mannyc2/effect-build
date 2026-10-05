@@ -36,6 +36,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./SignTool": {
+      "types": "./dist/SignTool.d.ts",
+      "import": "./dist/SignTool.js"
     }
   },
   "scripts": {

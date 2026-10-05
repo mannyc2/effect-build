@@ -35,9 +35,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./api": {
-      "types": "./dist/Api/index.d.ts",
-      "import": "./dist/Api/index.js"
+    "./Deno": {
+      "types": "./dist/Deno.d.ts",
+      "import": "./dist/Deno.js"
     }
   },
   "scripts": {
