@@ -129,7 +129,7 @@ layer(native, { excludeTestServices: true })("Tool with real Node processes", (i
       yield* assertChildGone(pid);
     }), 10_000);
 
-  it.effect("sanitizes real spawn and signal failures without inventing a numeric exit", () =>
+  it.effect("sanitizes real failures and preserves native termination status", () =>
     Effect.gen(function*() {
       const tool = yield* Tool.make("node", { executable: process.execPath });
       const error = yield* tool.run(
@@ -144,11 +144,19 @@ layer(native, { excludeTestServices: true })("Tool with real Node processes", (i
         );
         yield* Stream.runHead(handle.stdout);
         yield* handle.kill({ killSignal: "SIGKILL" });
-        return yield* handle.exitCode.pipe(Effect.flip);
+        return yield* handle.exitCode.pipe(Effect.result);
       }));
-      assert.strictEqual(killed._tag, "PlatformError");
-      assert.include(killed.message, "SIGKILL");
-      assert.notInclude(Cause.pretty(Cause.fail(killed)), "setInterval");
+      if (process.platform === "win32") {
+        assert.strictEqual(killed._tag, "Success");
+        if (killed._tag === "Success") assert.strictEqual(killed.success, 1);
+      } else {
+        assert.strictEqual(killed._tag, "Failure");
+        if (killed._tag === "Failure") {
+          assert.strictEqual(killed.failure._tag, "PlatformError");
+          assert.include(killed.failure.message, "SIGKILL");
+          assert.notInclude(Cause.pretty(Cause.fail(killed.failure)), "setInterval");
+        }
+      }
     }), 10_000);
 
   it.effect("keeps one persistent writer per input and closes both on finite completion", () =>
