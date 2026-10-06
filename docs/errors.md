@@ -16,9 +16,11 @@ and each reason is a real tagged error class with a readable message.
 | `Output`   | safe schema `cause`                    | Output did not decode through the selected schema |
 | `Limit`    | `unit: "output" \| "line"`, `maxBytes` | Bounded text or a line exceeded its byte limit    |
 
-Use `Effect.catchTag` for `ToolError`, and Effect's `catchReason` or `unwrapReason` to work
-with its reason classes. All constructors expose real fields and `message`; the outer error
-does not copy the reason's cause onto itself.
+Use `Effect.catchTag` for `ToolError`. `Effect.catchReason` handles one nested reason tag;
+unmatched reasons keep their outer error and its fields. `Effect.catchReasons` handles several
+reason tags in one call. `Effect.unwrapReason` moves the reasons into the error channel for
+handlers such as `Effect.catchTags`. All constructors expose real fields and `message`; the
+outer error does not copy the reason's cause onto itself.
 
 A valid decoded value does not establish command success: `run` and `stream` still drain
 remaining output, observe late I/O failures, and check the exit code. Accepted numeric exit
@@ -85,6 +87,8 @@ Bindings expose this behavior through `atomic: true`; direct native output is th
 Executable checking is a magic sanity check. Native file read failures remain `PlatformError`;
 the check establishes neither target architecture nor full executable validity.
 Layout validation has no filesystem dependency and treats directories as implicit prefixes.
+The same reason handlers apply to `LayoutError`: handling `Collision` leaves `InvalidPath`
+failures unchanged.
 Digest verification reads current bytes; see [digests](digests.md).
 
 Node SEA additionally exposes `NodeSeaError` for native configuration preparation and cleanup.
