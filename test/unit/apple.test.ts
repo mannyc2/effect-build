@@ -263,7 +263,8 @@ it.effect("xcrun-run tools are still named for the tool in their failures", () =
                 blocks: Option.none(),
               }),
           }),
-          NodePath.layer,
+          // POSIX paths on every host: this checks naming, not native path resolution.
+          Path.layer,
         )),
       ),
       Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ PATH: "/usr/bin" })),
