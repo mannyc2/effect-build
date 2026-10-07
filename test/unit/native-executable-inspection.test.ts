@@ -1,186 +1,63 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, PlatformError } from "effect";
-import * as Artifact from "effect-build/Artifact";
-import * as Executable from "effect-build/Executable";
-import { chmod, mkdtemp, open, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { assert, it } from "@effect/vitest";
+import { Effect, FileSystem, Path } from "effect";
+import * as Executable from "../../packages/effect-build/src/Executable.ts";
 
-import { TestArtifact } from "effect-build/testing";
-const { elf, thinMacho, fatMacho, pe } = TestArtifact;
-
-const changed = (source: Uint8Array, update: (view: DataView) => void): Uint8Array => {
-  const bytes = Uint8Array.from(source);
-  update(new DataView(bytes.buffer));
-  return bytes;
-};
-
-// Go's Darwin linker stores DWARF bytes in a segment that occupies no virtual memory.
-const machoWithDwarf = (): Uint8Array => {
-  const bytes = new Uint8Array(178), view = new DataView(bytes.buffer);
-  bytes.set(thinMacho().subarray(0, 32));
-  view.setUint32(16, 2, true);
-  view.setUint32(20, 144, true);
-  for (const offset of [32, 104]) {
-    view.setUint32(offset, 0x19, true);
-    view.setUint32(offset + 4, 72, true);
-  }
-  bytes.set(new TextEncoder().encode("__TEXT"), 40);
-  view.setBigUint64(64, 177n, true);
-  view.setBigUint64(80, 177n, true);
-  view.setUint32(88, 5, true);
-  view.setUint32(92, 5, true);
-  bytes.set(new TextEncoder().encode("__DWARF"), 112);
-  view.setBigUint64(128, 16384n, true);
-  view.setBigUint64(144, 177n, true);
-  view.setBigUint64(152, 1n, true);
-  bytes.set([0xcc, 0xde], 176);
-  return bytes;
-};
-
-const fixtures = [
-  ["glibc x64", elf("/lib64/ld-linux-x86-64.so.2"), { format: "elf", os: "linux", arch: "x64", abi: "gnu" }, "linux-x64"],
-  ["glibc arm64", elf("/lib/ld-linux-aarch64.so.1", 183), { format: "elf", os: "linux", arch: "arm64", abi: "gnu" }, "linux-arm64"],
-  ["musl x64", elf("/lib/ld-musl-x86_64.so.1"), { format: "elf", os: "linux", arch: "x64", abi: "musl" }, "linux-x64-musl"],
-  ["musl arm64", elf("/lib/ld-musl-aarch64.so.1", 183), { format: "elf", os: "linux", arch: "arm64", abi: "musl" }, "linux-arm64-musl"],
-  ["Mach-O x64", thinMacho(0x01000007), { format: "mach-o", os: "darwin", arch: "x64" }, "darwin-x64"],
-  ["Mach-O arm64", thinMacho(0x0100000c), { format: "mach-o", os: "darwin", arch: "arm64" }, "darwin-arm64"],
-  ["Mach-O with unmapped DWARF", machoWithDwarf(), { format: "mach-o", os: "darwin", arch: "arm64" }, "darwin-arm64"],
-  ["fat Mach-O x64", fatMacho([0x01000007]), { format: "mach-o", os: "darwin", arch: "x64" }, "darwin-x64"],
-  ["PE x64", pe(0x8664), { format: "pe", os: "windows", arch: "x64" }, "windows-x64"],
-  ["PE arm64", pe(0xaa64), { format: "pe", os: "windows", arch: "arm64" }, "windows-arm64"],
-] as const;
-
-describe("executable headers", () => {
-  it("preserves a denied open as an unreadable executable with native details", async () => {
-    const failure = await Effect.runPromise(Effect.gen(function*() {
+it.layer(NodeServices.layer)("optional native-header check", (it) => {
+  it.effect.each([
+    "7f454c46",
+    "feedface",
+    "cefaedfe",
+    "feedfacf",
+    "cffaedfe",
+    "cafebabe",
+    "bebafeca",
+    "cafebabf",
+    "bfbafeca",
+    "4d5a0000",
+  ])("accepts the four-byte native magic %s without reading payloads", (magic) =>
+    Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem;
-      return yield* Executable.inspect("denied").pipe(Effect.provideService(FileSystem.FileSystem, {
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped();
+      const file = path.join(root, "app");
+      const bytes = Uint8Array.from(magic.match(/../gu) ?? [], (byte) => Number.parseInt(byte, 16));
+      yield* fs.writeFile(file, bytes);
+      let requested = 0;
+      yield* Executable.checkNative(file).pipe(Effect.provideService(FileSystem.FileSystem, {
         ...fs,
-        open: () => Effect.fail(PlatformError.systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "open" })),
-      }), Effect.flip);
-    }).pipe(Effect.provide(NodeServices.layer)));
-    expect(failure).toMatchObject({ reason: "unreadable", detail: expect.stringContaining("PermissionDenied") });
-  });
+        readFile: () => Effect.die("whole-file reads are forbidden"),
+        open: Effect.fnUntraced(function*(target: string, options?: Parameters<FileSystem.FileSystem["open"]>[1]) {
+          const handle = yield* fs.open(target, options);
+          return {
+            ...handle,
+            readAlloc: (length) => {
+              requested += length;
+              return handle.readAlloc(length);
+            },
+          } satisfies FileSystem.File;
+        }),
+      }));
+      assert.strictEqual(requested, 4);
+    }));
 
-  it.each(fixtures)("identifies %s and resolves its target", async (_name, bytes, expected, target) => {
-    const facts = await Effect.runPromise(Executable.parse(bytes));
-    expect(facts).toEqual(expected);
-    expect(Executable.matches(facts, target)).toBe(true);
-    expect(await Effect.runPromise(Executable.resolveTarget("app", facts))).toBe(target);
-  });
-
-  it("accepts static Linux binaries for either ABI and defaults to glibc", async () => {
-    const facts = await Effect.runPromise(Executable.parse(elf()));
-    expect(facts).toEqual({ format: "elf", os: "linux", arch: "x64" });
-    expect(Executable.matches(facts, "linux-x64")).toBe(true);
-    expect(Executable.matches(facts, "linux-x64-musl")).toBe(true);
-    expect(await Effect.runPromise(Executable.resolveTarget("app", facts))).toBe("linux-x64");
-    expect(await Effect.runPromise(Executable.resolveTarget("app", facts, "linux-x64-musl"))).toBe("linux-x64-musl");
-  });
-
-  it.each(["linux-x64-musl", "linux-arm64", "darwin-x64"] as const)(
-    "rejects %s when the header identifies glibc x64",
-    async (target) => {
-      const facts = await Effect.runPromise(Executable.parse(elf("/lib64/ld-linux-x86-64.so.2")));
-      expect(Executable.matches(facts, target)).toBe(false);
-      const error = await Effect.runPromise(Executable.resolveTarget("app", facts, target).pipe(Effect.flip));
-      expect(error).toMatchObject({ _tag: "ExecutableTargetMismatch", path: "app", expected: target, observed: "linux-x64-gnu" });
-    },
+  it.effect.each([new Uint8Array(), new Uint8Array([0x4d, 0x5a]), new TextEncoder().encode("#!/bin/sh")])(
+    "rejects empty, truncated and non-native magic %#",
+    (bytes) =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped();
+        const file = path.join(root, "app");
+        yield* fs.writeFile(file, bytes);
+        const error = yield* Executable.checkNative(file).pipe(Effect.flip);
+        assert.deepInclude(error, { _tag: "ExecutableError", path: file });
+      }),
   );
 
-  it.each([
-    ["short header", new Uint8Array(3), "truncated-header"],
-    ["non-native file", new TextEncoder().encode("#!/bin/sh"), "not-a-native-executable"],
-    ["invalid ELF class", changed(elf(), (v) => v.setUint8(4, 0)), "invalid-header"],
-    ["eight-byte Mach-O", thinMacho().subarray(0, 8), "truncated-header"],
-    ["missing Mach-O load commands", thinMacho().subarray(0, 32), "truncated-header"],
-    ["missing Mach-O segment payload", thinMacho().subarray(0, 104), "truncated-header"],
-    ["unmapped Mach-O segment with initial protection", changed(machoWithDwarf(), (v) => v.setUint32(164, 1, true)), "invalid-header"],
-    ["mapped Mach-O segment larger than its virtual memory", changed(machoWithDwarf(), (v) => v.setBigUint64(64, 176n, true)), "invalid-header"],
-    ["unmapped Mach-O segment outside the file", changed(machoWithDwarf(), (v) => v.setBigUint64(152, 2n, true)), "truncated-header"],
-    ["Mach-O with only unmapped payload", changed(thinMacho(), (v) => v.setBigUint64(64, 0n, true)), "invalid-header"],
-    ["missing ELF program-header table", elf().subarray(0, 64), "truncated-header"],
-    ["missing ELF interpreter", elf("/lib64/ld-linux-x86-64.so.2").subarray(0, 180), "truncated-header"],
-    ["unknown ELF interpreter", elf("/lib/custom-loader.so"), "unsupported-interpreter"],
-    ["missing ELF loadable payload", elf().subarray(0, 120), "truncated-header"],
-    ["missing PE COFF header", pe().subarray(0, 70), "truncated-header"],
-    ["missing PE section payload", pe().subarray(0, 512), "truncated-header"],
-    ["PE DLL", changed(pe(), (v) => v.setUint16(86, 0x2002, true)), "invalid-header"],
-    ["unsupported ELF machine", elf(undefined, 0), "unsupported-machine"],
-    ["missing ELF program headers", changed(elf(), (v) => v.setUint16(56, 0, true)), "invalid-header"],
-    ["overflowing ELF offset", changed(elf(), (v) => v.setBigUint64(32, 0xffff_ffff_ffff_ffffn, true)), "invalid-header"],
-    ["empty fat Mach-O", fatMacho([]), "invalid-header"],
-    ["mixed-architecture fat Mach-O", fatMacho([0x01000007, 0x0100000c]), "ambiguous-fat-binary"],
-    ["invalid PE signature", changed(pe(0x8664), (v) => v.setUint8(64, 0)), "invalid-header"],
-  ] as const)("rejects a %s", async (_name, bytes, reason) => {
-    const error = await Effect.runPromise(Executable.parse(bytes).pipe(Effect.flip));
-    expect(error).toBeInstanceOf(Executable.ParseError);
-    expect(error.reason).toBe(reason);
-  });
-
-  it("reads a real file and reports unreadable or malformed files with their path", async () => {
-    const root = await mkdtemp(join(tmpdir(), "effect-build-header-"));
-    try {
-      const path = join(root, "app");
-      await writeFile(path, pe(0xaa64));
-      expect(await Effect.runPromise(Executable.inspect(path).pipe(Effect.provide(NodeServices.layer)))).toEqual({
-        format: "pe", os: "windows", arch: "arm64",
-      });
-      const missing = join(root, "missing");
-      const unreadable = await Effect.runPromise(Executable.inspect(missing).pipe(Effect.flip, Effect.provide(NodeServices.layer)));
-      expect(unreadable).toMatchObject({ _tag: "ExecutableInspectError", path: missing, reason: "not-found", detail: expect.any(String) });
-      await writeFile(path, new Uint8Array(3));
-      const malformed = await Effect.runPromise(Executable.inspect(path).pipe(Effect.flip, Effect.provide(NodeServices.layer)));
-      expect(malformed).toMatchObject({ _tag: "ExecutableInspectError", path, reason: "truncated-header" });
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("inspects a file with an unmapped DWARF segment", async () => {
-    const root = await mkdtemp(join(tmpdir(), "effect-build-dwarf-"));
-    try {
-      const path = join(root, "app");
-      await writeFile(path, machoWithDwarf());
-      expect(await Effect.runPromise(Executable.inspect(path).pipe(Effect.provide(NodeServices.layer)))).toEqual({
-        format: "mach-o", os: "darwin", arch: "arm64",
-      });
-    } finally { await rm(root, { recursive: true, force: true }); }
-  });
-
-  it("inspects metadata near the end of a large sparse file without buffering its payload", async () => {
-    const root = await mkdtemp(join(tmpdir(), "effect-build-sparse-header-"));
-    try {
-      const path = join(root, "app"), bytes = elf("/lib64/ld-linux-x86-64.so.2");
-      const offset = 512 * 1024 * 1024, view = new DataView(bytes.buffer);
-      view.setBigUint64(128, BigInt(offset), true);
-      const handle = await open(path, "w");
-      try {
-        await handle.write(bytes.subarray(0, 176));
-        await handle.write(bytes.subarray(176), 0, bytes.length - 176, offset);
-      } finally { await handle.close(); }
-      expect(await Effect.runPromise(Executable.inspect(path).pipe(Effect.provide(NodeServices.layer)))).toEqual({ format: "elf", os: "linux", arch: "x64", abi: "gnu" });
-    } finally { await rm(root, { recursive: true, force: true }); }
-  });
-
-  it("re-reads the header when an executable passes through expectTarget", async () => {
-    const root = await mkdtemp(join(tmpdir(), "effect-build-target-"));
-    try {
-      const path = join(root, "app");
-      await writeFile(path, thinMacho(0x01000007));
-      await chmod(path, 0o755);
-      const artifact = await Effect.runPromise(
-        Artifact.executable(path, { name: "fixture", version: "1.0.0" }).pipe(Effect.provide(NodeServices.layer)),
-      );
-      const check = Effect.succeed(artifact).pipe(Executable.expectTarget("darwin-x64"), Effect.provide(NodeServices.layer));
-      expect(await Effect.runPromise(check)).toBe(artifact);
-      await writeFile(path, thinMacho(0x0100000c));
-      const error = await Effect.runPromise(check.pipe(Effect.flip));
-      expect(error).toMatchObject({ _tag: "ExecutableTargetMismatch", path, expected: "darwin-x64", observed: "darwin-arm64" });
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+  it.effect("keeps a native open failure in the platform error channel", () =>
+    Effect.gen(function*() {
+      const error = yield* Executable.checkNative("/does-not-exist/effect-build").pipe(Effect.flip);
+      assert.strictEqual(error._tag, "PlatformError");
+    }));
 });

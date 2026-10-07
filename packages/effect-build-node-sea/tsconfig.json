@@ -3,9 +3,15 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "types": ["node"],
+    "types": [],
     "tsBuildInfoFile": "../../node_modules/.cache/effect-build-node-sea.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
-  "references": [{ "path": "../effect-build" }]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../effect-build"
+    }
+  ]
 }

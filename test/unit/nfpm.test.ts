@@ -1,44 +1,55 @@
-import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import { Artifact, Tool } from "effect-build";
-import * as Nfpm from "effect-build-nfpm";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, expect, it } from "vitest";
-import { TestArtifact } from "effect-build/testing";
-const { elf, pe, thinMacho } = TestArtifact;
+import { assert, it } from "@effect/vitest";
+import { Effect, FileSystem, Layer, Path } from "effect";
+import { Nfpm } from "effect-build-nfpm";
+import { ToolTest } from "effect-build/testing";
+import { ChildProcessSpawner } from "effect/process";
 
-const producer = { name: "fixture", version: "0.7.0" };
-const tool = { name: "nfpm", path: "/not-launched", version: "2.47.0", bytes: 0 };
-const run = <A, E>(effect: Effect.Effect<A, E, Nfpm.Nfpm | NodeServices.NodeServices>) =>
-  Effect.runPromise(effect.pipe(Effect.provideService(Nfpm.Nfpm, { tool }), Effect.provide(NodeServices.layer)));
-let root: string;
-beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "effect-build-nfpm-target-"));
-});
-afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
-});
+it.effect("nFPM consumes its native config without rewriting metadata", () =>
+  Effect.gen(function*() {
+    const path = yield* Path.Path.pipe(Effect.provideContext(yield* Layer.build(Path.layer)));
+    const spawner = ToolTest.layer((command) =>
+      Effect.sync(() => {
+        assert.strictEqual(command._tag, "StandardCommand");
+        if (command._tag === "StandardCommand") {
+          assert.deepStrictEqual(command.args, [
+            "package",
+            "--quiet",
+            "--config",
+            "nfpm.yaml",
+            "--packager",
+            "deb",
+            "--target",
+            path.resolve("app.deb"),
+          ]);
+        }
+        return ToolTest.handle();
+      })
+    );
+    const nfpm = yield* Nfpm.make({ executable: "nfpm" }).pipe(
+      Effect.provideContext(yield* Layer.build(Layer.mergeAll(spawner, FileSystem.layerNoop({}), Path.layer))),
+    );
+    assert.strictEqual(
+      yield* nfpm.package({ config: "nfpm.yaml", format: "deb", outfile: "app.deb", extraArgs: ["--quiet"] }),
+      path.resolve("app.deb"),
+    );
+  }));
 
-it.each([
-  { name: "Darwin program in Linux package", bytes: thinMacho(), arch: "arm64" },
-  { name: "Windows program in Linux package", bytes: pe(), arch: "amd64" },
-  { name: "x64 program in ARM package", bytes: elf(), arch: "arm64" },
-  { name: "native program in architecture independent package", bytes: elf(), arch: "all" },
-  { name: "Linux package declaring Darwin", bytes: elf(), arch: "amd64", platform: "darwin" },
-])("rejects $name before touching output", async ({ bytes, arch, platform }) => {
-  const path = join(root, "program");
-  await writeFile(path, bytes);
-  const artifact = await run(Artifact.executable(path, producer));
-  const error = await run(
-    Nfpm.package({
-      format: "deb",
-      config: { name: "fixture", version: "1.0.0", arch, ...(platform === undefined ? {} : { platform }) },
-      contents: [{ artifact, dst: "/usr/bin/fixture" }],
-      outfile: join(root, "output.deb"),
-    }).pipe(Effect.flip),
-  );
-  expect(error).toBeInstanceOf(Tool.InputInvalid);
-  expect(await readdir(root)).toEqual(["program"]);
-});
+it.effect("nFPM leaves native config failures observable", () =>
+  Effect.gen(function*() {
+    const nfpm = yield* Nfpm.make({ executable: "nfpm" }).pipe(Effect.provideContext(
+      yield* Layer.build(Layer.mergeAll(
+        ToolTest.layer(() =>
+          Effect.succeed(
+            ToolTest.handle({
+              stderr: "yaml: cannot unmarshal",
+              exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+            }),
+          )
+        ),
+        FileSystem.layerNoop({}),
+        Path.layer,
+      )),
+    ));
+    const error = yield* Effect.flip(nfpm.package({ config: "invalid.yaml", format: "deb", outfile: "app.deb" }));
+    assert.include(error.message, "yaml: cannot unmarshal");
+  }));

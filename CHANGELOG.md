@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.9.0 (unreleased)
+
+Breaking release: native tools are ordinary Effect `Context.Service` bindings. Construct a
+binding with its `make`, `layer`, or `layerConfig`, obtain it with `yield* Service`, and call
+its traced methods. Operations return paths or native decoded reports. The nine packages
+(core plus eight bindings) move together to stable Effect 4.0.0.
+
+Core now exports only `Tool`, `Atomic`, `Executable`, `Digest`, `Environment`, and `Layout`.
+`Tool.make` resolves once and captures the platform spawner; `run`, `stream`, and scoped
+`session` use Effect's native commands and handles. Optional version probes warn once on
+untested versions, failure, or timeout. They do not gate construction or operation.
+`ToolError` has five real error reasons: `NotFound`, `Process`, `Exit`, `Output`, and `Limit`.
+Process errors replace argv and environment tokens while keeping the executable path readable.
+Decoding errors carry a `detail` with schema paths and expectations, without output values or
+output-derived keys. Failed exits retain only a bounded stderr tail with exact-value redaction
+before trimming. `Tool.make` accepts `mapCommand`, applied to every command it runs; each binding
+forwards it, for native options or `Environment.scrub`. Binding `env` values may be `Redacted`,
+revealed with `Environment.reveal` and removed from the stderr tail. Windows PATH lookup selects
+only `.exe` files.
+
+File publication is explicit: producing bindings write directly by default, with
+`atomic: true` opting into same-parent staging. `Atomic.context` captures the filesystem
+services a binding provides to publication; checks receive the staged path and destination. Files commit with one rename; directories
+commit each staged leaf and retain unrelated destination files. `Digest` streams SHA-256
+and fresh verification, `Environment.scrub` replaces command environments, and `Layout`
+validates portable relative leaf paths. Memoization uses Effect's own caching operations.
+
+Bun exposes `build` and `compile`; Deno exposes native `compile` and `bundle`; uv, nFPM,
+and Syft return paths or native reports. Apple exports `Codesign`, `Notarytool`, and `Stapler`;
+Windows exports `SignTool`. Node SEA uses native `node --build-sea` to assemble already-bundled
+source, with no postject dependency. ffprobe/ffmpeg bindings and a live encoder remain typed examples.
+
+The hard cut deletes artifact/producer records, core targets, `Tool.provider`, compatibility
+aliases, the old error set and testing framework, and the persistent cache API. The esbuild,
+Rolldown, and archives packages, Python wheel writer, and Bun/Deno JavaScript API subpaths
+are removed. Applications own JavaScript bundler integration, file-format writers, and
+release composition.
+
+`effect-build/testing` now exports `ToolTest.handle` and `ToolTest.layer` over the native
+spawner seam. Application tests replace services with `Layer.succeed`. Typechecked workspace
+examples and TypeDoc over actual exports/JSDoc replace the old artifact-oriented guides.
+See [getting started](docs/getting-started.md) for the source API. This entry prepares the
+breaking release; 0.9.0 has not been published.
+
 ## 0.8.0 (unreleased)
 
 Every binary provider now uses `Tool.provider(Service, spec)`, with declared tested versions,
@@ -21,8 +65,7 @@ published packages together.
 
 ## 0.7.0 (unreleased)
 
-0.7.0 composes compilers and packagers through one `Artifact.File | Artifact.Executable |
-Artifact.Directory` record with numeric byte counts and SHA-256. Bun and Deno compile and bundle,
+0.7.0 composes compilers and packagers through one `Artifact.File | Artifact.Executable | Artifact.Directory` record with numeric byte counts and SHA-256. Bun and Deno compile and bundle,
 esbuild and now-public Rolldown retain scoped native APIs, and Node SEA consumes artifact inputs.
 The same executable feeds archives, OS packages, and the new Python wheel writer without external
 tools; uv builds projects and Syft generates SBOMs. Apple and Windows signing remain experimental.
@@ -71,18 +114,18 @@ effect-build package together, install `effect`, `@effect/platform-node`, and
 `@effect/platform-node-shared` at one 4.0 release candidate (rc.108 is tested), and import from
 ESM. [Getting started](docs/getting-started.md) has the complete first build.
 
-| 0.6                                                          | 0.7                                                                                                                                                      |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.6                                                          | 0.7                                                                                                                                                                                             |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Bun and Deno `Command/*` and `Api/*` modules                 | Package-root `compile`, `bundle`, `watch` (Bun adds `build`, Deno adds `transpile`) with `layer({ executable?, version? })`; native APIs at `effect-build-bun/api` and `effect-build-deno/api`. |
-| esbuild `Api/*` and selected-command wrappers                | Package-root `build`, `buildToDirectory`, `transform`, and scoped `context`. CLI wrappers are gone.                                                     |
-| Private Rolldown implementation                              | Public `effect-build-rolldown` with `buildToDirectory`, scoped builders, and a watch stream.                                                             |
-| Hashed and unhashed identities, decimal byte strings         | `Artifact.File`, `Artifact.Executable`, `Artifact.Directory`; `bytes` is a number and `sha256` is always present.                                        |
-| Admission, finalization, and adoption operations; `Author/*` | `Artifact.file`, `Artifact.executable`, `Artifact.directory` record real paths; `Artifact.verify` checks them later; `Artifact.encode`/`decode` carry core records as JSON. |
-| Launch reauthentication                                      | The provider layer resolves, hashes, and probes once; later launches use the recorded path.                                                              |
-| Producer-owned release orchestration                         | Compose operations with `Effect.gen`, `Effect.forEach`, `Commit.atomic`, checksums, and artifact records. Publishing belongs to the caller's release system. |
-| nFPM metadata fields at the top level                        | `Nfpm.package({ config: { name, version, arch, ...nativeConfig }, contents, format, outfile })`.                                                           |
-| GNU/Linux descriptors and native triples                     | Eight core targets; Linux without `-musl` means glibc. Bun and Deno still accept their native names. Windows outputs must already end in lowercase `.exe`. |
-| Wheel ZIP32 limits as `Python.InputInvalid`                  | `Archive.FormatLimit` and `Archive.EntrySizeMismatch` from `effect-build-archives`.                                                                       |
+| esbuild `Api/*` and selected-command wrappers                | Package-root `build`, `buildToDirectory`, `transform`, and scoped `context`. CLI wrappers are gone.                                                                                             |
+| Private Rolldown implementation                              | Public `effect-build-rolldown` with `buildToDirectory`, scoped builders, and a watch stream.                                                                                                    |
+| Hashed and unhashed identities, decimal byte strings         | `Artifact.File`, `Artifact.Executable`, `Artifact.Directory`; `bytes` is a number and `sha256` is always present.                                                                               |
+| Admission, finalization, and adoption operations; `Author/*` | `Artifact.file`, `Artifact.executable`, `Artifact.directory` record real paths; `Artifact.verify` checks them later; `Artifact.encode`/`decode` carry core records as JSON.                     |
+| Launch reauthentication                                      | The provider layer resolves, hashes, and probes once; later launches use the recorded path.                                                                                                     |
+| Producer-owned release orchestration                         | Compose operations with `Effect.gen`, `Effect.forEach`, `Commit.atomic`, checksums, and artifact records. Publishing belongs to the caller's release system.                                    |
+| nFPM metadata fields at the top level                        | `Nfpm.package({ config: { name, version, arch, ...nativeConfig }, contents, format, outfile })`.                                                                                                |
+| GNU/Linux descriptors and native triples                     | Eight core targets; Linux without `-musl` means glibc. Bun and Deno still accept their native names. Windows outputs must already end in lowercase `.exe`.                                      |
+| Wheel ZIP32 limits as `Python.InputInvalid`                  | `Archive.FormatLimit` and `Archive.EntrySizeMismatch` from `effect-build-archives`.                                                                                                             |
 
 Every producer accepts `atomic`, `onExists`, and `prefix`; `Commit.atomic(..., { staging: "sibling" })`
 wraps a release directory that holds bundles so relative imports and source maps keep their

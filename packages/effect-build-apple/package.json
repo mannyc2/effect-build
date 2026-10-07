@@ -1,7 +1,7 @@
 {
   "name": "effect-build-apple",
-  "version": "0.8.0",
-  "description": "macOS app bundles, signing, packaging, and notarization as composable Effect programs.",
+  "version": "0.9.0",
+  "description": "Run codesign, notarytool and stapler as composable Effect services.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -36,6 +36,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./Codesign": {
+      "types": "./dist/Codesign.d.ts",
+      "import": "./dist/Codesign.js"
+    },
+    "./Notarytool": {
+      "types": "./dist/Notarytool.d.ts",
+      "import": "./dist/Notarytool.js"
+    },
+    "./Stapler": {
+      "types": "./dist/Stapler.d.ts",
+      "import": "./dist/Stapler.js"
     }
   },
   "scripts": {
@@ -46,12 +58,10 @@
     "effect-build": "workspace:^"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.113 <4.1.0-0"
+    "effect": ">=4.0.0 <4.1.0"
   },
   "devDependencies": {
-    "@effect/platform-node": "4.0.0-rc.115",
-    "effect": "4.0.0-rc.115",
-    "vitest": "3.2.6"
+    "effect": "4.0.0"
   },
   "engines": {
     "node": ">=22.19.0"

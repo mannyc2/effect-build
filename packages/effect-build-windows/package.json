@@ -1,7 +1,7 @@
 {
   "name": "effect-build-windows",
-  "version": "0.8.0",
-  "description": "Experimental executable and MSIX signing with Windows SignTool and shared artifacts.",
+  "version": "0.9.0",
+  "description": "Native Windows SignTool signing and verification as a typed Effect service.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -36,6 +36,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./SignTool": {
+      "types": "./dist/SignTool.d.ts",
+      "import": "./dist/SignTool.js"
     }
   },
   "scripts": {
@@ -46,10 +50,10 @@
     "effect-build": "workspace:^"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.113 <4.1.0-0"
+    "effect": ">=4.0.0 <4.1.0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.115"
+    "effect": "4.0.0"
   },
   "engines": {
     "node": ">=22.19.0"

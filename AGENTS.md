@@ -1,52 +1,38 @@
-# effect-build
+# Working in this repository
 
-effect-build runs build tools as composable Effect programs. Producers return plain artifact records; hashing is an explicit schema refinement; queries return values; remote operations return typed references
-and outcomes when they change or attest to bytes. Publishing belongs to ts-release.
+effect-build binds native command-line tools as ordinary Effect services. A binding's `make` resolves its executable
+once with `Tool.make` and returns `Effect.fn` methods. Runs decode output and check exit; streams acquire lazily and
+check exit before completion; sessions return the platform handle in the caller's Scope.
 
-## Working here
+## Engineering charter
 
-- `bun install --frozen-lockfile`, then `bun run verify` (build, typecheck, lint,
-  unit tests, examples). It must be green before you push.
-- Real-tool tests: `bun run test:integration:*`. They need the tool installed;
-  CI runs them on Linux. See `CONTRIBUTING.md` for the commands.
-- Read `DESIGN.md` before changing a public signature. It's short.
+- Core owns the portable `Tool` kernel, explicit path-based opt-ins, and `effect-build/testing` defaults over the
+  platform's spawner constructors. First-party binding packages depend only on core, never on a sibling.
+- Native options and diagnostics stay native. An explicit executable is used as given; otherwise one deterministic
+  PATH walk selects a runnable candidate. Never install, retry another candidate, fall back, or substitute at call time.
+- Version checking is an optional, warn-only construction probe, with ignored stdin and an Effect deadline. Probe
+  failure, timeout, or an untested version logs one warning and never rejects a tool.
+- Atomic publication, native-header checking, digests, environment replacement, and portable layout checking are
+  chosen explicitly. Files stage privately under the destination's parent and commit with one rename; directories
+  commit each produced file with its own rename, preserving native overwrite behavior and unrelated files.
+- A ToolError has five real tagged reason classes. It never stores argv, env, or stdout. Platform errors and decoder
+  causes are rebuilt into safe diagnostics; bounded stderr removes every supplied Redacted value before tail trimming.
+- Library source has no `node:*` imports, `process.*` reads, `Effect.run*`, casts, or `any`. Applications provide platform
+  layers. Validate only at real public decoding boundaries; preserve interruption, defects, and separately observed
+  cleanup causes.
+- The public surface is asserted against `tooling/public-api.json`; regenerate deliberately with public changes.
+- `bun run verify`, installed consumers, and affected real-tool tests must pass before merge. The supported OS and
+  real-tool CI matrix is required before release. Prepare versions and release notes without publishing.
 
-## Rules
+## Working rules
 
-1. **One artifact type.** `Artifact.File | Artifact.Executable | Artifact.Directory`.
-   Every producer returns one of these and composes through these records. No package defines its own
-   identity, digest, path, or size type. `bytes` is a `number`. Core `Hashed*` schemas add SHA-256;
-   artifact construction never hashes implicitly. Require a prior identity only when comparing against
-   previously identified bytes; formats and caches compute needed digests while consuming bytes.
-2. **Defenses are combinators or options, never services.** `Commit.atomic`,
-   `Executable.expectTarget`, `Tool.requireVersion`, `Artifact.verify`. If you need
-   a service to hold a decision, make a combinator instead.
-   Ordinary operations establish their stated result. Additional assurance and portability are explicit;
-   do not repeat payload checks already established by the operation consuming those bytes.
-3. **Core is domain-free.** It knows files, executables, directories, tools, and
-   rename. It does not know Bun, zip, wheels, or Apple. A concept enters core only
-   when two packages need it for the same reason. A provider is core's shape for wrapping a tool;
-   first-party providers are instances of it, not privileged.
-4. **Provider edge cases stay in the provider.** Bun's `.exe` suffix, Deno's basename
-   rule, Node SEA's temp tree: local, not core.
-5. **Vocabulary.** Artifact, target, tool, build, compile, bundle, package, sign,
-   commit, verify, provider, constraint, cache. Not: observation, admission, durable, borrowed, finalizer, claim,
-   adoption, lane, publication, provenance (it's `producedBy`).
-6. **Delete, don't deprecate.** No aliases, no compatibility exports, no `@deprecated`.
-7. **Tests test behavior on real files.** Compile a real program, read the real
-   header, rename a real file. No tests that assert the shape of an API or the
-   contents of a workflow file.
-8. **No plan documents.** A change is described by its commit message and, if it's a
-   durable decision, one line under "Decided" in `DESIGN.md`. No document may be
-   longer than the code it describes.
+Read CONTRIBUTING.md and installed effect/AGENTS.md, ai-docs, declarations, and implementation for relevant APIs.
+Use isolated worktrees for parallel work; agents own disjoint files and one integrator owns shared exports and errors.
+Preserve other people's work. Stage only changed paths. Code, configuration, and Git record implementation; PRs record
+validation and deliberate departures. Do not create plan documents, receipts, compatibility shims, or replacement
+platform abstractions. Historical plans and research have no authority.
 
-## Layout
-
-`packages/effect-build` is core. Every other package wraps one external toolchain
-or one domain and depends on core only. Binary providers declare a named `Context.Service` and pass it to
-`Tool.provider(Service, spec)`: tool identity, version policy, tested versions, constraints,
-host requirements, and an optional service extension. The factory owns resolution and layers;
-operations own typed inputs, native options and output validation. In-process bundlers keep their
-native APIs. Rejected input is `Tool.InputInvalid`; rejected versions are
-`Tool.VersionUnsupported` naming the operation. Sections read in one order: service,
-declaration, then operations. Provider conformance lives in `effect-build/testing`.
+Use real Node on PATH and umask 022. Install with the frozen lockfile. Fix strict lint findings and remove obsolete
+legacy exceptions; never add legacy entries or weaken policy. Keep credentials, generated media, tarballs, and build
+output out of Git. Do not push to main, tag, publish, deploy, change provider selections, or spend money without explicit
+authorization. Only the existing release workflow publishes.

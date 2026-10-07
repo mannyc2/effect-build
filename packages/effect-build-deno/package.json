@@ -1,7 +1,7 @@
 {
   "name": "effect-build-deno",
-  "version": "0.8.0",
-  "description": "Compile, bundle, and transpile TypeScript with Deno as Effect programs.",
+  "version": "0.9.0",
+  "description": "Native Deno compile and bundle operations as a typed Effect service.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -35,9 +35,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./api": {
-      "types": "./dist/Api/index.d.ts",
-      "import": "./dist/Api/index.js"
+    "./Deno": {
+      "types": "./dist/Deno.d.ts",
+      "import": "./dist/Deno.js"
     }
   },
   "scripts": {
@@ -48,10 +48,10 @@
     "effect-build": "workspace:^"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.113 <4.1.0-0"
+    "effect": ">=4.0.0 <4.1.0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.115"
+    "effect": "4.0.0"
   },
   "engines": {
     "node": ">=22.19.0"

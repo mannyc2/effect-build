@@ -1,0 +1,358 @@
+{
+  "schema": "effect-build/public-surface@4",
+  "packages": {
+    "effect-build": {
+      ".": {
+        "runtime": [
+          "Atomic",
+          "Digest",
+          "Environment",
+          "Executable",
+          "Layout",
+          "Tool"
+        ],
+        "declarations": [
+          "Atomic",
+          "Digest",
+          "Environment",
+          "Executable",
+          "Layout",
+          "Tool"
+        ]
+      },
+      "./Tool": {
+        "runtime": [
+          "Exit",
+          "Limit",
+          "NotFound",
+          "Output",
+          "Process",
+          "ToolError",
+          "make"
+        ],
+        "declarations": [
+          "Exit",
+          "Limit",
+          "NotFound",
+          "Options",
+          "Output",
+          "Process",
+          "RunOptions",
+          "Tool",
+          "ToolError",
+          "VersionCheck",
+          "make"
+        ]
+      },
+      "./Atomic": {
+        "runtime": [
+          "AtomicError",
+          "context",
+          "directory",
+          "file"
+        ],
+        "declarations": [
+          "AtomicError",
+          "Check",
+          "context",
+          "directory",
+          "file"
+        ]
+      },
+      "./Executable": {
+        "runtime": [
+          "ExecutableError",
+          "checkNative"
+        ],
+        "declarations": [
+          "ExecutableError",
+          "checkNative"
+        ]
+      },
+      "./Digest": {
+        "runtime": [
+          "DigestError",
+          "Mismatch",
+          "Read",
+          "sha256",
+          "verifySha256"
+        ],
+        "declarations": [
+          "DigestError",
+          "Mismatch",
+          "Read",
+          "sha256",
+          "verifySha256"
+        ]
+      },
+      "./Environment": {
+        "runtime": [
+          "reveal",
+          "scrub"
+        ],
+        "declarations": [
+          "Variables",
+          "reveal",
+          "scrub"
+        ]
+      },
+      "./Layout": {
+        "runtime": [
+          "Collision",
+          "InvalidPath",
+          "LayoutError",
+          "validatePortable"
+        ],
+        "declarations": [
+          "Collision",
+          "InvalidPath",
+          "LayoutError",
+          "validatePortable"
+        ]
+      },
+      "./testing": {
+        "runtime": [
+          "ToolTest"
+        ],
+        "declarations": [
+          "ToolTest"
+        ]
+      }
+    },
+    "effect-build-apple": {
+      ".": {
+        "runtime": [
+          "Codesign",
+          "Notarytool",
+          "Stapler"
+        ],
+        "declarations": [
+          "Codesign",
+          "Notarytool",
+          "Stapler"
+        ]
+      },
+      "./Codesign": {
+        "runtime": [
+          "Codesign"
+        ],
+        "declarations": [
+          "Codesign",
+          "Options",
+          "SignInput",
+          "VerifyInput"
+        ]
+      },
+      "./Notarytool": {
+        "runtime": [
+          "Notarytool",
+          "Status",
+          "Submission"
+        ],
+        "declarations": [
+          "Credential",
+          "LookupInput",
+          "Notarytool",
+          "Options",
+          "Status",
+          "Submission",
+          "SubmitInput",
+          "WaitInput"
+        ]
+      },
+      "./Stapler": {
+        "runtime": [
+          "Stapler"
+        ],
+        "declarations": [
+          "Input",
+          "Options",
+          "Stapler"
+        ]
+      }
+    },
+    "effect-build-bun": {
+      ".": {
+        "runtime": [
+          "BuildInput",
+          "Bun",
+          "CompileInput"
+        ],
+        "declarations": [
+          "BuildInput",
+          "Bun",
+          "CompileInput",
+          "Options"
+        ]
+      },
+      "./Bun": {
+        "runtime": [
+          "BuildInput",
+          "Bun",
+          "CompileInput"
+        ],
+        "declarations": [
+          "BuildInput",
+          "Bun",
+          "CompileInput",
+          "Options"
+        ]
+      }
+    },
+    "effect-build-deno": {
+      ".": {
+        "runtime": [
+          "Deno"
+        ],
+        "declarations": [
+          "BundleInput",
+          "CompileInput",
+          "Deno",
+          "Options",
+          "Target"
+        ]
+      },
+      "./Deno": {
+        "runtime": [
+          "Deno"
+        ],
+        "declarations": [
+          "BundleInput",
+          "CompileInput",
+          "Deno",
+          "Options",
+          "Target"
+        ]
+      }
+    },
+    "effect-build-nfpm": {
+      ".": {
+        "runtime": [
+          "Nfpm"
+        ],
+        "declarations": [
+          "Format",
+          "Nfpm",
+          "Options",
+          "PackageInput"
+        ]
+      },
+      "./Nfpm": {
+        "runtime": [
+          "Nfpm"
+        ],
+        "declarations": [
+          "Format",
+          "Nfpm",
+          "Options",
+          "PackageInput"
+        ]
+      }
+    },
+    "effect-build-node-sea": {
+      ".": {
+        "runtime": [
+          "NodeSea",
+          "NodeSeaError"
+        ],
+        "declarations": [
+          "AssembleInput",
+          "NodeSea",
+          "NodeSeaError",
+          "Options"
+        ]
+      },
+      "./NodeSea": {
+        "runtime": [
+          "NodeSea",
+          "NodeSeaError"
+        ],
+        "declarations": [
+          "AssembleInput",
+          "NodeSea",
+          "NodeSeaError",
+          "Options"
+        ]
+      }
+    },
+    "effect-build-python": {
+      ".": {
+        "runtime": [
+          "Python"
+        ],
+        "declarations": [
+          "BuildInput",
+          "Options",
+          "Python"
+        ]
+      },
+      "./Python": {
+        "runtime": [
+          "Python"
+        ],
+        "declarations": [
+          "BuildInput",
+          "Options",
+          "Python"
+        ]
+      }
+    },
+    "effect-build-sbom": {
+      ".": {
+        "runtime": [
+          "Sbom"
+        ],
+        "declarations": [
+          "Format",
+          "GenerateInput",
+          "Options",
+          "ReportInput",
+          "Sbom"
+        ]
+      },
+      "./Sbom": {
+        "runtime": [
+          "Sbom"
+        ],
+        "declarations": [
+          "Format",
+          "GenerateInput",
+          "Options",
+          "ReportInput",
+          "Sbom"
+        ]
+      }
+    },
+    "effect-build-windows": {
+      ".": {
+        "runtime": [
+          "SignTool"
+        ],
+        "declarations": [
+          "Credential",
+          "Options",
+          "SignInput",
+          "SignTool",
+          "VerifyInput"
+        ]
+      },
+      "./SignTool": {
+        "runtime": [
+          "SignTool"
+        ],
+        "declarations": [
+          "Credential",
+          "Options",
+          "SignInput",
+          "SignTool",
+          "VerifyInput"
+        ]
+      }
+    }
+  },
+  "symbols": {
+    "named": 78,
+    "namespaces": 7,
+    "total": 85
+  }
+}

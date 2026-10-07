@@ -1,75 +1,58 @@
-import { Context, Effect, FileSystem, Path } from "effect";
-import { Artifact, Commit, Tool } from "effect-build";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import type { Config } from "effect";
+import { Config as C, Context, Effect, Layer, Path, Sink } from "effect";
+import * as Atomic from "effect-build/Atomic";
+import * as Environment from "effect-build/Environment";
+import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
-export class Python extends Context.Service<Python, Tool.Service>()("effect-build-python/Python") {}
-export const { name, layer, supported, tested, constraints, requirements, resolved, testLayer } = Tool.provider(Python, {
-  name: "uv",
-  version: { parse: Tool.versionPattern(/^uv (\S+)/u), supported: ">=0.12.0 <1.0.0", tested: ["0.12.0"] },
-  requirements: { env: ["HOME", "UV_CACHE_DIR", "UV_PYTHON", "UV_INDEX_URL", "UV_OFFLINE"], network: true, services: [],
-    detail: "Build backends and Python may be downloaded; credentials and project settings remain caller inputs." },
-});
-
-type Fs = FileSystem.FileSystem | Path.Path;
-type Env = Fs | ChildProcessSpawner.ChildProcessSpawner;
-
-export interface BuildInput extends Commit.ProducerOptions, Tool.EnvironmentOptions {
+export interface BuildInput {
   readonly project: string;
   readonly outdir: string;
+  readonly cwd?: string | undefined;
+  /** `Redacted` values are revealed only into the command and removed from failure diagnostics. */
+  readonly env?: Environment.Variables | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly extraArgs?: ReadonlyArray<string> | undefined;
+  readonly atomic?: boolean | undefined;
 }
-export interface BuildResult {
-  readonly wheel: Artifact.File;
-  readonly sdist: Artifact.File;
+
+export interface Options {
+  readonly executable?: string | undefined;
+  readonly mapCommand?: Tool.Options["mapCommand"];
 }
-export type BuildError =
-  | Tool.InputInvalid
-  | Tool.Failed
-  | Tool.SpawnFailed
-  | Artifact.ArtifactError
-  | Commit.CommitError;
 
-/** uv writes the wheel and sdist at the top of its output directory. */
-const topLevel = (suffix: string) => (entry: Artifact.Entry) =>
-  entry.kind === "file" && !entry.path.includes("/") && entry.path.endsWith(suffix);
-
-export const build = Effect.fn("Python.build")((
-  input: BuildInput,
-): Effect.Effect<BuildResult, BuildError, Python | Env> =>
-  Effect.gen(function*() {
-    for (const [field, value] of [["project", input.project], ["outdir", input.outdir]] as const) {
-      const issue = Tool.argumentIssue(value);
-      if (issue !== undefined) {
-        return yield* new Tool.InputInvalid({ operation: "Python.build", reason: `${field} ${issue}` });
-      }
-    }
-    const { tool } = yield* Python;
-    const p = yield* Path.Path;
-    const project = p.resolve(input.project);
-    const outdir = p.resolve(input.outdir);
-    const producer = Tool.producedBy(tool);
-    const produce = (out: string) =>
-      Effect.gen(function*() {
-        // uv's default builds the wheel from its sdist, checking that the source archive is complete.
-        yield* Tool.run(tool, ["build", project, "--out-dir", out, "--no-create-gitignore"], { env: input.env, extendEnv: input.extendEnv, scrubEnv: input.scrubEnv, cwd: project });
-        const directory = yield* Artifact.directory(out, producer);
-        if (
-          directory.entries.filter(topLevel(".whl")).length !== 1
-          || directory.entries.filter(topLevel(".tar.gz")).length !== 1
-        ) {
-          return yield* new Tool.InputInvalid({
-            operation: "Python.build",
-            reason: "uv output must contain exactly one wheel and one .tar.gz sdist",
-          });
-        }
-        return directory;
-      });
-    const directory = yield* Commit.output(outdir, produce, input, "sibling");
-    // Re-read at the committed paths so callers receive ordinary core file artifacts.
-    const wheel = directory.entries.find(topLevel(".whl"))!;
-    const sdist = directory.entries.find(topLevel(".tar.gz"))!;
+export class Python extends Context.Service<Python>()("effect-build-python/Python", {
+  make: Effect.fn("Python.make")(function*(options: Options = {}) {
+    const tool = yield* Tool.make("uv", options);
+    const path = yield* Path.Path;
+    const platform = yield* Atomic.context;
     return {
-      wheel: yield* Artifact.file(p.join(directory.path, wheel.path), producer),
-      sdist: yield* Artifact.file(p.join(directory.path, sdist.path), producer),
+      /** uv builds its wheel from the sdist by default. Returns the distribution directory. */
+      build: Effect.fn("Python.build")(function*(input: BuildInput) {
+        const project = path.resolve(input.cwd ?? ".", input.project);
+        const outdir = path.resolve(input.cwd ?? ".", input.outdir);
+        const { env, redact } = Environment.reveal(input.env);
+        const produce = (out: string) =>
+          tool.run(
+            ChildProcess.make(tool.executable, [
+              "build",
+              ...(input.extraArgs ?? []),
+              project,
+              "--out-dir",
+              out,
+              "--no-create-gitignore",
+            ], { cwd: project, env, extendEnv: input.extendEnv, stdin: "ignore" }),
+            Sink.drain,
+            { redact },
+          );
+        if (input.atomic === true) return yield* Atomic.directory(outdir, produce);
+        yield* produce(outdir);
+        return outdir;
+      }, Effect.provideContext(platform)),
     };
-  })
-);
+  }),
+}) {
+  static readonly layer = (options?: Options) => Layer.effect(this, this.make(options));
+  static readonly layerConfig = (options: Config.Wrap<Options>) =>
+    Layer.effect(this, Effect.flatMap(C.unwrap(options), (values) => this.make(values)));
+}

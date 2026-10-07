@@ -18,6 +18,8 @@
     "examples/**/*.json",
     "*.ts",
     "*.json",
+    "tooling/**/*.json",
+    "CHANGELOG.md",
     "README.md",
     "CONTRIBUTING.md",
     "AGENTS.md",
@@ -25,11 +27,14 @@
     "examples/**/*.md",
     "packages/**/*.md",
     "DESIGN.md",
-    "scripts/**/*.mjs"
+    "scripts/**/*.mjs",
+    "scripts/**/*.ts",
+    "tooling/**/*.mjs"
   ],
   "excludes": [
     "node_modules",
     "dist",
+    ".bun-install-cache",
     ".agent-sources"
   ]
 }

@@ -11,9 +11,6 @@
   "references": [
     {
       "path": "../effect-build"
-    },
-    {
-      "path": "../effect-build-archives"
     }
   ]
 }

@@ -1,4 +1,5 @@
 {
+  "$schema": "./node_modules/@effect/tsgo/schema.json",
   "compilerOptions": {
     "target": "ES2022",
     "module": "NodeNext",
@@ -18,6 +19,18 @@
     "declarationMap": true,
     "sourceMap": true,
     "composite": true,
-    "inlineSources": true
+    "inlineSources": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "useUnknownInCatchVariables": true,
+    "noEmitOnError": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnostics": false
+      }
+    ]
   }
 }

@@ -1,0 +1,4 @@
+{
+  // The hard cutover removed all historical exceptions; new code follows the policy.
+  "overrides": []
+}

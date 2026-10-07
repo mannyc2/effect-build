@@ -1,6 +1,6 @@
 {
   "name": "effect-build-nfpm",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Effect-native nFPM system and MSIX package production.",
   "type": "module",
   "license": "MIT",
@@ -37,6 +37,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./Nfpm": {
+      "types": "./dist/Nfpm.d.ts",
+      "import": "./dist/Nfpm.js"
     }
   },
   "scripts": {
@@ -47,10 +51,10 @@
     "effect-build": "workspace:^"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.113 <4.1.0-0"
+    "effect": ">=4.0.0 <4.1.0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.115"
+    "effect": "4.0.0"
   },
   "engines": {
     "node": ">=22.19.0"

@@ -1,7 +1,7 @@
 {
   "name": "effect-build-python",
-  "version": "0.8.0",
-  "description": "Build Python projects with uv or write wheels directly from artifacts.",
+  "version": "0.9.0",
+  "description": "Build Python wheels and source distributions with uv as Effect programs.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -35,6 +35,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./Python": {
+      "types": "./dist/Python.d.ts",
+      "import": "./dist/Python.js"
     }
   },
   "scripts": {
@@ -42,15 +46,13 @@
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@noble/hashes": "2.4.0",
-    "effect-build": "workspace:^",
-    "effect-build-archives": "workspace:^"
+    "effect-build": "workspace:^"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-rc.113 <4.1.0-0"
+    "effect": ">=4.0.0 <4.1.0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.115"
+    "effect": "4.0.0"
   },
   "engines": {
     "node": ">=22.19.0"

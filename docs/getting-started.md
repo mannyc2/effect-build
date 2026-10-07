@@ -1,147 +1,97 @@
 # Getting started
 
-This guide compiles one TypeScript file into a native executable, explains every line of the
-program that did it, and points at what to do next. It takes about five minutes.
+The 0.9.0 source checkout exposes native tool bindings as Effect services. This version is
+unreleased; these examples use the workspace packages rather than the older published API.
 
-## Prerequisites
+## Prepare the checkout
 
-- **Node 22.19 or newer** runs the build program. Node 24 can also run a `build.ts` directly,
-  using its built-in type stripping.
-- **Bun 1.3.14 or newer** is the compiler in this guide. Install it from [bun.sh](https://bun.sh).
-  It has to be on `PATH`, or at a path you pass to the provider layer.
-- **An ESM project**: a `.mjs` file, `"type": "module"` in `package.json`, or a TypeScript
-  project with `NodeNext` or `Bundler` module resolution. The packages are ESM-only.
+Use Node 22.19 or newer and Bun 1.3.14 for repository tooling. The checked-in TypeScript
+entry points run with Node 24.14.1. Packages are ESM-only. The source checkout pins Effect
+and its platform packages to 4.0.0.
 
-## Install
+From the repository root:
 
 ```sh
-npm install --save-dev --save-exact effect-build-bun@0.8.0 effect@4.0.0-rc.115 @effect/platform-node@4.0.0-rc.115 @effect/platform-node-shared@4.0.0-rc.115
+bun install --frozen-lockfile
+bun run build
+bun run --cwd examples/tool-runs test
 ```
 
-`effect-build-bun` depends on the core `effect-build` package, so that comes along. Effect 4 is
-a release candidate: pin `effect`, `@effect/platform-node`, and `@effect/platform-node-shared` to
-the same version, because the platform packages use caret ranges and can otherwise select a
-newer shared candidate with a newer Effect peer. 4.0.0-rc.115 is the tested version; see
-[compatibility](compatibility.md) for the accepted range.
-
-## The first build
-
-Create `src/cli.ts`:
+The first example resolves `node`, runs its version command, and prints bounded text.
+Here is its complete [source](../examples/tool-runs/src/main.ts):
 
 ```ts
-console.log("Hello!");
-```
-
-Save this as `build.mjs`. It is complete: no TypeScript runner, no wrapper script.
-
-```js
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import * as Bun from "effect-build-bun";
+import { Console, Effect } from "effect";
+import { Tool } from "effect-build";
+import { ChildProcess } from "effect/process";
 
-NodeRuntime.runMain(
-  Bun.compile({ entrypoints: ["src/cli.ts"], outfile: "dist/cli" }).pipe(
-    Effect.tap((artifact) => Effect.log(artifact)),
-    Effect.provide(Bun.layer()),
-    Effect.provide(NodeServices.layer),
-  ),
-);
+const program = Effect.gen(function*() {
+  const node = yield* Tool.make("node");
+  const version = yield* node.run(
+    ChildProcess.make(node.executable, ["--version"], { stdin: "ignore" }),
+    node.text({ maxBytes: 4096 }),
+  );
+  yield* Console.log(version.trim());
+});
+
+// The application supplies its platform once, at the entry point.
+NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)));
 ```
 
-Run it, then run what it built:
+`Tool.make` resolves once and captures the supplied process spawner. `ChildProcess.make`
+is Effect's native command description. `node.run` consumes stdout through the bounded
+text sink, drains remaining piped output, and accepts exit code zero. Platform construction
+belongs at the application's entry point.
+
+## Build with a service
+
+The [Bun example](../examples/bun-build/src/main.ts) creates a small source file and bundles
+it with the native Bun executable:
+
+```ts
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Console, Effect, FileSystem, Layer, Path } from "effect";
+import { Bun } from "effect-build-bun";
+
+const program = Effect.gen(function*() {
+  const bun = yield* Bun;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const directory = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-example-" });
+  const main = path.join(directory, "main.ts");
+  yield* fs.writeFileString(main, 'console.log("built with Effect");\n');
+  const output = yield* bun.build({
+    entrypoints: [main],
+    outdir: path.join(directory, "output"),
+    target: "bun",
+    atomic: true,
+  });
+  yield* Console.log(output);
+});
+
+const services = Bun.layer().pipe(Layer.provideMerge(NodeServices.layer));
+NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(services)));
+```
+
+Run it with Bun available on PATH:
 
 ```sh
-node build.mjs
-./dist/cli
+bun run --cwd examples/bun-build test
 ```
 
-On Windows, use `outfile: "dist/cli.exe"` and run `.\dist\cli.exe`: Bun always names Windows
-executables `.exe`, and the provider refuses an `outfile` that does not. Running the build again
-replaces `dist/cli`.
+`yield* Bun` obtains the service; `bun.build` returns an Effect whose success value is the
+absolute output directory. `Bun.layer()` captures the selected compiler and services once.
+`Layer.provideMerge` also makes the application's filesystem and path services available.
 
-The build logs the artifact record:
+The example chooses `atomic: true`: bundle files are produced in a private sibling directory
+and each file is renamed into the output directory. The example's temporary root is removed
+when its scope closes. An application uses its own destination and decides how long outputs live.
 
-```
-[08:07:05.920] INFO (#2): {
-  kind: 'executable',
-  path: '/home/you/app/dist/cli',
-  bytes: 63446114,
-  producedBy: { name: 'bun', version: '1.3.14', path: '/usr/local/bin/bun' },
-  target: 'darwin-arm64',
-  format: 'mach-o'
-}
-```
+`bun.compile` creates a native executable and accepts Bun's native target spelling.
+Its full input and return type are documented in the
+[Bun binding](../packages/effect-build-bun/README.md). Other bindings follow the same service pattern.
 
-## What each line does
-
-- `Bun.compile({ entrypoints, outfile })` describes a `bun build --compile` run and returns an
-  Effect. Nothing happens until the Effect runs. The operation stages the executable next to
-  `outfile`, reads its header to confirm the target, records the file, and renames it into place.
-- `Effect.tap((artifact) => Effect.log(artifact))` logs the record and passes it through.
-- `Effect.provide(Bun.layer())` supplies the compiler. The layer finds `bun` on `PATH`, resolves
-  symlinks, records its metadata, probes its version once, and checks the version against
-  `Bun.supported` (`>=1.3.14 <2.0.0`). Every later operation uses that resolved tool; nothing
-  re-checks it. `Bun.layer({ executable: "/opt/bun/bin/bun" })` selects a specific binary, and
-  `Bun.layer({ version: "^1.4.2" })` changes the accepted range. An `undefined` executable, such
-  as an unset environment variable, means `PATH`, so `Bun.layer({ executable: process.env.MY_BUN })`
-  needs no branch.
-- `Effect.provide(NodeServices.layer)` supplies the filesystem, path, crypto, and child-process
-  services from Node. On Bun, `BunServices.layer` from `@effect/platform-bun` does the same.
-- `NodeRuntime.runMain` runs the program, and on failure prints the error and exits with a
-  failing status.
-
-## The record
-
-Every artifact has the same core fields. Executables and directories add a few more.
-
-| Field        | Meaning                                                                                                 |
-| ------------ | ------------------------------------------------------------------------------------------------------- |
-| `kind`       | `file`, `executable`, or `directory`.                                                                   |
-| `path`       | Absolute path of the output.                                                                            |
-| `bytes`      | Size as a number. A directory's `bytes` is the total of its files.                                      |
-| `producedBy` | The tool or package that made it: `name`, `version`, and for external tools their `path`.  |
-| `target`     | Executables only: one of the eight [targets](../packages/effect-build#target), read from the header.    |
-| `format`     | Executables only: `elf`, `mach-o`, or `pe`.                                                             |
-| `entries`    | Directories only: every file, directory, and symlink with its `path`, `mode`, and for files its byte count. |
-
-The record is data. `Artifact.encode([artifact])` turns a list of them into plain JSON for a
-manifest and `Artifact.decode` validates one back. To retain byte identity, add
-`Effect.flatMap(Artifact.withSha256)` to the build and encode with `Artifact.HashedArtifact`
-or the appropriate hashed/provider schema. `Artifact.verify` accepts that stronger record
-and fails if the current contents differ. Schema decoding performs no filesystem I/O.
-These operations live in the core package:
-
-```sh
-npm install --save-dev --save-exact effect-build@0.8.0
-```
-
-## Next steps
-
-**Cross-compile.** Add `target: "linux-arm64"` (or any other [target](../packages/effect-build#target))
-to `Bun.compile`. Bun downloads the runtime for that target on first use. The provider checks the
-header of what came out against what you asked for.
-
-**Pass compiler options.** `options: { minify: true, sourcemap: "inline", bytecode: true }` and the
-rest of `Bun.CompileOptions` map to `bun build --compile` flags.
-
-**Build a matrix.** Share the layer across operations by providing it once around an
-`Effect.gen` program, and fan out with `Effect.forEach(targets, compile, { concurrency: 2 })`. The
-[recipes](recipes.md) show this, along with archives, checksums, packages, wheels, signing, and
-SBOMs, and the [CLI example](../examples/cli) is a complete release.
-
-**Keep the records.** Write `Artifact.encode(artifacts)` to a manifest file at the end of a build
-and hand it to whatever publishes. If later consumers need byte identity, compute it with
-`Artifact.withSha256`, persist with the hashed schema, and explicitly verify when consuming it.
-
-## When something goes wrong
-
-Failures are typed errors with a `_tag` and useful fields, and an unhandled one prints as
-`Tag: message`. The [errors reference](errors.md) lists all of them. The ones you meet first:
-
-- `ToolNotFound: bun not found (searched: PATH)`: install Bun, or pass
-  `Bun.layer({ executable: "/absolute/path/to/bun" })`.
-- `ToolVersionUnsupported: bun 1.2.0 is not supported (>=1.3.14 <2.0.0)`: upgrade, or pass a
-  `version` range you accept.
-- `InputInvalid: Bun.compile: outfile for windows-x64 must end with .exe`: name Windows outputs `.exe`.
-- `ToolFailed`: the compiler exited unsuccessfully. The error carries `exitCode`, `stdout`, and
-  `stderr`; `onOutput` on the operation streams both while the tool runs.
+Next, read [tools and bindings](providers.md), [errors and publication](errors.md), or
+[recipes](recipes.md). [Compatibility](compatibility.md) distinguishes the runtime running
+Effect from the tools it launches.

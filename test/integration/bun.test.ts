@@ -1,51 +1,68 @@
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
-import { Artifact, Executable, Target } from "effect-build";
-import * as Bun from "effect-build-bun";
-import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { assert, it } from "@effect/vitest";
+import { Effect, FileSystem, Layer, Path } from "effect";
+import { Bun } from "effect-build-bun";
+import * as Tool from "effect-build/Tool";
+import { ChildProcess } from "effect/process";
 
-const executable = process.env.EFFECT_BUILD_BUN;
-if (executable === undefined) throw new Error("Set EFFECT_BUILD_BUN to the exact Bun executable under test");
-const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices | Bun.Bun>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(Bun.layer({ executable })), Effect.provide(NodeServices.layer)));
-let root: string;
-beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "effect-build-bun-"));
-  await writeFile(join(root, "hello.ts"), 'console.log("hello from effect-build");\n');
-});
-afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+const native = Bun.layer({ executable: process.env.EFFECT_BUILD_BUN }).pipe(Layer.provideMerge(NodeServices.layer));
 
-describe("real Bun executables", () => {
-  it.each(["linux-x64", "linux-x64-musl", "linux-arm64", "windows-x64"] as const)(
-    "compiles a %s executable and verifies its bytes and header",
-    async (target) => {
-      const outfile = join(root, `hello-${target}${Target.parts(target).executableSuffix}`);
-      const artifact = await run(Bun.compile({ entrypoints: ["hello.ts"], outfile, target, cwd: root }));
-      expect(artifact.path).toBe(outfile);
-      expect(artifact.target).toBe(target);
-      expect(artifact.bytes).toBeGreaterThan(0);
-      expect(await run(Artifact.withSha256(artifact).pipe(Effect.flatMap(Artifact.verify), Effect.as(artifact)))).toEqual(artifact);
-      const facts = await run(Executable.inspect(outfile));
-      expect(Executable.matches(facts, target)).toBe(true);
-    },
-    300_000,
-  );
+it.live(
+  "real Bun builds a bundle and atomically publishes a runnable executable",
+  () =>
+    Layer.build(native).pipe(Effect.flatMap((context) =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-bun-" });
+        yield* fs.writeFileString(path.join(root, "main.ts"), 'console.log("hello from effect-build");\n');
+        const bun = yield* Bun;
+        const outdir = yield* bun.build({
+          entrypoints: ["main.ts"],
+          outdir: "dist",
+          target: "bun",
+          cwd: root,
+          atomic: true,
+        });
+        assert.include(yield* fs.readFileString(path.join(outdir, "main.js")), "hello from effect-build");
+        const os = process.platform === "win32" ? "windows" : process.platform;
+        const outfile = yield* bun.compile({
+          entrypoints: ["main.ts"],
+          outfile: "hello",
+          target: `bun-${os}-${process.arch}`,
+          cwd: root,
+          atomic: true,
+        });
+        const executable = yield* Tool.make("hello", { executable: outfile });
+        const output = yield* executable.run(
+          ChildProcess.make(outfile, [], { stdin: "ignore" }),
+          executable.text({ maxBytes: 4096 }),
+        );
+        assert.strictEqual(output.trim(), "hello from effect-build");
+        assert.strictEqual(outfile, path.join(root, process.platform === "win32" ? "hello.exe" : "hello"));
+      }).pipe(Effect.provideContext(context))
+    )),
+  300_000,
+);
 
-  it("preserves CommonJS variable bindings in a compiled program that prints 42", async () => {
-    const target = Target.host();
-    if (target === undefined) throw new Error("The Bun fixture needs a supported native host target");
-    const entrypoint = fileURLToPath(new URL("./fixtures/bun-variable-collision.cjs", import.meta.url));
-    const artifact = await run(Bun.compile({
-      entrypoints: [entrypoint],
-      outfile: join(root, `collision${Target.parts(target).executableSuffix}`),
-      target,
-    }));
-    expect(execFileSync(artifact.path, [], { encoding: "utf8", timeout: 30_000 }).trim()).toBe("42");
-    await run(Artifact.withSha256(artifact).pipe(Effect.flatMap(Artifact.verify), Effect.as(artifact)));
-  }, 300_000);
-});
+it.live(
+  "real Bun failure preserves the previous atomic destination",
+  () =>
+    Layer.build(native).pipe(Effect.flatMap((context) =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "effect-build-bun-failure-" });
+        const outfile = path.join(root, "previous");
+        yield* fs.writeFileString(outfile, "previous output");
+        const bun = yield* Bun;
+        const error = yield* Effect.flip(
+          bun.compile({ entrypoints: ["missing.ts"], outfile, target: "bun-linux-x64", cwd: root, atomic: true }),
+        );
+        assert.strictEqual(error._tag, "ToolError");
+        assert.strictEqual(yield* fs.readFileString(outfile), "previous output");
+        assert.deepStrictEqual(yield* fs.readDirectory(root), ["previous"]);
+      }).pipe(Effect.provideContext(context))
+    )),
+  30_000,
+);
