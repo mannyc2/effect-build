@@ -1,6 +1,7 @@
 import type { Config } from "effect";
-import { Config as C, Context, Effect, FileSystem, Layer, Path, Sink } from "effect";
+import { Config as C, Context, Effect, Layer, Path, Sink } from "effect";
 import * as Atomic from "effect-build/Atomic";
+import * as Environment from "effect-build/Environment";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
@@ -12,7 +13,8 @@ export interface PackageInput {
   readonly format: Format;
   readonly outfile: string;
   readonly cwd?: string | undefined;
-  readonly env?: Readonly<Record<string, string>> | undefined;
+  /** `Redacted` values are revealed only into the command and removed from failure diagnostics. */
+  readonly env?: Environment.Variables | undefined;
   readonly extendEnv?: boolean | undefined;
   readonly extraArgs?: ReadonlyArray<string> | undefined;
   readonly atomic?: boolean | undefined;
@@ -20,18 +22,19 @@ export interface PackageInput {
 
 export interface Options {
   readonly executable?: string | undefined;
+  readonly mapCommand?: Tool.Options["mapCommand"];
 }
 
 export class Nfpm extends Context.Service<Nfpm>()("effect-build-nfpm/Nfpm", {
   make: Effect.fn("Nfpm.make")(function*(options: Options = {}) {
     const tool = yield* Tool.make("nfpm", options);
     const path = yield* Path.Path;
-    const fs = yield* FileSystem.FileSystem;
-    const platform = Context.make(FileSystem.FileSystem, fs).pipe(Context.add(Path.Path, path));
+    const platform = yield* Atomic.context;
     return {
       /** Packages the native configuration and returns its absolute output path. */
       package: Effect.fn("Nfpm.package")(function*(input: PackageInput) {
         const outfile = path.resolve(input.cwd ?? ".", input.outfile);
+        const { env, redact } = Environment.reveal(input.env);
         const produce = (out: string) =>
           tool.run(
             ChildProcess.make(tool.executable, [
@@ -43,8 +46,9 @@ export class Nfpm extends Context.Service<Nfpm>()("effect-build-nfpm/Nfpm", {
               input.format,
               "--target",
               out,
-            ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }),
+            ], { cwd: input.cwd, env, extendEnv: input.extendEnv, stdin: "ignore" }),
             Sink.drain,
+            { redact },
           );
         if (input.atomic === true) return yield* Atomic.file(outfile, produce);
         yield* produce(outfile);

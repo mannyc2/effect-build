@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Config, Effect, FileSystem, Layer, Option, Path, Tracer } from "effect";
+import { Config, Effect, FileSystem, Layer, Option, Path, Redacted, Tracer } from "effect";
 import { Bun } from "effect-build-bun";
 import { ToolTest } from "effect-build/testing";
 import { ChildProcessSpawner } from "effect/process";
@@ -65,6 +65,35 @@ it.effect("Bun surfaces native diagnostics after valid stdout and a failed exit"
     assert.strictEqual(error._tag, "ToolError");
     if (error._tag === "ToolError") assert.strictEqual(error.reason._tag, "Exit");
     assert.include(error.message, "Could not resolve ./missing.ts");
+  }));
+
+it.effect("Bun reveals Redacted environment values only into the command", () =>
+  Effect.gen(function*() {
+    const spawner = ToolTest.layer((command) =>
+      Effect.sync(() => {
+        const version = command._tag === "StandardCommand" && command.args[0] === "--version";
+        if (!version && command._tag === "StandardCommand") {
+          assert.deepStrictEqual(command.options.env, { NPM_TOKEN: "npm-secret", MODE: "ci" });
+        }
+        return ToolTest.handle({
+          stdout: version ? "1.4.2" : "",
+          stderr: "registry rejected npm-secret",
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(version ? 0 : 1)),
+        });
+      })
+    );
+    const bun = yield* Bun.make({ executable: "bun" }).pipe(
+      Effect.provideContext(yield* Layer.build(Layer.mergeAll(spawner, FileSystem.layerNoop({}), Path.layer))),
+    );
+    const error = yield* Effect.flip(bun.build({
+      entrypoints: ["main.ts"],
+      outdir: "dist",
+      target: "bun",
+      env: { NPM_TOKEN: Redacted.make("npm-secret"), MODE: "ci" },
+      extendEnv: true,
+    }));
+    assert.include(error.message, "registry rejected <redacted>");
+    assert.notInclude(JSON.stringify(error), "npm-secret");
   }));
 
 it.effect("Bun layerConfig reads its executable through Config", () =>

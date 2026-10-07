@@ -138,3 +138,36 @@ it.effect("SignTool store and Trusted Signing credentials use native options", (
     ]);
     assert.deepStrictEqual(environments[1], { AZURE_CLIENT_ID: "client", AZURE_CLIENT_SECRET: "azure-secret" });
   }));
+
+it.effect("SignTool credential variables join the caller's environment choice", () =>
+  Effect.gen(function*() {
+    const options: Array<{ readonly env: unknown; readonly extendEnv: boolean | undefined }> = [];
+    const signtool = yield* SignTool.make({ executable: "signtool" }).pipe(
+      Effect.provideContext(
+        yield* Layer.build(Layer.mergeAll(
+          ToolTest.layer((command) =>
+            Effect.sync(() => {
+              if (command._tag === "StandardCommand") {
+                options.push({ env: command.options.env, extendEnv: command.options.extendEnv });
+              }
+              return ToolTest.handle();
+            })
+          ),
+          FileSystem.layerNoop({}),
+          NodePath.layer,
+        )),
+      ),
+    );
+    const credential = {
+      _tag: "TrustedSigning",
+      library: "Azure.CodeSigning.Dlib.dll",
+      metadata: "metadata.json",
+      env: { AZURE_CLIENT_SECRET: Redacted.make("azure-secret") },
+    } as const;
+    yield* signtool.sign({ path: "app.exe", credential });
+    yield* signtool.sign({ path: "app.exe", credential, env: { AZURE_CLIENT_ID: Redacted.make("client") } });
+    assert.deepStrictEqual(options, [
+      { env: { AZURE_CLIENT_SECRET: "azure-secret" }, extendEnv: true },
+      { env: { AZURE_CLIENT_ID: "client", AZURE_CLIENT_SECRET: "azure-secret" }, extendEnv: undefined },
+    ]);
+  }));

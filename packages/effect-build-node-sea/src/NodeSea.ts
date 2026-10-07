@@ -17,6 +17,7 @@ export interface Options {
   readonly executable?: string | undefined;
   /** Base executable passed to Node's native assembly. Defaults to the resolved builder. */
   readonly baseExecutable?: string | undefined;
+  readonly mapCommand?: Tool.Options["mapCommand"];
 }
 
 /** Node assembles an already-bundled source file; bundling stays with the caller. */
@@ -46,18 +47,17 @@ export class NodeSea extends Context.Service<NodeSea>()("effect-build-node-sea/N
   make: Effect.fn("NodeSea.make")(function*(options: Options = {}) {
     const tool = yield* Tool.make("node", {
       executable: options.executable,
+      mapCommand: options.mapCommand,
       version: {
         args: ["--version"],
         tested: "26.7.x",
         isTested: (output) => output.trim().startsWith("v26.7."),
       },
     });
-    const base = options.baseExecutable === undefined
-      ? tool.executable
-      : (yield* Tool.make("node", { executable: options.baseExecutable })).executable;
+    const base = options.baseExecutable ?? tool.executable;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const platform = Context.make(FileSystem.FileSystem, fs).pipe(Context.add(Path.Path, path));
+    const platform = yield* Atomic.context;
     const prepareFailure = (cause: unknown) => NodeSeaError.make({ step: "prepare", cause });
 
     const assemble = Effect.fn("NodeSea.assemble")(

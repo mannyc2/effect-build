@@ -1,6 +1,7 @@
 import type { Config } from "effect";
-import { Config as C, Context, Effect, FileSystem, Layer, Path, Sink } from "effect";
+import { Config as C, Context, Effect, Layer, Path, Sink } from "effect";
 import * as Atomic from "effect-build/Atomic";
+import * as Environment from "effect-build/Environment";
 import * as Executable from "effect-build/Executable";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
@@ -15,7 +16,8 @@ export type Target =
 
 interface Common {
   readonly cwd?: string | undefined;
-  readonly env?: Readonly<Record<string, string>> | undefined;
+  /** `Redacted` values are revealed only into the command and removed from failure diagnostics. */
+  readonly env?: Environment.Variables | undefined;
   readonly extendEnv?: boolean | undefined;
   readonly config?: string | false | undefined;
   readonly extraArgs?: ReadonlyArray<string> | undefined;
@@ -49,24 +51,29 @@ export interface Options {
   readonly executable?: string | undefined;
   /** Select a native denort without recording or probing its bytes. */
   readonly runtime?: string | undefined;
+  readonly mapCommand?: Tool.Options["mapCommand"];
 }
 
 export class Deno extends Context.Service<Deno>()("effect-build-deno/Deno", {
   make: Effect.fn("Deno.make")(function*(options: Options = {}) {
-    const tool = yield* Tool.make("deno", { executable: options.executable });
+    const tool = yield* Tool.make("deno", { executable: options.executable, mapCommand: options.mapCommand });
     const path = yield* Path.Path;
-    const fs = yield* FileSystem.FileSystem;
-    const platform = Context.make(FileSystem.FileSystem, fs).pipe(Context.add(Path.Path, path));
-    const run = (input: CompileInput | BundleInput, args: ReadonlyArray<string>) =>
-      tool.run(
+    const platform = yield* Atomic.context;
+    const run = (input: CompileInput | BundleInput, args: ReadonlyArray<string>) => {
+      const { env, redact } = Environment.reveal(input.env);
+      // DENORT_BIN joins the caller's choice: the inherited environment unless `env` replaces it.
+      const runtime = options.runtime === undefined ? undefined : { ...env, DENORT_BIN: options.runtime };
+      return tool.run(
         ChildProcess.make(tool.executable, args, {
           cwd: input.cwd,
-          env: options.runtime === undefined ? input.env : { ...input.env, DENORT_BIN: options.runtime },
-          extendEnv: options.runtime === undefined ? input.extendEnv : (input.extendEnv ?? true),
+          env: runtime ?? env,
+          extendEnv: runtime !== undefined && env === undefined ? true : input.extendEnv,
           stdin: "ignore",
         }),
         Sink.drain,
+        { redact },
       );
+    };
     return {
       /** Deno embeds the output basename; staging keeps that basename intact. */
       compile: Effect.fn("Deno.compile")(function*(input: CompileInput) {

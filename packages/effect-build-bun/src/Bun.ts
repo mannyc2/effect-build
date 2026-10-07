@@ -1,6 +1,7 @@
 import type { Config } from "effect";
-import { Config as C, Context, Effect, FileSystem, Layer, Path, Schema, Sink } from "effect";
+import { Config as C, Context, Effect, Layer, Path, Schema, Sink } from "effect";
 import * as Atomic from "effect-build/Atomic";
+import * as Environment from "effect-build/Environment";
 import * as Executable from "effect-build/Executable";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
@@ -11,7 +12,8 @@ const Common = {
   external: Schema.optionalKey(Schema.Array(Schema.String)),
   extraArgs: Schema.optionalKey(Schema.Array(Schema.String)),
   cwd: Schema.optionalKey(Schema.String),
-  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  /** `Redacted` values are revealed only into the command and removed from failure diagnostics. */
+  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Redacted(Schema.String)]))),
   extendEnv: Schema.optionalKey(Schema.Boolean),
   /** Stage beside the destination and rename the produced files. Default false. */
   atomic: Schema.optionalKey(Schema.Boolean),
@@ -40,12 +42,14 @@ const flags = (input: BuildInput | CompileInput) => [
 
 export interface Options {
   readonly executable?: string | undefined;
+  readonly mapCommand?: Tool.Options["mapCommand"];
 }
 
 export class Bun extends Context.Service<Bun>()("effect-build-bun/Bun", {
   make: Effect.fn("Bun.make")(function*(options: Options = {}) {
     const tool = yield* Tool.make("bun", {
       executable: options.executable,
+      mapCommand: options.mapCommand,
       version: {
         args: ["--version"],
         tested: "1.3.x and 1.4.x",
@@ -53,19 +57,20 @@ export class Bun extends Context.Service<Bun>()("effect-build-bun/Bun", {
       },
     });
     const path = yield* Path.Path;
-    const platform = Context.make(FileSystem.FileSystem, yield* FileSystem.FileSystem).pipe(
-      Context.add(Path.Path, path),
-    );
-    const bun = (input: BuildInput | CompileInput, args: ReadonlyArray<string>) =>
-      tool.run(
+    const platform = yield* Atomic.context;
+    const bun = (input: BuildInput | CompileInput, args: ReadonlyArray<string>) => {
+      const { env, redact } = Environment.reveal(input.env);
+      return tool.run(
         ChildProcess.make(tool.executable, ["build", ...flags(input), ...args, "--", ...input.entrypoints], {
           cwd: input.cwd,
-          env: input.env,
+          env,
           extendEnv: input.extendEnv,
           stdin: "ignore",
         }),
         Sink.drain,
+        { redact },
       );
+    };
     return {
       /** Bundles into the absolute output directory. Atomic publication is opt-in. */
       build: Effect.fn("Bun.build")(function*(input: BuildInput) {

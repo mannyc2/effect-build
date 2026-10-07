@@ -1,6 +1,6 @@
 import { NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Redacted } from "effect";
+import { ByteSize, ConfigProvider, Effect, FileSystem, Layer, Option, Path, Redacted } from "effect";
 import { Codesign, Notarytool, Stapler } from "effect-build-apple";
 import { ToolTest } from "effect-build/testing";
 import { ChildProcessSpawner } from "effect/process";
@@ -174,6 +174,7 @@ it.effect("notarytool removes a Redacted native password from failed diagnostics
     assert.strictEqual(error.reason._tag, "Exit");
     assert.notInclude(error.message, "secret-token");
     assert.include(error.message, "rejected");
+    assert.isTrue(error.message.startsWith("notarytool exited with code 1"));
   }));
 
 it.effect("notarytool log preserves JSON issues with the native log arguments", () =>
@@ -226,4 +227,48 @@ it.effect("stapler keeps in-place mutation and ticket validation separate", () =
     yield* stapler.validate({ path: output });
     assert.strictEqual(output, path.resolve("release.dmg"));
     assert.deepStrictEqual(commands, [["staple", "-v", output], ["validate", output]]);
+  }));
+
+it.effect("xcrun-run tools are still named for the tool in their failures", () =>
+  Effect.gen(function*() {
+    const commands: Array<ReadonlyArray<string>> = [];
+    const stapler = yield* Stapler.make().pipe(
+      Effect.provideContext(
+        yield* Layer.build(Layer.mergeAll(
+          ToolTest.layer((command) =>
+            Effect.sync(() => {
+              if (command._tag === "StandardCommand") commands.push([command.command, ...command.args]);
+              return ToolTest.handle({
+                stderr: "release.dmg does not have a ticket stapled to it.",
+                exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(65)),
+              });
+            })
+          ),
+          FileSystem.layerNoop({
+            stat: () =>
+              Effect.succeed({
+                type: "File",
+                mode: 0o755,
+                dev: 0,
+                size: ByteSize.bytes(0),
+                mtime: Option.none(),
+                atime: Option.none(),
+                birthtime: Option.none(),
+                ino: Option.none(),
+                nlink: Option.none(),
+                uid: Option.none(),
+                gid: Option.none(),
+                rdev: Option.none(),
+                blksize: Option.none(),
+                blocks: Option.none(),
+              }),
+          }),
+          NodePath.layer,
+        )),
+      ),
+      Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ PATH: "/usr/bin" })),
+    );
+    const error = yield* Effect.flip(stapler.validate({ path: "/release.dmg" }));
+    assert.deepStrictEqual(commands, [["/usr/bin/xcrun", "stapler", "validate", "/release.dmg"]]);
+    assert.strictEqual(error.message, "stapler exited with code 65: release.dmg does not have a ticket stapled to it.");
   }));

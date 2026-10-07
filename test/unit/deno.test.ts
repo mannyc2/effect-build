@@ -47,6 +47,28 @@ it.effect("Deno preserves native target, script ordering and Windows basename", 
     ]]);
   }));
 
+it.effect("Deno adds its runtime to the caller's environment choice", () =>
+  Effect.gen(function*() {
+    const options: Array<{ readonly env: unknown; readonly extendEnv: boolean | undefined }> = [];
+    const spawner = ToolTest.layer((command) =>
+      Effect.sync(() => {
+        if (command._tag === "StandardCommand") {
+          options.push({ env: command.options.env, extendEnv: command.options.extendEnv });
+        }
+        return ToolTest.handle();
+      })
+    );
+    const deno = yield* Deno.make({ executable: "deno", runtime: "/runtime/denort" }).pipe(
+      Effect.provideContext(yield* Layer.build(Layer.mergeAll(spawner, FileSystem.layerNoop({}), Path.layer))),
+    );
+    yield* deno.bundle({ entrypoints: ["main.ts"], outdir: "dist" });
+    yield* deno.bundle({ entrypoints: ["main.ts"], outdir: "dist", env: { DENO_DIR: "/cache" } });
+    assert.deepStrictEqual(options, [
+      { env: { DENORT_BIN: "/runtime/denort" }, extendEnv: true },
+      { env: { DENO_DIR: "/cache", DENORT_BIN: "/runtime/denort" }, extendEnv: undefined },
+    ]);
+  }));
+
 it.effect("Deno bundle uses its command and leaves tool options native", () =>
   Effect.gen(function*() {
     const spawner = ToolTest.layer((command) =>

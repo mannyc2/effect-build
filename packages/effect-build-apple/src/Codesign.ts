@@ -1,12 +1,14 @@
 import type { Config } from "effect";
 import { Config as C, Context, Effect, Layer, Path, Sink } from "effect";
+import * as Environment from "effect-build/Environment";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
 interface Common {
   readonly path: string;
   readonly cwd?: string | undefined;
-  readonly env?: Readonly<Record<string, string>> | undefined;
+  /** `Redacted` values are revealed only into the command and removed from failure diagnostics. */
+  readonly env?: Environment.Variables | undefined;
   readonly extendEnv?: boolean | undefined;
   readonly extraArgs?: ReadonlyArray<string> | undefined;
 }
@@ -25,22 +27,21 @@ export interface VerifyInput extends Common {
 
 export interface Options {
   readonly executable?: string | undefined;
+  readonly mapCommand?: Tool.Options["mapCommand"];
 }
 
 export class Codesign extends Context.Service<Codesign>()("effect-build-apple/Codesign", {
   make: Effect.fn("Codesign.make")(function*(options: Options = {}) {
     const tool = yield* Tool.make("codesign", options);
     const path = yield* Path.Path;
-    const run = (input: SignInput | VerifyInput, args: ReadonlyArray<string>) =>
-      tool.run(
-        ChildProcess.make(tool.executable, args, {
-          cwd: input.cwd,
-          env: input.env,
-          extendEnv: input.extendEnv,
-          stdin: "ignore",
-        }),
+    const run = (input: SignInput | VerifyInput, args: ReadonlyArray<string>) => {
+      const { env, redact } = Environment.reveal(input.env);
+      return tool.run(
+        ChildProcess.make(tool.executable, args, { cwd: input.cwd, env, extendEnv: input.extendEnv, stdin: "ignore" }),
         Sink.drain,
+        { redact },
       );
+    };
     return {
       /** Signs a path in place. Nested code ordering belongs to the application. */
       sign: Effect.fn("Codesign.sign")(function*(input: SignInput) {

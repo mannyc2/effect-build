@@ -1,5 +1,6 @@
 import type { Config } from "effect";
 import { Config as C, Context, Effect, Layer, Path, Redacted, Sink } from "effect";
+import * as Environment from "effect-build/Environment";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess } from "effect/process";
 
@@ -26,7 +27,8 @@ export type Credential =
 interface Common {
   readonly path: string;
   readonly cwd?: string | undefined;
-  readonly env?: Readonly<Record<string, string>> | undefined;
+  /** `Redacted` values are revealed only into the command and removed from failure diagnostics. */
+  readonly env?: Environment.Variables | undefined;
   readonly extendEnv?: boolean | undefined;
   readonly extraArgs?: ReadonlyArray<string> | undefined;
 }
@@ -62,19 +64,16 @@ const credentials = (credential: Credential): {
         ],
         redact: [],
       };
-    case "TrustedSigning":
-      return {
-        args: ["/dlib", credential.library, "/dmdf", credential.metadata],
-        redact: Object.values(credential.env ?? {}),
-        env: credential.env === undefined ? undefined : Object.fromEntries(
-          Object.entries(credential.env).map(([name, value]) => [name, Redacted.value(value)]),
-        ),
-      };
+    case "TrustedSigning": {
+      const { env, redact } = Environment.reveal(credential.env);
+      return { args: ["/dlib", credential.library, "/dmdf", credential.metadata], redact, env };
+    }
   }
 };
 
 export interface Options {
   readonly executable?: string | undefined;
+  readonly mapCommand?: Tool.Options["mapCommand"];
 }
 
 export class SignTool extends Context.Service<SignTool>()("effect-build-windows/SignTool", {
@@ -85,6 +84,7 @@ export class SignTool extends Context.Service<SignTool>()("effect-build-windows/
       /** Signs a native file in place. Timestamping and verification are caller choices. */
       sign: Effect.fn("SignTool.sign")(function*(input: SignInput) {
         const credential = credentials(input.credential);
+        const { env, redact } = Environment.reveal(input.env);
         const destination = path.resolve(input.cwd ?? ".", input.path);
         yield* tool.run(
           ChildProcess.make(tool.executable, [
@@ -98,18 +98,18 @@ export class SignTool extends Context.Service<SignTool>()("effect-build-windows/
             destination,
           ], {
             cwd: input.cwd,
-            env: credential.env === undefined ? input.env : { ...input.env, ...credential.env },
-            extendEnv: credential.env === undefined ? input.extendEnv : (input.extendEnv ?? true),
+            // Credential variables join the caller's choice: the inherited environment unless `env` replaces it.
+            env: credential.env === undefined ? env : { ...env, ...credential.env },
+            extendEnv: credential.env !== undefined && env === undefined ? true : input.extendEnv,
             stdin: "ignore",
           }),
           Sink.drain,
-          {
-            redact: credential.redact,
-          },
+          { redact: [...credential.redact, ...redact] },
         );
         return destination;
       }),
       verify: Effect.fn("SignTool.verify")(function*(input: VerifyInput) {
+        const { env, redact } = Environment.reveal(input.env);
         yield* tool.run(
           ChildProcess.make(tool.executable, [
             "verify",
@@ -117,8 +117,9 @@ export class SignTool extends Context.Service<SignTool>()("effect-build-windows/
             "/pa",
             "/all",
             path.resolve(input.cwd ?? ".", input.path),
-          ], { cwd: input.cwd, env: input.env, extendEnv: input.extendEnv, stdin: "ignore" }),
+          ], { cwd: input.cwd, env, extendEnv: input.extendEnv, stdin: "ignore" }),
           Sink.drain,
+          { redact },
         );
       }),
     };
