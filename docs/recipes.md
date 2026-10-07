@@ -41,7 +41,8 @@ through `tool.decode(schema)`. The [Ffprobe binding](../examples/ffmpeg-session/
 shows bounded CSV and JSON protocols, duplicate codec rows, and finite numeric parsing.
 
 Decoding succeeds only after `run` has also drained the command and accepted its exit code.
-Malformed output produces `ToolError/Output` with a safe schema cause. Text and line bounds
+Malformed output produces `ToolError/Output` whose `detail` names the schema path and expectation,
+such as `Expected string at status`, without output values or output-derived record keys. Text and line bounds
 produce `ToolError/Limit`.
 
 ## Replace a command environment
@@ -51,18 +52,21 @@ The [typed utility example](../examples/tool-runs/src/Optins.ts) uses a caller-s
 ```ts
 export const nodeVersion = Effect.fn("Optins.nodeVersion")(
   function*(allowed: Readonly<Record<string, string>>) {
-    const node = yield* Tool.make("node");
-    const command = ChildProcess.make(node.executable, ["--version"], { stdin: "ignore" }).pipe(
-      Environment.scrub(allowed),
+    // Bindings accept the same `mapCommand` option, so it scrubs their commands too.
+    const node = yield* Tool.make("node", { mapCommand: Environment.scrub(allowed) });
+    return yield* node.run(
+      ChildProcess.make(node.executable, ["--version"], { stdin: "ignore" }),
+      node.text({ maxBytes: 4096 }),
     );
-    return yield* node.run(command, node.text({ maxBytes: 4096 }));
   },
 );
 ```
 
 Obtain the allowed values through `Config` at the application edge. The transformation replaces
-every pipeline leaf's environment with those values and `extendEnv: false`. Resolution still
-uses the construction-time PATH. Native backends can supply system variables; filesystem and
+every pipeline leaf's environment with those values and `extendEnv: false`, including variables
+a binding adds itself, so allow those too. `mapCommand` runs on every command the tool or binding
+starts, including its version probe; use it also for native options a binding does not expose,
+such as `killSignal` and `forceKillAfter`. Resolution still uses the construction-time PATH. Native backends can supply system variables; filesystem and
 network access follow the native tool.
 
 ## Live sessions

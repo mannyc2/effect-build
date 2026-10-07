@@ -22,7 +22,7 @@ document usage, and this file doesn't repeat them.
   - env scrubbing;
   - layout checks.
 
-  These defenses are combinators, options or middleware. They are never services, and never run on every call.
+  These defenses are combinators or options. They are never services, and never run on every call.
 - **It isn't a build system or a container runtime.** No sandboxing, no hermeticity, no container executor.
 - **Core is domain-free.** It knows tools, commands, processes and protocols, not Bun, ffmpeg or Apple.
   - A concept enters core only when two bindings need it for the same reason.
@@ -63,8 +63,8 @@ document usage, and this file doesn't repeat them.
 
   Follow Effect's naming too: `make`, `layer`, and `layerConfig`. If a precedent doesn't fit, say why in the
   pull request.
-- **The simple path is the default; extras are opt-in.** A feature only some callers need is an option, combinator or
-  middleware chosen by the binding author or the caller. It never runs on every call, and it never becomes a service
+- **The simple path is the default; extras are opt-in.** A feature only some callers need is an option or combinator
+  chosen by the binding author or the caller. It never runs on every call, and it never becomes a service
   that holds a decision.
 - **Requirements don't leak.** A binding's methods require no other service, and its layer requires only platform
   services. The one requirement a caller supplies is `Scope`, for a method that returns a resource tied to a lifetime
@@ -78,7 +78,9 @@ document usage, and this file doesn't repeat them.
 - **The surface is small.**
   - Every export has a caller.
   - An exported function that takes a subject also has its pipeable form (`Function.dual`), as Effect's modules do.
-  - Don't mirror every flag of a tool. Expose a typed subset and one explicit escape hatch (`extraArgs`).
+  - Don't mirror every flag of a tool. Expose a typed subset, `extraArgs` for further arguments, and forward
+    `mapCommand` to `Tool.make` for native command options. Don't add parallel process options.
+  - `env` accepts `Environment.Variables`; reveal it with `Environment.reveal` and pass its `redact` to the run.
   - An option exists only for a real choice, and has a documented default.
 - **Use plain words.** The API settles the final names; keep one word per concept, and list the names in the README.
   Don't use producer, provider, artifact record, admission, durable, adoption, lane or claim.

@@ -29,7 +29,8 @@ const program = Effect.gen(function*() {
 NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)));
 ```
 
-`Tool.make(name, { executable?, version? })` captures the platform spawner. An explicit
+`Tool.make(name, { executable?, version?, mapCommand? })` captures the platform spawner.
+`mapCommand` transforms every command the tool runs, for native options or `Environment.scrub`. An explicit
 executable is used exactly as supplied. Otherwise one deterministic PATH walk chooses the
 first runnable file. Subsequent operations use that selection; they never install, retry
 another candidate, or substitute an executable.

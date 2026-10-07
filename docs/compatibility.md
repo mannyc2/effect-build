@@ -52,6 +52,11 @@ extra descriptors, plus the first child's stdin. Only the last child's status is
 Earlier stderr must be inherited, ignored, or explicitly wired; the returned handle cannot
 drain it. An accepted final exit code does not establish that every stage succeeded.
 
+`run` and `stream` finish only when stdout and stderr reach end of file, not merely when the
+process exits. A descendant that inherits those pipes, such as a daemon a build starts in the
+background, keeps them open, so the call waits for that descendant too. Start such processes with
+their own output, or use a `session` and apply your own exit policy.
+
 Scope close follows the backend's termination policy and does not recover unread output.
 Node's process finalizer and pipeline kill operation suppress native kill failures; `Tool`
 cannot surface failures already discarded by the backend. Configure the command's

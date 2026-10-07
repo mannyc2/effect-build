@@ -8,7 +8,9 @@ release graphs, registry retries, application restart policy, artifact records, 
 - A binding is a Context.Service whose make captures only the platform services it needs and resolves one executable.
   Method calls retain the caller's tracing and Scope context.
 - Call arguments are TypeScript types; schemas describe actual configuration and tool-output decoding boundaries.
-- ChildProcess.Command is the complete native request; no argv/options transport exists beside it.
+- ChildProcess.Command is the complete native request; no argv/options transport exists beside it. Bindings forward
+  one `mapCommand` to Tool.make for native options they do not expose.
+- Bun's inputs are Schemas because release tooling decodes them from configuration; other inputs are call arguments.
 - Runs drain one stdout reader and stderr concurrently with exit, then check the exit code.
 - Streams acquire on consumption and finish only after output and checked exit; sessions use the caller's Scope.
 - Errors have real tagged reasons and safe diagnostics, without argv, env, or stdout.

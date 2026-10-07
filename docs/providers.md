@@ -7,7 +7,8 @@ returns traced methods. Call methods on the service obtained with `yield* Servic
 
 Services expose `make(options?)`, `layer(options?)`, and `layerConfig(config)`.
 `layerConfig` obtains options through Effect `Config`; applications supply their platform
-layer once. The [Bun example](../examples/bun-build/src/main.ts) shows this construction:
+layer once. Every binding's options also accept `mapCommand`, which `Tool.make` applies to each
+command the binding starts, for native options the binding does not expose. The [Bun example](../examples/bun-build/src/main.ts) shows this construction:
 
 ```ts
 const services = Bun.layer().pipe(Layer.provideMerge(NodeServices.layer));
@@ -16,8 +17,10 @@ NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(services)));
 
 An explicit `executable` is used exactly as supplied. Otherwise the kernel reads PATH once
 and walks its directories in order, skipping missing files, directories, and non-executable
-files. Windows lookup also considers `.exe` and `.cmd`. Operations use the chosen path without
-another search, installation, fallback, or identity check.
+files. On Windows, lookup considers only `name.exe`: Node launches batch and script shims only
+through a shell, so pass such a shim as an explicit executable with a `mapCommand` that sets
+`shell`. Operations use the chosen path without another search, installation, fallback, or
+identity check.
 
 A binding can add a one-time version probe. Its tested range is warning policy: an untested
 version, probe failure, or ten-second timeout logs one warning, then construction succeeds.

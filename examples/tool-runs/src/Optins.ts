@@ -25,10 +25,11 @@ export const inspectFile = Effect.fn("Optins.inspectFile")(function*(file: strin
 /** Obtain the allowlist values through Config at the application's entry point. */
 export const nodeVersion = Effect.fn("Optins.nodeVersion")(
   function*(allowed: Readonly<Record<string, string>>) {
-    const node = yield* Tool.make("node");
-    const command = ChildProcess.make(node.executable, ["--version"], { stdin: "ignore" }).pipe(
-      Environment.scrub(allowed),
+    // Bindings accept the same `mapCommand` option, so it scrubs their commands too.
+    const node = yield* Tool.make("node", { mapCommand: Environment.scrub(allowed) });
+    return yield* node.run(
+      ChildProcess.make(node.executable, ["--version"], { stdin: "ignore" }),
+      node.text({ maxBytes: 4096 }),
     );
-    return yield* node.run(command, node.text({ maxBytes: 4096 }));
   },
 );

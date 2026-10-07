@@ -13,7 +13,7 @@ and each reason is a real tagged error class with a readable message.
 | `NotFound` | `executable`                           | The PATH walk found no runnable candidate         |
 | `Process`  | `detail`, sanitized `cause`            | Native spawn, read, or exit observation failed    |
 | `Exit`     | `code`, `stderr`                       | The numeric exit code was outside `exitCodes`     |
-| `Output`   | safe schema `cause`                    | Output did not decode through the selected schema |
+| `Output`   | `detail`                               | Output did not decode through the selected schema |
 | `Limit`    | `unit: "output" \| "line"`, `maxBytes` | Bounded text or a line exceeded its byte limit    |
 
 Use `Effect.catchTag` for `ToolError`. `Effect.catchReason` handles one nested reason tag;
@@ -29,7 +29,8 @@ platform cause rather than inventing an exit code.
 
 `Tool.make` can also fail with `ConfigError` when PATH configuration cannot be read.
 An explicit executable skips that lookup; native launch failure then appears as `Process`.
-Version probes warn once on failure, timeout, or an untested version.
+Version probes warn once on failure, timeout, or an untested version. The warning names the
+failure kind or the version number found, never raw probe output.
 
 Sink errors and event-transform errors remain the caller's `E`; the kernel preserves foreign
 defects. Byte limits must be nonnegative safe integers. Invalid limit options are programmer
@@ -42,8 +43,12 @@ defects rather than another expected tool reason.
 boundaries. Transformed values and unknown inherited secrets require the caller's own policy.
 
 Tool errors retain no argv, environment, or stdout. Platform causes are rebuilt to remove
-command-bearing fields. Output decoding errors use a fixed safe schema issue, so dynamic
-record keys, custom parser messages, and input values cannot leak through the retained cause.
+command-bearing fields: whole argument and environment tokens are replaced, and the executable
+path stays readable. `Output.detail` keeps schema-declared paths and expectations, such as
+`Expected "Accepted" | "Invalid" at status`. Record keys taken from output become `<key>`, and
+messages built while parsing, which can quote output, become the schema's declared expectation.
+Binding `env` values may be `Redacted`; they are revealed only into the command and removed from
+the stderr tail like `redact` values.
 The caller can keep successful decoded reports or explicitly consume output.
 
 `session` returns the native handle type in the caller's `Scope`. Spawn failure is
@@ -64,8 +69,9 @@ the optional check, and renames that file once. Its success value is the absolut
 | File rename                | `AtomicError` with `step: "commit"`; publication failed                   |
 | Cleanup                    | `AtomicError` with `step: "cleanup"`; the file may already be published   |
 
-`AtomicError` carries `destination`, `step`, and `cause`. Cleanup failure after publication
-does not roll back the committed output.
+`AtomicError` carries `destination`, `step`, and `cause`; its message includes the cause's
+message. A check receives the staged path and the destination, so `Executable.checkNative`
+reports the destination. Cleanup failure after publication does not roll back the committed output.
 
 `Atomic.directory` stages a bundle in a private sibling directory and renames each leaf
 file or symlink separately. It creates parent directories, retains unrelated destination files,

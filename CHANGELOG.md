@@ -12,11 +12,17 @@ Core now exports only `Tool`, `Atomic`, `Executable`, `Digest`, `Environment`, a
 `session` use Effect's native commands and handles. Optional version probes warn once on
 untested versions, failure, or timeout. They do not gate construction or operation.
 `ToolError` has five real error reasons: `NotFound`, `Process`, `Exit`, `Output`, and `Limit`.
-Process errors omit argv and environment, decoding errors omit input-bearing schema issues,
-and failed exits retain only a bounded stderr tail with exact-value redaction before trimming.
+Process errors replace argv and environment tokens while keeping the executable path readable.
+Decoding errors carry a `detail` with schema paths and expectations, without output values or
+output-derived keys. Failed exits retain only a bounded stderr tail with exact-value redaction
+before trimming. `Tool.make` accepts `mapCommand`, applied to every command it runs; each binding
+forwards it, for native options or `Environment.scrub`. Binding `env` values may be `Redacted`,
+revealed with `Environment.reveal` and removed from the stderr tail. Windows PATH lookup selects
+only `.exe` files.
 
 File publication is explicit: producing bindings write directly by default, with
-`atomic: true` opting into same-parent staging. Files commit with one rename; directories
+`atomic: true` opting into same-parent staging. `Atomic.context` captures the filesystem
+services a binding provides to publication; checks receive the staged path and destination. Files commit with one rename; directories
 commit each staged leaf and retain unrelated destination files. `Digest` streams SHA-256
 and fresh verification, `Environment.scrub` replaces command environments, and `Layout`
 validates portable relative leaf paths. Memoization uses Effect's own caching operations.
