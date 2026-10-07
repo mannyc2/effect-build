@@ -1,6 +1,6 @@
 # Compatibility
 
-This checkout contains the unreleased 0.9.0 API. All nine packages release together and are
+This describes the 0.9.0 API. All nine packages release together and are
 ESM-only. The source checkout pins Effect and platform packages to **4.0.0**; package peer
 ranges accept `>=4.0.0 <4.1.0`. Keep the chosen Effect and platform packages at one version.
 

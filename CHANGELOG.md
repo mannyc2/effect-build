@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.0 (unreleased)
+## 0.9.0
 
 Breaking release: native tools are ordinary Effect `Context.Service` bindings. Construct a
 binding with its `make`, `layer`, or `layerConfig`, obtain it with `yield* Service`, and call
@@ -41,10 +41,9 @@ release composition.
 `effect-build/testing` now exports `ToolTest.handle` and `ToolTest.layer` over the native
 spawner seam. Application tests replace services with `Layer.succeed`. Typechecked workspace
 examples and TypeDoc over actual exports/JSDoc replace the old artifact-oriented guides.
-See [getting started](docs/getting-started.md) for the source API. This entry prepares the
-breaking release; 0.9.0 has not been published.
+See [getting started](docs/getting-started.md) for the source API.
 
-## 0.8.0 (unreleased)
+## 0.8.0
 
 Every binary provider now uses `Tool.provider(Service, spec)`, with declared tested versions,
 constraints and host requirements. `Tool.versionPattern` extracts probe versions and
@@ -63,7 +62,7 @@ provider layer errors uniformly include `ArtifactError`; Node SEA service `build
 standard platform layers already supply them. There are no aliases. Update the twelve
 published packages together.
 
-## 0.7.0 (unreleased)
+## 0.7.0
 
 0.7.0 composes compilers and packagers through one `Artifact.File | Artifact.Executable | Artifact.Directory` record with numeric byte counts and SHA-256. Bun and Deno compile and bundle,
 esbuild and now-public Rolldown retain scoped native APIs, and Node SEA consumes artifact inputs.

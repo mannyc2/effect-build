@@ -1,7 +1,7 @@
 # Getting started
 
-The 0.9.0 source checkout exposes native tool bindings as Effect services. This version is
-unreleased; these examples use the workspace packages rather than the older published API.
+The 0.9.0 source checkout exposes native tool bindings as Effect services. These examples
+use the checkout's workspace packages.
 
 ## Prepare the checkout
 

@@ -6,7 +6,7 @@ A binding is an Effect service: resolve an executable once, then call its method
 package, sign, or inspect files. Methods return paths or native reports. Applications supply
 the platform, choose publication boundaries, and compose the release workflow.
 
-This checkout contains **0.9.0, unreleased**, with Effect 4.0.0. The 0.9 API replaces the earlier
+This is **0.9.0**, with Effect 4.0.0. The 0.9 API replaces the earlier
 artifact and provider model without compatibility aliases. See the [changelog](CHANGELOG.md)
 for the breaking changes.
 

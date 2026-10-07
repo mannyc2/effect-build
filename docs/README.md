@@ -1,6 +1,6 @@
 # Documentation
 
-These guides describe the unreleased 0.9.0 service API.
+These guides describe the 0.9.0 service API.
 
 - [Getting started](getting-started.md): run a native command and a Bun build from the source checkout.
 - [Tools and bindings](providers.md): service construction, native options, resolution, and output policy.
