@@ -2,7 +2,7 @@
 
 An Effect service for native Node
 [single executable application assembly](https://nodejs.org/api/single-executable-applications.html#generating-single-executable-applications-with---build-sea).
-The 0.9.0 source API is currently unreleased and uses Effect 4.0.0.
+Version 0.9.0 uses Effect 4.0.0.
 
 `NodeSea` runs `node --check` and `node --build-sea` against already-bundled JavaScript.
 Bundling and signing belong to the application. The native assembly command was

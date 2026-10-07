@@ -1,7 +1,6 @@
 # effect-build
 
-The portable kernel for typed native tool bindings. The 0.9.0 source API uses Effect 4.0.0
-and is currently unreleased.
+The portable kernel for typed native tool bindings. Version 0.9.0 uses Effect 4.0.0.
 
 Import the six module namespaces from `effect-build`, or import their individual subpaths.
 The application supplies an Effect platform layer.
