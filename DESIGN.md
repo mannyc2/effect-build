@@ -22,4 +22,4 @@ release graphs, registry retries, application restart policy, artifact records, 
 - JavaScript build APIs and archive/wheel file writers are outside the native tool boundary.
 - Node SEA retains direct native --build-sea assembly as a binding; postject injection is removed.
 - Notarytool uses its supported credential interfaces; Apple-ID passwords use native argv with Redacted diagnostics.
-- Application watchdogs, paired persistent writers, restart, and delivery policy stay in the-show.
+- Application watchdogs, paired persistent writers, restart, and delivery policy stay in the application.

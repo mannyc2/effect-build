@@ -152,7 +152,7 @@ export class Ffmpeg extends Context.Service<Ffmpeg>()("@effect-build/example-ffm
             forceKillAfter: "500 millis",
             stdin: "pipe",
             stdout: "pipe",
-            // Inherited, as the-show runs it today. A piped stderr must be drained by its reader.
+            // Inherited, so diagnostics reach the terminal. A piped stderr must be drained by its reader.
             stderr: "inherit",
             additionalFds: { fd3: { type: "input" } },
           }));
