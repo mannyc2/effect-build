@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Fiber, FileSystem, Path, PlatformError } from "effect";
+import { Cause, Deferred, Effect, Fiber, FileSystem, Path, PlatformError, Schema } from "effect";
 import * as Atomic from "../../packages/effect-build/src/Atomic.ts";
 import * as Executable from "../../packages/effect-build/src/Executable.ts";
 
@@ -43,6 +43,7 @@ it.layer(NodeServices.layer)("optional publication", (it) => {
         check: Executable.checkNative,
       }).pipe(Effect.flip);
       assert.instanceOf(check, Executable.ExecutableError);
+      assert.strictEqual(Schema.is(Executable.ExecutableError)(check) ? check.path : "", destination);
       assert.strictEqual(yield* fs.readFileString(destination), "old");
       assert.deepStrictEqual(yield* fs.readDirectory(root), ["app"]);
     }));

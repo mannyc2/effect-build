@@ -47,11 +47,14 @@
       "./Atomic": {
         "runtime": [
           "AtomicError",
+          "context",
           "directory",
           "file"
         ],
         "declarations": [
           "AtomicError",
+          "Check",
+          "context",
           "directory",
           "file"
         ]
@@ -84,9 +87,12 @@
       },
       "./Environment": {
         "runtime": [
+          "reveal",
           "scrub"
         ],
         "declarations": [
+          "Variables",
+          "reveal",
           "scrub"
         ]
       },
@@ -345,8 +351,8 @@
     }
   },
   "symbols": {
-    "named": 74,
+    "named": 78,
     "namespaces": 7,
-    "total": 81
+    "total": 85
   }
 }

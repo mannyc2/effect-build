@@ -1,34 +1,52 @@
-import { Effect, FileSystem, Path, Predicate, Schema } from "effect";
+import { Context, Effect, FileSystem, Path, Predicate, Schema } from "effect";
 import { dual } from "effect/Function";
 
 export class AtomicError extends Schema.TaggedError<AtomicError>()("AtomicError", {
   destination: Schema.String,
-  step: Schema.Literals(["stage", "check", "commit", "cleanup"]),
+  step: Schema.Literals(["stage", "commit", "cleanup"]),
   cause: Schema.Defect(),
 }) {
   override get message(): string {
-    return `Publishing ${this.destination} failed during ${this.step}`;
+    const detail = Predicate.isError(this.cause) ? `: ${this.cause.message}` : "";
+    return `Publishing ${this.destination} failed during ${this.step}${detail}`;
   }
 }
+
+/**
+ * The filesystem services publication needs, without the rest of the current context. A binding captures this in
+ * `make` and provides it to its methods, so a call keeps its caller's Scope and tracing.
+ */
+export const context: Effect.Effect<
+  Context.Context<FileSystem.FileSystem | Path.Path>,
+  never,
+  FileSystem.FileSystem | Path.Path
+> = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  return Context.make(FileSystem.FileSystem, fs).pipe(Context.add(Path.Path, path));
+});
+
+/** Checks a staged file before commit. `destination` is the final path, for diagnostics. */
+export type Check<E, R> = (staged: string, destination: string) => Effect.Effect<void, E, R>;
 
 /** Stages beside the destination, checks only when requested, and returns the final absolute path.
  * Cleanup can fail after publication; it does not roll back a committed file. */
 export const file: {
   <E, R, E2 = never, R2 = never>(
     produce: (staged: string) => Effect.Effect<unknown, E, R>,
-    options?: { readonly check?: (staged: string) => Effect.Effect<void, E2, R2> },
+    options?: { readonly check?: Check<E2, R2> },
   ): (destination: string) => Effect.Effect<string, E | E2 | AtomicError, R | R2 | FileSystem.FileSystem | Path.Path>;
   <E, R, E2 = never, R2 = never>(
     destination: string,
     produce: (staged: string) => Effect.Effect<unknown, E, R>,
-    options?: { readonly check?: (staged: string) => Effect.Effect<void, E2, R2> },
+    options?: { readonly check?: Check<E2, R2> },
   ): Effect.Effect<string, E | E2 | AtomicError, R | R2 | FileSystem.FileSystem | Path.Path>;
 } = dual(
   (args) => Predicate.isString(args[0]),
   Effect.fn("Atomic.file")(function*<E, R, E2 = never, R2 = never>(
     destination: string,
     produce: (staged: string) => Effect.Effect<unknown, E, R>,
-    options?: { readonly check?: (staged: string) => Effect.Effect<void, E2, R2> },
+    options?: { readonly check?: Check<E2, R2> },
   ) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -42,7 +60,7 @@ export const file: {
       Effect.fnUntraced(function*(directory) {
         const staged = path.join(directory, path.basename(final));
         yield* produce(staged);
-        if (options?.check !== undefined) yield* options.check(staged);
+        if (options?.check !== undefined) yield* options.check(staged, final);
         yield* fs.rename(staged, final).pipe(Effect.mapError(failure("commit")));
         return final;
       }),

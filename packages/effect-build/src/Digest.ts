@@ -1,14 +1,22 @@
 import { sha256 as incrementalSha256 } from "@noble/hashes/sha2.js";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { dual } from "effect/Function";
 
-export class Read extends Schema.TaggedError<Read>()("Read", { cause: Schema.Defect() }) {}
+export class Read extends Schema.TaggedError<Read>()("Read", { cause: Schema.Defect() }) {
+  override get message(): string {
+    return Predicate.isError(this.cause) ? `reading failed: ${this.cause.message}` : "reading failed";
+  }
+}
 
 export class Mismatch extends Schema.TaggedError<Mismatch>()("Mismatch", {
   expected: Schema.String,
   actual: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return `expected ${this.expected}, found ${this.actual}`;
+  }
+}
 
 export class DigestError extends Schema.TaggedError<DigestError>()("DigestError", {
   path: Schema.String,
@@ -19,7 +27,7 @@ export class DigestError extends Schema.TaggedError<DigestError>()("DigestError"
       case "Read":
         return `Reading ${this.path} for SHA-256 failed`;
       case "Mismatch":
-        return `SHA-256 mismatch for ${this.path}: expected ${this.reason.expected}, found ${this.reason.actual}`;
+        return `SHA-256 mismatch for ${this.path}: ${this.reason.message}`;
     }
   }
 }

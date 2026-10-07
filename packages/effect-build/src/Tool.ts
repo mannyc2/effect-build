@@ -1,7 +1,9 @@
 /** Resolved native tools with checked runs, streams and caller-owned sessions. */
-import { Config, Effect, Fiber, FileSystem, Path, Schema, SchemaIssue, Sink, Stream } from "effect";
+import { Cause, Config, Effect, Fiber, FileSystem, Path, Schema, Sink, Stream } from "effect";
 import type { PlatformError, Redacted, Scope } from "effect";
+import { identity } from "effect/Function";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { describeIssue } from "./internal/Output.js";
 import { checkBound, commandOutputFds, sanitize } from "./internal/Process.js";
 import { stderrTail } from "./internal/Stderr.js";
 
@@ -39,10 +41,11 @@ export class Exit extends Schema.TaggedError<Exit>()("Exit", {
 
 /** The tool's output did not decode. */
 export class Output extends Schema.TaggedError<Output>()("Output", {
-  cause: Schema.Defect(),
+  /** Schema paths and expectations, such as `Expected string at status`, without output values or output-derived keys. */
+  detail: Schema.String,
 }) {
   override get message(): string {
-    return "produced output that did not decode";
+    return `produced output that did not decode: ${this.detail}`;
   }
 }
 
@@ -130,6 +133,12 @@ export interface Options {
   readonly executable?: string | undefined;
   /** Probe once here; log one warning outside the tested range, or if the probe fails or times out. Never fails. */
   readonly version?: VersionCheck | undefined;
+  /**
+   * Applied to every command this tool runs, including the version probe, after it is rendered. Use it for native
+   * options a binding does not expose, such as `killSignal`, or for `Environment.scrub`, which replaces the whole
+   * environment, including values a binding adds.
+   */
+  readonly mapCommand?: ((command: ChildProcess.Command) => ChildProcess.Command) | undefined;
 }
 
 const findOnPath = Effect.fnUntraced(function*(name: string) {
@@ -137,7 +146,8 @@ const findOnPath = Effect.fnUntraced(function*(name: string) {
   const path = yield* Path.Path;
   const windows = path.sep === "\\";
   const value = yield* Config.String("PATH").pipe(Config.orElse(() => Config.String("Path")));
-  const names = windows ? [name, `${name}.exe`, `${name}.cmd`] : [name];
+  // Windows launches only executables without a shell; batch and script shims need an explicit command.
+  const names = windows ? [name.toLowerCase().endsWith(".exe") ? name : `${name}.exe`] : [name];
   const candidates = value.split(windows ? ";" : ":").filter((directory) => directory.length > 0)
     .flatMap((directory) => names.map((file) => path.resolve(directory, file)));
   const found = yield* Effect.findFirst(candidates, (candidate) =>
@@ -154,13 +164,14 @@ const makeTool = (
   name: string,
   executable: string,
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  mapCommand: (command: ChildProcess.Command) => ChildProcess.Command,
 ): Tool => {
   const processError = (cause: PlatformError.PlatformError) =>
     ToolError.make({ tool: name, reason: Process.make({ detail: cause.message, cause }) });
   const limit = (unit: "output" | "line", maxBytes: number) =>
     ToolError.make({ tool: name, reason: Limit.make({ unit, maxBytes }) });
 
-  const session: Tool["session"] = Effect.fnUntraced(function*(command) {
+  const session = Effect.fnUntraced(function*(command: ChildProcess.Command) {
     const scrub = sanitize(command);
     const handle = yield* spawner.spawn(command).pipe(Effect.mapError(scrub), Effect.mapError(processError));
     return ChildProcessSpawner.makeHandle({
@@ -209,13 +220,14 @@ const makeTool = (
       options?: RunOptions,
     ) {
       yield* checkBound(options?.stderrTailBytes ?? 8192, "stderrTailBytes");
-      const handle = yield* session(command);
+      const mapped = mapCommand(command);
+      const handle = yield* session(mapped);
       const [value, tail, code] = yield* Effect.all([
         Stream.run(
           Stream.mapError(handle.stdout, processError),
           Sink.flatMap(output, (value) => Sink.as(Sink.drain, value)),
         ),
-        outputs(command, handle, options),
+        outputs(mapped, handle, options),
         Effect.mapError(handle.exitCode, processError),
       ], { concurrency: "unbounded" });
       yield* checkExit(code, tail, options);
@@ -231,12 +243,13 @@ const makeTool = (
       options?: RunOptions,
     ) {
       yield* checkBound(options?.stderrTailBytes ?? 8192, "stderrTailBytes");
-      const handle = yield* session(command);
+      const mapped = mapCommand(command);
+      const handle = yield* session(mapped);
       // The native reader belongs to this scope, including when the transform stops early.
       const pull = yield* Stream.toPull(Stream.mapError(handle.stdout, processError));
       const stdout = Stream.fromPull(Effect.succeed(pull));
       const terminal = yield* Effect.forkScoped(Effect.all([
-        outputs(command, handle, options),
+        outputs(mapped, handle, options),
         Effect.mapError(handle.exitCode, processError),
       ], { concurrency: "unbounded" }));
       const finish = Effect.gen(function*() {
@@ -255,7 +268,8 @@ const makeTool = (
     Sink.unwrap(
       checkBound(options.maxBytes, "maxBytes").pipe(Effect.map(() =>
         Sink.suspend(() => {
-          const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+          // The default decoder drops a leading byte order mark, which JSON decoding would reject.
+          const decoder = new TextDecoder("utf-8");
           return Sink.reduceEffect(() => ({ size: 0, text: "" }), (state, chunk: Uint8Array) => {
             const size = state.size + chunk.length;
             return size > options.maxBytes
@@ -270,10 +284,18 @@ const makeTool = (
     Stream.unwrap(
       checkBound(options.maxLineBytes, "maxLineBytes").pipe(Effect.as(Stream.suspend(() => {
         const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+        let first = true;
+        // Only the first line can begin with the stream's byte order mark.
+        const decodeLine = (line: Uint8Array) => {
+          const text = decoder.decode(line);
+          const bom = first && text.startsWith("\uFEFF");
+          first = false;
+          return bom ? text.slice(1) : text;
+        };
         const frame = Effect.fnUntraced(function*(pending: Uint8Array, chunk: Uint8Array | undefined) {
           if (chunk === undefined) {
             if (pending.length > options.maxLineBytes) return yield* limit("line", options.maxLineBytes);
-            return [new Uint8Array(0), pending.length === 0 ? [] : [decoder.decode(pending)]] as const;
+            return [new Uint8Array(0), pending.length === 0 ? [] : [decodeLine(pending)]] as const;
           }
           const bytes = new Uint8Array(pending.length + chunk.length);
           bytes.set(pending);
@@ -283,7 +305,7 @@ const makeTool = (
           for (let end = bytes.indexOf(10); end !== -1; end = bytes.indexOf(10, start)) {
             const size = end - start - (bytes[end - 1] === 13 ? 1 : 0);
             if (size > options.maxLineBytes) return yield* limit("line", options.maxLineBytes);
-            out.push(decoder.decode(bytes.subarray(start, start + size)));
+            out.push(decodeLine(bytes.subarray(start, start + size)));
             start = end + 1;
           }
           const rest = bytes.subarray(start);
@@ -301,18 +323,31 @@ const makeTool = (
 
   const decode: Tool["decode"] = (schema) => {
     const parse = Schema.decodeUnknownEffect(schema, { reportInput: false });
-    // Schema paths and custom messages can contain output even with input reporting disabled.
+    // Record keys and parse-time messages can contain output even with input reporting disabled.
     return (input) =>
-      parse(input).pipe(Effect.mapError(() =>
-        ToolError.make({
-          tool: name,
-          reason: Output.make({
-            cause: new Schema.SchemaError(new SchemaIssue.InvalidValue({ message: "Output did not match its schema" })),
-          }),
-        })
-      ));
+      parse(input).pipe(
+        Effect.mapError((error) =>
+          ToolError.make({ tool: name, reason: Output.make({ detail: describeIssue(error.issue) }) })
+        ),
+      );
   };
-  return { name, executable, run, stream, session, text, lines, decode };
+  const mappedSession: Tool["session"] = (command) => session(mapCommand(command));
+  return { name, executable, run, stream, session: mappedSession, text, lines, decode };
+};
+
+// Raw probe output and stderr can be arbitrary, so warnings name only the failure kind and a version number.
+const probeFailure = (error: ToolError | Cause.TimeoutError): string => {
+  if (Cause.isTimeoutError(error)) return "timed out after 10 seconds";
+  switch (error.reason._tag) {
+    case "Exit":
+      return `exited with code ${error.reason.code}`;
+    case "NotFound":
+    case "Process":
+      return "could not run";
+    case "Output":
+    case "Limit":
+      return "printed unreadable output";
+  }
 };
 
 const probeVersion = Effect.fnUntraced(function*(tool: Tool, version: VersionCheck) {
@@ -325,9 +360,13 @@ const probeVersion = Effect.fnUntraced(function*(tool: Tool, version: VersionChe
     tool.text({ maxBytes: 4096 }),
   ).pipe(Effect.timeout("10 seconds"), Effect.result);
   if (output._tag === "Failure") {
-    yield* Effect.logWarning(`${tool.name} version probe failed; tested range is ${version.tested}`);
+    yield* Effect.logWarning(
+      `${tool.name} version probe ${probeFailure(output.failure)}; tested range is ${version.tested}`,
+    );
   } else if (!version.isTested(output.success)) {
-    yield* Effect.logWarning(`${tool.name} is outside the tested range ${version.tested}`);
+    const found = /\d+\.\d+(?:\.\d+)?/u.exec(output.success)?.[0];
+    const detail = found === undefined ? "" : ` (found ${found})`;
+    yield* Effect.logWarning(`${tool.name} is outside the tested range ${version.tested}${detail}`);
   }
 });
 
@@ -339,7 +378,7 @@ export const make = Effect.fn("Tool.make")(function*(name: string, options?: Opt
 > {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const executable = options?.executable ?? (yield* findOnPath(name));
-  const tool = makeTool(name, executable, spawner);
+  const tool = makeTool(name, executable, spawner, options?.mapCommand ?? identity);
   if (options?.version !== undefined) yield* probeVersion(tool, options.version);
   return tool;
 });

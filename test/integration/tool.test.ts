@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Cause, Deferred, Effect, Fiber, Option, Ref, Sink, Stream } from "effect";
+import { Cause, Deferred, Effect, Fiber, Logger, Option, Ref, Sink, Stream } from "effect";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
@@ -164,6 +164,7 @@ layer(native, { excludeTestServices: true })("Tool with real Node processes", (i
       ).pipe(Effect.flip);
       assert.instanceOf(error.reason, Tool.Process);
       assert.notInclude(JSON.stringify(error), "PRIVATE_ARG");
+      assert.include(error.message, "/missing-effect-build-native-fixture");
       const killed = yield* Effect.scoped(Effect.gen(function*() {
         const handle = yield* tool.session(
           nodeCommand(tool, "process.stdout.write('ready');setInterval(()=>{},1000)", { stdout: "pipe" }),
@@ -208,6 +209,11 @@ layer(native, { excludeTestServices: true })("Tool with real Node processes", (i
 
   it.effect("warn-only version probing ignores stdin", () =>
     Effect.gen(function*() {
+      const warnings: Array<string> = [];
+      const logger = Logger.make((entry) => {
+        if (entry.logLevel === "Warn") warnings.push(String(entry.message));
+      });
+      // The probe prints its version only once stdin ends, which an ignored stdin does at once.
       const tool = yield* Tool.make("node", {
         executable: process.execPath,
         version: {
@@ -215,7 +221,11 @@ layer(native, { excludeTestServices: true })("Tool with real Node processes", (i
           tested: "1.x",
           isTested: (output) => output === "1.0",
         },
-      });
+      }).pipe(
+        // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This test observes the one construction's warnings.
+        Effect.provide(Logger.layer([logger])),
+      );
       assert.strictEqual(tool.executable, process.execPath);
+      assert.deepStrictEqual(warnings, []);
     }), 10_000);
 });

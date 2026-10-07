@@ -22,15 +22,18 @@ const nativeMagics = new Set([
   "bfbafeca",
 ]);
 
-/** Checks only four native-header bytes; this does not establish the target or executable validity. */
+/**
+ * Checks only four native-header bytes; this does not establish the target or executable validity.
+ * As an `Atomic.file` check it reads the staged file and reports the destination path.
+ */
 export const checkNative = Effect.fn("Executable.checkNative")(
-  function*(path: string) {
+  function*(path: string, reportedPath: string = path) {
     const fs = yield* FileSystem.FileSystem;
     const file = yield* fs.open(path);
     const bytes = yield* file.readAlloc(4);
     const magic = Hex.encode(Option.getOrElse(bytes, () => new Uint8Array()));
     if (magic.length !== 8 || (!nativeMagics.has(magic) && !magic.startsWith("4d5a"))) {
-      return yield* ExecutableError.make({ path, magic });
+      return yield* ExecutableError.make({ path: reportedPath, magic });
     }
   },
   Effect.scoped,

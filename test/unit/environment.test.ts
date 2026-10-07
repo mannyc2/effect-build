@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
-import { Effect, Stream } from "effect";
+import { Effect, Redacted, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Environment from "../../packages/effect-build/src/Environment.ts";
 
@@ -76,4 +76,12 @@ it.layer(NodeServices.layer)("native environment", (it) => {
       assert.strictEqual(Number(exit), 0, stderr.join(""));
       assert.strictEqual(output.join("").trim(), '{"ALLOWED":"only","SECRET":null,"PARENT":null}', process.execPath);
     }));
+});
+
+it("reveals Redacted values into env and lists them for diagnostic redaction", () => {
+  const secret = Redacted.make("token");
+  const revealed = Environment.reveal({ TOKEN: secret, MODE: "ci" });
+  assert.deepStrictEqual(revealed.env, { TOKEN: "token", MODE: "ci" });
+  assert.deepStrictEqual(revealed.redact, [secret]);
+  assert.deepStrictEqual(Environment.reveal(undefined), { env: undefined, redact: [] });
 });

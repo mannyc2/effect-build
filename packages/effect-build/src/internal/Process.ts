@@ -19,15 +19,22 @@ export const commandOutputFds = (command: ChildProcess.Command): ReadonlyArray<n
     .filter(([, config]) => config.type === "output")
     .map(([key]) => Number(key.slice(2)));
 
+const escapeRegExp = (value: string) => value.replace(/[$()*+.?[\\\]^{|}]/gu, "\\$&");
+
 /** Rebuild rather than retaining platform causes, which include spawnargs and command-line syscalls. */
 export const sanitize = (command: ChildProcess.Command) => {
   const commands = leaves(command);
-  const executable = commands.map((leaf) => leaf.command).join(" | ");
+  const executables = new Set(commands.map((leaf) => leaf.command));
+  const executable = [...executables].join(" | ");
   const values = commands.flatMap((leaf) => [...leaf.args, ...Object.values(leaf.options.env ?? {})])
-    .filter(Predicate.isString).filter((value) => value.length > 0)
+    .filter(Predicate.isString).filter((value) => value.length > 0 && !executables.has(value))
     .sort((left, right) => right.length - left.length);
+  // Whole tokens only: a short argument such as `in` must not rewrite the `bin` of an executable path.
+  const tokens = values.map((value) =>
+    new RegExp(`(^|[\\s"'\`=,(\\[])${escapeRegExp(value)}(?=$|[\\s"'\`,:;)\\]])`, "gu")
+  );
   const scrub = (message: string): string =>
-    values.reduce((text, value) => text.replaceAll(value, "<redacted>"), message);
+    tokens.reduce((text, token) => text.replace(token, "$1<redacted>"), message);
   return (error: PlatformError.PlatformError): PlatformError.PlatformError => {
     const reason = error.reason;
     // Native errno messages preserve useful signal names. The original cause and syscall never survive.

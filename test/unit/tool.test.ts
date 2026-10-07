@@ -20,6 +20,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import * as Environment from "effect-build/Environment";
 import { ToolTest } from "effect-build/testing";
 import * as Tool from "effect-build/Tool";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -110,6 +111,22 @@ describe("checked native runs", () => {
       assert.instanceOf(error.reason, Tool.Exit);
       assert.strictEqual(error.reason.stderr, "edacted>\n");
       assert.notInclude(JSON.stringify(error), "SECRET");
+    }));
+
+  it.effect("keeps the newest bytes when chunks wrap or exceed the tail", () =>
+    Effect.gen(function*() {
+      const failing = Effect.fnUntraced(function*(stderr: Stream.Stream<Uint8Array>) {
+        const tool = yield* makeFake(
+          ToolTest.handle({ stderr, exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)) }),
+        );
+        return yield* tool.run(command, Sink.drain, { stderrTailBytes: 6 }).pipe(Effect.flip);
+      });
+      const wrapped = yield* failing(Stream.make(bytes("abcd"), bytes("efgh"), bytes("ij")));
+      assert.strictEqual(wrapped.reason._tag === "Exit" ? wrapped.reason.stderr : "", "efghij");
+      const oversized = yield* failing(Stream.make(bytes("ab"), bytes("0123456789")));
+      assert.strictEqual(oversized.reason._tag === "Exit" ? oversized.reason.stderr : "", "456789");
+      const empty = yield* failing(Stream.empty);
+      assert.strictEqual(empty.message, "fixture exited with code 1");
     }));
 
   it.effect("drains accessible extra output pipes", () =>
@@ -281,20 +298,49 @@ describe("bounded output decoding", () => {
       assert.isTrue(Exit.isFailure(lines) && Cause.hasDies(lines.cause));
     }));
 
-  it.effect("projects dynamic record keys and custom schema messages out of Output causes", () =>
+  it.effect("describes declared paths and expectations without output values or output-derived keys", () =>
     Effect.gen(function*() {
       const tool = yield* makeFake(ToolTest.handle());
       const marker = "STDOUT_PRIVATE_MARKER";
+      const Status = Schema.Struct({
+        id: Schema.String,
+        status: Schema.Literals(["Accepted", "Invalid"]),
+        logs: Schema.Record(Schema.String, Schema.Finite),
+      });
       const errors = yield* Effect.all([
-        tool.decode(Schema.Record(Schema.String, Schema.Finite))({ [marker]: "invalid" }).pipe(Effect.flip),
+        tool.decode(Status)({ id: "x", status: marker, logs: {} }).pipe(Effect.flip),
+        tool.decode(Status)({ status: "Accepted", logs: { [marker]: marker } }).pipe(Effect.flip),
         tool.decode(Schema.String.check(Schema.makeFilter((input) => `invalid ${input}`)))(marker).pipe(Effect.flip),
+        tool.decode(Schema.fromJsonString(Status))(`{"${marker}`).pipe(Effect.flip),
       ]);
-      for (const error of errors) {
+      const details = errors.map((error) => error.reason._tag === "Output" ? error.reason.detail : "");
+      assert.deepStrictEqual(details, [
+        `Expected "Accepted" | "Invalid" at status`,
+        "Missing key at id",
+        "Expected <filter>",
+        "Expected a valid JSON string",
+      ]);
+      const record = yield* tool.decode(Status)({ id: "x", status: "Accepted", logs: { [marker]: marker } }).pipe(
+        Effect.flip,
+      );
+      assert.strictEqual(record.message, "fixture produced output that did not decode: Expected number at logs.<key>");
+      for (const error of [...errors, record]) {
         assert.instanceOf(error.reason, Tool.Output);
         assert.notInclude(JSON.stringify(error), marker);
         assert.notInclude(Cause.pretty(Cause.fail(error.reason)), marker);
-        assert.strictEqual(Schema.isSchemaError(error.reason.cause), true);
       }
+    }));
+
+  it.effect("drops a leading byte order mark from text and the first line only", () =>
+    Effect.gen(function*() {
+      const tool = yield* makeFake(ToolTest.handle());
+      const bom = Uint8Array.of(0xef, 0xbb, 0xbf);
+      assert.strictEqual(yield* Stream.make(bom, bytes("{}")).pipe(Stream.run(tool.text({ maxBytes: 8 }))), "{}");
+      const lines = yield* Stream.make(bom, bytes("one\n"), bom, bytes("two")).pipe(
+        tool.lines({ maxLineBytes: 8 }),
+        Stream.runCollect,
+      );
+      assert.deepStrictEqual(lines, ["one", "\uFEFFtwo"]);
     }));
 });
 
@@ -359,6 +405,67 @@ describe("construction", () => {
       assert.strictEqual(error._tag === "ToolError" ? error.reason._tag : "", "NotFound");
     }));
 
+  it.effect("on Windows, selects only executables and skips script shims", () =>
+    Effect.gen(function*() {
+      const visited: Array<string> = [];
+      const present = new Set(["/shims/fixture", "/shims/fixture.cmd", "/bin/fixture.exe"]);
+      const windowsPath = Effect.map(Path.Path, (path) => ({ ...path, sep: "\\" as const }));
+      const tool = yield* Tool.make("fixture").pipe(
+        Effect.provideServiceEffect(Path.Path, windowsPath),
+        // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This test construction provides its complete fake platform once.
+        Effect.provide(Layer.mergeAll(
+          ToolTest.layer(() => Effect.succeed(ToolTest.handle())),
+          Path.layer,
+          FileSystem.layerNoop({
+            stat: (file) =>
+              Effect.sync(() => visited.push(file)).pipe(
+                Effect.flatMap(() =>
+                  present.has(file)
+                    ? Effect.succeed(fileInfo("File", 0o644))
+                    : Effect.fail(PlatformError.systemError({
+                      _tag: "NotFound",
+                      module: "FileSystem",
+                      method: "stat",
+                      pathOrDescriptor: file,
+                    }))
+                ),
+              ),
+          }),
+        )),
+        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ Path: "/shims;/bin" })),
+      );
+      assert.strictEqual(tool.executable, "/bin/fixture.exe");
+      assert.deepStrictEqual(visited, ["/shims/fixture.exe", "/bin/fixture.exe"]);
+    }));
+
+  it.effect("applies mapCommand to every command, including the version probe", () =>
+    Effect.gen(function*() {
+      const spawned: Array<ChildProcess.Command> = [];
+      const tool = yield* Tool.make("fixture", {
+        executable: "fixture",
+        version: { args: ["--version"], tested: "1.x", isTested: () => true },
+        mapCommand: Environment.scrub({ ONLY: "allowed" }),
+      }).pipe(
+        // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This test construction provides its complete fake platform once.
+        Effect.provide(Layer.mergeAll(
+          ToolTest.layer((request) => Effect.sync(() => spawned.push(request)).pipe(Effect.as(ToolTest.handle()))),
+          FileSystem.layerNoop({}),
+          Path.layer,
+        )),
+      );
+      yield* tool.run(command, Sink.drain);
+      yield* Stream.runDrain(tool.stream(command, (stdout) => stdout));
+      yield* Effect.scoped(tool.session(command));
+      assert.strictEqual(spawned.length, 4);
+      for (const request of spawned) {
+        assert.strictEqual(request._tag, "StandardCommand");
+        if (request._tag === "StandardCommand") {
+          assert.deepStrictEqual(request.options.env, { ONLY: "allowed" });
+          assert.strictEqual(request.options.extendEnv, false);
+        }
+      }
+    }));
+
   it.effect("releases a timed-out probe at ten seconds, warns safely once, and returns the tool", () =>
     Effect.gen(function*() {
       const started = yield* Deferred.make<void>();
@@ -405,13 +512,19 @@ describe("construction", () => {
       const tool = yield* Fiber.join(fiber);
       assert.strictEqual(tool.name, "fixture");
       assert.strictEqual(yield* Ref.get(released), 1);
-      assert.strictEqual(warnings.length, 1);
-      assert.notInclude(warnings.join(" "), "PRIVATE_VERSION");
+      assert.deepStrictEqual(warnings, ["fixture version probe timed out after 10 seconds; tested range is 1.x"]);
     }));
 
   it.effect("probes once when selected, warns only when needed, and logs no raw output", () =>
     Effect.gen(function*() {
-      const modes = ["absent", "tested", "untested", "failed"] as const;
+      const modes = ["absent", "tested", "untested", "versioned", "failed"] as const;
+      const expected = {
+        absent: [],
+        tested: [],
+        untested: ["fixture is outside the tested range 1.x"],
+        versioned: ["fixture is outside the tested range 1.x (found 9.8.7)"],
+        failed: ["fixture version probe exited with code 1; tested range is 1.x"],
+      };
       for (const mode of modes) {
         const probes: Array<ChildProcess.Command> = [];
         const warnings: Array<string> = [];
@@ -431,7 +544,7 @@ describe("construction", () => {
               Effect.sync(() => {
                 probes.push(request);
                 return ToolTest.handle({
-                  stdout: "PRIVATE_VERSION_OUTPUT",
+                  stdout: mode === "versioned" ? "PRIVATE_VERSION_OUTPUT 9.8.7" : "PRIVATE_VERSION_OUTPUT",
                   stderr: "PRIVATE_VERSION_DIAGNOSTIC",
                   exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(mode === "failed" ? 1 : 0)),
                 });
@@ -444,8 +557,7 @@ describe("construction", () => {
         );
         assert.strictEqual(tool.executable, "fixture");
         assert.strictEqual(probes.length, mode === "absent" ? 0 : 1);
-        assert.strictEqual(warnings.length, mode === "untested" || mode === "failed" ? 1 : 0);
-        assert.notInclude(warnings.join(" "), "PRIVATE_VERSION");
+        assert.deepStrictEqual(warnings, expected[mode]);
       }
     }));
 });
@@ -549,4 +661,29 @@ it.effect("sanitizes every native handle failure, including Deno syscall and rer
       assert.notInclude(Cause.pretty(Cause.fail(error)), "credential");
       assert.isFalse("cause" in error);
     }
+  }));
+
+it.effect("removes argument tokens from spawn failures without rewriting the executable path", () =>
+  Effect.gen(function*() {
+    const executable = "/usr/local/bin/missing-ffprobe";
+    const spawnFailure = PlatformError.systemError({
+      _tag: "NotFound",
+      module: "ChildProcess",
+      method: "spawn",
+      pathOrDescriptor: `${executable} -v error --token=SECRET in .`,
+      cause: new Error(`spawn ${executable} ENOENT (--token=SECRET in .)`),
+    });
+    const tool = yield* Tool.make("ffprobe", { executable }).pipe(
+      // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This test construction provides its complete fake platform once.
+      Effect.provide(
+        Layer.mergeAll(ToolTest.layer(() => Effect.fail(spawnFailure)), FileSystem.layerNoop({}), Path.layer),
+      ),
+    );
+    const error = yield* tool.run(
+      ChildProcess.make(executable, ["-v", "error", "--token=SECRET", "in", "."]),
+      Sink.drain,
+    ).pipe(Effect.flip);
+    assert.instanceOf(error.reason, Tool.Process);
+    assert.include(error.message, `spawn ${executable} ENOENT (<redacted> <redacted> <redacted>)`);
+    assert.notInclude(JSON.stringify(error), "SECRET");
   }));
