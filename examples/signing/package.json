@@ -7,8 +7,8 @@
     "windows": "node src/windows.ts"
   },
   "dependencies": {
-    "effect": "4.0.0",
-    "@effect/platform-node": "4.0.0",
+    "effect": "4.0.2",
+    "@effect/platform-node": "4.0.2",
     "effect-build": "workspace:*",
     "effect-build-bun": "workspace:*",
     "effect-build-apple": "workspace:*",

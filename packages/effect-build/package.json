@@ -73,9 +73,9 @@
     "effect": ">=4.0.0 <4.1.0"
   },
   "devDependencies": {
-    "effect": "4.0.0",
+    "effect": "4.0.2",
     "@types/node": "24.3.0",
-    "@effect/platform-node": "4.0.0"
+    "@effect/platform-node": "4.0.2"
   },
   "engines": {
     "node": ">=22.19.0"
