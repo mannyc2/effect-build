@@ -6,8 +6,8 @@
     "test": "node ../../node_modules/vitest/vitest.mjs run --config vitest.config.ts"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0",
-    "effect": "4.0.0",
+    "@effect/platform-node": "4.0.2",
+    "effect": "4.0.2",
     "effect-build": "workspace:^"
   },
   "devDependencies": {
